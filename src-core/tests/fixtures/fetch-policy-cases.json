@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared fixture for FetchPolicy::from_settings and FetchPolicy::keeps_body. Consumed verbatim by src-core/src/fetch_mode.rs (Rust, via include_str!) and by src/utils/fetchPolicy.js's vitest suite, so the two implementations cannot drift. Plain JSON only: dates are epoch ms numbers, modes are the camelCase strings onDemand|keepRecent|indexOnly|hoarder. `state` mirrors frontend-settings.json's `mailvault-settings.state` object (not the full file root).",
+  "_comment": "Shared fixture for FetchPolicy::from_settings and FetchPolicy::keeps_body. Consumed verbatim by src-core/src/fetch_mode.rs (Rust, via include_str!). It was shared with src/utils/fetchPolicy.js, now gone: the app reads the policy from the daemon (`policy.accounts`). Plain JSON only: dates are epoch ms numbers, modes are the camelCase strings onDemand|keepRecent|indexOnly|hoarder. `state` mirrors frontend-settings.json's `mailvault-settings.state` object (not the full file root).",
 
   "fromSettingsCases": [
     {

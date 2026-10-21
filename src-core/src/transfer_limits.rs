@@ -32,10 +32,16 @@ pub const MB: u64 = 1024 * 1024;
 /// Gmail cuts an account off near 2500 MB down / 500 MB up in a day, across
 /// every client it has. The download default sits 500 MB below that so a
 /// user who switches the limit on and leaves the field empty keeps room for
-/// everyday mail. The app's `src/utils/transferLimits.js` repeats these two
-/// numbers for display and a vitest pins the two files together: change both.
+/// everyday mail. The app shows these through `policy.accounts`
+/// (`display_limits`); it holds no copy of them.
 pub const GMAIL_DEFAULT_DOWN_MB: u64 = 2000;
 pub const GMAIL_DEFAULT_UP_MB: u64 = 500;
+/// Gmail's own daily download cut-off: what the usage bar and the banner
+/// measure against while the cap is off (nothing of ours stops a download
+/// then, so Gmail's limit is the only one there is).
+pub const GMAIL_CUTOFF_DOWN_MB: u64 = 2500;
+/// The banner warns at this share of a day's limit.
+pub const WARN_FRACTION: f64 = 0.8;
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
@@ -91,6 +97,114 @@ pub fn default_limits(host: &str) -> (Option<u64>, Option<u64>) {
 pub fn background_down_limit(limits: Option<&TransferLimits>, host: &str) -> Option<u64> {
     let limits = limits.filter(|l| l.cap_enabled)?;
     limits.daily_down_limit_bytes.or(default_limits(host).0)
+}
+
+// ── What Settings > Data usage and the banner show ──────────────────────────
+
+/// Whether the provider defaults apply: decided by the IMAP host, exactly as
+/// `default_limits` decides it.
+pub fn is_gmail_host(host: &str) -> bool {
+    default_limits(host).0.is_some()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Down,
+    Up,
+}
+
+/// The figure an EMPTY limit field stands for: on Gmail 2000 MB down when the
+/// cap is on (what `background_down_limit` enforces), Gmail's own 2500 MB when
+/// it is off; 500 MB up either way. `None` off Gmail (unlimited).
+pub fn provider_default(gmail: bool, cap_enabled: bool, direction: Direction) -> Option<u64> {
+    if !gmail {
+        return None;
+    }
+    Some(match direction {
+        Direction::Up => GMAIL_DEFAULT_UP_MB * MB,
+        Direction::Down if cap_enabled => GMAIL_DEFAULT_DOWN_MB * MB,
+        Direction::Down => GMAIL_CUTOFF_DOWN_MB * MB,
+    })
+}
+
+/// One direction's daily limit as shown: the number the user typed wins, a
+/// blank field is the provider default (`is_provider_default`), else `None`
+/// (unlimited). `default_cap_on` / `default_cap_off` are what a blank field
+/// stands for with the cap on and off, so the field's placeholder follows
+/// the toggle before the change reaches the settings file.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShownLimit {
+    pub limit_bytes: Option<u64>,
+    pub is_provider_default: bool,
+    pub default_cap_on: Option<u64>,
+    pub default_cap_off: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShownLimits {
+    pub gmail: bool,
+    pub cap_enabled: bool,
+    pub warn_enabled: bool,
+    pub down: ShownLimit,
+    pub up: ShownLimit,
+}
+
+/// The limits Settings > Data usage and the banner show for one account, from
+/// its raw `transferLimits` entry. Read field by field, so one malformed
+/// field never hides the others the way a failed `TransferLimits` parse
+/// would. A missing entry is the default: cap off, warning on, both blank.
+pub fn display_limits(entry: Option<&serde_json::Value>, host: &str) -> ShownLimits {
+    let field = |name: &str| entry.and_then(|e| e.get(name));
+    let gmail = is_gmail_host(host);
+    let cap_enabled = field("capEnabled").and_then(serde_json::Value::as_bool) == Some(true);
+    let warn_enabled = field("warnEnabled").and_then(serde_json::Value::as_bool) != Some(false);
+    let side = |name: &str, direction: Direction| {
+        let explicit = field(name).and_then(serde_json::Value::as_u64);
+        let fallback = provider_default(gmail, cap_enabled, direction);
+        ShownLimit {
+            limit_bytes: explicit.or(fallback),
+            is_provider_default: explicit.is_none() && fallback.is_some(),
+            default_cap_on: provider_default(gmail, true, direction),
+            default_cap_off: provider_default(gmail, false, direction),
+        }
+    };
+    ShownLimits {
+        gmail,
+        cap_enabled,
+        warn_enabled,
+        down: side("dailyDownLimitBytes", Direction::Down),
+        up: side("dailyUpLimitBytes", Direction::Up),
+    }
+}
+
+/// The banner's warning: the direction whose usage today is the larger share
+/// of its limit, once that share reaches `WARN_FRACTION`. Never with the
+/// warning switched off, and never against a limit of 0 or none.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Warning {
+    /// "download" or "upload": the catalog word the banner picks.
+    pub direction: &'static str,
+    pub fraction: f64,
+}
+
+pub fn warning(shown: &ShownLimits, today: transfer_stats::DayBucket) -> Option<Warning> {
+    if !shown.warn_enabled {
+        return None;
+    }
+    let share = |used: u64, limit: Option<u64>| limit.filter(|l| *l > 0).map(|l| used as f64 / l as f64);
+    let mut worst: Option<Warning> = None;
+    if let Some(f) = share(today.down, shown.down.limit_bytes).filter(|f| *f >= WARN_FRACTION) {
+        worst = Some(Warning { direction: "download", fraction: f });
+    }
+    if let Some(f) = share(today.up, shown.up.limit_bytes).filter(|f| *f >= WARN_FRACTION) {
+        if worst.as_ref().is_none_or(|w| f > w.fraction) {
+            worst = Some(Warning { direction: "upload", fraction: f });
+        }
+    }
+    worst
 }
 
 // ── The clock ───────────────────────────────────────────────────────────────
@@ -300,6 +414,122 @@ mod tests {
 
     fn spend(dir: &Path, account: &str, day: &str, down_mb: u64) {
         crate::app_db::with(dir, |c| crate::app_db::stats::add(c, account, day, "daemon", down_mb * MB, 0)).unwrap();
+    }
+
+    mod shown {
+        use super::super::*;
+        use serde::Deserialize;
+
+        const FIXTURE: &str = include_str!("../tests/fixtures/transfer-limits-cases.json");
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Fixture {
+            gmail_host_cases: Vec<HostCase>,
+            limit_cases: Vec<LimitCase>,
+            warning_cases: Vec<WarningCase>,
+        }
+        #[derive(Deserialize)]
+        struct HostCase {
+            host: String,
+            expected: bool,
+        }
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Side {
+            limit_bytes: Option<u64>,
+            is_provider_default: bool,
+            default_cap_on: Option<u64>,
+            default_cap_off: Option<u64>,
+        }
+        #[derive(Deserialize)]
+        struct Sides {
+            down: Side,
+            up: Side,
+        }
+        #[derive(Deserialize)]
+        struct LimitCase {
+            name: String,
+            entry: Option<serde_json::Value>,
+            host: String,
+            expected: Sides,
+        }
+        #[derive(Deserialize)]
+        struct Expected {
+            direction: String,
+            fraction: f64,
+        }
+        #[derive(Deserialize)]
+        struct WarningCase {
+            name: String,
+            entry: Option<serde_json::Value>,
+            host: String,
+            today: transfer_stats::DayBucket,
+            expected: Option<Expected>,
+        }
+
+        fn fixture() -> Fixture {
+            serde_json::from_str(FIXTURE).expect("fixture matches the Fixture shape")
+        }
+
+        fn same(got: &ShownLimit, want: &Side, case: &str) {
+            assert_eq!(got.limit_bytes, want.limit_bytes, "case {case}: limitBytes");
+            assert_eq!(got.is_provider_default, want.is_provider_default, "case {case}: isProviderDefault");
+            assert_eq!(got.default_cap_on, want.default_cap_on, "case {case}: defaultCapOn");
+            assert_eq!(got.default_cap_off, want.default_cap_off, "case {case}: defaultCapOff");
+        }
+
+        #[test]
+        fn gmail_is_decided_by_host_as_the_fixture_says() {
+            for case in fixture().gmail_host_cases {
+                assert_eq!(is_gmail_host(&case.host), case.expected, "host {:?}", case.host);
+            }
+        }
+
+        #[test]
+        fn shown_limits_match_the_shared_fixture() {
+            let cases = fixture().limit_cases;
+            assert!(cases.len() >= 20);
+            for case in cases {
+                let shown = display_limits(case.entry.as_ref(), &case.host);
+                same(&shown.down, &case.expected.down, &case.name);
+                same(&shown.up, &case.expected.up, &case.name);
+            }
+        }
+
+        #[test]
+        fn warnings_match_the_shared_fixture() {
+            let cases = fixture().warning_cases;
+            assert!(cases.iter().any(|c| c.expected.is_some()) && cases.iter().any(|c| c.expected.is_none()));
+            for case in cases {
+                let got = warning(&display_limits(case.entry.as_ref(), &case.host), case.today);
+                match (&got, &case.expected) {
+                    (None, None) => {}
+                    (Some(g), Some(w)) => {
+                        assert_eq!(g.direction, w.direction, "case {}", case.name);
+                        assert!((g.fraction - w.fraction).abs() < 1e-12, "case {}: {} vs {}", case.name, g.fraction, w.fraction);
+                    }
+                    _ => panic!("case {}: got {:?}", case.name, got),
+                }
+            }
+        }
+
+        #[test]
+        fn a_malformed_field_hides_only_itself() {
+            let entry = serde_json::json!({"capEnabled": true, "warnEnabled": false, "dailyDownLimitBytes": 1.5});
+            let shown = display_limits(Some(&entry), "imap.gmail.com");
+            assert!(shown.cap_enabled && !shown.warn_enabled);
+            assert_eq!(shown.down.limit_bytes, Some(GMAIL_DEFAULT_DOWN_MB * MB));
+        }
+
+        #[test]
+        fn the_shown_default_is_the_enforced_one_when_the_cap_is_on() {
+            for host in ["imap.gmail.com", "imap.hostinger.com"] {
+                let entry = serde_json::json!({"capEnabled": true});
+                let limits: TransferLimits = serde_json::from_value(entry.clone()).unwrap();
+                assert_eq!(display_limits(Some(&entry), host).down.limit_bytes, background_down_limit(Some(&limits), host), "{host}");
+            }
+        }
     }
 
     #[test]

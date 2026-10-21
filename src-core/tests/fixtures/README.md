@@ -1,3 +1,5 @@
 # Shared test fixtures
 
 - `sender-check-cases.json` and `verification-code-cases.json` hold the answers of the deleted `src/utils/senderCheck.js` and `src/utils/verificationCode.js` at origin/main `f66b58621`, which `src-core/src/sender_check.rs` and `src-core/src/verification_code.rs` must match. Regenerate with `node src-core/tests/fixtures/gen/parity-fixtures.mjs` (reads that JS out of git); `git diff` must stay empty.
+- `transfer-limits-cases.json` and `vault-dir-mailbox-cases.json` hold the answers of the deleted `src/utils/transferLimits.js` (with the warning loop of `TransferLimitBanner.jsx`) and of `mailboxPathFromVaultDir` in `src/stores/slices/unifiedHelpers.js` at local main `65040308f`, which `src-core/src/transfer_limits.rs` and `src-core/src/search_index/text.rs` must match. Regenerate with `node src-core/tests/fixtures/gen/limits-policy-fixtures.mjs` (reads that JS out of git); `git diff` must stay empty.
+- `fetch-policy-cases.json` and `vault_dir_names.json` were shared with JS ports that are gone too (`src/utils/fetchPolicy.js`, `vaultDirName`); they now pin the Rust alone.

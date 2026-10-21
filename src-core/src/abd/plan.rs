@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 /// Gmail cuts an account off near 2500 MB down a day whatever the user typed.
-pub const GMAIL_DAILY_CAP_BYTES: u64 = 2500 * crate::transfer_limits::MB;
+pub const GMAIL_DAILY_CAP_BYTES: u64 = crate::transfer_limits::GMAIL_CUTOFF_DOWN_MB * crate::transfer_limits::MB;
 
 // ── Plan files ──────────────────────────────────────────────────────────────
 

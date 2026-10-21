@@ -81,10 +81,23 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 // field on `TokenResponse` (like `email`, Track B's id_token
                 // claim, or `clientId`, the OAuth client the account must be
                 // stamped with) reaches the caller without a second edit here.
-                Ok(result) => RpcResponse::success(
-                    id,
-                    serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true})),
-                ),
+                Ok(result) => {
+                    let mut reply = serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true}));
+                    // `expectEmail`, the address the user typed: whether the
+                    // mailbox they signed into is that one, by identity
+                    // (`normalize_identity`: Gmail ignores dots and `+tags`),
+                    // never by bytes. Absent when the provider names no
+                    // address (Microsoft returns no id_token).
+                    if let (Some(expected), Some(signed_in)) =
+                        (params.get("expectEmail").and_then(Value::as_str), result.email.as_deref())
+                    {
+                        reply["emailMatches"] = json!(
+                            mailvault_core::notes_to_self::normalize_identity(expected)
+                                == mailvault_core::notes_to_self::normalize_identity(signed_in)
+                        );
+                    }
+                    RpcResponse::success(id, reply)
+                }
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
@@ -600,6 +613,32 @@ mod tests {
         assert_eq!(result["clientId"], json!(url_client));
         assert_eq!(result["refreshToken"], json!("rt"));
         assert!(posted_field(&body, "client_secret").is_some());
+    }
+
+    // The typed address and the id_token's claim are compared by identity:
+    // a dotted or `+tag` spelling of the same Gmail inbox matches, another
+    // mailbox does not, and without `expectEmail` there is no answer.
+    #[tokio::test]
+    async fn exchange_says_whether_the_signed_in_mailbox_is_the_typed_one() {
+        use base64::Engine;
+        let enc = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let id_token = format!("{}.{}.sig", enc.encode(b"{}"), enc.encode(br#"{"email":"johndoe@gmail.com"}"#));
+        let body = format!(r#"{{"access_token":"at","refresh_token":"rt","expires_in":3600,"id_token":"{id_token}"}}"#);
+        for (typed, want) in [(Some("John.Doe+news@googlemail.com"), Some(true)), (Some("jane@gmail.com"), Some(false)), (None, None)] {
+            let _g = mock_token_response(200, &body);
+            POSTED.lock().unwrap().clear();
+            let s = st();
+            let auth = call(&s, "oauth2_auth_url", json!({"provider": "google"})).await.result.expect("success");
+            let issued_state = auth["state"].as_str().unwrap().to_string();
+            assert!(s.oauth2.deliver_code_for_tests(&issued_state, "the-code").await);
+            let mut params = json!({"state": issued_state});
+            if let Some(typed) = typed {
+                params["expectEmail"] = json!(typed);
+            }
+            let result = call(&s, "oauth2_exchange", params).await.result.expect("success");
+            assert_eq!(result["email"], json!("johndoe@gmail.com"));
+            assert_eq!(result.get("emailMatches").and_then(Value::as_bool), want, "typed {typed:?}");
+        }
     }
 
     #[tokio::test]

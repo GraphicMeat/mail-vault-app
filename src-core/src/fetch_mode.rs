@@ -164,6 +164,60 @@ impl FetchPolicy {
     pub fn runs_hoarder_worker(&self) -> bool {
         self.mode == FetchMode::Hoarder && self.hoarder_premium
     }
+
+    /// What the download-ahead keeps as of `now_ms`, for a caller that judges
+    /// many dates against one answer (the app's pipeline asks the daemon once
+    /// per pass, `policy.accounts`): `KeepBodies::keeps` agrees with
+    /// `keeps_body_dated` for every date.
+    pub fn keep_bodies(&self, now_ms: i64) -> KeepBodies {
+        match self.mode {
+            FetchMode::OnDemand => KeepBodies::None,
+            FetchMode::Hoarder => KeepBodies::All,
+            FetchMode::KeepRecent | FetchMode::IndexOnly => {
+                if self.window_months == 0 {
+                    return KeepBodies::All;
+                }
+                cutoff_ms(now_ms, self.window_months).map_or(KeepBodies::All, KeepBodies::Since)
+            }
+        }
+    }
+
+    /// Whether the vault is meant to hold copies at all (the vault-gap row's
+    /// "nothing to count by design"): On Demand keeps none on disk, Index
+    /// Only evicts them once indexed. `promises_copy` without a date.
+    pub fn vault_holds_copies(&self) -> bool {
+        matches!(self.mode, FetchMode::KeepRecent | FetchMode::Hoarder)
+    }
+
+    /// The window a Keep Recent account names to the user, 0 for every other
+    /// mode (and for a Keep Recent window of 0, which keeps everything).
+    pub fn recent_window_months(&self) -> u32 {
+        if self.mode == FetchMode::KeepRecent {
+            self.window_months
+        } else {
+            0
+        }
+    }
+}
+
+/// `FetchPolicy::keep_bodies`: no body, every body, or those dated at or
+/// after an instant (epoch ms). A date that is unknown is kept by `All` and
+/// `Since` alike, as the download gate keeps it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeepBodies {
+    None,
+    All,
+    Since(i64),
+}
+
+impl KeepBodies {
+    pub fn keeps(&self, date_ms: Option<i64>) -> bool {
+        match (self, date_ms) {
+            (KeepBodies::None, _) => false,
+            (KeepBodies::All, _) | (KeepBodies::Since(_), None) => true,
+            (KeepBodies::Since(cutoff), Some(date)) => date >= *cutoff,
+        }
+    }
 }
 
 /// `now_ms` minus `months` calendar months, in UTC. Uses `chrono`'s
@@ -177,13 +231,10 @@ impl FetchPolicy {
 /// or `months` alone exceeding `i32::MAX`) — callers treat `None` as "no
 /// cutoff" rather than an error.
 ///
-/// This is UTC calendar-month arithmetic, not a port of the frontend's
-/// `Date.setMonth` cutoff (`src/services/EmailPipelineManager.js`
-/// `_getUncachedUids`), which runs in the local timezone and rolls overflow
-/// into the following month instead of clamping to the last day of the
-/// target month. A JS port of this function must do UTC arithmetic with an
-/// explicit end-of-month clamp (not reuse `setMonth`) to agree with this
-/// one.
+/// This is UTC calendar-month arithmetic (never a local-time `setMonth`,
+/// which rolls overflow into the next month). The app's download-ahead
+/// takes the instant from the daemon (`keep_bodies`, `policy.accounts`)
+/// instead of computing its own.
 fn cutoff_ms(now_ms: i64, months: u32) -> Option<i64> {
     use chrono::{DateTime, Months, Utc};
 
@@ -443,6 +494,36 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn keep_bodies_agrees_with_keeps_body_on_the_shared_fixture() {
+        for case in fixture().keeps_body_cases {
+            let policy = FetchPolicy {
+                mode: case.policy.mode,
+                window_months: case.policy.window_months,
+                hoarder_premium: case.policy.hoarder_premium,
+            };
+            let keep = policy.keep_bodies(case.now_ms);
+            assert_eq!(keep.keeps(Some(case.date_ms)), case.expected, "case `{}`", case.name);
+            assert_eq!(keep.keeps(None), policy.keeps_body_dated(None, case.now_ms), "case `{}`: unknown date", case.name);
+        }
+    }
+
+    #[test]
+    fn vault_copies_and_the_named_window_follow_the_mode() {
+        let at = |mode, window_months| FetchPolicy { mode, window_months, hoarder_premium: false };
+        assert!(!at(FetchMode::OnDemand, 3).vault_holds_copies());
+        assert!(!at(FetchMode::IndexOnly, 3).vault_holds_copies());
+        assert!(at(FetchMode::KeepRecent, 3).vault_holds_copies());
+        assert!(at(FetchMode::Hoarder, 3).vault_holds_copies());
+        assert_eq!(at(FetchMode::KeepRecent, 6).recent_window_months(), 6);
+        assert_eq!(at(FetchMode::KeepRecent, 0).recent_window_months(), 0);
+        assert_eq!(at(FetchMode::Hoarder, 6).recent_window_months(), 0);
+        assert_eq!(at(FetchMode::IndexOnly, 6).recent_window_months(), 0);
+        // A window too large for the calendar keeps everything, as keeps_body does.
+        assert_eq!(at(FetchMode::KeepRecent, u32::MAX).keep_bodies(0), KeepBodies::All);
+        assert_eq!(at(FetchMode::OnDemand, 0).keep_bodies(0), KeepBodies::None);
     }
 
     #[test]

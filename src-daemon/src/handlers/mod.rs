@@ -48,6 +48,7 @@ pub(crate) mod notes;
 pub(crate) mod oauth2;
 pub(crate) mod pgp;
 pub(crate) mod people;
+pub(crate) mod policy;
 pub(crate) mod people_write;
 pub(crate) mod portable;
 pub(crate) mod release_notes;

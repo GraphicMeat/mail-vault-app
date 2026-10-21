@@ -1,12 +1,12 @@
 //! Text helpers for indexing and snippets.
 
-/// Directory name a mailbox path gets under `Maildir/<account>/`. Mirrors
-/// `vaultDirName` in src/stores/slices/unifiedHelpers.js
-/// (`/[^\p{Alphabetic}\p{N}.\-_]/gu` → `_`); the shared fixture keeps the two
-/// sanitizers equal on unix. On Windows both sides additionally run
-/// `avoid_reserved`/`avoidReserved` — kept as a second, platform-gated step
-/// rather than folded into the fixture, so the fixture stays the same on
-/// every platform and only the Windows-only step needs its own test.
+/// Directory name a mailbox path gets under `Maildir/<account>/`: every char
+/// outside alphanumeric (Unicode-aware), `.`, `-` and `_` becomes `_`. The
+/// shared fixture (`vault_dir_names.json`) pins the unix names. On Windows it
+/// additionally runs `avoid_reserved`, a second, platform-gated step rather
+/// than folded into the fixture, so the fixture stays the same on every
+/// platform and only the Windows-only step needs its own test. The app asks
+/// the daemon for the reverse (`policy.vault_mailboxes`), never computes it.
 pub fn vault_dir_name(mailbox: &str) -> String {
     let safe: String = mailbox.chars()
         .map(|c| if c.is_alphabetic() || c.is_numeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
@@ -18,6 +18,27 @@ pub fn vault_dir_name(mailbox: &str) -> String {
     #[cfg(windows)]
     let safe = avoid_reserved(&safe);
     safe
+}
+
+/// The server mailbox each vault directory of `dirs` holds: the first of
+/// `mailboxes` (in the order given) whose `vault_dir_name` is the directory,
+/// else the directory itself. The mapping is many-to-one ("Projekt Nystart"
+/// and "Projekt_Nystart" share a directory), so a directory read back off
+/// disk is not a path IMAP can SELECT; a caller lists the paths it wants
+/// preferred first. A directory no listed mailbox produces (a stale vault
+/// folder) is still readable mail and comes back as itself, and so does an
+/// empty one. One sanitize per mailbox, however many directories.
+pub fn mailboxes_from_vault_dirs(dirs: &[String], mailboxes: &[String]) -> Vec<String> {
+    let mut first: std::collections::HashMap<String, &str> = std::collections::HashMap::new();
+    for mailbox in mailboxes {
+        first.entry(vault_dir_name(mailbox)).or_insert(mailbox.as_str());
+    }
+    dirs.iter()
+        .map(|dir| match first.get(dir.as_str()) {
+            Some(mailbox) if !dir.is_empty() => (*mailbox).to_owned(),
+            _ => dir.clone(),
+        })
+        .collect()
 }
 
 /// Win32 reserved device names, and names Win32 silently rewrites.
@@ -239,6 +260,32 @@ mod tests {
             let want = avoid_reserved(&want);
             assert_eq!(vault_dir_name(&input), want, "{input:?}");
         }
+    }
+
+    #[test]
+    fn mailboxes_from_vault_dirs_match_shared_fixture() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            dir: String,
+            mailboxes: Vec<String>,
+            expected: String,
+        }
+        #[derive(serde::Deserialize)]
+        struct Fixture {
+            cases: Vec<Case>,
+        }
+        let raw = include_str!("../../tests/fixtures/vault-dir-mailbox-cases.json");
+        let fixture: Fixture = serde_json::from_str(raw).unwrap();
+        assert!(fixture.cases.len() >= 10);
+        for case in fixture.cases {
+            let got = mailboxes_from_vault_dirs(std::slice::from_ref(&case.dir), &case.mailboxes);
+            assert_eq!(got, vec![case.expected.clone()], "case {}", case.name);
+        }
+        // Many directories against one list answer in order.
+        let tree: Vec<String> = ["Projekt Nystart", "Projekt_Nystart", "INBOX"].map(String::from).to_vec();
+        let dirs: Vec<String> = ["INBOX", "Projekt_Nystart", "Gone"].map(String::from).to_vec();
+        assert_eq!(mailboxes_from_vault_dirs(&dirs, &tree), ["INBOX", "Projekt Nystart", "Gone"]);
     }
 
     #[test]
