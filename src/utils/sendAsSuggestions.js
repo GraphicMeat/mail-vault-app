@@ -2,9 +2,10 @@
 //
 // composeIdentities / composeSenderName / resolveInitialComposeIdentity decide
 // what compose's From row offers and sends as. Aliases themselves come from
-// the daemon's `aliases.discover` (services/aliasDiscovery.js), which reads
-// the provider's send-as list and the account's own mail, and from what the
-// user adds in Settings > Accounts > Aliases. The SMTP server stays the
+// the daemon (`aliases.*`, services/aliases.js), which reads the provider's
+// send-as list and the account's own mail and keeps what the user adds in
+// Settings > Accounts > Aliases; compose reads the settings store's copy of
+// the lists. The SMTP server stays the
 // authority on what it will accept (that is what Verify there is for).
 
 /**

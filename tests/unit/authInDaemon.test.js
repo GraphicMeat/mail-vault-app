@@ -70,7 +70,6 @@ describe('the app hands the daemon no token', () => {
     const allowed = [
       'src/components/AccountModal.jsx', // the new-account form's empty field
       'src/hooks/useEmailScheduler.js', // a change key, never sent
-      'src/services/aliasDiscovery.js', // presence: tokens loaded yet?
       'src/services/authUtils.js', // withOAuth2Exchange, hasValidCredentials
       'src/services/db/accounts.js', // the credentials writer
       'src/services/oauthTokenSync.js', // saves what the daemon refreshed

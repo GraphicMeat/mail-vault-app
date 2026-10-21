@@ -33,8 +33,10 @@ vi.mock('../../services/daemonClient', () => ({
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
 vi.mock('../../services/db', async importOriginal => ({ ...await importOriginal(), getCachedMailboxes: async () => [], saveAccount: async () => {} }));
-vi.mock('../../services/aliasDiscovery', () => ({
+vi.mock('../../services/aliases', () => ({
   refreshAliases: vi.fn(async () => ({ added: [], suggestions: [], providerStatus: 'unsupported' })),
+  addAlias: vi.fn(async () => ({ ok: true })),
+  removeAlias: vi.fn(async () => true),
 }));
 vi.mock('../EmailViewer', () => ({ EmailViewer: () => null }));
 vi.mock('../../services/trackerVerdicts', () => ({ backfillTrackerVerdicts: vi.fn() }));

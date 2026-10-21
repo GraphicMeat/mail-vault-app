@@ -675,6 +675,50 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
             : [];
           return { provider: { status: 'unsupported', aliases: [] }, detected };
         }
+        // Each account's alias list (handlers/alias_store.rs), kept in the
+        // demo's settings document the way the daemon keeps it.
+        if (['aliases.list', 'aliases.add', 'aliases.remove', 'aliases.dismiss', 'aliases.refresh'].includes(method)) {
+          const p = args.params || {};
+          const id = p.accountId;
+          const k = value => String(value || '').trim().toLowerCase();
+          const state = settings['mailvault-settings']?.state || null;
+          let aliases = [...(state?.aliases?.[id] || [])];
+          let dismissed = [...(state?.dismissedAliases?.[id] || [])];
+          const listed = address => aliases.some(a => k(a?.address) === k(address));
+          const save = async (extra = {}) => {
+            if (!state) throw new Error('errors.settingsNotLoaded');
+            const patch = { 'mailvault-settings': { state: { aliases: { [id]: aliases }, dismissedAliases: { [id]: dismissed }, ...extra } } };
+            await invoke('daemon_rpc', { method: 'settings.patch', params: { patch } });
+          };
+          if (method === 'aliases.list') return { aliases: aliases.filter(a => k(a?.address) && k(a.address) !== k(p.loginEmail)), dismissed };
+          if (method === 'aliases.add') {
+            const address = String(p.address || '').trim();
+            if (!/^[^\s@<>()[\],;:"]+@[^\s@<>()[\],;:"]+\.[^\s@<>()[\],;:"]+$/.test(address)) return { ok: false, reason: 'invalid' };
+            if (k(address) === k(p.loginEmail)) return { ok: false, reason: 'login' };
+            if (listed(address)) return { ok: false, reason: 'duplicate' };
+            const alias = { address, name: String(p.name || '').trim(), source: ['provider', 'detected'].includes(p.source) ? p.source : 'manual' };
+            aliases.push(alias);
+            dismissed = dismissed.filter(d => k(d) !== k(address));
+            await save();
+            return { ok: true, alias, aliases, dismissed };
+          }
+          if (method === 'aliases.remove' || method === 'aliases.dismiss') {
+            const gone = k(p.address);
+            const cleared = method === 'aliases.remove' && !!gone && k(state?.sendAsAddresses?.[id]) === gone;
+            if (method === 'aliases.remove') aliases = aliases.filter(a => k(a?.address) !== gone);
+            if (gone && !dismissed.includes(gone)) dismissed.push(gone);
+            await save(cleared ? { sendAsAddresses: { [id]: '' } } : {});
+            return method === 'aliases.remove' ? { aliases, dismissed, defaultFromCleared: cleared } : { aliases, dismissed };
+          }
+          if (p.auto) return { scheduled: false };
+          const found = await invoke('daemon_rpc', { method: 'aliases.discover', params: { accountId: id } });
+          const fresh = entry => !dismissed.includes(k(entry.address)) && !listed(entry.address) && k(entry.address) !== k(p.loginEmail);
+          const added = found.detected.filter(d => d.source === 'sent_from' && fresh(d)).map(d => ({ address: d.address, name: d.name, source: 'detected' }));
+          aliases.push(...added);
+          const suggestions = found.detected.filter(d => d.source === 'delivered_to' && fresh(d));
+          if (added.length && state) await save();
+          return { added, suggestions, providerStatus: found.provider.status, aliases, dismissed, displayName: null };
+        }
         if (method === 'sync.watch' || method === 'sync.unwatch') return { success: true, simulated: true };
         // The demo's mail carries no authentication results and no codes to read.
         // The settings document (handlers/settings.rs) over the same

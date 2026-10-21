@@ -162,6 +162,9 @@ export const DAEMON_OWNED = new Set([
   // Send-as aliases: what the provider lists (Gmail over OAuth) and what the
   // mail of the account proves, both found by the daemon.
   'aliases.discover',
+  // Each account's alias list, kept by the daemon in the settings document
+  // (handlers/alias_store.rs; was services/aliasDiscovery.js).
+  'aliases.list', 'aliases.add', 'aliases.remove', 'aliases.dismiss', 'aliases.refresh',
   // Learned classification rules: the daemon records corrections, learns,
   // stores, exports and imports them (handlers/learning.rs).
   'learning.record_correction', 'learning.rules', 'learning.stats', 'learning.save_rule',

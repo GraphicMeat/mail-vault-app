@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import { AtSign, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { refreshAliases } from '../../services/aliasDiscovery';
+import { addAlias as addAliasFor, refreshAliases, removeAlias as removeAliasFor } from '../../services/aliases';
 import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { SignatureImageSize } from './SignatureImageSize';
 import { SignatureEditor } from './SignatureEditor';
@@ -14,9 +14,10 @@ import { usePrivateAttr, usePrivateInputClass } from '../../hooks/usePrivacy';
 import { isJmapAccount } from '../../services/providerKind';
 
 // Settings > Accounts > Aliases: every address one account sends from. The
-// login comes first and always stays; the aliases after it are the settings
-// store's list (services/aliasDiscovery.js fills it from the provider and
-// from the account's own mail, the user adds the rest). The radio column is
+// login comes first and always stays; the aliases after it are the daemon's
+// list, mirrored in the settings store (services/aliases.js; the daemon fills
+// it from the provider and from the account's own mail, the user adds the
+// rest). The radio column is
 // the default From (`sendAsAddresses`, '' = the login); compose can still
 // pick any of them per message. An alias signs with the account's signature
 // unless it holds one of its own (`alias.signature`, see AliasSignature).
@@ -128,9 +129,13 @@ export function AliasesSection({ account, displayName = '' }) {
     lookFor();
   }, [accountId, lookFor]);
 
-  const addAlias = event => {
+  // The daemon keeps the list (aliases.add / aliases.remove); an answer for
+  // an account the user has left is not shown on this one.
+  const addAlias = async event => {
     event.preventDefault();
-    const result = useSettingsStore.getState().addAlias(accountId, { address: newAddress, name: newName, source: 'manual' }, login);
+    const id = accountId;
+    const result = await addAliasFor(account, { address: newAddress, name: newName, source: 'manual' });
+    if (!mounted.current || accountRef.current?.id !== id) return;
     if (!result.ok) {
       setAddError(result.reason);
       addInputRef.current?.focus();
@@ -142,13 +147,13 @@ export function AliasesSection({ account, displayName = '' }) {
   };
 
   const addSuggestion = suggestion => {
-    useSettingsStore.getState().addAlias(accountId, { address: suggestion.address, name: suggestion.name || '', source: 'detected' }, login);
+    void addAliasFor(account, { address: suggestion.address, name: suggestion.name || '', source: 'detected' });
   };
 
-  const removeAlias = address => {
-    useSettingsStore.getState().removeAlias(accountId, address);
+  const removeAlias = async address => {
     // The button that had focus is gone with its row.
     addInputRef.current?.focus();
+    await removeAliasFor(account, address);
   };
 
   const setDefault = address => useSettingsStore.getState().setSendAsAddress(accountId, address);
@@ -171,7 +176,7 @@ export function AliasesSection({ account, displayName = '' }) {
             {t('settings.accounts.aliases.listTitle')}
           </h4>
           <p data-testid="aliases-provider-hint" className="text-sm text-mail-text-muted">
-            {/* A JMAP server lists its identities (aliases.discover asks it, with
+            {/* A JMAP server lists its identities (aliases.refresh asks it, with
                 the account's password or token), as Google does. */}
             {isJmapAccount(account) ? t('settings.accounts.aliases.hintJmap')
               : t(isGoogleSignIn(account) ? 'settings.accounts.aliases.hintGmail' : 'settings.accounts.aliases.hintOther')}
@@ -247,7 +252,7 @@ export function AliasesSection({ account, displayName = '' }) {
         </div>
         {addError && (
           <p id={errorId} data-testid="alias-add-error" className="text-sm text-mail-danger mt-2">
-            {t(ERROR_KEYS[addError] || ERROR_KEYS.invalid)}
+            {t(ERROR_KEYS[addError] || (addError.startsWith('errors.') ? addError : ERROR_KEYS.invalid))}
           </p>
         )}
       </form>

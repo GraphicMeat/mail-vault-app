@@ -10,8 +10,10 @@ import { t } from '../../../i18n';
 // These account preferences remain real; only disk/network reads are isolated.
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
 // Opening Aliases asks the daemon for the account's aliases.
-vi.mock('../../../services/aliasDiscovery', () => ({
+vi.mock('../../../services/aliases', () => ({
   refreshAliases: vi.fn(async () => ({ added: [], suggestions: [], providerStatus: 'unsupported' })),
+  addAlias: vi.fn(async () => ({ ok: true })),
+  removeAlias: vi.fn(async () => true),
 }));
 
 const accounts = [

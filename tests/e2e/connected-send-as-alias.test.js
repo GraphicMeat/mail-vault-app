@@ -190,15 +190,25 @@ describe('Connected Send-As Alias', function () {
    * options: every case leaves the account with no aliases, nothing dismissed
    * and the login as its default From. `removeAlias` alone would leave the
    * address on the dismissed list, which discovery then skips.
+   *
+   * The daemon keeps the lists (`aliases.*`) and reads them from the
+   * settings document, so the reset is written there at once
+   * (`settings.patch`) as well as put in the store, whose own write lands
+   * only after its debounce.
    */
-  const clearAliases = (accountId) => browser.execute((id) => {
-    const state = window.__SETTINGS_STORE__.getState();
-    window.__SETTINGS_STORE__.setState({
-      aliases: { ...state.aliases, [id]: [] },
-      dismissedAliases: { ...state.dismissedAliases, [id]: [] },
-      sendAsAddresses: { ...state.sendAsAddresses, [id]: '' },
-    });
-  }, accountId);
+  const clearAliases = async (accountId) => {
+    const empty = { aliases: { [accountId]: [] }, dismissedAliases: { [accountId]: [] }, sendAsAddresses: { [accountId]: '' } };
+    await browser.execute((id) => {
+      const state = window.__SETTINGS_STORE__.getState();
+      window.__SETTINGS_STORE__.setState({
+        aliases: { ...state.aliases, [id]: [] },
+        dismissedAliases: { ...state.dismissedAliases, [id]: [] },
+        sendAsAddresses: { ...state.sendAsAddresses, [id]: '' },
+      });
+    }, accountId);
+    const patched = await invoke('daemon_rpc', { method: 'settings.patch', params: { patch: { 'mailvault-settings': { state: empty } } } });
+    expect(patched.ok).toBe(true);
+  };
 
   const readAliases = (accountId) => browser.execute((id) =>
     JSON.parse(JSON.stringify(window.__SETTINGS_STORE__.getState().aliases?.[id] || [])), accountId);

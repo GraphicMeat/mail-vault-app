@@ -71,7 +71,7 @@ export async function addAccount(accountData) {
   console.log('[mailStore] Account added to store');
   // Its aliases (Gmail's send-as list, the addresses it has sent from), in
   // the background a little later: a slow lookup never holds up the add.
-  import('../aliasDiscovery').then(m => m.scheduleAliasRefresh(account)).catch(() => {});
+  import('../aliases').then(m => m.scheduleAliasRefresh(account)).catch(() => {});
 
   if (get().accounts.length === 1) {
     // Fire-and-forget: activation (mailbox listing, first sync) can take far

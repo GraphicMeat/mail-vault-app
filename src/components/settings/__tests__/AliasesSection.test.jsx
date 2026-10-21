@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 // Settings > Accounts > Aliases: the addresses one account sends from. The
-// settings store is real; the daemon lookup (services/aliasDiscovery) and the
-// Verify dialog's real send are the boundaries.
+// settings store and the bindings (services/aliases.js) are real; the daemon
+// behind `transport.send` (a stand-in answering as alias_store.rs does), its
+// lookup (`refreshAliases`) and the Verify dialog's real send are the
+// boundaries.
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const { refreshAliases } = vi.hoisted(() => ({ refreshAliases: vi.fn() }));
-vi.mock('../../../services/aliasDiscovery', () => ({ refreshAliases }));
+const { refreshAliases, send } = vi.hoisted(() => ({ refreshAliases: vi.fn(), send: vi.fn() }));
+vi.mock('../../../services/aliases', async (importOriginal) => ({ ...(await importOriginal()), refreshAliases }));
+vi.mock('../../../services/transport.js', async (importOriginal) => ({ ...(await importOriginal()), send }));
 vi.mock('../SendAsVerifyModal', () => ({
   SendAsVerifyModal: ({ sendAsAddress, displayName, onClose }) => (
     <div data-testid="send-as-verify-modal" data-address={sendAsAddress} data-name={displayName}>
@@ -30,10 +33,36 @@ const store = () => useSettingsStore.getState();
 const seed = aliases => useSettingsStore.setState({ aliases: { studio: aliases } });
 const settle = () => act(async () => {});
 
+// The daemon's answers to `aliases.add` / `aliases.remove`, over the store's
+// lists (the rules themselves are src-core aliases/list.rs's, tested there).
+const k = value => String(value || '').trim().toLowerCase();
+function daemon(method, { accountId, loginEmail, address = '', name = '', source }) {
+  const state = useSettingsStore.getState();
+  const aliases = state.aliases?.[accountId] || [];
+  const dismissed = state.dismissedAliases?.[accountId] || [];
+  if (method === 'aliases.add') {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.trim())) return { ok: false, reason: 'invalid' };
+    if (k(address) === k(loginEmail)) return { ok: false, reason: 'login' };
+    if (aliases.some(a => k(a.address) === k(address))) return { ok: false, reason: 'duplicate' };
+    const alias = { address: address.trim(), name: name.trim(), source };
+    return { ok: true, alias, aliases: [...aliases, alias], dismissed: dismissed.filter(d => d !== k(address)) };
+  }
+  if (method === 'aliases.remove') {
+    return {
+      aliases: aliases.filter(a => k(a.address) !== k(address)),
+      dismissed: [...dismissed, k(address)],
+      defaultFromCleared: k(state.sendAsAddresses?.[accountId]) === k(address),
+    };
+  }
+  throw new Error(`unexpected ${method}`);
+}
+
 beforeEach(() => {
   _resetAliasesSection();
   refreshAliases.mockReset();
   refreshAliases.mockResolvedValue(NOTHING);
+  send.mockReset();
+  send.mockImplementation(async (method, params) => daemon(method, params));
   useSettingsStore.setState({ aliases: {}, dismissedAliases: {}, sendAsAddresses: {}, displayNames: {} });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -116,6 +145,7 @@ describe('adding an alias', () => {
     await settle();
     type('alias-add-input', address);
     submit();
+    await settle();
     const error = screen.getByTestId('alias-add-error');
     expect(error.textContent).toBe(t(`settings.accounts.aliases.error.${reason}`));
     const input = screen.getByTestId('alias-add-input');
@@ -133,6 +163,9 @@ describe('adding an alias', () => {
     type('alias-add-input', ' desk@example.test ');
     type('alias-add-name-input', 'Front Desk');
     submit();
+    await settle();
+    // The daemon is asked with the account's id and login, never the account.
+    expect(send).toHaveBeenCalledWith('aliases.add', { accountId: 'studio', loginEmail: 'studio@example.test', address: 'desk@example.test', name: 'Front Desk', source: 'manual' });
     expect(store().aliases.studio).toEqual([{ address: 'desk@example.test', name: 'Front Desk', source: 'manual' }]);
     expect(screen.getByTestId('alias-add-input').value).toBe('');
     expect(screen.getByTestId('alias-add-name-input').value).toBe('');
@@ -140,6 +173,7 @@ describe('adding an alias', () => {
 
     type('alias-add-input', 'shop@example.test');
     fireEvent.click(screen.getByTestId('alias-add-btn'));
+    await settle();
     expect(store().aliases.studio.map(a => a.address)).toEqual(['desk@example.test', 'shop@example.test']);
   });
 
@@ -214,6 +248,7 @@ describe('an alias row', () => {
     render(<AliasesSection account={ACCOUNT} />);
     await settle();
     fireEvent.click(within(row('desk@example.test')).getByTestId('alias-remove-btn'));
+    await settle();
     expect(store().aliases.studio.map(a => a.address)).toEqual(['shop@example.test']);
     expect(store().dismissedAliases.studio).toEqual(['desk@example.test']);
     expect(store().sendAsAddresses.studio).toBe('');
@@ -302,6 +337,7 @@ describe('looking for aliases', () => {
     // Nothing is kept until it is added.
     expect(store().aliases.studio).toBeUndefined();
     fireEvent.click(chips[0]);
+    await settle();
     expect(store().aliases.studio).toEqual([{ address: 'bookings@example.test', name: 'Bookings', source: 'detected' }]);
     expect(within(screen.getByTestId('aliases-suggestions')).getAllByTestId('alias-suggestion-add')
       .map(c => c.getAttribute('data-address'))).toEqual(['info@example.test']);
@@ -311,7 +347,8 @@ describe('looking for aliases', () => {
 
   it('shows what a lookup added without asking again', async () => {
     refreshAliases.mockImplementation(async () => {
-      store().addAlias('studio', { address: 'found@example.test', source: 'provider' }, ACCOUNT.email);
+      // What the daemon's lookup left in the store (services/aliases.js keeps it).
+      seed([{ address: 'found@example.test', name: '', source: 'provider' }]);
       return { ...NOTHING, providerStatus: 'ok' };
     });
     render(<AliasesSection account={ACCOUNT} />);

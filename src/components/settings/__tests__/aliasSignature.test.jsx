@@ -8,7 +8,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 const { refreshAliases } = vi.hoisted(() => ({ refreshAliases: vi.fn() }));
-vi.mock('../../../services/aliasDiscovery', () => ({ refreshAliases }));
+// The daemon removes an alias, its signature with it (src-core aliases/list.rs);
+// here the binding drops it from the store as the daemon's answer would.
+vi.mock('../../../services/aliases', async () => {
+  const { useSettingsStore } = await import('../../../stores/settingsStore');
+  return {
+    refreshAliases,
+    addAlias: vi.fn(async () => ({ ok: true })),
+    removeAlias: vi.fn(async (account, address) => {
+      const state = useSettingsStore.getState();
+      useSettingsStore.setState({ aliases: { ...state.aliases, [account.id]: (state.aliases?.[account.id] || []).filter(a => a.address !== address) } });
+      return true;
+    }),
+  };
+});
 vi.mock('../SendAsVerifyModal', () => ({ SendAsVerifyModal: () => null }));
 vi.mock('../../RichTextEditor', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -149,6 +162,7 @@ describe('an alias signature choice', () => {
     render(<AliasesSection account={ACCOUNT} />);
     await settle();
     fireEvent.click(within(row('shop@example.test')).getByTestId('alias-remove-btn'));
+    await settle();
     expect(stored('shop@example.test')).toBeUndefined();
   });
 });

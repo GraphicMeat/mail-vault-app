@@ -13,7 +13,6 @@ import {
 import { applyQuickActionPreset } from '../utils/quickActionPresets';
 import { clampComposeSize } from '../utils/composeSize';
 import { ownAddresses } from '../utils/ownAddresses';
-import { addAliasToList, mergeDiscovery } from '../utils/aliasDiscovery';
 import { folderColorKey, normalizeFolderIconStyle, normalizeFolderIconColors } from '../utils/folderIconColor';
 import { MACOS_WINDOW_RADIUS, EMAIL_WIDTH, normalizeEmailWidth } from '../services/export/social/socialLayout';
 
@@ -392,7 +391,7 @@ export function migrateSettings(persisted, version) {
  * The `aliases` a pre-v14 blob gains: every non-empty default From that the
  * account's list does not hold yet, as a manual alias. The login is unknown
  * here, so a default From that was the login becomes an alias too; the next
- * discovery for the account (mergeDiscovery) drops it. Empty when there is
+ * discovery for the account (the daemon's merge_discovery) drops it. Empty when there is
  * nothing to add, so settings with no default From come through unchanged.
  */
 function legacyAliasesPatch(persisted) {
@@ -480,8 +479,9 @@ export const useSettingsStore = create(
       // Display settings
       displayNames: {}, // { [accountId]: string }
       sendAsAddresses: {}, // { [accountId]: string }, the default From: '' = the login, else the login or one of the account's aliases
-      // { [accountId]: { address, name, source }[] }, source 'provider' | 'detected' | 'manual'
-      // (utils/aliasDiscovery.js). Never holds the login.
+      // { [accountId]: { address, name, source }[] }, source 'provider' | 'detected' | 'manual'.
+      // The daemon adds, removes and discovers them (services/aliases.js,
+      // src-core aliases/list.rs); the store keeps what it answers. Never holds the login.
       aliases: {},
       // { [accountId]: string[] }: lowercased aliases the user removed; discovery never adds them back.
       dismissedAliases: {},
@@ -1097,23 +1097,6 @@ export const useSettingsStore = create(
         return login ? list.filter(a => (a?.address || '').trim().toLowerCase() !== login) : list;
       },
 
-      // Returns { ok: true, alias } or { ok: false, reason: 'invalid' | 'login' | 'duplicate' }.
-      // Adding an alias by hand takes it off the dismissed list.
-      addAlias: (accountId, alias, loginEmail = '') => {
-        if (!accountId) return { ok: false, reason: 'invalid' };
-        const result = addAliasToList({ aliases: get().aliases?.[accountId] || [], loginEmail, alias });
-        if (!result.ok) return result;
-        const k = result.alias.address.toLowerCase();
-        set(state => ({
-          aliases: { ...state.aliases, [accountId]: result.aliases },
-          dismissedAliases: {
-            ...state.dismissedAliases,
-            [accountId]: (state.dismissedAliases?.[accountId] || []).filter(d => d !== k),
-          },
-        }));
-        return { ok: true, alias: result.alias };
-      },
-
       // Only the name and the signature can change: an alias with another address is another alias.
       updateAlias: (accountId, address, patch = {}) => {
         const k = (address || '').trim().toLowerCase();
@@ -1133,50 +1116,6 @@ export const useSettingsStore = create(
         }
         set(state => ({ aliases: { ...state.aliases, [accountId]: next } }));
         return true;
-      },
-
-      // Removed for good: discovery skips it from now on. A default From that
-      // pointed at it falls back to the login.
-      removeAlias: (accountId, address) => {
-        const k = (address || '').trim().toLowerCase();
-        if (!accountId || !k) return;
-        set(state => {
-          const dismissed = state.dismissedAliases?.[accountId] || [];
-          const pointer = (state.sendAsAddresses?.[accountId] || '').trim().toLowerCase();
-          return {
-            aliases: {
-              ...state.aliases,
-              [accountId]: (state.aliases?.[accountId] || []).filter(a => (a?.address || '').trim().toLowerCase() !== k),
-            },
-            dismissedAliases: { ...state.dismissedAliases, [accountId]: dismissed.includes(k) ? dismissed : [...dismissed, k] },
-            ...(pointer === k ? { sendAsAddresses: { ...state.sendAsAddresses, [accountId]: '' } } : {}),
-          };
-        });
-      },
-
-      // Keep what one `aliases.discover` answer adds (utils/aliasDiscovery.js
-      // has the rules). Returns { added, suggestions, providerStatus };
-      // suggestions are the caller's to offer, never stored.
-      applyDiscovery: (accountId, loginEmail, result) => {
-        const state = get();
-        const current = state.aliases?.[accountId] || [];
-        const merged = mergeDiscovery({
-          aliases: current,
-          dismissed: state.dismissedAliases?.[accountId] || [],
-          loginEmail,
-          displayName: state.displayNames?.[accountId] || '',
-          result,
-        });
-        // A lookup that finds nothing new writes nothing: every list that
-        // reads the aliases would redraw, and the settings file be rewritten.
-        const changed = merged.aliases.length !== current.length || merged.aliases.some((a, i) => a !== current[i]);
-        if (accountId && (changed || merged.displayName)) {
-          set(latest => ({
-            ...(changed ? { aliases: { ...latest.aliases, [accountId]: merged.aliases } } : {}),
-            ...(merged.displayName ? { displayNames: { ...latest.displayNames, [accountId]: merged.displayName } } : {}),
-          }));
-        }
-        return { added: merged.added, suggestions: merged.suggestions, providerStatus: merged.providerStatus };
       },
 
       setLastComposeIdentity: (accountId, address) => {

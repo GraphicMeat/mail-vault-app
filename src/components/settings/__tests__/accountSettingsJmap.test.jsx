@@ -11,8 +11,10 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { t } from '../../../i18n';
 
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
-vi.mock('../../../services/aliasDiscovery', () => ({
+vi.mock('../../../services/aliases', () => ({
   refreshAliases: vi.fn(async () => ({ added: [], suggestions: [], providerStatus: 'ok' })),
+  addAlias: vi.fn(async () => ({ ok: true })),
+  removeAlias: vi.fn(async () => true),
 }));
 
 const TOKEN = {

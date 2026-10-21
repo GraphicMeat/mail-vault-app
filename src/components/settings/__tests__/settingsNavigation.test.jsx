@@ -13,8 +13,10 @@ import { t } from '../../../i18n';
 // Account settings stay real; reading cached folders is the disk boundary.
 vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: async () => {} }));
 // The Aliases section asks the daemon for the account's aliases when it opens.
-vi.mock('../../../services/aliasDiscovery', () => ({
+vi.mock('../../../services/aliases', () => ({
   refreshAliases: vi.fn(async () => ({ added: [], suggestions: [], providerStatus: 'unsupported' })),
+  addAlias: vi.fn(async () => ({ ok: true })),
+  removeAlias: vi.fn(async () => true),
 }));
 
 beforeEach(() => {

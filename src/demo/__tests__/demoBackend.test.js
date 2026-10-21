@@ -476,6 +476,28 @@ describe('demo mailbox backend', () => {
     expect(none).toEqual({ provider: { status: 'unsupported', aliases: [] }, detected: [] });
   });
 
+  it('keeps each account\'s alias list in the settings document, the way the daemon does', async () => {
+    const backend = createDemoBackend({ initialSettings: { 'mailvault-settings': { state: {}, version: 5 } } });
+    const [studio] = backend.snapshot().accounts || [];
+    const ask = (method, params) => backend.invoke('daemon_rpc', { method, params: { accountId: studio.id, loginEmail: studio.email, ...params } });
+
+    await expect(ask('aliases.add', { address: studio.email })).resolves.toEqual({ ok: false, reason: 'login' });
+    const added = await ask('aliases.add', { address: ' desk@primecut.studio ', name: 'Desk' });
+    expect(added).toMatchObject({ ok: true, alias: { address: 'desk@primecut.studio', name: 'Desk', source: 'manual' } });
+    await expect(ask('aliases.add', { address: 'DESK@primecut.studio' })).resolves.toEqual({ ok: false, reason: 'duplicate' });
+
+    const found = await ask('aliases.refresh', {});
+    expect(found.providerStatus).toBe('unsupported');
+    expect(found.added.map(a => a.address)).toEqual(['hello@primecut.studio']);
+    expect(found.suggestions.map(a => a.address)).toEqual(['bookings@primecut.studio']);
+
+    await ask('aliases.remove', { address: 'hello@primecut.studio' });
+    const listed = await ask('aliases.list', {});
+    expect(listed.aliases.map(a => a.address)).toEqual(['desk@primecut.studio']);
+    expect(listed.dismissed).toEqual(['hello@primecut.studio']);
+    await expect(ask('aliases.refresh', { auto: true })).resolves.toEqual({ scheduled: false });
+  });
+
   it('keeps native-shaped sync, folder, backup and browser file contracts usable', async () => {
     const backend = createDemoBackend();
     const account = backend.accounts[0];
