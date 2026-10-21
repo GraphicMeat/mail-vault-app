@@ -10,6 +10,7 @@ pub mod aliases;
 pub mod app_db;
 pub mod archive;
 pub mod autostart;
+pub mod cleanup_rules;
 pub mod windows_mailto;
 pub mod backup;
 pub mod fetch_mode;
