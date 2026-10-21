@@ -545,13 +545,28 @@ pub async fn build_preview<S: ServerOps>(
     now_ms: i64,
     progress: &mut dyn FnMut(&str, usize),
 ) -> Result<PreviewListing, OpsError> {
+    build_preview_of(ops, preview_id, now_ms, &|_| true, progress).await
+}
+
+/// `build_preview` that lists only the folders `wanted` accepts (an
+/// auto-cleanup run needs the folders its rules name, not the whole account).
+/// Gmail's All Mail is always listed: it is how a label folder's message is
+/// deleted.
+pub async fn build_preview_of<S: ServerOps>(
+    ops: &mut S,
+    preview_id: &str,
+    now_ms: i64,
+    wanted: &dyn Fn(&FolderInfo) -> bool,
+    progress: &mut dyn FnMut(&str, usize),
+) -> Result<PreviewListing, OpsError> {
     let caps = ops.caps().await?;
     let list = ops.folders().await?;
     let provider = ops.provider();
     let trash = ops.trash().await?;
     let mut folders: Vec<(FolderInfo, Option<u32>, Vec<ListedMsg>)> = Vec::new();
     let mut all_mail: Option<(FolderInfo, u32, Vec<ListedMsg>)> = None;
-    for f in list.into_iter().filter(|f| f.selectable) {
+    let gmail_all_mail = |f: &FolderInfo| provider == Provider::Gmail && f.role == FolderRole::AllMail;
+    for f in list.into_iter().filter(|f| f.selectable && (gmail_all_mail(f) || wanted(f))) {
         let mut rows: Vec<ListedMsg> = Vec::new();
         let mut validity: Option<u32> = None;
         let mut cursor: Option<String> = None;

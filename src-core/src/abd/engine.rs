@@ -256,6 +256,9 @@ struct Engine<'a, S: ServerOps, L: LocalStore, E: Env> {
     /// Per folder, this run: whether the vault's recorded generation is the
     /// plan's UIDVALIDITY, so a file already on disk may be adopted by uid.
     gen_ok: HashMap<usize, bool>,
+    /// Per folder, this run: the vault folder carries no generation stamp at
+    /// all (`keep_unarchived` only).
+    unstamped: HashMap<usize, bool>,
 }
 
 impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
@@ -288,6 +291,7 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             planned_allmail: None,
             proven: HashSet::new(),
             gen_ok: HashMap::new(),
+            unstamped: HashMap::new(),
         }
     }
 
@@ -672,7 +676,22 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         self.ensure_listing(i).await?;
         self.prelude().await?;
         let path = self.job.folders[i].path.clone();
-        let r = self.local.mirror_copy_verify(&path, &self.listings[&i], uids).await;
+        let r = if self.job.mirror_read_only {
+            // Read only: the drive's copy is checked by name and Message-ID,
+            // never written. A uid with no vault file to name is missing.
+            let plan = self.plan(i)?;
+            let expected = expected_ids(plan, uids);
+            let files: Vec<(u32, String)> = uids
+                .iter()
+                .filter_map(|u| {
+                    let name = self.listings[&i].get(u)?.file_name()?.to_string_lossy().to_string();
+                    Some((*u, name))
+                })
+                .collect();
+            self.local.mirror_verify_paths(&path, &files, &expected).await
+        } else {
+            self.local.mirror_copy_verify(&path, &self.listings[&i], uids).await
+        };
         let v = match r {
             Ok(v) => v,
             Err(LocalError::VaultUnavailable(t)) => {
@@ -693,6 +712,9 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
                 self.job.folders[i].failures.remove(&u);
             } else if badset.contains(&u) {
                 self.keep_uid(i, u, KeptReason::MirrorMismatch);
+            } else if self.job.mirror_read_only {
+                // Nothing will put it there: asking again is pointless.
+                self.keep_uid(i, u, KeptReason::MirrorMissing);
             } else {
                 self.fail(i, u, KeptReason::MirrorMissing);
             }
@@ -939,6 +961,27 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
         Ok(ok)
     }
 
+    /// The vault folder has no generation stamp (`archive_emails` and the
+    /// scheduled backup write none until a repair stamps it). An error reads
+    /// as stamped, which never adopts a file.
+    async fn vault_unstamped(&mut self, i: usize) -> Flow<bool> {
+        if let Some(b) = self.unstamped.get(&i) {
+            return Ok(*b);
+        }
+        self.gate().await?;
+        let path = self.job.folders[i].path.clone();
+        let r = self.local.vault_generation(&path).await;
+        let none = match self.map_local(r)? {
+            Ok(g) => g.is_none(),
+            Err(t) => {
+                self.note_error(&t);
+                false
+            }
+        };
+        self.unstamped.insert(i, none);
+        Ok(none)
+    }
+
     // ── downloading ─────────────────────────────────────────────────────────
 
     fn next_batch(&self, i: usize, plan: &FolderPlan, cursor: &mut usize) -> Vec<u32> {
@@ -1096,6 +1139,19 @@ impl<'a, S: ServerOps, L: LocalStore, E: Env> Engine<'a, S, L, E> {
             let on_disk = self.listings.get(&i).map_or(false, |l| l.contains_key(&uid));
             if on_disk && with_id && self.vault_gen_ok(i).await? {
                 self.job.folders[i].stored.insert(uid);
+                continue;
+            }
+            if self.job.keep_unarchived {
+                // Nothing is fetched and nothing is written to the vault. A
+                // file already there under a folder that was never stamped
+                // is offered for verification against the planned (server)
+                // Message-ID; under another generation it is not, and a
+                // message without a Message-ID never is (E1).
+                if on_disk && with_id && self.vault_unstamped(i).await? {
+                    self.job.folders[i].stored.insert(uid);
+                } else {
+                    self.keep_uid(i, uid, KeptReason::VaultMissing);
+                }
                 continue;
             }
             if let Some(k) = plan.index_of(uid) {

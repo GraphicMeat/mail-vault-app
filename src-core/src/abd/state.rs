@@ -289,6 +289,15 @@ pub struct JobFile {
     pub mirror_hint: Option<String>,
     /// Last per-message error text, redacted.
     pub last_error: Option<String>,
+    /// Never download or copy into the vault: a message with no verified
+    /// vault copy already on disk is kept (`VaultMissing`). An auto-cleanup
+    /// "delete" rule, which may only take what is already saved.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub keep_unarchived: bool,
+    /// Backup mode: the drive is read, never written. A message whose copy is
+    /// not already on the drive is kept (`MirrorMissing`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mirror_read_only: bool,
 }
 
 /// What a caller supplies to start a job; `JobFile::create` fills the rest.
@@ -329,6 +338,8 @@ impl JobFile {
             graph_tally: None,
             mirror_hint: None,
             last_error: None,
+            keep_unarchived: false,
+            mirror_read_only: false,
         }
     }
 }

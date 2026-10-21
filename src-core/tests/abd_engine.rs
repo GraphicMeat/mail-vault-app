@@ -1751,3 +1751,161 @@ async fn a_jmap_archive_and_delete_of_three_emails_keeps_a_second_label() {
     assert_eq!(fs.kept_count(), 0);
     assert!(job.status.is_finished());
 }
+
+// ── keep_unarchived and mirror_read_only (auto-cleanup rules) ───────────────
+
+/// A "delete" rule takes only what the vault already holds: nothing is
+/// fetched or stored, and a message without a vault copy stays on the server.
+#[tokio::test]
+async fn keep_unarchived_fetches_nothing_and_deletes_only_what_the_vault_holds() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    rig.job.keep_unarchived = true;
+    seed(&mut rig, "INBOX", 3);
+    rig.local.put_vault("INBOX", 1, raw_msg("INBOX-1@t", 100), true);
+    rig.local.put_vault("INBOX", 3, raw_msg("INBOX-3@t", 100), true);
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert_eq!(fetches(&rig), 0, "nothing is downloaded");
+    assert!(rig.local.stores.borrow().is_empty(), "nothing is written to the vault");
+    assert_eq!(rig.server.uids_in("INBOX"), vec![2]);
+    assert_eq!(kept(&rig, "INBOX", KeptReason::VaultMissing), vec![2]);
+    assert_eq!(rig.server.ids_in("Trash").len(), 2, "moved to Trash, not expunged");
+}
+
+/// Control: the same job without the flag downloads uid 2 and deletes all three.
+#[tokio::test]
+async fn control_without_keep_unarchived_the_missing_copy_is_downloaded() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    seed(&mut rig, "INBOX", 3);
+    rig.local.put_vault("INBOX", 1, raw_msg("INBOX-1@t", 100), true);
+    rig.local.put_vault("INBOX", 3, raw_msg("INBOX-3@t", 100), true);
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert!(fetches(&rig) >= 1);
+    assert!(rig.server.uids_in("INBOX").is_empty());
+}
+
+/// `archive_emails` writes no generation stamp. Under keep_unarchived a file
+/// there counts when its Message-ID is the server's for that uid; a file with
+/// another Message-ID, a non-archived cache copy, and a folder stamped with
+/// another generation do not.
+#[tokio::test]
+async fn keep_unarchived_adopts_an_unstamped_vault_copy_only_by_its_message_id() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    rig.job.keep_unarchived = true;
+    seed(&mut rig, "INBOX", 3);
+    rig.local.set_generation("INBOX", None);
+    rig.local.put_vault("INBOX", 1, raw_msg("INBOX-1@t", 100), true);
+    rig.local.put_vault("INBOX", 2, raw_msg("someone-else@t", 100), true);
+    rig.local.put_vault("INBOX", 3, raw_msg("INBOX-3@t", 100), false);
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert_eq!(fetches(&rig), 0);
+    assert_eq!(rig.server.uids_in("INBOX"), vec![2, 3]);
+    assert_eq!(kept(&rig, "INBOX", KeptReason::VaultMismatch), vec![2]);
+    assert_eq!(kept(&rig, "INBOX", KeptReason::VaultMissing), vec![3]);
+
+    let mut other = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    other.job.keep_unarchived = true;
+    seed(&mut other, "INBOX", 1);
+    other.local.set_generation("INBOX", Some(999));
+    other.local.put_vault("INBOX", 1, raw_msg("INBOX-1@t", 100), true);
+    other.select(&["INBOX"]);
+    done(&mut other).await;
+    assert_eq!(other.server.uids_in("INBOX"), vec![1], "another generation's uid 1 is not this message's copy");
+    assert_eq!(kept(&other, "INBOX", KeptReason::VaultMissing), vec![1]);
+}
+
+/// A message with no Message-ID is never proven by a file already on disk.
+#[tokio::test]
+async fn keep_unarchived_never_adopts_a_copy_without_a_message_id() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    rig.job.keep_unarchived = true;
+    let raw = raw_no_id("no id", 100);
+    let uid = rig.server.add_raw("INBOX", raw.clone(), day());
+    rig.local.put_vault("INBOX", uid, raw, true);
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert_eq!(rig.server.uids_in("INBOX"), vec![uid]);
+    assert_eq!(fetches(&rig), 0);
+}
+
+/// A Trash rule empties exactly the planned uids of Trash.
+#[tokio::test]
+async fn keep_unarchived_in_empty_mode_expunges_the_trash_copies_it_holds() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrashAndEmpty);
+    rig.job.keep_unarchived = true;
+    let trash = rig.server.trash_path();
+    let uids = seed(&mut rig, &trash, 2);
+    rig.local.put_vault(&trash, uids[0], raw_msg(&format!("{trash}-1@t"), 100), true);
+    rig.select(&[trash.as_str()]);
+    done(&mut rig).await;
+    assert_eq!(rig.server.uids_in(&trash), vec![uids[1]]);
+    assert_eq!(fetches(&rig), 0);
+}
+
+/// Read-only mirror: the drive is checked, never written. A message whose
+/// copy is not already on the drive stays on the server.
+#[tokio::test]
+async fn mirror_read_only_never_copies_and_keeps_what_the_drive_lacks() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveBackupDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    rig.job.keep_unarchived = true;
+    rig.job.mirror_read_only = true;
+    seed(&mut rig, "INBOX", 2);
+    for u in [1, 2] {
+        rig.local.put_vault("INBOX", u, raw_msg(&format!("INBOX-{u}@t"), 100), true);
+    }
+    let on_drive = rig.local.vault.borrow()["INBOX"][&1].clone();
+    rig.local.mirror.borrow_mut().entry("INBOX".to_string()).or_default().insert(1, on_drive);
+    rig.select(&["INBOX"]);
+    done(&mut rig).await;
+    assert_eq!(rig.local.mirror_copy_calls.get(), 0, "nothing is copied to the drive");
+    assert_eq!(rig.local.mirror_uids("INBOX"), vec![1]);
+    assert_eq!(rig.server.uids_in("INBOX"), vec![2]);
+    assert_eq!(kept(&rig, "INBOX", KeptReason::MirrorMissing), vec![2]);
+}
+
+/// Read-only mirror with the drive gone: the job pauses for it and deletes nothing.
+#[tokio::test]
+async fn mirror_read_only_with_no_drive_deletes_nothing() {
+    let mut rig = Rig::imap(&["INBOX"], Mode::ArchiveBackupDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    rig.job.keep_unarchived = true;
+    rig.job.mirror_read_only = true;
+    seed(&mut rig, "INBOX", 1);
+    rig.local.put_vault("INBOX", 1, raw_msg("INBOX-1@t", 100), true);
+    rig.local.drive_gone.set(true);
+    rig.select(&["INBOX"]);
+    assert_eq!(rig.plan().await, RunExit::Completed);
+    assert_eq!(rig.run().await, RunExit::Paused(PauseReason::DriveUnavailable));
+    assert_eq!(rig.server.uids_in("INBOX"), vec![1]);
+}
+
+/// Old job files carry neither flag: both read as off, and a job without them
+/// writes neither key.
+#[test]
+fn the_cleanup_flags_default_off_and_stay_out_of_old_job_files() {
+    let job = sample_job();
+    let text = serde_json::to_string(&job).unwrap();
+    assert!(!text.contains("keepUnarchived") && !text.contains("mirrorReadOnly"), "{text}");
+    let back: JobFile = serde_json::from_str(&text).unwrap();
+    assert!(!back.keep_unarchived && !back.mirror_read_only);
+    let mut on = sample_job();
+    on.keep_unarchived = true;
+    on.mirror_read_only = true;
+    let back: JobFile = serde_json::from_str(&serde_json::to_string(&on).unwrap()).unwrap();
+    assert!(back.keep_unarchived && back.mirror_read_only);
+}
+
+/// A cleanup run lists only the folders its rules name, and Gmail's All Mail.
+#[tokio::test]
+async fn a_filtered_preview_lists_the_wanted_folders_and_all_mail() {
+    use mailvault_core::abd::imap_ops::build_preview_of;
+    let mut rig = Rig::gmail(&["INBOX", "Work"], Mode::ArchiveDelete, Timing::AsSaved, DeleteMode::MoveToTrash);
+    rig.server.add_gmail_msg("g1@t", day(), 100, &["INBOX", "Work"]);
+    let p = build_preview_of(&mut rig.server, "p1", 0, &|f| f.path == "INBOX", &mut |_, _| {}).await.unwrap();
+    let listed: Vec<&str> = p.folders.iter().map(|f| f.0.path.as_str()).collect();
+    assert_eq!(listed, vec!["INBOX"]);
+    assert!(p.all_mail.as_ref().is_some_and(|a| a.2.len() == 1), "All Mail is listed whatever the filter says");
+    let all = build_preview_of(&mut rig.server, "p2", 0, &|_| true, &mut |_, _| {}).await.unwrap();
+    assert!(all.folders.len() > listed.len());
+}
