@@ -145,6 +145,24 @@ pub fn looks_like_code_mail(subject: &str, text: &str) -> bool {
     KEYWORDS.is_match(&format!("{}\n{}", clean(subject), clean(text)))
 }
 
+/// A subject about a password reset or account recovery, which often carries
+/// a code without saying "code" ("Password Reset Request"). Not a code word:
+/// it only earns the body a read, the code itself still needs `KEYWORDS`.
+static RESET: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"(?i)(?-u:\b)(?:password|passwort|kennwort|reset|recover[a-z]*)(?-u:\b)",
+        r"|zurücksetz|contraseña|restablec|mot de passe|réinitialis|senha|redefini|reimpost",
+        r"|パスワード|비밀번호|密码|密碼",
+    ))
+    .unwrap()
+});
+
+/// True when a mail with no code in its subject or snippet is worth one body
+/// read for it: either talks about a code, or the subject is about a reset.
+pub fn body_may_hold_code(subject: &str, snippet: &str) -> bool {
+    looks_like_code_mail(subject, snippet) || RESET.is_match(&clean(subject))
+}
+
 /// The code in the mail, as the user would type it.
 pub fn find_verification_code(subject: &str, text: &str) -> Option<String> {
     let t = Text::new(subject, text);
@@ -233,6 +251,44 @@ mod tests {
             }
         }
         assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
+
+    const RESET_BODY: &str = "PlayBall password reset\n\nHello!\n\nYou have received this email because you requested a password reset for your PlayBall account.\n\nTo reset your password, please enter the next code in your app:\n\n26313\n\nThis code will expire in 15 minutes.\n\nIf you did not request a password reset, simply ignore this message.\n\nSincerely,\nPlayBall Team\n\n© 2025 PlayBall. All rights reserved.";
+
+    #[test]
+    fn finds_the_code_in_a_password_reset_mail() {
+        assert_eq!(find_verification_code("Password Reset Request", RESET_BODY).as_deref(), Some("26313"));
+    }
+
+    /// The arrival's header carries no body, often no snippet: a subject about
+    /// a password reset is worth one body read even with no code word in it.
+    #[test]
+    fn a_password_reset_subject_is_worth_reading_the_body_for() {
+        for subject in [
+            "Password Reset Request",
+            "Reset your password",
+            "Account recovery",
+            "Passwort zurücksetzen",
+            "Restablecer contraseña",
+            "Réinitialiser votre mot de passe",
+            "Redefinir senha",
+            "パスワードの再設定",
+            "비밀번호 재설정",
+            "重置密码",
+        ] {
+            assert!(body_may_hold_code(subject, ""), "{subject}");
+        }
+    }
+
+    #[test]
+    fn a_snippet_that_talks_about_a_code_is_worth_reading_the_body_for() {
+        assert!(body_may_hold_code("PlayBall", "Please enter the next code in your app"));
+    }
+
+    #[test]
+    fn an_ordinary_mail_is_not_worth_reading_the_body_for() {
+        assert!(!body_may_hold_code("Weekly digest", "Here is what happened this week"));
+        assert!(!body_may_hold_code("Your order has shipped", ""));
     }
 
     #[test]

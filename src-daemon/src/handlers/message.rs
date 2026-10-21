@@ -10,7 +10,8 @@
 //! - `message.code`: the one-time code in a mail
 //!   (`mailvault_core::verification_code`). Params `{subject, text}`; the
 //!   answer is `{code, needsBody}`, `needsBody` when no code was found but the
-//!   subject talks about one, so the body is worth reading for it.
+//!   subject or snippet talks about one (or the subject about a password
+//!   reset), so the body is worth reading for it.
 //!
 //! Both read only what they are handed: no vault, no network.
 use crate::handlers::common::{blocking, done};
@@ -34,7 +35,7 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
                 id,
                 blocking(move || {
                     let code = verification_code::find_verification_code(&subject, &body);
-                    let needs_body = code.is_none() && verification_code::looks_like_code_mail(&subject, "");
+                    let needs_body = code.is_none() && verification_code::body_may_hold_code(&subject, &body);
                     json!({"code": code, "needsBody": needs_body})
                 })
                 .await,
@@ -101,17 +102,22 @@ mod tests {
         assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     }
 
-    /// The bubble reads a body only for a mail whose subject talks about a
-    /// code and whose subject and snippet held none.
+    /// The bubble reads a body only for a mail whose subject or snippet talks
+    /// about a code (or a password reset) and held none.
     #[tokio::test]
-    async fn needs_body_only_when_the_subject_announces_a_code_it_does_not_hold() {
+    async fn needs_body_only_when_the_mail_announces_a_code_it_does_not_hold() {
         let s = st();
         let r = call(&s, "message.code", json!({"subject": "Sign in to Acme", "text": "Hello there"})).await;
         assert_eq!(r, json!({"code": null, "needsBody": true}));
         let r = call(&s, "message.code", json!({"subject": "Your code is 364758"})).await;
         assert_eq!(r, json!({"code": "364758", "needsBody": false}));
-        // The snippet talks about a code, the subject does not: no body read, as before.
+        // A snippet cut off before the code it announces.
         let r = call(&s, "message.code", json!({"subject": "Lunch", "text": "your verification"})).await;
+        assert_eq!(r, json!({"code": null, "needsBody": true}));
+        // A reset mail whose subject names no code and whose header has no snippet.
+        let r = call(&s, "message.code", json!({"subject": "Password Reset Request", "text": ""})).await;
+        assert_eq!(r, json!({"code": null, "needsBody": true}));
+        let r = call(&s, "message.code", json!({"subject": "Weekly digest", "text": "Hello there"})).await;
         assert_eq!(r, json!({"code": null, "needsBody": false}));
         let r = call(&s, "message.code", json!({})).await;
         assert_eq!(r, json!({"code": null, "needsBody": false}));
