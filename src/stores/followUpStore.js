@@ -134,7 +134,7 @@ export async function announceDue() {
       ? t('followUp.notifyBodyPrivate')
       : t('followUp.notifyBody', { subject: row.subject || t('common.noSubject'), recipients: row.recipients || '' });
     const target = { accountId: row.accountId, mailbox: 'INBOX' };
-    const mailCtx = { accountId: row.accountId, folder: 'INBOX', from: '', domain: '', viewIds: [] };
+    const mailCtx = { accountId: row.accountId, folder: 'INBOX', from: '', viewIds: [] };
     try {
       await notify(title, body, sound === 'none' ? undefined : sound, target, mailCtx);
       await daemonCall('follow_up.mark_announced', { id: row.id });

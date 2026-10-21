@@ -85,7 +85,7 @@ describe('the wake of a local snooze', () => {
     expect(mockGetEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX');
     expect(mockNotify).toHaveBeenCalledTimes(1);
     expect(mockNotify).toHaveBeenCalledWith('Ada', 'Back again', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 5 },
-      { accountId: 'a1', folder: 'INBOX', from: 'ada@one.co', domain: 'one.co', viewIds: [] });
+      { accountId: 'a1', folder: 'INBOX', from: 'ada@one.co', viewIds: [] });
     // The row is history, so the list shows the message again.
     expect(useSnoozeStore.getState().rows.map(r => r.id)).toEqual(['server']);
     expect(mockReload).toHaveBeenCalled();

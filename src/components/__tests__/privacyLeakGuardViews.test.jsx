@@ -191,7 +191,7 @@ describe('privacy leak guard: views and settings', () => {
     useSettingsStore.setState({ notificationSettings: { enabled: true, showPreview: true, accounts: {}, sound: 'none',
       importantSenders: [{ match: ROKAS_ADDR, throughQuietHours: true }] } });
     await act(() => notify(`Lunch with ${JOANNA}`, '', undefined, undefined,
-      { accountId: 'own', folder: 'INBOX', from: JOANNA_ADDR, domain: 'example.org', viewIds: [] }));
+      { accountId: 'own', folder: 'INBOX', from: JOANNA_ADDR, viewIds: [] }));
     usePrivacyStore.setState({ enabled: true });
     render(<NotificationSettings accounts={[ACCOUNT]} />);
     expect(document.body.textContent).toContain(`Lunch with ${MASKED_JOANNA}`);
