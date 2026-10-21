@@ -23,6 +23,7 @@ pub(crate) mod archive;
 pub(crate) mod auto_tags;
 pub(crate) mod backup;
 pub(crate) mod backup_zip;
+pub(crate) mod body;
 pub(crate) mod cache;
 pub(crate) mod common;
 pub(crate) mod compose;

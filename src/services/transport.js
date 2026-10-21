@@ -316,6 +316,10 @@ export const DAEMON_OWNED = new Set([
   // snapshot and answers every chart and drill-down (was the web worker and
   // src/utils/insights/model.js). Progress: `insights-build-progress`.
   'insights.build', 'insights.status', 'insights.aggregate', 'insights.messages', 'insights.release',
+  // Phase 1 row 10: tracking pixels, link safety and the row alerts, decided
+  // by the daemon (src-core/src/body_scan). services/bodyScan.js and
+  // services/rowVerdicts.js are the callers.
+  'body.scan', 'body.verdicts', 'body.classify_links', 'body.info',
 ]);
 
 async function sendToDaemon(command, args) {

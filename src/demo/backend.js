@@ -837,6 +837,12 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
           return { accounts };
         }
         if (method === 'policy.vault_mailboxes') return { mailboxes: [...(args.params?.dirs || [])] };
+        // The demo's mail carries no tracking pixels and no links to flag: every
+        // body is framed as given, every row wears only what it already carries.
+        if (method === 'body.scan') return { trackers: [], count: 0, https: 0, summary: null, html: null, alerts: args.params?.links ? [] : null, maxAlertLevel: null, simulated: true };
+        if (method === 'body.verdicts') return { rows: {}, trackers: {}, simulated: true };
+        if (method === 'body.classify_links') return (args.params?.links || []).map(() => ({ level: null, reason: '', actualDomain: null, textDomain: null }));
+        if (method === 'body.info') return { trackerPatterns: null, simulated: true };
         // "Is the server copy gone?": the demo's own server rows answer, and
         // nothing is stamped (its custody lives on the rows themselves).
         if (method === 'custody.probe_server_copy') {
