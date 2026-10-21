@@ -62,6 +62,8 @@ block2 = "0.6"
 # New-mail banners through UNUserNotificationCenter, so a click can open the
 # message (notification_open.rs). The plugin's banner reports no click.
 objc2-user-notifications = "0.3"
+# Copy & delete on a code banner copies the code natively (notification_open.rs).
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPasteboard"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Already in the tree through tauri-plugin-shell, with this feature on: it

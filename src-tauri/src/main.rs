@@ -970,6 +970,7 @@ fn send_notification(
     body: String,
     sound: Option<String>,
     target: Option<notification_open::NotificationTarget>,
+    actions: Option<notification_open::CodeActions>,
 ) -> Result<(), String> {
     // Title and body carry the subject and sender: Verbose logs only.
     info!("send_notification called");
@@ -991,9 +992,9 @@ fn send_notification(
             .as_deref()
             .filter(|_| icon != "purple")
             .and_then(|dir| app_icon::icon_file(dir, icon, true).ok());
-        return notification_open::mac::show(&title, &body, sound, target.as_ref(), thumbnail);
+        return notification_open::mac::show(&title, &body, sound, target.as_ref(), actions.as_ref(), thumbnail);
     }
-    let _ = target;
+    let _ = (target, actions);
 
     #[cfg(not(target_os = "macos"))]
     let icon_path = cache.and_then(|dir| match app_icon::icon_file(&dir, icon, false) {
@@ -3627,6 +3628,7 @@ fn main() {
         .manage(vault::VaultState::default())
         .manage(mailto::PendingMailto::default())
         .manage(notification_open::PendingNotificationOpen::default())
+        .manage(notification_open::PendingNotificationDeletes::default())
         .manage(app_icon::SelectedAppIcon::default());
 
     #[cfg(any(target_os = "linux", windows))]
@@ -3644,6 +3646,7 @@ fn main() {
             dropped_files::read_dropped_files,
             take_pending_mailto,
             notification_open::take_notification_open,
+            notification_open::take_notification_deletes,
             e2e_queue_mailto,
             mailto_default_status,
             mailto_make_default,

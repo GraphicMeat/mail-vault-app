@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { startNotificationOpenBridge, openNotificationTarget } from '../notificationOpen';
+import { startNotificationOpenBridge, startNotificationDeleteBridge, openNotificationTarget } from '../notificationOpen';
 
 // The rule this file protects: clicking a new-mail banner opens the message it
 // showed, in the folder it arrived in, including the click that launched the
@@ -52,6 +52,48 @@ describe('startNotificationOpenBridge', () => {
     await fire('notification-open');
 
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+// Delete and Copy & delete on a code banner (macOS). Rust copies the code and
+// queues the message; every queued one goes, including a press that launched
+// the app.
+describe('startNotificationDeleteBridge', () => {
+  it('deletes every message queued before the bridge started', async () => {
+    const { listen } = fakeListen();
+    const a = { accountId: 'a1', mailbox: 'INBOX', uid: 7 }, b = { accountId: 'a2', mailbox: 'INBOX', uid: 9 };
+    const invoke = vi.fn().mockResolvedValueOnce([a, b]);
+    const remove = vi.fn();
+
+    await startNotificationDeleteBridge({ invoke, listen, remove }).ready;
+
+    expect(invoke).toHaveBeenCalledWith('take_notification_deletes');
+    expect(remove.mock.calls).toEqual([[a], [b]]);
+  });
+
+  it('drains again on the wake-up', async () => {
+    const { listen, fire } = fakeListen();
+    const target = { accountId: 'a1', mailbox: 'INBOX', uid: 3 };
+    const invoke = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([target]);
+    const remove = vi.fn();
+
+    await startNotificationDeleteBridge({ invoke, listen, remove }).ready;
+    expect(remove).not.toHaveBeenCalled();
+
+    await fire('notification-delete');
+    expect(remove).toHaveBeenCalledWith(target);
+  });
+
+  it('keeps deleting the rest when one delete fails', async () => {
+    const { listen } = fakeListen();
+    const a = { accountId: 'a1', mailbox: 'INBOX', uid: 7 }, b = { accountId: 'a1', mailbox: 'INBOX', uid: 8 };
+    const invoke = vi.fn().mockResolvedValueOnce([a, b]);
+    const remove = vi.fn().mockRejectedValueOnce(new Error('offline'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await startNotificationDeleteBridge({ invoke, listen, remove }).ready;
+
+    expect(remove).toHaveBeenCalledWith(b);
   });
 });
 

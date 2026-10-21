@@ -207,7 +207,11 @@ export function notify(title, body, sound, target, mailCtx) {
   // came; anything else is masked like the window behind it. Until the saved
   // choice has loaded it counts as on: a banner cannot be taken back.
   if (usePrivacyStore.getState().enabled || !usePrivacyStore.persist.hasHydrated()) {
-    if (mailCtx) { title = t('privacy.notificationTitle'); body = ''; }
+    if (mailCtx) {
+      title = t('privacy.notificationTitle'); body = '';
+      // The one-time code is the mail's content too, and with it go its buttons.
+      if (target?.code) { const { code: _code, ...rest } = target; target = rest; }
+    }
     else { const d = getPrivacyDictionary(); title = maskString(title, d); body = maskString(body, d); }
   }
   const selectedSound = normalizeNotificationSound(sound);

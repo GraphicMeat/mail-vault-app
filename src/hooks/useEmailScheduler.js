@@ -31,15 +31,20 @@ const dispatchNotifications = (perAccountResults) => {
   const selectedSound = normalizeNotificationSound(sound);
 
   for (const result of perAccountResults) {
-    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress } = result;
+    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress, newestCode } = result;
 
     // A click opens the message the banner shows, in the folder it arrived
     // in. Without a preview the banner names no message, so it opens the folder.
     const uid = Number(newestUid);
+    const named = showPreview && Number.isSafeInteger(uid) && uid > 0;
+    // A lone arrival's one-time code shows under the sender, and rides in the
+    // target for the banner's Copy & delete and Delete (macOS).
+    const code = named && newCount === 1 && newestCode ? newestCode : null;
     const target = {
       accountId,
       mailbox: folder,
-      ...(showPreview && Number.isSafeInteger(uid) && uid > 0 ? { uid } : {}),
+      ...(named ? { uid } : {}),
+      ...(code ? { code } : {}),
     };
     const from = newestFromAddress || '';
     const domain = from.includes('@') ? from.slice(from.indexOf('@') + 1) : '';
@@ -59,7 +64,7 @@ const dispatchNotifications = (perAccountResults) => {
       if (showPreview) {
         const sender = newestSender || 'Unknown sender';
         const subject = newestSubject || '(No subject)';
-        notifyEmail(sender, subject);
+        notifyEmail(sender, code ? `${code}\n${subject}` : subject);
       } else {
         notifyEmail('New Email', `New email in ${accountEmail}`);
       }
@@ -80,9 +85,10 @@ const dispatchNotifications = (perAccountResults) => {
 };
 
 /// One banner: `count` new in `folder` of `accountId`, previewing `header`
-/// (a cached list row, or null). The change feed and a local snooze's wake
-/// (stores/snoozeStore.js) both announce through it.
-export function notifyArrival(accountId, folder, count, header) {
+/// (a cached list row, or null) and the one-time `code` found in it, if any.
+/// The change feed and a local snooze's wake (stores/snoozeStore.js) both
+/// announce through it.
+export function notifyArrival(accountId, folder, count, header, code = null) {
   const account = useMailStore.getState().accounts.find(a => a.id === accountId);
   const fromAddress = typeof header?.from === 'string' ? header.from : (header?.from?.address || '');
   // The user's own reply lands in the inbox thread too (Gmail files it under
@@ -95,7 +101,27 @@ export function notifyArrival(accountId, folder, count, header) {
     newestSubject: header?.subject,
     newestUid: header?.uid,
     newestFromAddress: fromAddress,
+    newestCode: code,
   }]);
+}
+
+// How long a lone arrival's banner waits for the code read (which may read the
+// body) before it goes without the code. The bubble still gets a late code.
+const CODE_WAIT_MS = 3000;
+
+/// The change feed's banner and code bubble for one folder's arrivals: one
+/// code read feeds both.
+async function announceArrival(accountId, mailbox, count, header) {
+  const offered = offerCodeFromArrival(accountId, mailbox, header).catch(error => {
+    console.warn('[scheduler] Could not offer the code bubble:', error);
+    return null;
+  });
+  let timer;
+  const code = count === 1
+    ? await Promise.race([offered, new Promise(resolve => { timer = setTimeout(resolve, CODE_WAIT_MS, null); })])
+    : null;
+  clearTimeout(timer);
+  notifyArrival(accountId, mailbox, count, header, code);
 }
 
 // Fire-and-forget, loaded late: both stores sit on top of the mail store this
@@ -256,11 +282,10 @@ export function useEmailScheduler() {
       try {
         newest = (await db.getEmailHeadersPartial(accountId, mailbox, 1))?.emails?.[0] || null;
       } catch { /* no preview, still notify */ }
-      notifyArrival(accountId, mailbox, newEmails, newest);
-      // A one-time code in that mail goes to the corner bubble. Fire-and-forget:
-      // it may read the body, and nothing in the feed waits on it.
-      offerCodeFromArrival(accountId, mailbox, newest)
-        .catch(error => console.warn('[scheduler] Could not offer the code bubble:', error));
+      // A one-time code in that mail goes to the corner bubble and the banner.
+      // Fire-and-forget: it may read the body, and nothing in the feed waits on it.
+      announceArrival(accountId, mailbox, newEmails, newest)
+        .catch(error => console.warn('[scheduler] Could not announce the arrival:', error));
     }
     // A restore window saved before the change holds the old flags, and All
     // Inboxes paints those ahead of the cache. The Notes to Self board keeps

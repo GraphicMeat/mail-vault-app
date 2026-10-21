@@ -251,6 +251,63 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       expect(mockOfferCode).toHaveBeenCalledWith('a1', 'INBOX', header);
     });
 
+    // One read feeds both: the banner shows the code the bubble got, and its
+    // target carries it for Copy & delete (macOS).
+    it('puts the code in the banner of a lone arrival', async () => {
+      mailStore.setState({ accounts: [IMAP_A] });
+      const header = { uid: 7, from: { name: 'PlayBall', address: 'smtp@playball.lt' }, subject: 'Password Reset Request' };
+      mockGetHeaders.mockResolvedValue({ emails: [header] });
+      mockOfferCode.mockResolvedValueOnce('26313');
+      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockNotify).toHaveBeenCalledWith('PlayBall', '26313\nPassword Reset Request', undefined,
+        { accountId: 'a1', mailbox: 'INBOX', uid: 7, code: '26313' },
+        { accountId: 'a1', folder: 'INBOX', from: 'smtp@playball.lt', domain: 'playball.lt', viewIds: [] });
+    });
+
+    it('keeps the code out of a banner that shows no preview', async () => {
+      settingsStore.setState({ notificationSettings: { ...settingsState().notificationSettings, showPreview: false } });
+      mailStore.setState({ accounts: [IMAP_A] });
+      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'PlayBall' }, subject: 'Password Reset Request' }] });
+      mockOfferCode.mockResolvedValueOnce('26313');
+      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockNotify.mock.calls[0][1]).not.toContain('26313');
+      expect(mockNotify.mock.calls[0][3]).toEqual({ accountId: 'a1', mailbox: 'INBOX' });
+    });
+
+    it('keeps the code out of a banner for several arrivals', async () => {
+      mailStore.setState({ accounts: [IMAP_A] });
+      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'PlayBall' }, subject: 'Password Reset Request' }] });
+      mockOfferCode.mockResolvedValueOnce('26313');
+      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 2, updatedFlags: 0, at: 1 }] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockNotify.mock.calls[0][0]).toBe('2 New Emails');
+      expect(mockNotify.mock.calls[0][3]).toEqual({ accountId: 'a1', mailbox: 'INBOX', uid: 7 });
+    });
+
+    it('still notifies when the code read fails', async () => {
+      mailStore.setState({ accounts: [IMAP_A] });
+      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'Ada' }, subject: 'Hello' }] });
+      mockOfferCode.mockRejectedValueOnce(new Error('daemon gone'));
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 }, expect.any(Object));
+    });
+
     it('offers nothing for a change without new mail', async () => {
       mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
       eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1 }] })];

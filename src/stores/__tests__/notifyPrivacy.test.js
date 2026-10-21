@@ -22,6 +22,14 @@ describe('notify under privacy mode', () => {
     expect(title).toBe('New message');
     expect(body).toBe('');
   });
+  // A one-time code is mail content: no code, so no Copy & delete either.
+  it('a mail banner drops its one-time code', async () => {
+    usePrivacyStore.setState({ enabled: true });
+    await notify('PlayBall', '26313\nPassword Reset Request', undefined, { accountId: 'a', mailbox: 'INBOX', uid: 7, code: '26313' }, { accountId: 'a', folder: 'INBOX', from: 'j@x.com', domain: 'x.com', viewIds: [] });
+    const [, body, , target] = sendNotification.mock.calls[0];
+    expect(body).toBe('');
+    expect(target).toEqual({ accountId: 'a', mailbox: 'INBOX', uid: 7 });
+  });
   it('other banners are masked, not dropped', async () => {
     usePrivacyStore.setState({ enabled: true });
     await notify('Backup done', 'Saved mail for John Smith');

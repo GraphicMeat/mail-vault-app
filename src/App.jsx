@@ -101,7 +101,7 @@ import { useAbdStore } from './stores/abdStore';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
-import { openNotificationTarget, startNotificationOpenBridge } from './utils/notificationOpen';
+import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
 import { openComposeResolved } from './utils/replyTarget';
 import { loadComposeSession, mergeComposeSession, saveComposeSession } from './services/composeSession';
@@ -1283,29 +1283,41 @@ function App() {
     quickLoadAccounts();
   }, []);
 
-  // A click on a new-mail banner. Gated on quick load: a click that launched
-  // the app is already queued, and opening it needs the accounts in the store.
+  // A click on a new-mail banner, and Delete or Copy & delete on a code
+  // banner. Gated on quick load: a press that launched the app is already
+  // queued, and acting on it needs the accounts in the store.
   useEffect(() => {
     if (!quickLoadDone) return;
-    let stop = null;
+    let stops = [];
     let active = true;
     Promise.all([
       import('@tauri-apps/api/core'),
       import('@tauri-apps/api/event'),
     ]).then(([{ invoke }, { listen }]) => {
-      const bridge = startNotificationOpenBridge({
-        invoke,
-        listen,
-        open: (target) => {
-          openMailFromSidebar();
-          return openNotificationTarget(target, useMailStore.getState)
-            .catch(e => console.warn('[notification] could not open the clicked email:', e));
-        },
-      });
-      if (!active) bridge.stop();
-      else stop = bridge.stop;
+      const bridges = [
+        startNotificationOpenBridge({
+          invoke,
+          listen,
+          open: (target) => {
+            openMailFromSidebar();
+            return openNotificationTarget(target, useMailStore.getState)
+              .catch(e => console.warn('[notification] could not open the clicked email:', e));
+          },
+        }),
+        // The code bubble's own delete (Trash, with its undo); its bubble goes too.
+        startNotificationDeleteBridge({
+          invoke,
+          listen,
+          remove: async ({ accountId, mailbox, uid }) => {
+            await useMailStore.getState().deleteEmailFromServer(uid, { accountId, mailboxOverride: mailbox });
+            useCodeBubbleStore.getState().dismiss(`${accountId}|${mailbox}|${uid}`);
+          },
+        }),
+      ];
+      stops = bridges.map(b => b.stop);
+      if (!active) stops.forEach(stop => stop());
     }).catch(() => {}); // not in Tauri
-    return () => { active = false; if (stop) stop(); };
+    return () => { active = false; stops.forEach(stop => stop()); };
   }, [quickLoadDone, openMailFromSidebar]);
 
   // Full initialization with delay (includes keychain access)

@@ -9,15 +9,37 @@
  * drain has nothing to open the target in.
  */
 export function startNotificationOpenBridge({ invoke, listen, open }) {
+  return bridge(listen, 'notification-open', async (isActive) => {
+    const target = await invoke('take_notification_open');
+    if (target && isActive()) await open(target);
+  });
+}
+
+/**
+ * Delete and Copy & delete on a one-time-code banner (macOS): Rust has copied
+ * the code and queued the message; each queued one is deleted the way the
+ * code bubble deletes it. Same queue-plus-wake-up shape as the click, for a
+ * press that launched the app.
+ */
+export function startNotificationDeleteBridge({ invoke, listen, remove }) {
+  return bridge(listen, 'notification-delete', async (isActive) => {
+    for (const target of (await invoke('take_notification_deletes')) || []) {
+      if (!isActive()) return;
+      try {
+        await remove(target);
+      } catch (e) {
+        console.warn('[notification] could not delete the email:', e);
+      }
+    }
+  });
+}
+
+function bridge(listen, event, drainWith) {
   let active = true;
   let unlisten = null;
+  const drain = () => drainWith(() => active);
 
-  const drain = async () => {
-    const target = await invoke('take_notification_open');
-    if (target && active) await open(target);
-  };
-
-  const ready = listen('notification-open', drain)
+  const ready = listen(event, drain)
     .then(fn => {
       if (!active) fn();
       else unlisten = fn;

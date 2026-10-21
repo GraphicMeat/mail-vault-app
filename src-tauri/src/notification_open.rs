@@ -9,7 +9,13 @@
 //! a banner still sitting in Notification Center after the app quit *launches*
 //! the app when clicked, and that response lands before the webview exists.
 //!
+//! A banner that carries a one-time code (`NotificationTarget::code`) also has
+//! two buttons on macOS: Copy & delete copies the code here, natively (the
+//! webview may be in the background), and both queue the message for the
+//! frontend to delete, the same queue-plus-wake-up shape as a click.
+//!
 //! Other platforms keep the plugin path, so their banners still open nothing.
+//! The code still shows in their banner's text; it just has no buttons.
 //! On Windows that means tauri-plugin-notification's WinRT toast: it shows —
 //! title, body, sound all work — but a click on it reaches nobody, because the
 //! plugin drops the result exactly as it does everywhere it isn't macOS.
@@ -27,6 +33,18 @@ pub struct NotificationTarget {
     pub mailbox: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uid: Option<u64>,
+    /// The one-time code the banner shows, for its Copy & delete.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
+/// The titles of a code banner's buttons, in the app's language.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[derive(serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeActions {
+    pub copy_delete: String,
+    pub delete: String,
 }
 
 /// The last clicked banner the frontend has not taken yet. One slot: a second
@@ -47,6 +65,31 @@ impl PendingNotificationOpen {
     }
 }
 
+/// Messages a code banner's Delete or Copy & delete asked to delete, not yet
+/// taken by the frontend. A queue, not a slot: every press must delete.
+#[derive(Default)]
+pub struct PendingNotificationDeletes(Mutex<Vec<NotificationTarget>>);
+
+impl PendingNotificationDeletes {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub fn push(&self, target: NotificationTarget) {
+        if let Ok(mut queue) = self.0.lock() {
+            queue.push(target);
+        }
+    }
+
+    pub fn take(&self) -> Vec<NotificationTarget> {
+        self.0.lock().map(|mut queue| std::mem::take(&mut *queue)).unwrap_or_default()
+    }
+}
+
+#[tauri::command]
+pub fn take_notification_deletes(
+    state: tauri::State<PendingNotificationDeletes>,
+) -> Vec<NotificationTarget> {
+    state.take()
+}
+
 #[tauri::command]
 pub fn take_notification_open(
     state: tauri::State<PendingNotificationOpen>,
@@ -56,19 +99,21 @@ pub fn take_notification_open(
 
 #[cfg(target_os = "macos")]
 pub mod mac {
-    use super::{NotificationTarget, PendingNotificationOpen};
+    use super::{CodeActions, NotificationTarget, PendingNotificationDeletes, PendingNotificationOpen};
     use std::sync::OnceLock;
 
     use block2::RcBlock;
     use objc2::rc::Retained;
     use objc2::runtime::{AnyObject, Bool, ProtocolObject};
     use objc2::{define_class, msg_send, AllocAnyThread};
+    use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
     use objc2_foundation::{
-        NSArray, NSBundle, NSDictionary, NSError, NSObject, NSObjectProtocol, NSString, NSURL,
+        NSArray, NSBundle, NSDictionary, NSError, NSObject, NSObjectProtocol, NSSet, NSString, NSURL,
     };
     use objc2_user_notifications::{
-        UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationAttachment,
-        UNNotificationRequest,
+        UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationAction,
+        UNNotificationActionOptions, UNNotificationAttachment, UNNotificationCategory,
+        UNNotificationCategoryOptions, UNNotificationRequest,
         UNNotificationResponse, UNNotificationSound, UNUserNotificationCenter,
         UNUserNotificationCenterDelegate,
     };
@@ -76,6 +121,9 @@ pub mod mac {
     use tracing::warn;
 
     const TARGET_KEY: &str = "mvTarget";
+    const CODE_CATEGORY: &str = "mvCode";
+    const COPY_DELETE: &str = "mvCopyDelete";
+    const DELETE: &str = "mvDelete";
 
     static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 
@@ -94,7 +142,7 @@ pub mod mac {
                 response: &UNNotificationResponse,
                 completion_handler: &block2::DynBlock<dyn Fn()>,
             ) {
-                opened(response);
+                responded(response);
                 completion_handler.call(());
             }
         }
@@ -118,14 +166,45 @@ pub mod mac {
         std::mem::forget(delegate);
     }
 
+    /// The code banner's two buttons, titled in the app's language. The set is
+    /// replaced on every code banner, so a language switch reaches the next one.
+    /// Neither brings the app forward: the delete runs in the background.
+    fn register_code_actions(actions: &CodeActions) {
+        let action = |id: &str, title: &str, options| {
+            UNNotificationAction::actionWithIdentifier_title_options(
+                &NSString::from_str(id),
+                &NSString::from_str(title),
+                options,
+            )
+        };
+        let buttons = NSArray::from_retained_slice(&[
+            action(COPY_DELETE, &actions.copy_delete, UNNotificationActionOptions::empty()),
+            action(DELETE, &actions.delete, UNNotificationActionOptions::Destructive),
+        ]);
+        let category = UNNotificationCategory::categoryWithIdentifier_actions_intentIdentifiers_options(
+            &NSString::from_str(CODE_CATEGORY),
+            &buttons,
+            &NSArray::new(),
+            UNNotificationCategoryOptions::empty(),
+        );
+        UNUserNotificationCenter::currentNotificationCenter()
+            .setNotificationCategories(&NSSet::from_retained_slice(&[category]));
+    }
+
     pub fn show(
         title: &str,
         body: &str,
         sound: Option<&str>,
         target: Option<&NotificationTarget>,
+        actions: Option<&CodeActions>,
         thumbnail: Option<std::path::PathBuf>,
     ) -> Result<(), String> {
         let content = UNMutableNotificationContent::new();
+        // Buttons only for a banner that names a message and its code.
+        if let (Some(actions), Some(_)) = (actions, target.filter(|t| t.uid.is_some()).and_then(|t| t.code.as_ref())) {
+            register_code_actions(actions);
+            content.setCategoryIdentifier(&NSString::from_str(CODE_CATEGORY));
+        }
         content.setTitle(&NSString::from_str(title));
         content.setBody(&NSString::from_str(body));
         if let Some(name) = sound {
@@ -187,7 +266,7 @@ pub mod mac {
         Ok(())
     }
 
-    fn opened(response: &UNNotificationResponse) {
+    fn responded(response: &UNNotificationResponse) {
         let Some(app) = APP.get() else { return };
         let info = response.notification().request().content().userInfo();
         let key = NSString::from_str(TARGET_KEY);
@@ -196,6 +275,28 @@ pub mod mac {
             .and_then(|value| value.downcast::<NSString>().ok())
             .and_then(|json| serde_json::from_str::<NotificationTarget>(&json.to_string()).ok());
 
+        let action = response.actionIdentifier().to_string();
+        if action == COPY_DELETE || action == DELETE {
+            let Some(target) = target.filter(|t| t.uid.is_some()) else { return };
+            if action == COPY_DELETE {
+                let Some(code) = &target.code else { return };
+                let board = NSPasteboard::generalPasteboard();
+                board.clearContents();
+                // A code that never reached the clipboard must not cost the message.
+                if !board.setString_forType(&NSString::from_str(code), unsafe { NSPasteboardTypeString }) {
+                    warn!("[notification] code not copied; message kept");
+                    return;
+                }
+            }
+            app.state::<PendingNotificationDeletes>().push(target);
+            let _ = app.emit("notification-delete", ());
+            return;
+        }
+        // No dismiss action is asked for, so anything else is a click.
+        opened(app, target);
+    }
+
+    fn opened(app: &tauri::AppHandle, target: Option<NotificationTarget>) {
         if let Some(window) = app.get_webview_window("main") {
             crate::show_main_window(&window);
         }
@@ -227,9 +328,30 @@ mod tests {
     }
 
     #[test]
+    fn a_code_banner_target_carries_its_code() {
+        let t: NotificationTarget =
+            serde_json::from_str(r#"{"accountId":"a1","mailbox":"INBOX","uid":7,"code":"26313"}"#).unwrap();
+        assert_eq!(t.code.as_deref(), Some("26313"));
+        assert_eq!(
+            serde_json::to_string(&t).unwrap(),
+            r#"{"accountId":"a1","mailbox":"INBOX","uid":7,"code":"26313"}"#
+        );
+    }
+
+    #[test]
+    fn every_queued_delete_is_taken_once() {
+        let q = PendingNotificationDeletes::default();
+        let t = |uid| NotificationTarget { account_id: "a".into(), mailbox: "INBOX".into(), uid: Some(uid), code: None };
+        q.push(t(1));
+        q.push(t(2));
+        assert_eq!(q.take(), vec![t(1), t(2)]);
+        assert!(q.take().is_empty());
+    }
+
+    #[test]
     fn take_empties_the_slot_and_a_later_click_wins() {
         let q = PendingNotificationOpen::default();
-        let t = |uid| NotificationTarget { account_id: "a".into(), mailbox: "INBOX".into(), uid: Some(uid) };
+        let t = |uid| NotificationTarget { account_id: "a".into(), mailbox: "INBOX".into(), uid: Some(uid), code: None };
         q.set(t(1));
         q.set(t(2));
         assert_eq!(q.take(), Some(t(2)));

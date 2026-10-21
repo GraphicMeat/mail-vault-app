@@ -871,9 +871,14 @@ export async function backupCancel(accountId) {
   return tauriInvoke('backup_cancel', { accountId });
 }
 
-// `target` ({ accountId, mailbox, uid? }) is what a click on the banner opens.
+// `target` ({ accountId, mailbox, uid?, code? }) is what a click on the banner
+// opens. A one-time code in it gives the banner Copy & delete and Delete
+// (macOS); Rust has no catalog, so their titles travel with it.
 export async function sendNotification(title, body, sound, target) {
-  return tauriInvoke('send_notification', { title, body, ...(sound ? { sound } : {}), ...(target ? { target } : {}) });
+  return tauriInvoke('send_notification', {
+    title, body, ...(sound ? { sound } : {}), ...(target ? { target } : {}),
+    ...(target?.code ? { actions: { copyDelete: t('codeBubble.copyDelete'), delete: t('common.delete') } } : {}),
+  });
 }
 
 export async function previewNotificationSound(sound) {

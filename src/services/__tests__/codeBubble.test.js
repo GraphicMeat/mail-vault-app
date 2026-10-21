@@ -46,7 +46,7 @@ describe('offerCodeFromArrival', () => {
 
   it('offers nothing when the daemon cannot be asked', async () => {
     mockCode.mockRejectedValue(new Error('daemon unavailable'));
-    await expect(offerCodeFromArrival('a1', 'INBOX', header('Your code is 364758'), { fetchBody })).resolves.toBeUndefined();
+    await expect(offerCodeFromArrival('a1', 'INBOX', header('Your code is 364758'), { fetchBody })).resolves.toBeNull();
     expect(fetchBody).not.toHaveBeenCalled();
     expect(bubbles()).toEqual([]);
   });
@@ -57,6 +57,12 @@ describe('offerCodeFromArrival', () => {
     expect(bubbles()).toEqual([expect.objectContaining({
       accountId: 'a1', mailbox: 'INBOX', uid: 42, code: '364758', sender: 'Acme', subject: 'Your verification code is 364758',
     })]);
+  });
+
+  // The banner for the same arrival shows it, with Copy & delete.
+  it('returns the code it offered, and null when it offered none', async () => {
+    await expect(offerCodeFromArrival('a1', 'INBOX', header('Sign in to Acme'), { fetchBody })).resolves.toBe('775421');
+    await expect(offerCodeFromArrival('a1', 'INBOX', header('Weekly newsletter'), { fetchBody })).resolves.toBeNull();
   });
 
   it('reads the body when the subject only announces a code', async () => {
@@ -108,7 +114,7 @@ describe('offerCodeFromArrival', () => {
 
   it('swallows a failed body fetch', async () => {
     fetchBody.mockRejectedValue(new Error('offline'));
-    await expect(offerCodeFromArrival('a1', 'INBOX', header('Sign in to Acme'), { fetchBody })).resolves.toBeUndefined();
+    await expect(offerCodeFromArrival('a1', 'INBOX', header('Sign in to Acme'), { fetchBody })).resolves.toBeNull();
     expect(bubbles()).toEqual([]);
   });
 });

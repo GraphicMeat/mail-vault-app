@@ -4851,6 +4851,7 @@ dependencies = [
  "mock-imap",
  "objc",
  "objc2",
+ "objc2-app-kit",
  "objc2-foundation",
  "objc2-store-kit",
  "objc2-user-notifications",

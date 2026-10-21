@@ -32,12 +32,13 @@ async function codeIn(subject, text) {
 
 /**
  * An arrival's newest header, from the change feed: offer its one-time code
- * in the corner bubble. A code in the subject costs nothing; a subject that
- * only announces a code ("Sign in to Acme") costs one body read. Anything
- * else is left alone.
+ * in the corner bubble, and return it (null for none) for the arrival's
+ * banner. A code in the subject costs nothing; a mail that only announces a
+ * code ("Sign in to Acme", "Password Reset Request") costs one body read.
+ * Anything else is left alone.
  */
 export async function offerCodeFromArrival(accountId, mailbox, header, { fetchBody = fetchArrivalBody } = {}) {
-  if (!header || header.uid == null || mailbox !== 'INBOX') return;
+  if (!header || header.uid == null || mailbox !== 'INBOX') return null;
   const subject = header.subject || '';
   let code;
   try {
@@ -49,19 +50,20 @@ export async function offerCodeFromArrival(accountId, mailbox, header, { fetchBo
         body = await fetchBody(accountId, header.uid, mailbox);
       } catch (e) {
         console.warn('[codeBubble] Could not read the body for a code:', e);
-        return;
+        return null;
       }
       code = (await codeIn(subject, body?.text || htmlToPlainText(body?.html || '')))?.code || null;
     }
   } catch (e) {
     console.warn('[codeBubble] Could not read the mail for a code:', e);
-    return;
+    return null;
   }
-  if (!code) return;
+  if (!code) return null;
   const from = typeof header.from === 'string' ? { address: header.from } : (header.from || {});
   useCodeBubbleStore.getState().offer({
     accountId, mailbox, uid: header.uid, code,
     sender: from.name || from.address || '',
     subject,
   });
+  return code;
 }
