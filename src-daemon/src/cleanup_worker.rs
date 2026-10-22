@@ -263,23 +263,37 @@ pub(crate) struct AccountWork {
 }
 
 impl AccountWork {
-    fn total(&self) -> u64 {
-        self.rules.iter().flat_map(|r| r.folders.values()).map(|(_, c)| c.len() as u64).sum()
+    /// Every copy the account's rules name, each once.
+    pub(crate) fn unique(&self) -> HashSet<(String, u32)> {
+        self.rules
+            .iter()
+            .flat_map(|r| r.folders.iter())
+            .flat_map(|(f, (_, c))| c.iter().map(move |c| (f.clone(), c.uid)))
+            .collect()
     }
 }
 
-/// Group candidates per account and rule, minus the protected ones and the
-/// ones an earlier rule of the same run already names (the JS deleted such a
-/// copy twice; once is all there is).
+/// Group candidates per account and rule, minus the protected ones. A copy
+/// an earlier rule already names is left to that rule (the JS deleted such a
+/// copy twice; once is all there is), except that a later archive-then-delete
+/// rule also gets a copy an earlier delete rule names: the delete rule can
+/// only take it when the vault already holds it, and when it cannot, the
+/// archive rule must still archive and take it, as in the JS. A copy the
+/// earlier job did take is dropped from the later one when it runs
+/// (`run_account`), and each copy is counted once.
 pub(crate) fn group(state: &Arc<DaemonState>, candidates: Vec<Candidate>) -> Vec<AccountWork> {
     let journal = mailvault_core::op_journal::read(&state.app_dir);
     let mut out: Vec<AccountWork> = Vec::new();
-    let mut seen: HashSet<(String, String, u32)> = HashSet::new();
+    let mut seen: HashMap<(String, String, u32), Action> = HashMap::new();
     let mut protected: HashMap<(String, String), Option<HashSet<u32>>> = HashMap::new();
     for c in candidates {
-        if !seen.insert((c.account_id.clone(), c.folder.clone(), c.uid)) {
-            continue;
+        let key = (c.account_id.clone(), c.folder.clone(), c.uid);
+        match seen.get(&key) {
+            None => {}
+            Some(Action::Delete) if c.action == Action::ArchiveThenDelete => {}
+            Some(_) => continue,
         }
+        let first = seen.insert(key, c.action).is_none();
         let key = (c.account_id.clone(), c.folder.clone());
         let prot = protected.entry(key).or_insert_with(|| protected_uids(state, &journal, &c.account_id, &c.folder));
         let at = match out.iter().position(|w| w.account_id == c.account_id) {
@@ -291,7 +305,9 @@ pub(crate) fn group(state: &Arc<DaemonState>, candidates: Vec<Candidate>) -> Vec
         };
         let work = &mut out[at];
         if prot.as_ref().map_or(true, |p| p.contains(&c.uid)) {
-            work.protected += 1;
+            if first {
+                work.protected += 1;
+            }
             continue;
         }
         // Candidates arrive in rule order, so a new rule is always the last.
@@ -457,18 +473,23 @@ fn keep_changed(job: &mut JobFile, plans: &PlanStore, folders: &Folders) {
     }
 }
 
-/// Count what a finished job did with this group's candidates.
-fn tally_job(job: &JobFile, action: Action, total: u64) -> Tally {
-    let mut t = Tally::default();
+/// What one finished job did: copies archived (archive-then-delete only) and
+/// the (folder, uid) copies confirmed gone from the server.
+#[derive(Default)]
+struct JobDone {
+    archived: u64,
+    deleted: HashSet<(String, u32)>,
+}
+
+fn job_done(job: &JobFile, action: Action) -> JobDone {
+    let mut d = JobDone::default();
     for fs in &job.folders {
-        t.deleted += fs.deleted.len();
+        d.deleted.extend(fs.deleted.iter().map(|u| (fs.path.clone(), u)));
         if action == Action::ArchiveThenDelete {
-            t.archived += fs.vault_ok.len();
+            d.archived += fs.vault_ok.len();
         }
     }
-    t.deleted = t.deleted.min(total);
-    t.skipped = total - t.deleted;
-    t
+    d
 }
 
 struct AccountRun<'a> {
@@ -489,8 +510,18 @@ impl AccountRun<'_> {
         action: Action,
         delete_mode: DeleteMode,
         folders: &Folders,
-    ) -> Tally {
-        let total: u64 = folders.values().map(|(_, c)| c.len() as u64).sum();
+        taken: &HashSet<(String, u32)>,
+    ) -> JobDone {
+        // What an earlier job of this run already took is not asked again.
+        let folders: Folders = folders
+            .iter()
+            .map(|(f, (p, c))| (f.clone(), (*p, c.iter().filter(|c| !taken.contains(&(f.clone(), c.uid))).cloned().collect::<Vec<_>>())))
+            .filter(|(_, (_, c))| !c.is_empty())
+            .collect();
+        if folders.is_empty() {
+            return JobDone::default();
+        }
+        let folders = &folders;
         let account_id = self.account_id.clone();
         let listing = job_listing(full, folders, self.validity, &account_id);
         let dir = dir(&self.state.app_dir).join("jobs").join(&account_id);
@@ -522,7 +553,7 @@ impl AccountRun<'_> {
         job.keep_unarchived = action == Action::Delete;
         job.mirror_read_only = self.mirror.is_some();
         if job.scope.folders.is_empty() {
-            return Tally { skipped: total, ..Tally::default() };
+            return JobDone::default();
         }
         let env = CleanupEnv {
             state: Arc::clone(self.state),
@@ -541,7 +572,7 @@ impl AccountRun<'_> {
         let planned = plan_job(&mut job, &listing, &mut plans, ops, &local, &env, &ctl).await;
         if planned != RunExit::Completed {
             warn!("cleanup: an account's job could not be planned; its mail stays on the server");
-            return Tally { skipped: total, ..Tally::default() };
+            return JobDone::default();
         }
         keep_changed(&mut job, &plans, folders);
         ops.prepare(&plans, &effective);
@@ -565,14 +596,15 @@ impl AccountRun<'_> {
             };
             info!("cleanup: a job stopped before the end ({kind}); the rest stays on the server");
         }
-        tally_job(&job, action, total)
+        job_done(&job, action)
     }
 }
 
 /// Every rule of one account, through the engine.
 async fn run_account<S: JobOps>(ar: &AccountRun<'_>, ops: &mut S, work: &AccountWork) -> Tally {
     let mut tally = Tally { skipped: work.protected, ..Tally::default() };
-    let all = work.total();
+    let unique = work.unique();
+    let all = unique.len() as u64;
     let names: HashSet<String> = work.rules.iter().flat_map(|r| r.folders.keys().cloned()).collect();
     let now = ar.state.clock.now_ms();
     let listing = {
@@ -600,16 +632,24 @@ async fn run_account<S: JobOps>(ar: &AccountRun<'_>, ops: &mut S, work: &Account
     } else {
         full
     };
+    // Copies gone from the server so far this run, by any job.
+    let mut taken: HashSet<(String, u32)> = HashSet::new();
     for r in &work.rules {
         let (permanent, moved): (Folders, Folders) =
             r.folders.iter().map(|(k, v)| (k.clone(), v.clone())).partition(|(_, (p, _))| *p);
-        if !moved.is_empty() {
-            tally.add(ar.job(ops, &full, r.action, DeleteMode::MoveToTrash, &moved).await);
-        }
-        if !permanent.is_empty() {
-            tally.add(ar.job(ops, &full, r.action, DeleteMode::MoveToTrashAndEmpty, &permanent).await);
+        for (mode, folders) in [(DeleteMode::MoveToTrash, moved), (DeleteMode::MoveToTrashAndEmpty, permanent)] {
+            if folders.is_empty() {
+                continue;
+            }
+            let done = ar.job(ops, &full, r.action, mode, &folders, &taken).await;
+            tally.archived += done.archived;
+            taken.extend(done.deleted);
         }
     }
+    // Each named copy once: deleted by some job, or skipped.
+    let deleted = unique.iter().filter(|k| taken.contains(*k)).count() as u64;
+    tally.deleted += deleted;
+    tally.skipped += all - deleted;
     tally
 }
 
@@ -636,7 +676,7 @@ pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<Strin
     };
     let mut tally = Tally::default();
     for w in &work {
-        let n = w.total();
+        let n = w.unique().len() as u64;
         if n == 0 {
             tally.skipped += w.protected;
             continue;

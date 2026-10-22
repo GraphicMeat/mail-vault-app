@@ -76,8 +76,9 @@ async fn preview(state: &Arc<DaemonState>) -> Result<Value, String> {
                         if let Some(m) = matched.get_mut(r.rule) {
                             *m += n;
                         }
-                        total += n;
                     }
+                    // A copy two rules name is one message.
+                    total += w.unique().len() as u64;
                 }
                 let rules: Vec<Value> = ids.into_iter().zip(matched).map(|(id, n)| json!({ "id": id, "matched": n })).collect();
                 json!({ "ran": true, "archived": 0, "deleted": total, "skipped": 0, "rules": rules })

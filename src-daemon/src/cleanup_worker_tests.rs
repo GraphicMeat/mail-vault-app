@@ -349,6 +349,37 @@ async fn an_account_with_a_running_abd_job_is_left_alone() {
     assert_eq!(rig.uids("INBOX"), vec![1, 2, 3]);
 }
 
+/// Rule 1 deletes what the vault holds and must keep the rest; rule 2,
+/// archive-then-delete over a longer age, archives and deletes that rest, as
+/// the JS did. Rule 1 naming a message first must not hide it from rule 2.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_later_archive_rule_takes_what_an_earlier_delete_rule_had_to_keep() {
+    let rules = json!([
+        rule(json!({})),
+        rule(json!({"id": "r2", "folder": "all", "age": 90, "action": "archive-then-delete"})),
+    ]);
+    let rig = Rig::new(inbox_and_trash(), rules);
+    rig.headers("INBOX", &[1, 2, 3]);
+    rig.archived("INBOX", 2);
+
+    let r = rig.run().await.unwrap();
+
+    assert_eq!(rig.uids("INBOX"), vec![3], "uid 2 by rule 1, uid 1 archived and deleted by rule 2");
+    assert_eq!(counts(&r), (2, 1, 0), "each message counted once");
+}
+
+/// Control: two delete rules naming the same message act on it once, and a
+/// message neither can take is skipped once.
+#[tokio::test(flavor = "multi_thread")]
+async fn two_delete_rules_act_on_a_message_once() {
+    let rig = Rig::new(inbox_and_trash(), json!([rule(json!({})), rule(json!({"id": "r2", "folder": "all"}))]));
+    rig.headers("INBOX", &[1, 2, 3]);
+    rig.archived("INBOX", 1);
+    let r = rig.run().await.unwrap();
+    assert_eq!(counts(&r), (1, 0, 1));
+    assert_eq!(rig.uids("INBOX"), vec![2, 3]);
+}
+
 /// Two runs never overlap: the slot is taken, `cleanup.run_now` says so.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_run_cannot_overlap_itself() {
