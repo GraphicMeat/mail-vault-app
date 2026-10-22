@@ -26,7 +26,7 @@ function harness(overrides = {}) {
       });
       return { ok: true, buildId };
     },
-    insightsStatus: async buildId => { calls.push(['status', buildId]); return overrides.status || { ok: true, state: 'ready', loaded: 2, coverage: { status: 'ready' } }; },
+    insightsStatus: async buildId => { calls.push(['status', buildId]); if (overrides.statusFn) return overrides.statusFn(buildId, calls); return overrides.status || { ok: true, state: 'ready', loaded: 2, coverage: { status: 'ready' } }; },
     aggregateInsights: async (buildId, query) => { calls.push(['aggregate', buildId, query]); return overrides.aggregate ? overrides.aggregate(buildId, calls) : { totals: { received: 2 } }; },
     insightsMessages: async (buildId, query, selection) => { calls.push(['messages', buildId, query, selection]); return [{ key: 'one' }]; },
     releaseInsights: async buildId => { calls.push(['release', buildId]); },
@@ -113,9 +113,55 @@ describe('Insights session over the daemon model', () => {
     session.dispose();
   });
 
-  it('fails a build the restarted daemon lost', async () => {
-    const { session, emit } = harness({ onBuild: () => queueMicrotask(() => emit('daemon-reconnected', {})) });
-    await expect(session.load(scope)).rejects.toMatchObject({ code: 'daemonRestarted' });
+  // The shell's event channel reconnects on a backoff after a daemon
+  // restart (a vault move or adopt): a build that ran meanwhile reported to
+  // nobody, and only the reconnect tells the app to look.
+  it('asks where the build is after the event channel reconnects, instead of failing', async () => {
+    const { session, calls, emit } = harness({ onBuild: () => queueMicrotask(() => emit('daemon-reconnected', {})) });
+    expect(await session.load(scope)).toEqual({ coverage: { status: 'ready' }, loaded: 2 });
+    expect(calls.filter(c => c[0] === 'status')).toHaveLength(1);
+    session.dispose();
+  });
+
+  it('keeps following a build the reconnected daemon is still running', async () => {
+    let finish;
+    const { session, calls } = harness({
+      onBuild: (buildId, emit) => {
+        finish = () => emit(BUILD_PROGRESS_EVENT, { buildId, finished: true, ok: true, loaded: 3, coverage: { status: 'ready' } });
+        queueMicrotask(() => emit('daemon-reconnected', {}));
+      },
+      status: { ok: true, state: 'building', loaded: 1 },
+    });
+    const pending = session.load(scope);
+    await new Promise(r => setTimeout(r, 0));
+    expect(calls.filter(c => c[0] === 'status')).toHaveLength(1);
+    finish();
+    expect(await pending).toEqual({ coverage: { status: 'ready' }, loaded: 3 });
+    session.dispose();
+  });
+
+  it('builds again under the same id when the restarted daemon lost the build', async () => {
+    let builds = 0;
+    const { session, calls } = harness({
+      onBuild: (buildId, emit) => queueMicrotask(() => {
+        if (++builds === 1) emit('daemon-reconnected', {});
+        else emit(BUILD_PROGRESS_EVENT, { buildId, finished: true, ok: true, loaded: 4, coverage: { status: 'ready' } });
+      }),
+      statusFn: () => { throw Object.assign(new Error('gone'), { code: 'modelExpired' }); },
+    });
+    expect(await session.load(scope)).toEqual({ coverage: { status: 'ready' }, loaded: 4 });
+    const ids = calls.filter(c => c[0] === 'build').map(c => c[1]);
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe(ids[0]);
+    session.dispose();
+  });
+
+  it('fails when the restarted daemon lost the build twice', async () => {
+    const { session } = harness({
+      onBuild: (buildId, emit) => queueMicrotask(() => emit('daemon-reconnected', {})),
+      statusFn: () => { throw Object.assign(new Error('gone'), { code: 'modelExpired' }); },
+    });
+    await expect(session.load(scope)).rejects.toMatchObject({ code: 'modelExpired' });
     session.dispose();
   });
 

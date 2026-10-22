@@ -34,12 +34,23 @@ export function createInsightsSession({ api, listen = tauriListen }) {
         else if (payload.ok) settle.resolve(payload);
         else settle.reject(insightsFailure(payload.error));
       }));
-      // A restarted daemon lost the build; a lagging stream may have dropped
-      // the last frame, so ask where it is.
-      unlisten.push(await listen('daemon-reconnected', () => settle.reject(insightsFailure({ code: 'daemonRestarted' }))));
-      unlisten.push(await listen('daemon-events-lagged', () => {
-        api.insightsStatus(id).then(status => { if (status.state === 'ready') settle.resolve(status); }, error => settle.reject(error));
-      }));
+      // Frames this build sent while the shell's event channel was down (it
+      // reconnects on a backoff after a daemon restart, such as a vault move)
+      // or that a lagging stream dropped reached nobody: ask the daemon where
+      // the build is. A restarted daemon that lost it builds it again, once.
+      let rebuilt = false;
+      const resync = () => {
+        api.insightsStatus(id).then(status => {
+          if (status.state === 'ready') settle.resolve(status);
+        }, error => {
+          if (error?.code !== 'modelExpired' || rebuilt || mine.cancelled) { settle.reject(error); return; }
+          rebuilt = true;
+          // `buildExists`: the first request landed after all; its frames follow.
+          api.buildInsights(id, scope).catch(failure => { if (failure?.code !== 'buildExists') settle.reject(failure); });
+        });
+      };
+      unlisten.push(await listen('daemon-reconnected', resync));
+      unlisten.push(await listen('daemon-events-lagged', resync));
       if (mine.cancelled) throw aborted();
       await api.buildInsights(id, scope);
       const done = await finished;
