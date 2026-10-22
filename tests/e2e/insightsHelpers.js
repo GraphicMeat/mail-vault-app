@@ -155,30 +155,52 @@ export async function cacheScenarioHeaders() {
   console.log('[insights] Real provider header cache:', JSON.stringify(stats));
   return stats;
 }
-/** Task 3.7: the three snapshot commands are daemon methods now. A failure
- * arrives as an `{ok: false, error: {...}}` reply rather than a rejected
- * invoke, so `nativeDaemonInvoke`'s own assertion cannot see it and a stale
- * or unavailable snapshot would otherwise surface as an undefined
- * `snapshotId` several assertions later. */
-async function insightsInvoke(method, params) {
-  const reply = await nativeDaemonInvoke(method, params);
-  assert.notEqual(reply?.ok, false, `${method} failed: ${JSON.stringify(reply?.error)}`);
-  return reply;
-}
+/** Pages a whole native snapshot inside the page, in one async script, and
+ * then copies its rows out in small slices.
+ *
+ * It used to send one WebDriver `execute/async` per daemon page. A large
+ * page reply could fail on that bridge (`WebDriverError: [object Object]`,
+ * flaky at the pre-wave-2 base too), and WebDriver's own retry then resent a
+ * cursor the daemon may already have consumed. Now a retried script starts
+ * a fresh snapshot, and a retried slice read is a plain re-read. A daemon
+ * failure arrives as an `{ok: false, error}` reply (Task 3.7) and is raised
+ * with its code, not as an undefined `snapshotId` later. */
+const SNAPSHOT_SLICE = 200;
 export async function readNativeSnapshot(accountIds = browser.mockAccounts.map(a => a.id)) {
-  const begin = await insightsInvoke('insights_begin_snapshot', { accountIds });
-  const rows = [], pageSizes = [];
-  let cursor = null;
+  const key = `snapshot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const summary = await browser.executeAsync((ids, slot, done) => {
+    const call = (method, params) => window.__TAURI__.core.invoke('daemon_rpc', { method, params }).then(reply => {
+      if (reply?.ok === false) throw new Error(`${method} failed: ${JSON.stringify(reply.error)}`);
+      return reply;
+    });
+    (async () => {
+      const begin = await call('insights_begin_snapshot', { accountIds: ids });
+      const rows = [], pageSizes = [];
+      let cursor = null;
+      try {
+        do {
+          const page = await call('insights_read_page', { snapshotId: begin.snapshotId, cursor });
+          rows.push(...page.rows); pageSizes.push(page.rows.length); cursor = page.nextCursor;
+        } while (cursor);
+      } finally {
+        await call('insights_release_snapshot', { snapshotId: begin.snapshotId }).catch(() => {});
+      }
+      (window.__E2E_INSIGHTS_SNAPSHOTS__ ||= {})[slot] = rows;
+      return { begin, pageSizes, count: rows.length };
+    })().then(done, error => done({ __error: String(error?.message || error) }));
+  }, accountIds, key);
+  assert.ok(!summary?.__error, summary?.__error);
+  assert.ok(summary.pageSizes.every(size => size <= 1000), 'Native page size stays bounded');
+  const rows = [];
   try {
-    do {
-      const page = await insightsInvoke('insights_read_page', { snapshotId: begin.snapshotId, cursor });
-      assert.ok(page.rows.length <= 1000, 'Native page size stays bounded');
-      rows.push(...page.rows); pageSizes.push(page.rows.length); cursor = page.nextCursor;
-    } while (cursor);
+    for (let offset = 0; offset < summary.count; offset += SNAPSHOT_SLICE) {
+      rows.push(...await browser.execute((slot, from, size) => window.__E2E_INSIGHTS_SNAPSHOTS__[slot].slice(from, from + size), key, offset, SNAPSHOT_SLICE));
+    }
   } finally {
-    await insightsInvoke('insights_release_snapshot', { snapshotId: begin.snapshotId });
+    await browser.execute(slot => { delete window.__E2E_INSIGHTS_SNAPSHOTS__?.[slot]; }, key);
   }
-  return { ...begin, rows, pageSizes };
+  assert.equal(rows.length, summary.count, 'Every snapshot row was copied out');
+  return { ...summary.begin, rows, pageSizes: summary.pageSizes };
 }
 export async function summaryText() {
   return browser.execute(() => ({ total: document.querySelector('[data-testid="insights-total"]')?.textContent,
