@@ -763,7 +763,14 @@ pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<Strin
             info!("cleanup: the vault or its caches cannot be read; nothing ran, the next check tries again");
             return None;
         }
-        Err(NoPick::NoRun(_)) => return None,
+        Err(NoPick::NoRun(why)) => {
+            let why = match why {
+                cleanup_rules::NoRun::NotPremium => "no premium access",
+                cleanup_rules::NoRun::NoEnabledRules => "no enabled rule",
+            };
+            info!("cleanup: nothing to run ({why})");
+            return None;
+        }
     };
     let mirror: Option<PathBuf> = if mirror_wanted {
         mirror_root.map(PathBuf::from).filter(|p| p.is_dir())
@@ -812,7 +819,9 @@ pub(crate) fn start(state: Arc<DaemonState>) {
         return;
     }
     let daily = !(cfg!(debug_assertions) && std::env::var("MAILVAULT_DISABLE_CLEANUP_DAILY").as_deref() == Ok("1"));
-    let spawned = std::thread::Builder::new().name("cleanup-worker".into()).spawn(move || {
+    // 8 MiB, not the default 2: a run's engine futures are polled on this
+    // thread, and debug builds keep large frames.
+    let spawned = std::thread::Builder::new().name("cleanup-worker".into()).stack_size(8 * 1024 * 1024).spawn(move || {
         #[cfg(target_os = "macos")]
         unsafe {
             libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);
@@ -834,12 +843,19 @@ pub(crate) fn start(state: Arc<DaemonState>) {
     }
 }
 
+/// Waits for work. A run is spawned as its own local task, never awaited
+/// inline: the engine's futures are large (debug builds most of all), and
+/// inlined here they made this loop's own future too big for the thread's
+/// stack (the daemon aborted with a stack overflow). A task's future lives on
+/// the heap. Runs still never overlap: `CleanupState::claim` holds the slot.
 async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, daily: bool) {
     let mut next = tokio::time::Instant::now() + STARTUP_DELAY;
     loop {
         tokio::select! {
             cmd = rx.recv() => match cmd {
-                Some(Cmd::Run { mirror_root }) => run_claimed(Arc::clone(&state), mirror_root).await,
+                Some(Cmd::Run { mirror_root }) => {
+                    tokio::task::spawn_local(run_claimed(Arc::clone(&state), mirror_root));
+                }
                 None => return,
             },
             _ = tokio::time::sleep_until(next), if daily => {
@@ -850,7 +866,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, da
                     .unwrap_or(false);
                 if due && state.cleanup.claim() {
                     state.events.emit(RUN_EVENT, json!({"state": "running", "manual": false}));
-                    run_claimed(Arc::clone(&state), None).await;
+                    tokio::task::spawn_local(run_claimed(Arc::clone(&state), None));
                 }
             }
         }

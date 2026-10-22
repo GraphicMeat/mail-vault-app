@@ -480,3 +480,16 @@ fn the_worker_logs_no_values() {
         }
     }
 }
+
+/// The `cleanup-worker` thread overflowed its stack on the mini (debug
+/// build): the whole run, engine and all, was inlined into the loop's own
+/// future and polled on that thread's 2 MiB stack, which took the daemon
+/// down. A run is its own task (on the heap); the loop stays small.
+#[test]
+fn the_worker_loop_keeps_runs_off_its_own_stack() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+    let (_tx, rx) = unbounded_channel::<Cmd>();
+    let size = std::mem::size_of_val(&worker_loop(state, rx, false));
+    assert!(size < 16 * 1024, "the worker loop's future is {size} bytes");
+}
