@@ -18,7 +18,9 @@
 .mv-site .mv-help-main h2 { margin-top:42px; font-size:clamp(1.5rem,2.3vw,2rem); }
 .mv-site .mv-help-main h3 { margin-top:28px; line-height:1.4; }
 .mv-site .mv-help-main .prose { max-width:none; }
-.mv-help-version { color:var(--mv-muted); font-size:.78rem; margin-block:0 24px; }
+.mv-help-version { color:var(--mv-muted); font-size:.78rem; line-height:1.7; }
+.mv-help-sidebar>.mv-help-version { margin:20px 12px; }
+.mv-help-review { margin-top:48px; padding-top:24px; border-top:1px solid var(--mv-line); }
 .mv-help-search { margin:28px 0 38px; padding:24px; background:var(--mv-surface); border-radius:6px; }
 .mv-help-search label { display:block; font-weight:650; font-size:.94rem; margin-bottom:10px; }
 .mv-help-search-row { display:flex; gap:10px; }
