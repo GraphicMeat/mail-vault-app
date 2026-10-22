@@ -15,7 +15,6 @@
   "3afa38a8833e": "La pulizia è la stessa cosa della scrittura IA?",
   "6ecb1a5060dc": "No. La scrittura IA ha impostazioni del provider proprie per Apple Intelligence, un modello scaricato o un endpoint compatibile come Ollama. Cambiare questo provider non modifica il classificatore della pulizia.",
   "eea32a5141b1": "Elimina rimuove la copia sul server senza prima crearne una nella cassaforte. Usa Archivia nella pulizia per salvare e verificare una copia locale prima di rimuoverla dal server. La Capsula del tempo può mostrare la cronologia salvata, ma non può recuperare un messaggio che non è mai stato salvato.",
-  "3e016ad79e11": "Collega Yahoo con una password per app, archivia le tue cartelle e verifica la copia locale.",
   "c7beb003a3af": "Selettore dei contatti e rubrica — suggerimenti durante la composizione, cronologia dei contatti, unione e importazione/esportazione vCard",
   "2820f998042a": "Le tue email restano sul tuo computer. MailVault verifica i mittenti, conserva le credenziali nel Portachiavi di macOS, in Gestione credenziali di Windows o in Linux Secret Service ed è eseguito in una sandbox. Nessun servizio MailVault di archiviazione della posta, nessuna telemetria. Gli endpoint IA facoltativi ricevono solo il testo che approvi; la posta Gmail resta sul dispositivo."
 }

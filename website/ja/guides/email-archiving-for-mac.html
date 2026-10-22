@@ -38,7 +38,7 @@
   "description": "Mac のためのメールアーカイブを解説：アーカイブ、バックアップ、同期の違い、macOS での選択肢、残すべき形式、ローカルのアーカイブの作り方と確かめ方。",
   "url": "https://mailvaultapp.com/ja/guides/email-archiving-for-mac.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -161,6 +161,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -208,7 +209,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -218,7 +219,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac でメールをアーカイブし、ずっと残す方法</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac でメールをアーカイブし、ずっと残す方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">アーカイブ、バックアップ、同期は同じものではない</a></li><li><a href="#help-section-2">Mac での選択肢</a></li><li><a href="#help-section-3">メールを残す形式</a></li><li><a href="#help-section-4">手順：MailVault で Gmail、Outlook.com、iCloud、IMAP を Mac にアーカイブする</a></li><li><a href="#help-section-5">アーカイブが完全か確認する方法</a></li><li><a href="#help-section-6">アーカイブを続ける方法</a></li><li><a href="#help-section-7">よくある質問</a></li><li><a href="#help-section-8">次にすること</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8分で読めます</span>
           </div>
@@ -240,7 +241,7 @@
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">アーカイブ、バックアップ、同期は同じものではない</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-1">アーカイブ、バックアップ、同期は同じものではない</h2>
 
           <p>
             メールアプリのアーカイブボタンは移動であり、コピーではありません。Apple のメールのガイドによると、アーカイブするとメッセージはそのメールアカウント用に作られたアーカイブのメールボックスに移動します。Gmail のヘルプによると、アーカイブしたメッセージは「すべてのメール」で引き続き見つけられます。Microsoft の Outlook のヘルプによると、アーカイブボタンでメールボックスのサイズは減りません。3 つとも、メールはプロバイダーに残ります。
@@ -289,17 +290,17 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Mac での選択肢</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-2">Mac での選択肢</h2>
 
           <ul class="list-disc pl-6 space-y-3">
             <li><strong>Apple Mail の「メールボックスを書き出す」。</strong>1 つ以上のメールボックスを選び、メールボックス &gt; メールボックスを書き出す を選んで、フォルダを指定します。Apple によると、書き出しは mbox 形式で、メールは前の書き出しを上書きせず、隣に新しい .mbox ファイルを作ります。ファイル &gt; メールボックスを読み込む で元に戻せます。無料で標準搭載ですが、手で繰り返すスナップショットです。</li>
             <li><strong>Thunderbird。</strong>無料のオープンソースで、macOS 版もあります。Mozilla によると、Thunderbird は標準ではフォルダごとに 1 つの mbox ファイルとしてメールを保存し、1 通ごとに 1 ファイル（Maildir）の保存方式も選べますが、Mozilla はまだ試験的なものとして扱っています。ImportExportTools NG のアドオンは、メッセージを EML、PDF などの形式で、フォルダを mbox として書き出します。</li>
             <li><strong>コマンドラインのバックアップツール。</strong>Got Your Back（GYB）は、Gmail の API を通じて Gmail と Google Workspace のアカウントをローカルのフォルダにバックアップし、復元もできるオープンソースのツールです。ターミナルに慣れた人に向いており、対象は Google のアカウントだけです。</li>
             <li><strong>専用のアーカイバー。</strong>Mail Archiver X、MailSteward、EagleFiler は、メールを検索できるアーカイブやライブラリに取り込む有料の Mac アプリで、それぞれ独自の方法で保存します。<a href="/ja/guides/best-email-archiver-for-mac.html">Mac におすすめのメールアーカイバー</a>のページで、用途別に比較しています。</li>
-            <li><strong>MailVault。</strong>メールのコピーを Maildir 形式のフォルダにプレーンな .eml ファイルとしてコンピュータに保管する、macOS・Windows・Linux 向けの無料のメールアプリです。Gmail、Microsoft 365、Outlook.com、あらゆる IMAP のアカウントにサインインでき、メールの経路に MailVault のアカウントもサーバーもありません。このガイドの残りでは、手順の説明にこれを使います。</li>
+            <li><strong>MailVault。</strong>メールのコピーを Maildir 形式のフォルダにプレーンな .eml ファイルとしてコンピュータに保管する、macOS・Windows・Linux 向けの無料のメールアプリです。Gmail、Microsoft 365、Outlook.com、あらゆる IMAP のアカウントにサインインでき、メールの経路に MailVault のアカウントもサーバーもありません。このガイドの残りでは、手順の説明にこれを使います。 このファイル構成の説明は、標準のMaildir形式を対象としています。設定 → ストレージではJMAPストレージも選択でき、元のメッセージのバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">メールを残す形式</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-3">メールを残す形式</h2>
 
           <p>
             アーカイブはツールより長く残るべきなので、ツールよりも形式のほうが重要です。
@@ -315,7 +316,7 @@
             実践的なルール：ほかに何を使うにしても、アーカイブのコピーを少なくとも 1 つは .eml か mbox で残してください。ツールを信頼する前に確認すべき点は、<a href="/ja/guides/imap-backup-tool-checklist.html">IMAP バックアップツールのチェックリスト</a>を参照してください。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">手順：MailVault で Gmail、Outlook.com、iCloud、IMAP を Mac にアーカイブする</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-4">手順：MailVault で Gmail、Outlook.com、iCloud、IMAP を Mac にアーカイブする</h2>
 
           <p>
             MailVault は macOS 11 Big Sur 以降の Apple Silicon と Intel で動作します。Premium と書かれていない手順はすべて無料です。
@@ -328,10 +329,10 @@
           </ol>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/ja/settings-backup-light-1440.webp" srcset="/screenshots/ja/settings-backup-light-720.webp 720w, /screenshots/ja/settings-backup-light-1440.webp 1440w, /screenshots/ja/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault の設定の、バックアップと復元のバックアップ設定タブ。「フォルダを開く」と「メールを移動」のボタンの付いたメールの保存場所、「アーカイブ済みメールのみ」に設定されたバックアップの対象のメニュー、そして 2 つ目のコピー（外部のコールドストレージ）のフォルダの選択欄が表示されています。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/settings-backup-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ja/settings-backup-light-1440.webp" srcset="/screenshots/ja/settings-backup-light-720.webp 720w, /screenshots/ja/settings-backup-light-1440.webp 1440w, /screenshots/ja/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault の設定の、バックアップと復元のバックアップ設定タブ。「フォルダを開く」と「メールを移動」のボタンの付いたメールの保存場所、「アーカイブ済みメールのみ」に設定されたバックアップの対象のメニュー、そして 2 つ目のコピー（外部のコールドストレージ）のフォルダの選択欄が表示されています。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">バックアップ設定。最初の実行の前に、バックアップの対象を「アーカイブ済みメールのみ」から「すべてのメール」に切り替えてください。</figcaption>
           </figure>
 
@@ -349,7 +350,7 @@
             知っておきたい設定が 1 つあります。設定 &gt; ストレージ &gt; ダウンロードモード で、通常のキャッシュされたメールをどれだけ Mac に残すかが決まります。既定の「最近分を保持」は直近の数か月分を残します。バックアップやアーカイブしたメールが削除されることはないので、アーカイブが小さくなることはありません。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">アーカイブが完全か確認する方法</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-5">アーカイブが完全か確認する方法</h2>
 
           <p>
             サーバーで何かを削除する前に、コピーを確認してください。
@@ -363,18 +364,18 @@
           </ul>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="各メッセージの行に保管庫のアイコンが付いた MailVault の受信トレイ。一覧の下の凡例には「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」とあり、フォルダ一覧には「すべて」「サーバー」「保管庫」の切り替えがあります。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/state-icons-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="各メッセージの行に保管庫のアイコンが付いた MailVault の受信トレイ。一覧の下の凡例には「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」とあり、フォルダ一覧には「すべて」「サーバー」「保管庫」の切り替えがあります。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">各行に、そのメッセージがどこにあるかが表示されます。一覧の下の凡例でアイコンの意味がわかります。</figcaption>
           </figure>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-backup-health-detail-720.webp 720w, /screenshots/ja/premium-backup-health-detail-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/ja/premium-backup-health-detail-light-1440.webp" srcset="/screenshots/ja/premium-backup-health-detail-light-720.webp 720w, /screenshots/ja/premium-backup-health-detail-light-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="524" loading="lazy" decoding="async" alt="MailVault のバックアップの検証の表。アプリは 73 パーセント、外部は未設定で、フォルダの各行にサーバーの件数とアプリの件数が並んでいます。たとえば Archive はサーバーに 12 件、アプリに 0 件です。合計は「アプリ内 84/115」です。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/premium-backup-health-detail-light-1440.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-backup-health-detail-720.webp 720w, /screenshots/ja/premium-backup-health-detail-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ja/premium-backup-health-detail-light-1440.webp" srcset="/screenshots/ja/premium-backup-health-detail-light-720.webp 720w, /screenshots/ja/premium-backup-health-detail-light-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="524" loading="lazy" decoding="async" alt="MailVault のバックアップの検証の表。アプリは 73 パーセント、外部は未設定で、フォルダの各行にサーバーの件数とアプリの件数が並んでいます。たとえば Archive はサーバーに 12 件、アプリに 0 件です。合計は「アプリ内 84/115」です。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Premium：バックアップの健全性チェックは、サーバーと Mac をフォルダごとに比べます。ここでは Archive、Trash、Clients、Suppliers のフォルダがまだ保存されていません。</figcaption>
           </figure>
 
@@ -382,7 +383,7 @@
             サーバーを空にする準備ができたら、MailVault の<a href="/ja/features/archive-and-delete.html">アーカイブして削除</a>（Premium）が、各メッセージを保管庫にコピーし、コピーを確認し、そのあとで初めてサーバーのコピーを削除します。サーバーからの削除だけなら無料ですが、その場合の確認は自分で行うことになります。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">アーカイブを続ける方法</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-6">アーカイブを続ける方法</h2>
 
 
           <ul class="list-disc pl-6 space-y-2">
@@ -394,7 +395,7 @@
             どちらの場合も、Mac から離れた場所に 2 つ目のコピーを置いてください。保管庫は普通のファイルなので、外付けドライブや NAS に置けます。ローカルのコピーを持つべき理由については、<a href="/ja/guides/archive-imap-emails-locally.html">IMAP のメールをローカルにアーカイブする方法</a>を読んでください。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">よくある質問</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-7">よくある質問</h2>
 
           <div class="pt-2">
             <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Apple Mail のアーカイブボタンでメールは Mac に保存されますか？</h3>
@@ -421,7 +422,7 @@
             <p>はい、アーカイブを確認した後なら。MailVault でアーカイブしたコピーは、その後サーバーで何が起きてもディスクに残ります。MailVault Premium なら、保存した各コピーを確認してからサーバーのコピーを削除する、ワンステップのアーカイブと削除ができます。</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">次にすること</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-8">次にすること</h2>
 
           <p>
             最も失いたくないアカウントを選び、今週のうちに最初のアーカイブを作って、上の手順で確認してください。MailVault でやるなら、作成するアカウントもない無料のダウンロードです。
@@ -440,7 +441,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -464,5 +465,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

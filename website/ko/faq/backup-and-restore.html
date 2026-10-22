@@ -60,7 +60,7 @@
       "name": "MailVault는 메일을 어떻게 백업합니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault는 메일 서버에 연결해(IMAP으로, 개인 Outlook.com 계정은 Microsoft Graph로) 메일을 한 통씩 Maildir 형식의 표준 .eml 파일로 볼트에 내려받습니다. 메일 한 통이 디스크의 파일 하나입니다 — 사람이 읽을 수 있고, 옮길 수 있으며, 어떤 메일 클라이언트와도 호환됩니다. 메시지가 볼트에 들어가면 서버 사본을 지워 공간을 비울 수 있으며, 로컬 사본은 영향을 받지 않습니다."
+        "text": "MailVault는 IMAP, 개인 Outlook.com 계정용 Microsoft Graph 또는 JMAP으로 메일 서버에 연결합니다. 메일을 보관하려면 필요한 메시지를 명시적으로 보관하거나 모든 메일 (서버에서 내려받기)로 수동 백업을 실행합니다. 기본 Maildir 저장 형식에서는 저장된 메시지가 컴퓨터의 Maildir 폴더에 표준 .eml 파일로 저장되며 EML 지원 앱에서 읽을 수 있습니다. 선택 사항인 JMAP 저장소는 원본 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거합니다. 서버 사본을 삭제하기 전에 보관된 메시지와 첨부파일을 열고, 필요한 폴더와 날짜 범위가 포함되어 있는지 확인하고, 별도의 백업 위치에 두 번째 사본이 있는지도 검증해야 합니다. 받은 편지함이나 캐시에 메시지가 표시된다는 사실만으로 보관이 완료되었다고 볼 수는 없습니다."
       }
     },
     {
@@ -68,7 +68,7 @@
       "name": "메일을 보관하면 어떻게 됩니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "보관하면 서버에서 메일 전체를 내려받아(이미 캐시되어 있지 않은 경우) 파일 이름에 A(보관됨) 플래그를 붙인 .eml 파일로 디스크에 저장합니다. 보관된 메일은 로컬 보기 모드에 나타나고 백업에도 포함됩니다. 직접 삭제하지 않는 한 메일은 서버에 그대로 남습니다."
+        "text": "보관하면 서버에서 전체 메일을 다운로드하고(아직 캐시되지 않은 경우), Maildir 저장소에서는 파일 이름에 A(보관됨) 플래그가 있는 .eml 파일로 저장합니다. JMAP 저장소는 해당 플래그를 메시지 레코드에 기록합니다. 보관된 메일은 로컬 보기 모드에 나타나고 백업에도 포함됩니다. 직접 삭제하지 않는 한 메일은 서버에 그대로 남습니다."
       }
     },
     {
@@ -147,6 +147,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -195,7 +196,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html" aria-current="page">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -208,30 +209,30 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">백업과 복원</h1>
+      <h1 class="text-4xl font-bold mb-2">백업과 복원</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">MailVault는 메일을 어떻게 백업합니까?</a></li><li><a href="#help-section-2">메일을 보관하면 어떻게 됩니까?</a></li><li><a href="#help-section-3">보관 후 서버에서 삭제하면 어떻게 됩니까?</a></li><li><a href="#help-section-4">서버에서 메일을 삭제하면 어떻게 됩니까?</a></li><li><a href="#help-section-5">백업과 복원은 어떻게 작동합니까?</a></li><li><a href="#help-section-6">자동 백업이 실행되는 시각을 정할 수 있나요?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault가 메일을 어떻게 보관하는지, 보관한 뒤 삭제하면 서버 사본이 어떻게 되는지, 자동 백업이 언제 실행되는지, 볼트를 내보내고 다시 가져오는 방법.</p>
 
       <div class="space-y-4">
 
         <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault는 메일을 어떻게 백업합니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault는 메일을 어떻게 백업합니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault는 메일 서버에 연결해(IMAP으로, 개인 Outlook.com 계정은 Microsoft Graph로) 메일을 한 통씩 표준 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 파일</a>로 내려받아 컴퓨터에 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 형식으로 저장합니다. 메일 한 통이 디스크의 파일 하나입니다 — 사람이 읽을 수 있고, 옮길 수 있으며, 어떤 메일 클라이언트와도 호환됩니다. 메시지가 볼트에 들어가면 서버 사본을 지워 공간을 비울 수 있으며, 로컬 사본은 영향을 받지 않습니다.
+              MailVault는 IMAP, 개인 Outlook.com 계정용 Microsoft Graph 또는 JMAP으로 메일 서버에 연결합니다. 메일을 보관하려면 필요한 메시지를 명시적으로 보관하거나 모든 메일 (서버에서 내려받기)로 수동 백업을 실행합니다. 기본 Maildir 저장 형식에서는 저장된 메시지가 컴퓨터의 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 폴더에 표준 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 파일</a>로 저장되며 EML 지원 앱에서 읽을 수 있습니다. 선택 사항인 JMAP 저장소는 원본 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거합니다. 서버 사본을 삭제하기 전에 보관된 메시지와 첨부파일을 열고, 필요한 폴더와 날짜 범위가 포함되어 있는지 확인하고, 별도의 백업 위치에 두 번째 사본이 있는지도 검증해야 합니다. 받은 편지함이나 캐시에 메시지가 표시된다는 사실만으로 보관이 완료되었다고 볼 수는 없습니다.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/archive-progress-720.webp 720w, /screenshots/ko/archive-progress-1440.webp 1440w, /screenshots/ko/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/archive-progress-light-1440.webp" srcset="/screenshots/ko/archive-progress-light-720.webp 720w, /screenshots/ko/archive-progress-light-1440.webp 1440w, /screenshots/ko/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="일괄 메일 백업이 진행 중인 MailVault 보관 진행 막대 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/archive-progress-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/archive-progress-720.webp 720w, /screenshots/ko/archive-progress-1440.webp 1440w, /screenshots/ko/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/archive-progress-light-1440.webp" srcset="/screenshots/ko/archive-progress-light-720.webp 720w, /screenshots/ko/archive-progress-light-1440.webp 1440w, /screenshots/ko/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="일괄 메일 백업이 진행 중인 MailVault 보관 진행 막대 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             </figure>
         </article>
 
         <article id="archive-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">메일을 보관하면 어떻게 됩니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">메일을 보관하면 어떻게 됩니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              보관은 (아직 캐시되지 않았다면) 서버에서 메일 전체를 내려받아, 파일 이름에 <strong>A</strong>(Archived) 플래그를 붙인 .eml 파일로 디스크에 저장합니다. 이미 로컬에 캐시되어 있었다면 MailVault는 파일 이름만 바꿔 보관 플래그를 더합니다. 보관한 메일은 <strong>볼트</strong> 보기에 나타나고 백업에도 포함됩니다. 서버 사본은 사용자가 직접 지울 때까지 그대로입니다.
+              보관은 (아직 캐시되지 않았다면) 서버에서 메일 전체를 내려받아, 파일 이름에 <strong>A</strong>(Archived) 플래그를 붙인 .eml 파일로 디스크에 저장합니다. 메일이 이미 로컬에 캐시되어 있다면 MailVault는 기존 로컬 메시지를 보관됨으로 표시합니다. 보관한 메일은 <strong>볼트</strong> 보기에 나타나고 백업에도 포함됩니다. 서버 사본은 사용자가 직접 지울 때까지 그대로입니다.
             </p>
         </article>
 
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">보관 후 서버에서 삭제하면 어떻게 됩니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">보관 후 서버에서 삭제하면 어떻게 됩니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               Premium 기능인 <strong>보관 후 삭제</strong>는 세 단계를 차례로 실행합니다. 메시지를 .eml 파일로 볼트에 복사하고, 사본이 실제로 있는지 확인한 다음, 그제야 서버에서 삭제합니다. 확인을 통과하지 못한 메시지는 서버에 남습니다 &mdash; 복사에 실패해도 원본을 잃지 않습니다. 작업이 끝나면 해당 행에 <strong>유일한 사본</strong>이 표시됩니다. 그 메시지가 남아 있는 곳은 볼트뿐이라는 뜻이며, 백업 드라이브를 연결해 두라는 신호이기도 합니다.</p>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
@@ -243,27 +244,27 @@
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">서버에서 메일을 삭제하면 어떻게 됩니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">서버에서 메일을 삭제하면 어떻게 됩니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               먼저 보관한 메시지는 서버가 나중에 무엇을 하든 볼트에 그대로 남습니다 — 이 제품의 핵심이 바로 그것입니다. 보관하지 <em>않은</em> 메시지는 서버 사본과 함께 사라집니다. 그래서 MailVault는 삭제하기 전에 모든 메시지의 상태를 각 행에 보여 줍니다. 서버에 있는지, 볼트에 있는지, 둘 다인지. 안전한 방법은 <strong>보관 후 삭제</strong>(Premium)로, 각 메시지를 볼트에 복사하고 거기서 확인한 다음에 서버에서 제거합니다.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w, /screenshots/ko/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/state-icons-light-1440.webp" srcset="/screenshots/ko/state-icons-light-720.webp 720w, /screenshots/ko/state-icons-light-1440.webp 1440w, /screenshots/ko/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서버에만 있는 메일, 로컬에 보관된 메일, 로컬에만 있는 메일을 메시지마다 아이콘으로 표시한 MailVault 받은편지함 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/state-icons-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w, /screenshots/ko/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/state-icons-light-1440.webp" srcset="/screenshots/ko/state-icons-light-720.webp 720w, /screenshots/ko/state-icons-light-1440.webp 1440w, /screenshots/ko/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서버에만 있는 메일, 로컬에 보관된 메일, 로컬에만 있는 메일을 메시지마다 아이콘으로 표시한 MailVault 받은편지함 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             </figure>
         </article>
 
         <article id="backup-and-restore" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">백업과 복원은 어떻게 작동합니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">백업과 복원은 어떻게 작동합니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               MailVault는 메일을 모든 .eml 파일과 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code>이 든 ZIP 아카이브로 내보냅니다. 이 manifest는 내부 ID가 아니라 이메일 주소로 메일과 계정을 이어 주므로, 백업을 다른 설치 환경으로도 그대로 옮길 수 있습니다. <strong>모든 메일</strong>을 내보낼지 <strong>보관된 것만</strong> 내보낼지 고를 수 있습니다. 가져오기는 몇 번을 해도 결과가 같습니다 — 로컬에 이미 있는 메일은 중복되지 않습니다. 백업에 아직 설정하지 않은 계정의 메일이 들어 있으면 MailVault가 그 계정을 자동으로 만들어 줍니다(설정에서 비밀번호만 다시 넣으면 됩니다).
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/settings-backup-light-1440.webp" srcset="/screenshots/ko/settings-backup-light-720.webp 720w, /screenshots/ko/settings-backup-light-1440.webp 1440w, /screenshots/ko/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="ZIP 내보내기와 가져오기, Thunderbird나 Apple Mail용 MBOX 내보내기가 있는 MailVault 백업·복원 설정 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/settings-backup-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/settings-backup-light-1440.webp" srcset="/screenshots/ko/settings-backup-light-720.webp 720w, /screenshots/ko/settings-backup-light-1440.webp 1440w, /screenshots/ko/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="ZIP 내보내기와 가져오기, Thunderbird나 Apple Mail용 MBOX 내보내기가 있는 MailVault 백업·복원 설정 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             </figure>
         </article>
 
         <article id="backup-at-set-hours" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">자동 백업이 실행되는 시각을 정할 수 있나요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">자동 백업이 실행되는 시각을 정할 수 있나요?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               네, <a href="/ko/pricing.html" class="text-primary-500 hover:underline">Premium</a>에서 가능합니다. <strong>설정 &rarr; 백업 및 복원 &rarr; 백업 일정</strong>에는 네 가지 주기가 있습니다. 매시간, 하루 한 번, 일주일에 한 번, 그리고 <strong>지정한 시각에</strong>입니다. “지정한 시각에”를 고르면 24시간 전체 그리드가 나타납니다. 원하는 시각을, 예를 들어 07, 12, 22를 누르면 MailVault가 각 시각 정각에 백업하고 그 사이에는 실행하지 않습니다. 모든 주기는 앱이 유휴 상태일 때만 실행되므로 작업 중에 백업이 시작되지 않습니다.
             </p>
@@ -271,7 +272,7 @@
               지정한 시각은 Time Machine처럼 다른 프로그램이 자체 일정으로 이미 사용하는 외장 드라이브의 볼트나 백업 사본을 위한 기능입니다. 그 드라이브가 비어 있는 시각을 고르세요. 선택한 시각이 왔을 때 MailVault가 다른 작업 중이면 그 회차는 나중에 따라잡지 않고 건너뛰며, 다음 실행은 그다음 선택한 시각입니다.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/premium-backup-hours-720.webp 720w, /screenshots/ko/premium-backup-hours-1440.webp 1440w, /screenshots/ko/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/premium-backup-hours-light-1440.webp" srcset="/screenshots/ko/premium-backup-hours-light-720.webp 720w, /screenshots/ko/premium-backup-hours-light-1440.webp 1440w, /screenshots/ko/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 백업 일정을 “지정한 시각에”로 설정하고 24시간 그리드에서 07, 12, 22를 선택한 화면 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/premium-backup-hours-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/premium-backup-hours-720.webp 720w, /screenshots/ko/premium-backup-hours-1440.webp 1440w, /screenshots/ko/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/premium-backup-hours-light-1440.webp" srcset="/screenshots/ko/premium-backup-hours-light-720.webp 720w, /screenshots/ko/premium-backup-hours-light-1440.webp 1440w, /screenshots/ko/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 백업 일정을 “지정한 시각에”로 설정하고 24시간 그리드에서 07, 12, 22를 선택한 화면 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             </figure>
         </article>
 
@@ -294,7 +295,7 @@
         </div>
       </div>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -317,5 +318,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

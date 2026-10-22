@@ -38,7 +38,7 @@
   "description": "Saiba como arquivar seus e-mails IMAP no armazenamento local no macOS, Windows e Linux. Guarde e-mails para sempre como .eml, libere espaço no servidor e acesse tudo offline.",
   "url": "https://mailvaultapp.com/pt-br/guides/archive-imap-emails-locally.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-03-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Pular para o conteúdo</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Tópicos de ajuda</summary><nav aria-label="Tópicos da central de ajuda"><a href="/pt-br/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ajuda do MailVault</a><a href="/pt-br/faq/getting-started.html">Primeiros passos</a><a href="/pt-br/faq/storage-and-vault.html">Armazenamento e seu cofre</a><a href="/pt-br/faq/providers.html">Provedores de e-mail</a><a href="/pt-br/faq/backup-and-restore.html">Backup e restauração</a><a href="/pt-br/faq/explorer-and-insights.html">Explorer e Estatísticas</a><a href="/pt-br/faq/scheduled-send.html">Envio agendado</a><a href="/pt-br/faq/premium.html">Gratuito e Premium</a><a href="/pt-br/faq/troubleshooting.html">Solução de problemas</a><a href="/pt-br/docs.html#guides" class="mv-help-divider">Guias práticos</a><a href="/pt-br/docs.html#articles">Artigos</a><a href="/pt-br/features.html">Referência de recursos</a><a href="/changelog.html">Notas da versão</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,7 +169,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Como arquivar e-mails IMAP localmente no Mac, Windows e Linux</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Como arquivar e-mails IMAP localmente no Mac, Windows e Linux</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5 min de leitura</span>
           </div>
@@ -191,7 +192,7 @@
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
-            <li><strong>Limites de armazenamento</strong> &mdash; Os planos gratuitos do Gmail (15 GB divididos com o Drive e o Photos), do Outlook (15 GB) e do Yahoo (1 TB) uma hora enchem. Quando isso acontece, você para de receber e-mails novos.</li>
+            <li><strong>Limites de armazenamento</strong> &mdash; Os planos gratuitos do Gmail (15 GB compartilhados com Drive e Photos), Outlook (15 GB) e Yahoo (atualmente 20 GB; confira sua conta) acabam ficando cheios. Quando isso acontece, você para de receber e-mails novos.</li>
             <li><strong>Bloqueio de conta</strong> &mdash; Senhas esquecidas, problemas com o segundo fator ou violações de política podem deixar você trancado para fora da conta em definitivo.</li>
             <li><strong>Mudanças do provedor</strong> &mdash; Serviços fecham, se fundem ou mudam de preço. O Google já aposentou dezenas de produtos. O Yahoo Mail já trocou de dono várias vezes.</li>
             <li><strong>Sem acesso off-line</strong> &mdash; Sem uma cópia local, você não consegue buscar nem ler e-mails antigos sem conexão com a internet.</li>
@@ -211,7 +212,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Por que .eml e Maildir importam</h3>
 
           <p>
-            <strong>.eml</strong> é o formato de arquivo padrão para mensagens de e-mail, definido pela RFC 5322. Qualquer cliente de e-mail, em qualquer plataforma, abre um arquivo .eml. É um formato de texto puro que contém a mensagem inteira: cabeçalhos, corpo (texto simples e HTML) e anexos codificados em MIME. Como é um padrão, os e-mails que você arquiva não ficam presos a nenhum software específico.
+            <strong>.eml</strong> é o formato de arquivo padrão para mensagens de e-mail, definido pela RFC 5322. Qualquer cliente de e-mail, em qualquer plataforma, abre um arquivo .eml. Muitos clientes, incluindo Apple Mail e Thunderbird, podem abrir um arquivo .eml. Como é um padrão, os e-mails que você arquiva não ficam presos a nenhum software específico.
           </p>
 
           <p>
@@ -219,8 +220,7 @@
           </p>
 
           <p>
-            O MailVault usa os dois: os e-mails são guardados como arquivos <code>.eml</code> individuais em uma estrutura de diretórios Maildir, organizada por conta e por pasta. Ou seja, o seu arquivo permanente é só uma pasta cheia de arquivos de e-mail padrão, que qualquer ferramenta consegue ler.
-          </p>
+            O MailVault usa os dois: os e-mails são guardados como arquivos <code>.eml</code> individuais em uma estrutura de diretórios Maildir, organizada por conta e por pasta. Ou seja, o seu arquivo permanente é só uma pasta cheia de arquivos de e-mail padrão, que qualquer ferramenta consegue ler. Estas instruções sobre a estrutura dos arquivos se referem ao formato padrão Maildir. Configurações → Armazenamento também oferece armazenamento JMAP, que mantém os bytes originais das mensagens com registros JSON e elimina mensagens idênticas duplicadas.</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Como o MailVault arquiva seus e-mails</h3>
 
@@ -229,7 +229,7 @@
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
-            <li><strong>Adicione a sua conta</strong> &mdash; Informe as credenciais do seu e-mail ou entre com OAuth2 (Google, Microsoft, Yahoo). O MailVault conecta por IMAP sobre TLS.</li>
+            <li><strong>Adicione sua conta</strong> &mdash; Informe as credenciais de e-mail ou entre com OAuth2 (Google ou Microsoft). O Yahoo usa senha de aplicativo. Conexões IMAP usam as configurações de segurança do provedor; contas pessoais do Outlook.com usam Microsoft Graph, e contas compatíveis podem usar JMAP.</li>
             <li><strong>Navegue pela sua caixa postal</strong> &mdash; O MailVault carrega os cabeçalhos das mensagens e mostra a sua caixa de entrada. Você pode navegar pelas pastas, buscar e ler e-mails como em qualquer cliente de e-mail.</li>
             <li><strong>Arquive os e-mails</strong> &mdash; Selecione os e-mails que você quer guardar e arquive. O MailVault baixa a mensagem completa (cabeçalhos, corpo, anexos) e salva como um arquivo <code>.eml</code> no seu disco.</li>
             <li><strong>Cache em segundo plano</strong> &mdash; O MailVault também pode guardar e-mails automaticamente em segundo plano, baixando o conteúdo das mensagens conforme você navega, de modo que o seu arquivo permanente se forma com o tempo, sem esforço manual.</li>
@@ -279,7 +279,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Veja no MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/pt-br/manual-backup.webp"><img src="/assets/help-media/pt-br/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Fazer backup de todas as contas e confirmar a conclusão</figcaption><video controls playsinline preload="none" poster="/assets/help-media/pt-br/manual-backup.jpg" aria-label="Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/pt-br/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/pt-br/manual-backup.vtt" srclang="pt-BR" label="Português (Brasil)" default></video></figure><details class="mv-help-contents"><summary>Transcrição do vídeo</summary><p>Inicie o backup de todas as contas nas configurações de backup. Acompanhe o progresso até a conclusão do backup.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Uma criação da Graphic Meat</p><h2 id="studio-title">Conheça as pessoas por trás do MailVault.</h2><p>Somos a Graphic Meat, um estúdio independente de produtos que cria software útil desde 2013. MailVault é uma das coisas que fazemos. Venha nos conhecer e explorar em que mais estamos trabalhando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conheça a Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visite a Graphic Meat, o estúdio por trás do MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mais da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transforme suas fotos em um livro pronto para impressão.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Um espaço de trabalho local para notas e código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mova seu e-mail para outro provedor.</span></a></div></div></aside><footer class="mv-footer">
@@ -303,5 +303,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura de tela do produto"><button type="button">Fechar captura de tela</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

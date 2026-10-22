@@ -61,6 +61,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/cloud-vs-local-email-search.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/cloud-vs-local-email-search.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
   <header class="mv-header">
@@ -88,13 +89,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← ブログに戻る</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-01" class="text-sm text-primary-500 font-medium">2026年10月1日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail の AI 検索が拡大中。メール検索はクラウドで行うべきか、自分のコンピュータで行うべきか</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail の AI 検索が拡大中。メール検索はクラウドで行うべきか、自分のコンピュータで行うべきか</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">必要なのは回答か、文書かを決める</a></li><li><a href="#help-section-2">ローカル検索が依存するものは別にある</a></li><li><a href="#help-section-3">クラウドの AI とローカルの AI は別々の選択</a></li><li><a href="#help-section-4">自分で試せる小さな比較</a></li><li><a href="#help-section-5">MailVault のアプローチ</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>3分で読めます</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -102,23 +103,23 @@
 <p>件名を思い出せないとき、キーワードを当て推量するより「修正した見積もりを送ってきたのは誰？」と尋ねるほうが楽に感じます。メール検索はそうした会話の方向へ進んでいます。しかし、役に立つ回答と、長く残る記録とでは、解決する問題が違います。</p>
 <p>2026年9月15日、Google は <a href="https://workspaceupdates.googleblog.com/2026/09/gmail-searchs-ai-overviews-now-available-globally.html" class="text-primary-500 hover:text-primary-600 underline">Gmail 検索の AI による概要</a>の提供拡大を発表しました。対象のユーザーは自然な言葉で質問し、自分のメールをもとにした要約を受け取れます。拡大の対象は、Gmail の言語が英語に設定された対応する有料プランです。Google は、EEA、英国、スイス、日本の個人アカウントを対象外として挙げています。必須のスマート機能の設定も適用されます。</p>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/cloud-local-search.svg" width="640" height="804" loading="lazy" decoding="async" alt="2 つの検索経路：ローカルの取り出しはコンピュータ上のダウンロード済みメッセージを検索し、クラウドの AI は質問をリモートで処理して、確認が必要な回答を返します。"><figcaption>検索を行う場所と AI の処理は別々の選択です。対象範囲、アカウントの対象条件、プロバイダーの設定を確認してください。</figcaption></figure>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">必要なのは回答か、文書かを決める</h2>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/cloud-local-search.svg"><img src="/assets/blog/cloud-local-search.svg" width="640" height="804" loading="lazy" decoding="async" alt="2 つの検索経路：ローカルの取り出しはコンピュータ上のダウンロード済みメッセージを検索し、クラウドの AI は質問をリモートで処理して、確認が必要な回答を返します。"></a><figcaption>検索を行う場所と AI の処理は別々の選択です。対象範囲、アカウントの対象条件、プロバイダーの設定を確認してください。</figcaption></figure>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">必要なのは回答か、文書かを決める</h2>
 <p>たとえば、請負業者から見積もりが届き、続いて修正した見積もり、さらに返信で訂正が届いたとします。要約はすばやく状況をつかむ助けになります。ただ、支払いを承認しようとしているなら、やはり元のメッセージを開いて、どの版が最新かを確かめる必要があります。</p>
 <p>領収書、署名済みの添付ファイル、正確な指示が目的なら、多くの場合ゴールは取り出し、つまり証拠を含む文書を見つけることです。長い議論なら、ゴールは解釈、つまりすべての返信を読まずにやり取りを理解することかもしれません。この違いを軸にツールを選んでください。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">ローカル検索が依存するものは別にある</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-2">ローカル検索が依存するものは別にある</h2>
 <p>ローカルのインデックスは、すでにコンピュータに保存されている内容を検索します。関連するメッセージがダウンロードされインデックス化されていれば、プロバイダーの検索サービスに問い合わせずに取り出せます。電車の中や障害の最中、あるいは元のアカウントにアクセスできなくなった後に役立ちます。</p>
 <p>制約は対象範囲です。クライアントが直近 3 か月分しか保存していなければ、一度もダウンロードされていない 10 年前の請求書はオフライン検索では見つかりません。メッセージ全体ではなくヘッダーやプレビューだけを保存するクライアントもあります。結果が空だったことを、そのメールが存在しなかった証拠とみなす前に、ダウンロードの設定を確認してください。</p>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="ローカル検索の流れ：保存されたメッセージが SQLite のインデックスに入り、クエリが結果を返し、結果を開くと保存された原本が読み込まれます。"><figcaption>結果の一覧はインデックスから来ます。元のメッセージは、読んで確かめるためにそのまま残っています。</figcaption></figure>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">クラウドの AI とローカルの AI は別々の選択</h2>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/local-search-flow.svg"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="ローカル検索の流れ：保存されたメッセージが SQLite のインデックスに入り、クエリが結果を返し、結果を開くと保存された原本が読み込まれます。"></a><figcaption>結果の一覧はインデックスから来ます。元のメッセージは、読んで確かめるためにそのまま残っています。</figcaption></figure>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">クラウドの AI とローカルの AI は別々の選択</h2>
 <p>「AI 検索」は操作の形を表す言葉で、処理がどこで行われるかを表すものではありません。モデルは自分のコンピュータで動くこともあれば、リモートのサービスを使うことも、ローカルでの取り出しとリモートでの解釈を組み合わせることもあります。デスクトップにインストールしたアプリでも、メッセージの内容をクラウドのプロバイダーに送ることがあります。</p>
 <p>機能を有効にする前に、何がデバイスの外に出るのか、どのプロバイダーがそれを受け取るのか、保持と学習をどの設定が管理するのかを調べてください。自分のアカウントの種類に適用されるポリシーを読みましょう。個人向けのサービスと職場のプランがすべて同じ条件だと思い込まないでください。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">自分で試せる小さな比較</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-4">自分で試せる小さな比較</h2>
 <p>自分のメールボックスから 3 つの作業を選びます。領収書を見つける、添付ファイルの最新版を特定する、長いスレッドを理解する、の 3 つです。使える検索ツールでそれぞれを試してください。</p>
 <ul><li><strong>正確さ：</strong>正しい元のメッセージにたどり着けたか？</li><li><strong>範囲：</strong>古いフォルダやアーカイブ済みのメッセージも含まれていたか？</li><li><strong>追跡可能性：</strong>回答の根拠となる元を確認できたか？</li><li><strong>オフラインでのアクセス：</strong>接続なしで同じ取り出しを繰り返せたか？</li></ul>
 <p>新しい外部サービスを評価する場合は、機密でない例を使ってください。回答がどれだけ洗練されて聞こえるかではなく、作業の実際の結果を比べましょう。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault のアプローチ</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-5">MailVault のアプローチ</h2>
 <p>MailVault は、ディスクに保管されたメールのためにローカルの全文インデックスを作ります。差出人、日付、添付ファイル、フォルダで絞り込み、保存されたメッセージを開けます。AI による文章作成とスレッド要約のツールは、自分のコンピュータで動くモデルか、自分で選んだプロバイダーを使えます。これらは通常の全文検索とは別のものです。</p>
 <p>実践的なやり方は、全体像の把握には要約を、判断には元のメッセージを使うことです。元になるアーカイブは持ち運べる形で保ち、必要な期間がダウンロード済みかを確認し、<a href="/ja/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">ローカルのインデックスの仕組みを理解しておきましょう</a>。速い回答がもっとも役に立つのは、その元を簡単に確かめられるときです。</p>
 
@@ -131,11 +132,12 @@
         </div>
       </article>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/search-local.webp"><img src="/assets/help-media/ja/search-local.webp" width="1440" height="1056" loading="lazy" alt="ローカルのメールからPriyaを検索して結果を表示する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>ローカルのメールからPriyaを検索して結果を表示する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/search-local.jpg" aria-label="ローカルのメールからPriyaを検索して結果を表示する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/search-local.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/search-local.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>検索欄にPriyaと入力します。 検索を実行し、このコンピュータに保存されたメールを確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちはGraphic Meatです。2013年から役立つソフトウェアを作っている独立系プロダクトスタジオです。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meatを見る ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>メールを読む。メールを残す。</p></div><nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

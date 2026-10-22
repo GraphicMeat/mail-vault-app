@@ -38,7 +38,7 @@
   "description": "파일 형식, 오프라인 접근, 제공업체 지원, 복원 옵션을 기준으로 Linux용 이메일 보관 도구를 선택합니다. MailVault를 직접 시험할 체크리스트도 제공합니다.",
   "url": "https://mailvaultapp.com/ko/guides/linux-email-archive.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/linux-email-archive.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/linux-email-archive.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,24 +172,24 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">이메일 백업 가이드 · <time datetime="2026-10-15">2026년 10월 15일</time></p>
-          <h1>Linux용 로컬 이메일 보관 도구: 확인할 사항</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>Linux용 로컬 이메일 보관 도구: 확인할 사항</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">필요한 작업을 기준으로 선택하기</a></li><li><a href="#help-section-2">자신의 메일함으로 10분간 시험하기</a></li><li><a href="#help-section-3">MailVault가 제공하는 기능</a></li><li><a href="#help-section-4">다른 도구를 검토할 때 확인할 질문</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>Linux에서 로컬 이메일 보관함을 원한다면 먼저 결과를 확인하십시오. 제공업체에서 메시지를 제거한 후에도 읽을 수 있습니까? 클라이언트의 동기화된 받은편지함만으로는 알 수 없습니다. 독립적으로 보존되는 사본과 다른 컴퓨터에서 복원할 방법이 필요합니다.</p>
-          <h2 data-i18n-block>필요한 작업을 기준으로 선택하기</h2>
+          <h2 data-i18n-block id="help-section-1">필요한 작업을 기준으로 선택하기</h2>
           <ul class="list-disc pl-6 space-y-2">
           <li data-i18n-block><strong>일상적인 메일:</strong> 안정적인 로그인, 발송, 폴더, 편한 작업 흐름을 우선하십시오. 서버 메일을 삭제할 계획이라면 별도의 보존 계획을 세우십시오.</li>
           <li data-i18n-block><strong>개인 보관함:</strong> 메시지 본문과 첨부 파일의 저장, 오프라인 검색, 개방형 내보내기 형식을 우선하십시오.</li>
           <li data-i18n-block><strong>터미널 백업:</strong> 반복 가능한 작업, 인증 갱신, 로그, 검증된 복원을 우선하십시오. 도구가 서버의 삭제 사항을 그대로 반영하는지, 이전 사본을 보존하는지 확인하십시오.</li>
           <li data-i18n-block><strong>회사 메일 보존:</strong> 접근 제어, 보존 정책, 감사 요구사항을 별도로 확인하십시오. 개인용 데스크톱 보관함이 있다는 사실만으로 조직의 규정 준수 요구사항을 충족했다고 할 수는 없습니다.</li></ul>
-          <h2 data-i18n-block>자신의 메일함으로 10분간 시험하기</h2>
+          <h2 data-i18n-block id="help-section-2">자신의 메일함으로 10분간 시험하기</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block><a href="/ko/get-started.html">다운로드 페이지</a>에서 Linux 버전을 설치하고 계정 하나를 연결하십시오.</li>
           <li data-i18n-block>일반 텍스트 메시지, HTML 메시지, 보낸 메시지, 첨부 파일이 포함된 짧은 날짜 범위를 보관하십시오. 서버 메일을 그대로 두는 <strong>보관</strong>을 사용하십시오.</li>
           <li data-i18n-block><strong>보관함</strong>으로 전환하고 네트워크 연결을 끊으십시오. 표본 메시지를 읽고 첨부 파일을 여십시오.</li>
           <li data-i18n-block><strong>백업 및 복원</strong>에서 두 번째 드라이브로 백업을 내보내십시오. ZIP을 열고 저장된 EML 파일을 찾을 수 있는지 확인하십시오.</li>
           <li data-i18n-block>전체 메일 기록을 맡기기 전에 복원 절차를 시험하고 필요한 모든 폴더를 제공업체가 연결된 앱에 제공하는지 확인하십시오.</li></ol>
-          <h2 data-i18n-block>MailVault가 제공하는 기능</h2>
-          <p data-i18n-block>MailVault는 데스크톱 이메일 클라이언트와 로컬 보관함을 결합합니다. 수동 보관은 무료입니다. 보관한 메시지는 Maildir 구조의 EML 파일을 사용하며 앱은 로컬 검색과 백업/내보내기를 지원합니다. Premium은 예약 작업과 삭제 전 보관 작업을 추가합니다. 하나의 앱에서 메일을 살펴보고 보존하려면 선택하십시오. 위의 시험 절차로 실제 사용할 계정을 확인하십시오.</p>
-          <h2 data-i18n-block>다른 도구를 검토할 때 확인할 질문</h2>
+          <h2 data-i18n-block id="help-section-3">MailVault가 제공하는 기능</h2>
+          <p data-i18n-block>MailVault는 데스크톱 이메일 클라이언트와 로컬 보관함을 결합합니다. 수동 보관은 무료입니다. 보관한 메시지는 Maildir 구조의 EML 파일을 사용하며 앱은 로컬 검색과 백업/내보내기를 지원합니다. Premium은 예약 작업과 삭제 전 보관 작업을 추가합니다. 하나의 앱에서 메일을 살펴보고 보존하려면 선택하십시오. 위의 시험 절차로 실제 사용할 계정을 확인하십시오. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
+          <h2 data-i18n-block id="help-section-4">다른 도구를 검토할 때 확인할 질문</h2>
           <ul class="list-disc pl-6 space-y-2">
           <li data-i18n-block>원래 앱 밖에서도 파일을 열 수 있습니까?</li>
           <li data-i18n-block>서버의 메시지가 사라지면 로컬 사본은 어떻게 됩니까?</li>
@@ -200,7 +201,7 @@
           <p data-i18n-block>더 많은 실용 가이드: <a href="/ko/guides/backup-gmail-to-eml.html">Gmail을 EML 파일로 백업하는 방법</a> · <a href="/ko/guides/export-outlook-to-eml.html">Outlook 이메일을 EML로 내보내는 방법</a> · <a href="/ko/guides/download-all-emails-mac.html">Mac에서 모든 이메일을 다운로드하는 방법</a> · <a href="/ko/guides/backup-email-linux.html">Linux에서 이메일을 EML로 백업하는 방법</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -228,5 +229,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

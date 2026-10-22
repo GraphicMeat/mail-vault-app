@@ -99,7 +99,6 @@
   "6ed7c0ac7594": "La mayoría de los proveedores guardan el correo borrado en una papelera durante un tiempo antes de eliminarlo definitivamente, y hasta entonces sigue contando para tu cuota. Si borras por espacio, vacía la papelera a mano cuando estés seguro de tus decisiones, en lugar de esperar a que se purgue sola.",
   "c4dad737ac1d": "El paso de la copia, con MailVault",
   "1ba02c8886f8": "Copia antes de borrar en bloque",
-  "178ba4515f44": "MailVault archiva todo tu buzón como archivos .eml sueltos y buscables, así que borrar miles de correos antiguos del servidor no tiene ningún riesgo.",
   "faf1c669524d": "¿Es seguro borrar correos antiguos en bloque sin leer cada uno antes?",
   "76c8003f72d8": "Sí, siempre que antes hayas archivado y verificado una copia completa. Cuando tienes una copia local confirmada de todo, puedes borrar por remitente, por categoría o por intervalo de fechas en bloque sin revisar miles de mensajes uno a uno.",
   "f81d13d6fa85": "¿Cómo sé que mi copia del correo está completa antes de borrar nada?",

@@ -38,7 +38,7 @@
   "description": "Gmail에서 떠나려 하십니까? Gmail이 지금 갖고 있는 모든 것의 완전하고 검색 가능한 로컬 사본을 간직한 채 새 메일 제공업체로 옮기는 방법을 정리했습니다.",
   "url": "https://mailvaultapp.com/ko/guides/leave-gmail-keep-your-emails.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -74,7 +74,7 @@
       "name": "제공업체를 옮긴 뒤 Gmail 계정을 지워야 합니까?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "그럴 필요는 없습니다. 많은 사람이 주 받은편지함으로 쓰지 않으면서도 전달용 주소로 몇 년씩 살려 둡니다. 언젠가 닫고 싶다면 먼저 백업하고 보관본을 확인하십시오 &mdash; 계정 삭제 후에는 Gmail 데이터를 복구할 수 없습니다."
+        "text": "그럴 필요는 없습니다. 많은 사람이 주 받은편지함으로 쓰지 않으면서도 전달용 주소로 몇 년씩 살려 둡니다. 나중에 계정을 닫는다면 먼저 백업하고 보관본을 확인하세요 &mdash; 삭제 후 복구에는 기한이 있으며 보장되지 않습니다. Google의 현재 계정 복구 안내를 확인하세요."
       }
     },
     {
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">메일을 잃지 않고 Gmail을 떠나는 방법</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">메일을 잃지 않고 Gmail을 떠나는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>7분 분량</span>
           </div>
@@ -243,14 +244,13 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4단계: Gmail 계정 자체를 어떻게 할지 정하십시오</h3>
 
           <p>
-            꼭 지울 필요는 없습니다. 많은 사람이 뒤늦게 오는 메일을 받아 주는 전달용으로만 예전 Gmail 계정을 무기한(또는 1~2년) 살려 둡니다. 언젠가 닫고 싶다면 1단계의 로컬 보관본이 완전한지 먼저 확인하십시오 &mdash; Google 계정이 삭제되면 그 Gmail 데이터는 복구할 수 없습니다.
+            꼭 지울 필요는 없습니다. 많은 사람이 뒤늦게 오는 메일을 받아 주는 전달용으로만 예전 Gmail 계정을 무기한(또는 1~2년) 살려 둡니다. 나중에 계정을 닫기로 했다면 먼저 1단계의 로컬 보관본이 완전하고 검증되었는지 확인하세요 &mdash; 제공업체의 복구 기간이 지나면 삭제된 Gmail 데이터를 복구하지 못할 수 있습니다. 계정을 닫기 전에 Google의 현재 계정 복구 안내를 확인하세요.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault로 제대로 된 보관본 만들기</h3>
 
           <p>
-            MailVault는 1단계를 제대로 하기 위해 만든 macOS, Windows, Linux용 무료 데스크톱 앱입니다. Google의 OAuth 방식으로 Gmail에 로그인하고(비밀번호도 앱 비밀번호도 필요 없습니다), 원하는 폴더와 라벨을 고르면, MailVault가 모든 메시지를 개별 <code>.eml</code> 파일로 디스크에 내려받습니다 &mdash; 쓰기 전에 어딘가로 가져와야 하는 하나의 거대한 내보내기 파일이 아닙니다. 그 결과 Gmail 계정 자체가 계속 살아 있든 아니든 작동하는, 검색하고 둘러볼 수 있는 Gmail 전체 기록의 로컬 사본이 생깁니다.
-          </p>
+            MailVault는 1단계를 제대로 하기 위해 만든 macOS, Windows, Linux용 무료 데스크톱 앱입니다. Google의 OAuth 방식으로 Gmail에 로그인하고(비밀번호도 앱 비밀번호도 필요 없습니다), 원하는 폴더와 라벨을 고르면, MailVault가 모든 메시지를 개별 <code>.eml</code> 파일로 디스크에 내려받습니다 &mdash; 쓰기 전에 어딘가로 가져와야 하는 하나의 거대한 내보내기 파일이 아닙니다. 그 결과 Gmail 계정 자체가 계속 살아 있든 아니든 작동하는, 검색하고 둘러볼 수 있는 Gmail 전체 기록의 로컬 사본이 생깁니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
 
           <p>
             새로운 IMAP 기반 제공업체로도 옮기는 경우라면(Gmail에서 Gmail로, 또는 다른 Google 계정으로 옮기는 것이 아니라면) MailVault Premium이 계정 간 메일함 이전을 더해 줍니다 &mdash; 예전 계정에서 보관한 메일을 새 계정의 폴더로 곧바로 복사하는 기능이며, 무료 무제한 수동 보관에 더해 예약 자동 백업도 함께 제공됩니다.
@@ -278,7 +278,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">제공업체를 옮긴 뒤 Gmail 계정을 지워야 합니까?</p>
-            <p>그럴 필요는 없습니다. 많은 사람이 주 받은편지함으로 쓰지 않으면서도 전달용 주소로 몇 년씩 살려 둡니다. 언젠가 닫고 싶다면 먼저 백업하고 보관본을 확인하십시오 &mdash; 계정 삭제 후에는 Gmail 데이터를 복구할 수 없습니다.</p>
+            <p>그럴 필요는 없습니다. 많은 사람이 주 받은편지함으로 쓰지 않으면서도 전달용 주소로 몇 년씩 살려 둡니다. 나중에 계정을 닫는다면 먼저 백업하고 보관본을 확인하세요 &mdash; 삭제 후 복구에는 기한이 있으며 보장되지 않습니다. Google의 현재 계정 복구 안내를 확인하세요.</p>
           </div>
 
           <div class="pt-2">
@@ -299,7 +299,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -323,5 +323,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

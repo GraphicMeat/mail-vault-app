@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-emails-mac.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-emails-mac.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,22 +172,22 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">メールバックアップガイド · <time datetime="2026-10-15">2026年10月15日</time></p>
-          <h1>Macですべてのメールをダウンロードする方法</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>Macですべてのメールをダウンロードする方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">方法1：Apple Mailからメールボックスを書き出す</a></li><li><a href="#help-section-2">方法2：MailVaultで検索できるEMLアーカイブを作成する</a></li><li><a href="#help-section-3">アーカイブを頼りにする前に検証する</a></li><li><a href="#search-local-archive-video">短いデモ：ローカルアーカイブを検索する</a></li><li><a href="#help-section-4">「すべてのメール」にフォルダのチェックリストが必要な理由</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>Macですべてのメールをダウンロードするには、Apple Mailのメールボックス書き出しと、専用のローカルアーカイブから選びます。大切なのは、漏れがないことです。受信トレイだけでアカウント全体を網羅することはほとんどなく、同期されたメールボックスではサーバー側の削除が反映されることもあります。</p>
-          <h2 data-i18n-block>方法1：Apple Mailからメールボックスを書き出す</h2>
+          <h2 data-i18n-block id="help-section-1">方法1：Apple Mailからメールボックスを書き出す</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Apple Mailにアカウントを接続し、メールの取得が終わるまで待ちます。受信トレイ、送信済み、必要なすべてのフォルダを、古いメールも含めて確認してください。</li>
           <li data-i18n-block>サイドバーで必要なメールボックスを選択し、<strong>メールボックス → メールボックスを書き出す</strong>を選びます。</li>
           <li data-i18n-block>Mac内または外付けドライブのフォルダを選びます。Apple MailはメールボックスのデータをMBOX形式で書き出します。</li>
           <li data-i18n-block>別のコピーを保管し、<strong>ファイル → メールボックスを読み込む</strong>で読み込みを試します。読み込んだコピーから、代表的なメールや添付ファイルを開いてください。</li></ol>
           <p data-i18n-block>これらのメニュー名とMBOX形式は、<a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac">Appleのメールボックス読み込み・書き出しガイド</a>に記載されています。書き出したメールボックスは独立したデータです。Mailにアカウントを接続したままにするだけでは、同じバックアップにはなりません。</p>
-          <h2 data-i18n-block>方法2：MailVaultで検索できるEMLアーカイブを作成する</h2>
+          <h2 data-i18n-block id="help-section-2">方法2：MailVaultで検索できるEMLアーカイブを作成する</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block><a href="/ja/get-started.html">はじめに</a>からmacOS版をダウンロードし、メールアカウントを追加します。利用できる場合はGoogleまたはMicrosoftのログインを使ってください。</li>
           <li data-i18n-block>受信トレイ、送信済み、独自のフォルダ、受信トレイ以外のメールを含むラベルの一覧を作ります。必要に応じて、プロバイダーのアーカイブ済みフォルダや非表示フォルダを接続先から見えるようにします。</li>
           <li data-i18n-block>一括操作で必要なフォルダと日付を選び、<strong>アーカイブ</strong>を選択します。完了まで待ち、失敗やスキップされたフォルダがあれば調べてください。</li>
           <li data-i18n-block>表示元を<strong>保管庫</strong>に切り替え、独立したローカルコピーを確認します。保管庫内のメールは.emlファイルです。「サーバー」にしか表示されないメールは、まだアーカイブに含まれていません。</li></ol>
-          <h2 data-i18n-block>アーカイブを頼りにする前に検証する</h2>
+          <h2 data-i18n-block id="help-section-3">アーカイブを頼りにする前に検証する</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>メールの表示元を、サーバーやすべてではなく<strong>保管庫</strong>に切り替えます。見覚えのある古いメールを検索してください。</li>
           <li data-i18n-block>ネットワークを切断し、異なるフォルダや年のアーカイブ済みメールをいくつか開きます。添付ファイルも開いてください。一覧に件名があるだけでは、メール本文が保存されている証拠にはなりません。</li>
@@ -199,14 +200,14 @@
           <p data-i18n-block class="text-sm">既存のmacOSデモ録画を編集した、架空のメールによるデモです。アカウントへのログインと一部の準備は録画外で行っています。実際のプロバイダーへのライブ接続ではありません。</p>
           <details><summary data-i18n-block>デモの説明を読む</summary>
           <p data-i18n-block>このデモでは、準備済みの保管庫にある架空のメールを検索します。ご自身のアーカイブは、接続を切って古いメールや添付ファイルを開いて検証し、別のドライブにもコピーを保管してください。</p></details></section>
-          <h2 data-i18n-block>「すべてのメール」にフォルダのチェックリストが必要な理由</h2>
+          <h2 data-i18n-block id="help-section-4">「すべてのメール」にフォルダのチェックリストが必要な理由</h2>
           <p data-i18n-block>デスクトップからの接続でアーカイブできるのは、プロバイダーが公開している範囲だけです。Gmailの非表示ラベル、別のアカウント、オンラインアーカイブ、管理者の制限により、漏れが生じる場合があります。プロバイダーのWebアプリとアプリのフォルダ一覧を照合し、重要な各フォルダで最も古いメールと新しいメールをいくつか確認してください。Gmailのラベルの重複で、単純な件数が実態と合わないこともあります。同じメールが複数のラベルに表示されるためです。</p>
           <p data-i18n-block>アカウント別の手順は、<a href="/ja/guides/backup-gmail-to-eml.html">GmailからEMLへ</a>、<a href="/ja/guides/export-outlook-to-eml.html">OutlookからEMLへ</a>、<a href="/ja/guides/export-icloud-mail.html">iCloud Mailの書き出し</a>をご覧ください。Windows用アーカイブツールから移行する場合は、<a href="/ja/guides/mailstore-alternative-mac.html">Mac向けMailStore代替アプリ</a>から始めてください。</p>
           <p data-i18n-block><a href="/ja/get-started.html">MailVaultを無料でダウンロード</a>して、最初のローカルアーカイブを作成できます。手動アーカイブは無料です。自動アーカイブ、スケジュールバックアップ、アーカイブして削除には<a href="/ja/pricing.html">Premium</a>が必要です。</p>
           <p data-i18n-block>ほかの実用ガイド： <a href="/ja/guides/backup-gmail-to-eml.html">GmailをEMLファイルにバックアップする方法</a> · <a href="/ja/guides/export-outlook-to-eml.html">OutlookのメールをEMLに書き出す方法</a> · <a href="/ja/guides/backup-email-linux.html">LinuxでメールをEMLとしてバックアップする方法</a> · <a href="/ja/guides/linux-email-archive.html">Linux用ローカルメールアーカイブの確認点</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -234,5 +235,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

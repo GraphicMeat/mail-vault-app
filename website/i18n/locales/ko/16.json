@@ -29,7 +29,6 @@
   "1a88113e53ee": "MailVault {release}를 다운로드하고 있습니다. 시작되지 않으면 위의 버튼을 사용하십시오.",
   "93c3e0b8c5fb": "버튼을 누르면 최신 릴리스 페이지가 열립니다. 그곳에서 컴퓨터에 맞는 파일을 선택하십시오.",
   "757da7c8028f": "다운로드가 자동으로 시작되지 않았습니다. 버튼을 누르면 최신 릴리스 페이지가 열립니다. 그곳에서 컴퓨터에 맞는 파일을 선택하십시오.",
-  "af2a175acc52": "MailVault가 메일을 디스크 어디에 두는지, 그중 얼마나 이 컴퓨터에 남는지, 왜 .eml과 Maildir을 쓰는지, 볼트를 다른 드라이브로 옮기는 방법.",
   "384095550461": "내 메일 중 얼마나 이 컴퓨터에 남나요?",
   "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>모두 보관</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: 최근 기간만이 아니라 모든 폴더와 전체 기록을 백그라운드에서 다운로드해 이 컴퓨터에 보관하는 다운로드 모드입니다</span>",
   "7f9bb36583b5": "14개 기능 모두 보기",

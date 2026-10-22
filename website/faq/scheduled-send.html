@@ -155,6 +155,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -203,7 +204,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html" aria-current="page">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Breadcrumb" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -216,25 +217,25 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Scheduled Send</h1>
+      <h1 class="text-4xl font-bold mb-2">Scheduled Send</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">What is Scheduled Send?</a></li><li><a href="#help-section-2">Can I schedule an email in someone else’s time zone?</a></li><li><a href="#help-section-3">How does MailVault know the recipient’s time zone?</a></li><li><a href="#help-section-4">How do I change, reschedule or cancel a scheduled email?</a></li><li><a href="#help-section-5">Does MailVault have to be open for a scheduled email to go out?</a></li><li><a href="#help-section-6">What is free, and what needs Premium?</a></li><li><a href="#help-section-7">What happens to scheduled emails if my subscription ends?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Write an email now and have MailVault send it at an exact date and time, in any time zone. Scheduling is part of Premium; a send delay of up to 5 minutes is free.</p>
 
       <div class="space-y-4">
 
         <article id="what-is-scheduled-send" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What is Scheduled Send?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">What is Scheduled Send?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Scheduled Send holds an email you have written and sends it at the date and time you choose, in the time zone you choose. In Compose, click the arrow beside <strong>Send</strong> to open <strong>Schedule send</strong>, pick the date and time, check the time zone below it, and click <strong>Schedule</strong>.</p>
               <p><strong>Tomorrow 8am</strong> and <strong>Monday 8am</strong> fill in the time with one click, in the time zone you have chosen.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-scheduled-send-720.webp 720w, /screenshots/premium-scheduled-send-1440.webp 1440w, /screenshots/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/premium-scheduled-send-light-1440.webp" srcset="/screenshots/premium-scheduled-send-light-720.webp 720w, /screenshots/premium-scheduled-send-light-1440.webp 1440w, /screenshots/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Compose with the Schedule send panel open: a reply set for 8:00 AM in New York, the time zone suggested from the recipient’s last email · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
-              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">A reply scheduled for 8:00 AM in New York, with the time zone suggested from the recipient&rsquo;s last email.</figcaption>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/premium-scheduled-send-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-scheduled-send-720.webp 720w, /screenshots/premium-scheduled-send-1440.webp 1440w, /screenshots/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/premium-scheduled-send-light-1440.webp" srcset="/screenshots/premium-scheduled-send-light-720.webp 720w, /screenshots/premium-scheduled-send-light-1440.webp 1440w, /screenshots/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Compose with the Schedule send panel open: a reply set for 8:00 AM in New York, the time zone suggested from the recipient’s last email · MailVault version 2.16.0 en" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">A reply scheduled for 8:00 AM in New York, with the time zone suggested from the recipient’s last email.</figcaption>
             </figure>
         </article>
 
         <article id="schedule-time-zones" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I schedule an email in someone else&rsquo;s time zone?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Can I schedule an email in someone else&rsquo;s time zone?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Yes, in any time zone. The list shows each zone with its UTC offset, for example <strong>(UTC-04:00) New York</strong>, and you can search it by city or by offset: type <strong>+2</strong> to see the zones two hours ahead of UTC. The offset shown is the one in effect when the email is sent, so a send after a clock change is labelled correctly.</p>
               <p>Below the fields, MailVault shows the time now where you are and in the chosen zone, and when the email will go out in your own time. You can check an 8:00 AM send in New York against your own clock before you schedule it.</p>
@@ -242,7 +243,7 @@
         </article>
 
         <article id="suggested-time-zone" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How does MailVault know the recipient&rsquo;s time zone?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">How does MailVault know the recipient&rsquo;s time zone?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>It suggests one, and you can always pick another. Every email carries its sender&rsquo;s UTC offset, so MailVault reads the offset in the last email the first recipient sent you and picks the matching time zone. A note under the field says the suggestion came from their last email. One offset can belong to several places, so check the city.</p>
               <p>If they have never written to you, MailVault uses the zone you last chose when scheduling an email to them. With neither, it starts from your own time zone. A zone you picked yourself is never replaced.</p>
@@ -250,7 +251,7 @@
         </article>
 
         <article id="edit-scheduled-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How do I change, reschedule or cancel a scheduled email?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">How do I change, reschedule or cancel a scheduled email?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Scheduled emails wait in the <strong>Scheduled</strong> folder in the sidebar. Click one to open it in Compose and change the recipients, the text or the time. It stays scheduled as it was until you save your changes.</p>
               <p>Each email in the folder also has buttons to <strong>Reschedule</strong> it, <strong>Cancel</strong> it, or <strong>Send now</strong>.</p>
@@ -258,7 +259,7 @@
         </article>
 
         <article id="send-while-closed" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Does MailVault have to be open for a scheduled email to go out?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">Does MailVault have to be open for a scheduled email to go out?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Not if it can keep running in the background. Scheduled emails are sent by MailVault&rsquo;s background helper. Turn on <strong>Keep running in the background</strong> in Settings &rsaquo; <strong>Diagnostics</strong> &rsaquo; <strong>Background Daemon</strong> and the helper keeps running after you quit and starts when you log in, so emails go out on time while the app is closed.</p>
               <p>If that setting is off, or your copy of MailVault cannot keep running in the background, a scheduled email goes out the next time you open MailVault. The Scheduled folder says which applies to you and links to the setting.</p>
@@ -266,7 +267,7 @@
         </article>
 
         <article id="scheduled-send-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What is free, and what needs Premium?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">What is free, and what needs Premium?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Scheduling an email for a set date and time is part of Premium. Delaying a send by up to 5 minutes is free: per email with the menu next to <strong>Send</strong>, or for every email with <strong>Send Delay</strong> in Settings.</p>
               <p>Without Premium, the Schedule send panel says so and offers <strong>Upgrade</strong>. <a href="/pricing.html#premium-scheduled-send" class="text-primary-500 hover:text-primary-600 underline">See what Premium includes</a>.</p>
@@ -274,7 +275,7 @@
         </article>
 
         <article id="subscription-ends" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What happens to scheduled emails if my subscription ends?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">What happens to scheduled emails if my subscription ends?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>They still go out at the time you set. Editing and rescheduling them need Premium again, but you can still send one now or cancel it from the Scheduled folder.</p>
             </div>
@@ -299,7 +300,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -322,5 +323,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

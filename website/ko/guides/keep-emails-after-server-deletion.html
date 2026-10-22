@@ -38,7 +38,7 @@
   "description": "메일을 잃지 않고 서버에서 삭제하십시오. MailVault는 삭제 전에 메일을 .eml 파일로 로컬에 보관합니다 — 검색 가능하고, 오프라인에서 열리며, 영원히 사용자의 것입니다.",
   "url": "https://mailvaultapp.com/ko/guides/keep-emails-after-server-deletion.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,14 +169,14 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">서버에서 지운 뒤에도 메일을 남겨 두는 방법</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">서버에서 지운 뒤에도 메일을 남겨 두는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5분 분량</span>
           </div>
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <h2>서버에서 이메일을 삭제하고 로컬 사본 유지하기: 안전한 순서</h2>
+          <h2 id="help-section-1">서버에서 이메일을 삭제하고 로컬 사본 유지하기: 안전한 순서</h2>
           <p>동기화된 폴더는 서버의 상태를 보여 줍니다. 그곳에서 메일을 삭제하기 전에 독립적으로 열 수 있는 보존용 보관함을 만드십시오. MailVault의 <strong>보관함</strong> 소스는 저장된 사본을, <strong>서버</strong>는 제공업체의 메일을 보여 줍니다. 전체에서 메시지가 보인다는 사실만으로 로컬 사본이 있다고 할 수는 없습니다.</p>
           <ol class="list-decimal pl-6 space-y-2">
           <li>먼저 <strong>보관</strong>으로 소량의 메시지를 보관하십시오. 작업이 완료될 때까지 기다리십시오.</li>
@@ -197,7 +198,7 @@
           </p>
 
           <p>
-            하지만 서버에서 메일을 지울 정당한 이유도 있습니다. 저장 공간이 가득 찼는데 더 사고 싶지 않을 때. 메일 제공업체를 떠나며 정리하고 싶을 때. 회사 정책이 오래된 메시지를 서버에서 지우도록 요구할 때. 또는 그저 데이터를 잃을 불안 없이 깔끔한 받은편지함을 원할 때입니다.
+            하지만 서버에서 메일을 지울 정당한 이유도 있습니다. 저장 공간이 가득 찼는데 더 사고 싶지 않을 때. 메일 제공업체를 떠나며 정리하고 싶을 때. 회사가 서버 저장 공간을 줄이면서 로컬 사본을 유지하도록 허용하는 경우입니다. 보존 또는 삭제 규칙은 해당 로컬 사본에도 적용될 수 있습니다. 또는 그저 데이터를 잃을 불안 없이 깔끔한 받은편지함을 원할 때입니다.
           </p>
 
           <p>
@@ -231,7 +232,7 @@
             <li><strong>1단계: 동기화</strong> &mdash; IMAP 계정을 MailVault에 연결하십시오. 앱이 메일 헤더를 불러와 메일함 내용을 보여 줍니다. 여느 메일 클라이언트와 같습니다.</li>
             <li><strong>2단계: 로컬에 보관</strong> &mdash; 지키고 싶은 메일을 골라 보관하십시오. MailVault가 메일을 통째로 &mdash; 헤더, 본문 텍스트, HTML 서식, 모든 첨부파일까지 &mdash; 내려받아 디스크에 표준 <code>.eml</code> 파일로 저장합니다.</li>
             <li><strong>3단계: 확인</strong> &mdash; MailVault에서 보관한 메일 몇 통을 열어 온전한지 확인하십시오. 첨부파일을 확인하십시오. 특정 메시지를 검색해 보십시오. 필요한 것이 전부 로컬 보관본에 들어 있는지 확인하십시오.</li>
-            <li><strong>4단계: 서버에서 삭제</strong> &mdash; 확인된 로컬 사본이 생겼으니 이제 서버에서 메일을 지우십시오. MailVault는 RFC 4315의 <code>UID EXPUNGE</code>를 써서 지정한 메시지만 정확히 지웁니다 &mdash; 실수로 엉뚱한 메일을 지울 위험이 없습니다.</li>
+            <li><strong>4단계: 서버에서 삭제</strong> &mdash; 확인된 로컬 사본이 생겼으니 이제 서버에서 메일을 지우십시오. MailVault는 선택한 계정의 삭제 경로를 사용합니다. IMAP 처리는 서버 기능에 따라 달라지며 개인용 Outlook.com에는 Microsoft Graph를 사용합니다. 확인 전에 선택 항목을 검토하고 별도 백업을 보관하세요.</li>
             <li><strong>5단계: 언제든 열어 보기</strong> &mdash; 보관한 메일은 디스크에 남아 검색도 읽기도 그대로 됩니다. 인터넷 연결도, 서버 의존도 필요 없습니다.</li>
           </ul>
 
@@ -245,11 +246,11 @@
             <li><strong>모든 헤더</strong> &mdash; From, To, CC, BCC, Date, Subject, Message-ID, In-Reply-To, References를 비롯한 모든 헤더입니다. 스레드 관계도 그대로 보존됩니다.</li>
             <li><strong>본문 내용</strong> &mdash; 일반 텍스트본과 HTML본 양쪽 모두입니다. 서식, 링크, 인라인 이미지가 전부 남습니다.</li>
             <li><strong>첨부파일</strong> &mdash; 형식이나 크기와 관계없이 첨부된 모든 파일입니다. PDF, 이미지, 문서, 스프레드시트까지 &mdash; 전부 MIME 파트로 .eml 파일 안에 들어갑니다.</li>
-            <li><strong>메타데이터</strong> &mdash; 읽음/안 읽음 상태, 플래그, 폴더 위치가 Maildir 파일 이름에 부호화됩니다.</li>
+            <li><strong>메타데이터</strong> &mdash; 읽음·읽지 않음 상태와 플래그는 Maildir 파일 이름에 기록되며 폴더 위치는 폴더 경로에 기록됩니다. JMAP 저장소는 대신 JSON 레코드를 사용합니다.</li>
           </ul>
 
           <p>
-            <code>.eml</code> 형식은 공개 표준(RFC 5322)입니다. 어떤 운영체제의 어떤 메일 클라이언트든 이 파일을 열 수 있습니다. 보관본은 MailVault를 비롯한 어떤 소프트웨어에도 묶이지 않습니다.
+            <code>.eml</code> 형식은 공개 표준(RFC 5322)입니다. EML을 지원하는 메일 앱에서 이 파일을 열 수 있습니다. 보관본은 MailVault를 비롯한 어떤 소프트웨어에도 묶이지 않습니다.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">흔한 상황들</h3>
@@ -259,7 +260,7 @@
           </p>
 
           <p>
-            <strong>회사 메일 정리:</strong> IT 부서가 서버 저장 비용을 줄이려 합니다. 직원들의 오래된 메일을 로컬에 보관한 다음 서버에서 비우십시오. 메일은 규정 준수용으로도 참고용으로도 여전히 남아 있습니다.
+            <strong>회사 메일 정리:</strong> IT 부서가 서버 저장 비용을 줄이려 합니다. 조직이 허용한 로컬 사본만 보관하고 그 사본에도 조직의 보존, 삭제, 접근 규칙을 적용하세요. MailVault는 개인용 데스크톱 아카이브이며 규정 준수나 법적 보존 시스템이 아닙니다.
           </p>
 
           <p>
@@ -302,7 +303,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -330,5 +331,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

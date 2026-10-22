@@ -38,7 +38,7 @@
   "description": "Niente MailStore per Mac? MailVault è un'app gratuita per macOS, Windows e Linux che archivia in locale la posta Gmail, Outlook e IMAP come semplici file .eml.",
   "url": "https://mailvaultapp.com/it/guides/mailstore-alternative-mac.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Vai al contenuto</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Argomenti di aiuto</summary><nav aria-label="Argomenti del centro assistenza"><a href="/it/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aiuto di MailVault</a><a href="/it/faq/getting-started.html">Per iniziare</a><a href="/it/faq/storage-and-vault.html">Archiviazione e il tuo vault</a><a href="/it/faq/providers.html">Provider di posta</a><a href="/it/faq/backup-and-restore.html">Backup e ripristino</a><a href="/it/faq/explorer-and-insights.html">Explorer e Statistiche</a><a href="/it/faq/scheduled-send.html">Invio programmato</a><a href="/it/faq/premium.html">Gratuito e Premium</a><a href="/it/faq/troubleshooting.html">Risoluzione dei problemi</a><a href="/it/docs.html#guides" class="mv-help-divider">Guide pratiche</a><a href="/it/docs.html#articles">Articoli</a><a href="/it/features.html">Riferimento delle funzioni</a><a href="/changelog.html">Note di rilascio</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,7 +169,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Un'alternativa a MailStore per Mac: MailVault</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Un'alternativa a MailStore per Mac: MailVault</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 min di lettura</span>
           </div>
@@ -267,8 +268,7 @@
           </p>
 
           <p>
-            <strong>Archiviazione aperta e standard.</strong> MailStore conserva le email archiviate nei propri file di archivio, e per tirarle fuori come file EML o MSG devi esportarle. Se MailStore smettesse di essere sviluppato, accedere a quelle email diventerebbe più difficile. MailVault salva ogni email come file <code>.eml</code> standard, il formato RFC 5322 che altri client email sanno aprire. Il tuo archivio è semplicemente una cartella di file. Puoi aprirli in Apple Mail, in Thunderbird o in qualsiasi editor di testo.
-          </p>
+            <strong>Archiviazione aperta e standard.</strong> MailStore conserva le email archiviate nei propri file di archivio, e per tirarle fuori come file EML o MSG devi esportarle. Se MailStore smettesse di essere sviluppato, accedere a quelle email diventerebbe più difficile. MailVault salva ogni email come file <code>.eml</code> standard, il formato RFC 5322 che altri client email sanno aprire. Il tuo archivio è semplicemente una cartella di file. Puoi aprirli in Apple Mail, in Thunderbird o in qualsiasi editor di testo. Queste istruzioni sulla struttura dei file si riferiscono al formato predefinito Maildir. Impostazioni → Archiviazione offre anche l’archiviazione JMAP, che conserva i byte originali dei messaggi con record JSON e deduplica i messaggi identici.</p>
 
           <p>
             <strong>Codice sorgente su GitHub.</strong> Il codice sorgente di MailVault è su GitHub. Puoi leggerlo e controllare cosa fa con la tua posta. Per qualcosa che gestisce le tue email personali, sapere esattamente cosa fa il software conta.
@@ -283,7 +283,7 @@
           </p>
 
           <figure class="pt-2">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/search-results-720.webp 720w, /screenshots/it/search-results-1440.webp 1440w, /screenshots/it/search-results-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/it/search-results-light-1440.webp" srcset="/screenshots/it/search-results-light-720.webp 720w, /screenshots/it/search-results-light-1440.webp 1440w, /screenshots/it/search-results-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="MailVault su macOS che mostra i Risultati della ricerca per Rack &amp; Rind: 7 risultati trovati in INBOX, tutti dalla posta locale, elencati con mittente e oggetto. · MailVault version 2.16.0" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/it/search-results-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/it/search-results-720.webp 720w, /screenshots/it/search-results-1440.webp 1440w, /screenshots/it/search-results-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/it/search-results-light-1440.webp" srcset="/screenshots/it/search-results-light-720.webp 720w, /screenshots/it/search-results-light-1440.webp 1440w, /screenshots/it/search-results-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="MailVault su macOS che mostra i Risultati della ricerca per Rack &amp; Rind: 7 risultati trovati in INBOX, tutti dalla posta locale, elencati con mittente e oggetto. · MailVault version 2.16.0 it" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 it"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 it</span></a>
             <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">Una ricerca in MailVault su un Mac. La riga sotto la casella di ricerca dice quanti risultati vengono dalla posta locale e quanti dal server.</figcaption>
           </figure>
 
@@ -295,7 +295,7 @@
             <strong>Archivia, poi elimina, con un controllo.</strong> Archiviare un messaggio ed eliminarlo dal server sono gratuiti come passaggi separati. <a href="/it/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">Archivia ed elimina</a> (Premium) li fa entrambi insieme: copia ogni messaggio nel tuo vault, controlla la copia e solo allora lo elimina dal server.
           </p>
 
-          <figure class="mv-clip my-6" data-clip="archive-delete"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/it/archive-delete.jpg" width="960" height="660" aria-label="MailVault chiede Archiviare e poi eliminare dal server?, si clicca Archivia ed elimina, l’avanzamento arriva a 420 di 420 e la vista Vault elenca ancora i 420 messaggi archiviati del 2022. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/it/archive-delete.mp4" type="video/mp4"></video></div>
+          <figure class="mv-clip my-6" data-clip="archive-delete"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/it/archive-delete.jpg" width="960" height="660" aria-label="MailVault chiede Archiviare e poi eliminare dal server?, si clicca Archivia ed elimina, l’avanzamento arriva a 420 di 420 e la vista Vault elenca ancora i 420 messaggi archiviati del 2022. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/it/archive-delete.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">Archivia ed elimina (Premium)</strong><span class="mv-clip-text">I 420 messaggi del 2022 vengono archiviati, controllati, poi eliminati dal server. La vista Vault li conserva tutti e 420.</span></figcaption></figure>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Dove vince MailStore</h3>
@@ -367,7 +367,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -391,5 +391,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Schermata del prodotto"><button type="button">Chiudi schermata</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

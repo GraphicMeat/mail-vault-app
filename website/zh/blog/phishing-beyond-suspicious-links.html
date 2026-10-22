@@ -40,7 +40,7 @@
   "headline": "网络钓鱼早已不止可疑链接：日历邀请、二维码和附带的邮件",
   "description": "识别藏在日历邀请、二维码和附带邮件里的网络钓鱼，并在登录或批准付款之前做几项实用的检查。",
   "datePublished": "2026-10-01",
-  "dateModified": "2026-10-01",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -61,6 +61,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/phishing-beyond-suspicious-links.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/phishing-beyond-suspicious-links.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
   <header class="mv-header">
@@ -88,38 +89,38 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-01" class="text-sm text-primary-500 font-medium">2026 年 10 月 1 日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">网络钓鱼早已不止可疑链接：日历邀请、二维码和附带的邮件</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">网络钓鱼早已不止可疑链接：日历邀请、二维码和附带的邮件</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">日历邀请仍然是某个人发来的消息</a></li><li><a href="#help-section-2">二维码改变的是途径，而不是信任的判断</a></li><li><a href="#help-section-3">附带的邮件可能多了一层说服手段</a></li><li><a href="#help-section-4">检查邮件想让你采取的行动</a></li><li><a href="#help-section-5">如果你已经做了操作</a></li><li><a href="#help-section-6">归档能做什么，不能做什么</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>3 分钟阅读</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
 <p>一封邮件不一定要有明显的拼写错误或奇怪的链接，才值得多看一眼。它可能以日历邀请的形式出现，把目的地藏在二维码后面，或者让你打开附在第一封邮件里的另一封邮件。</p>
 <p>Microsoft 于 7 月 23 日发布的<a href="https://www.microsoft.com/en-us/security/blog/2026/07/23/email-threat-landscape-q2-2026-trends-and-insights/" class="text-primary-500 hover:text-primary-600 underline">2026 年第二季度邮件威胁报告</a>描述了一些攻击活动：它们把嵌套的 EML 附件、日历邀请和一次 Microsoft 身份验证重定向组合在一起。实际的教训是：即使每一步单独看都很眼熟，也要从整个交互过程来判断这个请求。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">日历邀请仍然是某个人发来的消息</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">日历邀请仍然是某个人发来的消息</h2>
 <p>日历项目可能显得比邮件更正式，因为它出现在你真正安排过的会议旁边。把一份意料之外的邀请当作未经核实的内容。一个看起来像发票、安全通知或订阅续费的标题，并不能说明它是谁发的。</p>
 <p>例如，一份声称订阅今天续费的邀请，可能附上一个用来「取消」的电话号码。不要拨打邀请里给出的号码，而是通过平常使用的应用或你保存的书签打开该服务，在那里检查账户。</p>
 <p>在合适的时候，使用邀请里的举报或垃圾邮件功能。对于一个明显是不请自来的要求，不要只是为了问它是不是真的就去回复。如果它涉及你本来就在等的会议，请通过现有的联系途径向组织者确认。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">二维码改变的是途径，而不是信任的判断</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-2">二维码改变的是途径，而不是信任的判断</h2>
 <p>扫描二维码往往会把交互从你的电脑转移到手机上。这种切换更容易让你忘记原来的发件人和请求。一个标着「安全文件」的二维码，仍然只是通往某个目的地的途径。</p>
 <p>如果一封工作邮件让你扫描二维码登录，请改为直接打开那项工作服务。对于你本来就在等的二维码，访问之前先查看扫描器显示的目的地。不要仅仅因为页面有熟悉的品牌标识就输入凭据。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">附带的邮件可能多了一层说服手段</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">附带的邮件可能多了一层说服手段</h2>
 <p><code>.eml</code> 文件是一种标准的邮件文件，适合原样转发一封邮件或保存归档。这个扩展名并不意味着里面的内容可信。附带的邮件可以像投递它的那封邮件一样，包含链接、文件和各种说法。</p>
 <p>附件里一段伪造的对话可能暗示同事们已经批准了某笔付款或某份文件。请通过已知的地址或电话号码，向真正的同事核实这一说法。不要仅仅因为每个附件都说下一个才是那份文件，就顺着一串附件一路打开下去。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">检查邮件想让你采取的行动</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-4">检查邮件想让你采取的行动</h2>
 <p>在登录、分享验证码、打开文件或汇款之前，先停下来想四个问题：</p>
 <ul><li><strong>我在等这封邮件吗？</strong>把这个请求和一项真实的任务或对话对应起来。</li><li><strong>我能独立核实吗？</strong>使用现有的联系方式，或直接打开该服务。</li><li><strong>目的地与任务相符吗？</strong>页面设计眼熟，并不能证明它归谁所有。</li><li><strong>为什么这么急？</strong>一个让你来不及核实的截止时间，值得仔细审视。</li></ul>
 <p>对于付款信息的变更，请通过之前已经建立的渠道核实。拨打同一封可疑邮件里给出的号码，并不算独立的确认。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">如果你已经做了操作</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-5">如果你已经做了操作</h2>
 <p>如果你输入了工作凭据、批准了一次意料之外的登录，或打开了可疑文件，请尽快联系你所在组织的安全团队。说明发生了什么，并保留原始邮件以便他们调查。如果是个人账户，请直接访问服务商官方的账户恢复和安全页面，检查访问情况。</p>
 <p>如果已经汇出款项，请立即通过官方渠道联系银行或支付服务商。保留邮件和交易详情。尽快报告，能让处理事件的人有更多机会采取行动。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">归档能做什么，不能做什么</h2>
-<p>保存下来的原件可以帮你日后还原发件人、时间和指示内容。MailVault 把归档的邮件保存为标准 <code>.eml</code> 文件，让邮件随时可供查看。这是留存记录上的好处，并不能保证一封邮件是安全的。</p>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-6">归档能做什么，不能做什么</h2>
+<p>保存下来的原件可以帮你日后还原发件人、时间和指示内容。MailVault 把归档的邮件保存为标准 <code>.eml</code> 文件，让邮件随时可供查看。这是留存记录上的好处，并不能保证一封邮件是安全的。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
 <p>对归档的邮件，也要做和在线收件箱一样的检查。本地副本保存一个恶意链接，和保存一张正当收据一样忠实。保留记录，核实请求，发现可疑之处时，使用服务商或所在组织的举报流程。</p>
 
 <p class="text-sm text-slate-500 dark:text-slate-400">写于 2026 年 10 月 1 日。服务商的功能和可用范围可能会变化；更改设置之前，请查看文中链接的官方说明。</p>
@@ -131,11 +132,12 @@
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

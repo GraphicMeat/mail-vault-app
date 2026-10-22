@@ -38,7 +38,7 @@
   "description": "Una checklist onesta per valutare qualsiasi strumento di backup email via IMAP &mdash; formato dei file, gestione delle cartelle, supporto OAuth e che fine fa il tuo archivio se lo strumento sparisce.",
   "url": "https://mailvaultapp.com/it/guides/imap-backup-tool-checklist.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Vai al contenuto</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Argomenti di aiuto</summary><nav aria-label="Argomenti del centro assistenza"><a href="/it/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aiuto di MailVault</a><a href="/it/faq/getting-started.html">Per iniziare</a><a href="/it/faq/storage-and-vault.html">Archiviazione e il tuo vault</a><a href="/it/faq/providers.html">Provider di posta</a><a href="/it/faq/backup-and-restore.html">Backup e ripristino</a><a href="/it/faq/explorer-and-insights.html">Explorer e Statistiche</a><a href="/it/faq/scheduled-send.html">Invio programmato</a><a href="/it/faq/premium.html">Gratuito e Premium</a><a href="/it/faq/troubleshooting.html">Risoluzione dei problemi</a><a href="/it/docs.html#guides" class="mv-help-divider">Guide pratiche</a><a href="/it/docs.html#articles">Articoli</a><a href="/it/features.html">Riferimento delle funzioni</a><a href="/changelog.html">Note di rilascio</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Strumenti di backup IMAP: che cosa guardare</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Strumenti di backup IMAP: che cosa guardare</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 min di lettura</span>
           </div>
@@ -229,7 +230,7 @@
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
-            <li><strong>Singoli file .eml (RFC 5322)</strong> &mdash; il risultato migliore. Ogni email è un file standard a sé che qualsiasi client di posta, o persino un editor di testo, può aprire. Non resta legato niente.</li>
+            <li><strong>Singoli file .eml (RFC 5322)</strong> &mdash; il risultato migliore. Ogni email è un file standard distinto che si può aprire con un’app compatibile con EML o un editor di testo. Non resta legato niente.</li>
             <li><strong>Mbox</strong> &mdash; un unico file grande per cartella, con tutti i messaggi concatenati. È standard e ampiamente supportato, ma non è sfogliabile direttamente senza importarlo da qualche parte.</li>
             <li><strong>Formato proprietario, database o contenitore</strong> &mdash; il risultato peggiore. Il tuo archivio è utilizzabile solo attraverso quel preciso strumento. Se l'azienda chiude o smetti di pagare, rischi di perdere l'accesso pratico al tuo stesso backup.</li>
           </ul>
@@ -243,7 +244,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Gestisce l'autenticazione come si deve?</h3>
 
           <p>
-            Per gli account Gmail e Microsoft in particolare, lo strumento dovrebbe supportare l'accesso OAuth2 invece di chiederti la password vera o una password per app &mdash; entrambi i provider si stanno allontanando dall'accesso IMAP con password per motivi di sicurezza, e alcuni account non lo supportano più affatto. Per provider come Yahoo che non offrono password per app, lo strumento deve supportare la loro procedura di accesso standard; se l'unica opzione Yahoo di uno strumento è "genera una password per app", non è rimasto al passo con il funzionamento reale dell'autenticazione di Yahoo oggi.
+            Per gli account Gmail e Microsoft in particolare, lo strumento dovrebbe supportare l'accesso OAuth2 invece di chiederti la password vera o una password per app &mdash; entrambi i provider si stanno allontanando dall'accesso IMAP con password per motivi di sicurezza, e alcuni account non lo supportano più affatto. Yahoo richiede una password per app per i client che non usano la sua pagina di accesso. Segui le istruzioni del provider invece di riutilizzare la normale password dell’account.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. Puoi archiviare in modo selettivo, o è tutto o niente?</h3>
@@ -273,8 +274,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Dove si inserisce MailVault</h3>
 
           <p>
-            MailVault è un'opzione in questa categoria, e conviene giudicarlo con la checklist qui sopra invece di fidarsi sulla parola: è gratuito, il suo codice sorgente è su GitHub, salva singoli file <code>.eml</code> in una struttura Maildir standard sul tuo disco (non in un formato proprietario o sul server di qualcun altro), supporta OAuth per Gmail e Microsoft e il flusso di accesso standard di Yahoo, e ti permette di archiviare in modo selettivo cartelle specifiche. L'archiviazione manuale è illimitata e gratuita per sempre; backup automatici programmati, migrazione tra account, regole di pulizia e snapshot puntuali sono funzioni Premium a $4/mese o $25/anno, con una prova gratuita di 14 giorni sul piano annuale. Funziona su macOS, Windows e Linux.
-          </p>
+            MailVault è una possibilità in questa categoria e va valutato secondo la lista precedente: è gratuito, il codice è su GitHub, salva file <code>.eml</code> individuali in una struttura Maildir standard sul tuo disco anziché in un formato proprietario o su server altrui, supporta OAuth per Gmail e Microsoft e una password per app per Yahoo, e permette di archiviare cartelle specifiche. L'archiviazione manuale è illimitata e gratuita per sempre; backup automatici programmati, migrazione tra account, regole di pulizia e snapshot puntuali sono funzioni Premium a $4/mese o $25/anno, con una prova gratuita di 14 giorni sul piano annuale. Funziona su macOS, Windows e Linux. Queste istruzioni sulla struttura dei file si riferiscono al formato predefinito Maildir. Impostazioni → Archiviazione offre anche l’archiviazione JMAP, che conserva i byte originali dei messaggi con record JSON e deduplica i messaggi identici.</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Guarda come se la cava MailVault con questa lista</p>
@@ -319,7 +319,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Guarda in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/it/manual-backup.webp"><img src="/assets/help-media/it/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Eseguire il backup di tutti gli account e verificarne il completamento</figcaption><video controls playsinline preload="none" poster="/assets/help-media/it/manual-backup.jpg" aria-label="Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/it/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/it/manual-backup.vtt" srclang="it" label="Italiano" default></video></figure><details class="mv-help-contents"><summary>Trascrizione del video</summary><p>Avviare il backup di tutti gli account nelle impostazioni di backup. Seguire l’avanzamento fino al completamento del backup.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -343,5 +343,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Schermata del prodotto"><button type="button">Chiudi schermata</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

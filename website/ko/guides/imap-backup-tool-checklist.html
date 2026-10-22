@@ -38,7 +38,7 @@
   "description": "어떤 IMAP 메일 백업 도구든 솔직하게 평가할 수 있는 점검 목록 &mdash; 파일 형식, 폴더 처리, OAuth 지원, 그리고 그 도구가 사라졌을 때 보관본은 어떻게 되는지를 다룹니다.",
   "url": "https://mailvaultapp.com/ko/guides/imap-backup-tool-checklist.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">IMAP 백업 도구: 무엇을 확인해야 하는가</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">IMAP 백업 도구: 무엇을 확인해야 하는가</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8분 분량</span>
           </div>
@@ -229,7 +230,7 @@
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
-            <li><strong>개별 .eml 파일(RFC 5322)</strong> &mdash; 가장 좋은 결과입니다. 메일마다, 어떤 메일 클라이언트로든 심지어 텍스트 편집기로도 열 수 있는 표준 파일이 하나씩 있습니다. 어디에도 묶이지 않습니다.</li>
+            <li><strong>개별 .eml 파일(RFC 5322)</strong> &mdash; 가장 좋은 결과입니다. 각 메일은 EML 지원 메일 앱이나 텍스트 편집기로 열 수 있는 독립적인 표준 파일입니다. 어디에도 묶이지 않습니다.</li>
             <li><strong>Mbox</strong> &mdash; 폴더마다 모든 메시지를 이어 붙인 커다란 파일 하나입니다. 표준이고 널리 지원되지만, 어딘가로 가져오지 않으면 바로 살펴볼 수 없습니다.</li>
             <li><strong>독점 데이터베이스나 컨테이너 형식</strong> &mdash; 가장 나쁜 결과입니다. 보관본을 그 특정 도구로만 쓸 수 있습니다. 회사가 문을 닫거나 결제를 멈추면 자기 백업에 사실상 접근하지 못할 수 있습니다.</li>
           </ul>
@@ -243,7 +244,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 인증을 제대로 처리합니까?</h3>
 
           <p>
-            특히 Gmail과 Microsoft 계정이라면, 도구는 날것의 비밀번호나 앱 비밀번호를 요구하는 대신 OAuth2 로그인을 지원해야 합니다 &mdash; 두 제공업체 모두 보안상의 이유로 비밀번호 기반 IMAP 접근에서 멀어지고 있고, 아예 지원하지 않는 계정도 있습니다. 앱 비밀번호를 제공하지 않는 Yahoo 같은 제공업체라면 도구가 그쪽의 표준 로그인 절차를 지원해야 합니다. Yahoo에 대해 "앱 비밀번호를 만드세요"밖에 제시하지 못하는 도구라면, Yahoo 인증이 오늘날 실제로 어떻게 작동하는지 따라가지 못한 것입니다.
+            특히 Gmail과 Microsoft 계정이라면, 도구는 날것의 비밀번호나 앱 비밀번호를 요구하는 대신 OAuth2 로그인을 지원해야 합니다 &mdash; 두 제공업체 모두 보안상의 이유로 비밀번호 기반 IMAP 접근에서 멀어지고 있고, 아예 지원하지 않는 계정도 있습니다. Yahoo 전용 로그인 페이지를 사용하지 않는 클라이언트에는 앱 비밀번호가 필요합니다. 일반 계정 비밀번호를 재사용하지 말고 제공업체의 공식 안내를 확인하세요.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. 선택적으로 보관할 수 있습니까, 아니면 전부 아니면 전무입니까?</h3>
@@ -273,8 +274,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault가 놓이는 자리</h3>
 
           <p>
-            MailVault는 이 범주의 선택지 중 하나이며, 그냥 믿기보다 위의 체크리스트로 판단해 볼 만합니다. 무료이고, 소스 코드는 GitHub에 있으며, 개별 <code>.eml</code> 파일을 자신의 디스크에 표준 Maildir 구조로 저장하고(독점 형식이나 다른 누군가의 서버가 아닙니다), Gmail과 Microsoft의 OAuth와 Yahoo의 표준 로그인 방식을 지원하며, 특정 폴더만 골라 보관할 수 있습니다. 수동 보관은 언제나 무제한이고 무료입니다. 예약 자동 백업, 계정 간 이전, 정리 규칙, 특정 시점 스냅샷은 월 $4 또는 연 $25의 Premium 기능이며, 연간 요금제에는 14일 무료 체험이 있습니다. macOS, Windows, Linux에서 실행됩니다.
-          </p>
+            MailVault도 이 범주의 선택지 중 하나입니다. 설명만 믿기보다 위의 체크리스트로 판단하세요. 무료이며 소스를 GitHub에 공개하고, 개별 <code>.eml</code> 파일을 자신의 디스크에 표준 Maildir 구조로 저장합니다. 독점 형식이나 다른 회사의 서버가 아닙니다. Gmail과 Microsoft의 OAuth 및 Yahoo의 앱 비밀번호를 지원하며 특정 폴더를 선택해 보관할 수 있습니다. 수동 보관은 언제나 무제한이고 무료입니다. 예약 자동 백업, 계정 간 이전, 정리 규칙, 특정 시점 스냅샷은 월 $4 또는 연 $25의 Premium 기능이며, 연간 요금제에는 14일 무료 체험이 있습니다. macOS, Windows, Linux에서 실행됩니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트와 JSON 레코드를 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">MailVault가 이 점검 목록에 어떻게 맞는지 확인해 보십시오</p>
@@ -319,7 +319,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -343,5 +343,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

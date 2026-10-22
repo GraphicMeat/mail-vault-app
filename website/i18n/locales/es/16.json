@@ -29,7 +29,6 @@
   "1a88113e53ee": "Descargando MailVault {release}. Si no empieza, usa el botón de arriba.",
   "93c3e0b8c5fb": "El botón abre la página de la última versión. Elige allí el archivo para tu ordenador.",
   "757da7c8028f": "La descarga no pudo empezar sola. El botón abre la página de la última versión; elige allí el archivo para tu ordenador.",
-  "af2a175acc52": "Dónde guarda MailVault tu correo en el disco, cuánto de él se queda en este equipo, por qué usa .eml y Maildir, y cómo mover la bóveda a otra unidad.",
   "384095550461": "¿Cuánto de mi correo se queda en este equipo?",
   "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Acumulador</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: un modo de descarga que obtiene cada carpeta y todo el historial en segundo plano y lo conserva en este equipo, en vez de solo un periodo reciente</span>",
   "7f9bb36583b5": "Ver las 14 funciones",

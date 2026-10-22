@@ -131,6 +131,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Pular para o conteúdo</a>
@@ -179,7 +180,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Tópicos de ajuda</summary><nav aria-label="Tópicos da central de ajuda"><a href="/pt-br/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ajuda do MailVault</a><a href="/pt-br/faq/getting-started.html">Primeiros passos</a><a href="/pt-br/faq/storage-and-vault.html">Armazenamento e seu cofre</a><a href="/pt-br/faq/providers.html">Provedores de e-mail</a><a href="/pt-br/faq/backup-and-restore.html">Backup e restauração</a><a href="/pt-br/faq/explorer-and-insights.html">Explorer e Estatísticas</a><a href="/pt-br/faq/scheduled-send.html">Envio agendado</a><a href="/pt-br/faq/premium.html">Gratuito e Premium</a><a href="/pt-br/faq/troubleshooting.html" aria-current="page">Solução de problemas</a><a href="/pt-br/docs.html#guides" class="mv-help-divider">Guias práticos</a><a href="/pt-br/docs.html#articles">Artigos</a><a href="/pt-br/features.html">Referência de recursos</a><a href="/changelog.html">Notas da versão</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Trilha de navegação" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -192,13 +193,13 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Solução de problemas</h1>
+      <h1 class="text-4xl font-bold mb-2">Solução de problemas</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Nesta página</summary><ul><li><a href="#help-section-1">Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?</a></li><li><a href="#help-section-2">Por que o corretor ortográfico não sublinha nada no Linux?</a></li><li><a href="#help-section-3">Adicionei uma pasta no servidor — quanto tempo o MailVault leva para mostrá-la?</a></li><li><a href="#help-section-4">O MailVault diz “Sem conexão com a internet”, mas minha internet funciona. Por quê?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Correções para os problemas mais comuns: o limite diário de banda do Gmail, o corretor ortográfico que não sublinha nada no Linux e uma pasta adicionada no servidor que ainda não aparece.</p>
 
       <div class="space-y-4">
 
         <article id="gmail-bandwidth-limits" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 O Google limita quanto de dados de e-mail uma única conta Gmail ou Google Workspace pode movimentar por dia. Os limites valem para a conta, não para o aplicativo — Apple Mail, seu celular e o MailVault consomem do mesmo orçamento diário.
@@ -244,7 +245,7 @@
         </article>
 
         <article id="linux-spellcheck-dictionary" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Por que o corretor ortográfico não sublinha nada no Linux?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Por que o corretor ortográfico não sublinha nada no Linux?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 Porque não há dicionário de ortografia na máquina. O macOS e o Windows já vêm com um; no Linux o dicionário vem da sua distribuição, e uma instalação de desktop mínima muitas vezes não tem nenhum. O MailVault verifica a ortografia pelo WebKitGTK, que consulta as palavras através do enchant e do hunspell — então ele só consegue sublinhar depois que um dicionário do hunspell estiver instalado.
@@ -269,7 +270,7 @@
         </article>
 
         <article id="folder-list-refresh" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Adicionei uma pasta no servidor &mdash; quanto tempo o MailVault leva para mostrá-la?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">Adicionei uma pasta no servidor &mdash; quanto tempo o MailVault leva para mostrá-la?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>Em até dez minutos.</strong> O MailVault mantém uma cópia da lista de pastas no disco, então a barra lateral aparece assim que você abre uma conta, e ele relê a lista do servidor no máximo uma vez a cada dez minutos. Crie, renomeie ou exclua uma pasta no webmail ou em outro cliente de e-mail, e o MailVault detectará a mudança na próxima vez que você abrir essa conta ou clicar numa pasta na barra lateral &mdash; depois que os dez minutos tiverem passado.
@@ -287,7 +288,7 @@
         </article>
 
         <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O MailVault diz “Sem conexão com a internet”, mas minha internet funciona. Por quê?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">O MailVault diz “Sem conexão com a internet”, mas minha internet funciona. Por quê?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>O que faz o aviso aparecer.</strong> Quando uma conexão com um servidor de e-mail falha de um jeito que aponta para a rede, o MailVault verifica a internet por conta própria e só mostra <strong>Sem conexão com a internet</strong> quando nada responde. Enquanto o aviso está na tela, seus e-mails continuam aí: o MailVault mostra o que já está salvo neste computador, pausa a sincronização em segundo plano e tira o aviso sozinho assim que a verificação dá certo. <strong>Verificar de novo</strong> faz a verificação na hora.
@@ -323,7 +324,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Uma criação da Graphic Meat</p><h2 id="studio-title">Conheça as pessoas por trás do MailVault.</h2><p>Somos a Graphic Meat, um estúdio independente de produtos que cria software útil desde 2013. MailVault é uma das coisas que fazemos. Venha nos conhecer e explorar em que mais estamos trabalhando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conheça a Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visite a Graphic Meat, o estúdio por trás do MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mais da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transforme suas fotos em um livro pronto para impressão.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Um espaço de trabalho local para notas e código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mova seu e-mail para outro provedor.</span></a></div></div></aside><footer class="mv-footer">
@@ -346,5 +347,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura de tela do produto"><button type="button">Fechar captura de tela</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

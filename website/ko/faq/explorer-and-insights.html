@@ -163,6 +163,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -211,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html" aria-current="page">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -224,49 +225,49 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Explorer와 메일 분석</h1>
+      <h1 class="text-4xl font-bold mb-2">Explorer와 메일 분석</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">Explorer는 무엇입니까?</a></li><li><a href="#help-section-2">한 사람이 보낸 메일을 전부 모아서 볼 수 있습니까?</a></li><li><a href="#help-section-3">“날짜 → 대화”는 무엇을 합니까?</a></li><li><a href="#help-section-4">Explorer에서도 검색이 됩니까?</a></li><li><a href="#help-section-5">메일 분석은 무엇입니까?</a></li><li><a href="#help-section-6">타임라인과 활동 보기는 무엇을 보여 줍니까?</a></li><li><a href="#help-section-7">메일 분석이 내 메일을 어딘가로 보냅니까?</a></li><li><a href="#help-section-8">Explorer와 메일 분석은 Premium 기능입니까?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">이미 가지고 있는 메일함을 보는 두 가지 방법입니다. Explorer는 묶어 주고, 메일 분석은 그려 줍니다. 둘 다 무료이며 둘 다 디스크에 있는 것만 읽습니다.</p>
 
       <div class="space-y-4">
 
         <article id="what-is-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorer는 무엇입니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Explorer는 무엇입니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Explorer는 이미 가지고 있는 메일을 지나가는 두 번째 방법입니다. 하나의 긴 목록 대신, 현재 폴더의 메시지를 내려가며 살펴볼 수 있는 그룹으로 묶습니다 — <strong>날짜</strong>별, <strong>보낸 사람</strong>별, 또는 <strong>날짜 다음 대화</strong>별로. 메시지 목록 위의 <strong>목록 / Explorer</strong> 컨트롤로 켜십시오. 아무것도 옮겨지거나 복사되거나 다시 정리되지 않으며, 목록으로 되돌려도 모든 것이 그대로 남습니다.</p>
               <p>각 그룹은 열기 전에 안에 무엇이 있는지 알려 줍니다. 담고 있는 메시지 수, 그중 이미 볼트에 저장된 수, 읽지 않은 수입니다. 그룹을 열면 안의 메시지가 일반 목록에서와 똑같이 그려지고, 같은 리더와 같은 동작을 씁니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/explorer-date-720.webp 720w, /screenshots/ko/explorer-date-1440.webp 1440w, /screenshots/ko/explorer-date-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/explorer-date-light-1440.webp" srcset="/screenshots/ko/explorer-date-light-720.webp 720w, /screenshots/ko/explorer-date-light-1440.webp 1440w, /screenshots/ko/explorer-date-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="메일함을 날짜로 묶은 MailVault Explorer. 한 월 그룹에 메시지 수, 볼트 수, 읽지 않은 수가 표시되어 있습니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/explorer-date-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/explorer-date-720.webp 720w, /screenshots/ko/explorer-date-1440.webp 1440w, /screenshots/ko/explorer-date-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/explorer-date-light-1440.webp" srcset="/screenshots/ko/explorer-date-light-720.webp 720w, /screenshots/ko/explorer-date-light-1440.webp 1440w, /screenshots/ko/explorer-date-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="메일함을 날짜로 묶은 MailVault Explorer. 한 월 그룹에 메시지 수, 볼트 수, 읽지 않은 수가 표시되어 있습니다 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">날짜로 분류: 월 단위, 더 잘게 보고 싶다면 일 단위.</figcaption>
             </figure>
         </article>
 
         <article id="explorer-by-sender" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">한 사람이 보낸 메일을 전부 모아서 볼 수 있습니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">한 사람이 보낸 메일을 전부 모아서 볼 수 있습니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>예 — <strong>분류 기준</strong>을 <strong>보낸 사람</strong>으로 설정하십시오. 상대마다 현재 폴더에 있는 그 사람의 모든 메시지를 담은 그룹 하나가 되고, 최신 메시지가 먼저 오며, 가장 최근 메시지의 날짜가 행에 표시됩니다.</p>
               <p>그룹 행의 체크박스는 그 안의 모든 메시지를 한 번에 선택하므로, "이 뉴스레터가 보낸 것 전부 보관"이 길게 이어지는 shift-클릭 대신 두 번의 클릭으로 끝납니다. 삭제와 내보내기도 마찬가지입니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/explorer-sender-720.webp 720w, /screenshots/ko/explorer-sender-1440.webp 1440w, /screenshots/ko/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/explorer-sender-light-1440.webp" srcset="/screenshots/ko/explorer-sender-light-720.webp 720w, /screenshots/ko/explorer-sender-light-1440.webp 1440w, /screenshots/ko/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="보낸 사람으로 묶은 MailVault Explorer. 상대마다 그룹이 하나씩 있습니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/explorer-sender-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/explorer-sender-720.webp 720w, /screenshots/ko/explorer-sender-1440.webp 1440w, /screenshots/ko/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/explorer-sender-light-1440.webp" srcset="/screenshots/ko/explorer-sender-light-720.webp 720w, /screenshots/ko/explorer-sender-light-1440.webp 1440w, /screenshots/ko/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="보낸 사람으로 묶은 MailVault Explorer. 상대마다 그룹이 하나씩 있습니다 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">보낸 사람으로 분류: 상대마다 그룹 하나, 통째로 선택할 수 있습니다.</figcaption>
             </figure>
         </article>
 
         <article id="explorer-conversation" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">“날짜 &rarr; 대화”는 무엇을 합니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">“날짜 &rarr; 대화”는 무엇을 합니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>한 단계 더 깊이 들어갑니다. 최상위는 여전히 월(또는 일)이지만, 하나를 열면 흩어진 메시지 대신 그 기간에 오간 <em>대화</em>가 나옵니다. 대화를 열어 읽거나, <strong>전체 대화 열기</strong>로 일반 스레드 보기에 넘기십시오.</p>
               <p>누가 보냈는지보다 대략 언제 있었는지로 기억하는 메일을 찾을 때 쓰는 보기입니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/explorer-conversation-720.webp 720w, /screenshots/ko/explorer-conversation-1440.webp 1440w, /screenshots/ko/explorer-conversation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/explorer-conversation-light-1440.webp" srcset="/screenshots/ko/explorer-conversation-light-720.webp 720w, /screenshots/ko/explorer-conversation-light-1440.webp 1440w, /screenshots/ko/explorer-conversation-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="날짜 다음 대화 모드의 MailVault Explorer. 한 월 아래에 대화가 묶여 있습니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
-              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">날짜 &rarr; 대화: 월을 열면 그 안의 스레드가 나옵니다.</figcaption>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/explorer-conversation-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/explorer-conversation-720.webp 720w, /screenshots/ko/explorer-conversation-1440.webp 1440w, /screenshots/ko/explorer-conversation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/explorer-conversation-light-1440.webp" srcset="/screenshots/ko/explorer-conversation-light-720.webp 720w, /screenshots/ko/explorer-conversation-light-1440.webp 1440w, /screenshots/ko/explorer-conversation-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="날짜 다음 대화 모드의 MailVault Explorer. 한 월 아래에 대화가 묶여 있습니다 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">날짜 → 대화: 월을 열면 그 안의 스레드가 표시됩니다.</figcaption>
             </figure>
         </article>
 
         <article id="searching-in-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorer에서도 검색이 됩니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">Explorer에서도 검색이 됩니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>됩니다. 두 단계로 작동합니다. Explorer 안의 검색창은 지금 서 있는 그룹을 걸러 내며, 큰 발신자 그룹이나 월 그룹 안에서 메시지 하나를 찾는 가장 빠른 방법입니다. 대신 편지함 전체를 찾고 싶다면, <strong>전체 편지함 검색</strong>이 목록으로 되돌아가 일반 검색을 엽니다.</p>
               <p>Explorer는 있던 자리도 기억합니다. 분류 기준, 날짜 단위, 열어 두었던 그룹이 폴더별, 계정별로 유지되며 재시작 후에도 남습니다.</p>
@@ -274,37 +275,37 @@
         </article>
 
         <article id="what-is-insights" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">메일 분석은 무엇입니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">메일 분석은 무엇입니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>메일 분석은 누구와 메일을 주고받는지 보여 주는 전체 화면 보기이며, 사이드바의 <strong>메일 분석</strong>에서 들어갑니다. MailVault가 이미 디스크에 가지고 있는 메시지 헤더 — 보낸 사람, 받는 사람, 날짜 — 를 읽어 세 가지 방식으로 그립니다.</p>
               <p><strong>발신자 지도</strong>는 가운데에 사용자를 두고 모든 상대를 원으로 둘러 놓습니다. 원의 넓이는 그 사람이 차지하는 메시지 수이고, 중심에서의 거리는 마지막으로 연락받은 뒤로 지난 시간입니다. 최근에 자주 연락하는 사람은 가깝고 크게 놓이고, 몇 년 전에 한 번 쓴 사람은 멀고 작게 놓입니다.</p>
               <p>원을 클릭하면 그 뒤의 메시지가 나오고, 페이지를 벗어나지 않고 읽을 수 있습니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/insights-map-720.webp 720w, /screenshots/ko/insights-map-1440.webp 1440w, /screenshots/ko/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/insights-map-light-1440.webp" srcset="/screenshots/ko/insights-map-light-720.webp 720w, /screenshots/ko/insights-map-light-1440.webp 1440w, /screenshots/ko/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 메일 분석 발신자 지도. 상대들이 메시지 수에 따라 크기가 정해지고 최근 정도에 따라 자리가 정해진 원으로 그려져 있습니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/insights-map-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/insights-map-720.webp 720w, /screenshots/ko/insights-map-1440.webp 1440w, /screenshots/ko/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/insights-map-light-1440.webp" srcset="/screenshots/ko/insights-map-light-720.webp 720w, /screenshots/ko/insights-map-light-1440.webp 1440w, /screenshots/ko/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 메일 분석 발신자 지도. 상대들이 메시지 수에 따라 크기가 정해지고 최근 정도에 따라 자리가 정해진 원으로 그려져 있습니다 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">발신자 지도: 원의 넓이는 메일 양이고, 거리는 마지막 메시지 이후로 지난 시간입니다.</figcaption>
             </figure>
         </article>
 
         <article id="insights-timeline-activity" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">타임라인과 활동 보기는 무엇을 보여 줍니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">타임라인과 활동 보기는 무엇을 보여 줍니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p><strong>타임라인</strong>은 보낸 사람마다 실제 시간축을 가로지르는 줄을 하나씩 주고, 받은 메시지는 원으로, 보낸 메시지는 마름모로 표시합니다. 관계가 시작되고, 조용해지고, 한쪽으로 기우는 것이 보이는 보기입니다. 주 단위, 일 단위, 개별 메시지 사이를 오가며 확대할 수 있습니다.</p>
               <p><strong>활동</strong>은 하루에 한 칸씩인 달력 격자이며, 그날 오간 메일 양에 따라 칸이 짙어집니다. 날짜를 클릭하면 무엇이 도착했는지 정확히 볼 수 있습니다.</p>
               <p>세 보기 모두 위쪽의 같은 컨트롤을 씁니다. 어느 계정인지, 어느 기간인지 — 30일, 90일, 12개월 또는 직접 고른 날짜 — 그리고 받은 메일을 보는지, 보낸 메일을 보는지, 둘 다인지입니다. <strong>자동 발송으로 추정되는 발신자 숨기기</strong>를 한 번 체크하면 뉴스레터와 no-reply 주소가 그림에서 빠집니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/insights-timeline-720.webp 720w, /screenshots/ko/insights-timeline-1440.webp 1440w, /screenshots/ko/insights-timeline-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/insights-timeline-light-1440.webp" srcset="/screenshots/ko/insights-timeline-light-720.webp 720w, /screenshots/ko/insights-timeline-light-1440.webp 1440w, /screenshots/ko/insights-timeline-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 메일 분석 타임라인. 보낸 사람마다 한 줄씩, 시간축을 따라 받은 표시와 보낸 표시가 놓여 있습니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/insights-timeline-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/insights-timeline-720.webp 720w, /screenshots/ko/insights-timeline-1440.webp 1440w, /screenshots/ko/insights-timeline-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/insights-timeline-light-1440.webp" srcset="/screenshots/ko/insights-timeline-light-720.webp 720w, /screenshots/ko/insights-timeline-light-1440.webp 1440w, /screenshots/ko/insights-timeline-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 메일 분석 타임라인. 보낸 사람마다 한 줄씩, 시간축을 따라 받은 표시와 보낸 표시가 놓여 있습니다 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">타임라인: 보낸 사람마다 한 줄, 받은 것과 보낸 것을 따로 표시합니다.</figcaption>
             </figure>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/insights-activity-720.webp 720w, /screenshots/ko/insights-activity-1440.webp 1440w, /screenshots/ko/insights-activity-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/insights-activity-light-1440.webp" srcset="/screenshots/ko/insights-activity-light-720.webp 720w, /screenshots/ko/insights-activity-light-1440.webp 1440w, /screenshots/ko/insights-activity-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 메일 분석 활동 달력. 오간 메일 양에 따라 짙기가 달라지는 날짜 칸의 격자입니다 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/insights-activity-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/insights-activity-720.webp 720w, /screenshots/ko/insights-activity-1440.webp 1440w, /screenshots/ko/insights-activity-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/insights-activity-light-1440.webp" srcset="/screenshots/ko/insights-activity-light-720.webp 720w, /screenshots/ko/insights-activity-light-1440.webp 1440w, /screenshots/ko/insights-activity-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 메일 분석 활동 달력. 오간 메일 양에 따라 짙기가 달라지는 날짜 칸의 격자입니다 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">활동: 하루에 한 칸씩, 한 해의 메일을 한눈에.</figcaption>
             </figure>
         </article>
 
         <article id="insights-privacy" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">메일 분석이 내 메일을 어딘가로 보냅니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">메일 분석이 내 메일을 어딘가로 보냅니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>보내지 않습니다. 메일 분석은 전적으로 사용자 기기에 이미 저장된 헤더 데이터로 만들어집니다 — 열어 본 폴더의 캐시된 헤더와 볼트에 있는 메시지입니다. 메시지 본문은 읽지 않고, 첨부 파일은 건드리지 않으며, 어떤 서비스로도 아무것도 업로드하지 않습니다. 만들 계정도 없고 네트워크를 꺼도 작동합니다.</p>
               <p>이 기기에 있는 메일만 설명할 수 있기 때문에 메일 분석은 그 사실을 분명히 밝힙니다. 컨트롤 아래의 적용 범위 안내가 어떤 폴더를 읽었는지, 각 폴더가 로컬에 얼마나 캐시되어 있는지 알려 주므로, 조용해 보이는 달이 실은 비어 있는 구간인데도 사실로 오해되는 일이 없습니다.</p>
@@ -312,7 +313,7 @@
         </article>
 
         <article id="insights-explorer-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorer와 메일 분석은 Premium 기능입니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">Explorer와 메일 분석은 Premium 기능입니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>아닙니다. 둘 다 무료 버전에 들어 있으며, 계정도 로그인도 필요하지 않습니다. MailVault 2.13.0에서 추가되었습니다.</p>
               <p>메일 분석은 읽기 창에 있던 기존 <strong>발신자 패널</strong>과 같은 기능이 아닙니다. 발신자 패널은 열어 둔 메시지를 쓴 사람과 주고받은 이력을 보여 줍니다. 그 기능은 그대로 있고 역시 무료이며, 메일 분석은 편지함 전체를 보는 보기입니다.</p>
@@ -338,7 +339,7 @@
         </div>
       </div>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/search-local.webp"><img src="/assets/help-media/ko/search-local.webp" width="1440" height="1056" loading="lazy" alt="로컬 메시지에서 Priya를 검색하고 결과 표시 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>로컬 메시지에서 Priya를 검색하고 결과 표시</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/search-local.jpg" aria-label="로컬 메시지에서 Priya를 검색하고 결과 표시 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/search-local.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/search-local.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>검색창에 Priya를 입력합니다. 검색을 실행하고 이 컴퓨터에 저장된 메시지를 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -361,5 +362,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

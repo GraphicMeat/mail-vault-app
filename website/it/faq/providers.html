@@ -147,6 +147,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Vai al contenuto</a>
@@ -195,7 +196,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Argomenti di aiuto</summary><nav aria-label="Argomenti del centro assistenza"><a href="/it/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aiuto di MailVault</a><a href="/it/faq/getting-started.html">Per iniziare</a><a href="/it/faq/storage-and-vault.html">Archiviazione e il tuo vault</a><a href="/it/faq/providers.html" aria-current="page">Provider di posta</a><a href="/it/faq/backup-and-restore.html">Backup e ripristino</a><a href="/it/faq/explorer-and-insights.html">Explorer e Statistiche</a><a href="/it/faq/scheduled-send.html">Invio programmato</a><a href="/it/faq/premium.html">Gratuito e Premium</a><a href="/it/faq/troubleshooting.html">Risoluzione dei problemi</a><a href="/it/docs.html#guides" class="mv-help-divider">Guide pratiche</a><a href="/it/docs.html#articles">Articoli</a><a href="/it/features.html">Riferimento delle funzioni</a><a href="/changelog.html">Note di rilascio</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Percorso di navigazione" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -208,20 +209,20 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Provider di posta</h1>
+      <h1 class="text-4xl font-bold mb-2">Provider di posta</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>In questa pagina</summary><ul><li><a href="#help-section-1">MailVault funziona con Gmail e Outlook?</a></li><li><a href="#help-section-2">Come collego il mio account Outlook.com?</a></li><li><a href="#help-section-3">Come uso MailVault con Proton Mail?</a></li><li><a href="#help-section-4">Posso inviare da un indirizzo diverso da quello con cui accedo?</a></li><li><a href="#help-section-5">Come invio da un alias?</a></li><li><a href="#help-section-6">Come collego Fastmail o un altro account JMAP?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Collega Gmail, Microsoft 365, Outlook.com, Proton Mail e server JMAP come Fastmail e invia da un alias.</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault funziona con Gmail e Outlook?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault funziona con Gmail e Outlook?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               Sì. MailVault funziona con Gmail, Outlook, server JMAP come Fastmail e qualsiasi servizio email che supporti IMAP. Per Gmail, accedi direttamente con il tuo account Google tramite OAuth2 — non servono impostazioni IMAP manuali. Gli account Microsoft 365 Business ed Enterprise possono accedere direttamente con il tuo account Microsoft tramite OAuth2 e funzionano anche con l'autenticazione a due fattori. Gli account personali Outlook.com, Hotmail e Live.com <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">si collegano tramite l'API Microsoft Graph</a>.
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Come collego il mio account Outlook.com?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Come collego il mio account Outlook.com?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">MailVault collega gli account personali Outlook.com, Hotmail e Live.com tramite la <strong>Microsoft Graph API</strong>. Aggiungi l'account, scegli Accedi con Microsoft e completa l'accesso nel browser. MailVault riconosce un account Microsoft personale e usa Graph da solo, quindi non ci sono impostazioni IMAP da inserire.</p>
               <p class="mb-4">Per questi account non usa IMAP a causa di un problema dell'IMAP di Microsoft con l'accesso OAuth2 iniziato a fine 2024. Lettura, eliminazione, segna come letto o da leggere, spostamento e backup della posta funzionano come sugli altri account.</p>
@@ -237,7 +238,7 @@
         </article>
 
         <article id="proton-mail-bridge" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Come uso MailVault con Proton Mail?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">Come uso MailVault con Proton Mail?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Proton Mail cifra la tua posta end-to-end, quindi non espone direttamente IMAP. Per collegarlo a MailVault (o a qualsiasi client di posta di terze parti) serve <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — un'app desktop di Proton che gira sul tuo computer ed espone la tua casella cifrata come normale IMAP/SMTP su <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>. Bridge richiede un piano Proton Mail a pagamento: non è disponibile sul piano gratuito di Proton.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Passaggi di configurazione:</p>
@@ -255,24 +256,24 @@
                   </ul>
                 </li>
               </ol>
-              <p class="mb-4">Proton Mail Bridge deve essere in esecuzione in background ogni volta che MailVault sincronizza — se Bridge è chiuso, MailVault non riesce a raggiungere la casella di posta. La posta che hai già archiviato resta comunque del tutto leggibile e ricercabile in MailVault anche con Bridge chiuso, perché MailVault è local-first e legge dal proprio archivio di file <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> invece che in diretta da Bridge.</p>
+              <p class="mb-4">Proton Mail Bridge deve essere in esecuzione in background ogni volta che MailVault sincronizza — se Bridge è chiuso, MailVault non riesce a raggiungere la casella di posta. La posta che hai già archiviato resta comunque del tutto leggibile e ricercabile in MailVault anche con Bridge chiuso, perché MailVault è local-first e legge dal proprio archivio di file <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> invece che in diretta da Bridge. Queste istruzioni sulla struttura dei file si riferiscono al formato predefinito Maildir. Impostazioni → Archiviazione offre anche l’archiviazione JMAP, che conserva i byte originali dei messaggi con record JSON e deduplica i messaggi identici.</p>
               <p>Bridge protegge il suo server IMAP/SMTP locale con un certificato TLS autofirmato. MailVault lo gestisce automaticamente per le connessioni locali (<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>), quindi non serve installare alcun certificato a mano.</p>
             </div>
         </article>
 
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Posso inviare da un indirizzo diverso da quello con cui accedo?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">Posso inviare da un indirizzo diverso da quello con cui accedo?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Sì. Aggiungi l'indirizzo come alias dell'account, come descritto in <a href="#send-from-an-alias" class="text-primary-500 hover:underline">Come invio da un alias?</a>, poi sceglilo nella riga Da quando scrivi, oppure rendilo predefinito. È una cosa comune su Fastmail e su qualsiasi provider in cui l'indirizzo con cui accedi non è quello che dai agli altri.</p>
               <p>Cambia solo l'indirizzo <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> della posta in uscita. Nome utente e password restano invariati, MailVault continua ad accedere con l'account che hai configurato e <strong>non viene aggiunta alcuna intestazione Reply-To</strong> &mdash; le risposte arrivano all'indirizzo usato per l'invio.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/compose-email-720.webp 720w, /screenshots/it/compose-email-1440.webp 1440w, /screenshots/it/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/it/compose-email-light-1440.webp" srcset="/screenshots/it/compose-email-light-720.webp 720w, /screenshots/it/compose-email-light-1440.webp 1440w, /screenshots/it/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Finestra di scrittura e risposta di MailVault con editor di testo formattato · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/it/compose-email-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/it/compose-email-720.webp 720w, /screenshots/it/compose-email-1440.webp 1440w, /screenshots/it/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/it/compose-email-light-1440.webp" srcset="/screenshots/it/compose-email-light-720.webp 720w, /screenshots/it/compose-email-light-1440.webp 1440w, /screenshots/it/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Finestra di scrittura e risposta di MailVault con editor di testo formattato · MailVault version 2.16.0 it" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 it"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 it</span></a>
             </figure>
         </article>
 
         <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Come invio da un alias?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">Come invio da un alias?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Apri <strong>Impostazioni &rarr; Account</strong>, scegli l'account e vai alla sua sezione <strong>Alias</strong>. Elenca ogni indirizzo da cui l'account invia: prima l'indirizzo di accesso, poi ogni alias. Il link <strong>Aggiungi indirizzo</strong> nella riga Da di un nuovo messaggio apre la stessa sezione.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Aggiungere e configurare un alias:</p>
@@ -295,7 +296,7 @@
         </article>
 
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Come collego Fastmail o un altro account JMAP?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Come collego Fastmail o un altro account JMAP?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Scegli Fastmail quando aggiungi un account e incolla un token API con accesso a Mail e Submission dalle impostazioni di Fastmail. Per un altro server, scegli JMAP e usa la sua password o il suo token API. MailVault rileva l'URL di sessione quando il dominio lo pubblica; altrimenti inserisci l'URL di sessione HTTPS completo. Conferma un server rilevato che non conosci prima di inviare le credenziali. La nuova posta arriva tramite push, con interrogazioni periodiche come alternativa, e gli indirizzi di invio provengono dalle identità del server. Fastmail offre anche un'opzione IMAP con password per app.</p></div>
         </article>
 
@@ -318,7 +319,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -341,5 +342,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Schermata del prodotto"><button type="button">Chiudi schermata</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

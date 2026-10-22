@@ -59,6 +59,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/organize-invoice-emails-automatically.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/organize-invoice-emails-automatically.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
   <header class="mv-header">
@@ -86,13 +87,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← ブログに戻る</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-20" class="text-sm text-primary-500 font-medium">2026年10月20日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">請求書メールを自動で整理する方法</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">請求書メールを自動で整理する方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#choose">1. 請求書に一貫したタグを付ける</a></li><li><a href="#rule">2. アプリが確認できる情報でルールを作る</a></li><li><a href="#preview">3. 有効にする前にプレビューする</a></li><li><a href="#collect">4. 過去の請求書も同じ一覧に集める</a></li><li><a href="#limits">この手順でわかること、わからないこと</a></li></ul></details><!-- help-contents:end -->
           <p class="text-sm text-slate-500">MailVault 著 · 読了まで 4 分</p>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -110,7 +111,7 @@
 <p><strong>絞り込み(任意)</strong>では、わかっている場合に正確な送信元アドレス、送信元ドメイン、件名の条件を追加します。いつも同じ仕入先なら、送信元の条件に、件名に「請求書」を含む条件を加えるところから始めると便利です。対象の請求書すべてに添付ファイルがある場合を除き、添付を必須にしないでください。書類へのリンクを送る仕入先もあります。</p>
 <p><strong>自動タグが確認するのは、送信者、件名、メールボックス、添付ファイルの有無です。メール本文や添付されたPDFは読みません。</strong>請求総額、PDF内の支払期限、支払済みかどうかを指示に含めると、ルールが持っていない情報を推測させることになります。</p>
 <p>テスト中は<strong>受信トレイでの扱い → 受信トレイに残す</strong>にしておきます。普段のメールの読み方を変えずに、ルールでタグを付けられます。</p>
-<figure class="mv-search-diagram"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-auto-tags-detail-720.webp 720w, /screenshots/ja/settings-auto-tags-detail-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/ja/settings-auto-tags-detail-light-1792.webp" srcset="/screenshots/ja/settings-auto-tags-detail-light-720.webp 720w, /screenshots/ja/settings-auto-tags-detail-light-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px" width="896" height="309" loading="lazy" decoding="async" alt="「領収書」ルール、有効スイッチ、「新しいルール」ボタンが表示された自動タグ設定 · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture><figcaption>ルールには指示、タグ、受信トレイでの扱いがまとめて保存されます。結果を確認する間は「受信トレイに残す」で始めます。</figcaption></figure>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/settings-auto-tags-detail-light-1792.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-auto-tags-detail-720.webp 720w, /screenshots/ja/settings-auto-tags-detail-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/ja/settings-auto-tags-detail-light-1792.webp" srcset="/screenshots/ja/settings-auto-tags-detail-light-720.webp 720w, /screenshots/ja/settings-auto-tags-detail-light-1792.webp 1792w" sizes="(max-width: 760px) 92vw, 720px" width="896" height="309" loading="lazy" decoding="async" alt="「領収書」ルール、有効スイッチ、「新しいルール」ボタンが表示された自動タグ設定 · MailVault version 2.16.0 ja" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a><figcaption>ルールには指示、タグ、受信トレイでの扱いがまとめて保存されます。結果を確認する間は「受信トレイに残す」で始めます。</figcaption></figure>
 <h2 id="preview">3. 有効にする前にプレビューする</h2>
 <p>確認するアカウントを選び、<strong>プレビュー</strong>を押します。タグを実際に付けずに、一致するメールを表示します。配送状況のお知らせが請求書として含まれていないか、件名が曖昧な本物の請求書が漏れていないか、2種類の誤りを確認します。</p>
 <p>条件を1つずつ調整して、再度プレビューします。<strong>判定できませんでした</strong>と表示された場合は、ルールが使えると判断する前にAIの設定を確認します。自然な言葉で書いたルールには、動作するモデルが必要です。厳密な条件で候補を絞ってから、モデルが評価します。利用できる選択肢は<a href="/ja/ai-setup.html">AI設定ガイド</a>で説明しています。</p>
@@ -119,7 +120,7 @@
 <h2 id="collect">4. 過去の請求書も同じ一覧に集める</h2>
 <p><strong>一括適用</strong>を使うと、保存済みルールを選択したアカウントの過去のメールにも適用できます。引き継ぎなどにまとめたメールを使う前に、結果を確認します。対象が広すぎた場合に備え、MailVaultでは過去のメールへの適用を取り消せます。</p>
 <p>月ごとに確認するには、請求書タグと必要な日付範囲で絞り込んだ<a href="/ja/features/saved-views.html">保存済みビュー</a>を作成します。元のメールを移動せずに、複数のアカウントから一致するものを集められます。初期ビューを含めて3つの保存済みビューを無料で使えます。Premiumではさらに増やせます。</p>
-<figure class="mv-search-diagram"><video controls playsinline preload="none" width="960" height="660" poster="/assets/clips/ja/tagging-rules.jpg" aria-label="MailVaultのタグ付けルールのデモ · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/tagging-rules.mp4" type="video/mp4"><a href="/assets/clips/ja/tagging-rules.mp4">短いデモを見る</a>.</video><figcaption id="clip-description">約5秒、音声なし。自然な言葉で書いたルールのある「自動タグ」を開きます。受信トレイに切り替えると、「請求書 2026-0471」に「請求書」タグが付いています。この動画はルールとタグが付いた結果を示すもので、プレビューや設定の手順は含みません。</figcaption></figure>
+<figure class="mv-search-diagram"><video controls="" playsinline="" preload="none" width="960" height="660" poster="/assets/clips/ja/tagging-rules.jpg" aria-label="MailVaultのタグ付けルールのデモ · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/tagging-rules.mp4" type="video/mp4"><a href="/assets/clips/ja/tagging-rules.mp4">短いデモを見る</a>.</video><figcaption id="clip-description">約5秒、音声なし。自然な言葉で書いたルールのある「自動タグ」を開きます。受信トレイに切り替えると、「請求書 2026-0471」に「請求書」タグが付いています。この動画はルールとタグが付いた結果を示すもので、プレビューや設定の手順は含みません。</figcaption></figure>
 <h2 id="limits">この手順でわかること、わからないこと</h2>
 <p>自動タグと手動のタグ付けは無料です。タグはメールをまとめやすくしますが、仕入先の確認、支払いの承認、会計項目の抽出は行いません。詳細が重要なときは、元のメールと書類を開いて確認します。また、タグ付けでは独立したバックアップは作成されません。</p>
 <p>古い請求書が見つからない場合は、ルールの件名と送信元の条件、選択したアカウント、ローカルで利用できるメールを確認します。一度だけ探す場合は、別の記事<a href="/ja/blog/how-to-search-thousands-of-emails-fast.html">大量のメールアーカイブを検索する方法</a>を参照してください。書類の保存については、<a href="/ja/guides/email-archiving-for-freelancers.html">フリーランス向けメールアーカイブガイド</a>をご覧ください。</p>
@@ -130,17 +131,18 @@
             <p class="text-sm mb-4">この手順をMailVaultで試せます。macOS、Windows、Linuxに対応しています。</p>
             <div class="flex flex-wrap gap-3">
               <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/ja/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="organize-invoice-emails-automatically" data-acquisition-destination="download">MailVault を無料でダウンロード</a>
-              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ja" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="organize-invoice-emails-automatically" data-acquisition-destination="demo">デモを試す ↗</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ja" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="organize-invoice-emails-automatically" data-acquisition-destination="demo" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す ↗</a>
             </div>
           </div>
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちはGraphic Meatです。2013年から役立つソフトウェアを作っている独立系プロダクトスタジオです。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meatを見る ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>メールを読む。メールを残す。</p></div><nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

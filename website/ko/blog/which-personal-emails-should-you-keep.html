@@ -57,6 +57,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/which-personal-emails-should-you-keep.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/which-personal-emails-should-you-keep.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
   <header class="mv-header">
@@ -84,13 +85,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-15" class="text-sm text-primary-500 font-medium">2026년 10월 15일</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">어떤 개인 메일을 남겨야 할까요?</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">어떤 개인 메일을 남겨야 할까요?</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#three-questions">무엇을 남길지 결정하는 세 가지 질문</a></li><li><a href="#small-collection">작은 모음 하나 만들기</a></li><li><a href="#keep-context">메일을 맥락과 함께 보관하기</a></li><li><a href="#where-to-keep-it">나중에 다시 찾을 수 있는 곳 선택하기</a></li><li><a href="#mailvault-demo">영상: 로컬 보관함에서 메일 찾기</a></li><li><a href="#first-message">첫 번째 메일 찾기</a></li></ul></details><!-- help-contents:end -->
           <p class="text-sm text-slate-500">MailVault 작성 · 읽는 시간 4분</p>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -114,21 +115,21 @@
 <p>저장한 메일의 링크는 여전히 다른 서비스를 가리킵니다. 메일을 저장한다고 링크에 있는 모든 내용이 저장되는 것은 아닙니다. 공유 사진이나 문서도 모음에 포함해야 한다면 허용된 범위에서 자신의 사본을 다운로드하고 열리는지 확인하세요.</p>
 <p>몇 년 뒤 이 모음을 여는 모습을 상상해 보면 도움이 됩니다. 이름, 날짜, 답장을 보면 무슨 일이 있었는지 이해할 수 있을까요? 그렇지 않다면 아직 기억할 때 빠진 맥락을 더하세요.</p>
 <figure class="mv-search-diagram">
-<a href="/screenshots/ko/chat-view-thread-light-1440.webp" target="_blank" rel="noopener" aria-label="MailVault 대화 스크린샷을 원본 크기로 열기">
-<img src="/screenshots/ko/chat-view-thread-light-1440.webp" srcset="/screenshots/ko/chat-view-thread-light-720.webp 720w, /screenshots/ko/chat-view-thread-light-1440.webp 1440w" sizes="(max-width: 760px) 92vw, 720px" width="1440" height="932" alt="받은 메일과 보낸 답장을 함께 보여 주는, 가상의 프로젝트 대화가 담긴 MailVault 채팅 보기 · MailVault version 2.16.0" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-</a>
+<a href="/screenshots/ko/chat-view-thread-light-1440.webp" target="_blank" rel="noopener" aria-label="MailVault 대화 스크린샷을 원본 크기로 열기" data-help-image="" aria-haspopup="dialog">
+<img src="/screenshots/ko/chat-view-thread-light-1440.webp" srcset="/screenshots/ko/chat-view-thread-light-720.webp 720w, /screenshots/ko/chat-view-thread-light-1440.webp 1440w" sizes="(max-width: 760px) 92vw, 720px" width="1440" height="932" alt="받은 메일과 보낸 답장을 함께 보여 주는, 가상의 프로젝트 대화가 담긴 MailVault 채팅 보기 · MailVault version 2.16.0 ko" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko">
+<span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
 <figcaption>대화의 양쪽을 남기면 맥락도 함께 보존됩니다. 가상의 데모 메일을 표시한 MailVault 채팅 보기입니다. 이미지를 열어 자세히 살펴보세요.</figcaption>
 </figure>
 <h2 id="where-to-keep-it">나중에 다시 찾을 수 있는 곳 선택하기</h2>
 <p>메일 서비스의 내보내기 도구나 데스크톱 메일 앱의 로컬 내보내기 기능으로 시작할 수 있습니다. 내보내기에 어떤 메일과 첨부 파일이 포함되는지 확인하고 결과물을 열 수 있는 소프트웨어가 있는지 확인하세요. 아직 읽을 수 없는 파일은 보관 작업이 끝나지 않은 상태입니다.</p>
-<p>MailVault는 모은 메일을 읽을 수 있는 상태로 간직하는 방법 중 하나입니다. 보관한 메일을 개별 <code>.eml</code> 파일로 저장하며 로컬 메일을 검색할 수 있습니다. 기존 메일 주소를 계속 사용하면서 컴퓨터에 모아 갈 수 있습니다. 수동 보관은 무료입니다.</p>
+<p>MailVault는 모은 메일을 읽을 수 있는 상태로 간직하는 방법 중 하나입니다. 보관한 메일을 개별 <code>.eml</code> 파일로 저장하며 로컬 메일을 검색할 수 있습니다. 기존 메일 주소를 계속 사용하면서 컴퓨터에 모아 갈 수 있습니다. 수동 보관은 무료입니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
 <p>모은 메일의 백업도 따로 보관하세요. 노트북에 사본이 있으면 독립적으로 접근할 수 있고, 다른 드라이브에 두 번째 사본이 있으면 노트북이 고장 났을 때 복구할 곳이 하나 더 생깁니다. <a href="/ko/blog/how-to-check-email-backup.html">백업 확인 방법</a>에서는 원본을 바꾸지 않고 저장한 메일을 열어 보는 방법을 설명합니다.</p>
 <section aria-labelledby="mailvault-demo">
 <h2 id="mailvault-demo">영상: 로컬 보관함에서 메일 찾기</h2>
 <figure>
-  <video controls playsinline preload="none" width="1440" height="900" poster="/assets/videos/guides/ko/search-local-archive-full-window-v4.jpg" aria-label="영상: 로컬 보관함에서 메일 찾기 · Reviewed for MailVault version 2.20.0" aria-describedby="mailvault-demo-caption" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0">
+  <video controls="" playsinline="" preload="none" width="1440" height="900" poster="/assets/videos/guides/ko/search-local-archive-full-window-v4.jpg" aria-label="영상: 로컬 보관함에서 메일 찾기 · Reviewed for MailVault version 2.20.0" aria-describedby="mailvault-demo-caption" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0">
     <source src="/assets/videos/guides/ko/search-local-archive-full-window-v4.mp4" type="video/mp4">
-    <track kind="captions" src="/assets/videos/guides/ko/search-local-archive-full-window-v4.vtt" srclang="ko" label="한국어" default>
+    <track kind="captions" src="/assets/videos/guides/ko/search-local-archive-full-window-v4.vtt" srclang="ko" label="한국어" default="">
     <a href="/assets/videos/guides/ko/search-local-archive-full-window-v4.mp4">MailVault 데모 보기</a>.
   </video>
   <figcaption id="mailvault-demo-caption" class="text-sm text-slate-500 mt-3">가상의 데모 메일을 사용해 Mac mini에서 녹화한 macOS용 MailVault입니다. 재생을 눌러 시청하세요.</figcaption>
@@ -151,11 +152,12 @@
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@
   "description": "Build a local email backup on Linux: connect your mailbox, archive to EML, verify attachments offline and keep a second copy on another drive.",
   "url": "https://mailvaultapp.com/guides/backup-email-linux.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-email-linux.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-email-linux.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,33 +172,33 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Email backup guides · <time datetime="2026-10-15">October 15, 2026</time></p>
-          <h1>How to Back Up Email on Linux as EML</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <p data-i18n-block>A Linux email backup should survive both a provider deletion and a failed disk. Start by archiving messages into an independent local vault, then keep a second copy elsewhere. MailVault’s Linux app stores archived mail as individual EML files in Maildir folders.</p>
-          <h2 data-i18n-block>1. Install the Linux app and connect an account</h2>
+          <h1>How to Back Up Email on Linux as EML</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">1. Install the Linux app and connect an account</a></li><li><a href="#help-section-2">2. Make an archive before making a backup</a></li><li><a href="#help-section-3">Verify the archive before relying on it</a></li><li><a href="#help-section-4">3. Protect the disk copy</a></li><li><a href="#help-section-5">Can I automate it?</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>A Linux email backup should survive both a provider deletion and a failed disk. Start by archiving messages into an independent local vault, then keep a second copy elsewhere. MailVault’s Linux app stores archived mail as individual EML files in Maildir folders. These file-layout instructions use the default Maildir format. Settings → Storage also offers JMAP storage, which keeps original message bytes with JSON records and deduplicates identical messages.</p>
+          <h2 data-i18n-block id="help-section-1">1. Install the Linux app and connect an account</h2>
           <p data-i18n-block>Use the Linux download links on <a href="/get-started.html">the download page</a> and choose the package and architecture that match your system. Follow the current installer guidance there rather than copying commands for another distribution. Add Gmail or Microsoft accounts with the supported sign-in flow, or enter the connection details supplied by your IMAP provider. An organization can restrict access regardless of operating system.</p>
-          <h2 data-i18n-block>2. Make an archive before making a backup</h2>
+          <h2 data-i18n-block id="help-section-2">2. Make an archive before making a backup</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Check Inbox, Sent and custom folders against your webmail. Include older folders and labels that you want to keep.</li>
           <li data-i18n-block>In bulk operations, pick the folders and date range, then choose <strong>Archive</strong>. This creates the local copies without removing mail from the server.</li>
           <li data-i18n-block>Leave the app running until the job completes. Review failures and retry missing messages before treating the archive as complete.</li>
           <li data-i18n-block>Choose the <strong>Vault</strong> source and inspect messages from several years, including attachments.</li></ol>
-          <h2 data-i18n-block>Verify the archive before relying on it</h2>
+          <h2 data-i18n-block id="help-section-3">Verify the archive before relying on it</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Switch the message source to <strong>Vault</strong>, rather than Server or All. Search for an old message you recognize.</li>
           <li data-i18n-block>Disconnect from the network and open a few archived messages from different folders and years. Open their attachments too. A subject line in a list is not proof that the message body is saved.</li>
           <li data-i18n-block>In Settings, open <strong>Backup &amp; Restore</strong> and use <strong>Export Backup</strong>. Choose a location on a second drive. The ZIP contains the vault, accounts and settings; it excludes messages that only exist on the server.</li>
           <li data-i18n-block>Check that the ZIP opens, contains .eml files, and includes the folders you intended to preserve. For important mail, test restoring a copy in a separate installation before deleting anything.</li></ol>
-          <h2 data-i18n-block>3. Protect the disk copy</h2>
+          <h2 data-i18n-block id="help-section-4">3. Protect the disk copy</h2>
           <p data-i18n-block>Use a second drive for the exported backup. A second folder on the same disk does not protect against that disk failing. If the drive is removable, check that it is mounted and writable before a scheduled run. Store private mail on encrypted storage and keep backup recovery credentials somewhere you can reach after losing the computer.</p>
           <p data-i18n-block>Maildir makes individual messages portable, but the active vault also has app metadata. Prefer the app’s backup/export workflow for a running installation. If you copy the entire vault at the filesystem level, close the app first so you do not capture files halfway through a write.</p>
-          <h2 data-i18n-block>Can I automate it?</h2>
+          <h2 data-i18n-block id="help-section-5">Can I automate it?</h2>
           <p data-i18n-block>MailVault Premium supports scheduled backups. Start with a successful manual archive and a verified restore before enabling a schedule. If you prefer a terminal workflow, compare tools by their authentication support, storage format, deletion behavior and restore process in our <a href="/guides/imap-backup-tool-checklist.html">IMAP backup checklist</a>.</p>
           <p data-i18n-block>Also see <a href="/guides/linux-email-archive.html">choosing a Linux email archive</a> and <a href="/guides/keep-emails-after-server-deletion.html">keeping mail after server deletion</a>. The accompanying Mac recordings elsewhere in these guides demonstrate the shared app workflow, not a Linux desktop session.</p>
           <p data-i18n-block><a href="/get-started.html">Download MailVault for free</a> to make your first local archive. Manual archiving is free; automated archiving, scheduled backups and Archive &amp; Delete require <a href="/pricing.html">Premium</a>.</p>
           <p data-i18n-block>More practical guides: <a href="/guides/backup-gmail-to-eml.html">How to Back Up Gmail to EML Files</a> · <a href="/guides/export-outlook-to-eml.html">How to Export Outlook Email to EML</a> · <a href="/guides/download-all-emails-mac.html">How to Download All Your Emails on Mac</a> · <a href="/guides/linux-email-archive.html">A Local Email Archive for Linux: What to Check</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -225,5 +226,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

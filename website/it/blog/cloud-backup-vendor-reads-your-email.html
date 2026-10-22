@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu. - Blog di MailVault</title>
-  <meta name="description" content="Un servizio di backup cloud di terze parti per la tua casella non elimina il singolo punto di guasto: aggiunge una seconda azienda con accesso continuo a ogni messaggio che hai mai inviato o ricevuto. Ecco la vera differenza di architettura, e perché il backup locale la chiude.">
+  <title>Backup email nel cloud e archivi locali: chi può accedere alla copia? - Blog di MailVault</title>
+  <meta name="description" content="Confronta backup email nel cloud e archivi locali per cifratura, proprietà delle chiavi, controlli di accesso e recupero. Anche i file locali richiedono protezione del disco e un backup separato.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/it/blog/cloud-backup-vendor-reads-your-email.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/it/blog/cloud-backup-vendor-reads-your-email.html">
-  <meta property="og:title" content="Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu.">
-  <meta property="og:description" content="Un servizio di backup cloud di terze parti per la tua casella non elimina il singolo punto di guasto: aggiunge una seconda azienda con accesso continuo a ogni messaggio che hai mai inviato o ricevuto. Ecco la vera differenza di architettura, e perché il backup locale la chiude.">
+  <meta property="og:title" content="Backup email nel cloud e archivi locali: chi può accedere alla copia?">
+  <meta property="og:description" content="Confronta backup email nel cloud e archivi locali per cifratura, proprietà delle chiavi, controlli di accesso e recupero. Anche i file locali richiedono protezione del disco e un backup separato.">
   <meta property="og:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare. Gratis per macOS, Windows e Linux, con un&#39;anteprima dell&#39;app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu.">
-  <meta name="twitter:description" content="Un servizio di backup cloud di terze parti per la tua casella non elimina il singolo punto di guasto: aggiunge una seconda azienda con accesso continuo a ogni messaggio che hai mai inviato o ricevuto. Ecco la vera differenza di architettura, e perché il backup locale la chiude.">
+  <meta name="twitter:title" content="Backup email nel cloud e archivi locali: chi può accedere alla copia?">
+  <meta name="twitter:description" content="Confronta backup email nel cloud e archivi locali per cifratura, proprietà delle chiavi, controlli di accesso e recupero. Anche i file locali richiedono protezione del disco e un backup separato.">
   <meta name="twitter:image:alt" content="MailVault: ricerca veloce. Posta privata. Tua da conservare. Gratis per macOS, Windows e Linux, con un&#39;anteprima dell&#39;app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=3">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Vai al contenuto</a>
@@ -132,7 +133,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Argomenti di aiuto</summary><nav aria-label="Argomenti del centro assistenza"><a href="/it/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aiuto di MailVault</a><a href="/it/faq/getting-started.html">Per iniziare</a><a href="/it/faq/storage-and-vault.html">Archiviazione e il tuo vault</a><a href="/it/faq/providers.html">Provider di posta</a><a href="/it/faq/backup-and-restore.html">Backup e ripristino</a><a href="/it/faq/explorer-and-insights.html">Explorer e Statistiche</a><a href="/it/faq/scheduled-send.html">Invio programmato</a><a href="/it/faq/premium.html">Gratuito e Premium</a><a href="/it/faq/troubleshooting.html">Risoluzione dei problemi</a><a href="/it/docs.html#guides" class="mv-help-divider">Guide pratiche</a><a href="/it/docs.html#articles">Articoli</a><a href="/it/features.html">Riferimento delle funzioni</a><a href="/changelog.html">Note di rilascio</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/it/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -143,7 +144,7 @@
       <article>
         <header class="mb-8">
           <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">28 agosto 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu.</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Backup email nel cloud e archivi locali: chi può accedere alla copia?</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 min di lettura</span>
           </div>
@@ -156,7 +157,7 @@
           </p>
 
           <p>
-            Non hai eliminato il singolo punto di guasto. Hai aggiunto una seconda azienda con una copia permanente di ogni email che hai mai inviato o ricevuto, più le credenziali o l'accesso delegato che le servono per continuare a scaricare posta nuova per sempre.
+            Un backup da cloud a cloud può creare una copia di recupero indipendente, aggiungendo però un servizio e un’autorizzazione di accesso da valutare. La durata della conservazione e chi può leggere la copia dipendono da configurazione, cifratura e contratto.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Che cosa ha davvero in mano un fornitore di backup cloud</h3>
@@ -166,7 +167,7 @@
           </p>
 
           <p>
-            Per tutta la durata dell'abbonamento il fornitore di backup &mdash; e, di riflesso, chiunque riesca a violarne i sistemi &mdash; ha accesso continuo a tutta la tua storia di posta. Non un'istantanea del giorno in cui ti sei iscritto. Un archivio continuo e in crescita, che diventa più prezioso per un attaccante ogni anno che passa. Hai scambiato "il mio provider ha la mia posta" con "il mio provider e un fornitore di backup hanno entrambi la mia posta", che è più esposizione, non meno.
+            Un backup aggiornato continuamente può conservare una cronologia di messaggi crescente. Valuta autorizzazioni delegate, conservazione, chiavi di cifratura e controlli di ripristino, incluso cosa accade quando si revoca l’accesso o termina l’abbonamento. Una seconda copia può migliorare il recupero introducendo rischi di accesso diversi.
           </p>
 
           <p>
@@ -180,11 +181,11 @@
           </p>
 
           <p>
-            Una copia che sta sui server di un fornitore può essere letta dai suoi dipendenti nelle giuste condizioni di accesso interno, richiesta da un tribunale che ha giurisdizione su quel fornitore, esposta se il fornitore subisce una violazione, oppure consegnata se il fornitore viene acquisito da un'azienda con criteri di trattamento dei dati diversi da quella di cui ti eri fidato. Nessuno di questi esiti richiede che qualcosa vada storto da parte tua. Sono proprietà del semplice fatto che la copia esista sull'infrastruttura di qualcun altro.
+            L’accesso dipende dalla cifratura, dalla proprietà delle chiavi e dalle autorizzazioni del servizio. Un provider con le chiavi di decifratura potrebbe accedere alla posta salvata; un backup correttamente cifrato sul client può limitare tale accesso. Controlla le politiche, i termini di eliminazione e il ripristino del servizio specifico senza presumere che ogni copia cloud sia leggibile dal provider.
           </p>
 
           <p>
-            Una copia che sta sul tuo disco ha esattamente una di quelle categorie di rischio: la sicurezza del tuo dispositivo. È una responsabilità vera &mdash; cifratura dell'intero disco, una macchina blindata, un tuo backup del backup se vuoi ridondanza in più &mdash; ma è un rischio unico e delimitato, che controlli direttamente, non un rischio aperto che affidi a terzi perché lo gestiscano per te a tempo indeterminato.
+            Una copia locale dipende dalla sicurezza del dispositivo, dallo stato del disco, dall’accesso fisico e dai backup. I file dei messaggi di MailVault non sono di per sé un archivio cifrato. Usa la cifratura del disco e un backup separato verificato; se i file sono in una cartella sincronizzata nel cloud, anche quel servizio fa parte dell’archiviazione.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Il backup locale, semplicemente, sopravvive a più cose</h3>
@@ -196,11 +197,10 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Come è costruito MailVault, invece</h3>
 
           <p>
-            MailVault si collega al tuo account di posta IMAP o OAuth esistente e archivia ogni cartella come singoli file <code>.eml</code> &mdash; scritti direttamente sul tuo disco. Non c'è alcun server gestito da MailVault che tenga in mezzo una copia della tua posta. Non possiamo leggere il tuo archivio, perché non lo riceviamo mai; la connessione è tra il tuo dispositivo e il tuo provider, e i file che ne risultano vivono solo dove li metti tu.
-          </p>
+            MailVault si collega al tuo account di posta IMAP o OAuth esistente e archivia ogni cartella come singoli file <code>.eml</code> &mdash; scritti direttamente sul tuo disco. Non c'è alcun server gestito da MailVault che tenga in mezzo una copia della tua posta. Non possiamo leggere il tuo archivio, perché non lo riceviamo mai; la connessione è tra il tuo dispositivo e il tuo provider, e i file che ne risultano vivono solo dove li metti tu. Queste istruzioni sulla struttura dei file si riferiscono al formato predefinito Maildir. Impostazioni → Archiviazione offre anche l’archiviazione JMAP, che conserva i byte originali dei messaggi con record JSON e deduplica i messaggi identici.</p>
 
           <p>
-            Anche il formato conta: <code>.eml</code> è uno standard aperto e semplice, leggibile da qualsiasi client di posta, non un database proprietario che lega il tuo archivio a un unico software o alla sopravvivenza di un'unica azienda. I backup locali manuali e illimitati sono gratuiti, punto. I backup pianificati, che tengono l'archivio aggiornato in automatico senza che tu debba ricordartene, sono una funzione premium da $4/mese o $25/anno &mdash; il piano annuale comprende 14 giorni di prova.
+            Anche il formato conta: <code>.eml</code> è uno standard semplice e aperto leggibile dalle app compatibili con EML, anziché un database proprietario che leghi l’archivio a un solo software o alla sopravvivenza di un’azienda. I backup locali manuali e illimitati sono gratuiti, punto. I backup pianificati, che tengono l'archivio aggiornato in automatico senza che tu debba ricordartene, sono una funzione premium da $4/mese o $25/anno &mdash; il piano annuale comprende 14 giorni di prova.
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -224,7 +224,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -248,5 +248,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Schermata del prodotto"><button type="button">Chiudi schermata</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

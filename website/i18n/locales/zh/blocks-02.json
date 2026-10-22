@@ -3,8 +3,6 @@
   "705de0098a69": "一旦超出限额，Google 会临时暂停该账户：<strong>通常在 1 小时左右，但也可能持续到 24 小时</strong>。所有 Google Workspace 版本的限额都一样，而且 Google 可以不经通知就修改——当前的具体数字见 <a href=\"https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Google 的带宽限额文档</a>。",
   "e49a5450cedd": "<strong>这对第一次备份意味着什么。</strong>超过大约 2.5 GB 的邮箱没法在一天之内通过 IMAP 下载完——没有哪个客户端做得到，这是服务器端的硬性上限。大的归档要做好花上几天的准备。",
   "3afecc79e78f": "<strong>MailVault 的做法。</strong>它会识别出限额响应，干净地停下这一轮，而不是不断重试把封禁拖得更久，并告诉你已经触到当天的限额。等暂停解除后再启动备份，它会从停下的地方继续——本地已经存好的邮件会被跳过，不会下载两遍。等待期间，磁盘上已有的一切照样能读、能搜。",
-  "320c21c1b0ba": "MailVault 始终在应用自己的存储里保留一份邮件的<strong>工作副本</strong>——你读的、搜的、打开的就是它。外部备份位置则在你掌控的磁盘上再加一份<strong>独立的第二副本</strong>：一块外接 SSD、一个 NAS 共享目录，或者一个同步文件夹。",
-  "0d73b222b588": "<strong>与工作副本同时写入。</strong>备份运行时，每封邮件都会同时存到两个位置，用的是同样的 <code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">.eml</code> + Maildir 布局——所以没有 MailVault，第二份副本也能用 Apple Mail、Thunderbird 或任何其他客户端打开。",
   "8579935d2dc0": "<strong>是冷存储，不是镜像。</strong>应用日常不会去读它。在服务器上删掉的、或者在 MailVault 里移除的邮件，仍然留在这份外部副本里。",
   "093ff8ecb7a9": "<strong>已读和未读标记双向保留。</strong>每次运行前两份副本会先对账，所以你读过的邮件仍然是已读。",
   "8099239ea389": "<strong>独立于应用之外。</strong>就算那台电脑坏了，或者你卸载了 MailVault，那个外部文件夹依然是一份完整的、自我描述的邮件归档。",
@@ -86,15 +84,11 @@
   "0fa5edab65b1": "上传限额",
   "2e1b284935af": "AI 驱动的<span class=\"lamp-text\">邮件清理</span>",
   "03ca8ba644a5": "你的 MailVault Premium 订阅已经生效。回到 MailVault 应用，在 设置 &rarr; 账单 里点击<strong class=\"text-white\">检查状态</strong>，即可激活 Premium 功能。",
-  "edca6f2dde46": "<a href=\"https://datatracker.ietf.org/doc/html/rfc5322\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">.eml（RFC 5322）</a>是邮件消息的互联网标准格式。每封邮件 —— 邮件头、正文和附件 —— 都存成一个自包含的文本文件。与专有数据库不同，.eml 文件能被任何邮件客户端（Apple Mail、Thunderbird、Outlook）打开，也能用任何文本编辑器阅读。",
   "46aa7b51f19e": "<a href=\"https://en.wikipedia.org/wiki/Maildir\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Maildir</a> 是一种久经考验的邮件存放目录结构，邮件服务器已经用了几十年。每封邮件就是一个文件，所以不存在一个会整体损坏的数据库 —— 一个文件坏了，归档的其余部分毫发无损。.eml + Maildir 合在一起，意味着你的邮件面向未来、可移植，永远不会被任何单一应用锁住。",
-  "3e908cbca87e": "会的。MailVault 打开的每一封邮件都会被检查有没有跟踪像素 —— 就是营销邮件用来回报你何时打开、打开几次、来自哪个 IP、用的哪个客户端的隐藏 1x1 图片。带有跟踪像素的邮件，主题旁边会出现一只小眼睛，点开它会说明是哪家跟踪公司，并显示这个像素本来要请求的确切 URL。检测对所有人免费。MailVault Premium 还会在邮件渲染之前把这些信标从 HTML 里剥掉，于是请求根本不会发出，发件人什么也得不到。应用自带将近 500 个已知的跟踪端点；这份列表随应用分发、随版本更新，从不在运行时去服务器拉取。<a href=\"/features/email-tracker-blocking.html\" class=\"text-primary-500 hover:text-primary-600 underline\">看看它如何工作，处理前后对比</a>。",
   "832558cf7a44": "Proton Mail 对邮件做端到端加密，所以不直接开放 IMAP。要把它接到 MailVault（或任何第三方邮件客户端），需要 <a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a> —— 这是 Proton 提供的桌面应用，跑在你自己的电脑上，把你加密的邮箱以标准 IMAP/SMTP 的形式暴露在 <code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">127.0.0.1</code> 上。Bridge 需要付费的 Proton Mail 套餐；免费版用不了。",
   "2e089a56554e": "从 Proton 官网安装 <a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a>",
   "97d03306dcc2": "Bridge 会为每个账户显示一组 <strong>IMAP/SMTP 凭据</strong> —— 显示出来的那个密码是 Bridge 生成的应用密码，<strong>不是</strong>你平常的 Proton 账户密码",
   "41da1639ed80": "IMAP 端口：<code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">1143</code>，安全方式：<code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">STARTTLS</code>",
-  "230a4bf715b7": "MailVault 同步的时候，Proton Mail Bridge 必须在后台运行 —— Bridge 关了，MailVault 就够不到邮箱。不过就算 Bridge 关着，你已经归档的邮件在 MailVault 里照样能完整地阅读和搜索，因为 MailVault 是本地优先的，它读的是自己的 <code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">.eml</code> 存储，而不是实时向 Bridge 要。",
   "8c84d1aff414": "Bridge 用一张自签名 TLS 证书来保护它本地的 IMAP/SMTP 服务。对本地（<code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">127.0.0.1</code>）连接，MailVault 会自动处理这一点，不需要你手动安装证书。",
-  "a0e567732861": "附件以 MIME 部件的形式嵌在每个 .eml 文件里 —— 它们不是单独存放的文件。你打开一封邮件时，MailVault 的 Rust 后端会解析 MIME 结构并即时取出附件。你可以直接在邮件查看器里对任何附件执行<strong>打开</strong>、<strong>另存为</strong>或<strong>在文件夹中显示</strong>。取出来的附件会临时缓存，方便再次快速访问。",
-  "8bd63a4353f7": "归档会从你的服务器下载完整邮件（如果尚未缓存），并把它存成磁盘上的一个 .eml 文件，文件名里带 <strong>A</strong>（已归档）标记。如果这封邮件本地已经缓存过，MailVault 只是给文件改个名，加上归档标记。归档过的邮件会出现在<strong>保险库</strong>视图中，并被纳入备份。在你自己动手删除之前，服务器上那份不会被碰。"
+  "a0e567732861": "附件以 MIME 部件的形式嵌在每个 .eml 文件里 —— 它们不是单独存放的文件。你打开一封邮件时，MailVault 的 Rust 后端会解析 MIME 结构并即时取出附件。你可以直接在邮件查看器里对任何附件执行<strong>打开</strong>、<strong>另存为</strong>或<strong>在文件夹中显示</strong>。取出来的附件会临时缓存，方便再次快速访问。"
 }

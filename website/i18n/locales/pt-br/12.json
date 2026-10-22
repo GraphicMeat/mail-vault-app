@@ -8,12 +8,9 @@
   "b02ccf634646": "Horários definidos servem para um cofre ou uma cópia de backup em um disco externo que outra coisa já usa com a própria programação, na maioria das vezes o Time Machine: escolha os horários em que esse disco está livre. Um horário selecionado que chega enquanto o MailVault está ocupado é ignorado em vez de recuperado depois, então a próxima tentativa é o horário selecionado seguinte.",
   "e1dd9724c424": "Sim, com Premium. Configurações → Backup e restauração → Agendamento de backup oferece quatro frequências: a cada hora, uma vez por dia, uma vez por semana e Em horários definidos. Escolha “Em horários definidos” e aparece uma grade com as 24 horas; toque nas que quiser, por exemplo 07, 12 e 22, e o MailVault faz backup na hora cheia de cada uma delas e nunca no meio. Todas as frequências são executadas apenas enquanto o app está ocioso, então um backup nunca começa enquanto você trabalha. Horários definidos servem para um cofre ou uma cópia de backup em um disco externo que outra coisa já usa com a própria programação, na maioria das vezes o Time Machine: escolha os horários em que esse disco está livre. Um horário selecionado que chega enquanto o MailVault está ocupado é ignorado em vez de recuperado depois, então a próxima tentativa é o horário selecionado seguinte.",
   "63f585557c08": "Seguir o ponteiro: as linhas reagem ao mouse e a mensagem aberta fica colorida.",
-  "9eee52a85e4f": "Marcar o que estou lendo: o ponteiro fica quieto, a mensagem aberta fica preenchida e a conversa dela permanece um tom mais clara.",
   "370413878614": "Lista de mensagens do MailVault com o destaque padrão: a mensagem aberta recebe uma faixa colorida",
   "5a2270d3c7a6": "Lista de mensagens do MailVault marcando a mensagem aberta em cinza firme e o restante da conversa em um cinza mais claro",
   "51ee587d08e8": "Explorer e Estatísticas",
-  "9abc8155b225": "Agrupar uma caixa postal por data, remetente ou conversa, e ler as visões de mapa de remetentes, linha do tempo e atividade.",
-  "8391a88056bd": "8 perguntas",
   "9f9ad086f126": "Posso mudar a aparência e o layout do MailVault?",
   "e1481b4253f2": "O que é o Explorer?",
   "87f874849730": "Posso ver tudo o que uma pessoa já me enviou?",
@@ -221,6 +218,5 @@
   "02e10d46369f": "Ampliar: mudança guiada de servidor",
   "78c0778c5b6f": "Mudança guiada de servidor no MailVault",
   "7bf0101cf05a": "Ampliar: exportar como imagem ou HTML",
-  "6ba74d86c98f": "Exportar como imagem ou HTML no MailVault",
-  "8b302c851f90": "O MailVault sempre mantém uma cópia de trabalho do seu e-mail no armazenamento do próprio app — é ela que você lê, pesquisa e abre. Um local de backup externo adiciona uma segunda cópia independente em uma unidade escolhida por você: um SSD externo, um compartilhamento NAS ou uma pasta sincronizada. Ela é gravada durante os backups ao mesmo tempo que a cópia de trabalho, com o mesmo formato .eml e layout Maildir, para que apps compatíveis com EML possam ler os arquivos de mensagem. O app não a lê no uso diário, e ela é armazenamento frio: e-mails excluídos no servidor ou removidos no MailVault permanecem na cópia externa. Defina-a em Configurações, em Backup, em 'Segunda cópia — armazenamento frio externo'. No macOS, o MailVault armazena um marcador de segurança da pasta para que o acesso sobreviva a reinícios e atualizações do app; o selo de estado mostra Pronto, Precisa de nova autorização, Indisponível ou Acesso negado, e autorizar de novo exige apenas um clique. Se a unidade for desconectada durante um backup, a cópia de trabalho ainda será concluída e o MailVault informará quantas mensagens não chegaram à cópia externa; a próxima execução as copiará."
+  "6ba74d86c98f": "Exportar como imagem ou HTML no MailVault"
 }

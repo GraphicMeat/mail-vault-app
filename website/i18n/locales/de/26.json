@@ -15,7 +15,6 @@
   "3afa38a8833e": "Ist die Bereinigung dasselbe wie KI-Schreiben?",
   "6ecb1a5060dc": "Nein. KI-Schreiben hat eigene Anbietereinstellungen für Apple Intelligence, ein heruntergeladenes Modell oder einen kompatiblen Endpunkt wie Ollama. Ein Wechsel dieses Anbieters ändert den Klassifikator der Bereinigung nicht.",
   "eea32a5141b1": "Löschen entfernt die Serverkopie und erstellt vorher keine Tresorkopie. Verwende Archivieren in der Bereinigung, um eine lokale Kopie zu speichern und zu überprüfen, bevor du sie vom Server entfernst. Die Zeitkapsel kann gespeicherte Verläufe anzeigen, aber keine Nachricht wiederherstellen, die nie gespeichert wurde.",
-  "3e016ad79e11": "Verbinde Yahoo mit einem App-Passwort, archiviere deine Ordner und überprüfe deine lokale Kopie.",
   "c7beb003a3af": "Kontaktauswahl und Adressbuch — Vorschläge beim Schreiben, Kontaktverlauf, Zusammenführen sowie vCard-Import und -Export",
   "2820f998042a": "Deine E-Mails bleiben auf deinem Computer. MailVault überprüft Absender, speichert Zugangsdaten im macOS-Schlüsselbund, in der Windows-Anmeldeinformationsverwaltung oder im Linux Secret Service und läuft in einer Sandbox. Kein MailVault-Dienst zur E-Mail-Speicherung, keine Telemetrie. Optionale KI-Endpunkte erhalten nur den Text, den du freigibst; Gmail-E-Mails bleiben auf dem Gerät."
 }

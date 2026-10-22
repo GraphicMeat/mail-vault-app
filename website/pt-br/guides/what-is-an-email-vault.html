@@ -38,7 +38,7 @@
   "description": "Um cofre de e-mail pode ser um arquivo local seu, uma caixa postal hospedada criptografada ou um arquivo de conformidade. Como diferem e como montar o seu de graça.",
   "url": "https://mailvaultapp.com/pt-br/guides/what-is-an-email-vault.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -151,6 +151,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Pular para o conteúdo</a>
@@ -198,7 +199,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Tópicos de ajuda</summary><nav aria-label="Tópicos da central de ajuda"><a href="/pt-br/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ajuda do MailVault</a><a href="/pt-br/faq/getting-started.html">Primeiros passos</a><a href="/pt-br/faq/storage-and-vault.html">Armazenamento e seu cofre</a><a href="/pt-br/faq/providers.html">Provedores de e-mail</a><a href="/pt-br/faq/backup-and-restore.html">Backup e restauração</a><a href="/pt-br/faq/explorer-and-insights.html">Explorer e Estatísticas</a><a href="/pt-br/faq/scheduled-send.html">Envio agendado</a><a href="/pt-br/faq/premium.html">Gratuito e Premium</a><a href="/pt-br/faq/troubleshooting.html">Solução de problemas</a><a href="/pt-br/docs.html#guides" class="mv-help-divider">Guias práticos</a><a href="/pt-br/docs.html#articles">Artigos</a><a href="/pt-br/features.html">Referência de recursos</a><a href="/changelog.html">Notas da versão</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -208,7 +209,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">O que é um cofre de e-mail? Três significados, e como montar o seu</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">O que é um cofre de e-mail? Três significados, e como montar o seu</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Nesta página</summary><ul><li><a href="#help-section-1">Três coisas que as pessoas querem dizer com "cofre de e-mail"</a></li><li><a href="#help-section-2">Qual deles é o MailVault</a></li><li><a href="#help-section-3">Um cofre não é um cliente de e-mail que espelha o servidor</a></li><li><a href="#help-section-4">Como montar o seu próprio cofre de e-mail em 10 minutos</a></li><li><a href="#help-section-5">Custódia: o que acontece com seus e-mails se o provedor encerrar a conta</a></li><li><a href="#help-section-6">Perguntas frequentes</a></li><li><a href="#help-section-7">O que fazer a seguir</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 min de leitura</span>
           </div>
@@ -226,11 +227,11 @@
               <li><strong>Cofre de e-mail local:</strong> uma cópia dos seus e-mails no seu próprio disco, que fica mesmo quando o servidor os apaga. Quem a guarda é você.</li>
               <li><strong>Caixa postal segura hospedada:</strong> e-mails guardados criptografados nos servidores de um provedor. Privados para os outros, mas ainda uma conta que outra pessoa administra.</li>
               <li><strong>Arquivo de conformidade:</strong> uma cópia de cada mensagem mantida pela empresa, guardada por um número fixo de anos para auditorias e solicitações legais.</li>
-              <li>O MailVault é do primeiro tipo: um app de desktop gratuito para macOS, Windows e Linux que guarda seus e-mails como arquivos <code>.eml</code> simples no seu computador.</li>
+              <li>O MailVault é do primeiro tipo: um app de desktop gratuito para macOS, Windows e Linux que guarda seus e-mails como arquivos <code>.eml</code> simples no seu computador. Estas instruções sobre a estrutura dos arquivos se referem ao formato padrão Maildir. Configurações → Armazenamento também oferece armazenamento JMAP, que mantém os bytes originais das mensagens com registros JSON e elimina mensagens idênticas duplicadas.</li>
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Três coisas que as pessoas querem dizer com "cofre de e-mail"</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">Três coisas que as pessoas querem dizer com "cofre de e-mail"</h2>
 
           <p>
             Uma busca por <em>cofre de e-mail</em> ou <em>email vault</em> traz ferramentas muito diferentes, porque muitos produtos usam a palavra. Aqui está cada significado, em resumo, sem referência a nenhum produto específico.
@@ -290,7 +291,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Qual deles é o MailVault</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Qual deles é o MailVault</h2>
 
           <p>
             O MailVault é do primeiro tipo. É um app de e-mail de desktop para macOS, Windows e Linux, e mantém uma cópia dos seus e-mails num cofre no seu computador. Cada mensagem é um arquivo <code>.eml</code> simples em pastas no estilo Maildir, então o Apple Mail, o Thunderbird ou um editor de texto conseguem abri-lo sem o MailVault. Você faz login com o seu provedor de e-mail, nunca com o MailVault: Gmail e Microsoft 365 pelas próprias páginas de login, Outlook.com pelo Microsoft Graph e qualquer outro provedor por IMAP. Seu computador fala diretamente com o seu servidor de e-mail, e os servidores do MailVault nunca veem suas mensagens. O código-fonte está no GitHub.
@@ -301,11 +302,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/local-vault-720.webp 720w, /screenshots/pt-br/local-vault-1440.webp 1440w, /screenshots/pt-br/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/pt-br/local-vault-light-1440.webp" srcset="/screenshots/pt-br/local-vault-light-720.webp 720w, /screenshots/pt-br/local-vault-light-1440.webp 1440w, /screenshots/pt-br/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="O MailVault com a aba Cofre selecionada em Pastas. O cabeçalho da caixa de entrada mostra uma contagem No seu cofre, e uma legenda no pé da lista explica os ícones das linhas: Somente no servidor, No seu cofre, Única cópia, No disco de backup. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/pt-br/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/local-vault-720.webp 720w, /screenshots/pt-br/local-vault-1440.webp 1440w, /screenshots/pt-br/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/pt-br/local-vault-light-1440.webp" srcset="/screenshots/pt-br/local-vault-light-720.webp 720w, /screenshots/pt-br/local-vault-light-1440.webp 1440w, /screenshots/pt-br/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="O MailVault com a aba Cofre selecionada em Pastas. O cabeçalho da caixa de entrada mostra uma contagem No seu cofre, e uma legenda no pé da lista explica os ícones das linhas: Somente no servidor, No seu cofre, Única cópia, No disco de backup. · MailVault version 2.16.0 pt-br" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 pt-br"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 pt-br</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">A aba Cofre mostra só o que está salvo no seu computador. O cabeçalho conta quanto da pasta está no seu cofre, e o ícone de cada linha diz onde aquela mensagem está.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Um cofre não é um cliente de e-mail que espelha o servidor</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">Um cofre não é um cliente de e-mail que espelha o servidor</h2>
 
           <p>
             A maioria dos apps de e-mail são espelhos. Eles mostram o que está no servidor e mantêm um cache local por velocidade. Quando o servidor exclui uma mensagem, o espelho também a exclui na sincronização seguinte. Isso é certo para manter celular, notebook e webmail de acordo, e errado para guardar e-mails.
@@ -317,7 +318,7 @@
             Um detalhe importa. O MailVault também mantém um cache de trabalho e, por padrão (o modo de download Manter recentes), remove do seu computador as cópias em cache com mais de alguns meses, enquanto o servidor mantém a dele. E-mails em cache não são o cofre; e-mails arquivados e com backup nunca são removidos por nenhum modo de download. É por isso que as etapas abaixo terminam com um backup ou arquivamento explícito.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Como montar o seu próprio cofre de e-mail em 10 minutos</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">Como montar o seu próprio cofre de e-mail em 10 minutos</h2>
 
           <p>
             Os dez minutos são a configuração. O download de uma caixa postal grande continua em segundo plano depois disso, e quanto tempo leva depende do tamanho da caixa postal e da sua conexão. As seis etapas abaixo usam só o app gratuito.
@@ -333,7 +334,7 @@
           </ol>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/pt-br/manual-backup.jpg" width="960" height="660" aria-label="Fazer backup de todas as contas agora é clicado e uma barra de progresso corre. O cartão de backup muda de 5 cópias ainda não estão no seu cofre para Todas as cópias estão no seu cofre, último backup agora mesmo, 48 e-mails. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/pt-br/manual-backup.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/pt-br/manual-backup.jpg" width="960" height="660" aria-label="Fazer backup de todas as contas agora é clicado e uma barra de progresso corre. O cartão de backup muda de 5 cópias ainda não estão no seu cofre para Todas as cópias estão no seu cofre, último backup agora mesmo, 48 e-mails. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/pt-br/manual-backup.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">Backups manuais</strong><span class="mv-clip-text">Clique em Fazer backup de todas as contas agora e uma barra de progresso corre até o cartão dizer que todas as cópias estão no seu cofre.</span></figcaption></figure>
           </div>
 
@@ -342,11 +343,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/selection-dialog-archive-720.webp 720w, /screenshots/pt-br/selection-dialog-archive-1440.webp 1440w, /screenshots/pt-br/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/pt-br/selection-dialog-archive-light-1440.webp" srcset="/screenshots/pt-br/selection-dialog-archive-light-720.webp 720w, /screenshots/pt-br/selection-dialog-archive-light-1440.webp 1440w, /screenshots/pt-br/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="A caixa de diálogo de escolha de ação do MailVault para uma seleção de e-mails. Ela mostra quantos estão no servidor e quantos estão arquivados aqui, avisa que desarquivar exclui a cópia do cofre e lista Arquivar, Desarquivar, Excluir do servidor, Arquivar e excluir e Excluir em todo lugar, com Arquivar selecionado. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/pt-br/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/selection-dialog-archive-720.webp 720w, /screenshots/pt-br/selection-dialog-archive-1440.webp 1440w, /screenshots/pt-br/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/pt-br/selection-dialog-archive-light-1440.webp" srcset="/screenshots/pt-br/selection-dialog-archive-light-720.webp 720w, /screenshots/pt-br/selection-dialog-archive-light-1440.webp 1440w, /screenshots/pt-br/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="A caixa de diálogo de escolha de ação do MailVault para uma seleção de e-mails. Ela mostra quantos estão no servidor e quantos estão arquivados aqui, avisa que desarquivar exclui a cópia do cofre e lista Arquivar, Desarquivar, Excluir do servidor, Arquivar e excluir e Excluir em todo lugar, com Arquivar selecionado. · MailVault version 2.16.0 pt-br" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 pt-br"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 pt-br</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Arquivando e-mails selecionados à mão. Arquivar copia as mensagens para o cofre e não mexe no servidor. A caixa de diálogo conta o que já está arquivado antes de você escolher algo mais arriscado.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Custódia: o que acontece com seus e-mails se o provedor encerrar a conta</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Custódia: o que acontece com seus e-mails se o provedor encerrar a conta</h2>
 
           <p>
             Sua caixa de entrada fica numa infraestrutura que outra pessoa administra, sob termos que ela pode mudar. Contas são bloqueadas quando se perde um número de telefone ou um autenticador. Empregadores encerram caixas postais no dia em que alguém sai. Provedores excluem contas inativas: o Google, por exemplo, diz que pode excluir uma Conta do Google inativa há dois anos, junto com o conteúdo dela (<a href="https://support.google.com/accounts/answer/12418290" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">política de contas inativas do Google</a>). O nosso post sobre por que <a href="/pt-br/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">seu provedor de e-mail não é um backup</a> analisa esses casos com mais detalhes.
@@ -365,7 +366,7 @@
             Se você sabe que uma conta está prestes a ser encerrada, monte o cofre primeiro e confira-o na aba Cofre antes de perder o acesso. Se você está num Mac e ainda comparando ferramentas, <a href="/pt-br/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">arquivamento de e-mail para Mac</a> trata da escolha mais ampla.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Perguntas frequentes</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">Perguntas frequentes</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Um cofre de e-mail é a mesma coisa que um backup?</h3>
           <p>Quase, mas não exatamente. Um backup é uma cópia de onde você restaura quando algo quebra. Um cofre é uma cópia que você também usa: você a lê e pesquisa todo dia, e ela guarda as mensagens depois que o servidor as excluiu. O MailVault também pode gravar uma segunda cópia num disco externo, que é o backup do seu cofre.</p>
@@ -379,7 +380,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">O que acontece com meu cofre se eu parar de pagar o Premium?</h3>
           <p>Nada é excluído. Ler, pesquisar, arquivar e fazer backups manuais é grátis, e uma assinatura Premium vencida nunca remove e-mails do seu computador. Você perde os extras do Premium, como backups agendados e o Arquivar e excluir.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">O que fazer a seguir</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">O que fazer a seguir</h2>
 
           <p>
             O jeito mais rápido de avaliar um cofre local é montar um com uma única conta e olhar a aba Cofre. A <a href="/pt-br/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">página do recurso de cofre local</a> tem os detalhes sobre a estrutura dos arquivos e como mover o cofre para outro disco, e a página de <a href="/pt-br/pricing.html" class="text-primary-500 hover:text-primary-600 underline">preços</a> lista o que o Premium acrescenta. Depois que seus e-mails estiverem no cofre, o <a href="/pt-br/blog/email-insights-who-fills-your-inbox.html" class="text-primary-500 hover:text-primary-600 underline">Estatísticas do MailVault</a> pode mostrar quem o enche.
@@ -397,7 +398,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Veja no MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/pt-br/manual-backup.webp"><img src="/assets/help-media/pt-br/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Fazer backup de todas as contas e confirmar a conclusão</figcaption><video controls playsinline preload="none" poster="/assets/help-media/pt-br/manual-backup.jpg" aria-label="Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/pt-br/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/pt-br/manual-backup.vtt" srclang="pt-BR" label="Português (Brasil)" default></video></figure><details class="mv-help-contents"><summary>Transcrição do vídeo</summary><p>Inicie o backup de todas as contas nas configurações de backup. Acompanhe o progresso até a conclusão do backup.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Uma criação da Graphic Meat</p><h2 id="studio-title">Conheça as pessoas por trás do MailVault.</h2><p>Somos a Graphic Meat, um estúdio independente de produtos que cria software útil desde 2013. MailVault é uma das coisas que fazemos. Venha nos conhecer e explorar em que mais estamos trabalhando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conheça a Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visite a Graphic Meat, o estúdio por trás do MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mais da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transforme suas fotos em um livro pronto para impressão.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Um espaço de trabalho local para notas e código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mova seu e-mail para outro provedor.</span></a></div></div></aside><footer class="mv-footer">
@@ -421,5 +422,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura de tela do produto"><button type="button">Fechar captura de tela</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

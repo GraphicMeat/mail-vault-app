@@ -38,7 +38,7 @@
   "description": "Choose a Linux email archive by file format, offline access, provider support and restore options. Includes a practical MailVault trial checklist.",
   "url": "https://mailvaultapp.com/guides/linux-email-archive.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/linux-email-archive.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/linux-email-archive.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,24 +172,24 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Email backup guides · <time datetime="2026-10-15">October 15, 2026</time></p>
-          <h1>A Local Email Archive for Linux: What to Check</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>A Local Email Archive for Linux: What to Check</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">Choose by the job you need done</a></li><li><a href="#help-section-2">A ten-minute trial with your own mailbox</a></li><li><a href="#help-section-3">What MailVault provides</a></li><li><a href="#help-section-4">Questions to ask any alternative</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>If you want a local email archive on Linux, start with the outcome: can you still read a message after it is removed from the provider? A client’s synchronized Inbox does not prove that. You need independent retained copies, plus a way to restore them on another machine.</p>
-          <h2 data-i18n-block>Choose by the job you need done</h2>
+          <h2 data-i18n-block id="help-section-1">Choose by the job you need done</h2>
           <ul class="list-disc pl-6 space-y-2">
           <li data-i18n-block><strong>Everyday mail:</strong> prioritize reliable sign-in, sending, folders and a workflow you like. Add a separate retention plan if you intend to delete server mail.</li>
           <li data-i18n-block><strong>Personal archive:</strong> prioritize saved message bodies, attachments, offline search and an open export format.</li>
           <li data-i18n-block><strong>Terminal backup:</strong> prioritize repeatable jobs, authentication renewal, logs and tested restores. Check whether the tool mirrors server deletions or preserves earlier copies.</li>
           <li data-i18n-block><strong>Company retention:</strong> check access control, retention policy and audit requirements separately. A personal desktop archive is not evidence that organizational compliance requirements are met.</li></ul>
-          <h2 data-i18n-block>A ten-minute trial with your own mailbox</h2>
+          <h2 data-i18n-block id="help-section-2">A ten-minute trial with your own mailbox</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Install the Linux build from <a href="/get-started.html">the download page</a> and connect one account.</li>
           <li data-i18n-block>Archive a small date range that includes a plain message, an HTML message, a sent message and an attachment. Use <strong>Archive</strong>, which leaves server mail in place.</li>
           <li data-i18n-block>Switch to <strong>Vault</strong> and disconnect the network. Read the sample messages and open the attachments.</li>
           <li data-i18n-block>Export a backup to a second drive in <strong>Backup &amp; Restore</strong>. Confirm that you can open the ZIP and find the saved EML files.</li>
           <li data-i18n-block>Before committing your whole history, test the restore workflow and check that the provider exposes every folder you need.</li></ol>
-          <h2 data-i18n-block>What MailVault provides</h2>
-          <p data-i18n-block>MailVault combines a desktop email client with a local vault. Manual archiving is free. Archived messages use EML in a Maildir structure, and the app supports local search and backup/export. Premium adds scheduled workflows and the archive-before-delete operation. Pick it if you want to browse and retain mail in one app; use the trial above to check the actual account you care about.</p>
-          <h2 data-i18n-block>Questions to ask any alternative</h2>
+          <h2 data-i18n-block id="help-section-3">What MailVault provides</h2>
+          <p data-i18n-block>MailVault combines a desktop email client with a local vault. Manual archiving is free. Archived messages use EML in a Maildir structure, and the app supports local search and backup/export. Premium adds scheduled workflows and the archive-before-delete operation. Pick it if you want to browse and retain mail in one app; use the trial above to check the actual account you care about. These file-layout instructions use the default Maildir format. Settings → Storage also offers JMAP storage, which keeps original message bytes with JSON records and deduplicates identical messages.</p>
+          <h2 data-i18n-block id="help-section-4">Questions to ask any alternative</h2>
           <ul class="list-disc pl-6 space-y-2">
           <li data-i18n-block>Can I open the files outside the original app?</li>
           <li data-i18n-block>What happens to the local copy if a server message disappears?</li>
@@ -200,7 +201,7 @@
           <p data-i18n-block>More practical guides: <a href="/guides/backup-gmail-to-eml.html">How to Back Up Gmail to EML Files</a> · <a href="/guides/export-outlook-to-eml.html">How to Export Outlook Email to EML</a> · <a href="/guides/download-all-emails-mac.html">How to Download All Your Emails on Mac</a> · <a href="/guides/backup-email-linux.html">How to Back Up Email on Linux as EML</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -228,5 +229,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

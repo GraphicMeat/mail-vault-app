@@ -38,7 +38,7 @@
   "description": "macOS・Windows・Linux で IMAP メールをローカルにアーカイブする方法。.eml ファイルとしてずっと残し、サーバーの容量を空け、すべてにオフラインでアクセスできます。",
   "url": "https://mailvaultapp.com/ja/guides/archive-imap-emails-locally.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-03-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,7 +169,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac・Windows・Linux で IMAP メールをローカルにアーカイブする方法</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac・Windows・Linux で IMAP メールをローカルにアーカイブする方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5分で読めます</span>
           </div>
@@ -191,7 +192,7 @@
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
-            <li><strong>保存容量の上限</strong> &mdash; Gmail（DriveやPhotosと共有の15 GB）、Outlook（15 GB）、Yahoo（1 TB）の無料の枠は、いずれいっぱいになります。そうなると、新しいメールが届かなくなります。</li>
+            <li><strong>容量制限</strong> &mdash; Gmail（Drive・フォトと共有の15GB）、Outlook（15GB）、Yahoo（現在20GB。自分のアカウントを確認）の無料容量も、いずれいっぱいになります。 そうなると、新しいメールが届かなくなります。</li>
             <li><strong>アカウントの締め出し</strong> &mdash; パスワードを忘れる、二要素認証の問題、規約の違反などで、アカウントから恒久的に締め出されることがあります。</li>
             <li><strong>提供元の変更</strong> &mdash; サービスは終了し、統合され、価格が変わります。Googleは数十のプロダクトを終了してきました。Yahoo Mailは何度も持ち主が変わっています。</li>
             <li><strong>オフラインでは使えない</strong> &mdash; 手元にコピーがなければ、インターネットの接続なしに古いメールを検索することも読むこともできません。</li>
@@ -211,7 +212,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">.emlとMaildirが重要な理由</h3>
 
           <p>
-            <strong>.eml</strong>は、RFC 5322で定められた、メールのメッセージの標準的なファイル形式です。どのプラットフォームのどのメールクライアントでも.emlのファイルを開けます。プレーンテキストの形式で、メッセージの全体、つまりヘッダー、本文（プレーンテキストとHTML）、MIMEでエンコードされた添付ファイルを含みます。標準であるため、保管したメールが特定のソフトウェアに縛られることはありません。
+            <strong>.eml</strong>は、RFC 5322で定められた、メールのメッセージの標準的なファイル形式です。 Apple Mail や Thunderbird など、多くのメールクライアントで .eml ファイルを開けます。 プレーンテキストの形式で、メッセージの全体、つまりヘッダー、本文（プレーンテキストとHTML）、MIMEでエンコードされた添付ファイルを含みます。 標準であるため、保管したメールが特定のソフトウェアに縛られることはありません。
           </p>
 
           <p>
@@ -219,8 +220,7 @@
           </p>
 
           <p>
-            MailVaultはその両方を使います。メールは、アカウントとフォルダごとに整理されたMaildirのディレクトリの構造の中に、1通ずつの<code>.eml</code>のファイルとして保存されます。つまりアーカイブは、どんなツールでも読める標準的なメールのファイルが入っただけのフォルダです。
-          </p>
+            MailVaultはその両方を使います。メールは、アカウントとフォルダごとに整理されたMaildirのディレクトリの構造の中に、1通ずつの<code>.eml</code>のファイルとして保存されます。つまりアーカイブは、どんなツールでも読める標準的なメールのファイルが入っただけのフォルダです。 このファイル構成の説明は、標準のMaildir形式を対象としています。設定 → ストレージではJMAPストレージも選択でき、元のメッセージのバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。</p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVaultがメールをアーカイブする仕組み</h3>
 
@@ -229,7 +229,7 @@
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
-            <li><strong>アカウントを追加します</strong> &mdash; メールの認証情報を入力するか、OAuth2（Google、Microsoft、Yahoo）でサインインします。MailVaultはTLSでIMAPに接続します。</li>
+            <li><strong>アカウントを追加</strong> &mdash; メールの認証情報を入力するか、OAuth2（Google または Microsoft）でログインします。Yahoo にはアプリパスワードを使います。IMAP 接続にはプロバイダーが指定したセキュリティ設定を使い、個人用 Outlook.com には Microsoft Graph、互換アカウントには JMAP を利用できます。</li>
             <li><strong>メールボックスを見ます</strong> &mdash; MailVaultがメールのヘッダーを読み込み、受信トレイを表示します。ほかのメールクライアントと同じように、フォルダをたどり、検索し、メールを読めます。</li>
             <li><strong>メールをアーカイブします</strong> &mdash; 残しておきたいメールを選んでアーカイブします。MailVaultはメッセージの全体（ヘッダー、本文、添付ファイル）をダウンロードし、ディスクに<code>.eml</code>のファイルとして保存します。</li>
             <li><strong>背後でのキャッシュ</strong> &mdash; MailVaultは背後で自動的にメールをキャッシュすることもできます。閲覧するそばからメッセージの内容をダウンロードするので、手をかけずにアーカイブが少しずつ積み上がります。</li>
@@ -279,7 +279,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -303,5 +303,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

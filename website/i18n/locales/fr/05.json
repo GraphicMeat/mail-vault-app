@@ -99,7 +99,6 @@
   "6ed7c0ac7594": "La plupart des fournisseurs gardent le courrier supprimé dans une corbeille pendant une durée définie avant de l'effacer définitivement, et il compte toujours dans votre quota jusque-là. Si vous supprimez pour des raisons de stockage, videz la corbeille à la main une fois vos choix assumés, plutôt que d'attendre la purge automatique.",
   "c4dad737ac1d": "Faire l'étape de sauvegarde avec MailVault",
   "1ba02c8886f8": "Sauvegardez avant de supprimer en masse",
-  "178ba4515f44": "MailVault archive toute votre boîte en fichiers .eml individuels et consultables : supprimer des milliers d'anciens e-mails du serveur ne présente alors aucun risque.",
   "faf1c669524d": "Est-il sans risque de supprimer en masse d'anciens e-mails sans les lire un par un ?",
   "76c8003f72d8": "Oui, tant que vous avez archivé et vérifié une sauvegarde complète au préalable. Une fois une copie locale confirmée, vous pouvez supprimer par expéditeur, par catégorie ou par plage de dates, en masse, sans passer en revue des milliers de messages.",
   "f81d13d6fa85": "Comment savoir si ma sauvegarde d'e-mails est complète avant de supprimer quoi que ce soit ?",

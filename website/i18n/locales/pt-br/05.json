@@ -99,7 +99,6 @@
   "6ed7c0ac7594": "A maioria dos provedores mantém as mensagens apagadas em uma pasta Lixeira por um período antes de removê-las de vez, e elas continuam contando na sua cota até lá. Se você está apagando por causa de espaço, esvazie a Lixeira manualmente quando estiver seguro das suas escolhas, em vez de esperar a limpeza automática.",
   "c4dad737ac1d": "Fazendo o passo do backup com o MailVault",
   "1ba02c8886f8": "Faça o backup antes de apagar em massa",
-  "178ba4515f44": "O MailVault arquiva sua caixa postal completa como arquivos .eml individuais e pesquisáveis, para que apagar milhares de e-mails antigos do servidor não tenha risco nenhum.",
   "faf1c669524d": "É seguro apagar e-mails antigos em massa sem ler cada um antes?",
   "76c8003f72d8": "Sim, desde que você tenha arquivado e conferido um backup completo antes. Com uma cópia local confirmada de tudo, você pode apagar por remetente, por categoria ou por período em massa, sem revisar milhares de mensagens individualmente.",
   "f81d13d6fa85": "Como sei que meu backup de e-mail está completo antes de apagar qualquer coisa?",

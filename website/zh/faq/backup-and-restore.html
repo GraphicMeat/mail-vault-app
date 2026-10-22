@@ -60,7 +60,7 @@
       "name": "MailVault 如何备份邮件？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault 连接你的邮件服务器（通过 IMAP，个人 Outlook.com 账户则通过 Microsoft Graph），把每封邮件作为标准的 .eml 文件、以 Maildir 格式下载进你的保险库。每封邮件就是磁盘上的一个文件——人类可读、可迁移，任何邮件客户端都能打开。邮件进入保险库之后，你就可以删除服务器上的副本来腾出空间，本地这一份不受影响。"
+        "text": "MailVault 通过 IMAP、适用于个人 Outlook.com 账户的 Microsoft Graph 或 JMAP 连接邮件服务器。要保留邮件，请明确归档所需的邮件，或使用“全部邮件（从服务器下载）”执行手动备份。在默认的 Maildir 存储格式中，保存的邮件是电脑上 Maildir 文件夹中的标准 .eml 文件，可由支持 EML 的应用读取。可选的 JMAP 存储将原始字节与 JSON 记录一起保留，并对相同邮件去重。删除服务器副本前，请打开已归档的邮件和附件，确认包含预期的文件夹和日期范围，并验证独立备份位置中的第二份副本。邮件出现在收件箱或缓存中，并不代表它已归档。"
       }
     },
     {
@@ -68,7 +68,7 @@
       "name": "归档一封邮件时会发生什么？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "归档会从服务器下载完整邮件（如果尚未缓存），并以 .eml 文件保存到磁盘，文件名中带 A（已归档）标记。已归档的邮件会出现在「本地」视图模式中，并纳入备份。除非你明确删除，邮件仍会留在服务器上。"
+        "text": "归档会从服务器下载完整邮件（如果尚未缓存），在 Maildir 存储中将其保存为文件名带有 A（已归档）标记的 .eml 文件。JMAP 存储则将该标记写入邮件记录。 已归档的邮件会出现在「本地」视图模式中，并纳入备份。 除非你明确删除，邮件仍会留在服务器上。"
       }
     },
     {
@@ -147,6 +147,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -195,7 +196,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html" aria-current="page">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -208,30 +209,30 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">备份与恢复</h1>
+      <h1 class="text-4xl font-bold mb-2">备份与恢复</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">MailVault 如何备份邮件？</a></li><li><a href="#help-section-2">归档一封邮件时会发生什么？</a></li><li><a href="#help-section-3">归档并从服务器删除时会发生什么？</a></li><li><a href="#help-section-4">如果我从服务器删除邮件会怎样？</a></li><li><a href="#help-section-5">备份和恢复是怎么工作的？</a></li><li><a href="#help-section-6">可以指定自动备份在哪些时间运行吗？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么、自动备份在什么时候运行，以及如何导出并重新导入你的保险库。</p>
 
       <div class="space-y-4">
 
         <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 如何备份邮件？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault 如何备份邮件？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault 连接你的邮件服务器（通过 IMAP，个人 Outlook.com 账户则通过 Microsoft Graph），把每封邮件下载为一个标准的 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a>，以 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式存放在你的电脑上。每封邮件就是磁盘上的一个文件——人类可读、可迁移，任何邮件客户端都能打开。邮件进入保险库之后，你就可以删除服务器上的副本来腾出空间，本地这一份不受影响。
+              MailVault 通过 IMAP、适用于个人 Outlook.com 账户的 Microsoft Graph 或 JMAP 连接邮件服务器。要保留邮件，请明确归档所需的邮件，或使用“全部邮件（从服务器下载）”执行手动备份。在默认的 Maildir 存储格式中，保存的邮件是电脑上 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 文件夹中的标准 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a>，可由支持 EML 的应用读取。可选的 JMAP 存储将原始字节与 JSON 记录一起保留，并对相同邮件去重。删除服务器副本前，请打开已归档的邮件和附件，确认包含预期的文件夹和日期范围，并验证独立备份位置中的第二份副本。邮件出现在收件箱或缓存中，并不代表它已归档。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/archive-progress-720.webp 720w, /screenshots/zh/archive-progress-1440.webp 1440w, /screenshots/zh/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/archive-progress-light-1440.webp" srcset="/screenshots/zh/archive-progress-light-720.webp 720w, /screenshots/zh/archive-progress-light-1440.webp 1440w, /screenshots/zh/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 归档进度条，显示批量邮件备份正在进行 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/archive-progress-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/archive-progress-720.webp 720w, /screenshots/zh/archive-progress-1440.webp 1440w, /screenshots/zh/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/archive-progress-light-1440.webp" srcset="/screenshots/zh/archive-progress-light-720.webp 720w, /screenshots/zh/archive-progress-light-1440.webp 1440w, /screenshots/zh/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 归档进度条，显示批量邮件备份正在进行 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             </figure>
         </article>
 
         <article id="archive-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">归档一封邮件时会发生什么？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">归档一封邮件时会发生什么？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              归档会从你的服务器下载完整邮件（如果尚未缓存），并把它存成磁盘上的一个 .eml 文件，文件名里带 <strong>A</strong>（已归档）标记。如果这封邮件本地已经缓存过，MailVault 只是给文件改个名，加上归档标记。归档过的邮件会出现在<strong>保险库</strong>视图中，并被纳入备份。在你自己动手删除之前，服务器上那份不会被碰。
+              归档会从你的服务器下载完整邮件（如果尚未缓存），并把它存成磁盘上的一个 .eml 文件，文件名里带 <strong>A</strong>（已归档）标记。 如果邮件已缓存在本地，MailVault 会将现有本地邮件标记为已归档。 归档过的邮件会出现在<strong>保险库</strong>视图中，并被纳入备份。 在你自己动手删除之前，服务器上那份不会被碰。
             </p>
         </article>
 
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">归档并从服务器删除时会发生什么？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">归档并从服务器删除时会发生什么？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <strong>归档并删除</strong>是一项 Premium 功能，按顺序执行三步：把邮件以 .eml 文件复制进你的保险库，检查副本确实存在，然后才从服务器删除。任何没有通过检查的邮件都会留在服务器上 &mdash; 复制失败永远不会让你失去原件。完成后，这一行会显示<strong>你唯一的副本</strong>：保险库是这封邮件仅存的地方，这也是在提醒你接好备份盘。</p>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
@@ -243,27 +244,27 @@
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如果我从服务器删除邮件会怎样？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">如果我从服务器删除邮件会怎样？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               你先归档的任何邮件都会留在你的保险库里，不受服务器之后任何操作的影响 &mdash; 这正是这个产品存在的意义。你<em>没有</em>归档的邮件会随服务器副本一起消失，所以在你删除之前，MailVault 会在每封邮件自己那一行显示它的状态：在服务器上、在你的保险库中，或者两处都有。稳妥的做法是使用<strong>归档并删除</strong>（Premium），它会把每封邮件复制进你的保险库并在那里核验，然后才从服务器移除。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w, /screenshots/zh/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w, /screenshots/zh/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 收件箱，逐封显示仅在服务器、已归档到本地、仅在本地的状态图标 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/state-icons-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w, /screenshots/zh/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w, /screenshots/zh/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 收件箱，逐封显示仅在服务器、已归档到本地、仅在本地的状态图标 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             </figure>
         </article>
 
         <article id="backup-and-restore" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">备份和恢复是怎么工作的？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">备份和恢复是怎么工作的？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               MailVault 把你的邮件导出成一个 ZIP 压缩包，里面是全部 .eml 文件，外加一份 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code>，它按邮箱地址（而不是内部 ID）把邮件对应到账户，所以备份在不同的安装之间是可移植的。你可以选择导出<strong>全部邮件</strong>或<strong>仅已归档的</strong>。导入是幂等的——如果某封邮件本地已经有了，就不会重复一份。如果备份里含有你还没设置过的账户的邮件，MailVault 会自动创建这个账户（你只需在设置里重新输入密码）。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/settings-backup-720.webp 720w, /screenshots/zh/settings-backup-1440.webp 1440w, /screenshots/zh/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/settings-backup-light-1440.webp" srcset="/screenshots/zh/settings-backup-light-720.webp 720w, /screenshots/zh/settings-backup-light-1440.webp 1440w, /screenshots/zh/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 备份与恢复设置，包含 ZIP 导出、导入，以及面向 Thunderbird 或 Apple Mail 的 MBOX 导出 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/settings-backup-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/settings-backup-720.webp 720w, /screenshots/zh/settings-backup-1440.webp 1440w, /screenshots/zh/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/settings-backup-light-1440.webp" srcset="/screenshots/zh/settings-backup-light-720.webp 720w, /screenshots/zh/settings-backup-light-1440.webp 1440w, /screenshots/zh/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 备份与恢复设置，包含 ZIP 导出、导入，以及面向 Thunderbird 或 Apple Mail 的 MBOX 导出 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             </figure>
         </article>
 
         <article id="backup-at-set-hours" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">可以指定自动备份在哪些时间运行吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">可以指定自动备份在哪些时间运行吗？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               可以，需要 <a href="/zh/pricing.html" class="text-primary-500 hover:underline">Premium</a>。<strong>设置 &rarr; 备份与恢复 &rarr; 备份计划</strong>提供四种频率：每小时、每天一次、每周一次，以及<strong>在指定时间</strong>。选择“在指定时间”后会出现 24 小时的时间网格；点选你需要的时刻，例如 07、12 和 22，MailVault 就会在每个整点执行备份，其余时间不会运行。所有频率都只在应用空闲时运行，因此备份不会在你使用时突然开始。
             </p>
@@ -271,7 +272,7 @@
               指定时间适合放在外置硬盘上的保险库或备份副本，尤其是这块盘已经被别的程序按自己的计划占用时，最常见的就是 Time Machine：请选择这块盘空闲的时间。如果所选时刻到来时 MailVault 正忙，这一次会被跳过，不会事后补做，下一次执行是下一个所选时刻。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/premium-backup-hours-720.webp 720w, /screenshots/zh/premium-backup-hours-1440.webp 1440w, /screenshots/zh/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/premium-backup-hours-light-1440.webp" srcset="/screenshots/zh/premium-backup-hours-light-720.webp 720w, /screenshots/zh/premium-backup-hours-light-1440.webp 1440w, /screenshots/zh/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 备份计划设置为“在指定时间”，并在 24 小时网格中选择了 07、12 和 22 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/premium-backup-hours-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/premium-backup-hours-720.webp 720w, /screenshots/zh/premium-backup-hours-1440.webp 1440w, /screenshots/zh/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/premium-backup-hours-light-1440.webp" srcset="/screenshots/zh/premium-backup-hours-light-720.webp 720w, /screenshots/zh/premium-backup-hours-light-1440.webp 1440w, /screenshots/zh/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 备份计划设置为“在指定时间”，并在 24 小时网格中选择了 07、12 和 22 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             </figure>
         </article>
 
@@ -294,7 +295,7 @@
         </div>
       </div>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -317,5 +318,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

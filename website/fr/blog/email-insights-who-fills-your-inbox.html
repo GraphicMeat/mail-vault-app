@@ -115,6 +115,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/email-insights-who-fills-your-inbox.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Aller au contenu</a>
   <header class="mv-header">
@@ -142,13 +143,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Rubriques d’aide</summary><nav aria-label="Rubriques du centre d’aide"><a href="/fr/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aide MailVault</a><a href="/fr/faq/getting-started.html">Premiers pas</a><a href="/fr/faq/storage-and-vault.html">Stockage et votre coffre</a><a href="/fr/faq/providers.html">Fournisseurs d'e-mail</a><a href="/fr/faq/backup-and-restore.html">Sauvegarde et restauration</a><a href="/fr/faq/explorer-and-insights.html">Explorer et Statistiques</a><a href="/fr/faq/scheduled-send.html">Envoi programmé</a><a href="/fr/faq/premium.html">Gratuit et Premium</a><a href="/fr/faq/troubleshooting.html">Dépannage</a><a href="/fr/docs.html#guides" class="mv-help-divider">Guides pratiques</a><a href="/fr/docs.html#articles">Articles</a><a href="/fr/features.html">Référence des fonctionnalités</a><a href="/changelog.html">Notes de version</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/fr/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← Retour au blog</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-08" class="text-sm text-primary-500 font-medium">8 octobre 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Les statistiques e-mail dans MailVault : qui remplit votre boîte, et quand</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Les statistiques e-mail dans MailVault : qui remplit votre boîte, et quand</h1><!-- help-intro:start --><form class="mv-help-search" action="/fr/docs.html" method="get" role="search"><label for="help-q">Rechercher dans la documentation, la FAQ et les articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Rechercher parmi tous les guides et réponses" required><button type="submit">Recherche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Sur cette page</summary><ul><li><a href="#help-section-1">Ce que montre Statistiques</a></li><li><a href="#help-section-2">Trouver qui vous envoie le plus de courrier</a></li><li><a href="#help-section-3">Quels expéditeurs prennent le plus de place ?</a></li><li><a href="#help-section-4">Voir quand le courrier s'accumule</a></li><li><a href="#help-section-5">Agir sur ce que vous avez trouvé</a></li><li><a href="#help-section-6">Calculé sur votre ordinateur</a></li><li><a href="#help-section-7">Questions fréquentes</a></li><li><a href="#help-section-8">Et ensuite</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7 min de lecture</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -165,11 +166,11 @@
           </div>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="insights"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/fr/insights.jpg" width="960" height="660" aria-label="Statistiques est ouvert et son onglet « Activité » montre une carte thermique du courrier reçu et envoyé, un carré par jour. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/fr/insights.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="insights"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/fr/insights.jpg" width="960" height="660" aria-label="Statistiques est ouvert et son onglet « Activité » montre une carte thermique du courrier reçu et envoyé, un carré par jour. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/fr/insights.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">Statistiques</strong><span class="mv-clip-text">Ouvrez Statistiques et une carte thermique montre le courrier reçu et envoyé chaque jour, construite à partir des en-têtes déjà sur votre ordinateur.</span></figcaption></figure>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Ce que montre Statistiques</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">Ce que montre Statistiques</h2>
           <p>Statistiques s'ouvre en plein écran depuis la barre latérale et compte trois onglets. Ils partagent les mêmes commandes en haut : quel compte, quelle période (30 derniers jours, 90 derniers jours, 12 derniers mois ou des dates de votre choix), quel sens (courrier reçu, courrier envoyé, ou les deux), et une case <strong>Masquer les expéditeurs probablement automatisés</strong>. Cette dernière écarte les expéditeurs dont le courrier semble envoyé par une machine : une adresse no-reply, ou les en-têtes List-Id, List-Unsubscribe ou Precedence bulk qu'ajoutent les listes de diffusion.</p>
 
           <div class="overflow-x-auto">
@@ -203,7 +204,7 @@
 
           <p>Chaque vue est cliquable. Cliquez sur une bulle, un point sur une ligne ou un jour, et les messages correspondants s'ouvrent dans une liste, où vous pouvez les lire sans quitter Statistiques.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Trouver qui vous envoie le plus de courrier</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Trouver qui vous envoie le plus de courrier</h2>
           <ol class="list-decimal pl-6 space-y-2">
             <li>Ouvrez Statistiques et choisissez le compte dans <strong>Comptes</strong>. Statistiques examine un compte à la fois.</li>
             <li>Réglez <strong>Période</strong> sur <em>12 derniers mois</em> et <strong>Sens</strong> sur <em>Reçus</em>.</li>
@@ -213,11 +214,11 @@
           <p>Faites-le ensuite deux fois : une fois avec Masquer les expéditeurs probablement automatisés désactivé, une fois activé. La première liste contient généralement lettres d'information, boutiques et notifications. La seconde, les personnes avec qui vous correspondez vraiment, souvent bien moins nombreuses.</p>
 
           <figure class="my-6">
-            <img src="/screenshots/fr/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="La Carte des expéditeurs de Statistiques dans MailVault. Des bulles portant des initiales de deux lettres entourent un cercle marqué Vous. La légende indique : L&#39;aire du cercle représente le nombre de messages. La distance indique le temps écoulé depuis le dernier contact, évalué au 24 septembre 2026. Sous la carte, Trier les expéditeurs est réglé sur Dernière interaction. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/fr/insights-map-1440.webp"><img src="/screenshots/fr/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="La Carte des expéditeurs de Statistiques dans MailVault. Des bulles portant des initiales de deux lettres entourent un cercle marqué Vous. La légende indique : L&#39;aire du cercle représente le nombre de messages. La distance indique le temps écoulé depuis le dernier contact, évalué au 24 septembre 2026. Sous la carte, Trier les expéditeurs est réglé sur Dernière interaction. · MailVault version 2.16.0 fr" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 fr"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 fr</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">La Carte des expéditeurs sur un compte de test. Les grosses bulles envoient plus de courrier, les bulles proches ont écrit plus récemment. Le tri sous la carte démarre sur Dernière interaction.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Quels expéditeurs prennent le plus de place ?</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">Quels expéditeurs prennent le plus de place ?</h2>
           <p>Statistiques a ici une limite qu'il faut connaître : il compte des messages, pas des mégaoctets. Un expéditeur de 900 courtes notifications remplit la carte, alors qu'un client qui a envoyé six gros PDF se voit à peine. Le nombre de messages n'est qu'une approximation de l'espace occupé : utile pour repérer l'encombrement, pas pour trouver le courrier lourd.</p>
           <p>Pour le courrier lourd, regardez les pièces jointes. Le texte pèse peu ; ce sont les fichiers qui alourdissent un message. Deux façons de les trouver dans MailVault :</p>
           <ul class="list-disc pl-6 space-y-2">
@@ -226,16 +227,16 @@
           </ul>
           <p>Combinez les deux : Statistiques vous dit qui envoie beaucoup, et la recherche vous dit lesquels envoient gros.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Voir quand le courrier s'accumule</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">Voir quand le courrier s'accumule</h2>
           <p>L'onglet <strong>Activité</strong> donne l'image la plus rapide de votre année d'e-mails. Chaque carré est un jour ; plus il est foncé, plus il y a eu de courrier. Les tendances apparaissent vite : une vague de courrier chaque lundi, un mois d'août calme, une semaine de printemps où un projet a submergé votre boîte. Cliquez sur un carré pour voir exactement ce qui est arrivé ce jour-là.</p>
           <p>L'onglet <strong>Chronologie</strong> raconte la même histoire expéditeur par expéditeur. Une lettre d'information apparaît comme une rangée régulière de points, un client très actif comme un amas serré, et une relation devenue à sens unique comme une ligne de cercles sans aucun losange. Changez <strong>Détail de la chronologie</strong> entre semaines, jours et messages pour zoomer.</p>
 
           <figure class="my-6">
-            <img src="/screenshots/fr/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="L&#39;onglet Chronologie de Statistiques dans MailVault sur un compte de test, avec 82 événements e-mail, 82 reçus et 5 envoyés. Les notes sous le total indiquent Basé sur les e-mails disponibles sur cet appareil, Certains e-mails manquent sur cet appareil. Les décomptes peuvent être incomplets, et 51 événements utilisent une date de remplacement. En dessous, une ligne par expéditeur du 25 septembre 2025 au 24 septembre 2026, avec des points pour le courrier reçu. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/fr/insights-timeline-1440.webp"><img src="/screenshots/fr/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="L&#39;onglet Chronologie de Statistiques dans MailVault sur un compte de test, avec 82 événements e-mail, 82 reçus et 5 envoyés. Les notes sous le total indiquent Basé sur les e-mails disponibles sur cet appareil, Certains e-mails manquent sur cet appareil. Les décomptes peuvent être incomplets, et 51 événements utilisent une date de remplacement. En dessous, une ligne par expéditeur du 25 septembre 2025 au 24 septembre 2026, avec des points pour le courrier reçu. · MailVault version 2.16.0 fr" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 fr"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 fr</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">La Chronologie, une ligne par expéditeur. Notez les lignes de couverture sous le total : ce compte de test n'avait qu'une partie de son courrier sur l'appareil, et Statistiques le dit au lieu de deviner.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Agir sur ce que vous avez trouvé</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Agir sur ce que vous avez trouvé</h2>
           <p>Statistiques sert à observer. Le nettoyage se fait dans la vue normale du courrier, et Explorer le rend rapide :</p>
           <ol class="list-decimal pl-6 space-y-2">
             <li>Revenez au dossier et faites passer la liste des messages de <strong>Liste</strong> à <strong>Explorer</strong>.</li>
@@ -245,19 +246,19 @@
           </ol>
 
           <figure class="my-6">
-            <img src="/screenshots/fr/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="Explorer de MailVault avec Parcourir par réglé sur Expéditeur. Une ligne de synthèse indique 20 groupes, 82 e-mails, 13 non lus. Chaque ligne d&#39;expéditeur a une case à cocher, un nom, une adresse et des compteurs, par exemple Theo Lomas, 6 e-mails, 6 dans le coffre, 1 non lu. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/fr/explorer-sender-detail-1002.webp"><img src="/screenshots/fr/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="Explorer de MailVault avec Parcourir par réglé sur Expéditeur. Une ligne de synthèse indique 20 groupes, 82 e-mails, 13 non lus. Chaque ligne d&#39;expéditeur a une case à cocher, un nom, une adresse et des compteurs, par exemple Theo Lomas, 6 e-mails, 6 dans le coffre, 1 non lu. · MailVault version 2.16.0 fr" class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 fr"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 fr</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Explorer par expéditeur. La case d'une ligne sélectionne tout le courrier chargé de cet expéditeur dans le dossier, prêt à être archivé ou supprimé.</figcaption>
           </figure>
 
           <p>Pour les listes de diffusion, il existe un chemin plus court. Quand le courrier d'un expéditeur contient un lien de désabonnement, les détails de l'expéditeur dans Statistiques affichent un bouton <strong>Se désabonner</strong>. MailVault demande toujours confirmation d'abord. Si la liste prend en charge le désabonnement en un clic et que le message a passé DKIM, MailVault envoie la demande lui-même ; sinon, il ouvre la page de désabonnement de la liste dans votre navigateur, ou un e-mail de désabonnement tout prêt.</p>
           <p>Si les mêmes types de courrier reviennent chaque mois, le <a href="/fr/features/email-cleanup.html" class="text-primary-500 hover:text-primary-600 underline">Nettoyage des e-mails</a> (Premium) peut trier lettres d'information, promotions et autres catégories, et conserver, archiver ou supprimer chacune, avec des règles par ancienneté pour chaque compte et dossier.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Calculé sur votre ordinateur</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">Calculé sur votre ordinateur</h2>
           <p>Statistiques lit les en-têtes de messages que MailVault détient déjà sur votre disque : expéditeur, destinataires et dates, à partir des en-têtes en cache des dossiers que vous avez ouverts et des messages de votre coffre. Il ne lit ni le corps des messages ni les pièces jointes pour dessiner les graphiques, et rien n'est envoyé à MailVault. Aucun compte MailVault n'intervient, et les graphiques fonctionnent hors réseau.</p>
           <p>Deux actions sortent bel et bien de votre ordinateur, et seulement si vous les choisissez. Ouvrir un message depuis Statistiques le charge normalement, ce qui peut signifier le télécharger depuis votre propre serveur de messagerie. Se désabonner contacte la liste de diffusion, comme décrit plus haut.</p>
           <p>Comme Statistiques ne connaît que ce qui se trouve sur cet appareil, il vous indique à quel point l'image est complète. Une note sous les commandes indique « Basé sur les e-mails disponibles sur cet appareil », et <strong>Détails de la couverture</strong> liste chaque dossier avec le nombre d'en-têtes stockés en local à côté du nombre de messages que le serveur est censé contenir. S'il manque du courrier, il précise que les décomptes peuvent être incomplets. Si un message n'avait pas de date fiable, il indique combien d'événements utilisent une date de remplacement. Ne tenez un mois calme pour un fait que lorsque la couverture est complète. Pour la compléter, enregistrez d'abord davantage de la boîte sur votre ordinateur ; notre guide sur <a href="/fr/guides/what-is-an-email-vault.html" class="text-primary-500 hover:text-primary-600 underline">ce qu'est un coffre e-mail et comment en constituer un</a> l'explique.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Questions fréquentes</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">Questions fréquentes</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Statistiques de MailVault est-il gratuit ?</h3>
           <p>Oui. Statistiques et Explorer font partie de l'app gratuite, sans compte ni connexion. Ils sont arrivés avec MailVault 2.13.0.</p>
@@ -274,7 +275,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Statistiques peut-il me dire quels expéditeurs occupent le plus de stockage ?</h3>
           <p>Pas directement. Statistiques classe les expéditeurs par nombre de messages, pas par taille. Pour trouver le courrier volumineux, utilisez la vue Pièces jointes ou une recherche comme from:name has:attachment.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Et ensuite</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">Et ensuite</h2>
           <p>Ouvrez Statistiques sur votre compte le plus chargé, triez la Carte des expéditeurs par nombre de messages, et regardez les dix premiers avec les expéditeurs automatisés affichés puis masqués. Notez les lettres d'information que vous ne lisez plus et les expéditeurs de notifications qui pourraient aller dans un dossier ou une règle. La <a href="/fr/features/insights.html" class="text-primary-500 hover:text-primary-600 underline">page de la fonctionnalité Statistiques</a> et la <a href="/fr/faq/explorer-and-insights.html" class="text-primary-500 hover:text-primary-600 underline">FAQ Explorer et Statistiques</a> donnent plus de détails. Si votre boîte approche de sa limite, le guide <a href="/fr/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">que faire quand le stockage Outlook est plein</a> prend le relais.</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -285,11 +286,12 @@
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Une création de Graphic Meat</p><h2 id="studio-title">Découvrez les personnes derrière MailVault.</h2><p>Nous sommes Graphic Meat, un studio de produits indépendant qui crée des logiciels utiles depuis 2013.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Découvrir Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/fr/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Lisez vos e-mails. Gardez vos e-mails.</p></div><nav aria-label="Découvrir MailVault"><a href="/fr/use-cases.html">Cas d’usage</a><a href="/fr/blog.html">Blog</a><a href="/changelog.html">Nouveautés</a><a href="/fr/faq.html">FAQ</a><a href="/fr/docs.html">Aide</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code sur GitHub ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Créé par <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Confidentialité</a><a href="/terms.html">Conditions</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Capture d’écran du produit"><button type="button">Fermer la capture d’écran</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

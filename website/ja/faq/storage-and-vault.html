@@ -60,7 +60,7 @@
       "name": "メールはどこに保存されますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "既定では、保管庫はコンピューター上の Maildir 形式に整理された標準の .eml ファイルのフォルダーです。メール 1 件につき 1 ファイルで、データベースは不要です。macOS では MailVault がサンドボックス内で動作するため、フォルダーは ~/Library/Application Support ではなく ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ です。Linux では .deb パッケージの場合は ~/.local/share/com.mailvault.app/、Snap の場合は ~/snap/mailvault/current/.local/share/com.mailvault.app/ です。~/Library は Finder で非表示になっており、Spotlight のインデックス対象でもないため、ドライブで com.mailvault.app を検索しても見つかりません。Finder で Shift + Command + G を押して ~/Library と入力するか、Option を押しながら Finder の「移動」メニューを開くか、ホームフォルダーで Command + J を押して「ライブラリフォルダを表示」を選んでください。MailVault でも、設定、バックアップと復元、バックアップ設定、メールの保存場所で使用中のフォルダーを確認できます。データがコンピューターの外に出たり、クラウドサービスにアップロードされたりすることはありません。.eml は広く対応されているメール形式なので、Apple Mail、Thunderbird、Outlook など EML 対応のアプリでメールを開けます。MailVault だけに縛られることはありません。"
+        "text": "標準では、保管庫はコンピュータ上に標準の .eml ファイルを Maildir 形式で整理したフォルダーです。1通につき1ファイルで、メール保存用のデータベースは不要です。macOS の MailVault はサンドボックス化されているため、保存先は ~/Library/Application Support ではなく ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ です。Linux の .deb パッケージでは ~/.local/share/com.mailvault.app/、Snap では ~/snap/mailvault/current/.local/share/com.mailvault.app/ です。~/Library は Finder で隠され、Spotlight の索引対象でもないため、ドライブ全体で com.mailvault.app を検索しても見つかりません。Finder で Shift + Command + G を押して ~/Library と入力するか、Option キーを押しながら「移動」メニューを開いてください。ホームフォルダーで Command + J を押し、「ライブラリフォルダを表示」を選ぶ方法もあります。実際の保存先は、設定 → バックアップと復元 → バックアップ設定 → メールの保存先でも確認できます。MailVault は保管庫を自社サーバーへアップロードしません。メール同期は引き続きプロバイダーが扱い、クラウド同期フォルダーや任意のリモート AI を使う場合は、自分で選んだサービスが関わります。.eml は広く対応されている形式なので、Apple Mail、Thunderbird、Outlook など EML 対応アプリで開けます。MailVault に縛られることはありません。"
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": ".emlファイルとMaildirとは何ですか？ なぜ重要なのですか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": ".eml（RFC 5322）はメールメッセージのインターネット標準形式です。Maildir 形式では、各メールを単独で完結する 1 つのテキストファイルとして保存し、どのメールクライアントでも開けます。Maildir は、メールサーバーで何十年も使われてきた実績あるメール保存用のディレクトリ構造です。メール 1 件につき 1 ファイルなので、破損すると全体に影響する単一のデータベースはありません。.eml + Maildir により、メールを将来も使い続け、持ち運べるようになり、特定のアプリケーションに縛られません。"
+        "text": ".eml（RFC 5322）はメールメッセージのインターネット標準形式です。 Maildir ストレージでは、各メールが1つの自己完結したテキストファイルに保存され、EML 対応のメールアプリで開けます。 Maildir は、メールサーバーで何十年も使われてきた実績あるメール保存用のディレクトリ構造です。 メール 1 件につき 1 ファイルなので、破損すると全体に影響する単一のデータベースはありません。 .eml + Maildir により、メールを将来も使い続け、持ち運べるようになり、特定のアプリケーションに縛られません。"
       }
     },
     {
@@ -108,7 +108,7 @@
       "name": "外部バックアップ先（2つ目のコピー）とは何ですか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault は常にアプリ自身のストレージにメールの作業用コピーを保持します。これが閲覧、検索、開封に使うコピーです。外部バックアップ場所を設定すると、外付け SSD、NAS 共有、同期フォルダーなど、選んだドライブに独立した二つ目のコピーができます。バックアップ実行時に作業用コピーと同時に同じ .eml と Maildir のレイアウトで書き込まれるため、EML 対応アプリでメッセージファイルを読めます。アプリは日常的にはこれを読みません。これはコールドストレージであり、サーバーから削除したメールや MailVault 内で削除したメールも外部コピーには残ります。「設定」の「バックアップ」にある「2 つ目のコピー — 外部コールドストレージ」で設定します。macOS では、再起動やアプリ更新後もアクセスを維持できるよう、MailVault がフォルダーのセキュリティスコープ付きブックマークを保存します。状態バッジには「準備完了」「再認証が必要」「利用不可」「アクセス拒否」が表示され、再認証は一回のクリックでできます。バックアップ中にドライブが外れても作業用コピーは成功し、外部コピーへ届かなかったメッセージ数が報告されます。次の実行でそれらをコピーします。"
+        "text": "MailVault は、設定したメール保存先に保存済みメールの作業用コピーを保持します。閲覧、検索、開封に使うのはこのコピーです。外部バックアップ場所を設定すると、外付け SSD、NAS 共有、同期フォルダーなど、選んだドライブに独立した二つ目のコピーができます。バックアップ実行時に作業用コピーと同時に同じ .eml と Maildir のレイアウトで書き込まれるため、EML 対応アプリでメッセージファイルを読めます。アプリは日常的にはこれを読みません。これはコールドストレージであり、サーバーから削除したメールや MailVault 内で削除したメールも外部コピーには残ります。「設定」の「バックアップ」にある「2 つ目のコピー — 外部コールドストレージ」で設定します。macOS では、再起動やアプリ更新後もアクセスを維持できるよう、MailVault がフォルダーのセキュリティスコープ付きブックマークを保存します。状態バッジには「準備完了」「再認証が必要」「利用不可」「アクセス拒否」が表示され、再認証は一回のクリックでできます。バックアップ中にドライブが外れても作業用コピーは成功し、外部コピーへ届かなかったメッセージ数が報告されます。次の実行でそれらをコピーします。"
       }
     },
     {
@@ -163,6 +163,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -211,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html" aria-current="page">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="パンくずリスト" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -224,18 +225,18 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">保存場所と保管庫</h1>
+      <h1 class="text-4xl font-bold mb-2">保存場所と保管庫</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">メールはどこに保存されますか？</a></li><li><a href="#help-section-2">自分のメールのうち、どれだけがこのコンピュータに残りますか？</a></li><li><a href="#help-section-3">.emlファイルとMaildirとは何ですか？ なぜ重要なのですか？</a></li><li><a href="#help-section-4">オフラインでメールを見られますか？</a></li><li><a href="#help-section-5">添付ファイルはどのように扱われますか？</a></li><li><a href="#help-section-6">既定のアプリケーションフォルダ以外の場所にメールを保存できますか？</a></li><li><a href="#help-section-7">外部バックアップ先（2つ目のコピー）とは何ですか？</a></li><li><a href="#help-section-8">保管庫の保存形式は変更できますか？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault がメールを保存する場所、Maildir と JMAP の保存形式の違い、保管庫の移動や変換の方法。</p>
 
       <div class="space-y-4">
 
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">メールはどこに保存されますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">メールはどこに保存されますか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">既定では、保管庫はコンピューター上の <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 形式に整理された標準の <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml ファイル</a>のフォルダーです &mdash; メール 1 件につき 1 ファイルで、データベースは不要です。データがコンピューターの外に出たり、クラウドサービスにアップロードされたりすることはありません。.eml は広く対応されているメール形式なので、Apple Mail、Thunderbird、Outlook など EML 対応のアプリでメールを開けます。MailVault だけに縛られることはありません。</p>
+              <p class="mb-4">標準では、保管庫はコンピュータ上の標準 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml ファイル</a>を <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 形式で整理したフォルダーです &mdash; 1通につき1ファイルで、メール保存用のデータベースは不要です。MailVault は保管庫を自社サーバーへアップロードしません。メール同期は引き続きプロバイダーが扱い、クラウド同期フォルダーや任意のリモート AI を使う場合は、自分で選んだサービスが関わります。.eml は広く対応されている形式なので、Apple Mail、Thunderbird、Outlook など EML 対応アプリで開けます。MailVault に縛られることはありません。</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">正確なフォルダ</p>
-              <p class="mb-2">MailVault はサンドボックス化されたアプリなので、macOS では保管庫はアプリ自身のコンテナ内にあります &mdash; 多くの人が最初に見る <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> の直下ではありません:</p>
+              <p class="mb-2">サンドボックス化された macOS ビルドでは、標準の保管庫はアプリ自身のコンテナ内にあります &mdash; 多くの人が最初に見る <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> の直下ではありません：</p>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-4"><code>~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/</code></pre>
               <p class="mb-4">Linux では、.deb パッケージの場合は <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/.local/share/com.mailvault.app/</code>、Snap の場合は <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/snap/mailvault/current/.local/share/com.mailvault.app/</code> です。</p>
               <p class="mb-4">ドライブ内を <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">com.mailvault.app</code> で検索してもたいていは何も見つかりませんが、それは想定どおりです: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library</code> は Finder では非表示で、Spotlight も索引を作りません。パスを指定して開いてください。</p>
@@ -264,7 +265,7 @@
         </article>
 
         <article id="download-modes" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">自分のメールのうち、どれだけがこのコンピュータに残りますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">自分のメールのうち、どれだけがこのコンピュータに残りますか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>設定 &rarr; ストレージ &rarr; ダウンロードモード</strong>で決まります。<strong>設定 &rarr; アカウント &rarr; 詳細設定</strong>で、アカウントごとに個別のモードを設定することもできます。
@@ -282,34 +283,34 @@
         </article>
 
         <article id="eml-and-maildir" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">.emlファイルとMaildirとは何ですか？ なぜ重要なのですか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">.emlファイルとMaildirとは何ですか？ なぜ重要なのですか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a>は、メールのメッセージのためのインターネット標準の形式です。メールは — ヘッダーも、本文も、添付ファイルも — 1つの、それ自体で完結したテキストファイルに収まります。独自形式のデータベースと違い、.emlファイルはどのメールクライアント（Apple Mail、Thunderbird、Outlook）でも開けますし、どのテキストエディタでも読めます。</p>
+              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a>は、メールのメッセージのためのインターネット標準の形式です。 標準の Maildir 形式では、各メールのヘッダー、本文、添付ファイルが1つの自己完結したテキストファイルに保存されます。独自のデータベースとは異なり、.eml ファイルは EML に対応するメールアプリ（Apple Mail や Thunderbird など）で開くことができ、テキストエディタでも読めます。</p>
               <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>は、メールサーバーが何十年も使ってきた、実績のあるメール保存のディレクトリ構造です。メール1通が1ファイルなので、壊れうる単一のデータベースがありません — 1つのファイルが傷んでも、アーカイブの残りは影響を受けません。.emlとMaildirを合わせることで、メールは将来にわたって読め、持ち運べ、どの単一のアプリケーションにも縛られません。</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">ファイル名のフラグ:</p>
-              <p>各メッセージのファイル名は <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">&lt;uid&gt;:2,&lt;flags&gt;.eml</code> で、Maildir の標準的な命名です — <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">2,</code> の後ろの文字が状態を表します: <strong>A</strong> = アーカイブ済み、<strong>S</strong> = 既読、<strong>R</strong> = 返信済み、<strong>F</strong> = フラグ付き。つまり <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">102:2,AS.eml</code> はメッセージ 102 で、アーカイブ済みかつ既読です。</p>
+              <p>macOS と Linux では、各 Maildir メッセージの名前は <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">&lt;uid&gt;:2,&lt;flags&gt;.eml</code> です。標準の Maildir 命名方法で、<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">2,</code> の後の文字が状態を示します。<strong>A</strong> = アーカイブ済み、<strong>S</strong> = 既読、<strong>R</strong> = 返信済み、<strong>F</strong> = フラグ付きです。つまり <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">102:2,AS.eml</code> は、アーカイブ済みで既読のメッセージ102です。Windows のファイル名にはコロンを使えないため、MailVault は <code>:2,</code> の代わりに <code>;2,</code> を使用します。</p>
             </div>
         </article>
 
         <article id="offline-access" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">オフラインでメールを見られますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">オフラインでメールを見られますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               はい。同期が済んだメールはローカルに保存されるので、インターネット接続がなくてもすべて閲覧、検索、参照できます。インターネットが必要なのは、新しいメールを同期するときと、メールを送信するときだけです。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーから削除したあともディスクに残っているメールを表示している、MailVaultのローカル表示 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーから削除したあともディスクに残っているメールを表示している、MailVaultのローカル表示 · MailVault version 2.16.0 ja" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             </figure>
         </article>
 
         <article id="attachments" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">添付ファイルはどのように扱われますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">添付ファイルはどのように扱われますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               添付ファイルは、それぞれの.emlファイルの中にMIMEのパートとして埋め込まれています — 別々のファイルとして保存されるのではありません。メールを開くと、MailVaultのRustのバックエンドがMIMEの構造を解析し、その場で添付ファイルを取り出します。メールの表示から直接、どの添付ファイルでも<strong>Open</strong>、<strong>Save As</strong>、<strong>Show in Folder</strong>ができます。取り出した添付ファイルは、すぐに開き直せるよう一時的にキャッシュされます。
             </p>
         </article>
 
         <article id="change-mail-storage-folder" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">既定のアプリケーションフォルダ以外の場所にメールを保存できますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">既定のアプリケーションフォルダ以外の場所にメールを保存できますか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 はい。既定では、MailVaultは起動ディスク上のアプリ専用のApplication Supportフォルダの中にメールストアを置きます。このストアは、外付けSSDや2台目の内蔵ディスクなど、どのドライブのどのフォルダにも移動できます。アーカイブが数十ギガバイトに育つと、これが効いてきます。
@@ -333,13 +334,13 @@
         </article>
 
         <article id="external-backup-location" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">外部バックアップ先（2つ目のコピー）とは何ですか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">外部バックアップ先（2つ目のコピー）とは何ですか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
-                MailVaultは常に、アプリ自身の保存領域にメールの<strong>作業用のコピー</strong>を保ちます — 読み、検索し、開いているのはこれです。外部バックアップ先は、自分が管理するドライブ上に<strong>2つ目の独立したコピー</strong>を加えます。外付けSSD、NASの共有、同期されたフォルダなどです。
+                MailVault は常に、設定したメール保存先にメールの<strong>作業用コピー</strong>を保持します。閲覧、検索、開封に使うのはこのコピーです。外部バックアップ先は、自分が管理するドライブ上に<strong>2つ目の独立したコピー</strong>を加えます。外付けSSD、NASの共有、同期されたフォルダなどです。
               </p>
               <ul class="list-disc pl-5 space-y-2">
-                <li><strong>作業用のコピーと並べて書き込まれます。</strong>バックアップの実行中、それぞれのメッセージは同じ<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code>とMaildirの構成で両方の場所に保存されます — そのため2つ目のコピーは、MailVaultがなくてもApple MailやThunderbirdなど、ほかのメールクライアントで開けます。</li>
+                <li><strong>作業用コピーと同時に書き込みます。</strong> バックアップ実行中は、各メールが両方の保存先に同じ <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir 構成で保存されます。EML 対応アプリなら MailVault なしで個々のメールファイルを開けます。</li>
                 <li><strong>ミラーではなく、コールドストレージです。</strong>アプリが日常的にそこを読むことはありません。サーバー上で削除したメールも、MailVaultの中で消したメールも、外部のコピーには残ります。</li>
                 <li><strong>既読と未読のフラグは双方向で保たれます。</strong>実行の前に両方のコピーが突き合わされるので、読んだメッセージは読んだままです。</li>
                 <li><strong>アプリから独立しています。</strong>そのコンピューターが壊れても、MailVaultをアンインストールしても、外部のフォルダはそれ自体で完結した、内容を語れるメールのアーカイブのままです。</li>
@@ -354,7 +355,7 @@
         </article>
 
         <article id="jmap-storage" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">保管庫の保存形式は変更できますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">保管庫の保存形式は変更できますか？</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>はい。設定 &gt; ストレージで、Maildir と JMAP の保存形式を相互に変換できます。既定の Maildir では、メッセージ 1 件につき 1 つの .eml ファイルを保存します。JMAP は元のメッセージのバイト列と標準の JMAP JSON レコードを保持し、フォルダーをまたぐ同一のメッセージを 1 度だけ保存します。古いファイルを別に残すか、各メッセージの検証後に削除するかを選べます。変換はバックグラウンドで実行され、再起動後も再開します。この保存形式の選択は、アカウントが IMAP、Microsoft Graph、JMAP のどれを使うかとは関係ありません。</p></div>
         </article>
 
@@ -377,7 +378,7 @@
         </div>
       </div>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -400,5 +401,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

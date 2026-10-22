@@ -38,7 +38,7 @@
   "description": "邮件保险库可以指由你拥有的本地归档、托管的加密邮箱或合规归档。它们有何不同，以及如何免费建立你自己的保险库。",
   "url": "https://mailvaultapp.com/zh/guides/what-is-an-email-vault.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -151,6 +151,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -198,7 +199,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -208,7 +209,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">什么是邮件保险库？三种含义，以及如何建立你自己的保险库</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">什么是邮件保险库？三种含义，以及如何建立你自己的保险库</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">人们说「邮件保险库」时指的三种东西</a></li><li><a href="#help-section-2">MailVault 属于哪一种</a></li><li><a href="#help-section-3">保险库不是一个镜像服务器的邮件客户端</a></li><li><a href="#help-section-4">如何在 10 分钟内建立你自己的邮件保险库</a></li><li><a href="#help-section-5">保管：如果服务商关闭了账户，你的邮件会怎样</a></li><li><a href="#help-section-6">常见问题</a></li><li><a href="#help-section-7">下一步做什么</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 分钟阅读</span>
           </div>
@@ -226,11 +227,11 @@
               <li><strong>本地邮件保险库：</strong>你自己磁盘上的一份邮件副本，服务器删除邮件时它依然保留。由你持有。</li>
               <li><strong>托管的安全邮箱：</strong>以加密方式存储在服务商服务器上的邮件。对他人保密，但仍然是别人运营的账户。</li>
               <li><strong>合规归档：</strong>由公司运行、包含每一封邮件的副本，为审计和法律要求保存一定年限。</li>
-              <li>MailVault 属于第一种：一款适用于 macOS、Windows 和 Linux 的免费桌面应用，把你的邮件以普通 <code>.eml</code> 文件保存在你的电脑上。</li>
+              <li>MailVault 属于第一种：一款适用于 macOS、Windows 和 Linux 的免费桌面应用，把你的邮件以普通 <code>.eml</code> 文件保存在你的电脑上。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</li>
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">人们说「邮件保险库」时指的三种东西</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">人们说「邮件保险库」时指的三种东西</h2>
 
           <p>
             搜索<em>邮件保险库</em>或 <em>mail vault</em> 会得到截然不同的工具，因为很多产品都用这个词。下面简要说明每种含义，不涉及任何具体产品。
@@ -290,7 +291,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailVault 属于哪一种</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">MailVault 属于哪一种</h2>
 
           <p>
             MailVault 属于第一种。它是一款适用于 macOS、Windows 和 Linux 的桌面邮件应用，会在你电脑上的保险库里保留一份邮件副本。每封邮件都是 Maildir 风格文件夹里的一个普通 <code>.eml</code> 文件，所以不借助 MailVault，Apple Mail、Thunderbird 或文本编辑器也能打开它。你登录的是你的邮箱服务商，而不是 MailVault：Gmail 和 Microsoft 365 通过它们自己的登录页面，Outlook.com 通过 Microsoft Graph，其他服务商则通过 IMAP。你的电脑直接与邮件服务器通信，MailVault 的服务器从不接触你的邮件。源代码公开在 GitHub 上。
@@ -301,11 +302,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/local-vault-720.webp 720w, /screenshots/zh/local-vault-1440.webp 1440w, /screenshots/zh/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/local-vault-light-1440.webp" srcset="/screenshots/zh/local-vault-light-720.webp 720w, /screenshots/zh/local-vault-light-1440.webp 1440w, /screenshots/zh/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="在「文件夹」下选中了「保险库」标签页的 MailVault。收件箱标题显示「在你的保险库中」的数量，列表底部的图例解释了各行图标：「仅在服务器」、「在你的保险库中」、「唯一副本」、「在备份盘上」。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/local-vault-720.webp 720w, /screenshots/zh/local-vault-1440.webp 1440w, /screenshots/zh/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/local-vault-light-1440.webp" srcset="/screenshots/zh/local-vault-light-720.webp 720w, /screenshots/zh/local-vault-light-1440.webp 1440w, /screenshots/zh/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="在「文件夹」下选中了「保险库」标签页的 MailVault。收件箱标题显示「在你的保险库中」的数量，列表底部的图例解释了各行图标：「仅在服务器」、「在你的保险库中」、「唯一副本」、「在备份盘上」。 · MailVault version 2.16.0 zh" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">「保险库」标签页只显示保存在你电脑上的内容。标题统计该文件夹有多少在你的保险库中，每一行的图标说明那封邮件在哪里。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">保险库不是一个镜像服务器的邮件客户端</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">保险库不是一个镜像服务器的邮件客户端</h2>
 
           <p>
             大多数邮件应用都是镜像。它们显示服务器上的内容，并为了速度保留本地缓存。当服务器删除一封邮件时，镜像也会在下次同步时删除它。这对于让手机、笔记本和网页邮箱保持一致是对的，对于保存邮件却是错的。
@@ -317,7 +318,7 @@
             有一个细节很重要。MailVault 还保留一个工作缓存，默认情况下（「保留近期」下载模式），它会从你的电脑上移除超过几个月的缓存副本，而服务器保留它的副本。缓存的邮件不是保险库；已归档和已备份的邮件永远不会被任何下载模式移除。这就是为什么下面的步骤最后要做一次明确的备份或归档。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">如何在 10 分钟内建立你自己的邮件保险库</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">如何在 10 分钟内建立你自己的邮件保险库</h2>
 
           <p>
             10 分钟是设置所需的时间。在那之后，大邮箱的下载会在后台继续进行，需要多长时间取决于邮箱的大小和你的网络连接。下面的六个步骤只用到免费应用。
@@ -333,7 +334,7 @@
           </ol>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/zh/manual-backup.jpg" width="960" height="660" aria-label="点击“立即备份所有账户”，进度条开始运行。备份卡片从“有 5 份副本尚未存入你的保险库”变为“每份副本都已存入你的保险库”，上次备份刚刚完成，共 48 封邮件。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/manual-backup.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/zh/manual-backup.jpg" width="960" height="660" aria-label="点击“立即备份所有账户”，进度条开始运行。备份卡片从“有 5 份副本尚未存入你的保险库”变为“每份副本都已存入你的保险库”，上次备份刚刚完成，共 48 封邮件。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/manual-backup.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">手动备份</strong><span class="mv-clip-text">点击“立即备份所有账户”，进度条会一直走到卡片显示每份副本都已存入你的保险库。</span></figcaption></figure>
           </div>
 
@@ -342,11 +343,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/selection-dialog-archive-720.webp 720w, /screenshots/zh/selection-dialog-archive-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/selection-dialog-archive-light-1440.webp" srcset="/screenshots/zh/selection-dialog-archive-light-720.webp 720w, /screenshots/zh/selection-dialog-archive-light-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 中针对选中邮件的「选择操作」对话框。它显示服务器上有多少封、此处已归档多少封，警告取消归档会删除保险库副本，并列出「归档」、「取消归档」、「从服务器删除」、「归档并删除」和「全部删除」，当前选中的是「归档」。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/selection-dialog-archive-720.webp 720w, /screenshots/zh/selection-dialog-archive-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/selection-dialog-archive-light-1440.webp" srcset="/screenshots/zh/selection-dialog-archive-light-720.webp 720w, /screenshots/zh/selection-dialog-archive-light-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 中针对选中邮件的「选择操作」对话框。它显示服务器上有多少封、此处已归档多少封，警告取消归档会删除保险库副本，并列出「归档」、「取消归档」、「从服务器删除」、「归档并删除」和「全部删除」，当前选中的是「归档」。 · MailVault version 2.16.0 zh" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">手动归档选中的邮件。「归档」把邮件复制进保险库，服务器保持不变。在你选择风险更大的操作之前，对话框会统计哪些已经归档。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">保管：如果服务商关闭了账户，你的邮件会怎样</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">保管：如果服务商关闭了账户，你的邮件会怎样</h2>
 
           <p>
             你的收件箱建立在别人运营的基础设施上，适用的条款由他们随时可以修改。丢了手机号或身份验证器，账户就会被锁。员工离职当天，雇主就会关闭邮箱。服务商会删除不活跃的账户：例如 Google 表示，它可以删除连续两年不活跃的 Google 账户及其内容（<a href="https://support.google.com/accounts/answer/12418290" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Google 的不活跃账户政策</a>）。我们关于<a href="/zh/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">你的邮箱服务商为什么不是备份</a>的文章更详细地讨论了这些情况。
@@ -365,7 +366,7 @@
             如果你知道某个账户即将关闭，请先建立保险库，并在失去访问权之前在「保险库」标签页上检查它。如果你用的是 Mac，还在比较各种工具，<a href="/zh/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac 上的邮件归档</a>介绍了更广泛的选择。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">常见问题</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">邮件保险库和备份是一回事吗？</h3>
           <p>很接近，但不完全一样。备份是出问题时用来恢复的副本。保险库是一份你同时也在使用的副本：你每天阅读和搜索它，而且在服务器删除邮件之后它依然保留这些邮件。MailVault 还可以把第二份副本写入外置硬盘，那就是你保险库的备份。</p>
@@ -379,7 +380,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">如果我停止支付 Premium，我的保险库会怎样？</h3>
           <p>什么都不会被删除。阅读、搜索、归档和手动备份都是免费的，Premium 订阅过期也绝不会从你的电脑上移除邮件。你失去的是 Premium 的附加功能，比如定时备份和「归档并删除」。</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">下一步做什么</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">下一步做什么</h2>
 
           <p>
             判断本地保险库最快的方法，是用一个账户建一个，然后看看「保险库」标签页。<a href="/zh/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">本地保险库功能页</a>详细介绍了文件布局以及如何把保险库移到另一块硬盘，<a href="/zh/pricing.html" class="text-primary-500 hover:text-primary-600 underline">价格</a>页面列出了 Premium 增加的功能。邮件进入保险库之后，<a href="/zh/blog/email-insights-who-fills-your-inbox.html" class="text-primary-500 hover:text-primary-600 underline">MailVault 邮件分析</a>可以告诉你是谁把它塞满的。
@@ -397,7 +398,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -421,5 +422,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

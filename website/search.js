@@ -32,7 +32,7 @@
   const rows = [...document.querySelectorAll(field.dataset.row)];
   const groups = [...document.querySelectorAll(field.dataset.group)];
 
-  field.parentElement.hidden = false;
+  (field.closest('[data-mv-search-container]') || field.parentElement).hidden = false;
 
   // The hub pages sit at a locale root (/faq.html, /de/docs.html), so the
   // index of the language being read is always next to the page itself.

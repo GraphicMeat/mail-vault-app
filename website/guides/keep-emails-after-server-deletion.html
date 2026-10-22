@@ -38,7 +38,7 @@
     "description": "Delete emails from your server without losing them. MailVault archives emails locally as .eml files before deletion — searchable, offline, forever yours.",
     "url": "https://mailvaultapp.com/guides/keep-emails-after-server-deletion.html",
     "datePublished": "2026-03-15",
-    "dateModified": "2026-10-15",
+    "dateModified": "2026-10-22",
     "author": {
       "@type": "Organization",
       "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,14 +169,14 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How to Keep Emails After Deleting Them From the Server</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How to Keep Emails After Deleting Them From the Server</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5 min read</span>
           </div>
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <h2>Delete emails from the server and keep a local copy: the safe order</h2>
+          <h2 id="help-section-1">Delete emails from the server and keep a local copy: the safe order</h2>
           <p>A synchronized folder is a view of the server. Before you delete mail there, create a retained archive that you can open independently. MailVault’s <strong>Vault</strong> source shows saved copies; <strong>Server</strong> shows provider mail. Seeing a message under All does not by itself prove you have a local copy.</p>
           <ol class="list-decimal pl-6 space-y-2">
           <li>Archive a small batch with <strong>Archive</strong> first. Wait until the operation finishes.</li>
@@ -197,7 +198,7 @@
           </p>
 
           <p>
-            But there are legitimate reasons to delete emails from the server. Your storage is full and you do not want to pay for more. You are leaving an email provider and want to clean up before you go. Your company policy requires purging old messages from the server. Or you simply want a clean inbox without the anxiety of lost data.
+            But there are legitimate reasons to delete emails from the server. Your storage is full and you do not want to pay for more. You are leaving an email provider and want to clean up before you go. Your company permits keeping a local copy while reducing server storage. Retention or deletion rules can also apply to that local copy. Or you simply want a clean inbox without the anxiety of lost data.
           </p>
 
           <p>
@@ -231,7 +232,7 @@
             <li><strong>Step 1: Sync</strong> &mdash; Connect your IMAP account to MailVault. The app loads your email headers and shows your mailbox contents, just like any email client.</li>
             <li><strong>Step 2: Archive locally</strong> &mdash; Select the emails you want to preserve and archive them. MailVault downloads each email in full &mdash; headers, body text, HTML formatting, and every attachment &mdash; and saves it as a standard <code>.eml</code> file on your disk.</li>
             <li><strong>Step 3: Verify</strong> &mdash; Open some archived emails in MailVault to confirm they are complete. Check attachments. Search for specific messages. Make sure everything you need is in the local archive.</li>
-            <li><strong>Step 4: Delete from server</strong> &mdash; Now that you have a verified local copy, delete the emails from the server. MailVault uses RFC 4315 <code>UID EXPUNGE</code> to precisely remove only the targeted messages &mdash; no risk of accidentally deleting the wrong emails.</li>
+            <li><strong>Step 4: Delete from server</strong> &mdash; Now that you have a verified local copy, delete the emails from the server. MailVault uses the selected account’s deletion path; IMAP handling depends on server capabilities, while personal Outlook.com uses Microsoft Graph. Review the selection and keep a separate backup before confirming.</li>
             <li><strong>Step 5: Access anytime</strong> &mdash; Your archived emails remain on your disk, fully searchable and readable. No internet connection needed. No server dependency.</li>
           </ul>
 
@@ -245,11 +246,11 @@
             <li><strong>All headers</strong> &mdash; From, To, CC, BCC, Date, Subject, Message-ID, In-Reply-To, References, and every other header. Thread relationships are preserved.</li>
             <li><strong>Body content</strong> &mdash; Both plain text and HTML versions. Formatting, links, and inline images are all retained.</li>
             <li><strong>Attachments</strong> &mdash; Every attached file, regardless of type or size. PDFs, images, documents, spreadsheets &mdash; all embedded in the .eml file as MIME parts.</li>
-            <li><strong>Metadata</strong> &mdash; Read/unread status, flags, and folder location are encoded in the Maildir filename.</li>
+            <li><strong>Metadata</strong> &mdash; Read/unread status and flags are recorded in Maildir filenames; the folder path records folder location. JMAP storage uses JSON records instead.</li>
           </ul>
 
           <p>
-            The <code>.eml</code> format is an open standard (RFC 5322). Any email client on any operating system can open these files. Your archive is not locked into MailVault or any other software.
+            The <code>.eml</code> format is an open standard (RFC 5322). Mail apps that support EML can open these files. Your archive is not locked into MailVault or any other software.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Common Scenarios</h3>
@@ -259,7 +260,7 @@
           </p>
 
           <p>
-            <strong>Company email cleanup:</strong> Your IT department wants to reduce server storage costs. Archive employees' old emails locally, then purge them from the server. The emails are still available for compliance or reference.
+            <strong>Company email cleanup:</strong> Your IT department wants to reduce server storage costs. Keep only the local copies your organization authorizes, and apply its retention, deletion and access rules to them too. MailVault is a personal desktop archive, not a compliance or legal-hold system.
           </p>
 
           <p>
@@ -302,7 +303,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -330,5 +331,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

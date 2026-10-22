@@ -40,7 +40,7 @@
   "headline": "フィッシングは怪しいリンクだけではない：カレンダーの招待、QR コード、添付されたメール",
   "description": "カレンダーの招待、QR コード、添付されたメッセージに潜むフィッシングを見分け、サインインや支払いの承認の前に実践的な確認を行う方法。",
   "datePublished": "2026-10-01",
-  "dateModified": "2026-10-01",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -61,6 +61,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/phishing-beyond-suspicious-links.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/phishing-beyond-suspicious-links.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
   <header class="mv-header">
@@ -88,38 +89,38 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← ブログに戻る</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-01" class="text-sm text-primary-500 font-medium">2026年10月1日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">フィッシングは怪しいリンクだけではない：カレンダーの招待、QR コード、添付されたメール</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">フィッシングは怪しいリンクだけではない：カレンダーの招待、QR コード、添付されたメール</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">カレンダーの招待も、誰かからのメッセージであることに変わりはない</a></li><li><a href="#help-section-2">QR コードが変えるのは経路で、信頼の判断ではない</a></li><li><a href="#help-section-3">添付されたメールには、もう一段の説得が仕込まれていることがある</a></li><li><a href="#help-section-4">メッセージがあなたに求めている行動を確かめる</a></li><li><a href="#help-section-5">すでに反応してしまった場合</a></li><li><a href="#help-section-6">アーカイブにできること、できないこと</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>3分で読めます</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
 <p>あからさまな誤字や奇妙なリンクがなくても、もう一度見直すべきメッセージはあります。カレンダーの招待として届くこともあれば、行き先を QR コードの裏に隠すことも、最初のメールに添付された別のメールを開くよう求めることもあります。</p>
 <p>7月23日に公開された Microsoft の <a href="https://www.microsoft.com/en-us/security/blog/2026/07/23/email-threat-landscape-q2-2026-trends-and-insights/" class="text-primary-500 hover:text-primary-600 underline">2026年第2四半期のメール脅威レポート</a>は、入れ子になった EML の添付ファイル、カレンダーの招待、Microsoft の認証へのリダイレクトを組み合わせたキャンペーンを取り上げています。実践的な教訓は、個々の手順が見慣れたものに見えても、やり取り全体を通して要求を評価することです。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">カレンダーの招待も、誰かからのメッセージであることに変わりはない</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">カレンダーの招待も、誰かからのメッセージであることに変わりはない</h2>
 <p>カレンダーの予定は、実際に自分で設定した会議の横に表示されるため、メールより公式なものに感じられることがあります。予期しない招待は、未確認の内容として扱ってください。請求書、セキュリティの通知、契約更新に似たタイトルだからといって、誰が送ったかが確かになるわけではありません。</p>
 <p>たとえば、契約が今日更新されると主張する招待に、「解約」のための電話番号が書かれていることがあります。招待に書かれた番号に電話する代わりに、いつものアプリか保存したブックマークからサービスを開き、そこでアカウントを確認してください。</p>
 <p>必要に応じて、招待の報告や迷惑メールの機能を使ってください。明らかに一方的な要求が本物かどうかを尋ねるためだけに返信するのは避けましょう。予定していた会議に関するものなら、既存の連絡手段で主催者に確認してください。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">QR コードが変えるのは経路で、信頼の判断ではない</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-2">QR コードが変えるのは経路で、信頼の判断ではない</h2>
 <p>コードを読み取ると、やり取りがコンピュータからスマートフォンへ移ることがよくあります。この切り替えで、元の差出人と要求を見失いやすくなります。「安全な文書」と書かれたコードも、行き先への経路にすぎません。</p>
 <p>仕事のメッセージがサインインのために QR コードを読み取るよう求めてきたら、代わりに仕事のサービスを直接開いてください。予期していたコードでも、アクセスする前にスキャナーが表示する行き先を確認しましょう。見慣れたブランドのページだというだけで、認証情報を入力しないでください。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">添付されたメールには、もう一段の説得が仕込まれていることがある</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">添付されたメールには、もう一段の説得が仕込まれていることがある</h2>
 <p><code>.eml</code> ファイルは標準的なメールのファイルで、メッセージをそのまま転送したり、アーカイブを残したりするのに役立ちます。ただし、拡張子があるからといって中身が信頼できるわけではありません。添付されたメッセージにも、それを届けたメッセージと同じように、リンク、ファイル、主張が含まれていることがあります。</p>
 <p>添付ファイルの中のでっち上げのやり取りは、同僚がすでに支払いや文書を承認したかのように見せかけることがあります。その主張は、わかっているアドレスや電話番号を使って、実際の同僚に確かめてください。次の添付に文書があると約束されるたびに、添付の連鎖をたどり続けるのは避けましょう。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">メッセージがあなたに求めている行動を確かめる</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-4">メッセージがあなたに求めている行動を確かめる</h2>
 <p>サインイン、コードの共有、ファイルを開く、送金の前に、次の 4 つの質問で立ち止まってください。</p>
 <ul><li><strong>これは予期していたものか？</strong> 要求を、実際の作業ややり取りと結びつけてください。</li><li><strong>独立して確かめられるか？</strong> 既存の連絡先を使うか、サービスを直接開いてください。</li><li><strong>行き先は作業に合っているか？</strong> 見慣れたページのデザインは、持ち主の証明にはなりません。</li><li><strong>なぜ急がせるのか？</strong> 確認をためらわせる期限には、よく注意してください。</li></ul>
 <p>支払い先の情報の変更は、以前から確立している経路で確認してください。同じ怪しいメッセージに書かれた番号に電話しても、独立した確認にはなりません。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">すでに反応してしまった場合</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-5">すでに反応してしまった場合</h2>
 <p>仕事の認証情報を入力した、予期しないサインインを承認した、怪しいファイルを開いた、といった場合は、すぐに組織のセキュリティチームに連絡してください。何が起きたかを説明し、調査のために元のメッセージを残しておきます。個人のアカウントなら、プロバイダーの公式の復旧ページとセキュリティページに直接アクセスして、アクセス状況を確認してください。</p>
 <p>送金してしまった場合は、すぐに銀行や決済事業者の公式の窓口に連絡してください。メッセージと取引の詳細は残しておきます。早く報告するほど、対応する人が手を打てる機会が増えます。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">アーカイブにできること、できないこと</h2>
-<p>保存された原本があれば、後から差出人、タイミング、指示をたどり直す助けになります。MailVault はアーカイブしたメールを標準的な <code>.eml</code> ファイルとして保存し、メッセージを見直せる状態に保ちます。これは記録を残すうえでの利点であり、メッセージが安全であることを保証するものではありません。</p>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-6">アーカイブにできること、できないこと</h2>
+<p>保存された原本があれば、後から差出人、タイミング、指示をたどり直す助けになります。MailVault はアーカイブしたメールを標準的な <code>.eml</code> ファイルとして保存し、メッセージを見直せる状態に保ちます。これは記録を残すうえでの利点であり、メッセージが安全であることを保証するものではありません。 このファイル構成の説明は、標準のMaildir形式を対象としています。設定 → ストレージではJMAPストレージも選択でき、元のメッセージのバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。</p>
 <p>アーカイブしたメールにも、稼働中の受信トレイと同じ確認を行ってください。ローカルのコピーは、正規の領収書と同じくらい忠実に悪意のあるリンクも残します。記録を残し、要求を確かめ、何かおかしいと感じたらプロバイダーや組織の報告手順を使いましょう。</p>
 
 <p class="text-sm text-slate-500 dark:text-slate-400">2026年10月1日執筆。プロバイダーの機能や提供状況は変わる可能性があります。設定を変える前に、リンク先の公式の案内を確認してください。</p>
@@ -131,11 +132,12 @@
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちはGraphic Meatです。2013年から役立つソフトウェアを作っている独立系プロダクトスタジオです。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meatを見る ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>メールを読む。メールを残す。</p></div><nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

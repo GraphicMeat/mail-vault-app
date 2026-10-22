@@ -38,7 +38,7 @@
   "description": "一份评估任何 IMAP 邮件备份工具的诚实清单 &mdash; 文件格式、文件夹处理、OAuth 支持，以及这个工具消失之后你的归档会怎么样。",
   "url": "https://mailvaultapp.com/zh/guides/imap-backup-tool-checklist.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">IMAP 备份工具：该看哪些地方</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">IMAP 备份工具：该看哪些地方</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 分钟阅读</span>
           </div>
@@ -229,7 +230,7 @@
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
-            <li><strong>一个个独立的 .eml 文件（RFC 5322）</strong> &mdash; 最好的结果。每封邮件都是自己的标准文件，任何邮件客户端、甚至文本编辑器都能打开。什么都没被锁住。</li>
+            <li><strong>一个个独立的 .eml 文件（RFC 5322）</strong> &mdash; 最好的结果。 每封邮件都是独立的标准文件，可由支持 EML 的邮件应用或文本编辑器打开。 什么都没被锁住。</li>
             <li><strong>Mbox</strong> &mdash; 每个文件夹一个大文件，把所有邮件串在一起。它是标准格式，支持面也广，但不导进某个客户端就没法直接浏览。</li>
             <li><strong>专有的数据库或容器格式</strong> &mdash; 最糟的结果。你的归档只有通过那个特定工具才用得了。如果那家公司关门，或者你停止付费，你可能实际上就进不去自己的备份了。</li>
           </ul>
@@ -243,7 +244,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 它的认证方式做得对吗？</h3>
 
           <p>
-            尤其是对 Gmail 和 Microsoft 账户，这个工具应该支持 OAuth2 登录，而不是要你的明文密码或应用专用密码 &mdash; 出于安全原因，两家服务商都在逐步远离基于密码的 IMAP 访问，有些账户甚至已经完全不支持了。对于像 Yahoo 这类不提供应用专用密码的服务商，工具需要支持它们的标准登录流程；如果一个工具对 Yahoo 只有「生成一个应用专用密码」这一个选项，说明它没跟上 Yahoo 如今真正的认证方式。
+            尤其是对 Gmail 和 Microsoft 账户，这个工具应该支持 OAuth2 登录，而不是要你的明文密码或应用专用密码 &mdash; 出于安全原因，两家服务商都在逐步远离基于密码的 IMAP 访问，有些账户甚至已经完全不支持了。 Yahoo 要求不使用其专用登录页面的客户端使用应用密码。请查看提供商的官方说明，不要重复使用普通账户密码。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. 能有选择地归档，还是只能全有或全无？</h3>
@@ -273,8 +274,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 在这里的位置</h3>
 
           <p>
-            MailVault 是这一类工具中的一个选择，值得你拿上面的清单去检验，而不是凭信任接受：它是免费的，源代码公开在 GitHub 上；它把邮件保存为一个个单独的 <code>.eml</code> 文件，以标准的 Maildir 结构存放在你自己的磁盘上（而不是专有格式或别人的服务器）；它支持 Gmail 和 Microsoft 的 OAuth 以及 Yahoo 的标准登录流程；它还允许你只归档指定的文件夹。手动归档不限次数，永久免费；定时自动备份、跨账户迁移、清理规则和时间点快照属于 Premium 功能，价格为 $4/月或 $25/年，年付方案提供 14 天免费试用。它可以在 macOS、Windows 和 Linux 上运行。
-          </p>
+            MailVault 是这类工具中的一个选择，值得按上述清单评估，而不是只听宣传：它免费、源代码公开于 GitHub，以标准 Maildir 结构将单独的 <code>.eml</code> 文件存储在您自己的磁盘上，而非专有格式或他人的服务器。它支持 Gmail 和 Microsoft 的 OAuth，以及 Yahoo 的应用密码，并允许选择特定文件夹归档。 手动归档不限次数，永久免费；定时自动备份、跨账户迁移、清理规则和时间点快照属于 Premium 功能，价格为 $4/月或 $25/年，年付方案提供 14 天免费试用。 它可以在 macOS、Windows 和 Linux 上运行。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，保留原始邮件字节和 JSON 记录，并对相同邮件去重。</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">看看 MailVault 在这份清单上的表现</p>
@@ -319,7 +319,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -343,5 +343,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

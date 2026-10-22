@@ -38,7 +38,7 @@
   "description": "メール保管庫とは、自分で所有するローカルのアーカイブ、ホスト型の暗号化されたメールボックス、またはコンプライアンス用のアーカイブのこと。その違いと、自分の保管庫を無料で作る方法。",
   "url": "https://mailvaultapp.com/ja/guides/what-is-an-email-vault.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -151,6 +151,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -198,7 +199,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -208,7 +209,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">メール保管庫とは？ 3 つの意味と、自分の保管庫の作り方</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">メール保管庫とは？ 3 つの意味と、自分の保管庫の作り方</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">「メール保管庫」が指す 3 つのもの</a></li><li><a href="#help-section-2">MailVault はどれに当たるか</a></li><li><a href="#help-section-3">保管庫は、サーバーを映すメールクライアントではない</a></li><li><a href="#help-section-4">10 分で自分のメール保管庫を作る方法</a></li><li><a href="#help-section-5">保管：プロバイダーがアカウントを閉じたらメールはどうなるか</a></li><li><a href="#help-section-6">よくある質問</a></li><li><a href="#help-section-7">次にすること</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8分で読めます</span>
           </div>
@@ -226,11 +227,11 @@
               <li><strong>ローカルのメール保管庫：</strong>サーバーが削除しても残る、自分のディスク上のメールのコピー。持っているのはあなたです。</li>
               <li><strong>ホスト型の安全なメールボックス：</strong>プロバイダーのサーバーに暗号化して保存されたメール。ほかの人からは守られますが、それでも他人が運用するアカウントです。</li>
               <li><strong>コンプライアンス用のアーカイブ：</strong>監査や法的な要請のために、決められた年数残される、会社が運用するすべてのメッセージのコピー。</li>
-              <li>MailVault は 1 つ目の種類です。メールをプレーンな <code>.eml</code> ファイルとしてコンピュータに保管する、macOS・Windows・Linux 向けの無料のデスクトップアプリです。</li>
+              <li>MailVault は 1 つ目の種類です。メールをプレーンな <code>.eml</code> ファイルとしてコンピュータに保管する、macOS・Windows・Linux 向けの無料のデスクトップアプリです。 このファイル構成の説明は、標準のMaildir形式を対象としています。設定 → ストレージではJMAPストレージも選択でき、元のメッセージのバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。</li>
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">「メール保管庫」が指す 3 つのもの</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">「メール保管庫」が指す 3 つのもの</h2>
 
           <p>
             <em>メール保管庫</em>や<em>mail vault</em>で検索すると、まったく違うツールが出てきます。多くの製品がこの言葉を使っているからです。ここでは、特定の製品に触れずに、それぞれの意味を手短に説明します。
@@ -290,7 +291,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">MailVault はどれに当たるか</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">MailVault はどれに当たるか</h2>
 
           <p>
             MailVault は前者です。macOS・Windows・Linux 向けのデスクトップメールアプリで、メールのコピーをコンピュータ上の保管庫に保管します。すべてのメッセージは Maildir 形式のフォルダに置かれたプレーンな <code>.eml</code> ファイルなので、MailVault がなくても Apple Mail、Thunderbird、テキストエディタで開けます。サインインする相手はメールのプロバイダーで、MailVault ではありません。Gmail と Microsoft 365 はそれぞれのサインインページで、Outlook.com は Microsoft Graph 経由で、そのほかのプロバイダーは IMAP で接続します。コンピュータはメールサーバーと直接通信し、MailVault のサーバーがあなたのメッセージを目にすることはありません。ソースコードは GitHub で公開されています。
@@ -301,11 +302,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="フォルダの下で「保管庫」タブを選んだ MailVault。受信トレイのヘッダーには「保管庫に」の件数が表示され、一覧の下の凡例が行のアイコン「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」を説明しています。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/local-vault-720.webp 720w, /screenshots/ja/local-vault-1440.webp 1440w, /screenshots/ja/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/local-vault-light-1440.webp" srcset="/screenshots/ja/local-vault-light-720.webp 720w, /screenshots/ja/local-vault-light-1440.webp 1440w, /screenshots/ja/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="フォルダの下で「保管庫」タブを選んだ MailVault。受信トレイのヘッダーには「保管庫に」の件数が表示され、一覧の下の凡例が行のアイコン「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」を説明しています。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">保管庫タブには、コンピュータに保存されているものだけが表示されます。ヘッダーはフォルダのどれだけが保管庫にあるかを数え、各行のアイコンはそのメッセージがどこにあるかを示します。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">保管庫は、サーバーを映すメールクライアントではない</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">保管庫は、サーバーを映すメールクライアントではない</h2>
 
           <p>
             多くのメールアプリは鏡です。サーバーにあるものを表示し、速さのためにローカルにキャッシュを持ちます。サーバーでメッセージが削除されると、次の同期で鏡からも削除されます。スマートフォン、ノートパソコン、ウェブメールの内容をそろえるにはそれが正しく、メールを残すには間違っています。
@@ -317,7 +318,7 @@
             1 つ大事な点があります。MailVault は作業用のキャッシュも持っており、既定（ダウンロードモード「最近分を保持」）では、数か月より古いキャッシュのコピーをコンピュータから削除し、サーバーは自分のコピーを持ち続けます。キャッシュされたメールは保管庫ではありません。アーカイブしたメールとバックアップしたメールは、どのダウンロードモードでも削除されません。以下の手順が明示的なバックアップかアーカイブで終わるのはそのためです。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">10 分で自分のメール保管庫を作る方法</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">10 分で自分のメール保管庫を作る方法</h2>
 
           <p>
             10 分かかるのは設定です。大きなメールボックスのダウンロードはその後もバックグラウンドで続き、かかる時間はメールボックスの大きさと接続によります。以下の 6 つの手順は無料のアプリだけを使います。
@@ -333,7 +334,7 @@
           </ol>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/ja/manual-backup.jpg" width="960" height="660" aria-label="「すべてのアカウントを今すぐバックアップ」を押すと、進行バーが動きます。バックアップのカードの表示は、5 件のコピーがまだ保管庫にありませんから、すべてのコピーが保管庫にあります、前回のバックアップはたった今、メール 48 件に変わります。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/manual-backup.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/ja/manual-backup.jpg" width="960" height="660" aria-label="「すべてのアカウントを今すぐバックアップ」を押すと、進行バーが動きます。バックアップのカードの表示は、5 件のコピーがまだ保管庫にありませんから、すべてのコピーが保管庫にあります、前回のバックアップはたった今、メール 48 件に変わります。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/manual-backup.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">手動バックアップ</strong><span class="mv-clip-text">「すべてのアカウントを今すぐバックアップ」を押すと進行バーが動き、すべてのコピーが保管庫に入ったとカードに表示されるまで続きます。</span></figcaption></figure>
           </div>
 
@@ -342,11 +343,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="選択したメールに対する MailVault の「操作を選択」ダイアログ。サーバー上の件数とここにアーカイブ済みの件数を表示し、アーカイブから戻すと保管庫のコピーが削除されることを警告し、アーカイブ、アーカイブから戻す、サーバーから削除、アーカイブして削除、すべてから削除が並び、アーカイブが選択されています。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="選択したメールに対する MailVault の「操作を選択」ダイアログ。サーバー上の件数とここにアーカイブ済みの件数を表示し、アーカイブから戻すと保管庫のコピーが削除されることを警告し、アーカイブ、アーカイブから戻す、サーバーから削除、アーカイブして削除、すべてから削除が並び、アーカイブが選択されています。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">選んだメールを手動でアーカイブしているところ。アーカイブはメッセージを保管庫にコピーし、サーバーには手を付けません。より危険な操作を選ぶ前に、ダイアログがすでにアーカイブ済みのものを数えます。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">保管：プロバイダーがアカウントを閉じたらメールはどうなるか</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">保管：プロバイダーがアカウントを閉じたらメールはどうなるか</h2>
 
           <p>
             受信トレイは、他人が運用する基盤の上に、相手が変えられる条件のもとで置かれています。電話番号や認証アプリを失えばアカウントはロックされます。雇用主は退職したその日にメールボックスを閉じます。プロバイダーは使われていないアカウントを削除します。たとえば Google は、2 年間使われていない Google アカウントを、そのコンテンツとともに削除できるとしています（<a href="https://support.google.com/accounts/answer/12418290" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Google の非アクティブなアカウントに関するポリシー</a>）。こうしたケースは、<a href="/ja/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">メールプロバイダーはバックアップではない</a>理由についての記事で詳しく説明しています。
@@ -365,7 +366,7 @@
             アカウントがもうすぐ閉じられるとわかっているなら、アクセスを失う前に保管庫を作り、保管庫タブで確認してください。Mac を使っていてまだツールを比べているなら、<a href="/ja/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac のためのメールアーカイブ</a>でより広い選択肢を説明しています。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">よくある質問</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">メール保管庫はバックアップと同じですか？</h3>
           <p>近いですが、同じではありません。バックアップは、何かが壊れたときに復元するためのコピーです。保管庫は使うためのコピーでもあります。毎日読んで検索し、サーバーが削除した後もメッセージを残します。MailVault は外付けドライブに 2 つ目のコピーを書き出すこともでき、それが保管庫のバックアップになります。</p>
@@ -379,7 +380,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Premium の支払いをやめたら保管庫はどうなりますか？</h3>
           <p>何も削除されません。閲覧、検索、アーカイブ、手動バックアップは無料で、Premium のサブスクリプションが切れても、コンピュータからメールが削除されることはありません。失うのは、スケジュールバックアップやアーカイブして削除などの Premium の追加機能です。</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">次にすること</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">次にすること</h2>
 
           <p>
             ローカルの保管庫を判断するいちばん早い方法は、1 つのアカウントで作って保管庫タブを見ることです。ファイルの構成や保管庫を別のドライブに移す方法の詳細は<a href="/ja/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">ローカルの保管庫の機能ページ</a>に、Premium で加わるものは<a href="/ja/pricing.html" class="text-primary-500 hover:text-primary-600 underline">料金</a>にあります。メールが保管庫に入ったら、<a href="/ja/blog/email-insights-who-fills-your-inbox.html" class="text-primary-500 hover:text-primary-600 underline">MailVault のメール分析</a>で誰がそれを埋めているかがわかります。
@@ -397,7 +398,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -421,5 +422,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

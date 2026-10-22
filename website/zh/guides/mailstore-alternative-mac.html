@@ -38,7 +38,7 @@
   "description": "MailStore 没有 Mac 版？MailVault 是一款适用于 macOS、Windows 和 Linux 的免费应用，把 Gmail、Outlook 和 IMAP 邮件以普通 .eml 文件归档到本地。",
   "url": "https://mailvaultapp.com/zh/guides/mailstore-alternative-mac.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,7 +169,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac 上的 MailStore 替代方案：MailVault</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac 上的 MailStore 替代方案：MailVault</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 分钟阅读</span>
           </div>
@@ -267,8 +268,7 @@
           </p>
 
           <p>
-            <strong>开放的标准存储。</strong>MailStore 把你归档的邮件保存在它自己的归档文件中，要取出 EML 或 MSG 文件就得导出。如果 MailStore 停止开发，访问这些邮件就会变得更困难。MailVault 把每封邮件存为标准的 <code>.eml</code> 文件，也就是其他邮件客户端都能打开的 RFC 5322 格式。你的归档不过是一个装满文件的文件夹。你可以在 Apple Mail、Thunderbird 或任何文本编辑器中打开它们。
-          </p>
+            <strong>开放的标准存储。</strong>MailStore 把你归档的邮件保存在它自己的归档文件中，要取出 EML 或 MSG 文件就得导出。如果 MailStore 停止开发，访问这些邮件就会变得更困难。MailVault 把每封邮件存为标准的 <code>.eml</code> 文件，也就是其他邮件客户端都能打开的 RFC 5322 格式。你的归档不过是一个装满文件的文件夹。你可以在 Apple Mail、Thunderbird 或任何文本编辑器中打开它们。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
 
           <p>
             <strong>源代码公开在 GitHub 上。</strong>MailVault 的源代码公开在 GitHub 上。你可以阅读代码，检查它如何处理你的邮件。对于一个经手你私人邮件的软件来说，确切知道它在做什么很重要。
@@ -283,7 +283,7 @@
           </p>
 
           <figure class="pt-2">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-results-720.webp 720w, /screenshots/zh/search-results-1440.webp 1440w, /screenshots/zh/search-results-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/zh/search-results-light-1440.webp" srcset="/screenshots/zh/search-results-light-720.webp 720w, /screenshots/zh/search-results-light-1440.webp 1440w, /screenshots/zh/search-results-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="macOS 上的 MailVault 显示 Rack &amp; Rind 的搜索结果：在 INBOX 中找到 7 条结果，全部来自本地邮件，并列出发件人和主题。 · MailVault version 2.16.0" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/search-results-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-results-720.webp 720w, /screenshots/zh/search-results-1440.webp 1440w, /screenshots/zh/search-results-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/zh/search-results-light-1440.webp" srcset="/screenshots/zh/search-results-light-720.webp 720w, /screenshots/zh/search-results-light-1440.webp 1440w, /screenshots/zh/search-results-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="macOS 上的 MailVault 显示 Rack &amp; Rind 的搜索结果：在 INBOX 中找到 7 条结果，全部来自本地邮件，并列出发件人和主题。 · MailVault version 2.16.0 zh" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">在 Mac 上的 MailVault 中进行搜索。搜索框下方的一行显示有多少结果来自本地邮件，多少来自服务器。</figcaption>
           </figure>
 
@@ -295,7 +295,7 @@
             <strong>先归档再删除，并经过检查。</strong>归档邮件和从服务器删除邮件作为两个单独的步骤都是免费的。<a href="/zh/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">归档并删除</a>（Premium）一次完成两者：它把每封邮件复制进你的保险库，检查副本，然后才从服务器删除。
           </p>
 
-          <figure class="mv-clip my-6" data-clip="archive-delete"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/zh/archive-delete.jpg" width="960" height="660" aria-label="MailVault 询问“先归档再从服务器删除？”，点击“归档并删除”，进度达到 420/420，Vault 视图仍列出 2022 年已归档的 420 封邮件。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/archive-delete.mp4" type="video/mp4"></video></div>
+          <figure class="mv-clip my-6" data-clip="archive-delete"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/zh/archive-delete.jpg" width="960" height="660" aria-label="MailVault 询问“先归档再从服务器删除？”，点击“归档并删除”，进度达到 420/420，Vault 视图仍列出 2022 年已归档的 420 封邮件。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/archive-delete.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">归档并删除（Premium）</strong><span class="mv-clip-text">2022 年的 420 封邮件会先归档、核对，再从服务器删除。Vault 视图里仍有全部 420 封。</span></figcaption></figure>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailStore 强在哪里</h3>
@@ -367,7 +367,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -391,5 +391,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

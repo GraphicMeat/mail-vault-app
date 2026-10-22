@@ -29,7 +29,6 @@
   "1a88113e53ee": "Download di MailVault {release}. Se non parte, usa il pulsante qui sopra.",
   "93c3e0b8c5fb": "Il pulsante apre la pagina dell'ultima release. Scegli lì il file per il tuo computer.",
   "757da7c8028f": "Il download non è partito da solo. Il pulsante apre la pagina dell'ultima release; scegli lì il file per il tuo computer.",
-  "af2a175acc52": "Dove MailVault tiene la tua posta sul disco, quanta ne resta su questo computer, perché usa .eml e Maildir e come spostare il vault su un altro disco.",
   "384095550461": "Quanta della mia posta resta su questo computer?",
   "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Collezionista</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: una modalità di download che scarica ogni cartella e tutta la cronologia in background e li conserva su questo computer, invece di solo un periodo recente</span>",
   "7f9bb36583b5": "Vedi tutte le 14 funzionalità",

@@ -38,7 +38,7 @@
   "description": "从服务器删除邮件而不丢失它们。MailVault 在删除之前把邮件归档成本地的 .eml 文件 —— 可搜索、可离线，永远属于你。",
   "url": "https://mailvaultapp.com/zh/guides/keep-emails-after-server-deletion.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,14 +169,14 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">从服务器删除邮件之后如何还能保留它们</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">从服务器删除邮件之后如何还能保留它们</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5 分钟阅读</span>
           </div>
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <h2>从服务器删除邮件并保留本地副本：安全的操作顺序</h2>
+          <h2 id="help-section-1">从服务器删除邮件并保留本地副本：安全的操作顺序</h2>
           <p>同步文件夹反映的是服务器状态。在其中删除邮件前，请先创建可以独立打开、持续保留的归档。MailVault 的<strong>保险库</strong>来源显示已保存的副本；<strong>服务器</strong>显示服务商上的邮件。仅在全部中看到一封邮件，本身并不能证明已有本地副本。</p>
           <ol class="list-decimal pl-6 space-y-2">
           <li>先使用<strong>归档</strong>保存一小批邮件，等待操作完成。</li>
@@ -197,7 +198,7 @@
           </p>
 
           <p>
-            但从服务器删除邮件是有正当理由的。你的存储满了，又不想花钱买更多。你要离开某个邮件服务商，想走之前先清理干净。公司政策要求清除服务器上的旧邮件。或者你只是想要一个干净的收件箱，又不必担心丢数据。
+            但从服务器删除邮件是有正当理由的。 你的存储满了，又不想花钱买更多。 你要离开某个邮件服务商，想走之前先清理干净。 公司允许在减少服务器存储的同时保留本地副本。保留或删除规则也可能适用于该本地副本。 或者你只是想要一个干净的收件箱，又不必担心丢数据。
           </p>
 
           <p>
@@ -231,7 +232,7 @@
             <li><strong>第 1 步：同步</strong> &mdash; 把你的 IMAP 账户连到 MailVault。应用会加载邮件头并显示邮箱内容，和任何邮件客户端一样。</li>
             <li><strong>第 2 步：归档到本地</strong> &mdash; 选中你想保住的邮件并归档。MailVault 会完整下载每封邮件 &mdash; 邮件头、正文文本、HTML 排版，以及每一个附件 &mdash; 并把它存成你磁盘上一个标准的 <code>.eml</code> 文件。</li>
             <li><strong>第 3 步：核对</strong> &mdash; 在 MailVault 里打开几封归档过的邮件，确认它们是完整的。检查附件。搜几封具体的邮件。确保你需要的东西都在本地归档里。</li>
-            <li><strong>第 4 步：从服务器删除</strong> &mdash; 既然本地副本已经核对过了，就把邮件从服务器上删掉。MailVault 使用 RFC 4315 的 <code>UID EXPUNGE</code> 精确地只移除指定的邮件 &mdash; 不存在误删其他邮件的风险。</li>
+            <li><strong>第 4 步：从服务器删除</strong> &mdash; 既然本地副本已经核对过了，就把邮件从服务器上删掉。 MailVault 使用所选账户对应的删除方式；IMAP 处理取决于服务器能力，个人 Outlook.com 则使用 Microsoft Graph。确认前请检查选择范围，并保留单独的备份。</li>
             <li><strong>第 5 步：随时访问</strong> &mdash; 归档过的邮件留在你的磁盘上，完全可搜索、可阅读。不需要联网，也不依赖服务器。</li>
           </ul>
 
@@ -245,11 +246,11 @@
             <li><strong>全部邮件头</strong> &mdash; From、To、CC、BCC、Date、Subject、Message-ID、In-Reply-To、References 以及其他每一个头字段。会话关系得以保留。</li>
             <li><strong>正文内容</strong> &mdash; 纯文本和 HTML 两个版本都在。排版、链接和内嵌图片全部保留。</li>
             <li><strong>附件</strong> &mdash; 每一个附件文件，不论类型和大小。PDF、图片、文档、表格 &mdash; 全都作为 MIME 部件嵌在 .eml 文件里。</li>
-            <li><strong>元数据</strong> &mdash; 已读/未读状态、标记和所在文件夹都编码在 Maildir 文件名里。</li>
+            <li><strong>元数据</strong> &mdash; 已读/未读状态和标记记录在 Maildir 文件名中，文件夹位置记录在文件夹路径中。JMAP 存储则使用 JSON 记录。</li>
           </ul>
 
           <p>
-            <code>.eml</code> 格式是一项开放标准（RFC 5322）。任何操作系统上的任何邮件客户端都能打开这些文件。你的归档不会被锁在 MailVault 或任何其他软件里。
+            <code>.eml</code> 格式是一项开放标准（RFC 5322）。 支持 EML 的邮件应用可以打开这些文件。 你的归档不会被锁在 MailVault 或任何其他软件里。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">常见场景</h3>
@@ -259,7 +260,7 @@
           </p>
 
           <p>
-            <strong>公司邮箱清理：</strong>IT 部门想降低服务器存储开销。把员工的旧邮件归档到本地，再从服务器上清掉。这些邮件依然可供合规审查或日后查阅。
+            <strong>公司邮箱清理：</strong>IT 部门想降低服务器存储开销。 只保留组织授权的本地副本，并将组织的保留、删除和访问规则同样应用于这些副本。MailVault 是个人桌面归档工具，不是合规或法律保全系统。
           </p>
 
           <p>
@@ -302,7 +303,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -330,5 +331,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

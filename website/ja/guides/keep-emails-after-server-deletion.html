@@ -38,7 +38,7 @@
   "description": "メールを失わずにサーバーから削除しましょう。MailVaultは削除の前にメールを.emlファイルとしてローカルにアーカイブします。検索でき、オフラインでも読め、ずっとあなたのものです。",
   "url": "https://mailvaultapp.com/ja/guides/keep-emails-after-server-deletion.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,14 +169,14 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">サーバーから削除してもメールを残す方法</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">サーバーから削除してもメールを残す方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5分で読めます</span>
           </div>
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <h2>サーバーからメールを削除してローカルコピーを残す：安全な順序</h2>
+          <h2 id="help-section-1">サーバーからメールを削除してローカルコピーを残す：安全な順序</h2>
           <p>同期フォルダはサーバーの内容を表示しています。そこでメールを削除する前に、独立して開ける保存用アーカイブを作成してください。MailVaultの表示元で<strong>保管庫</strong>を選ぶと保存済みのコピーが、<strong>サーバー</strong>を選ぶとプロバイダーのメールが表示されます。「すべて」にメールがあるだけでは、ローカルコピーがある証拠にはなりません。</p>
           <ol class="list-decimal pl-6 space-y-2">
           <li>まず少量のメールを<strong>アーカイブ</strong>で保存します。処理が終わるまで待ってください。</li>
@@ -197,7 +198,7 @@
           </p>
 
           <p>
-            しかし、サーバーからメールを削除するもっともな理由もあります。容量がいっぱいで、追加の費用は払いたくない。メールプロバイダーを離れるので、去る前に整理したい。会社の方針で古いメッセージをサーバーから消す必要がある。あるいは単に、データを失う不安なしにすっきりした受信トレイが欲しい。
+            しかし、サーバーからメールを削除するもっともな理由もあります。 容量がいっぱいで、追加の費用は払いたくない。 メールプロバイダーを離れるので、去る前に整理したい。 会社が、サーバー容量を削減しながらローカルコピーを保持することを認めている場合です。保存期間や削除のルールはローカルコピーにも適用される場合があります。 あるいは単に、データを失う不安なしにすっきりした受信トレイが欲しい。
           </p>
 
           <p>
@@ -231,7 +232,7 @@
             <li><strong>手順1: 同期</strong> &mdash; IMAPのアカウントをMailVaultに接続します。アプリがメールのヘッダーを読み込み、ほかのメールクライアントと同じようにメールボックスの中身を表示します。</li>
             <li><strong>手順2: ローカルにアーカイブ</strong> &mdash; 残しておきたいメールを選んでアーカイブします。MailVaultはそれぞれのメールを丸ごと &mdash; ヘッダー、本文、HTMLの書式、すべての添付ファイルを &mdash; ダウンロードし、ディスクに標準的な<code>.eml</code>ファイルとして保存します。</li>
             <li><strong>手順3: 確認</strong> &mdash; アーカイブしたメールをいくつかMailVaultで開き、欠けがないことを確かめます。添付ファイルも確認します。特定のメッセージを検索します。必要なものがすべてローカルのアーカイブにあることを確かめてください。</li>
-            <li><strong>手順4: サーバーから削除</strong> &mdash; 確認済みのローカルのコピーができたので、サーバーからメールを削除します。MailVaultはRFC 4315の<code>UID EXPUNGE</code>を使い、対象のメッセージだけを正確に消します &mdash; 誤って別のメールを削除する心配はありません。</li>
+            <li><strong>手順4: サーバーから削除</strong> &mdash; 確認済みのローカルのコピーができたので、サーバーからメールを削除します。 MailVault は選択したアカウントの削除経路を使います。IMAP の処理はサーバーの機能によって異なり、個人用 Outlook.com では Microsoft Graph を使用します。確定前に選択内容を確認し、別のバックアップを保持してください。</li>
             <li><strong>手順5: いつでもアクセス</strong> &mdash; アーカイブしたメールはディスクに残り、そのまま検索して読めます。インターネットの接続は不要です。サーバーへの依存もありません。</li>
           </ul>
 
@@ -245,11 +246,11 @@
             <li><strong>すべてのヘッダー</strong> &mdash; From、To、CC、BCC、Date、Subject、Message-ID、In-Reply-To、References、そのほかのヘッダーもすべてです。スレッドの関係も保たれます。</li>
             <li><strong>本文の内容</strong> &mdash; プレーンテキスト版とHTML版の両方です。書式、リンク、埋め込みの画像もすべて残ります。</li>
             <li><strong>添付ファイル</strong> &mdash; 種類や大きさにかかわらず、添付されたファイルはすべてです。PDF、画像、文書、表計算 &mdash; いずれも.emlファイルの中にMIMEのパートとして収まります。</li>
-            <li><strong>メタデータ</strong> &mdash; 既読と未読の状態、フラグ、フォルダの場所は、Maildirのファイル名に符号化されます。</li>
+            <li><strong>メタデータ</strong> &mdash; 既読・未読状態やフラグは Maildir のファイル名に記録され、フォルダーの場所はフォルダーパスに記録されます。JMAP ストレージでは代わりに JSON レコードを使います。</li>
           </ul>
 
           <p>
-            <code>.eml</code>の形式は公開標準です（RFC 5322）。どのOSのどのメールクライアントでも、これらのファイルを開けます。アーカイブがMailVaultにも、ほかのどのソフトウェアにも縛られることはありません。
+            <code>.eml</code>の形式は公開標準です（RFC 5322）。 EML 対応のメールアプリでこれらのファイルを開けます。 アーカイブがMailVaultにも、ほかのどのソフトウェアにも縛られることはありません。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">よくある場面</h3>
@@ -259,7 +260,7 @@
           </p>
 
           <p>
-            <strong>会社のメールの整理:</strong> IT部門がサーバーの保管の費用を減らしたいとします。従業員の古いメールをローカルにアーカイブしてから、サーバー側を消します。メールはコンプライアンスや参照のために、引き続き使えます。
+            <strong>会社のメールの整理:</strong> IT部門がサーバーの保管の費用を減らしたいとします。 組織が認めたローカルコピーだけを保持し、そのコピーにも組織の保存期間、削除、アクセスのルールを適用してください。MailVault は個人向けのデスクトップアーカイブであり、コンプライアンスや法的保全のためのシステムではありません。
           </p>
 
           <p>
@@ -302,7 +303,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -330,5 +331,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

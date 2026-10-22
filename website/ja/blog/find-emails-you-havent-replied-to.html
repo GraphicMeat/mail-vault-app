@@ -59,6 +59,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/find-emails-you-havent-replied-to.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/find-emails-you-havent-replied-to.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
   <header class="mv-header">
@@ -86,13 +87,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← ブログに戻る</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-20" class="text-sm text-primary-500 font-medium">2026年10月20日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">まだ返信していないメールを見つける方法</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">まだ返信していないメールを見つける方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#open">「要返信」ビューから始める</a></li><li><a href="#scope">初期設定の一覧に含まれるもの</a></li><li><a href="#review">結果を使って毎日短く確認する</a></li><li><a href="#follow-up">30日の範囲を超える継続対応を管理する</a></li><li><a href="#missing">表示されるはずのメールが見つからない場合</a></li><li><a href="#free">無料で使える範囲は？</a></li></ul></details><!-- help-contents:end -->
           <p class="text-sm text-slate-500">MailVault 著 · 読了まで 4 分</p>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -104,13 +105,13 @@
 <h2 id="open">「要返信」ビューから始める</h2>
 <p>サイドバーで<strong>ビュー → 要返信</strong>を開きます。初期ビューの名前を変更したり削除したりした場合は、<strong>設定 → ビュー</strong>を確認します。そこで既存のビューを編集でき、保存した検索をビューにすることもできます。</p>
 <p>結果を頼りにする前に、アカウントの同期とローカルインデックスの更新を待ちます。ビューが検索するのは、MailVaultで利用できる情報です。読み込んでいないアカウントやフォルダに未返信メールがないことまでは確認できません。</p>
-<figure class="mv-search-diagram"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-views-detail-720.webp 720w, /screenshots/ja/settings-views-detail-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/ja/settings-views-detail-light-1708.webp" srcset="/screenshots/ja/settings-views-detail-light-720.webp 720w, /screenshots/ja/settings-views-detail-light-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px" width="854" height="212" loading="lazy" decoding="async" alt="MailVaultの保存済みビュー：「要返信」「スター付き」「添付ファイル」と独自の「請求書」ビュー · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture><figcaption>「要返信」は最初から用意されているビューの1つです。このスクリーンショットには独自の「請求書」ビューも表示されています。無料プランで使えるビューは合計3つです。</figcaption></figure>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/settings-views-detail-light-1708.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-views-detail-720.webp 720w, /screenshots/ja/settings-views-detail-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/ja/settings-views-detail-light-1708.webp" srcset="/screenshots/ja/settings-views-detail-light-720.webp 720w, /screenshots/ja/settings-views-detail-light-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px" width="854" height="212" loading="lazy" decoding="async" alt="MailVaultの保存済みビュー：「要返信」「スター付き」「添付ファイル」と独自の「請求書」ビュー · MailVault version 2.16.0 ja" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a><figcaption>「要返信」は最初から用意されているビューの1つです。このスクリーンショットには独自の「請求書」ビューも表示されています。無料プランで使えるビューは合計3つです。</figcaption></figure>
 <h2 id="scope">初期設定の一覧に含まれるもの</h2>
 <p>変更していない「要返信」の初期ビューでは、次の条件を満たすメールを選びます。</p>
 <ul><li>自分宛てのメールです。</li><li>自分から送ったメールではありません。</li><li>返信済みとしてマークされていません。</li><li>過去<strong>30日</strong>以内のメールです。</li><li>ゴミ箱、迷惑メール、アーカイブと認識されたフォルダには入っていません。</li></ul>
 <p>ビューは編集できるため、結果が異なる場合は現在のフィルターを確認します。日付の範囲にも注意してください。6週間前の未返信の依頼は、まだ対応が必要でも初期設定のビューには表示されません。</p>
 <p><strong>「要返信」はメールの返信済みフラグを使います。会話全体が解決したかどうかを推測するものではありません。</strong>通知メールには返信が不要なこともあります。新規メールとして返信した場合や、元のメールのフラグを更新しない別のアプリから返信した場合、元のメールが一覧に残ることがあります。返信済みのメールにも、約束した作業が残っている場合があります。</p>
-<figure class="mv-search-diagram"><video controls playsinline preload="none" width="960" height="660" poster="/assets/clips/ja/views.jpg" aria-label="MailVaultの保存済みビューのデモ · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/views.mp4" type="video/mp4"><a href="/assets/clips/ja/views.mp4">短いデモを見る</a>.</video><figcaption id="clip-description">約5秒、音声なし。サイドバーで「添付ファイル」を選ぶと316件のメールが表示されます。「要返信」を選ぶと41件が表示されます。その後「添付ファイル」に戻ります。これらはデモの件数であり、人が返信すべきメールの数を示すものではありません。</figcaption></figure>
+<figure class="mv-search-diagram"><video controls="" playsinline="" preload="none" width="960" height="660" poster="/assets/clips/ja/views.jpg" aria-label="MailVaultの保存済みビューのデモ · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/views.mp4" type="video/mp4"><a href="/assets/clips/ja/views.mp4">短いデモを見る</a>.</video><figcaption id="clip-description">約5秒、音声なし。サイドバーで「添付ファイル」を選ぶと316件のメールが表示されます。「要返信」を選ぶと41件が表示されます。その後「添付ファイル」に戻ります。これらはデモの件数であり、人が返信すべきメールの数を示すものではありません。</figcaption></figure>
 <h2 id="review">結果を使って毎日短く確認する</h2>
 <ol><li><strong>元のメールを開き、やり取りを読みます。</strong>後のやり取りで質問にすでに回答していないか確認します。</li><li><strong>回答できる内容が揃ったら返信します。</strong>同じ説明を繰り返す場合は、<a href="/ja/blog/email-templates-for-client-replies.html">保存済みの返信テンプレート</a>を使い、相手に合わせて調整します。</li><li><strong>作業が残っているメールにはスターを付けます。</strong>下書きの作成や受領の返信だけでは、作業が完了したとは限りません。対応が必要な項目に、自分用の目印を残します。</li><li><strong>「スター付き」ビューも確認します。</strong>既読・未読を完了・未完了の代わりにせず、対応が終わったらスターを外します。</li></ol>
 <p>スターの意味は「まだ自分の対応が必要」などに統一します。すでにお気に入りのメールにスターを使っている場合は、専用の手動タグを選びます。目印は、付けた意味がわかっていてこそ役立ちます。</p>
@@ -130,17 +131,18 @@
             <p class="text-sm mb-4">この手順をMailVaultで試せます。macOS、Windows、Linuxに対応しています。</p>
             <div class="flex flex-wrap gap-3">
               <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/ja/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="download">MailVault を無料でダウンロード</a>
-              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ja" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="demo">デモを試す ↗</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ja" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="demo" aria-label="新しいウィンドウでMailVaultのデモを開く">デモを試す ↗</a>
             </div>
           </div>
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちはGraphic Meatです。2013年から役立つソフトウェアを作っている独立系プロダクトスタジオです。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meatを見る ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>メールを読む。メールを残す。</p></div><nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

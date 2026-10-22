@@ -131,6 +131,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -179,7 +180,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html" aria-current="page">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -192,13 +193,13 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">疑难解答</h1>
+      <h1 class="text-4xl font-bold mb-2">疑难解答</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">Gmail 的带宽限制是多少？备份触发限制时会怎样？</a></li><li><a href="#help-section-2">为什么 Linux 上的拼写检查不给任何单词加下划线？</a></li><li><a href="#help-section-3">我在服务器上新建了文件夹 — MailVault 多久会显示它？</a></li><li><a href="#help-section-4">MailVault 提示“没有互联网连接”，但我的网络是通的。为什么？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。</p>
 
       <div class="space-y-4">
 
         <article id="gmail-bandwidth-limits" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Gmail 的带宽限制是多少？备份触发限制时会怎样？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Gmail 的带宽限制是多少？备份触发限制时会怎样？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 Google 限制单个 Gmail 或 Google Workspace 账户每天可以传输多少邮件数据。限制针对账户，而不是应用——Apple Mail、你的手机和 MailVault 共用同一份每日额度。
@@ -244,7 +245,7 @@
         </article>
 
         <article id="linux-spellcheck-dictionary" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">为什么 Linux 上的拼写检查不给任何单词加下划线？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">为什么 Linux 上的拼写检查不给任何单词加下划线？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 因为机器上没有拼写词典。macOS 和 Windows 随系统自带词典；Linux 上的词典来自你的发行版，而最小化的桌面安装往往一个都没有。MailVault 通过 WebKitGTK 做拼写检查，后者经由 enchant 和 hunspell 查词——所以只有装了 hunspell 词典才能画出下划线。
@@ -269,7 +270,7 @@
         </article>
 
         <article id="folder-list-refresh" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我在服务器上新建了文件夹 &mdash; MailVault 多久会显示它？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">我在服务器上新建了文件夹 &mdash; MailVault 多久会显示它？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>十分钟内。</strong>MailVault 会将文件夹列表保存在磁盘上，因此你一打开账户，侧边栏就会显示内容；它最多每十分钟从服务器重新读取一次列表。你在网页邮箱或其他邮件客户端中新建、重命名或删除文件夹后，十分钟过去后，下一次打开该账户或点击侧边栏中的文件夹时，MailVault 就会获取这一变化。
@@ -287,7 +288,7 @@
         </article>
 
         <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 提示“没有互联网连接”，但我的网络是通的。为什么？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">MailVault 提示“没有互联网连接”，但我的网络是通的。为什么？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>横幅什么时候出现。</strong>当与邮件服务器的连接以看起来像网络问题的方式失败时，MailVault 会自己检查互联网，只有在没有任何回应时才显示<strong>没有互联网连接</strong>。横幅显示期间，你的邮件都还在：MailVault 会显示这台电脑上已保存的内容，暂停后台同步，并在检查成功后自动收起横幅。点<strong>重新检查</strong>会立即检查。
@@ -323,7 +324,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -346,5 +347,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

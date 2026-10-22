@@ -155,6 +155,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
@@ -203,7 +204,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Hilfethemen</summary><nav aria-label="Themen im Hilfecenter"><a href="/de/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault-Hilfe</a><a href="/de/faq/getting-started.html">Erste Schritte</a><a href="/de/faq/storage-and-vault.html">Speicherort und dein Vault</a><a href="/de/faq/providers.html">E-Mail-Anbieter</a><a href="/de/faq/backup-and-restore.html">Backup und Wiederherstellung</a><a href="/de/faq/explorer-and-insights.html">Explorer und Einblicke</a><a href="/de/faq/scheduled-send.html" aria-current="page">Geplanter Versand</a><a href="/de/faq/premium.html">Kostenlos und Premium</a><a href="/de/faq/troubleshooting.html">Fehlerbehebung</a><a href="/de/docs.html#guides" class="mv-help-divider">Praktische Anleitungen</a><a href="/de/docs.html#articles">Artikel</a><a href="/de/features.html">Funktionsübersicht</a><a href="/changelog.html">Versionshinweise</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Brotkrümelnavigation" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -216,25 +217,25 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Geplanter Versand</h1>
+      <h1 class="text-4xl font-bold mb-2">Geplanter Versand</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">Was ist der geplante Versand?</a></li><li><a href="#help-section-2">Kann ich eine E-Mail in der Zeitzone einer anderen Person planen?</a></li><li><a href="#help-section-3">Woher kennt MailVault die Zeitzone des Empfängers?</a></li><li><a href="#help-section-4">Wie bearbeite ich eine geplante E-Mail, plane sie neu oder breche sie ab?</a></li><li><a href="#help-section-5">Muss MailVault geöffnet sein, damit eine geplante E-Mail versendet wird?</a></li><li><a href="#help-section-6">Was ist kostenlos, und was braucht Premium?</a></li><li><a href="#help-section-7">Was passiert mit geplanten E-Mails, wenn mein Abo endet?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Schreib eine E-Mail jetzt und lass MailVault sie zu einem genauen Datum und einer genauen Uhrzeit senden, in jeder Zeitzone. Das Planen gehört zu Premium; eine Sendeverzögerung von bis zu 5 Minuten ist kostenlos.</p>
 
       <div class="space-y-4">
 
         <article id="what-is-scheduled-send" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Was ist der geplante Versand?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Was ist der geplante Versand?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Der geplante Versand hält eine fertige E-Mail zurück und sendet sie zu Datum und Uhrzeit deiner Wahl, in der Zeitzone deiner Wahl. Klicke beim Verfassen auf den Pfeil neben <strong>Senden</strong>, um <strong>Versand planen</strong> zu öffnen, wähle Datum und Uhrzeit, prüfe die Zeitzone darunter und klicke auf <strong>Planen</strong>.</p>
               <p><strong>Morgen 8 Uhr</strong> und <strong>Montag 8 Uhr</strong> setzen die Uhrzeit mit einem Klick, in der gewählten Zeitzone.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/premium-scheduled-send-720.webp 720w, /screenshots/de/premium-scheduled-send-1440.webp 1440w, /screenshots/de/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/premium-scheduled-send-light-1440.webp" srcset="/screenshots/de/premium-scheduled-send-light-720.webp 720w, /screenshots/de/premium-scheduled-send-light-1440.webp 1440w, /screenshots/de/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Neue Nachricht in MailVault mit geöffnetem Bereich „Versand planen“: eine Antwort für 8:00 Uhr in New York, die Zeitzone vorgeschlagen aus der letzten E-Mail des Empfängers · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
-              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Eine Antwort, geplant für 8:00 Uhr in New York, mit der Zeitzone aus der letzten E-Mail des Empfängers.</figcaption>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/premium-scheduled-send-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/de/premium-scheduled-send-720.webp 720w, /screenshots/de/premium-scheduled-send-1440.webp 1440w, /screenshots/de/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/premium-scheduled-send-light-1440.webp" srcset="/screenshots/de/premium-scheduled-send-light-720.webp 720w, /screenshots/de/premium-scheduled-send-light-1440.webp 1440w, /screenshots/de/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Neue Nachricht in MailVault mit geöffnetem Bereich „Versand planen“: eine Antwort für 8:00 Uhr in New York, die Zeitzone vorgeschlagen aus der letzten E-Mail des Empfängers · MailVault version 2.16.0 de" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 de"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 de</span></a>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Eine Antwort ist für 8:00 Uhr in New York geplant. Die Zeitzone wird anhand der letzten E-Mail des Empfängers vorgeschlagen.</figcaption>
             </figure>
         </article>
 
         <article id="schedule-time-zones" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Kann ich eine E-Mail in der Zeitzone einer anderen Person planen?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Kann ich eine E-Mail in der Zeitzone einer anderen Person planen?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Ja, in jeder Zeitzone. Die Liste zeigt jede Zone mit ihrem UTC-Versatz, zum Beispiel <strong>(UTC-04:00) New York</strong>, und lässt sich nach Stadt oder Versatz durchsuchen: Tippe <strong>+2</strong>, um die Zonen zu sehen, die UTC zwei Stunden voraus sind. Städte stehen in der Liste unter ihrem englischen Namen, etwa Vienna. Angezeigt wird der Versatz, der beim Versand gilt, sodass ein Versand nach einer Zeitumstellung richtig beschriftet ist.</p>
               <p>Unter den Feldern zeigt MailVault die aktuelle Uhrzeit bei dir und in der gewählten Zone und wann die E-Mail in deiner eigenen Zeit rausgeht. So kannst du einen Versand um 8:00 Uhr in New York mit deiner eigenen Uhr abgleichen, bevor du ihn planst.</p>
@@ -242,7 +243,7 @@
         </article>
 
         <article id="suggested-time-zone" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Woher kennt MailVault die Zeitzone des Empfängers?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">Woher kennt MailVault die Zeitzone des Empfängers?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>MailVault schlägt eine vor, und du kannst jederzeit eine andere wählen. Jede E-Mail trägt den UTC-Versatz ihres Absenders, also liest MailVault den Versatz aus der letzten E-Mail, die dir der erste Empfänger geschickt hat, und wählt die passende Zeitzone. Ein Hinweis unter dem Feld sagt, dass der Vorschlag aus seiner letzten E-Mail stammt. Ein Versatz kann zu mehreren Orten gehören, also prüfe die Stadt.</p>
               <p>Hat die Person dir nie geschrieben, nimmt MailVault die Zone, die du zuletzt beim Planen einer E-Mail an sie gewählt hast. Gibt es beides nicht, beginnt es mit deiner eigenen Zeitzone. Eine Zone, die du selbst gewählt hast, wird nie ersetzt.</p>
@@ -250,7 +251,7 @@
         </article>
 
         <article id="edit-scheduled-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Wie bearbeite ich eine geplante E-Mail, plane sie neu oder breche sie ab?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">Wie bearbeite ich eine geplante E-Mail, plane sie neu oder breche sie ab?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Geplante E-Mails warten im Ordner <strong>Geplant</strong> in der Seitenleiste. Klicke eine an, um sie zum Bearbeiten zu öffnen und Empfänger, Text oder Uhrzeit zu ändern. Sie bleibt wie bisher geplant, bis du deine Änderungen speicherst.</p>
               <p>Jede E-Mail im Ordner hat außerdem Schaltflächen für <strong>Neu planen</strong>, <strong>Abbrechen</strong> und <strong>Jetzt senden</strong>.</p>
@@ -258,7 +259,7 @@
         </article>
 
         <article id="send-while-closed" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Muss MailVault geöffnet sein, damit eine geplante E-Mail versendet wird?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">Muss MailVault geöffnet sein, damit eine geplante E-Mail versendet wird?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Nicht, wenn es im Hintergrund weiterlaufen kann. Geplante E-Mails verschickt der Hintergrundhelfer von MailVault. Schalte <strong>Im Hintergrund weiterlaufen lassen</strong> unter Einstellungen &rsaquo; <strong>Diagnose</strong> &rsaquo; <strong>Hintergrunddienst</strong> ein, dann läuft der Helfer nach dem Beenden weiter und startet bei der Anmeldung, sodass E-Mails pünktlich rausgehen, während die App geschlossen ist.</p>
               <p>Ist die Einstellung aus oder kann dein MailVault nicht im Hintergrund weiterlaufen, geht eine geplante E-Mail beim nächsten Öffnen von MailVault raus. Der Ordner Geplant zeigt, was bei dir gilt, und verlinkt zur Einstellung.</p>
@@ -266,7 +267,7 @@
         </article>
 
         <article id="scheduled-send-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Was ist kostenlos, und was braucht Premium?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Was ist kostenlos, und was braucht Premium?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Eine E-Mail für ein festes Datum und eine feste Uhrzeit zu planen gehört zu Premium. Den Versand um bis zu 5 Minuten zu verzögern ist kostenlos: pro E-Mail mit dem Menü neben <strong>Senden</strong> oder für jede E-Mail mit <strong>Sendeverzögerung</strong> in den Einstellungen.</p>
               <p>Ohne Premium sagt der Bereich Versand planen das und bietet <strong>Upgrade</strong> an. <a href="/de/pricing.html#premium-scheduled-send" class="text-primary-500 hover:text-primary-600 underline">Sieh dir an, was Premium enthält</a>.</p>
@@ -274,7 +275,7 @@
         </article>
 
         <article id="subscription-ends" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Was passiert mit geplanten E-Mails, wenn mein Abo endet?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">Was passiert mit geplanten E-Mails, wenn mein Abo endet?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Sie gehen trotzdem zur eingestellten Zeit raus. Zum Bearbeiten und Neuplanen brauchst du wieder Premium, aber du kannst eine E-Mail im Ordner Geplant weiterhin jetzt senden oder abbrechen.</p>
             </div>
@@ -299,7 +300,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
@@ -322,5 +323,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Produkt-Screenshot"><button type="button">Screenshot schließen</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

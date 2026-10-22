@@ -60,7 +60,7 @@
       "name": "Where are my emails stored?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "By default, your vault is a folder of standard .eml files organized in Maildir format — on your computer — one file per email, no database required. On macOS MailVault is sandboxed, so the folder is ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ rather than ~/Library/Application Support. On Linux it is ~/.local/share/com.mailvault.app/ for the .deb package, or ~/snap/mailvault/current/.local/share/com.mailvault.app/ for the Snap. ~/Library is hidden in Finder and Spotlight does not index it, which is why searching the drive for com.mailvault.app finds nothing: in Finder press Shift + Command + G and type ~/Library, or hold Option while opening Finder's Go menu, or press Command + J in your Home folder and tick Show Library Folder. MailVault also shows the folder it is using under Settings, Backup & Restore, Backup Settings, Where your mail is stored. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you are never locked in to MailVault."
+        "text": "By default, your vault is a folder of standard .eml files organized in Maildir format — on your computer — one file per email, no database required. On macOS MailVault is sandboxed, so the folder is ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ rather than ~/Library/Application Support. On Linux it is ~/.local/share/com.mailvault.app/ for the .deb package, or ~/snap/mailvault/current/.local/share/com.mailvault.app/ for the Snap. ~/Library is hidden in Finder and Spotlight does not index it, which is why searching the drive for com.mailvault.app finds nothing: in Finder press Shift + Command + G and type ~/Library, or hold Option while opening Finder's Go menu, or press Command + J in your Home folder and tick Show Library Folder. MailVault also shows the folder it is using under Settings, Backup & Restore, Backup Settings, Where your mail is stored. MailVault does not upload your vault to its own servers. Your provider still handles mail sync, and cloud-synchronized folders or optional remote AI providers involve services you choose. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you are never locked in to MailVault."
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": "What are .eml files and Maildir? Why does it matter?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": ".eml (RFC 5322) is the internet standard format for email messages. In Maildir storage, every email is stored as a single, self-contained text file that can be opened by any email client. Maildir is a proven directory structure for storing email, used by mail servers for decades. Each email is one file, so there is no single database that can corrupt. Together, .eml + Maildir mean your emails are future-proof, portable, and never locked in to any single application."
+        "text": ".eml (RFC 5322) is the internet standard format for email messages. In Maildir storage, every email is stored as a single, self-contained text file that can be opened by mail apps that support EML. Maildir is a proven directory structure for storing email, used by mail servers for decades. Each email is one file, so there is no single database that can corrupt. Together, .eml + Maildir mean your emails are future-proof, portable, and never locked in to any single application."
       }
     },
     {
@@ -108,7 +108,7 @@
       "name": "What is the external backup location (second copy)?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault always keeps a working copy of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a second, independent copy on a drive you choose: an external SSD, a NAS share, or a synced folder. It is written during backup runs at the same time as the working copy, in the same .eml and Maildir layout, so apps that support EML can read the message files. The app never reads it day to day, and it is cold storage: emails deleted on the server, or removed inside MailVault, stay in the external copy. Set it in Settings under Backup, in 'Second copy — external cold storage'. On macOS, MailVault stores a security-scoped bookmark for the folder so access survives restarts and app updates; the status badge shows Ready, Needs reauthorization, Unavailable, or Access denied, and reauthorizing is a single click. If the drive is unplugged during a backup, the working copy still succeeds and MailVault reports how many messages failed to reach the external copy; the next run copies them across."
+        "text": "MailVault keeps a working copy of saved mail in your configured mail store — that is what you read, search and open. An external backup location adds a second, independent copy on a drive you choose: an external SSD, a NAS share, or a synced folder. It is written during backup runs at the same time as the working copy, in the same .eml and Maildir layout, so apps that support EML can read the message files. The app never reads it day to day, and it is cold storage: emails deleted on the server, or removed inside MailVault, stay in the external copy. Set it in Settings under Backup, in 'Second copy — external cold storage'. On macOS, MailVault stores a security-scoped bookmark for the folder so access survives restarts and app updates; the status badge shows Ready, Needs reauthorization, Unavailable, or Access denied, and reauthorizing is a single click. If the drive is unplugged during a backup, the working copy still succeeds and MailVault reports how many messages failed to reach the external copy; the next run copies them across."
       }
     },
     {
@@ -163,6 +163,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -211,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html" aria-current="page">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Breadcrumb" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -224,18 +225,18 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Storage and Your Vault</h1>
+      <h1 class="text-4xl font-bold mb-2">Storage and Your Vault</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">Where are my emails stored?</a></li><li><a href="#help-section-2">How much of my mail stays on this computer?</a></li><li><a href="#help-section-3">What are .eml files and Maildir? Why does it matter?</a></li><li><a href="#help-section-4">Can I access my emails offline?</a></li><li><a href="#help-section-5">How are attachments handled?</a></li><li><a href="#help-section-6">Can I store my mail somewhere other than the default application folder?</a></li><li><a href="#help-section-7">What is the external backup location (second copy)?</a></li><li><a href="#help-section-8">Can I change the vault storage format?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Where MailVault keeps your mail, how Maildir and JMAP storage differ, and how to move or convert the vault.</p>
 
       <div class="space-y-4">
 
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Where are my emails stored?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Where are my emails stored?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">By default, your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer &mdash; one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you're never locked in to MailVault.</p>
+              <p class="mb-4">By default, your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer &mdash; one file per email, no database required. MailVault does not upload your vault to its own servers. Your provider still handles mail sync, and cloud-synchronized folders or optional remote AI providers involve services you choose. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you're never locked in to MailVault.</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">The exact folder</p>
-              <p class="mb-2">MailVault is a sandboxed app, so on macOS the vault sits inside the app's own container &mdash; not directly under <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code>, which is where most people look first:</p>
+              <p class="mb-2">In the sandboxed macOS build, the default vault sits inside the app's own container &mdash; not directly under <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code>, which is where most people look first:</p>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-4"><code>~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/</code></pre>
               <p class="mb-4">On Linux it is <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/.local/share/com.mailvault.app/</code> for the .deb package, and <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/snap/mailvault/current/.local/share/com.mailvault.app/</code> for the Snap.</p>
               <p class="mb-4">Searching the drive for <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">com.mailvault.app</code> usually finds nothing, and that is expected: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library</code> is hidden in Finder and Spotlight does not index it. Open it by path instead.</p>
@@ -264,7 +265,7 @@
         </article>
 
         <article id="download-modes" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How much of my mail stays on this computer?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">How much of my mail stays on this computer?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>Settings &rarr; Storage &rarr; Download mode</strong> controls that, and <strong>Settings &rarr; Accounts &rarr; Advanced</strong> can give one account a mode of its own.
@@ -282,34 +283,34 @@
         </article>
 
         <article id="eml-and-maildir" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What are .eml files and Maildir? Why does it matter?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">What are .eml files and Maildir? Why does it matter?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a> is the internet standard format for email messages. Every email — headers, body, and attachments — is stored as a single, self-contained text file. Unlike proprietary databases, .eml files can be opened by any email client (Apple Mail, Thunderbird, Outlook) and read with any text editor.</p>
+              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a> is the internet standard format for email messages. In the default Maildir format, every email — headers, body, and attachments — is stored as a single, self-contained text file. Unlike proprietary databases, .eml files can be opened by mail apps that support EML (including Apple Mail and Thunderbird) and read with any text editor.</p>
               <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> is a proven directory structure for storing email, used by mail servers for decades. Each email is one file, so there's no single database that can corrupt — if one file is damaged, the rest of your archive is unaffected. Together, .eml + Maildir mean your emails are future-proof, portable, and never locked in to any single application.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Filename flags:</p>
-              <p>Each message is named <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">&lt;uid&gt;:2,&lt;flags&gt;.eml</code>, the standard Maildir naming — the characters after <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">2,</code> track status: <strong>A</strong> = Archived, <strong>S</strong> = Seen, <strong>R</strong> = Replied, <strong>F</strong> = Flagged. So <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">102:2,AS.eml</code> is message 102, archived and seen.</p>
+              <p>On macOS and Linux, each Maildir message is named <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">&lt;uid&gt;:2,&lt;flags&gt;.eml</code>, the standard Maildir naming — the characters after <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">2,</code> track status: <strong>A</strong> = Archived, <strong>S</strong> = Seen, <strong>R</strong> = Replied, <strong>F</strong> = Flagged. So <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">102:2,AS.eml</code> is message 102, archived and seen. On Windows, MailVault uses <code>;2,</code> in place of <code>:2,</code>, because Windows filenames cannot contain a colon.</p>
             </div>
         </article>
 
         <article id="offline-access" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I access my emails offline?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">Can I access my emails offline?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               Yes. Once your emails are synced, they are stored locally and you can read, search, and browse all of them without an internet connection. You only need internet to sync new emails or send messages.
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/local-vault-720.webp 720w, /screenshots/local-vault-1440.webp 1440w, /screenshots/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/local-vault-light-1440.webp" srcset="/screenshots/local-vault-light-720.webp 720w, /screenshots/local-vault-light-1440.webp 1440w, /screenshots/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault local view showing emails kept on disk after deletion from the server · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/local-vault-720.webp 720w, /screenshots/local-vault-1440.webp 1440w, /screenshots/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/local-vault-light-1440.webp" srcset="/screenshots/local-vault-light-720.webp 720w, /screenshots/local-vault-light-1440.webp 1440w, /screenshots/local-vault-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault local view showing emails kept on disk after deletion from the server · MailVault version 2.16.0 en" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             </figure>
         </article>
 
         <article id="attachments" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">How are attachments handled?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">How are attachments handled?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               Attachments are embedded inside each .eml file as MIME parts — they are not stored as separate files. When you open an email, MailVault's Rust backend parses the MIME structure and extracts attachments on the fly. You can <strong>Open</strong>, <strong>Save As</strong>, or <strong>Show in Folder</strong> any attachment directly from the email viewer. Extracted attachments are temporarily cached for quick re-access.
             </p>
         </article>
 
         <article id="change-mail-storage-folder" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I store my mail somewhere other than the default application folder?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Can I store my mail somewhere other than the default application folder?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 Yes. By default MailVault keeps its mail store inside the app's own Application Support folder on your startup disk. You can move that store to any folder on any drive — an external SSD, a second internal disk — which matters once an archive grows to tens of gigabytes.
@@ -333,13 +334,13 @@
         </article>
 
         <article id="external-backup-location" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What is the external backup location (second copy)?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">What is the external backup location (second copy)?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
-                MailVault always keeps a <strong>working copy</strong> of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a <strong>second, independent copy</strong> on a drive you control: an external SSD, a NAS share, or a synced folder.
+                MailVault always keeps a <strong>working copy</strong> of your mail in your configured mail store — that is what you read, search and open. An external backup location adds a <strong>second, independent copy</strong> on a drive you control: an external SSD, a NAS share, or a synced folder.
               </p>
               <ul class="list-disc pl-5 space-y-2">
-                <li><strong>Written alongside the working copy.</strong> During a backup run each message is saved to both places, in the same <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir layout — so the second copy opens in Apple Mail, Thunderbird or any other client without MailVault.</li>
+                <li><strong>Written alongside the working copy.</strong> During a backup run each message is saved to both places, in the same <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir layout — so apps that support EML can open the individual message files without MailVault.</li>
                 <li><strong>Cold storage, not a mirror.</strong> The app never reads it day to day. Emails deleted on the server, or removed inside MailVault, stay in the external copy.</li>
                 <li><strong>Read and write flags survive both directions.</strong> The copies are reconciled before a run, so a message you read stays read.</li>
                 <li><strong>Independent of the app.</strong> If that computer dies or you uninstall MailVault, the external folder is still a complete, self-describing mail archive.</li>
@@ -354,7 +355,7 @@
         </article>
 
         <article id="jmap-storage" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I change the vault storage format?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">Can I change the vault storage format?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Yes. Settings &gt; Storage lets you convert between Maildir and JMAP storage. Maildir is the default, with one .eml file per message. JMAP storage keeps the original message bytes plus a standard JMAP JSON record, and stores identical messages across folders only once. Choose whether to keep the old files aside or delete them after each message is verified. Conversion runs in the background and resumes after a restart. This storage choice is independent of whether your account uses IMAP, Microsoft Graph or JMAP.</p></div>
         </article>
 
@@ -377,7 +378,7 @@
         </div>
       </div>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -400,5 +401,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

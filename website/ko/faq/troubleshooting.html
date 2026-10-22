@@ -131,6 +131,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -179,7 +180,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html" aria-current="page">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -192,13 +193,13 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">문제 해결</h1>
+      <h1 class="text-4xl font-bold mb-2">문제 해결</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">Gmail의 대역폭 제한은 무엇이며, 백업이 그 한도에 걸리면 어떻게 됩니까?</a></li><li><a href="#help-section-2">Linux에서 맞춤법 검사가 왜 아무것도 밑줄 치지 않습니까?</a></li><li><a href="#help-section-3">서버에 폴더를 추가했는데 MailVault에는 언제 표시되나요?</a></li><li><a href="#help-section-4">MailVault에 “인터넷에 연결되어 있지 않습니다”라고 나오는데 인터넷은 됩니다. 왜 그렇습니까?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">사용자가 가장 자주 겪는 문제를 해결했습니다. Gmail 일일 대역폭 한도, Linux에서 아무것도 밑줄 치지 않는 맞춤법 검사, 서버에서 추가한 폴더가 아직 보이지 않는 문제입니다.</p>
 
       <div class="space-y-4">
 
         <article id="gmail-bandwidth-limits" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Gmail의 대역폭 제한은 무엇이며, 백업이 그 한도에 걸리면 어떻게 됩니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Gmail의 대역폭 제한은 무엇이며, 백업이 그 한도에 걸리면 어떻게 됩니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 Google은 Gmail 또는 Google Workspace 계정 하나가 하루에 옮길 수 있는 메일 데이터 양을 제한합니다. 이 제한은 앱이 아니라 계정에 적용됩니다 — Apple Mail, 휴대폰, MailVault가 모두 같은 하루치 한도를 나눠 씁니다.
@@ -244,7 +245,7 @@
         </article>
 
         <article id="linux-spellcheck-dictionary" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Linux에서 맞춤법 검사가 왜 아무것도 밑줄 치지 않습니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Linux에서 맞춤법 검사가 왜 아무것도 밑줄 치지 않습니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 컴퓨터에 맞춤법 사전이 없기 때문입니다. macOS와 Windows는 시스템과 함께 사전을 제공하지만, Linux에서는 사전이 배포판에서 오며 최소 구성으로 설치한 데스크톱에는 사전이 없는 경우가 많습니다. MailVault는 WebKitGTK를 통해 맞춤법을 검사하고, WebKitGTK는 enchant와 hunspell로 단어를 찾습니다 — 그래서 hunspell 사전이 설치되어 있어야만 밑줄을 칠 수 있습니다.
@@ -269,7 +270,7 @@
         </article>
 
         <article id="folder-list-refresh" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">서버에 폴더를 추가했는데 MailVault에는 언제 표시되나요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">서버에 폴더를 추가했는데 MailVault에는 언제 표시되나요?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>10분 안에 표시됩니다.</strong> MailVault는 폴더 목록 사본을 디스크에 보관하므로 계정을 열면 사이드바가 바로 채워지고, 서버의 목록은 최대 10분에 한 번만 다시 읽습니다. 웹메일이나 다른 메일 클라이언트에서 폴더를 만들고, 이름을 바꾸거나 삭제하면, 10분이 지난 뒤 해당 계정을 열거나 사이드바의 폴더를 클릭할 때 MailVault가 변경을 반영합니다.
@@ -287,7 +288,7 @@
         </article>
 
         <article id="no-internet-connection" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault에 “인터넷에 연결되어 있지 않습니다”라고 나오는데 인터넷은 됩니다. 왜 그렇습니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">MailVault에 “인터넷에 연결되어 있지 않습니다”라고 나오는데 인터넷은 됩니다. 왜 그렇습니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>
                 <strong>배너가 뜨는 경우.</strong> 메일 서버 연결이 네트워크 문제로 보이는 방식으로 실패하면 MailVault가 직접 인터넷을 확인하고, 아무것도 응답하지 않을 때만 <strong>인터넷에 연결되어 있지 않습니다</strong>를 표시합니다. 배너가 떠 있는 동안에도 메일은 그대로 있습니다. MailVault는 이 컴퓨터에 이미 저장된 내용을 보여 주고, 백그라운드 동기화를 일시 중지하며, 확인에 성공하면 배너를 저절로 치웁니다. <strong>다시 확인</strong>을 누르면 바로 확인합니다.
@@ -323,7 +324,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -346,5 +347,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

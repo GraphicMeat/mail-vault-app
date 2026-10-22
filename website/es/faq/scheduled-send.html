@@ -155,6 +155,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -203,7 +204,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html" aria-current="page">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="Ruta de navegación" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -216,25 +217,25 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Envío programado</h1>
+      <h1 class="text-4xl font-bold mb-2">Envío programado</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">¿Qué es el envío programado?</a></li><li><a href="#help-section-2">¿Puedo programar un correo en la zona horaria de otra persona?</a></li><li><a href="#help-section-3">¿Cómo sabe MailVault la zona horaria del destinatario?</a></li><li><a href="#help-section-4">¿Cómo cambio, reprogramo o cancelo un correo programado?</a></li><li><a href="#help-section-5">¿Tiene que estar abierto MailVault para que salga un correo programado?</a></li><li><a href="#help-section-6">¿Qué es gratis y qué necesita Premium?</a></li><li><a href="#help-section-7">¿Qué pasa con los correos programados si termina mi suscripción?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Escribe un correo ahora y deja que MailVault lo envíe en una fecha y hora exactas, en cualquier zona horaria. Programar forma parte de Premium; un retraso de envío de hasta 5 minutos es gratis.</p>
 
       <div class="space-y-4">
 
         <article id="what-is-scheduled-send" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Qué es el envío programado?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">¿Qué es el envío programado?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>El envío programado guarda un correo que has escrito y lo envía en la fecha y hora que elijas, en la zona horaria que elijas. Al redactar, haz clic en la flecha junto a <strong>Enviar</strong> para abrir <strong>Programar envío</strong>, elige la fecha y la hora, revisa la zona horaria debajo y haz clic en <strong>Programar</strong>.</p>
               <p><strong>Mañana 8:00</strong> y <strong>Lunes 8:00</strong> rellenan la hora con un clic, en la zona horaria que hayas elegido.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/premium-scheduled-send-720.webp 720w, /screenshots/es/premium-scheduled-send-1440.webp 1440w, /screenshots/es/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/premium-scheduled-send-light-1440.webp" srcset="/screenshots/es/premium-scheduled-send-light-720.webp 720w, /screenshots/es/premium-scheduled-send-light-1440.webp 1440w, /screenshots/es/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Mensaje nuevo en MailVault con el panel Programar envío abierto: una respuesta para las 8:00 en Nueva York, con la zona horaria sugerida según el último correo del destinatario · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
-              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Una respuesta programada para las 8:00 en Nueva York, con la zona horaria sugerida según el último correo del destinatario.</figcaption>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/es/premium-scheduled-send-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/es/premium-scheduled-send-720.webp 720w, /screenshots/es/premium-scheduled-send-1440.webp 1440w, /screenshots/es/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/premium-scheduled-send-light-1440.webp" srcset="/screenshots/es/premium-scheduled-send-light-720.webp 720w, /screenshots/es/premium-scheduled-send-light-1440.webp 1440w, /screenshots/es/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Mensaje nuevo en MailVault con el panel Programar envío abierto: una respuesta para las 8:00 en Nueva York, con la zona horaria sugerida según el último correo del destinatario · MailVault version 2.16.0 es" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 es"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 es</span></a>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Una respuesta programada para las 8:00 en Nueva York, con la zona horaria sugerida a partir del último correo del destinatario.</figcaption>
             </figure>
         </article>
 
         <article id="schedule-time-zones" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Puedo programar un correo en la zona horaria de otra persona?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">¿Puedo programar un correo en la zona horaria de otra persona?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Sí, en cualquier zona horaria. La lista muestra cada zona con su desfase UTC, por ejemplo <strong>(UTC-04:00) New York</strong>, y puedes buscar por ciudad o por desfase: escribe <strong>+2</strong> para ver las zonas que van dos horas por delante de UTC. Las ciudades aparecen con su nombre en inglés, por ejemplo Mexico City. El desfase que se muestra es el vigente cuando se envía el correo, así que un envío después de un cambio de hora aparece bien indicado.</p>
               <p>Debajo de los campos, MailVault muestra la hora actual donde estás y en la zona elegida, y cuándo saldrá el correo en tu propia hora. Puedes comparar un envío a las 8:00 en Nueva York con tu propio reloj antes de programarlo.</p>
@@ -242,7 +243,7 @@
         </article>
 
         <article id="suggested-time-zone" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Cómo sabe MailVault la zona horaria del destinatario?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">¿Cómo sabe MailVault la zona horaria del destinatario?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Sugiere una, y siempre puedes elegir otra. Cada correo lleva el desfase UTC de su remitente, así que MailVault lee el desfase del último correo que te envió el primer destinatario y elige la zona horaria que coincide. Una nota debajo del campo indica que la sugerencia viene de su último correo. Un desfase puede corresponder a varios lugares, así que revisa la ciudad.</p>
               <p>Si nunca te ha escrito, MailVault usa la zona que elegiste la última vez que le programaste un correo. Sin ninguna de las dos, parte de tu propia zona horaria. Una zona que hayas elegido tú nunca se reemplaza.</p>
@@ -250,7 +251,7 @@
         </article>
 
         <article id="edit-scheduled-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Cómo cambio, reprogramo o cancelo un correo programado?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">¿Cómo cambio, reprogramo o cancelo un correo programado?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Los correos programados esperan en la carpeta <strong>Programados</strong> de la barra lateral. Haz clic en uno para abrirlo en la ventana de redacción y cambiar los destinatarios, el texto o la hora. Sigue programado tal como estaba hasta que guardes los cambios.</p>
               <p>Cada correo de la carpeta tiene además botones para <strong>Reprogramar</strong>, <strong>Cancelar</strong> o <strong>Enviar ahora</strong>.</p>
@@ -258,7 +259,7 @@
         </article>
 
         <article id="send-while-closed" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Tiene que estar abierto MailVault para que salga un correo programado?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">¿Tiene que estar abierto MailVault para que salga un correo programado?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>No, si puede seguir funcionando en segundo plano. Los correos programados los envía el proceso en segundo plano de MailVault. Activa <strong>Mantener en ejecución en segundo plano</strong> en Ajustes &rsaquo; <strong>Diagnóstico</strong> &rsaquo; <strong>Proceso en segundo plano</strong> y el proceso sigue funcionando después de salir y se inicia al iniciar sesión, así que los correos salen a tiempo aunque la app esté cerrada.</p>
               <p>Si ese ajuste está desactivado, o tu copia de MailVault no puede seguir funcionando en segundo plano, un correo programado sale la próxima vez que abras MailVault. La carpeta Programados indica cuál es tu caso y enlaza con el ajuste.</p>
@@ -266,7 +267,7 @@
         </article>
 
         <article id="scheduled-send-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Qué es gratis y qué necesita Premium?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">¿Qué es gratis y qué necesita Premium?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Programar un correo para una fecha y hora concretas forma parte de Premium. Retrasar un envío hasta 5 minutos es gratis: por correo con el menú junto a <strong>Enviar</strong>, o para todos los correos con <strong>Retraso de envío</strong> en Ajustes.</p>
               <p>Sin Premium, el panel Programar envío lo indica y ofrece <strong>Mejorar</strong>. <a href="/es/pricing.html#premium-scheduled-send" class="text-primary-500 hover:text-primary-600 underline">Mira lo que incluye Premium</a>.</p>
@@ -274,7 +275,7 @@
         </article>
 
         <article id="subscription-ends" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Qué pasa con los correos programados si termina mi suscripción?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">¿Qué pasa con los correos programados si termina mi suscripción?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Se envían igualmente a la hora que fijaste. Para editarlos o reprogramarlos vuelves a necesitar Premium, pero aún puedes enviar uno ahora o cancelarlo desde la carpeta Programados.</p>
             </div>
@@ -299,7 +300,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creación de Graphic Meat</p><h2 id="studio-title">Conoce a las personas detrás de MailVault.</h2><p>Somos Graphic Meat, un estudio de productos independiente que crea software útil desde 2013. MailVault es una de las cosas que hacemos. Ven a conocernos y descubre en qué más estamos trabajando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conoce Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, el estudio detrás de MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Más de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Convierte tus fotos en un libro listo para imprimir.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espacio de trabajo local para notas y código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mueve tu correo a un proveedor nuevo.</span></a></div></div></aside><footer class="mv-footer">
@@ -322,5 +323,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

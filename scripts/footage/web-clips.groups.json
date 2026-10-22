@@ -17,6 +17,11 @@
     "demo"
   ],
   "groups": {
+    "help-media": {
+      "why": "Help article recordings: localized demo mailbox, local search, privacy setting, and a real manual backup. One launch per locale; no English-only extra mail or synthetic history.",
+      "clips": ["search-local", "privacy-mode", "manual-backup"],
+      "env": { "FOOTAGE_EXPECT_TOTAL": "82" }
+    },
     "history": {
       "why": "Multi-year history, nothing extra (v1 boots D and A). archive-delete deletes 2022 from the mock server (its 65 ms body fetch shows about 6 s of progress); scheduled-send runs after it so its Scheduled count is not in the archive clip's sidebar.",
       "clips": [

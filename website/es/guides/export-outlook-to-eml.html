@@ -38,7 +38,7 @@
   "description": "Exporta un mensaje de Outlook a EML, conoce las diferencias con PST y MSG, y archiva localmente el correo de Outlook.com o Microsoft 365 con una copia verificada.",
   "url": "https://mailvaultapp.com/es/guides/export-outlook-to-eml.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/export-outlook-to-eml.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/export-outlook-to-eml.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,21 +172,21 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Guías de copias de correo · <time datetime="2026-10-15">15 de octubre de 2026</time></p>
-          <h1>Cómo exportar correos de Outlook a EML</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>Cómo exportar correos de Outlook a EML</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">Guarda un mensaje individual en el nuevo Outlook o en Outlook en la web</a></li><li><a href="#help-section-2">Exporta un buzón de Outlook.com o Microsoft 365 a EML</a></li><li><a href="#help-section-3">Verifica el archivo antes de confiar en él</a></li><li><a href="#search-local-archive-video">Demostración breve: comprueba que el correo esté disponible en la bóveda</a></li><li><a href="#help-section-4">¿Y si ya tienes un archivo PST o MSG?</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>La exportación de Outlook depende de la versión que uses. El nuevo Outlook y Outlook en la web permiten guardar mensajes individuales. Outlook clásico usa otro proceso de exportación, y una copia de un buzón en PST no es una carpeta de archivos EML. Para guardar todo un buzón en archivos EML individuales, archiva la cuenta conectada con una aplicación de escritorio compatible.</p>
-          <h2 data-i18n-block>Guarda un mensaje individual en el nuevo Outlook o en Outlook en la web</h2>
+          <h2 data-i18n-block id="help-section-1">Guarda un mensaje individual en el nuevo Outlook o en Outlook en la web</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Abre el mensaje en el panel de lectura o en su propia ventana.</li>
           <li data-i18n-block>En el nuevo Outlook, elige <strong>Más acciones → Guardar como</strong>. En la web, abre el menú Más acciones del mensaje y busca <strong>Guardar como</strong> o <strong>Descargar</strong>, según la interfaz.</li>
           <li data-i18n-block>Elige un destino si se te solicita. Comprueba la extensión del archivo guardado y ábrelo en una aplicación de correo para verificar el mensaje y los adjuntos.</li></ol>
           <p data-i18n-block>Consulta las <a href="https://support.microsoft.com/en-us/outlook/mail/save-an-outlook-message-as-a-eml-file-a-pdf-file-or-as-a-draft">instrucciones de Microsoft para guardar según la versión</a> si tus menús son distintos. Guardar un mensaje no exporta el resto de su conversación ni de su buzón.</p>
-          <h2 data-i18n-block>Exporta un buzón de Outlook.com o Microsoft 365 a EML</h2>
+          <h2 data-i18n-block id="help-section-2">Exporta un buzón de Outlook.com o Microsoft 365 a EML</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Instala MailVault y añade la cuenta con el inicio de sesión de Microsoft. Las cuentas de Outlook.com usan Microsoft Graph en MailVault; Microsoft 365 también admite la conexión de cuenta OAuth de la aplicación. Las políticas de la organización pueden impedir el acceso.</li>
           <li data-i18n-block>Revisa la bandeja de entrada, los enviados y las carpetas personalizadas. Confirma que el correo que necesitas esté disponible en la cuenta conectada; los archivos en línea y los buzones compartidos pueden necesitar otra vía de acceso compatible.</li>
           <li data-i18n-block>Selecciona las carpetas y fechas en las operaciones masivas, elige <strong>Archivar</strong> y deja que termine la descarga. Usa solo Archivar para tu primera copia.</li>
           <li data-i18n-block>Cambia al origen Bóveda y comprueba los mensajes antiguos y los adjuntos. Los mensajes archivados se guardan localmente como archivos .eml individuales.</li></ol>
-          <h2 data-i18n-block>Verifica el archivo antes de confiar en él</h2>
+          <h2 data-i18n-block id="help-section-3">Verifica el archivo antes de confiar en él</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Cambia el origen de los mensajes a <strong>Bóveda</strong>, en lugar de Servidor o Todo. Busca un mensaje antiguo que reconozcas.</li>
           <li data-i18n-block>Desconecta la red y abre algunos mensajes archivados de distintas carpetas y años. Abre también sus adjuntos. Un asunto en una lista no demuestra que el cuerpo del mensaje esté guardado.</li>
@@ -198,14 +199,14 @@
           <p data-i18n-block class="text-sm">Demostración con correo ficticio, editada a partir de las grabaciones de demostración de macOS existentes. El inicio de sesión y parte de la preparación suceden fuera de cámara; no es una conexión en directo con un proveedor.</p>
           <details><summary data-i18n-block>Lee la descripción de la demostración</summary>
           <p data-i18n-block>La grabación muestra una búsqueda en un archivo local preparado. Abre los resultados guardados y prueba los adjuntos sin conexión antes de confiar en tu copia. Todo el correo de la demostración es ficticio.</p></details></section>
-          <h2 data-i18n-block>¿Y si ya tienes un archivo PST o MSG?</h2>
-          <p data-i18n-block>PST es un contenedor de datos de Outlook; MSG es otro formato para mensajes individuales. Cambiarles el nombre a .eml no los convierte. Conserva el original, usa Outlook o un conversor que admita expresamente el formato y valida una conversión de muestra antes de procesar toda la colección. Las instrucciones de MailVault de esta página para archivar una cuenta conectada no importan ni convierten archivos PST.</p>
+          <h2 data-i18n-block id="help-section-4">¿Y si ya tienes un archivo PST o MSG?</h2>
+          <p data-i18n-block>PST es un contenedor de datos de Outlook; MSG es otro formato para mensajes individuales. Cambiarles el nombre a .eml no los convierte. Conserva el original, usa Outlook o un conversor que admita expresamente el formato y valida una conversión de muestra antes de procesar toda la colección. Las instrucciones de MailVault de esta página para archivar una cuenta conectada no importan ni convierten archivos PST. Estas instrucciones sobre la estructura de archivos se refieren al formato Maildir predeterminado. Ajustes → Almacenamiento también ofrece almacenamiento JMAP, que conserva los bytes originales de los mensajes con registros JSON y elimina los duplicados de mensajes idénticos.</p>
           <p data-i18n-block>Para el método nativo de Microsoft para copiar buzones, consulta <a href="https://support.microsoft.com/en-us/office/back-up-your-email-e5845b0b-1aeb-424f-924c-aa1c33b18833">Hacer una copia del correo de Outlook</a>. Para el proceso en Mac, consulta <a href="/es/guides/back-up-outlook-com-email-to-mac.html">hacer una copia del correo de Outlook.com en Mac</a>. Si el problema es el almacenamiento, continúa con <a href="/es/guides/free-up-space-hotmail-outlook-com.html">liberar espacio en Outlook.com</a>.</p>
           <p data-i18n-block><a href="/es/get-started.html">Descarga MailVault gratis</a> para crear tu primer archivo local. El archivado manual es gratuito; el archivado automático, las copias programadas y Archivar y eliminar requieren <a href="/es/pricing.html">Premium</a>.</p>
           <p data-i18n-block>Más guías prácticas: <a href="/es/guides/backup-gmail-to-eml.html">Cómo guardar Gmail en archivos EML</a> · <a href="/es/guides/download-all-emails-mac.html">Cómo descargar todos tus correos en Mac</a> · <a href="/es/guides/backup-email-linux.html">Cómo hacer una copia del correo en Linux como EML</a> · <a href="/es/guides/linux-email-archive.html">Un archivo local de correo para Linux: qué comprobar</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Verlo en MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/es/manual-backup.webp"><img src="/assets/help-media/es/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Crear una copia de todas las cuentas y comprobar que termina</figcaption><video controls playsinline preload="none" poster="/assets/help-media/es/manual-backup.jpg" aria-label="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/es/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/es/manual-backup.vtt" srclang="es" label="Español" default></video></figure><details class="mv-help-contents"><summary>Transcripción del vídeo</summary><p>Iniciar la copia de seguridad de todas las cuentas en los ajustes de copia de seguridad. Seguir el progreso hasta que termine la copia.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -233,5 +234,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

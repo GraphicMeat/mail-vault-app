@@ -15,7 +15,6 @@
   "3afa38a8833e": "Limpeza de e-mails é o mesmo que escrita com IA?",
   "6ecb1a5060dc": "Não. A escrita com IA tem suas próprias configurações de provedor para Apple Intelligence, um modelo baixado ou um endpoint compatível, como Ollama. Alterar esse provedor não muda o classificador da Limpeza de e-mails.",
   "eea32a5141b1": "Excluir remove a cópia do servidor sem criar uma cópia no cofre primeiro. Use Arquivar em Limpeza de e-mails para salvar e verificar uma cópia local antes de removê-la do servidor. Cápsula do tempo pode mostrar o histórico salvo, mas não pode recuperar uma mensagem que nunca foi salva.",
-  "3e016ad79e11": "Conecte o Yahoo com uma senha de app, arquive suas pastas e verifique sua cópia local.",
   "6dda9750c924": "Onde fica o catálogo de endereços?",
   "69a1744ca80e": "Limpeza de e-mails do MailVault usa regras locais e um classificador Naive Bayes. Não precisa baixar nenhum modelo. Revise as categorias antes de arquivar ou excluir cópias do servidor.",
   "88101e500957": "Classifique e-mails localmente sem baixar um LLM. Revise categorias, arquive com segurança e mantenha o controle das cópias do servidor."

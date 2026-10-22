@@ -38,7 +38,7 @@
   "description": "Archiviare la posta su Mac: archivio, backup o sincronizzazione, le opzioni su macOS, quale formato conservare e come creare e controllare un archivio locale.",
   "url": "https://mailvaultapp.com/it/guides/email-archiving-for-mac.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -161,6 +161,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Vai al contenuto</a>
@@ -208,7 +209,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Argomenti di aiuto</summary><nav aria-label="Argomenti del centro assistenza"><a href="/it/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aiuto di MailVault</a><a href="/it/faq/getting-started.html">Per iniziare</a><a href="/it/faq/storage-and-vault.html">Archiviazione e il tuo vault</a><a href="/it/faq/providers.html">Provider di posta</a><a href="/it/faq/backup-and-restore.html">Backup e ripristino</a><a href="/it/faq/explorer-and-insights.html">Explorer e Statistiche</a><a href="/it/faq/scheduled-send.html">Invio programmato</a><a href="/it/faq/premium.html">Gratuito e Premium</a><a href="/it/faq/troubleshooting.html">Risoluzione dei problemi</a><a href="/it/docs.html#guides" class="mv-help-divider">Guide pratiche</a><a href="/it/docs.html#articles">Articoli</a><a href="/it/features.html">Riferimento delle funzioni</a><a href="/changelog.html">Note di rilascio</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -218,7 +219,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Come archiviare la posta su un Mac e conservarla per sempre</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Come archiviare la posta su un Mac e conservarla per sempre</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>In questa pagina</summary><ul><li><a href="#help-section-1">Archivio, backup e sincronizzazione non sono la stessa cosa</a></li><li><a href="#help-section-2">Le tue opzioni su un Mac</a></li><li><a href="#help-section-3">In che formato conservare la posta</a></li><li><a href="#help-section-4">Passo per passo: archiviare Gmail, Outlook.com, iCloud o IMAP sul Mac con MailVault</a></li><li><a href="#help-section-5">Come controllare che l'archivio sia completo</a></li><li><a href="#help-section-6">Come mantenere aggiornato l'archivio</a></li><li><a href="#help-section-7">Domande frequenti</a></li><li><a href="#help-section-8">Cosa fare adesso</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 min di lettura</span>
           </div>
@@ -240,7 +241,7 @@
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Archivio, backup e sincronizzazione non sono la stessa cosa</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-1">Archivio, backup e sincronizzazione non sono la stessa cosa</h2>
 
           <p>
             Il pulsante Archivia della tua app di posta è uno spostamento, non una copia. La guida di Apple a Mail dice che l'archiviazione sposta il messaggio in una casella Archivio creata per quell'account email. L'aiuto di Gmail dice che un messaggio archiviato si trova ancora in Tutti i messaggi. L'aiuto di Outlook di Microsoft dice che il pulsante Archivia non riduce la dimensione della casella. In tutti e tre i casi la posta resta presso il provider.
@@ -289,17 +290,17 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Le tue opzioni su un Mac</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-2">Le tue opzioni su un Mac</h2>
 
           <ul class="list-disc pl-6 space-y-3">
             <li><strong>Esporta casella di posta di Apple Mail.</strong> Seleziona una o più caselle, scegli Casella &gt; Esporta casella di posta e indica una cartella. Apple dice che l'esportazione è in formato mbox e che Mail non sovrascrive un'esportazione precedente, ma crea un nuovo file .mbox accanto. Archivio &gt; Importa caselle di posta la reimporta. È gratuito e integrato, ma è un'istantanea da ripetere a mano.</li>
             <li><strong>Thunderbird.</strong> Gratuito e open source, con un download per macOS. Mozilla dice che Thunderbird conserva la posta come un file mbox per cartella per impostazione predefinita, con un archivio opzionale a un file per messaggio (Maildir) che Mozilla considera ancora sperimentale. Il componente aggiuntivo ImportExportTools NG esporta i messaggi in EML, PDF e altri formati, e le cartelle in mbox.</li>
             <li><strong>Strumenti di backup a riga di comando.</strong> Got Your Back (GYB) è uno strumento open source che fa il backup degli account Gmail e Google Workspace in una cartella locale tramite l'API di Gmail, e può ripristinarli. È adatto a chi si trova a suo agio nel Terminale e copre solo gli account Google.</li>
             <li><strong>Archiviatori dedicati.</strong> Mail Archiver X, MailSteward ed EagleFiler sono app a pagamento per Mac che raccolgono la posta in un archivio o in una libreria ricercabile, ciascuna conservata a modo suo. La nostra pagina sul <a href="/it/guides/best-email-archiver-for-mac.html">miglior archiviatore di email per Mac</a> li confronta per caso d'uso.</li>
-            <li><strong>MailVault.</strong> Un'app di posta gratuita per macOS, Windows e Linux che tiene una copia della tua posta sul computer come semplici file .eml in cartelle in stile Maildir, accede a Gmail, Microsoft 365, Outlook.com e qualsiasi account IMAP, e non mette alcun account o server MailVault sul percorso della tua posta. Il resto di questa guida la usa per la procedura passo per passo.</li>
+            <li><strong>MailVault.</strong> Un'app di posta gratuita per macOS, Windows e Linux che tiene una copia della tua posta sul computer come semplici file .eml in cartelle in stile Maildir, accede a Gmail, Microsoft 365, Outlook.com e qualsiasi account IMAP, e non mette alcun account o server MailVault sul percorso della tua posta. Il resto di questa guida la usa per la procedura passo per passo. Queste istruzioni sulla struttura dei file si riferiscono al formato predefinito Maildir. Impostazioni → Archiviazione offre anche l’archiviazione JMAP, che conserva i byte originali dei messaggi con record JSON e deduplica i messaggi identici.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">In che formato conservare la posta</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-3">In che formato conservare la posta</h2>
 
           <p>
             Il formato conta più dello strumento, perché l'archivio dovrebbe sopravvivere allo strumento.
@@ -315,7 +316,7 @@
             Una regola pratica: tieni almeno una copia del tuo archivio in .eml o mbox, qualunque altra cosa usi. Per sapere cosa controllare prima di fidarti di uno strumento, vedi la nostra <a href="/it/guides/imap-backup-tool-checklist.html">checklist per gli strumenti di backup IMAP</a>.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Passo per passo: archiviare Gmail, Outlook.com, iCloud o IMAP sul Mac con MailVault</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-4">Passo per passo: archiviare Gmail, Outlook.com, iCloud o IMAP sul Mac con MailVault</h2>
 
           <p>
             MailVault funziona su macOS 11 Big Sur o successivo, su Apple Silicon e Intel. Ogni passaggio è gratuito salvo dove indicato Premium.
@@ -328,10 +329,10 @@
           </ol>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/settings-backup-720.webp 720w, /screenshots/it/settings-backup-1440.webp 1440w, /screenshots/it/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/it/settings-backup-light-1440.webp" srcset="/screenshots/it/settings-backup-light-720.webp 720w, /screenshots/it/settings-backup-light-1440.webp 1440w, /screenshots/it/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Impostazioni di MailVault, Backup e ripristino, scheda Impostazioni backup. Mostra dove è conservata la posta con i pulsanti Apri cartella e Sposta la posta, il menu Cosa salvare impostato su Solo le email archiviate e il selettore della cartella Seconda copia: archiviazione esterna a freddo. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/it/settings-backup-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/it/settings-backup-720.webp 720w, /screenshots/it/settings-backup-1440.webp 1440w, /screenshots/it/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/it/settings-backup-light-1440.webp" srcset="/screenshots/it/settings-backup-light-720.webp 720w, /screenshots/it/settings-backup-light-1440.webp 1440w, /screenshots/it/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Impostazioni di MailVault, Backup e ripristino, scheda Impostazioni backup. Mostra dove è conservata la posta con i pulsanti Apri cartella e Sposta la posta, il menu Cosa salvare impostato su Solo le email archiviate e il selettore della cartella Seconda copia: archiviazione esterna a freddo. · MailVault version 2.16.0 it" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 it">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 it</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Impostazioni backup. Cambia Cosa salvare da Solo le email archiviate a Tutte le email prima della prima esecuzione.</figcaption>
           </figure>
 
@@ -349,7 +350,7 @@
             Un'impostazione da conoscere: Impostazioni &gt; Archiviazione &gt; Modalità di download decide quanta posta normale in cache resta sul Mac. L'impostazione predefinita, Tieni i recenti, conserva gli ultimi mesi. Non rimuove mai i backup né la posta archiviata, quindi non riduce il tuo archivio.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Come controllare che l'archivio sia completo</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-5">Come controllare che l'archivio sia completo</h2>
 
           <p>
             Controlla la copia prima di eliminare qualsiasi cosa sul server.
@@ -363,18 +364,18 @@
           </ul>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/state-icons-720.webp 720w, /screenshots/it/state-icons-1440.webp 1440w, /screenshots/it/state-icons-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/it/state-icons-light-1440.webp" srcset="/screenshots/it/state-icons-light-720.webp 720w, /screenshots/it/state-icons-light-1440.webp 1440w, /screenshots/it/state-icons-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="La posta in arrivo di MailVault con un&#39;icona del vault su ogni riga di messaggio. Una legenda in fondo all&#39;elenco riporta Solo sul server, Nella tua cassaforte, Unica copia e Sul disco di backup, e l&#39;elenco delle cartelle ha gli interruttori Tutta la posta, Server e Cassaforte. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/it/state-icons-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/it/state-icons-720.webp 720w, /screenshots/it/state-icons-1440.webp 1440w, /screenshots/it/state-icons-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/it/state-icons-light-1440.webp" srcset="/screenshots/it/state-icons-light-720.webp 720w, /screenshots/it/state-icons-light-1440.webp 1440w, /screenshots/it/state-icons-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="La posta in arrivo di MailVault con un&#39;icona del vault su ogni riga di messaggio. Una legenda in fondo all&#39;elenco riporta Solo sul server, Nella tua cassaforte, Unica copia e Sul disco di backup, e l&#39;elenco delle cartelle ha gli interruttori Tutta la posta, Server e Cassaforte. · MailVault version 2.16.0 it" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 it">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 it</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Ogni riga dice dove si trova quel messaggio. La legenda sotto l'elenco spiega le icone.</figcaption>
           </figure>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/premium-backup-health-detail-720.webp 720w, /screenshots/it/premium-backup-health-detail-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/it/premium-backup-health-detail-light-1440.webp" srcset="/screenshots/it/premium-backup-health-detail-light-720.webp 720w, /screenshots/it/premium-backup-health-detail-light-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="524" loading="lazy" decoding="async" alt="La tabella Verifica del backup in MailVault. L&#39;app è al 73 percento, la copia esterna non è configurata, e ogni riga di cartella elenca un conteggio Server accanto a un conteggio App, per esempio Archive 12 sul server e 0 nell&#39;app. Il totale dice 84 di 115 nell&#39;app. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/it/premium-backup-health-detail-light-1440.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/it/premium-backup-health-detail-720.webp 720w, /screenshots/it/premium-backup-health-detail-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/it/premium-backup-health-detail-light-1440.webp" srcset="/screenshots/it/premium-backup-health-detail-light-720.webp 720w, /screenshots/it/premium-backup-health-detail-light-1440.webp 1440w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="524" loading="lazy" decoding="async" alt="La tabella Verifica del backup in MailVault. L&#39;app è al 73 percento, la copia esterna non è configurata, e ogni riga di cartella elenca un conteggio Server accanto a un conteggio App, per esempio Archive 12 sul server e 0 nell&#39;app. Il totale dice 84 di 115 nell&#39;app. · MailVault version 2.16.0 it" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 it">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 it</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Premium: il monitoraggio dei backup confronta il server e il tuo Mac cartella per cartella. Qui le cartelle Archive, Trash, Clients e Suppliers non sono ancora salvate.</figcaption>
           </figure>
 
@@ -382,7 +383,7 @@
             Quando sei pronto a svuotare il server, <a href="/it/features/archive-and-delete.html">Archivia ed elimina</a> di MailVault (Premium) copia ogni messaggio nel tuo vault, controlla la copia e solo allora elimina la copia sul server. Eliminare dal server da solo è gratuito, ma in quel caso il controllo spetta a te.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Come mantenere aggiornato l'archivio</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-6">Come mantenere aggiornato l'archivio</h2>
 
 
           <ul class="list-disc pl-6 space-y-2">
@@ -394,7 +395,7 @@
             In ogni caso, tieni una seconda copia lontano dal Mac: il vault è fatto di normali file, quindi un disco esterno o un NAS può ospitarne una. Per le ragioni più generali a favore di una copia locale, leggi <a href="/it/guides/archive-imap-emails-locally.html">come archiviare in locale le email IMAP</a>.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Domande frequenti</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-7">Domande frequenti</h2>
 
           <div class="pt-2">
             <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Il pulsante Archivia di Apple Mail salva la mia posta sul Mac?</h3>
@@ -421,7 +422,7 @@
             <p>Sì, una volta controllato l'archivio. Le copie archiviate in MailVault restano sul tuo disco qualunque cosa faccia poi il server. MailVault Premium può archiviare ed eliminare in un solo passaggio, controllando ogni copia salvata prima che la copia sul server venga rimossa.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Cosa fare adesso</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-8">Cosa fare adesso</h2>
 
           <p>
             Scegli l'account che ti dispiacerebbe di più perdere, crea un primo archivio questa settimana e controllalo con i passaggi qui sopra. Per farlo con MailVault basta un download gratuito, senza account da creare.
@@ -440,7 +441,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Guarda in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/it/manual-backup.webp"><img src="/assets/help-media/it/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Eseguire il backup di tutti gli account e verificarne il completamento</figcaption><video controls playsinline preload="none" poster="/assets/help-media/it/manual-backup.jpg" aria-label="Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/it/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/it/manual-backup.vtt" srclang="it" label="Italiano" default></video></figure><details class="mv-help-contents"><summary>Trascrizione del video</summary><p>Avviare il backup di tutti gli account nelle impostazioni di backup. Seguire l’avanzamento fino al completamento del backup.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -464,5 +465,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Schermata del prodotto"><button type="button">Chiudi schermata</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

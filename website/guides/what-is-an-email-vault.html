@@ -38,7 +38,7 @@
     "description": "An email vault can mean a local archive you own, a hosted encrypted mailbox or a compliance archive. How they differ, and how to build your own for free.",
     "url": "https://mailvaultapp.com/guides/what-is-an-email-vault.html",
     "datePublished": "2026-10-08",
-    "dateModified": "2026-10-08",
+    "dateModified": "2026-10-22",
     "author": {
       "@type": "Organization",
       "name": "MailVault"
@@ -151,6 +151,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -198,7 +199,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -208,7 +209,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">What Is an Email Vault? Three Meanings, and How to Build Your Own</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">What Is an Email Vault? Three Meanings, and How to Build Your Own</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">Three things people mean by &quot;email vault&quot;</a></li><li><a href="#help-section-2">Which one MailVault is</a></li><li><a href="#help-section-3">A vault is not a mail client that mirrors the server</a></li><li><a href="#help-section-4">How to build your own email vault in 10 minutes</a></li><li><a href="#help-section-5">Custody: what happens to your mail if the provider closes the account</a></li><li><a href="#help-section-6">Frequently asked questions</a></li><li><a href="#help-section-7">What to do next</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 min read</span>
           </div>
@@ -226,11 +227,11 @@
               <li><strong>Local email vault:</strong> a copy of your mail on your own disk that stays when the server deletes it. You hold it.</li>
               <li><strong>Hosted secure mailbox:</strong> mail stored encrypted on a provider's servers. Private from others, but still an account someone else runs.</li>
               <li><strong>Compliance archive:</strong> a company-run copy of every message, kept for a set number of years for audits and legal requests.</li>
-              <li>MailVault is the first kind: a free desktop app for macOS, Windows and Linux that keeps your mail as plain <code>.eml</code> files on your computer.</li>
+              <li>MailVault is the first kind: a free desktop app for macOS, Windows and Linux that keeps your mail as plain <code>.eml</code> files on your computer. These file-layout instructions use the default Maildir format. Settings → Storage also offers JMAP storage, which keeps original message bytes with JSON records and deduplicates identical messages.</li>
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Three things people mean by "email vault"</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">Three things people mean by "email vault"</h2>
 
           <p>
             A search for <em>email vault</em> or <em>mail vault</em> returns very different tools, because many products use the word. Here is each meaning in short, without reference to any particular product.
@@ -290,7 +291,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Which one MailVault is</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Which one MailVault is</h2>
 
           <p>
             MailVault is the first kind. It is a desktop email app for macOS, Windows and Linux, and it keeps a copy of your mail in a vault on your computer. Every message is a plain <code>.eml</code> file in Maildir-style folders, so Apple Mail, Thunderbird or a text editor can open it without MailVault. You sign in with your email provider, never with MailVault: Gmail and Microsoft 365 through their own sign-in pages, Outlook.com through Microsoft Graph, and any other provider over IMAP. Your computer talks to your mail server directly, and MailVault's servers never see your messages. The source is live on GitHub.
@@ -301,11 +302,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/local-vault-720.webp 720w, /screenshots/local-vault-1440.webp 1440w, /screenshots/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/local-vault-light-1440.webp" srcset="/screenshots/local-vault-light-720.webp 720w, /screenshots/local-vault-light-1440.webp 1440w, /screenshots/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault with the Vault tab selected under Folders. The inbox header shows an In your vault count, and a legend at the bottom of the list explains the row icons: Server only, In your vault, Only copy, On backup drive. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/local-vault-720.webp 720w, /screenshots/local-vault-1440.webp 1440w, /screenshots/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/local-vault-light-1440.webp" srcset="/screenshots/local-vault-light-720.webp 720w, /screenshots/local-vault-light-1440.webp 1440w, /screenshots/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault with the Vault tab selected under Folders. The inbox header shows an In your vault count, and a legend at the bottom of the list explains the row icons: Server only, In your vault, Only copy, On backup drive. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">The Vault tab shows only what is saved on your computer. The header counts how much of the folder is in your vault, and each row's icon says where that message lives.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">A vault is not a mail client that mirrors the server</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">A vault is not a mail client that mirrors the server</h2>
 
           <p>
             Most mail apps are mirrors. They show what is on the server and keep a local cache for speed. When the server deletes a message, the mirror deletes it too on the next sync. That is right for keeping a phone, a laptop and webmail in agreement, and wrong for keeping mail.
@@ -317,7 +318,7 @@
             One detail matters. MailVault also keeps a working cache, and by default (the Keep Recent download mode) it removes cached copies older than a few months from your computer while the server keeps its copy. Cached mail is not the vault; archived and backed-up mail is never removed by any download mode. That is why the steps below end with an explicit backup or archive.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">How to build your own email vault in 10 minutes</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">How to build your own email vault in 10 minutes</h2>
 
           <p>
             Ten minutes is the setup. Downloading a large mailbox keeps going in the background after that, and how long it takes depends on the size of the mailbox and your connection. The six steps below use only the free app.
@@ -333,7 +334,7 @@
           </ol>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/en/manual-backup.jpg" width="960" height="660" aria-label="Back up all accounts now is pressed and a progress bar runs. The backup card changes from 5 copies are not in your vault yet to Every copy is in your vault, last backup just now, 48 emails. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/en/manual-backup.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/en/manual-backup.jpg" width="960" height="660" aria-label="Back up all accounts now is pressed and a progress bar runs. The backup card changes from 5 copies are not in your vault yet to Every copy is in your vault, last backup just now, 48 emails. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/en/manual-backup.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">Manual backups</strong><span class="mv-clip-text">Press Back up all accounts now and a progress bar runs until the card says every copy is in your vault.</span></figcaption></figure>
           </div>
 
@@ -342,11 +343,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/selection-dialog-archive-720.webp 720w, /screenshots/selection-dialog-archive-1440.webp 1440w, /screenshots/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/selection-dialog-archive-light-1440.webp" srcset="/screenshots/selection-dialog-archive-light-720.webp 720w, /screenshots/selection-dialog-archive-light-1440.webp 1440w, /screenshots/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="The Choose Action dialog in MailVault for a selection of emails. It shows how many are on the server and how many are archived here, warns that unarchiving deletes the vault copy, and lists Archive, Unarchive, Delete from Server, Archive and Delete, and Delete Everywhere, with Archive selected. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/selection-dialog-archive-720.webp 720w, /screenshots/selection-dialog-archive-1440.webp 1440w, /screenshots/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/selection-dialog-archive-light-1440.webp" srcset="/screenshots/selection-dialog-archive-light-720.webp 720w, /screenshots/selection-dialog-archive-light-1440.webp 1440w, /screenshots/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="The Choose Action dialog in MailVault for a selection of emails. It shows how many are on the server and how many are archived here, warns that unarchiving deletes the vault copy, and lists Archive, Unarchive, Delete from Server, Archive and Delete, and Delete Everywhere, with Archive selected. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Archiving selected mail by hand. Archive copies messages into the vault and leaves the server alone. The dialog counts what is already archived before you pick anything riskier.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Custody: what happens to your mail if the provider closes the account</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Custody: what happens to your mail if the provider closes the account</h2>
 
           <p>
             Your inbox lives on infrastructure someone else runs, under terms they can change. Accounts get locked when a phone number or authenticator is lost. Employers close mailboxes the day someone leaves. Providers delete inactive accounts: Google, for example, says it can delete a Google Account that has been inactive for two years, along with its content (<a href="https://support.google.com/accounts/answer/12418290" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Google's inactive account policy</a>). Our post on why <a href="/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">your email provider is not a backup</a> goes through these cases in more detail.
@@ -365,7 +366,7 @@
             If you know an account is about to close, build the vault first and check it on the Vault tab before you lose access. If you are on a Mac and still comparing tools, <a href="/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">email archiving for Mac</a> covers the wider choice.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Frequently asked questions</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">Frequently asked questions</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Is an email vault the same as a backup?</h3>
           <p>Close, but not quite. A backup is a copy you restore from when something breaks. A vault is a copy you also use: you read and search it every day, and it keeps messages after the server has deleted them. MailVault can also write a second copy to an external drive, which is the backup of your vault.</p>
@@ -379,7 +380,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">What happens to my vault if I stop paying for Premium?</h3>
           <p>Nothing is deleted. Reading, searching, archiving and manual backups are free, and a lapsed Premium subscription never removes mail from your computer. You lose the Premium extras, such as scheduled backups and Archive &amp; Delete.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">What to do next</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">What to do next</h2>
 
           <p>
             The quickest way to judge a local vault is to build one with a single account and look at the Vault tab. The <a href="/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">local vault feature page</a> has the details on file layout and moving the vault to another drive, and <a href="/pricing.html" class="text-primary-500 hover:text-primary-600 underline">pricing</a> lists what Premium adds. Once your mail is in the vault, <a href="/blog/email-insights-who-fills-your-inbox.html" class="text-primary-500 hover:text-primary-600 underline">MailVault Insights</a> can show you who fills it.
@@ -397,7 +398,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -421,5 +422,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

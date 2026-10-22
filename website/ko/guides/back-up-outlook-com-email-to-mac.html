@@ -38,7 +38,7 @@
   "description": "Outlook.com과 Hotmail 메일을 Mac에 백업하는 네 가지 방법: Mac용 Outlook, Apple Mail, Thunderbird, MailVault. 각각 무엇을 저장하고 어떻게 확인하는지.",
   "url": "https://mailvaultapp.com/ko/guides/back-up-outlook-com-email-to-mac.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -161,6 +161,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -208,7 +209,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -218,7 +219,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook.com과 Hotmail 메일을 Mac에 백업하는 방법</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook.com과 Hotmail 메일을 Mac에 백업하는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">시작하기 전에</a></li><li><a href="#help-section-2">방법 1: 기존 Mac용 Outlook(.olm 파일)</a></li><li><a href="#help-section-3">방법 2: Apple Mail(.mbox 파일)</a></li><li><a href="#help-section-4">방법 3: Thunderbird(.mbox 또는 .eml 파일)</a></li><li><a href="#help-section-5">방법 4: MailVault(검색할 수 있는 .eml 파일)</a></li><li><a href="#help-section-6">네 가지 방법 나란히 보기</a></li><li><a href="#help-section-7">백업이 완전한지 확인하는 방법</a></li><li><a href="#help-section-8">자주 묻는 질문</a></li><li><a href="#help-section-9">다음에 할 일</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>9분 분량</span>
             <span aria-hidden="true">&middot;</span>
@@ -228,8 +229,7 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p>
-            지금 쓸 수 있는, Outlook.com이나 Hotmail 메일을 Mac에 백업하는 방법은 네 가지입니다. 기존 Mac용 Outlook에서 <code>.olm</code> 파일을 내보내거나, Apple Mail에서 <code>.mbox</code> 파일을 내보내거나, 추가 기능을 써서 Thunderbird에서 내보내거나, MailVault가 모든 메시지를 <code>.eml</code> 파일로 저장하게 하는 것입니다. 이 페이지는 네 가지를 비교하고, 각각 무엇을 얻는지 보여 주고, 백업에 의존하기 전에 확인하는 방법을 설명합니다. 백업한 뒤 온라인에서 메일을 지우고 싶다면 <a href="/ko/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">Hotmail과 Outlook.com의 공간을 비우는 방법</a>을 읽으십시오.
-          </p>
+            지금 쓸 수 있는, Outlook.com이나 Hotmail 메일을 Mac에 백업하는 방법은 네 가지입니다. 기존 Mac용 Outlook에서 <code>.olm</code> 파일을 내보내거나, Apple Mail에서 <code>.mbox</code> 파일을 내보내거나, 추가 기능을 써서 Thunderbird에서 내보내거나, MailVault가 모든 메시지를 <code>.eml</code> 파일로 저장하게 하는 것입니다. 이 페이지는 네 가지를 비교하고, 각각 무엇을 얻는지 보여 주고, 백업에 의존하기 전에 확인하는 방법을 설명합니다. 백업한 뒤 온라인에서 메일을 지우고 싶다면 <a href="/ko/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">Hotmail과 Outlook.com의 공간을 비우는 방법</a>을 읽으십시오. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
 
           <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">빠른 답</p>
@@ -241,7 +241,7 @@
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">시작하기 전에</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">시작하기 전에</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Microsoft의 자체 내보내기에는 데스크톱 Outlook이 필요합니다.</strong> Microsoft 도움말 페이지에 따르면 Outlook.com 메일함은 데스크톱 버전 Outlook으로 내보냅니다. Windows에서는 .pst 파일, 기존 Mac용 Outlook에서는 .olm 파일입니다. Outlook이 없다면 Microsoft는 30일 무료 Microsoft 365 체험판을 권합니다.</li>
@@ -249,7 +249,7 @@
             <li><strong>디스크 공간을 확인하십시오.</strong> Outlook.com에서 <strong>설정</strong> &gt; <strong>계정</strong> &gt; <strong>스토리지</strong>를 보십시오. 백업에는 Mac에 대략 그만큼의 여유 공간이 필요합니다.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">방법 1: 기존 Mac용 Outlook(.olm 파일)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">방법 1: 기존 Mac용 Outlook(.olm 파일)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Outlook.com 계정을 Mac용 Outlook에 추가하고 동기화가 끝날 때까지 기다리십시오.</li>
@@ -262,7 +262,7 @@
             <strong>얻는 것:</strong> 메일이 담긴 .olm 파일 하나이며, 선택했다면 연락처와 캘린더도 들어 있습니다. <strong>도구</strong> &gt; <strong>가져오기</strong>로 Mac용 Outlook에 다시 가져오도록 만들어진 파일입니다. <strong>적합한 사람:</strong> 이미 Mac용 Outlook을 쓰는 사람.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">방법 2: Apple Mail(.mbox 파일)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">방법 2: Apple Mail(.mbox 파일)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Mail에서 <strong>Mail</strong> &gt; <strong>계정 추가</strong>를 고르고, Outlook.com 주소를 입력한 뒤 단계를 따르십시오. Microsoft에 따르면 계정을 Outlook.com으로 설정하면 Apple Mail이 최신 로그인 방식을 씁니다.</li>
@@ -275,7 +275,7 @@
             <strong>얻는 것:</strong> 메일상자마다 .mbox 패키지 하나. 다시 내보내면 Mail은 기존 파일을 바꾸지 않고 <em>My Mailbox 3.mbox</em>처럼 그 옆에 새 파일을 만듭니다. 나중에 백업을 읽으려면 <strong>파일</strong> &gt; <strong>메일상자 가져오기</strong>를 쓰십시오. 메시지는 <strong>가져오기</strong>라는 새 메일상자에 나타납니다. <strong>적합한 사람:</strong> 아무것도 설치하지 않고 빠르게 사본을 만들고 싶은 사람. 내보내기는 매번 스냅샷이므로 새 메일이 오면 다시 내보내야 합니다.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">방법 3: Thunderbird(.mbox 또는 .eml 파일)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">방법 3: Thunderbird(.mbox 또는 .eml 파일)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Thunderbird를 설치하고 Outlook.com 계정을 추가하십시오. Mozilla의 2026년 가이드는 인증 방식을 <strong>OAuth2</strong>로 설정하고, Thunderbird 자체 설정에서 Microsoft 사이트의 쿠키를 허용하라고 안내합니다.</li>
@@ -288,7 +288,7 @@
             <strong>적합한 사람:</strong> 무료 오픈소스 메일 앱을 일상적으로도 쓰고 싶은 사람. 회사나 학교 계정은 관리자가 먼저 Thunderbird를 승인해야 할 수 있습니다.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">방법 4: MailVault(검색할 수 있는 .eml 파일)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">방법 4: MailVault(검색할 수 있는 .eml 파일)</h2>
 
           <p>
             MailVault는 macOS, Windows, Linux용 무료 메일 앱으로, 메일 사본을 컴퓨터의 볼트에 간직합니다. MailVault 계정이 없고, 메일이 MailVault 서버를 거치지 않습니다. 아래 단계는 저희 웹사이트에서 내려받는 버전 기준입니다. Mac App Store판은 백업 설정과 볼트 옮기기 등 몇 군데가 다릅니다.
@@ -307,7 +307,7 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/onboarding-account-720.webp 720w, /screenshots/ko/onboarding-account-1440.webp 1440w, /screenshots/ko/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/onboarding-account-light-1440.webp" srcset="/screenshots/ko/onboarding-account-light-720.webp 720w, /screenshots/ko/onboarding-account-light-1440.webp 1440w, /screenshots/ko/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="데이터가 있는 곳이라는 제목의 MailVault 첫 실행 화면. 시스템 키체인, 평문 파일에는 아무것도 두지 않습니다, 계정 없음, 원격 수집 없음, 그리고 내 보관함: 보관하는 메일은 한 통씩 디스크에 표준 .eml 파일로 저장됩니다가 나열되어 있고, 그 아래에 첫 계정 추가하기 버튼이 있습니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/onboarding-account-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/onboarding-account-720.webp 720w, /screenshots/ko/onboarding-account-1440.webp 1440w, /screenshots/ko/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/onboarding-account-light-1440.webp" srcset="/screenshots/ko/onboarding-account-light-720.webp 720w, /screenshots/ko/onboarding-account-light-1440.webp 1440w, /screenshots/ko/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="데이터가 있는 곳이라는 제목의 MailVault 첫 실행 화면. 시스템 키체인, 평문 파일에는 아무것도 두지 않습니다, 계정 없음, 원격 수집 없음, 그리고 내 보관함: 보관하는 메일은 한 통씩 디스크에 표준 .eml 파일로 저장됩니다가 나열되어 있고, 그 아래에 첫 계정 추가하기 버튼이 있습니다. · MailVault version 2.16.0 ko" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">계정을 추가하기 전에 MailVault는 데이터가 어디에 있는지 설명합니다. 로그인 정보는 시스템 키체인에, 보관한 메일은 한 통씩 표준 .eml 파일로 디스크에 둡니다.</figcaption>
           </figure>
 
@@ -321,7 +321,7 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/settings-backup-light-1440.webp" srcset="/screenshots/ko/settings-backup-light-720.webp 720w, /screenshots/ko/settings-backup-light-1440.webp 1440w, /screenshots/ko/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 설정, 백업 및 복원, 백업 설정 탭. 폴더 열기와 메일을 다른 폴더로 이동 버튼이 있는 메일 저장 위치, 보관된 메일만으로 설정된 백업 대상 메뉴, 사본이 하나뿐이라는 경고가 있는 두 번째 사본 섹션이 보입니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/settings-backup-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/settings-backup-light-1440.webp" srcset="/screenshots/ko/settings-backup-light-720.webp 720w, /screenshots/ko/settings-backup-light-1440.webp 1440w, /screenshots/ko/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 설정, 백업 및 복원, 백업 설정 탭. 폴더 열기와 메일을 다른 폴더로 이동 버튼이 있는 메일 저장 위치, 보관된 메일만으로 설정된 백업 대상 메뉴, 사본이 하나뿐이라는 경고가 있는 두 번째 사본 섹션이 보입니다. · MailVault version 2.16.0 ko" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">백업 설정은 메일이 저장된 곳, 백업에 포함되는 것, 두 번째 사본이 있는지를 보여 줍니다. 모든 것이 한곳에만 있으면 주황색 안내가 경고합니다.</figcaption>
           </figure>
 
@@ -337,7 +337,7 @@
             <strong>Outlook.com 계정의 알려진 제한:</strong> 이 계정들은 Microsoft Graph를 쓰므로 다시 알림은 아직 쓸 수 없고, MBOX 파일을 서버로 복원할 수 없으며, 삭제한 메일은 컴퓨터로는 복구되지만 서버로는 복구되지 않고, 연결 테스트 뒤 받은편지함 메일 수가 표시되지 않습니다. 읽기, 삭제, 이동, 표시, 백업은 다른 계정과 똑같이 작동합니다.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">네 가지 방법 나란히 보기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">네 가지 방법 나란히 보기</h2>
 
           <div class="scroll-x overflow-x-auto">
             <table class="w-full text-left text-sm border-collapse">
@@ -384,7 +384,7 @@
           </div>
           <p class="text-sm text-slate-500 dark:text-slate-400">마지막 확인: 2026년 10월. Apple Mail, Thunderbird, Mac용 Outlook은 각각 백업 외에도 많은 일을 합니다. 이 표는 Outlook.com 메일의 사본을 간직하는 데 중요한 부분만 다룹니다.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">백업이 완전한지 확인하는 방법</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">백업이 완전한지 확인하는 방법</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li><strong>개수를 비교하십시오.</strong> Outlook.com에서 큰 폴더마다 메일이 몇 통인지 적어 두고 백업과 비교하십시오. MailVault에서는 폴더마다 머리글에 그 폴더의 메일 중 몇 통이 볼트에 있는지 표시됩니다. 예: <em>보관함에 79 / 79</em>. 모든 폴더의 서버 개수와 볼트 개수를 보여 주는 표는 Premium(백업 상태 점검)에 들어 있습니다.</li>
@@ -396,11 +396,11 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/local-vault-720.webp 720w, /screenshots/ko/local-vault-1440.webp 1440w, /screenshots/ko/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/local-vault-light-1440.webp" srcset="/screenshots/ko/local-vault-light-720.webp 720w, /screenshots/ko/local-vault-light-1440.webp 1440w, /screenshots/ko/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Vault 필터가 선택된 MailVault 받은편지함. 머리글에 폴더의 메일 수와 보관함에 있음 개수가 표시되고, 모든 메시지 행에 초록색 볼트 아이콘이 있습니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/local-vault-720.webp 720w, /screenshots/ko/local-vault-1440.webp 1440w, /screenshots/ko/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/local-vault-light-1440.webp" srcset="/screenshots/ko/local-vault-light-720.webp 720w, /screenshots/ko/local-vault-light-1440.webp 1440w, /screenshots/ko/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Vault 필터가 선택된 MailVault 받은편지함. 머리글에 폴더의 메일 수와 보관함에 있음 개수가 표시되고, 모든 메시지 행에 초록색 볼트 아이콘이 있습니다. · MailVault version 2.16.0 ko" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">폴더 머리글로 빠르게 확인할 수 있습니다. 보관함에 있음의 두 숫자가 같으면, MailVault가 이 폴더에서 센 모든 메일의 사본이 컴퓨터에 있다는 뜻입니다. 구석의 진행 카드는 다른 작업의 것입니다.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">자주 묻는 질문</h2>
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook 없이 Hotmail 메일을 Mac으로 내보낼 수 있습니까?</h3>
@@ -427,7 +427,7 @@
             <p>Microsoft의 현재 도움말 페이지는 데스크톱 버전 Outlook으로 내보내는 방법만 설명합니다. 예전 가이드에는 Outlook.com 설정의 메일함 내보내기 버튼이 나옵니다. 계정에서 보이지 않는다면 이 페이지의 방법 중 하나를 쓰십시오.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">다음에 할 일</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-9">다음에 할 일</h2>
 
           <p>
             방법 하나를 골라 이번 주에 첫 사본을 만들고, 위 목록으로 확인하십시오. 메일함이 이미 가득 찼다면 메일이 반송되지 않도록 먼저 <a href="/ko/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">Outlook 저장 공간이 가득 찼을 때 할 일</a>을 읽으십시오. <a href="/ko/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com 또는 Hotmail 메일함이 가득 찼을 때</a>의 짧은 개요와 제공업체에 상관없는 <a href="/ko/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">메일 저장 공간 비우기</a> 가이드는 로컬 사본이 있으면 메일을 잃지 않고 온라인에서 지울 수 있는 이유를 설명합니다. 로컬 사본과 더 큰 요금제를 견주어 보려면 <a href="/ko/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">로컬 보관 vs 저장 공간 추가 구매</a>를 보십시오.
@@ -449,7 +449,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -473,5 +473,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -8,12 +8,9 @@
   "b02ccf634646": "Festgelegte Zeiten sind für einen Vault oder eine Sicherungskopie auf einer externen Festplatte gedacht, die schon etwas anderes nach eigenem Zeitplan benutzt, meistens Time Machine: wähle die Stunden, in denen die Festplatte frei ist. Eine ausgewählte Stunde, die kommt, während MailVault beschäftigt ist, wird übersprungen statt später nachgeholt; der nächste Versuch ist die nächste ausgewählte Stunde.",
   "e1dd9724c424": "Ja, mit Premium. Einstellungen → Sichern & Wiederherstellen → Sicherungszeitplan bietet vier Intervalle: stündlich, einmal täglich, einmal wöchentlich und Zu festgelegten Zeiten. Wähle „Zu festgelegten Zeiten“, und ein Raster mit allen 24 Stunden erscheint; tippe die an, die du willst, etwa 07, 12 und 22, und MailVault sichert zu jeder davon zur vollen Stunde und nie dazwischen. Jedes Intervall läuft nur, während die App im Leerlauf ist, damit ein Backup nie unter deinen Händen startet. Festgelegte Zeiten sind für einen Vault oder eine Sicherungskopie auf einer externen Festplatte gedacht, die schon etwas anderes nach eigenem Zeitplan benutzt, meistens Time Machine: wähle die Stunden, in denen die Festplatte frei ist. Eine ausgewählte Stunde, die kommt, während MailVault beschäftigt ist, wird übersprungen statt später nachgeholt; der nächste Versuch ist die nächste ausgewählte Stunde.",
   "63f585557c08": "Dem Zeiger folgen: Zeilen reagieren auf die Maus, und die geöffnete Nachricht ist getönt.",
-  "9eee52a85e4f": "Markieren, was ich lese: Der Zeiger bleibt ruhig, die geöffnete Nachricht ist gefüllt, und ihre Konversation bleibt eine Stufe heller.",
   "370413878614": "Nachrichtenliste von MailVault mit der voreingestellten Hervorhebung: Die geöffnete Nachricht trägt ein getöntes Band",
   "5a2270d3c7a6": "Nachrichtenliste von MailVault, die die geöffnete Nachricht in sattem Grau markiert und den Rest ihrer Konversation in hellerem Grau",
   "51ee587d08e8": "Explorer und Einblicke",
-  "9abc8155b225": "Ein Postfach nach Datum, Absender oder Konversation gruppieren und die Ansichten Absenderkarte, Zeitverlauf und Aktivität lesen.",
-  "8391a88056bd": "8 Fragen",
   "9f9ad086f126": "Kann ich ändern, wie MailVault aussieht und angeordnet ist?",
   "e1481b4253f2": "Was ist Explorer?",
   "87f874849730": "Kann ich alles sehen, was mir eine Person je geschickt hat?",
@@ -221,6 +218,5 @@
   "02e10d46369f": "Vergrößern: Geführter Serverwechsel",
   "78c0778c5b6f": "Geführter Serverwechsel in MailVault",
   "7bf0101cf05a": "Vergrößern: Als Bild oder HTML exportieren",
-  "6ba74d86c98f": "Als Bild oder HTML exportieren in MailVault",
-  "8b302c851f90": "MailVault behält immer eine Arbeitskopie deiner E-Mails im eigenen Speicher der App — daraus liest, sucht und öffnest du Nachrichten. Ein externer Backup-Speicherort fügt auf einem von dir gewählten Laufwerk eine zweite, unabhängige Kopie hinzu: eine externe SSD, eine NAS-Freigabe oder einen synchronisierten Ordner. Sie wird bei Backups gleichzeitig mit der Arbeitskopie im selben .eml- und Maildir-Layout geschrieben, sodass Apps mit EML-Unterstützung die Nachrichtendateien lesen können. Die App liest sie nicht im Alltag, und sie ist kalter Speicher: Auf dem Server gelöschte oder in MailVault entfernte E-Mails bleiben in der externen Kopie. Lege sie unter Einstellungen bei Backup in „Zweite Kopie — externer kalter Speicher“ fest. Unter macOS speichert MailVault für den Ordner ein sicherheitsbezogenes Lesezeichen, damit der Zugriff Neustarts und App-Updates übersteht; das Statusabzeichen zeigt Bereit, Erneute Berechtigung nötig, Nicht verfügbar oder Zugriff verweigert, und die erneute Berechtigung braucht nur einen Klick. Wenn das Laufwerk während eines Backups nicht angeschlossen ist, gelingt die Arbeitskopie trotzdem und MailVault meldet, wie viele Nachrichten die externe Kopie nicht erreicht haben; beim nächsten Durchlauf werden sie kopiert."
+  "6ba74d86c98f": "Als Bild oder HTML exportieren in MailVault"
 }

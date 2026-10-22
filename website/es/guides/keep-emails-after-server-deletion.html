@@ -38,7 +38,7 @@
   "description": "Borra correos de tu servidor sin perderlos. MailVault los archiva en local como archivos .eml antes del borrado: buscables, sin conexión y tuyos para siempre.",
   "url": "https://mailvaultapp.com/es/guides/keep-emails-after-server-deletion.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,14 +169,14 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cómo conservar correos después de borrarlos del servidor</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cómo conservar correos después de borrarlos del servidor</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5 min de lectura</span>
           </div>
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <h2>Elimina correos del servidor y conserva una copia local: el orden seguro</h2>
+          <h2 id="help-section-1">Elimina correos del servidor y conserva una copia local: el orden seguro</h2>
           <p>Una carpeta sincronizada es una vista del servidor. Antes de eliminar correo allí, crea un archivo que se conserve y que puedas abrir de forma independiente. El origen <strong>Bóveda</strong> de MailVault muestra las copias guardadas; <strong>Servidor</strong> muestra el correo del proveedor. Ver un mensaje en Todo no demuestra por sí solo que tengas una copia local.</p>
           <ol class="list-decimal pl-6 space-y-2">
           <li>Archiva primero un pequeño lote con <strong>Archivar</strong>. Espera a que termine la operación.</li>
@@ -197,7 +198,7 @@
           </p>
 
           <p>
-            Pero hay razones legítimas para borrar correos del servidor. Tienes el almacenamiento lleno y no quieres pagar más. Te vas de un proveedor y quieres limpiar antes de irte. La política de tu empresa exige purgar los mensajes antiguos del servidor. O simplemente quieres una bandeja limpia sin la angustia de perder datos.
+            Pero hay razones legítimas para borrar correos del servidor. Tienes el almacenamiento lleno y no quieres pagar más. Te vas de un proveedor y quieres limpiar antes de irte. Tu empresa permite conservar una copia local mientras reduces el almacenamiento del servidor. Las reglas de conservación o eliminación también pueden aplicarse a esa copia. O simplemente quieres una bandeja limpia sin la angustia de perder datos.
           </p>
 
           <p>
@@ -231,7 +232,7 @@
             <li><strong>Paso 1: sincroniza</strong> &mdash; Conecta tu cuenta IMAP a MailVault. La app carga las cabeceras de tus correos y muestra el contenido de tu buzón, igual que cualquier cliente de correo.</li>
             <li><strong>Paso 2: archiva en local</strong> &mdash; Selecciona los correos que quieras conservar y archívalos. MailVault descarga cada correo entero &mdash; cabeceras, texto del cuerpo, formato HTML y todos los adjuntos &mdash; y lo guarda como un archivo <code>.eml</code> estándar en tu disco.</li>
             <li><strong>Paso 3: comprueba</strong> &mdash; Abre algunos correos archivados en MailVault para confirmar que están completos. Revisa los adjuntos. Busca mensajes concretos. Asegúrate de que todo lo que necesitas está en el archivo local.</li>
-            <li><strong>Paso 4: borra del servidor</strong> &mdash; Ahora que tienes una copia local comprobada, borra los correos del servidor. MailVault usa <code>UID EXPUNGE</code> (RFC 4315) para eliminar con precisión solo los mensajes indicados &mdash; sin riesgo de borrar por accidente los correos equivocados.</li>
+            <li><strong>Paso 4: borra del servidor</strong> &mdash; Ahora que tienes una copia local comprobada, borra los correos del servidor. MailVault usa el método de eliminación de la cuenta seleccionada; el comportamiento de IMAP depende del servidor, mientras que las cuentas personales de Outlook.com usan Microsoft Graph. Revisa la selección y conserva una copia de seguridad independiente antes de confirmar.</li>
             <li><strong>Paso 5: accede cuando quieras</strong> &mdash; Tus correos archivados se quedan en tu disco, y puedes leerlos y buscarlos sin límite. No hace falta conexión a internet. Sin depender de ningún servidor.</li>
           </ul>
 
@@ -245,11 +246,11 @@
             <li><strong>Todas las cabeceras</strong> &mdash; From, To, CC, BCC, Date, Subject, Message-ID, In-Reply-To, References y todas las demás. Se conservan las relaciones entre los mensajes de una misma conversación.</li>
             <li><strong>El contenido del cuerpo</strong> &mdash; Tanto la versión en texto plano como la versión en HTML. Se conservan el formato, los enlaces y las imágenes incrustadas.</li>
             <li><strong>Los adjuntos</strong> &mdash; Todos los archivos adjuntos, sea cual sea su tipo o su tamaño. PDF, imágenes, documentos, hojas de cálculo &mdash; todo va incrustado en el archivo .eml como partes MIME.</li>
-            <li><strong>Los metadatos</strong> &mdash; El estado de leído o no leído, las marcas y la carpeta en la que está van codificados en el nombre del archivo de Maildir.</li>
+            <li><strong>Metadatos</strong> &mdash; El estado leído/no leído y las marcas se guardan en los nombres de archivo de Maildir; la ruta del directorio indica la ubicación de la carpeta. El almacenamiento JMAP usa registros JSON en su lugar.</li>
           </ul>
 
           <p>
-            El formato <code>.eml</code> es un estándar abierto (RFC 5322). Cualquier cliente de correo, en cualquier sistema operativo, puede abrir esos archivos. Tu archivo no queda atado a MailVault ni a ningún otro programa.
+            El formato <code>.eml</code> es un estándar abierto (RFC 5322). Las apps de correo compatibles con EML pueden abrir estos archivos. Tu archivo no queda atado a MailVault ni a ningún otro programa.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Situaciones habituales</h3>
@@ -259,7 +260,7 @@
           </p>
 
           <p>
-            <strong>Limpieza del correo de una empresa:</strong> El departamento de informática quiere reducir el gasto en almacenamiento del servidor. Archiva en local el correo antiguo de la plantilla y después púrgalo del servidor. Los correos siguen disponibles para cumplimiento normativo o para consulta.
+            <strong>Limpieza del correo de una empresa:</strong> El departamento de informática quiere reducir el gasto en almacenamiento del servidor. Conserva solo las copias locales autorizadas por tu organización y aplica también sus reglas de conservación, eliminación y acceso. MailVault es un archivo personal de escritorio, no un sistema de cumplimiento normativo ni de retención legal.
           </p>
 
           <p>
@@ -302,7 +303,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Verlo en MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/es/manual-backup.webp"><img src="/assets/help-media/es/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Crear una copia de todas las cuentas y comprobar que termina</figcaption><video controls playsinline preload="none" poster="/assets/help-media/es/manual-backup.jpg" aria-label="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/es/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/es/manual-backup.vtt" srclang="es" label="Español" default></video></figure><details class="mv-help-contents"><summary>Transcripción del vídeo</summary><p>Iniciar la copia de seguridad de todas las cuentas en los ajustes de copia de seguridad. Seguir el progreso hasta que termine la copia.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -330,5 +331,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

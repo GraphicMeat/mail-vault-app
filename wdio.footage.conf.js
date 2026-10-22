@@ -29,6 +29,8 @@ import { footageAccounts } from './scripts/footage/lib/mailbox.js';
 import { PREMIUM_BILLING_PROFILE } from './scripts/screenshots/premiumSeed.js';
 import { writeCorpus } from './scripts/screenshots/search50kCorpus.mjs';
 import { APP_LOCALE } from './scripts/footage/lib/locale.js';
+import { inspectCaptureGuard } from './scripts/footage/lib/captureGuard.mjs';
+import { startCaptureOwnership, recordCaptureDriver } from './scripts/footage/lib/captureOwnership.mjs';
 
 // FOOTAGE_CORPUS_50K=1 adds the 50,000-message search vault the screenshot
 // harness photographs (scripts/screenshots/search50kCorpus.mjs) to the work
@@ -120,9 +122,11 @@ export const config = {
 
   onPrepare: async function () {
     console.log(`[footage] spec ${SPEC}, theme ${THEME}, locale ${LOCALE}, HOME ${dataDir}, driver ${driverBin} on ${driverPort}`);
-    let live = '';
-    try { live = execFileSync('pgrep', ['-fl', 'tauri-wd'], { encoding: 'utf-8' }).trim(); } catch { /* none */ }
-    if (live) throw new Error(`a tauri-wd driver is already running; one app instance at a time:\n${live}`);
+    const guard = inspectCaptureGuard();
+    if (process.env.FOOTAGE_OUT) writeFileSync(join(process.env.FOOTAGE_OUT, 'launch-guard.json'), JSON.stringify(guard, null, 2));
+    if (!guard.ok) throw new Error(`capture launch refused: ${guard.reasons.join('; ')}`);
+    const ownership = process.env.FOOTAGE_OWNERSHIP_FILE;
+    if (ownership) startCaptureOwnership(ownership, process.cwd(), process.env.FOOTAGE_BIN_DIR);
 
     buildMockServer();
     mockServers = await Promise.all(DEMO_ACCOUNTS.map((a) => startMockImap(a.scenario())));
@@ -172,6 +176,7 @@ export const config = {
           ...(process.env.FOOTAGE_SMTP_PLAINTEXT === '1' ? { MAILVAULT_SMTP_PLAINTEXT: '1' } : {}),
         },
       });
+      if (ownership) recordCaptureDriver(ownership, tauriWd.pid);
       let started = false;
       const check = (d) => {
         const out = d.toString();

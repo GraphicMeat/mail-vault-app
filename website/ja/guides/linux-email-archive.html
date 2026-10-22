@@ -38,7 +38,7 @@
   "description": "ファイル形式、オフラインアクセス、対応プロバイダー、復元方法からLinux用メールアーカイブを選びます。MailVaultを試すための実用チェックリストも紹介します。",
   "url": "https://mailvaultapp.com/ja/guides/linux-email-archive.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/linux-email-archive.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/linux-email-archive.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,24 +172,24 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">メールバックアップガイド · <time datetime="2026-10-15">2026年10月15日</time></p>
-          <h1>Linux用ローカルメールアーカイブの確認点</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>Linux用ローカルメールアーカイブの確認点</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">必要な作業に合わせて選ぶ</a></li><li><a href="#help-section-2">自分のメールボックスで10分間試す</a></li><li><a href="#help-section-3">MailVaultでできること</a></li><li><a href="#help-section-4">ほかの選択肢でも確認したいこと</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>Linuxでローカルメールアーカイブを使いたいなら、まず結果を確認してください。プロバイダーから削除された後もメールを読めるでしょうか。メールクライアントの同期された受信トレイだけでは証明できません。独立して保存されたコピーと、別のコンピューターで復元する方法が必要です。</p>
-          <h2 data-i18n-block>必要な作業に合わせて選ぶ</h2>
+          <h2 data-i18n-block id="help-section-1">必要な作業に合わせて選ぶ</h2>
           <ul class="list-disc pl-6 space-y-2">
           <li data-i18n-block><strong>日常のメール：</strong>安定したログイン、送信、フォルダ、使いやすい操作を優先します。サーバーのメールを削除する予定なら、別途保存の計画を立ててください。</li>
           <li data-i18n-block><strong>個人のアーカイブ：</strong>保存済みの本文、添付ファイル、オフライン検索、オープンな書き出し形式を優先します。</li>
           <li data-i18n-block><strong>ターミナルでのバックアップ：</strong>再実行できる処理、認証の更新、ログ、検証済みの復元を優先します。サーバーの削除を反映するツールなのか、以前のコピーを残すのかを確認してください。</li>
           <li data-i18n-block><strong>企業の保存管理：</strong>アクセス制御、保存ポリシー、監査要件を別途確認します。個人用デスクトップアーカイブがあっても、組織のコンプライアンス要件を満たしている証拠にはなりません。</li></ul>
-          <h2 data-i18n-block>自分のメールボックスで10分間試す</h2>
+          <h2 data-i18n-block id="help-section-2">自分のメールボックスで10分間試す</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block><a href="/ja/get-started.html">ダウンロードページ</a>からLinux版をインストールし、1つのアカウントを接続します。</li>
           <li data-i18n-block>テキストメール、HTMLメール、送信済みメール、添付ファイルを含む短い日付範囲をアーカイブします。サーバーにメールを残す<strong>アーカイブ</strong>を使ってください。</li>
           <li data-i18n-block><strong>保管庫</strong>に切り替え、ネットワークを切断します。サンプルのメールを読み、添付ファイルを開きます。</li>
           <li data-i18n-block><strong>バックアップと復元</strong>で別のドライブにバックアップを書き出します。ZIPを開けること、保存済みのEMLファイルが見つかることを確認してください。</li>
           <li data-i18n-block>メールの全履歴を預ける前に、復元手順を試し、必要なすべてのフォルダにプロバイダー経由でアクセスできることを確認します。</li></ol>
-          <h2 data-i18n-block>MailVaultでできること</h2>
-          <p data-i18n-block>MailVaultは、デスクトップのメールクライアントとローカルの保管庫を組み合わせています。手動アーカイブは無料です。アーカイブ済みメールはMaildir構造内のEMLで保存され、ローカル検索とバックアップ／書き出しに対応しています。Premiumでは、スケジュール実行や、削除前にアーカイブする操作が加わります。1つのアプリでメールを閲覧しながら保管したい場合に選び、上の試用手順で実際に使いたいアカウントを確認してください。</p>
-          <h2 data-i18n-block>ほかの選択肢でも確認したいこと</h2>
+          <h2 data-i18n-block id="help-section-3">MailVaultでできること</h2>
+          <p data-i18n-block>MailVaultは、デスクトップのメールクライアントとローカルの保管庫を組み合わせています。手動アーカイブは無料です。アーカイブ済みメールはMaildir構造内のEMLで保存され、ローカル検索とバックアップ／書き出しに対応しています。Premiumでは、スケジュール実行や、削除前にアーカイブする操作が加わります。1つのアプリでメールを閲覧しながら保管したい場合に選び、上の試用手順で実際に使いたいアカウントを確認してください。 このファイル構成の説明は、標準のMaildir形式を対象としています。設定 → ストレージではJMAPストレージも選択でき、元のメッセージのバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。</p>
+          <h2 data-i18n-block id="help-section-4">ほかの選択肢でも確認したいこと</h2>
           <ul class="list-disc pl-6 space-y-2">
           <li data-i18n-block>元のアプリ以外でファイルを開けますか？</li>
           <li data-i18n-block>サーバー上のメールが消えると、ローカルコピーはどうなりますか？</li>
@@ -200,7 +201,7 @@
           <p data-i18n-block>ほかの実用ガイド： <a href="/ja/guides/backup-gmail-to-eml.html">GmailをEMLファイルにバックアップする方法</a> · <a href="/ja/guides/export-outlook-to-eml.html">OutlookのメールをEMLに書き出す方法</a> · <a href="/ja/guides/download-all-emails-mac.html">Macですべてのメールをダウンロードする方法</a> · <a href="/ja/guides/backup-email-linux.html">LinuxでメールをEMLとしてバックアップする方法</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -228,5 +229,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

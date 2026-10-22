@@ -39,6 +39,7 @@ on:
       - 'vite.demo.config.js'
       - 'scripts/capture-demo-preview.mjs'
       - 'scripts/update-demo-preview.mjs'
+      - 'scripts/build-help-center.mjs'
       - 'scripts/website-release.mjs'
       - 'package.json'
       - 'package-lock.json'
@@ -102,6 +103,7 @@ jobs:
         # an edit to an English page can never ship with stale translations.
         # `build` only reads the English sources; it never rewrites them.
         run: |
+          node scripts/build-help-center.mjs
           node website/i18n/i18n.mjs build
           node website/i18n/i18n.mjs verify
 

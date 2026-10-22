@@ -15,7 +15,6 @@
   "3afa38a8833e": "¿Limpieza de correo es lo mismo que la escritura con IA?",
   "6ecb1a5060dc": "No. La escritura con IA tiene sus propios ajustes de proveedor para Apple Intelligence, un modelo descargado o un endpoint compatible como Ollama. Cambiar ese proveedor no modifica el clasificador de Limpieza de correo.",
   "eea32a5141b1": "Eliminar quita la copia del servidor sin crear antes una copia en la bóveda. Usa Archivar en Limpieza de correo para guardar y verificar una copia local antes de quitarla del servidor. Cápsula del tiempo puede mostrar el historial guardado, pero no puede recuperar un mensaje que nunca se guardó.",
-  "3e016ad79e11": "Conecta Yahoo con una contraseña de aplicación, archiva tus carpetas y verifica tu copia local.",
   "6dda9750c924": "¿Dónde está la libreta de direcciones?",
   "69a1744ca80e": "Limpieza de correo de MailVault usa reglas locales y un clasificador Naive Bayes. No requiere descargar ningún modelo. Revisa las categorías antes de archivar o eliminar las copias del servidor.",
   "88101e500957": "Clasifica tu correo en local sin descargar un LLM. Revisa las categorías, archiva con seguridad y mantén el control de las copias del servidor."

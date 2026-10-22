@@ -38,7 +38,7 @@
     "description": "Four ways to back up Outlook.com and Hotmail email to a Mac: Outlook for Mac, Apple Mail, Thunderbird and MailVault. What each one saves and how to check it.",
     "url": "https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html",
     "datePublished": "2026-10-08",
-    "dateModified": "2026-10-08",
+    "dateModified": "2026-10-22",
     "author": {
       "@type": "Organization",
       "name": "MailVault"
@@ -161,6 +161,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -208,7 +209,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -218,7 +219,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How to back up Outlook.com and Hotmail email to your Mac</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How to back up Outlook.com and Hotmail email to your Mac</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">Before you start</a></li><li><a href="#help-section-2">Method 1: Legacy Outlook for Mac (.olm file)</a></li><li><a href="#help-section-3">Method 2: Apple Mail (.mbox files)</a></li><li><a href="#help-section-4">Method 3: Thunderbird (.mbox or .eml files)</a></li><li><a href="#help-section-5">Method 4: MailVault (.eml files you can search)</a></li><li><a href="#help-section-6">The four methods side by side</a></li><li><a href="#help-section-7">How to check that your backup is complete</a></li><li><a href="#help-section-8">Frequently asked questions</a></li><li><a href="#help-section-9">What to do next</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>9 min read</span>
             <span aria-hidden="true">&middot;</span>
@@ -229,7 +230,7 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p>
             There are four ways to back up Outlook.com or Hotmail email to a Mac that work today. You can export an <code>.olm</code> file from legacy Outlook for Mac, export <code>.mbox</code> files from Apple Mail, export from Thunderbird with an add-on, or let MailVault save every message as an <code>.eml</code> file. This page compares them, shows what each one gives you, and explains how to check the backup before you rely on it. If you want to delete mail online after the backup, read <a href="/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">how to free up space in Hotmail and Outlook.com</a>.
-          </p>
+           These file-layout instructions use the default Maildir format. Settings → Storage also offers JMAP storage, which keeps original message bytes with JSON records and deduplicates identical messages.</p>
 
           <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Quick answer</p>
@@ -241,7 +242,7 @@
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Before you start</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">Before you start</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Microsoft's own export needs desktop Outlook.</strong> Microsoft's help page says you export an Outlook.com mailbox with a desktop version of Outlook: a .pst file on Windows, or an .olm file from legacy Outlook for Mac. If you do not have Outlook, Microsoft suggests a free 30-day Microsoft 365 trial.</li>
@@ -249,7 +250,7 @@
             <li><strong>Check your disk space.</strong> Look at <strong>Settings</strong> &gt; <strong>Account</strong> &gt; <strong>Storage</strong> in Outlook.com. Your backup needs about that much free space on the Mac.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Method 1: Legacy Outlook for Mac (.olm file)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Method 1: Legacy Outlook for Mac (.olm file)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Add your Outlook.com account to Outlook for Mac and let it finish syncing.</li>
@@ -262,7 +263,7 @@
             <strong>What you get:</strong> one .olm file with your mail, and contacts and calendar if you ticked them. It is meant to be imported back into Outlook for Mac with <strong>Tools</strong> &gt; <strong>Import</strong>. <strong>Good for:</strong> people who already use Outlook for Mac.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Method 2: Apple Mail (.mbox files)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">Method 2: Apple Mail (.mbox files)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>In Mail, choose <strong>Mail</strong> &gt; <strong>Add Account</strong>, type your Outlook.com address and follow the steps. Microsoft says Apple Mail uses modern sign-in when you set the account up as Outlook.com.</li>
@@ -275,7 +276,7 @@
             <strong>What you get:</strong> one .mbox package per mailbox. If you export again, Mail makes a new file next to the old one, such as <em>My Mailbox 3.mbox</em>, instead of replacing it. To read the backup later, use <strong>File</strong> &gt; <strong>Import Mailboxes</strong>; the messages appear in a new mailbox called <strong>Import</strong>. <strong>Good for:</strong> a quick copy with nothing to install. Each export is a snapshot, so new mail needs a new export.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Method 3: Thunderbird (.mbox or .eml files)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">Method 3: Thunderbird (.mbox or .eml files)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Install Thunderbird and add your Outlook.com account. Mozilla's 2026 guide says to set the authentication method to <strong>OAuth2</strong> and to allow cookies from Microsoft sites in Thunderbird's own settings.</li>
@@ -288,7 +289,7 @@
             <strong>Good for:</strong> people who want a free, open-source mail app for daily use as well. A work or school account may need your administrator to approve Thunderbird first.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Method 4: MailVault (.eml files you can search)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Method 4: MailVault (.eml files you can search)</h2>
 
           <p>
             MailVault is a free mail app for macOS, Windows and Linux that keeps a copy of your mail in a vault on your computer. There is no MailVault account, and your mail does not pass through a MailVault server. The steps below are for the version you download from our website. The Mac App Store edition differs in a few places, such as backup settings and moving the vault.
@@ -307,7 +308,7 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/onboarding-account-720.webp 720w, /screenshots/onboarding-account-1440.webp 1440w, /screenshots/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/onboarding-account-light-1440.webp" srcset="/screenshots/onboarding-account-light-720.webp 720w, /screenshots/onboarding-account-light-1440.webp 1440w, /screenshots/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault first-run screen titled Where your data lives. It lists System keychain, Nothing in a plain file, No account, no telemetry, and Your vault: each email you archive is a standard .eml file on your disk, above an Add Your First Account button. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/onboarding-account-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/onboarding-account-720.webp 720w, /screenshots/onboarding-account-1440.webp 1440w, /screenshots/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/onboarding-account-light-1440.webp" srcset="/screenshots/onboarding-account-light-720.webp 720w, /screenshots/onboarding-account-light-1440.webp 1440w, /screenshots/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault first-run screen titled Where your data lives. It lists System keychain, Nothing in a plain file, No account, no telemetry, and Your vault: each email you archive is a standard .eml file on your disk, above an Add Your First Account button. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Before you add an account, MailVault explains where your data lives: sign-in details in the system keychain, and each archived email as a standard .eml file on your disk.</figcaption>
           </figure>
 
@@ -321,7 +322,7 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/settings-backup-720.webp 720w, /screenshots/settings-backup-1440.webp 1440w, /screenshots/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/settings-backup-light-1440.webp" srcset="/screenshots/settings-backup-light-720.webp 720w, /screenshots/settings-backup-light-1440.webp 1440w, /screenshots/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault Settings, Backup and Restore, Backup Settings tab. It shows Where your mail is stored with Open Folder and Move mail to another folder buttons, a What to back up menu set to Archived emails only, and a Second copy section with a warning that there is only one copy. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/settings-backup-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/settings-backup-720.webp 720w, /screenshots/settings-backup-1440.webp 1440w, /screenshots/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/settings-backup-light-1440.webp" srcset="/screenshots/settings-backup-light-720.webp 720w, /screenshots/settings-backup-light-1440.webp 1440w, /screenshots/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault Settings, Backup and Restore, Backup Settings tab. It shows Where your mail is stored with Open Folder and Move mail to another folder buttons, a What to back up menu set to Archived emails only, and a Second copy section with a warning that there is only one copy. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Backup Settings shows where your mail is stored, what the backup includes, and whether you have a second copy. The orange note warns when everything lives in one place.</figcaption>
           </figure>
 
@@ -337,7 +338,7 @@
             <strong>Known limits for Outlook.com accounts:</strong> because these accounts use Microsoft Graph, Snooze is not available yet, an MBOX file cannot be restored to the server, a deleted email can be recovered on your computer but not back to the server, and the Inbox count after the connection test is not shown. Reading, deleting, moving, marking and backing up work as on other accounts.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">The four methods side by side</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">The four methods side by side</h2>
 
           <div class="scroll-x overflow-x-auto">
             <table class="w-full text-left text-sm border-collapse">
@@ -384,7 +385,7 @@
           </div>
           <p class="text-sm text-slate-500 dark:text-slate-400">Last checked: October 2026. Apple Mail, Thunderbird and Outlook for Mac each do more than backups. This table covers only what matters for keeping a copy of Outlook.com mail.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">How to check that your backup is complete</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">How to check that your backup is complete</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li><strong>Compare the counts.</strong> Note how many emails each large folder has in Outlook.com, and compare with the backup. In MailVault, the header of each folder shows how many of its emails are in your vault, for example <em>In your vault: 79 of 79</em>. A table of server and vault counts for every folder is part of Premium (backup health monitoring).</li>
@@ -396,11 +397,11 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/local-vault-720.webp 720w, /screenshots/local-vault-1440.webp 1440w, /screenshots/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/local-vault-light-1440.webp" srcset="/screenshots/local-vault-light-720.webp 720w, /screenshots/local-vault-light-1440.webp 1440w, /screenshots/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault inbox with the Vault filter selected. The header shows the folder's email count and an In your vault count, and every message row has a green vault icon. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/local-vault-720.webp 720w, /screenshots/local-vault-1440.webp 1440w, /screenshots/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/local-vault-light-1440.webp" srcset="/screenshots/local-vault-light-720.webp 720w, /screenshots/local-vault-light-1440.webp 1440w, /screenshots/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault inbox with the Vault filter selected. The header shows the folder's email count and an In your vault count, and every message row has a green vault icon. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">The folder header gives a quick check: When the two numbers in In your vault match, every email MailVault counts for this folder has a copy on your computer. The progress card in the corner belongs to a different job.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Frequently asked questions</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">Frequently asked questions</h2>
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Can I export Hotmail emails to a Mac without Outlook?</h3>
@@ -427,7 +428,7 @@
             <p>Microsoft's current help page describes exporting with a desktop version of Outlook only. Older guides mention an Export mailbox button in the Outlook.com settings. If you do not see it in your account, use one of the methods on this page.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">What to do next</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-9">What to do next</h2>
 
           <p>
             Pick one method and make the first copy this week, then check it with the list above. If your mailbox is already full, read <a href="/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">what to do when Outlook storage is full</a> first, so mail stops bouncing. The short overview in <a href="/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com or Hotmail mailbox full</a> and the provider-neutral guide to <a href="/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">freeing up email storage</a> explain how a local copy lets you delete online without losing mail. To weigh a local copy against a bigger plan, see <a href="/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">archiving locally vs paying for more storage</a>.
@@ -449,7 +450,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -473,5 +474,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

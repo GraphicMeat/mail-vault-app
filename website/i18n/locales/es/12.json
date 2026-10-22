@@ -8,12 +8,9 @@
   "b02ccf634646": "Las horas concretas están pensadas para una bóveda o una copia espejo en un disco externo que ya usa otra cosa con su propio horario, casi siempre Time Machine: elige las horas en las que ese disco está libre. Una hora seleccionada que llega mientras MailVault está ocupado se omite en lugar de recuperarse después, así que el siguiente intento es la siguiente hora seleccionada.",
   "e1dd9724c424": "Sí, con Premium. Ajustes → Copia y restauración → Programación de copias ofrece cuatro frecuencias: cada hora, una vez al día, una vez a la semana y A horas concretas. Elige «A horas concretas» y aparece una cuadrícula con las 24 horas; toca las que quieras, por ejemplo 07, 12 y 22, y MailVault hará la copia en punto en cada una de ellas y nunca entre medias. Todas las frecuencias se ejecutan solo mientras la aplicación está en reposo, así que una copia nunca arranca mientras trabajas. Las horas concretas están pensadas para una bóveda o una copia espejo en un disco externo que ya usa otra cosa con su propio horario, casi siempre Time Machine: elige las horas en las que ese disco está libre. Una hora seleccionada que llega mientras MailVault está ocupado se omite en lugar de recuperarse después, así que el siguiente intento es la siguiente hora seleccionada.",
   "63f585557c08": "Seguir el puntero: las filas reaccionan al ratón y el mensaje abierto queda teñido.",
-  "9eee52a85e4f": "Marcar lo que estoy leyendo: el puntero se queda quieto, el mensaje abierto queda relleno y su conversación, un tono más clara.",
   "370413878614": "Lista de mensajes de MailVault con el resaltado por defecto: el mensaje abierto lleva una banda teñida",
   "5a2270d3c7a6": "Lista de mensajes de MailVault marcando el mensaje abierto en gris firme y el resto de su conversación en un gris más claro",
   "51ee587d08e8": "Explorer e Estadísticas",
-  "9abc8155b225": "Agrupar un buzón por fecha, remitente o conversación, y leer las vistas de mapa de remitentes, cronología y actividad.",
-  "8391a88056bd": "8 preguntas",
   "9f9ad086f126": "¿Puedo cambiar el aspecto y la distribución de MailVault?",
   "e1481b4253f2": "¿Qué es Explorer?",
   "87f874849730": "¿Puedo ver todo lo que me ha enviado una persona?",
@@ -221,6 +218,5 @@
   "02e10d46369f": "Ampliar: cambio guiado de servidor",
   "78c0778c5b6f": "Cambio guiado de servidor en MailVault",
   "7bf0101cf05a": "Ampliar: exportar como imagen o HTML",
-  "6ba74d86c98f": "Exportar como imagen o HTML en MailVault",
-  "8b302c851f90": "MailVault siempre conserva una copia de trabajo de tu correo en el almacenamiento propio de la app: eso es lo que lees, buscas y abres. Una ubicación de copia externa añade una segunda copia independiente en una unidad que elijas: un SSD externo, un recurso NAS o una carpeta sincronizada. Se escribe durante las copias al mismo tiempo que la copia de trabajo, con la misma estructura .eml y Maildir, para que las apps compatibles con EML puedan leer los archivos de mensajes. La app no la lee en el día a día y es almacenamiento en frío: los correos eliminados del servidor o quitados dentro de MailVault permanecen en la copia externa. Configúrala en Ajustes, en Copia, en «Segunda copia — almacenamiento externo en frío». En macOS, MailVault guarda un marcador con ámbito de seguridad para la carpeta, de modo que el acceso sobrevive a reinicios y actualizaciones de la app; la insignia de estado muestra Listo, Necesita reautorización, No disponible o Acceso denegado, y reautorizar requiere un solo clic. Si la unidad está desconectada durante una copia, la copia de trabajo se completa igualmente y MailVault informa de cuántos mensajes no llegaron a la copia externa; la siguiente ejecución los copia."
+  "6ba74d86c98f": "Exportar como imagen o HTML en MailVault"
 }

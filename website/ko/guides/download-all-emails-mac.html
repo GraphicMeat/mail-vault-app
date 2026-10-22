@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-emails-mac.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-emails-mac.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,22 +172,22 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">이메일 백업 가이드 · <time datetime="2026-10-15">2026년 10월 15일</time></p>
-          <h1>Mac에서 모든 이메일을 다운로드하는 방법</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>Mac에서 모든 이메일을 다운로드하는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">방법 1: Apple Mail에서 메일상자 내보내기</a></li><li><a href="#help-section-2">방법 2: MailVault로 검색 가능한 EML 보관함 만들기</a></li><li><a href="#help-section-3">보관한 메일을 신뢰하기 전에 검증하기</a></li><li><a href="#search-local-archive-video">짧은 데모: 로컬 보관함 검색하기</a></li><li><a href="#help-section-4">“모든 이메일”에 폴더 체크리스트가 필요한 이유</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>Mac에서 모든 이메일을 다운로드하려면 Apple Mail의 메일상자 내보내기나 전용 로컬 보관 도구를 선택하십시오. 중요한 것은 빠짐없이 저장하는 것입니다. 받은편지함만으로 계정 전체를 담는 경우는 드물며 동기화된 메일함에는 서버의 삭제 사항이 반영될 수 있습니다.</p>
-          <h2 data-i18n-block>방법 1: Apple Mail에서 메일상자 내보내기</h2>
+          <h2 data-i18n-block id="help-section-1">방법 1: Apple Mail에서 메일상자 내보내기</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Apple Mail에 계정을 연결하고 메시지를 모두 가져올 때까지 기다리십시오. 오래된 메일을 포함해 받은편지함, 보낸편지함, 필요한 모든 폴더를 확인하십시오.</li>
           <li data-i18n-block>사이드바에서 원하는 메일상자를 선택한 뒤 <strong>메일상자 → 메일상자 내보내기</strong>를 선택하십시오.</li>
           <li data-i18n-block>Mac이나 외장 드라이브의 폴더를 선택하십시오. Apple Mail은 메일상자 데이터를 MBOX 형식으로 내보냅니다.</li>
           <li data-i18n-block>두 번째 사본을 보관하고 <strong>파일 → 메일상자 가져오기</strong>로 가져오기를 시험하십시오. 가져온 사본에서 대표적인 메시지와 첨부 파일을 열어 보십시오.</li></ol>
           <p data-i18n-block>이 메뉴 이름과 MBOX 형식은 <a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac">Apple의 메일상자 가져오기 및 내보내기 가이드</a>에 설명되어 있습니다. 내보낸 메일상자는 별도의 파일입니다. Mail에 계정을 연결해 두기만 하는 것은 같은 백업이 아닙니다.</p>
-          <h2 data-i18n-block>방법 2: MailVault로 검색 가능한 EML 보관함 만들기</h2>
+          <h2 data-i18n-block id="help-section-2">방법 2: MailVault로 검색 가능한 EML 보관함 만들기</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block><a href="/ko/get-started.html">시작하기</a>에서 macOS 버전을 다운로드하고 이메일 계정을 추가하십시오. 사용할 수 있다면 Google 또는 Microsoft 로그인을 사용하십시오.</li>
           <li data-i18n-block>받은편지함, 보낸편지함, 사용자 지정 폴더, 받은편지함 밖의 메일이 있는 라벨로 폴더 체크리스트를 만드십시오. 필요하다면 제공업체의 보관된 폴더나 숨겨진 폴더가 연결된 앱에 표시되도록 설정하십시오.</li>
           <li data-i18n-block>일괄 작업에서 필요한 폴더와 날짜를 선택한 뒤 <strong>보관</strong>을 선택하십시오. 완료될 때까지 기다리고 실패 항목이나 건너뛴 폴더를 확인하십시오.</li>
           <li data-i18n-block>소스를 <strong>보관함</strong>으로 전환해 독립적인 로컬 사본을 확인하십시오. 보관함의 메시지는 .eml 파일을 사용합니다. 서버에서만 보이는 메시지는 아직 보관함에 포함되지 않았습니다.</li></ol>
-          <h2 data-i18n-block>보관한 메일을 신뢰하기 전에 검증하기</h2>
+          <h2 data-i18n-block id="help-section-3">보관한 메일을 신뢰하기 전에 검증하기</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>메시지 소스를 서버나 전체가 아닌 <strong>보관함</strong>으로 전환하십시오. 기억나는 오래된 메시지를 검색하십시오.</li>
           <li data-i18n-block>네트워크 연결을 끊고 서로 다른 폴더와 연도의 보관된 메시지를 몇 개 열어 보십시오. 첨부 파일도 열어 보십시오. 목록에 제목이 보인다는 것만으로 메시지 본문이 저장되었다고 할 수는 없습니다.</li>
@@ -199,14 +200,14 @@
           <p data-i18n-block class="text-sm">기존 macOS 데모 녹화 영상을 편집한 가상 메일 시연입니다. 계정 로그인과 일부 준비 과정은 화면 밖에서 진행되며 실제 제공업체에 연결한 영상이 아닙니다.</p>
           <details><summary data-i18n-block>데모 설명 읽기</summary>
           <p data-i18n-block>데모에서는 준비된 보관함의 가상 메일을 검색합니다. 자신의 보관함은 연결을 끊은 상태에서 오래된 메시지와 첨부 파일을 열어 검증하고 다른 드라이브에 두 번째 사본을 보관하십시오.</p></details></section>
-          <h2 data-i18n-block>“모든 이메일”에 폴더 체크리스트가 필요한 이유</h2>
+          <h2 data-i18n-block id="help-section-4">“모든 이메일”에 폴더 체크리스트가 필요한 이유</h2>
           <p data-i18n-block>데스크톱 연결은 제공업체가 노출하는 메일만 보관할 수 있습니다. 숨겨진 Gmail 라벨, 두 번째 계정, 온라인 보관함, 관리자 제한 때문에 누락이 생길 수 있습니다. 제공업체 웹 앱과 앱의 폴더 목록을 비교하고 중요한 각 폴더에서 가장 오래된 메시지와 최신 메시지를 표본으로 확인하십시오. Gmail 라벨이 겹치면 단순 개수도 정확한 판단 기준이 되지 못합니다. 같은 메시지가 여러 라벨에 나타날 수 있기 때문입니다.</p>
           <p data-i18n-block>계정별 안내는 <a href="/ko/guides/backup-gmail-to-eml.html">Gmail을 EML로 저장하기</a>, <a href="/ko/guides/export-outlook-to-eml.html">Outlook을 EML로 저장하기</a>, <a href="/ko/guides/export-icloud-mail.html">iCloud Mail 내보내기</a>를 읽으십시오. Windows용 보관 도구에서 옮겨 온다면 <a href="/ko/guides/mailstore-alternative-mac.html">Mac용 MailStore 대안</a>부터 확인하십시오.</p>
           <p data-i18n-block><a href="/ko/get-started.html">MailVault를 무료로 다운로드</a>하고 첫 로컬 보관함을 만드십시오. 수동 보관은 무료입니다. 자동 보관, 예약 백업, 보관 후 삭제에는 <a href="/ko/pricing.html">Premium</a>이 필요합니다.</p>
           <p data-i18n-block>더 많은 실용 가이드: <a href="/ko/guides/backup-gmail-to-eml.html">Gmail을 EML 파일로 백업하는 방법</a> · <a href="/ko/guides/export-outlook-to-eml.html">Outlook 이메일을 EML로 내보내는 방법</a> · <a href="/ko/guides/backup-email-linux.html">Linux에서 이메일을 EML로 백업하는 방법</a> · <a href="/ko/guides/linux-email-archive.html">Linux용 로컬 이메일 보관 도구: 확인할 사항</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -234,5 +235,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

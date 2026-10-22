@@ -381,7 +381,7 @@ export function collect(html) {
 // Keep release provenance invariant while reusing the existing translated media description.
 function mediaDescription(tag, name, value) {
   if ((tag.name === 'img' || tag.name === 'video') && tag.attrs['data-mailvault-version'] && (name === 'alt' || name === 'aria-label')) {
-    return value.replace(/ · (?:Reviewed for )?MailVault version \d+\.\d+\.\d+$/, '');
+    return value.replace(/ · (?:Reviewed for )?MailVault version \d+\.\d+\.\d+(?: (?:en|de|fr|es|it|ja|ko|zh|pt-br))?$/, '');
   }
   return value;
 }
@@ -443,6 +443,8 @@ function shotsFor(dir) {
  * (scripts/website-clips-upload.sh), so every locale page names them without checking.
  */
 export function localizeShot(abs, loc) {
+  const help = /^\/assets\/help-media\/en\/([^/]+)$/.exec(abs);
+  if (help) return `/assets/help-media/${loc.dir}/${help[1]}`;
   const guide = /^\/assets\/videos\/guides\/([^/]+\.(?:mp4|jpg|vtt))$/.exec(abs);
   if (guide) return `/assets/videos/guides/${loc.dir}/${guide[1]}`;
   const clip = /^\/assets\/clips\/en\/([^/]+)$/.exec(abs);
@@ -595,7 +597,7 @@ export function render(html, pageRel, loc, dict) {
     }
 
     // Guide tracks follow the localized recording; name them correctly in the player.
-    if (tag.name === 'track' && /^\/assets\/videos\/guides\/[^/]+\.vtt$/.test(a.src?.value || '')) {
+    if (tag.name === 'track' && /^\/assets\/(?:videos\/guides|help-media\/en)\/[^/]+\.vtt$/.test(a.src?.value || '')) {
       for (const [name, value] of [['srclang', loc.htmlLang], ['label', loc.name]]) {
         if (a[name]?.vs >= 0) edits.push({ start: a[name].vs, end: a[name].ve, text: value });
       }
@@ -617,9 +619,12 @@ export function render(html, pageRel, loc, dict) {
       if (at.vs < 0) continue;
       if (attrIsTranslatable(tag, name) && isTranslatable(at.value)) {
         const description = mediaDescription(tag, name, at.value);
-        edits.push({ start: at.vs, end: at.ve, text: ESC(tr(description) + at.value.slice(description.length)).replace(/"/g, '&quot;').replace(/'/g, '&#39;') });
+        const source = a.src?.value || a.poster?.value;
+        const captureLanguage = source && localizeShot(source,loc) === source ? 'en' : loc.dir;
+        const suffix = at.value.slice(description.length).replace(/(MailVault version \d+\.\d+\.\d+) en$/, `$1 ${captureLanguage}`);
+        edits.push({ start: at.vs, end: at.ve, text: ESC(tr(description) + suffix).replace(/"/g, '&quot;').replace(/'/g, '&#39;') });
       }
-      if ((name === 'href' || name === 'src' || name === 'poster') && !('data-i18n-abs' in a)) {
+      if ((name === 'href' || name === 'src' || name === 'poster' || name === 'action') && !('data-i18n-abs' in a)) {
         const r = absolutize(at.value, pageRel);
         if (!r) continue;
         const localized = localizePath(r.abs, loc);
@@ -635,7 +640,13 @@ export function render(html, pageRel, loc, dict) {
     }
   }
 
-  return applyEdits(html, edits);
+  // A historical screenshot without localized pixels keeps its actual language.
+  // Localize visible provenance footers and titles only after routing each figure.
+  return applyEdits(html, edits).replace(/<figure\b[^>]*>[\s\S]*?<\/figure>/g, figure => {
+    const src = figure.match(/<img\b[^>]*\bsrc="([^"]+)"/)?.[1];
+    const language = src?.match(/^\/(?:screenshots|assets\/help-media)\/(de|fr|es|it|ja|ko|zh|pt-br)\//)?.[1] || 'en';
+    return figure.replace(/(MailVault version \d+\.\d+\.\d+) en\b/g, `$1 ${language}`);
+  });
 }
 
 /*

@@ -38,7 +38,7 @@
   "description": "Quatre façons de sauvegarder vos e-mails Outlook.com et Hotmail sur un Mac : Outlook pour Mac, Apple Mail, Thunderbird et MailVault. Ce que chacune enregistre et comment vérifier.",
   "url": "https://mailvaultapp.com/fr/guides/back-up-outlook-com-email-to-mac.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -161,6 +161,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Aller au contenu</a>
@@ -208,7 +209,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Rubriques d’aide</summary><nav aria-label="Rubriques du centre d’aide"><a href="/fr/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aide MailVault</a><a href="/fr/faq/getting-started.html">Premiers pas</a><a href="/fr/faq/storage-and-vault.html">Stockage et votre coffre</a><a href="/fr/faq/providers.html">Fournisseurs d'e-mail</a><a href="/fr/faq/backup-and-restore.html">Sauvegarde et restauration</a><a href="/fr/faq/explorer-and-insights.html">Explorer et Statistiques</a><a href="/fr/faq/scheduled-send.html">Envoi programmé</a><a href="/fr/faq/premium.html">Gratuit et Premium</a><a href="/fr/faq/troubleshooting.html">Dépannage</a><a href="/fr/docs.html#guides" class="mv-help-divider">Guides pratiques</a><a href="/fr/docs.html#articles">Articles</a><a href="/fr/features.html">Référence des fonctionnalités</a><a href="/changelog.html">Notes de version</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/fr/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -218,7 +219,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Comment sauvegarder vos e-mails Outlook.com et Hotmail sur votre Mac</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Comment sauvegarder vos e-mails Outlook.com et Hotmail sur votre Mac</h1><!-- help-intro:start --><form class="mv-help-search" action="/fr/docs.html" method="get" role="search"><label for="help-q">Rechercher dans la documentation, la FAQ et les articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Rechercher parmi tous les guides et réponses" required><button type="submit">Recherche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Sur cette page</summary><ul><li><a href="#help-section-1">Avant de commencer</a></li><li><a href="#help-section-2">Méthode 1 : l'ancien Outlook pour Mac (fichier .olm)</a></li><li><a href="#help-section-3">Méthode 2 : Apple Mail (fichiers .mbox)</a></li><li><a href="#help-section-4">Méthode 3 : Thunderbird (fichiers .mbox ou .eml)</a></li><li><a href="#help-section-5">Méthode 4 : MailVault (fichiers .eml dans lesquels chercher)</a></li><li><a href="#help-section-6">Les quatre méthodes côte à côte</a></li><li><a href="#help-section-7">Comment vérifier que votre sauvegarde est complète</a></li><li><a href="#help-section-8">Questions fréquentes</a></li><li><a href="#help-section-9">Et ensuite</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>9 min de lecture</span>
             <span aria-hidden="true">&middot;</span>
@@ -228,8 +229,7 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p>
-            Il existe aujourd'hui quatre façons qui fonctionnent pour sauvegarder vos e-mails Outlook.com ou Hotmail sur un Mac. Vous pouvez exporter un fichier <code>.olm</code> depuis l'ancien Outlook pour Mac, exporter des fichiers <code>.mbox</code> depuis Apple Mail, exporter depuis Thunderbird avec un module complémentaire, ou laisser MailVault enregistrer chaque message en fichier <code>.eml</code>. Cette page les compare, montre ce que chacune vous donne et explique comment vérifier la sauvegarde avant de vous y fier. Si vous voulez supprimer du courrier en ligne après la sauvegarde, lisez <a href="/fr/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">comment libérer de l'espace dans Hotmail et Outlook.com</a>.
-          </p>
+            Il existe aujourd'hui quatre façons qui fonctionnent pour sauvegarder vos e-mails Outlook.com ou Hotmail sur un Mac. Vous pouvez exporter un fichier <code>.olm</code> depuis l'ancien Outlook pour Mac, exporter des fichiers <code>.mbox</code> depuis Apple Mail, exporter depuis Thunderbird avec un module complémentaire, ou laisser MailVault enregistrer chaque message en fichier <code>.eml</code>. Cette page les compare, montre ce que chacune vous donne et explique comment vérifier la sauvegarde avant de vous y fier. Si vous voulez supprimer du courrier en ligne après la sauvegarde, lisez <a href="/fr/guides/free-up-space-hotmail-outlook-com.html" class="text-primary-500 hover:text-primary-600 underline">comment libérer de l'espace dans Hotmail et Outlook.com</a>. Ces indications sur la structure des fichiers concernent le format Maildir utilisé par défaut. Paramètres → Stockage propose aussi le stockage JMAP, qui conserve les octets des messages d’origine avec des enregistrements JSON et déduplique les messages identiques.</p>
 
           <div class="p-5 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Réponse rapide</p>
@@ -241,7 +241,7 @@
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Avant de commencer</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">Avant de commencer</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>L'export proposé par Microsoft exige Outlook de bureau.</strong> La page d'aide de Microsoft indique qu'on exporte une boîte Outlook.com avec une version de bureau d'Outlook : un fichier .pst sous Windows, ou un fichier .olm depuis l'ancien Outlook pour Mac. Si vous n'avez pas Outlook, Microsoft suggère un essai gratuit de 30 jours de Microsoft 365.</li>
@@ -249,7 +249,7 @@
             <li><strong>Vérifiez votre espace disque.</strong> Regardez <strong>Paramètres</strong> &gt; <strong>Compte</strong> &gt; <strong>Stockage</strong> dans Outlook.com. Votre sauvegarde a besoin d'à peu près autant d'espace libre sur le Mac.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Méthode 1 : l'ancien Outlook pour Mac (fichier .olm)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Méthode 1 : l'ancien Outlook pour Mac (fichier .olm)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Ajoutez votre compte Outlook.com à Outlook pour Mac et laissez-le terminer la synchronisation.</li>
@@ -262,7 +262,7 @@
             <strong>Ce que vous obtenez :</strong> un fichier .olm avec votre courrier, et les contacts et le calendrier si vous les avez cochés. Il est prévu pour être réimporté dans Outlook pour Mac avec <strong>Outils</strong> &gt; <strong>Importer</strong>. <strong>Idéal pour :</strong> ceux qui utilisent déjà Outlook pour Mac.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Méthode 2 : Apple Mail (fichiers .mbox)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">Méthode 2 : Apple Mail (fichiers .mbox)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Dans Mail, choisissez <strong>Mail</strong> &gt; <strong>Ajouter un compte</strong>, tapez votre adresse Outlook.com et suivez les étapes. Microsoft indique qu'Apple Mail utilise l'authentification moderne quand vous configurez le compte en tant qu'Outlook.com.</li>
@@ -275,7 +275,7 @@
             <strong>Ce que vous obtenez :</strong> un paquet .mbox par boîte aux lettres. Si vous exportez à nouveau, Mail crée un nouveau fichier à côté de l'ancien, par exemple <em>Ma boîte 3.mbox</em>, au lieu de le remplacer. Pour relire la sauvegarde plus tard, utilisez <strong>Fichier</strong> &gt; <strong>Importer des boîtes aux lettres</strong> ; les messages apparaissent dans une nouvelle boîte nommée <strong>Import</strong> (ou son équivalent dans la langue de votre système). <strong>Idéal pour :</strong> une copie rapide, sans rien à installer. Chaque export est un instantané : le nouveau courrier demande un nouvel export.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Méthode 3 : Thunderbird (fichiers .mbox ou .eml)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">Méthode 3 : Thunderbird (fichiers .mbox ou .eml)</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li>Installez Thunderbird et ajoutez votre compte Outlook.com. Le guide 2026 de Mozilla indique de régler la méthode d'authentification sur <strong>OAuth2</strong> et d'autoriser les cookies des sites Microsoft dans les réglages de Thunderbird lui-même.</li>
@@ -288,7 +288,7 @@
             <strong>Idéal pour :</strong> ceux qui veulent aussi une app de messagerie gratuite et open source au quotidien. Un compte professionnel ou scolaire peut nécessiter que votre administrateur approuve d'abord Thunderbird.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Méthode 4 : MailVault (fichiers .eml dans lesquels chercher)</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Méthode 4 : MailVault (fichiers .eml dans lesquels chercher)</h2>
 
           <p>
             MailVault est une app de messagerie gratuite pour macOS, Windows et Linux qui garde une copie de votre courrier dans un coffre sur votre ordinateur. Il n'y a pas de compte MailVault, et votre courrier ne passe par aucun serveur MailVault. Les étapes ci-dessous concernent la version téléchargée depuis notre site. L'édition Mac App Store diffère sur quelques points, comme les réglages de sauvegarde et le déplacement du coffre.
@@ -307,7 +307,7 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/onboarding-account-720.webp 720w, /screenshots/fr/onboarding-account-1440.webp 1440w, /screenshots/fr/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/fr/onboarding-account-light-1440.webp" srcset="/screenshots/fr/onboarding-account-light-720.webp 720w, /screenshots/fr/onboarding-account-light-1440.webp 1440w, /screenshots/fr/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Écran de premier lancement de MailVault intitulé Où vivent vos données. Il liste Trousseau du système, Rien dans un fichier en clair, Pas de compte, pas de télémétrie, et Votre coffre : chaque e-mail que vous archivez est un fichier .eml standard sur votre disque, au-dessus d&#39;un bouton Ajouter votre premier compte. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/fr/onboarding-account-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/onboarding-account-720.webp 720w, /screenshots/fr/onboarding-account-1440.webp 1440w, /screenshots/fr/onboarding-account-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/fr/onboarding-account-light-1440.webp" srcset="/screenshots/fr/onboarding-account-light-720.webp 720w, /screenshots/fr/onboarding-account-light-1440.webp 1440w, /screenshots/fr/onboarding-account-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Écran de premier lancement de MailVault intitulé Où vivent vos données. Il liste Trousseau du système, Rien dans un fichier en clair, Pas de compte, pas de télémétrie, et Votre coffre : chaque e-mail que vous archivez est un fichier .eml standard sur votre disque, au-dessus d&#39;un bouton Ajouter votre premier compte. · MailVault version 2.16.0 fr" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 fr"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 fr</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Avant que vous ajoutiez un compte, MailVault explique où vivent vos données : les identifiants de connexion dans le trousseau du système, et chaque e-mail archivé sous forme de fichier .eml standard sur votre disque.</figcaption>
           </figure>
 
@@ -321,7 +321,7 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/settings-backup-720.webp 720w, /screenshots/fr/settings-backup-1440.webp 1440w, /screenshots/fr/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/fr/settings-backup-light-1440.webp" srcset="/screenshots/fr/settings-backup-light-720.webp 720w, /screenshots/fr/settings-backup-light-1440.webp 1440w, /screenshots/fr/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Paramètres de MailVault, Sauvegarde et restauration, onglet Paramètres de sauvegarde. On y voit Où votre courrier est stocké avec les boutons Ouvrir le dossier et Déplacer le courrier vers un autre dossier, un menu Que sauvegarder réglé sur E-mails archivés uniquement, et une section Deuxième copie avec un avertissement indiquant qu&#39;il n&#39;existe qu&#39;une seule copie. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/fr/settings-backup-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/settings-backup-720.webp 720w, /screenshots/fr/settings-backup-1440.webp 1440w, /screenshots/fr/settings-backup-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/fr/settings-backup-light-1440.webp" srcset="/screenshots/fr/settings-backup-light-720.webp 720w, /screenshots/fr/settings-backup-light-1440.webp 1440w, /screenshots/fr/settings-backup-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Paramètres de MailVault, Sauvegarde et restauration, onglet Paramètres de sauvegarde. On y voit Où votre courrier est stocké avec les boutons Ouvrir le dossier et Déplacer le courrier vers un autre dossier, un menu Que sauvegarder réglé sur E-mails archivés uniquement, et une section Deuxième copie avec un avertissement indiquant qu&#39;il n&#39;existe qu&#39;une seule copie. · MailVault version 2.16.0 fr" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 fr"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 fr</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Paramètres de sauvegarde montre où votre courrier est stocké, ce que comprend la sauvegarde et si vous avez une deuxième copie. La note orange avertit quand tout se trouve au même endroit.</figcaption>
           </figure>
 
@@ -337,7 +337,7 @@
             <strong>Limites connues pour les comptes Outlook.com :</strong> comme ces comptes utilisent Microsoft Graph, Reporter n'est pas encore disponible, un fichier MBOX ne peut pas être restauré sur le serveur, un e-mail supprimé peut être récupéré sur votre ordinateur mais pas sur le serveur, et le nombre de messages de la boîte de réception n'est pas affiché après le test de connexion. La lecture, la suppression, le déplacement, le marquage et la sauvegarde fonctionnent comme sur les autres comptes.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Les quatre méthodes côte à côte</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">Les quatre méthodes côte à côte</h2>
 
           <div class="scroll-x overflow-x-auto">
             <table class="w-full text-left text-sm border-collapse">
@@ -384,7 +384,7 @@
           </div>
           <p class="text-sm text-slate-500 dark:text-slate-400">Dernière vérification : octobre 2026. Apple Mail, Thunderbird et Outlook pour Mac font chacun bien plus que des sauvegardes. Ce tableau ne couvre que ce qui compte pour garder une copie du courrier Outlook.com.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Comment vérifier que votre sauvegarde est complète</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">Comment vérifier que votre sauvegarde est complète</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li><strong>Comparez les nombres.</strong> Notez combien d'e-mails contient chaque gros dossier dans Outlook.com, et comparez avec la sauvegarde. Dans MailVault, l'en-tête de chaque dossier indique combien de ses e-mails sont dans votre coffre, par exemple <em>Dans votre coffre : 79 sur 79</em>. Un tableau des nombres sur le serveur et dans le coffre pour chaque dossier fait partie de Premium (suivi de l'état des sauvegardes).</li>
@@ -396,11 +396,11 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/local-vault-720.webp 720w, /screenshots/fr/local-vault-1440.webp 1440w, /screenshots/fr/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/fr/local-vault-light-1440.webp" srcset="/screenshots/fr/local-vault-light-720.webp 720w, /screenshots/fr/local-vault-light-1440.webp 1440w, /screenshots/fr/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Boîte de réception de MailVault avec le filtre Coffre sélectionné. L&#39;en-tête affiche le nombre d&#39;e-mails du dossier et un compteur Dans votre coffre, et chaque ligne de message porte une icône de coffre verte. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/fr/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/local-vault-720.webp 720w, /screenshots/fr/local-vault-1440.webp 1440w, /screenshots/fr/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/fr/local-vault-light-1440.webp" srcset="/screenshots/fr/local-vault-light-720.webp 720w, /screenshots/fr/local-vault-light-1440.webp 1440w, /screenshots/fr/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Boîte de réception de MailVault avec le filtre Coffre sélectionné. L&#39;en-tête affiche le nombre d&#39;e-mails du dossier et un compteur Dans votre coffre, et chaque ligne de message porte une icône de coffre verte. · MailVault version 2.16.0 fr" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 fr"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 fr</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">L'en-tête du dossier permet une vérification rapide : quand les deux nombres de Dans votre coffre correspondent, chaque e-mail que MailVault compte pour ce dossier a une copie sur votre ordinateur. La carte de progression dans le coin appartient à une autre tâche.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Questions fréquentes</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">Questions fréquentes</h2>
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Puis-je exporter mes e-mails Hotmail vers un Mac sans Outlook ?</h3>
@@ -427,7 +427,7 @@
             <p>La page d'aide actuelle de Microsoft ne décrit que l'export avec une version de bureau d'Outlook. D'anciens guides mentionnent un bouton Exporter la boîte aux lettres dans les paramètres d'Outlook.com. Si vous ne le voyez pas dans votre compte, utilisez l'une des méthodes de cette page.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Et ensuite</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-9">Et ensuite</h2>
 
           <p>
             Choisissez une méthode et faites la première copie cette semaine, puis vérifiez-la avec la liste ci-dessus. Si votre boîte est déjà pleine, lisez d'abord <a href="/fr/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">que faire quand le stockage Outlook est plein</a>, pour que le courrier cesse d'être rejeté. Le bref aperçu <a href="/fr/guides/outlook-hotmail-mailbox-full.html" class="text-primary-500 hover:text-primary-600 underline">boîte Outlook.com ou Hotmail pleine</a> et le guide valable pour tous les fournisseurs pour <a href="/fr/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">libérer de l'espace de messagerie</a> expliquent comment une copie locale vous permet de supprimer en ligne sans perdre de courrier. Pour comparer une copie locale à une formule plus grande, voyez <a href="/fr/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">archiver en local ou payer plus de stockage</a>.
@@ -449,7 +449,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Voir dans MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/fr/manual-backup.webp"><img src="/assets/help-media/fr/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Sauvegarder tous les comptes et vérifier la fin de l’opération · MailVault version 2.20.0 fr" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Sauvegarder tous les comptes et vérifier la fin de l’opération</figcaption><video controls playsinline preload="none" poster="/assets/help-media/fr/manual-backup.jpg" aria-label="Sauvegarder tous les comptes et vérifier la fin de l’opération · MailVault version 2.20.0 fr" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/fr/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/fr/manual-backup.vtt" srclang="fr" label="Français" default></video></figure><details class="mv-help-contents"><summary>Transcription de la vidéo</summary><p>Lancer la sauvegarde de tous les comptes dans les paramètres de sauvegarde. Suivre la progression jusqu’à la fin de la sauvegarde.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Une création de Graphic Meat</p><h2 id="studio-title">Découvrez les personnes derrière MailVault.</h2><p>Nous sommes Graphic Meat, un studio de produits indépendant qui crée des logiciels utiles depuis 2013. MailVault est l’un de nos produits. Venez nous rencontrer et découvrir nos autres projets.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Découvrir Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visiter Graphic Meat, le studio derrière MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Plus de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transformez vos photos en livre prêt à imprimer.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espace de travail local pour les notes et le code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Transférez vos e-mails vers un nouveau fournisseur.</span></a></div></div></aside><footer class="mv-footer">
@@ -473,5 +473,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Capture d’écran du produit"><button type="button">Fermer la capture d’écran</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>
