@@ -26,8 +26,7 @@
 //! network.server` was already added to `src-daemon/entitlements.plist` in
 //! Task 5.1, but whether a spawned, sandboxed child can actually bind a
 //! listening socket under inheritance has never been tested; P0.1 only
-//! proved file-access and SCM_RIGHTS inheritance). See the probe script
-//! (`scripts/probe-oauth2-loopback.py`) and the ledger.
+//! proved file-access and SCM_RIGHTS inheritance).
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::oauth2::{

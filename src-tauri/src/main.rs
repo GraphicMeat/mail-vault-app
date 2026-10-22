@@ -3498,16 +3498,6 @@ fn main() {
         });
     }
 
-    // Same shape as --daemon-only: answer and leave, before a window, a
-    // single-instance lock or a tray icon exists. Exists so the probe can be
-    // driven over ssh, where clicking a Help menu is not an option.
-    #[cfg(target_os = "macos")]
-    if std::env::args().any(|a| a == "--probe-agent") {
-        let (title, body) = probe_agent_report();
-        println!("{title}\n{body}");
-        std::process::exit(if title.contains("PASS") { 0 } else { 1 });
-    }
-
     // Log panics before abort — set_hook fires even with panic = "abort"
     std::panic::set_hook(Box::new(|info| {
         let location = info.location()
@@ -3907,23 +3897,6 @@ fn main() {
             let blog_item = MenuItem::with_id(app, "open_blog", "Blog", true, None::<&str>)?;
             #[cfg(not(windows))]
             let more_apps_item = MenuItem::with_id(app, "open_more_apps", "More Apps by GraphicMeat", true, None::<&str>)?;
-            // PROBE (not for merge): "Probe: Backup Bookmark Scope (automatic)".
-            #[cfg(target_os = "macos")]
-            let probe_backup_scope_item = MenuItem::with_id(app, "probe_backup_scope", "Probe: Backup Bookmark Scope (automatic)", true, None::<&str>)?;
-            // PROBE (not for merge): "Probe: OAuth2 Loopback Bind (automatic)".
-            // Runs in-process (not the external scripts/probe-oauth2-loopback.py script)
-            // because that script's literal `~/.mailvault/mv.sock` path is invisible to an
-            // unsandboxed checker once the app+daemon are actually sandboxed: App Sandbox
-            // redirects $HOME for the (sandboxed) app/daemon pair into their Container, and
-            // TCC blocks any unsandboxed process — even Rokas's own Terminal without Full
-            // Disk Access — from reading in there. Doing the RPC + TCP check from inside the
-            // already-sandboxed app process sidesteps that entirely.
-            #[cfg(target_os = "macos")]
-            let probe_oauth2_item = MenuItem::with_id(app, "probe_oauth2_loopback", "Probe: OAuth2 Loopback Bind (automatic)", true, None::<&str>)?;
-            // Throwaway, with the agent probe it drives: does a sandboxed app
-            // get a bundled LaunchAgent registered once the agent's own program
-            // is sandboxed, and can that agent reach the group container.
-            let probe_agent_item = MenuItem::with_id(app, "probe_agent_registration", "Probe: Background Agent Registration (automatic)", true, None::<&str>)?;
 
             #[cfg(target_os = "macos")]
             {
@@ -3964,9 +3937,6 @@ fn main() {
                                 let _ = sub.append(&blog_item);
                                 let _ = sub.append(&more_apps_item);
                                 let _ = sub.append(&shortcuts_item);
-                                let _ = sub.append(&probe_backup_scope_item);
-                                let _ = sub.append(&probe_agent_item);
-                                let _ = sub.append(&probe_oauth2_item);
                                 break;
                             }
                         }
@@ -4044,24 +4014,6 @@ fn main() {
                     let _ = app_handle_for_menu.shell().open("https://graphicmeat.com", None::<tauri_plugin_shell::open::Program>);
                 } else if event.id().as_ref() == "open_shortcuts" {
                     let _ = app_handle_for_menu.emit("open-shortcuts", ());
-                } else if event.id().as_ref() == "probe_agent_registration" {
-                    #[cfg(target_os = "macos")]
-                    {
-                        let h = app_handle_for_menu.clone();
-                        std::thread::spawn(move || probe_agent_registration(h));
-                    }
-                } else if event.id().as_ref() == "probe_backup_scope" {
-                    #[cfg(target_os = "macos")]
-                    {
-                        let h = app_handle_for_menu.clone();
-                        std::thread::spawn(move || probe_backup_scope(h));
-                    }
-                } else if event.id().as_ref() == "probe_oauth2_loopback" {
-                    #[cfg(target_os = "macos")]
-                    {
-                        let h = app_handle_for_menu.clone();
-                        std::thread::spawn(move || probe_oauth2_loopback(h));
-                    }
                 } else if event.id().as_ref() == "quit_app" {
                     info!("Application quitting via menu");
                     // Not `process::exit`: that skips RunEvent::Exit, so the
@@ -4309,231 +4261,6 @@ fn main() {
                 _ => {}
             }
         });
-}
-
-/// PROBE (not for merge): does `resolve_external_location`'s `start_access`
-/// (which rebuilds a plain `fileURLWithPath:` from the resolved bookmark's
-/// path string — see the comment in `external_location::macos::open_in_finder_inner`)
-/// actually grant write access to the configured backup folder, or is it a
-/// silent no-op? Three writes: cold (no start_access at all), warm (right
-/// after `resolve_external_location`), post-release (after `release_external_access`).
-///
-/// Precondition: an external backup location must already be configured in
-/// Settings > Backup Scope & Storage, saved in a PRIOR app launch. Quit and
-/// relaunch this signed build before running the probe, so no NSOpenPanel
-/// session grant from picking the folder is still live — only the persisted
-/// bookmark is being tested.
-#[cfg(target_os = "macos")]
-/// Throwaway probe: register the sandboxed agent, then look for the line it
-/// writes into the group container.
-///
-/// Both halves matter. Registration clearing "Operation not permitted" proves
-/// the EPERM was the agent's program not being sandboxed, not the app being
-/// sandboxed. The line appearing proves a launchd-started agent — which gets
-/// its own container, not the app's — can still reach `group.com.mailvault`,
-/// which is where the daemon's socket has to move for the real thing to work.
-/// A pass on the first and a fail on the second means the mechanism is fine
-/// and the meeting point is not, which are very different pieces of work.
-#[cfg(target_os = "macos")]
-fn probe_agent_registration(h: tauri::AppHandle) {
-    use tauri_plugin_dialog::DialogExt;
-    let (title, body) = probe_agent_report();
-    h.dialog().message(body).title(title).blocking_show();
-}
-
-/// The probe itself, with no UI and no AppHandle, so `--probe-agent` can run it
-/// over ssh on a machine whose GUI nobody is sitting at. Registration has to
-/// come from inside the app bundle — SMAppService reports on the calling
-/// bundle — but it needs no Tauri runtime, so this runs before one exists.
-#[cfg(target_os = "macos")]
-fn probe_agent_report() -> (&'static str, String) {
-    let log = mailvault_core::autostart::group_container_dir(
-        &dirs::home_dir().unwrap_or_default(),
-        "group.com.mailvault",
-    )
-    .join("agent-probe.log");
-    let before = fs::read_to_string(&log).unwrap_or_default();
-
-    let registered = match autostart::probe_register_agent() {
-        Ok(status) => format!("register: OK (status {status})"),
-        Err(e) => {
-            return (
-                "Probe: Background Agent — FAIL",
-                format!("register refused:\n{e}\n\nLog looked for at:\n{}", log.display()),
-            );
-        }
-    };
-
-    // RunAtLoad fires on registration; give launchd a moment to start it.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let mut after = before.clone();
-    while std::time::Instant::now() < deadline {
-        std::thread::sleep(std::time::Duration::from_millis(250));
-        after = fs::read_to_string(&log).unwrap_or_default();
-        if after.len() > before.len() {
-            break;
-        }
-    }
-
-    if after.len() > before.len() {
-        let line = after[before.len()..].trim().to_string();
-        ("Probe: Background Agent — PASS", format!("{registered}\n\nThe agent ran and reached the group container:\n{line}"))
-    } else {
-        (
-            "Probe: Background Agent — PARTIAL",
-            format!("{registered}\n\nBut nothing was written to:\n{}\n\nRegistration works; the agent either did not start or cannot reach the group container. Check: log show --last 5m --predicate 'process == \"mailvault-agent-probe\"'", log.display()),
-        )
-    }
-}
-
-fn probe_backup_scope(h: tauri::AppHandle) {
-    use serde_json::json;
-    use tauri_plugin_dialog::DialogExt;
-
-    fn write_probe(dir: &Path) -> Result<(), String> {
-        let f = dir.join(".mailvault-probe-scope.txt");
-        std::fs::write(&f, b"probe\n").map_err(|e| format!("write: {e} (errno {:?})", e.raw_os_error()))?;
-        let readback = std::fs::read(&f).map_err(|e| format!("readback: {e} (errno {:?})", e.raw_os_error()))?;
-        let _ = std::fs::remove_file(&f);
-        if readback != b"probe\n" {
-            return Err("readback mismatch".to_string());
-        }
-        Ok(())
-    }
-
-    let data_dir = match mailvault_core::paths::app_data_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            h.dialog().message(format!("app_data_dir: {e}")).title("Probe: Backup Scope — FAIL").blocking_show();
-            return;
-        }
-    };
-
-    let display_path = mailvault_core::app_db::with(&data_dir, |conn| {
-        Ok(mailvault_core::app_db::locations::display_path(conn, external_location::SLOT_EXTERNAL_BACKUP))
-    })
-    .ok()
-    .flatten();
-
-    let Some(display_path) = display_path else {
-        h.dialog()
-            .message("No external backup location configured. Set one in Settings > Backup Scope & Storage, quit, relaunch, then run this probe again.")
-            .title("Probe: Backup Scope — SKIPPED")
-            .blocking_show();
-        return;
-    };
-
-    // Step A: cold write, before resolve_external_location is ever called this session.
-    let cold_err: Option<String> = write_probe(&PathBuf::from(&display_path)).err();
-    info!("[probe-backup-scope] cold (no start_access) error: {:?}", cold_err);
-
-    // Step B: production resolve_external_location — resolves the bookmark, calls start_access.
-    let resolved = external_location::resolve_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP);
-    let resolve_err: Option<String> = resolved.as_ref().err().cloned();
-    let resolved_path: Option<String> = resolved.ok().map(|(path, _loc)| path);
-    let warm_err: Option<String> = match &resolved_path {
-        Some(p) => write_probe(&PathBuf::from(p)).err(),
-        None => None,
-    };
-    info!("[probe-backup-scope] resolve_external_location error: {:?}; warm write error: {:?}", resolve_err, warm_err);
-
-    // Step C: release, then a control write — if this still succeeds, the
-    // sandbox is not enforcing scope-loss on release either, which is its own finding.
-    if let Some(p) = &resolved_path {
-        external_location::release_external_access(p);
-    }
-    let post_release_err: Option<String> = resolved_path.as_ref().and_then(|p| write_probe(&PathBuf::from(p)).err());
-    info!("[probe-backup-scope] post-release write error: {:?}", post_release_err);
-
-    let verdict = match (&cold_err, &resolved_path.is_some(), &warm_err) {
-        (None, _, _) => "INCONCLUSIVE: the cold write (before start_access was ever called) already succeeded. Either this folder never required scope, or a prior session's picker grant is still live — quit, relaunch, and rerun.",
-        (Some(_), false, _) => "INCONCLUSIVE: resolve_external_location itself failed (see log) before start_access could be tested.",
-        (Some(_), true, None) => "PASS: cold write was refused, the warm write (after resolve_external_location/start_access) succeeded. start_access genuinely grants access. The broker-vs-daemon-restart architectural fork is real — decide it on its own merits.",
-        (Some(_), true, Some(_)) => "FAIL — BUG CONFIRMED: cold write refused AND the warm write after start_access was ALSO refused. resolve_external_location's start_access does not carry the security-scope extension (it rebuilds a plain fileURLWithPath: from the resolved path string — same defect the open_in_finder_inner fix in c393c14c worked around for Finder, but this call site was never fixed). Backups to this external folder are broken today after any relaunch, independent of the daemon migration. Fix: start scope on the NSURL object resolve_bookmark_inner already returns, never round-trip it through a path string. This is a Phase 3 prerequisite, not a broker-vs-restart tiebreaker.",
-    };
-
-    let summary = json!({
-        "displayPath": display_path,
-        "cold_write_error": cold_err,
-        "resolve_external_location_error": resolve_err,
-        "warm_write_error": warm_err,
-        "post_release_write_error": post_release_err,
-        "verdict": verdict,
-    });
-    info!("[probe-backup-scope] SUMMARY: {}", summary);
-    h.dialog()
-        .message(format!("{verdict}\n\nFull JSON in the log (search \"probe-backup-scope\")."))
-        .title("Probe: Backup Bookmark Scope")
-        .blocking_show();
-}
-
-/// PROBE (not for merge): can the signed, sandboxed daemon bind the OAuth2
-/// loopback callback listener (127.0.0.1:19876)? Same question as
-/// `scripts/probe-oauth2-loopback.py`, but run in-process: that script talks
-/// to the daemon over its `~/.mailvault/mv.sock` control socket using the
-/// LITERAL path, which only resolves for an unsandboxed checker. Once the
-/// app+daemon are actually sandboxed, `$HOME` is redirected into the app's
-/// Container for both of them, and TCC blocks any outside process (even
-/// Rokas's own Terminal, without Full Disk Access) from reading in there —
-/// discovered while trying to run that script against this exact build.
-/// Doing the RPC (`oauth2_auth_url`, via the same `daemon_call_blocking` every
-/// other bridge caller uses) and the TCP probe from inside the app process
-/// sidesteps the whole problem: it shares the daemon's redirected view.
-#[cfg(target_os = "macos")]
-fn probe_oauth2_loopback(h: tauri::AppHandle) {
-    use serde_json::json;
-    use std::net::TcpStream;
-    use std::time::{Duration, Instant};
-    use tauri_plugin_dialog::DialogExt;
-
-    const CALLBACK_PORT: u16 = 19876;
-
-    let rpc_result = daemon_call_blocking(&h, "oauth2_auth_url", json!({}), Duration::from_secs(30));
-    let (auth_url_ok, rpc_err) = match &rpc_result {
-        Ok(v) => (v.get("authUrl").and_then(|s| s.as_str()).is_some(), None),
-        Err(e) => (false, Some(e.clone())),
-    };
-    info!("[probe-oauth2-loopback] oauth2_auth_url result: ok={} err={:?}", auth_url_ok, rpc_err);
-
-    if !auth_url_ok {
-        let verdict = format!(
-            "FAIL: oauth2_auth_url did not return an authUrl (daemon error: {}). The callback \
-             server bind is only requested as a side effect of this call, so it was never attempted.",
-            rpc_err.as_deref().unwrap_or("none, but authUrl missing from reply")
-        );
-        info!("[probe-oauth2-loopback] SUMMARY: {}", json!({"verdict": verdict}));
-        h.dialog().message(verdict).title("Probe: OAuth2 Loopback Bind — FAIL").blocking_show();
-        return;
-    }
-
-    // ensure_callback_server's bind runs on a spawned tokio task inside the
-    // daemon — give it a moment, then poll for the listener actually
-    // accepting connections, same 5 s budget as the external script.
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let mut connected = false;
-    while Instant::now() < deadline {
-        if TcpStream::connect_timeout(&"127.0.0.1:19876".parse().unwrap(), Duration::from_millis(500)).is_ok() {
-            connected = true;
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-
-    let verdict = if connected {
-        format!("PASS: the sandboxed daemon is listening on 127.0.0.1:{CALLBACK_PORT}. The OAuth2 loopback callback bind works under App Sandbox.")
-    } else {
-        format!(
-            "FAIL: oauth2_auth_url succeeded, but nothing accepted a TCP connection on \
-             127.0.0.1:{CALLBACK_PORT} within 5s — the sandboxed daemon likely could not bind the \
-             loopback listener. Check daemon.log for '[OAuth2]' / 'Failed to bind callback server' / \
-             'Operation not permitted'."
-        )
-    };
-    info!("[probe-oauth2-loopback] SUMMARY: {}", json!({"auth_url_ok": auth_url_ok, "connected": connected, "verdict": &verdict}));
-    h.dialog()
-        .message(verdict)
-        .title("Probe: OAuth2 Loopback Bind")
-        .blocking_show();
 }
 
 // ── Unit tests ──────────────────────────────────────────────────────────────

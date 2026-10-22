@@ -53,14 +53,6 @@ impl AutostartState {
     }
 }
 
-/// Help-menu probe (macOS): register the throwaway sandboxed agent and report
-/// exactly what macOS said, plus whether the agent actually ran and reached
-/// the group container. Throwaway with the probe itself.
-#[cfg(target_os = "macos")]
-pub fn probe_register_agent() -> Result<isize, String> {
-    imp::register_agent_by_name("com.mailvault.app.probe.plist")
-}
-
 // Async so they leave the main thread, where a sync command runs: on Windows
 // each one waits on a `reg.exe` child, and the Daemon tab froze for it.
 #[tauri::command]
@@ -229,32 +221,6 @@ mod imp {
                 Some(d) => format!("{desc} ({}, code {code})", d.to_string()),
                 None => format!("{desc} (code {code})"),
             })
-        }
-    }
-
-    /// Register an arbitrary bundled agent by plist name and report what macOS
-    /// said. Used by the Help-menu probe; the toggle goes through `set()`.
-    pub fn register_agent_by_name(plist_name: &str) -> Result<isize, String> {
-        let cls = AnyClass::get(c"SMAppService").ok_or("SMAppService needs macOS 13 or later")?;
-        let svc: Retained<AnyObject> = unsafe {
-            let name = NSString::from_str(plist_name);
-            let svc: Option<Retained<AnyObject>> = msg_send![cls, agentServiceWithPlistName: &*name];
-            svc.ok_or_else(|| format!("no agent service for {plist_name}"))?
-        };
-        // "If an app updates either the plist or the executable for a
-        // LaunchAgent [...] the SMAppService must be re-registered or it may
-        // not launch. It is recommended to also call unregister before
-        // re-registering" — SMAppService.h. A probe is rebuilt constantly, so
-        // it would otherwise keep launching the binary from the last run.
-        let mut drop_err: *mut AnyObject = std::ptr::null_mut();
-        let _: bool = unsafe { msg_send![&*svc, unregisterAndReturnError: &mut drop_err] };
-
-        let mut err: *mut AnyObject = std::ptr::null_mut();
-        let ok: bool = unsafe { msg_send![&*svc, registerAndReturnError: &mut err] };
-        if ok {
-            Ok(status(&svc))
-        } else {
-            Err(error_message(err).unwrap_or_else(|| "register refused, no NSError".into()))
         }
     }
 }

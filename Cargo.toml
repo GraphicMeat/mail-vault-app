@@ -5,7 +5,6 @@ members = [
     "src-core",
     "src-mock-imap",
     "src-mock-jmap",
-    "src-agent-probe",
     "vendor/imap-proto",
     "src-render", # blitz-render
 ]
