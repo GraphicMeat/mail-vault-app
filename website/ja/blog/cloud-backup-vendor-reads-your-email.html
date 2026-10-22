@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>クラウドバックアップは、事業者が永久にメールを読めるということ。ローカルバックアップなら、読めるのはあなただけです。 - MailVaultブログ</title>
-  <meta name="description" content="メールボックス向けの第三者のクラウドバックアップサービスは、単一障害点をなくすのではなく、あなたが送受信したすべてのメッセージに継続的にアクセスできる会社をもう一社増やします。実際のアーキテクチャの違いと、ローカルバックアップがその穴をふさぐ理由。">
+  <title>クラウドのメールバックアップとローカルアーカイブ：コピーにアクセスできるのは誰？ - MailVaultブログ</title>
+  <meta name="description" content="暗号化、鍵の所有者、アクセス管理、復元方法を基準に、クラウドのメールバックアップとローカルアーカイブを比較してください。ローカルファイルにもディスク保護と別のバックアップが必要です。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ja/blog/cloud-backup-vendor-reads-your-email.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/ja/blog/cloud-backup-vendor-reads-your-email.html">
-  <meta property="og:title" content="クラウドバックアップは、事業者が永久にメールを読めるということ。ローカルバックアップなら、読めるのはあなただけです。">
-  <meta property="og:description" content="メールボックス向けの第三者のクラウドバックアップサービスは、単一障害点をなくすのではなく、あなたが送受信したすべてのメッセージに継続的にアクセスできる会社をもう一社増やします。実際のアーキテクチャの違いと、ローカルバックアップがその穴をふさぐ理由。">
+  <meta property="og:title" content="クラウドのメールバックアップとローカルアーカイブ：コピーにアクセスできるのは誰？">
+  <meta property="og:description" content="暗号化、鍵の所有者、アクセス管理、復元方法を基準に、クラウドのメールバックアップとローカルアーカイブを比較してください。ローカルファイルにもディスク保護と別のバックアップが必要です。">
   <meta property="og:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="クラウドバックアップは、事業者が永久にメールを読めるということ。ローカルバックアップなら、読めるのはあなただけです。">
-  <meta name="twitter:description" content="メールボックス向けの第三者のクラウドバックアップサービスは、単一障害点をなくすのではなく、あなたが送受信したすべてのメッセージに継続的にアクセスできる会社をもう一社増やします。実際のアーキテクチャの違いと、ローカルバックアップがその穴をふさぐ理由。">
+  <meta name="twitter:title" content="クラウドのメールバックアップとローカルアーカイブ：コピーにアクセスできるのは誰？">
+  <meta name="twitter:description" content="暗号化、鍵の所有者、アクセス管理、復元方法を基準に、クラウドのメールバックアップとローカルアーカイブを比較してください。ローカルファイルにもディスク保護と別のバックアップが必要です。">
   <meta name="twitter:image:alt" content="MailVault：すばやい検索。プライベートなメール。手元に残る。macOS・Windows・Linux 向けに無料。アプリのプレビュー付き。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=3">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -132,7 +133,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -143,7 +144,7 @@
       <article>
         <header class="mb-8">
           <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">2026年8月28日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">クラウドバックアップは、事業者が永久にメールを読めるということ。ローカルバックアップなら、読めるのはあなただけです。</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">クラウドのメールバックアップとローカルアーカイブ：コピーにアクセスできるのは誰？</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6分で読めます</span>
           </div>
@@ -156,7 +157,7 @@
           </p>
 
           <p>
-            単一障害点はなくなっていません。あなたが送受信したすべてのメールの常設のコピーと、新しいメールを永久に取り込み続けるための認証情報や委任されたアクセス権を持つ会社が、もう一社増えただけです。
+            クラウド間バックアップは独立した復元用コピーを作成できますが、評価すべきサービスとアクセス権も増えます。保持期間と読み取り可能な相手は、設定、暗号化、契約によって異なります。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">クラウドバックアップの事業者が実際に持っているもの</h3>
@@ -166,7 +167,7 @@
           </p>
 
           <p>
-            サブスクリプションが続いている間ずっと、バックアップ事業者は &mdash; そして、そのシステムの侵害に成功した誰もが &mdash; あなたのメールの全履歴に継続的にアクセスできます。契約した日のスナップショットではありません。積み重なるほど攻撃者にとって価値が増していく、成長し続けるアーカイブです。「プロバイダーが自分のメールを持っている」を「プロバイダーとバックアップ事業者の両方が自分のメールを持っている」に交換したことになり、露出は減るどころか確実に増えています。
+            継続的に更新するバックアップでは、蓄積するメッセージ履歴が保持される場合があります。サービスに与える権限、保存期間、暗号鍵、復元の管理方法とともに、アクセスを取り消した場合や契約が終了した場合の扱いを確認してください。コピーを増やすと復元能力が向上する一方、別のアクセスリスクも生まれます。
           </p>
 
           <p>
@@ -180,11 +181,11 @@
           </p>
 
           <p>
-            事業者のサーバーにあるコピーは、社内のアクセス条件次第でその事業者の従業員に読まれ、事業者に管轄権を持つ裁判所から提出を命じられ、事業者が侵害されれば流出し、あなたが当初信頼したのとは異なるデータ取り扱いの方針を持つ企業に事業者が買収されれば引き渡されます。どの結末も、あなたの側で何かが起きる必要はありません。これらは、他人のインフラ上にコピーが存在すること自体の性質です。
+            アクセスできるかどうかは、サービスの暗号化、鍵の所有者、権限によって異なります。復号鍵を持つプロバイダーは保存されたメールを読める場合がありますが、適切なクライアント側暗号化を使うバックアップなら、そのアクセスを制限できます。すべてのクラウドコピーを運営会社が読めると決めつけず、個別のサービスのポリシー、削除条件、復元手順を確認してください。
           </p>
 
           <p>
-            自分のディスク上にあるコピーが抱えるリスクは、そのうちの1種類だけです。自分のデバイスのセキュリティです。これは確かに責任を伴います &mdash; ディスク全体の暗号化、しっかり管理されたマシン、さらに冗長性が欲しければバックアップのバックアップ &mdash; しかし、これは自分が直接コントロールできる、範囲の定まった単一のリスクであり、第三者に無期限に任せ続ける終わりのないリスクではありません。
+            ローカルコピーの安全性は、端末のセキュリティ、ディスクの状態、物理的なアクセス、バックアップ構成に左右されます。MailVault のメールファイル自体は暗号化された保管庫ではありません。ディスク暗号化を使い、別のバックアップを作成して確認してください。クラウド同期フォルダーに置けば、そのサービスも保存先の一部になります。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">ローカルバックアップは、単純に多くの事態を生き延びます</h3>
@@ -196,11 +197,10 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVaultの作りはどう違うのか</h3>
 
           <p>
-            MailVaultは、お使いのIMAPまたはOAuthのメールアカウントに接続し、すべてのフォルダを1通ずつの<code>.eml</code>ファイルとしてアーカイブします &mdash; 書き込み先は、そのまま自分のディスクです。あいだに立ってメールのコピーを持つ、MailVaultが運営するサーバーはありません。私たちが受け取ることは一度もないので、アーカイブを読むこともできません。通信はお使いの端末と提供元の間で行われ、できあがったファイルは置いた場所にだけ残ります。
-          </p>
+            MailVaultは、お使いのIMAPまたはOAuthのメールアカウントに接続し、すべてのフォルダを1通ずつの<code>.eml</code>ファイルとしてアーカイブします &mdash; 書き込み先は、そのまま自分のディスクです。あいだに立ってメールのコピーを持つ、MailVaultが運営するサーバーはありません。私たちが受け取ることは一度もないので、アーカイブを読むこともできません。通信はお使いの端末と提供元の間で行われ、できあがったファイルは置いた場所にだけ残ります。 このファイル構成の説明は、標準のMaildir形式を対象としています。設定 → ストレージではJMAPストレージも選択でき、元のメッセージのバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。</p>
 
           <p>
-            ここでは形式も重要です。<code>.eml</code>は、どのメールクライアントでも読める素直な公開標準であり、アーカイブを1つのソフトウェアや1社の存続に縛りつける独自形式のデータベースではありません。手動でのローカルバックアップは無制限で無料、それだけです。実行を覚えておかなくてもアーカイブを自動で最新に保つスケジュール実行のバックアップは、$4/月または$25/年のPremiumの機能です &mdash; 年額プランには14日間のトライアルが含まれます。
+            形式も重要です。<code>.eml</code> は EML 対応メールアプリで読めるシンプルな公開標準であり、アーカイブを1つのソフトウェアや1社の存続に依存させる独自データベースではありません。 手動でのローカルバックアップは無制限で無料、それだけです。実行を覚えておかなくてもアーカイブを自動で最新に保つスケジュール実行のバックアップは、$4/月または$25/年のPremiumの機能です &mdash; 年額プランには14日間のトライアルが含まれます。
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -224,7 +224,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -248,5 +248,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

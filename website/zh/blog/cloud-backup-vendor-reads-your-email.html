@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。 - MailVault 博客</title>
-  <meta name="description" content="给邮箱加一个第三方云备份服务，并没有消除单点故障——它只是又添了一家公司，持续掌握你收发过的每一封邮件。这里说清楚真正的架构差别，以及本地备份为什么能把这个口子堵上。">
+  <title>云端邮件备份与本地归档：谁能访问副本？ - MailVault 博客</title>
+  <meta name="description" content="请从加密、密钥归属、访问控制和恢复能力比较云端邮件备份与本地归档。本地文件同样需要磁盘保护和独立备份。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/blog/cloud-backup-vendor-reads-your-email.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/zh/blog/cloud-backup-vendor-reads-your-email.html">
-  <meta property="og:title" content="云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。">
-  <meta property="og:description" content="给邮箱加一个第三方云备份服务，并没有消除单点故障——它只是又添了一家公司，持续掌握你收发过的每一封邮件。这里说清楚真正的架构差别，以及本地备份为什么能把这个口子堵上。">
+  <meta property="og:title" content="云端邮件备份与本地归档：谁能访问副本？">
+  <meta property="og:description" content="请从加密、密钥归属、访问控制和恢复能力比较云端邮件备份与本地归档。本地文件同样需要磁盘保护和独立备份。">
   <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。">
-  <meta name="twitter:description" content="给邮箱加一个第三方云备份服务，并没有消除单点故障——它只是又添了一家公司，持续掌握你收发过的每一封邮件。这里说清楚真正的架构差别，以及本地备份为什么能把这个口子堵上。">
+  <meta name="twitter:title" content="云端邮件备份与本地归档：谁能访问副本？">
+  <meta name="twitter:description" content="请从加密、密钥归属、访问控制和恢复能力比较云端邮件备份与本地归档。本地文件同样需要磁盘保护和独立备份。">
   <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=3">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -132,7 +133,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -143,7 +144,7 @@
       <article>
         <header class="mb-8">
           <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">2026 年 8 月 28 日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">云端邮件备份与本地归档：谁能访问副本？</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 分钟阅读</span>
           </div>
@@ -156,7 +157,7 @@
           </p>
 
           <p>
-            你并没有消除单点故障。你只是又添了一家公司，它长期持有你收发过的每一封邮件的副本，外加继续永久拉取新邮件所需的凭据或委托授权。
+            云到云备份可以创建独立的恢复副本，但也增加了一项需要评估的服务和访问授权。保留多久、谁能读取副本，取决于其配置、加密和合同。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">云备份服务商实际掌握着什么</h3>
@@ -166,7 +167,7 @@
           </p>
 
           <p>
-            只要订阅还在续，备份服务商 &mdash; 以及顺带地，任何成功攻破他们系统的人 &mdash; 就能持续访问你完整的邮件历史。不是你注册那天的一张快照，而是一份不断增长的归档，攒得越久，对攻击者就越值钱。你把「我的服务商有我的邮件」换成了「我的服务商和一家备份供应商都有我的邮件」，这严格来说是暴露更多，而不是更少。
+            持续更新的备份可能保留不断增长的邮件历史。请评估服务的委托权限、保留期限、加密密钥和恢复控制，并了解撤销访问或订阅结束后的处理方式。第二份副本可以提升恢复能力，同时也会带来不同的访问风险。
           </p>
 
           <p>
@@ -180,11 +181,11 @@
           </p>
 
           <p>
-            放在某家服务商服务器上的副本，可能在满足内部访问条件时被该服务商的员工读取，可能被对该服务商有管辖权的法院调取，可能在该服务商被入侵时泄露，也可能在该服务商被一家数据处理规范与你当初信任的那家不同的公司收购时被一并交出。这些结果都不需要你这边出任何问题。它们只是「副本存在于别人基础设施上」这件事本身自带的属性。
+            能否访问取决于服务的加密方式、密钥归属和权限。持有解密密钥的提供商可能能够访问存储的邮件；正确实现的客户端加密备份可以限制这种访问。请检查具体服务的政策、删除条款和恢复流程，不要假定所有云端副本都可由服务商读取。
           </p>
 
           <p>
-            放在你自己磁盘上的副本，只有其中一类风险：你自己的设备安全。这是一份实实在在的责任 &mdash; 全盘加密、一台管好的机器，想要更多冗余的话，再给备份做个备份 &mdash; 但这是一个边界清晰、由你直接掌控的单一风险，而不是无限期地托付给第三方替你管理的开放式风险。
+            本地副本依赖设备安全、磁盘健康、物理访问和备份安排。MailVault 邮件文件本身并非加密保险库。请启用磁盘加密，并保留经过测试的独立备份；如果文件位于云同步文件夹中，该服务也会成为存储安排的一部分。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">本地备份还能扛住更多状况</h3>
@@ -196,11 +197,10 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 的做法不一样在哪里</h3>
 
           <p>
-            MailVault 连接你现有的 IMAP 或 OAuth 邮箱账户，把每个文件夹都归档成一个个独立的 <code>.eml</code> 文件 &mdash; 直接写到你自己的磁盘上。中间没有一台由 MailVault 运营、存着你邮件副本的服务器。我们读不到你的归档，因为我们从来就没收到过；连接发生在你的设备和你的服务商之间，产生的文件只存在于你放它们的地方。
-          </p>
+            MailVault 连接你现有的 IMAP 或 OAuth 邮箱账户，把每个文件夹都归档成一个个独立的 <code>.eml</code> 文件 &mdash; 直接写到你自己的磁盘上。中间没有一台由 MailVault 运营、存着你邮件副本的服务器。我们读不到你的归档，因为我们从来就没收到过；连接发生在你的设备和你的服务商之间，产生的文件只存在于你放它们的地方。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
 
           <p>
-            格式在这里同样要紧：<code>.eml</code> 是一种朴素的开放标准，任何邮件客户端都能读，而不是把你的归档绑死在某个软件、或某家公司能否继续存在上的专有数据库。手动的、不限次数的本地备份是免费的，就这么简单。不用你记着去点一下、自动让归档保持最新的定时备份，是 $4/月 或 $25/年 的 Premium 功能 &mdash; 年付方案含 14 天试用。
+            格式同样重要：<code>.eml</code> 是支持 EML 的邮件应用可以读取的简单开放标准，而非将归档绑定到单一软件或某家公司存续状态的专有数据库。 手动的、不限次数的本地备份是免费的，就这么简单。 不用你记着去点一下、自动让归档保持最新的定时备份，是 $4/月 或 $25/年 的 Premium 功能 &mdash; 年付方案含 14 天试用。
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -224,7 +224,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -248,5 +248,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-emails-mac.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-emails-mac.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,22 +172,22 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">邮件备份指南 · <time datetime="2026-10-15">2026年10月15日</time></p>
-          <h1>如何在 Mac 上下载所有邮件</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>如何在 Mac 上下载所有邮件</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">方案 1：从 Apple Mail 导出邮箱</a></li><li><a href="#help-section-2">方案 2：使用 MailVault 创建可搜索的 EML 归档</a></li><li><a href="#help-section-3">先验证归档，再依赖它</a></li><li><a href="#search-local-archive-video">简短演示：搜索本地归档</a></li><li><a href="#help-section-4">为什么下载“所有邮件”需要文件夹检查清单</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>要在 Mac 上下载所有邮件，可以选择 Apple Mail 邮箱导出或专用的本地归档工具。关键在于完整性：仅收件箱通常无法涵盖整个账户，同步邮箱仍可能反映服务器上的删除操作。</p>
-          <h2 data-i18n-block>方案 1：从 Apple Mail 导出邮箱</h2>
+          <h2 data-i18n-block id="help-section-1">方案 1：从 Apple Mail 导出邮箱</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>在 Apple Mail 中连接账户，等待邮件获取完成。检查收件箱、已发送和每个需要的文件夹，包括旧邮件。</li>
           <li data-i18n-block>在边栏中选择所需邮箱，然后选择<strong>邮箱 → 导出邮箱</strong>。</li>
           <li data-i18n-block>选择 Mac 或外置硬盘上的文件夹。Apple Mail 以 MBOX 格式导出邮箱数据。</li>
           <li data-i18n-block>保留第二份副本，并使用<strong>文件 → 导入邮箱</strong>测试导入。打开导入副本中有代表性的邮件和附件。</li></ol>
           <p data-i18n-block>这些菜单名称和 MBOX 格式在 <a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac">Apple 的邮箱导入与导出指南</a>中有说明。导出的邮箱是一份独立文件；仅在 Mail 中保持账户连接，并不等于做了同样的备份。</p>
-          <h2 data-i18n-block>方案 2：使用 MailVault 创建可搜索的 EML 归档</h2>
+          <h2 data-i18n-block id="help-section-2">方案 2：使用 MailVault 创建可搜索的 EML 归档</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>从<a href="/zh/get-started.html">开始使用</a>页面下载 macOS 版本，添加邮件账户。如果可用，请使用 Google 或 Microsoft 登录。</li>
           <li data-i18n-block>列出文件夹检查清单：收件箱、已发送、自定义文件夹，以及包含收件箱之外邮件的所有标签。如有需要，让服务商已归档或隐藏的文件夹对当前连接可见。</li>
           <li data-i18n-block>通过批量操作选择所需文件夹和日期，然后选择<strong>归档</strong>。等待完成，并调查任何失败项目或跳过的文件夹。</li>
           <li data-i18n-block>将来源切换为<strong>保险库</strong>，检查独立的本地副本。保险库中的邮件使用 .eml 文件；只在服务器来源下可见的邮件尚未归档。</li></ol>
-          <h2 data-i18n-block>先验证归档，再依赖它</h2>
+          <h2 data-i18n-block id="help-section-3">先验证归档，再依赖它</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>将邮件来源切换为<strong>保险库</strong>，而不是服务器或全部。搜索一封您记得的旧邮件。</li>
           <li data-i18n-block>断开网络，打开几封来自不同文件夹、不同年份的归档邮件，也打开它们的附件。列表中有邮件主题，并不能证明邮件正文已保存。</li>
@@ -199,14 +200,14 @@
           <p data-i18n-block class="text-sm">本演示使用虚构邮件，由现有 macOS 演示录屏剪辑而成。账户登录和部分准备工作在画面外完成，并未实时连接邮件服务商。</p>
           <details><summary data-i18n-block>阅读演示说明</summary>
           <p data-i18n-block>演示在预先准备好的保险库中搜索虚构邮件。请在断网时打开旧邮件和附件，验证您自己的归档，再在另一块硬盘上保留第二份副本。</p></details></section>
-          <h2 data-i18n-block>为什么下载“所有邮件”需要文件夹检查清单</h2>
+          <h2 data-i18n-block id="help-section-4">为什么下载“所有邮件”需要文件夹检查清单</h2>
           <p data-i18n-block>桌面连接只能归档服务商向它开放的内容。隐藏的 Gmail 标签、第二个账户、联机存档或管理员限制都可能造成遗漏。将服务商网页应用中的文件夹列表与应用列表进行比较，然后在每个重要文件夹中抽查最旧和最新的邮件。Gmail 标签重叠也可能使原始计数产生误导；同一封邮件可能出现在多个标签下。</p>
           <p data-i18n-block>有关特定账户的说明，请阅读<a href="/zh/guides/backup-gmail-to-eml.html">将 Gmail 保存为 EML</a>、<a href="/zh/guides/export-outlook-to-eml.html">将 Outlook 保存为 EML</a>或<a href="/zh/guides/export-icloud-mail.html">导出 iCloud Mail</a>。如果您正在从 Windows 归档工具迁移，请先阅读<a href="/zh/guides/mailstore-alternative-mac.html">适用于 Mac 的 MailStore 替代工具</a>。</p>
           <p data-i18n-block><a href="/zh/get-started.html">免费下载 MailVault</a>，创建您的第一份本地归档。手动归档免费；自动归档、定时备份和归档并删除需要 <a href="/zh/pricing.html">Premium</a>。</p>
           <p data-i18n-block>更多实用指南：<a href="/zh/guides/backup-gmail-to-eml.html">如何将 Gmail 备份为 EML 文件</a> · <a href="/zh/guides/export-outlook-to-eml.html">如何将 Outlook 邮件导出为 EML</a> · <a href="/zh/guides/backup-email-linux.html">如何在 Linux 上将邮件备份为 EML</a> · <a href="/zh/guides/linux-email-archive.html">选择 Linux 本地邮件归档工具：需要检查什么</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -234,5 +235,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@
   "description": "Mac용 MailStore가 없습니까? MailVault는 Gmail, Outlook, IMAP 메일을 일반 .eml 파일로 로컬에 보관하는 macOS, Windows, Linux용 무료 앱입니다.",
   "url": "https://mailvaultapp.com/ko/guides/mailstore-alternative-mac.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,7 +169,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac용 MailStore 대안: MailVault</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac용 MailStore 대안: MailVault</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6분 분량</span>
           </div>
@@ -267,8 +268,7 @@
           </p>
 
           <p>
-            <strong>개방형 표준 저장.</strong> MailStore는 보관한 메일을 자체 보관 파일에 두며, EML이나 MSG 파일을 꺼내려면 내보내야 합니다. MailStore 개발이 멈추면 그 메일에 접근하기가 어려워집니다. MailVault는 모든 메일을 다른 메일 클라이언트도 열 수 있는 RFC 5322 형식의 표준 <code>.eml</code> 파일로 저장합니다. 보관본은 파일이 든 폴더일 뿐입니다. Apple Mail, Thunderbird, 또는 아무 텍스트 편집기에서 열 수 있습니다.
-          </p>
+            <strong>개방형 표준 저장.</strong> MailStore는 보관한 메일을 자체 보관 파일에 두며, EML이나 MSG 파일을 꺼내려면 내보내야 합니다. MailStore 개발이 멈추면 그 메일에 접근하기가 어려워집니다. MailVault는 모든 메일을 다른 메일 클라이언트도 열 수 있는 RFC 5322 형식의 표준 <code>.eml</code> 파일로 저장합니다. 보관본은 파일이 든 폴더일 뿐입니다. Apple Mail, Thunderbird, 또는 아무 텍스트 편집기에서 열 수 있습니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
 
           <p>
             <strong>소스 코드는 GitHub에 있습니다.</strong> MailVault의 소스 코드는 GitHub에서 볼 수 있습니다. 직접 읽고 메일을 어떻게 다루는지 확인할 수 있습니다. 개인 메일을 다루는 소프트웨어라면 정확히 무엇을 하는지 아는 것이 중요합니다.
@@ -283,7 +283,7 @@
           </p>
 
           <figure class="pt-2">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/search-results-720.webp 720w, /screenshots/ko/search-results-1440.webp 1440w, /screenshots/ko/search-results-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/ko/search-results-light-1440.webp" srcset="/screenshots/ko/search-results-light-720.webp 720w, /screenshots/ko/search-results-light-1440.webp 1440w, /screenshots/ko/search-results-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="Rack &amp; Rind에 대한 검색 결과를 보여 주는 macOS의 MailVault: INBOX에서 결과 7개를 찾았고 모두 로컬 메일에서 나왔으며, 보낸 사람과 제목과 함께 나열되어 있습니다. · MailVault version 2.16.0" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/search-results-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/search-results-720.webp 720w, /screenshots/ko/search-results-1440.webp 1440w, /screenshots/ko/search-results-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px"><img src="/screenshots/ko/search-results-light-1440.webp" srcset="/screenshots/ko/search-results-light-720.webp 720w, /screenshots/ko/search-results-light-1440.webp 1440w, /screenshots/ko/search-results-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="Rack &amp; Rind에 대한 검색 결과를 보여 주는 macOS의 MailVault: INBOX에서 결과 7개를 찾았고 모두 로컬 메일에서 나왔으며, 보낸 사람과 제목과 함께 나열되어 있습니다. · MailVault version 2.16.0 ko" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="932" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">Mac의 MailVault에서 한 검색. 검색창 아래 줄에 결과 중 몇 개가 로컬 메일에서, 몇 개가 서버에서 나왔는지 표시됩니다.</figcaption>
           </figure>
 
@@ -295,7 +295,7 @@
             <strong>확인을 거쳐 보관한 뒤 삭제.</strong> 메시지 보관과 서버에서 삭제는 각각 따로 하면 무료입니다. <a href="/ko/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">보관 후 삭제</a>(Premium)는 둘을 한 번에 합니다. 메시지를 하나씩 볼트에 복사하고, 사본을 확인한 다음에야 서버에서 지웁니다.
           </p>
 
-          <figure class="mv-clip my-6" data-clip="archive-delete"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/ko/archive-delete.jpg" width="960" height="660" aria-label="MailVault가 &quot;보관한 뒤 서버에서 삭제할까요?&quot;라고 묻고, 보관 후 삭제하기를 클릭하면 진행률이 420 중 420에 이르며, 보관함 보기에는 2022년에 보관한 메일 420통이 그대로 나열됩니다. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ko/archive-delete.mp4" type="video/mp4"></video></div>
+          <figure class="mv-clip my-6" data-clip="archive-delete"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/ko/archive-delete.jpg" width="960" height="660" aria-label="MailVault가 &quot;보관한 뒤 서버에서 삭제할까요?&quot;라고 묻고, 보관 후 삭제하기를 클릭하면 진행률이 420 중 420에 이르며, 보관함 보기에는 2022년에 보관한 메일 420통이 그대로 나열됩니다. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ko/archive-delete.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">보관 후 삭제 (Premium)</strong><span class="mv-clip-text">2022년 메일 420통이 보관되고, 확인된 뒤 서버에서 삭제됩니다. 보관함 보기에는 420통이 그대로 남아 있습니다.</span></figcaption></figure>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailStore가 앞서는 부분</h3>
@@ -367,7 +367,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -391,5 +391,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

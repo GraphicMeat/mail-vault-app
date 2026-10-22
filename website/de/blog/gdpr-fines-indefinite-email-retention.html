@@ -85,6 +85,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=3">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
@@ -132,7 +133,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Hilfethemen</summary><nav aria-label="Themen im Hilfecenter"><a href="/de/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault-Hilfe</a><a href="/de/faq/getting-started.html">Erste Schritte</a><a href="/de/faq/storage-and-vault.html">Speicherort und dein Vault</a><a href="/de/faq/providers.html">E-Mail-Anbieter</a><a href="/de/faq/backup-and-restore.html">Backup und Wiederherstellung</a><a href="/de/faq/explorer-and-insights.html">Explorer und Einblicke</a><a href="/de/faq/scheduled-send.html">Geplanter Versand</a><a href="/de/faq/premium.html">Kostenlos und Premium</a><a href="/de/faq/troubleshooting.html">Fehlerbehebung</a><a href="/de/docs.html#guides" class="mv-help-divider">Praktische Anleitungen</a><a href="/de/docs.html#articles">Artikel</a><a href="/de/features.html">Funktionsübersicht</a><a href="/changelog.html">Versionshinweise</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/de/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -143,7 +144,7 @@
       <article>
         <header class="mb-8">
           <time datetime="2026-08-25" class="text-sm text-primary-500 font-medium">25. August 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">DSGVO-Bußgelder erreichen 6,11 Milliarden Euro — ist „alles für immer aufbewahren“ ein Compliance-Risiko?</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">DSGVO-Bußgelder erreichen 6,11 Milliarden Euro — ist „alles für immer aufbewahren“ ein Compliance-Risiko?</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>7 Min. Lesezeit</span>
           </div>
@@ -152,7 +153,7 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            Stand März 2026 belaufen sich die kumulierten DSGVO-Bußgelder in der EU auf rund &euro;6,11 Milliarden, verteilt auf 2.685 erfasste Verfahren, so der CMS GDPR Enforcement Tracker Report für 2025/2026. Einzelne Fälle in diesem Datensatz reichen bis zu &euro;1,2 Milliarden. Wie das Risikomodell deiner Organisation auch ausgesehen hat, als die DSGVO 2018 neu war &mdash; acht Jahre später ist das Durchsetzungsmuster nicht mehr theoretisch. Es ist ein stetiger, gut dokumentierter Kostenblock für Unternehmen, die beim Umgang mit Daten danebenliegen.
+            Bis März 2026 erreichten die erfassten DSGVO-Geldbußen in der EU insgesamt rund &euro;6.11 Milliarden. Der <a href="https://cms.law/en/gbr/publication/gdpr-enforcement-tracker-report/numbers-and-figures/">CMS GDPR Enforcement Tracker Report 2025/2026</a> erfasst dabei 2.685 Geldbußen mit bekanntem Betrag und Datum. Einschließlich Einträgen mit unvollständigen Informationen nennt der Bericht 3.062 Fälle. Einzelne Geldbußen erreichen &euro;1.2 Milliarden. Unabhängig davon, wie dein Unternehmen die Risiken bei Einführung der DSGVO 2018 eingeschätzt hat: Acht Jahre später sind Sanktionen keine theoretische Möglichkeit mehr, sondern dokumentierte Kosten für fehlerhaften Umgang mit Daten.
           </p>
 
           <p>
@@ -176,7 +177,7 @@
           </p>
 
           <p>
-            Das zeigt sich auch in angrenzenden Verfahren. Die französische CNIL und die italienische Garante haben im April 2026 beide formelle Leitlinien erlassen, die den Posteingang als Verlängerung des Privatlebens einer Person behandeln &mdash; ihre neuen Regeln zu Tracking-Pixeln in E-Mails verlangen eine vorherige Einwilligung, bevor irgendetwas Unsichtbares zurückmeldet, was im Postfach der empfangenden Person geschieht. Das ist ein anderer Mechanismus als die Durchsetzung von Aufbewahrungsfristen, aber die Haltung dahinter ist dieselbe: Aufsichtsbehörden schauen gezielt darauf, was Unternehmen mit den Inhalten von E-Mails tun, nicht nur darauf, ob irgendwo ein Richtliniendokument existiert.
+            Das zeigt sich auch in angrenzenden Verfahren. Frankreichs CNIL und Italiens Garante veröffentlichten im April 2026 formelle Leitlinien, die den Posteingang als Teil des Privatlebens behandeln &mdash; sie verlangen für Tracking-Pixel grundsätzlich eine Einwilligung, mit festgelegten Ausnahmen und Übergangsregelungen. Prüfe für den konkreten Einsatz die Regeln der zuständigen Aufsichtsbehörde. Das ist ein anderer Mechanismus als die Durchsetzung von Aufbewahrungsfristen, aber die Haltung dahinter ist dieselbe: Aufsichtsbehörden schauen gezielt darauf, was Unternehmen mit den Inhalten von E-Mails tun, nicht nur darauf, ob irgendwo ein Richtliniendokument existiert.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Eine Aufbewahrungsfrist, die tatsächlich standhält</h3>
@@ -208,16 +209,15 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Wo ein persönliches Archiv hier hineinpasst</h3>
 
           <p>
-            Für Einzelpersonen und kleine Teams entsteht hier ein echter Zielkonflikt: Aufbewahrungsdisziplin spricht dafür, alte Post vom Server zu löschen, aber niemand will fünfzehn Jahre Korrespondenz verlieren, weil eine Compliance-Regel sagt, das aktive Postfach solle sie nicht mehr halten. Die Auflösung ist dieselbe wie beim Backup-Risiko &mdash; trenne, <em>was auf dem Server bleibt</em>, von dem, <em>wovon du eine Kopie behältst</em>.
+            Ein lokales Archiv ändert den Speicherort eines Datensatzes und hebt Aufbewahrungspflichten nicht auf. Lege für geschäftliche E-Mails mit personenbezogenen Daten fest, warum jede Kategorie aufbewahrt werden muss, wer darauf zugreifen darf und wann sie gelöscht werden muss. Wende diese Richtlinie auf Server-E-Mails, lokale Archive und Sicherungskopien an. Weitere Aufbewahrung braucht einen gültigen Zweck oder eine rechtliche Verpflichtung; das Verschieben vom Server schafft keine solche Grundlage. Siehe die <a href="https://www.cnil.fr/fr/passer-laction/les-durees-de-conservation-des-donnees">Aufbewahrungshinweise der CNIL</a>.
           </p>
 
           <p>
-            MailVault archiviert jeden Ordner deines IMAP- oder OAuth-Kontos als einzelne <code>.eml</code>-Dateien auf deiner eigenen Festplatte, ganz unabhängig vom Postfach deines Anbieters. Das gibt dir Raum, auf dem aktiven Konto tatsächlich einen Aufbewahrungsplan durchzusetzen &mdash; zu löschen, was seine begründete Frist überschritten hat &mdash;, ohne den zugrunde liegenden Nachweis zu verlieren, denn der liegt bereits an einem Ort, den du kontrollierst, in einem Format, das jeder Client öffnen kann. Manuelle Backups sind kostenlos und unbegrenzt; geplante Backups, die das Archiv automatisch aktuell halten, sind eine Premium-Funktion für $4/Monat oder $25/Jahr, mit 14 Tagen Testphase im Jahresplan.
-          </p>
+            MailVault archiviert jeden Ordner deines IMAP- oder OAuth-Kontos als einzelne <code>.eml</code>-Dateien auf deiner eigenen Festplatte, ganz unabhängig vom Postfach deines Anbieters. Verwende die lokale Kopie nur für Unterlagen, die du aufbewahren darfst, und berücksichtige sie in deinen Zugriffskontrollen und Löschfristen. MailVault bietet keine zentral durchgesetzten Aufbewahrungsrichtlinien, rechtlichen Aufbewahrungssperren oder Compliance-Zertifizierung. Manuelle Backups sind kostenlos und unbegrenzt; geplante Backups, die das Archiv automatisch aktuell halten, sind eine Premium-Funktion für $4/Monat oder $25/Jahr, mit 14 Tagen Testphase im Jahresplan. Diese Angaben zur Dateistruktur gelten für das Standardformat Maildir. Unter Einstellungen → Speicher gibt es auch JMAP-Speicher, der die ursprünglichen Nachrichtenbytes mit JSON-Datensätzen aufbewahrt und identische Nachrichten dedupliziert.</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Nach Plan löschen. Den Beleg trotzdem behalten.</p>
-            <p class="text-sm mb-4">MailVault archiviert jeden Ordner als durchsuchbare, portable .eml-Dateien auf deiner eigenen Festplatte &mdash; eine belastbare Aufbewahrungsrichtlinie auf dem Server heißt damit nicht, dass etwas endgültig verloren geht.</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Bewahre Unterlagen auf, deren Aufbewahrung du begründen kannst. Wende Aufbewahrungsregeln auf jede Kopie an.</p>
+            <p class="text-sm mb-4">MailVault archiviert jeden Ordner als durchsuchbare, portable .eml-Dateien auf deiner Festplatte &mdash; für Unterlagen, die du aufbewahren darfst. Auch lokale Kopien brauchen Regeln für Aufbewahrung, Löschung und Zugriff.</p>
             <div class="flex flex-wrap gap-3">
               <a href="/de/#download" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
                 MailVault herunterladen
@@ -236,7 +236,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
@@ -260,5 +260,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Produkt-Screenshot"><button type="button">Screenshot schließen</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

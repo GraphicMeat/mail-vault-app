@@ -38,7 +38,7 @@
   "description": "Der beste E-Mail-Archivierer für den Mac hängt von deinen E-Mails ab. Sieben macOS-Tools im Vergleich: Format, Suche, Quellen, Preis, Lizenz, Apple Silicon.",
   "url": "https://mailvaultapp.com/de/guides/best-email-archiver-for-mac.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Hilfethemen</summary><nav aria-label="Themen im Hilfecenter"><a href="/de/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault-Hilfe</a><a href="/de/faq/getting-started.html">Erste Schritte</a><a href="/de/faq/storage-and-vault.html">Speicherort und dein Vault</a><a href="/de/faq/providers.html">E-Mail-Anbieter</a><a href="/de/faq/backup-and-restore.html">Backup und Wiederherstellung</a><a href="/de/faq/explorer-and-insights.html">Explorer und Einblicke</a><a href="/de/faq/scheduled-send.html">Geplanter Versand</a><a href="/de/faq/premium.html">Kostenlos und Premium</a><a href="/de/faq/troubleshooting.html">Fehlerbehebung</a><a href="/de/docs.html#guides" class="mv-help-divider">Praktische Anleitungen</a><a href="/de/docs.html#articles">Artikel</a><a href="/de/features.html">Funktionsübersicht</a><a href="/changelog.html">Versionshinweise</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/de/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Der beste E-Mail-Archivierer für den Mac, ausgewählt nach deinem Bedarf</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Der beste E-Mail-Archivierer für den Mac, ausgewählt nach deinem Bedarf</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">Wie wir sie beurteilt haben</a></li><li><a href="#help-section-2">Die sieben Werkzeuge im Vergleich</a></li><li><a href="#help-section-3">Die Empfehlungen nach Einsatzzweck</a></li><li><a href="#help-section-4">Häufige Fragen</a></li><li><a href="#help-section-5">Wie es weitergeht</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 Min. Lesezeit</span>
             <span aria-hidden="true">&middot;</span>
@@ -228,7 +229,7 @@
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">Schnelle Empfehlungen</p>
             <ul class="list-disc pl-6 space-y-2">
               <li><strong>Eigenes Archiv für mehrere Mail-Apps:</strong> Mail Archiver X.</li>
-              <li><strong>Kostenlos, behält Konten bei Anbietern als einfache .eml-Dateien:</strong> MailVault.</li>
+              <li><strong>Kostenlos, behält Konten bei Anbietern als einfache .eml-Dateien:</strong> MailVault. Diese Angaben zur Dateistruktur gelten für das Standardformat Maildir. Unter Einstellungen → Speicher gibt es auch JMAP-Speicher, der die ursprünglichen Nachrichtenbytes mit JSON-Datensätzen aufbewahrt und identische Nachrichten dedupliziert.</li>
               <li><strong>Kostenlos und quelloffen, wenn du schon Thunderbird nutzt:</strong> Thunderbird mit ImportExportTools NG.</li>
               <li><strong>Eine Datenbank deiner Apple-Mail- oder Gmail-E-Mails:</strong> MailSteward.</li>
               <li><strong>E-Mails und Dokumente in einer Bibliothek:</strong> EagleFiler.</li>
@@ -237,7 +238,7 @@
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Wie wir sie beurteilt haben</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-1">Wie wir sie beurteilt haben</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Speicherformat.</strong> Einfache .eml- oder mbox-Dateien lassen sich noch nach Jahren in anderen Apps öffnen. Eine eigene Datenbank kann schneller suchen, bindet dich aber an eine App, deshalb prüfen wir, ob sie exportieren kann.</li>
@@ -249,7 +250,7 @@
             <li><strong>Apple Silicon.</strong> Nativ oder auf Rosetta 2 angewiesen.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Die sieben Werkzeuge im Vergleich</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-2">Die sieben Werkzeuge im Vergleich</h2>
 
           <p class="text-sm text-slate-500 dark:text-slate-400">Zuletzt geprüft: Oktober 2026. Preise in US-Dollar vor Steuern, von der Website des jeweiligen Herstellers. Prüfe die aktuellen Preise dort, bevor du kaufst.</p>
 
@@ -326,14 +327,14 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Die Empfehlungen nach Einsatzzweck</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-3">Die Empfehlungen nach Einsatzzweck</h2>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Mail Archiver X: das beste eigene Archiv für mehrere Mail-Apps</h3>
           <p>
             Mail Archiver X von Moth Software (Version 8.2.4, September 2026) holt E-Mails aus Apple Mail, Outlook, Thunderbird, Postbox, IMAP-Konten einschließlich Gmail und iCloud sowie aus mbox-Dateien in ein Archiv, mit einfacher und gefilterter Suche über Absender, Betreff, Text und Anhänge. Es kann nach mbox und PDF exportieren, was praktisch ist, wenn jemand eine lesbare Aufzeichnung ohne die App braucht. Es ist der vollständigste reine Archivierer auf der Liste und die richtige Wahl, wenn deine E-Mails über mehrere Desktop-Apps verteilt sind.
           </p>
           <p>
-            <strong>Achte auf:</strong> Das Archiv liegt in der eigenen internen Datenbank der App, plane also einen Export ein, falls du sie je verlässt. Die Standardlizenz kostet $49.95. Die Pro-Server-Version ist ein Jahresabo, und ohne gültige Pro-Lizenz kann die App deine E-Mails zwar noch anzeigen, aber nicht mehr archivieren oder exportieren. Eine Easy-Version ist auf 10.000 E-Mails pro Archiv begrenzt und hat keine Zeitplanung.
+            <strong>Achte auf:</strong> Beim Datenbankablauf liegt die Post in der internen Datenbank der App. Plane einen Export ein, wenn du dieses Format verwendest. Mail Archiver X kann auch direkt in MBOX oder PDF speichern. Die Standardlizenz kostet $49.95. Die Pro-Server-Version ist ein Jahresabo, und ohne gültige Pro-Lizenz kann die App deine E-Mails zwar noch anzeigen, aber nicht mehr archivieren oder exportieren. Eine Easy-Version ist auf 10.000 E-Mails pro Archiv begrenzt und hat keine Zeitplanung.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. MailVault: der beste kostenlose Weg, Konten bei Anbietern als einfache Dateien zu behalten</h3>
@@ -342,10 +343,10 @@
           </p>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-results-720.webp 720w, /screenshots/de/search-results-1440.webp 1440w, /screenshots/de/search-results-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/de/search-results-light-1440.webp" srcset="/screenshots/de/search-results-light-720.webp 720w, /screenshots/de/search-results-light-1440.webp 1440w, /screenshots/de/search-results-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Suchergebnisse von MailVault für Rack and Rind. Die Zeile unter dem Suchfeld lautet 7 Treffer in INBOX gefunden, 7 lokal, 0 Server, und die Liste zeigt die sieben passenden Nachrichten. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/search-results-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-results-720.webp 720w, /screenshots/de/search-results-1440.webp 1440w, /screenshots/de/search-results-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/de/search-results-light-1440.webp" srcset="/screenshots/de/search-results-light-720.webp 720w, /screenshots/de/search-results-light-1440.webp 1440w, /screenshots/de/search-results-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Suchergebnisse von MailVault für Rack and Rind. Die Zeile unter dem Suchfeld lautet 7 Treffer in INBOX gefunden, 7 lokal, 0 Server, und die Liste zeigt die sieben passenden Nachrichten. · MailVault version 2.16.0 de" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 de">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 de</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Die Suche läuft über die Kopie deiner E-Mails auf deinem Mac. Hier kamen alle 7 Treffer aus lokalen Dateien und keiner vom Server.</figcaption>
           </figure>
 
@@ -354,10 +355,10 @@
           </p>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/selection-dialog-archive-720.webp 720w, /screenshots/de/selection-dialog-archive-1440.webp 1440w, /screenshots/de/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/de/selection-dialog-archive-light-1440.webp" srcset="/screenshots/de/selection-dialog-archive-light-720.webp 720w, /screenshots/de/selection-dialog-archive-light-1440.webp 1440w, /screenshots/de/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Der Dialog Aktion für 63 E-Mails wählen von MailVault. Er zeigt 63 auf dem Server, 32 hier archiviert und bietet Archivieren, Aus dem Archiv holen, Vom Server löschen, Archivieren und löschen sowie Überall löschen an, wobei Archivieren ausgewählt ist. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/selection-dialog-archive-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/de/selection-dialog-archive-720.webp 720w, /screenshots/de/selection-dialog-archive-1440.webp 1440w, /screenshots/de/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/de/selection-dialog-archive-light-1440.webp" srcset="/screenshots/de/selection-dialog-archive-light-720.webp 720w, /screenshots/de/selection-dialog-archive-light-1440.webp 1440w, /screenshots/de/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Der Dialog Aktion für 63 E-Mails wählen von MailVault. Er zeigt 63 auf dem Server, 32 hier archiviert und bietet Archivieren, Aus dem Archiv holen, Vom Server löschen, Archivieren und löschen sowie Überall löschen an, wobei Archivieren ausgewählt ist. · MailVault version 2.16.0 de" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 de">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 de</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Archivieren kopiert die ausgewählten E-Mails in deinen Tresor und lässt die Kopie auf dem Server liegen; das ist kostenlos. Archivieren &amp; löschen, das jede Kopie prüft, bevor es sie vom Server entfernt, ist Premium.</figcaption>
           </figure>
 
@@ -399,7 +400,7 @@
             Nicht auf der Liste: MailStore Home, ein beliebter kostenloser Archivierer, läuft nur unter Windows. MailStore nennt Windows 10 und Windows 11 als unterstützte Systeme. Wenn du davon kommst, sieh dir <a href="/de/guides/mailstore-alternatives-compared.html">MailStore-Alternativen im Vergleich</a> an.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Häufige Fragen</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-4">Häufige Fragen</h2>
 
           <div class="pt-2">
             <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Was ist der beste kostenlose E-Mail-Archivierer für den Mac?</h3>
@@ -421,7 +422,7 @@
             <p>Eine Datenbank kann die Suche innerhalb einer App schnell machen. Einfache .eml- oder mbox-Dateien lassen sich auch dann noch mit anderen Apps öffnen, wenn ein bestimmtes Werkzeug längst verschwunden ist. Wenn dein Archivierer eine Datenbank nutzt, exportiere von Zeit zu Zeit eine Kopie nach mbox oder eml.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Wie es weitergeht</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-5">Wie es weitergeht</h2>
 
           <p>
             Such dir in der Tabelle die Zeile aus, die dazu passt, wo deine E-Mails liegen, probiere dieses Werkzeug mit einem Konto aus und öffne ein paar archivierte Nachrichten außerhalb davon, bevor du ihm vertraust. Unsere <a href="/de/guides/imap-backup-tool-checklist.html">Checkliste für IMAP-Backup-Werkzeuge</a> listet auf, was du testen solltest. Wenn MailVault passt: Es ist ein kostenloser Download, ohne dass du ein Konto anlegen musst.
@@ -443,7 +444,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
@@ -467,5 +468,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Produkt-Screenshot"><button type="button">Screenshot schließen</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

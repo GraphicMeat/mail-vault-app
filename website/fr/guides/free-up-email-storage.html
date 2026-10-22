@@ -38,7 +38,7 @@
   "description": "Boîte mail pleine ? Archivez vos e-mails en local avec MailVault, puis supprimez-les du serveur sans risque. Libérez du stockage Gmail, Outlook ou IMAP sans rien perdre.",
   "url": "https://mailvaultapp.com/fr/guides/free-up-email-storage.html",
   "datePublished": "2026-03-15",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -111,6 +111,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Aller au contenu</a>
@@ -158,7 +159,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Rubriques d’aide</summary><nav aria-label="Rubriques du centre d’aide"><a href="/fr/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aide MailVault</a><a href="/fr/faq/getting-started.html">Premiers pas</a><a href="/fr/faq/storage-and-vault.html">Stockage et votre coffre</a><a href="/fr/faq/providers.html">Fournisseurs d'e-mail</a><a href="/fr/faq/backup-and-restore.html">Sauvegarde et restauration</a><a href="/fr/faq/explorer-and-insights.html">Explorer et Statistiques</a><a href="/fr/faq/scheduled-send.html">Envoi programmé</a><a href="/fr/faq/premium.html">Gratuit et Premium</a><a href="/fr/faq/troubleshooting.html">Dépannage</a><a href="/fr/docs.html#guides" class="mv-help-divider">Guides pratiques</a><a href="/fr/docs.html#articles">Articles</a><a href="/fr/features.html">Référence des fonctionnalités</a><a href="/changelog.html">Notes de version</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/fr/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -168,7 +169,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Comment libérer de l'espace e-mail sans perdre vos anciens messages</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Comment libérer de l'espace e-mail sans perdre vos anciens messages</h1><!-- help-intro:start --><form class="mv-help-search" action="/fr/docs.html" method="get" role="search"><label for="help-q">Rechercher dans la documentation, la FAQ et les articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Rechercher parmi tous les guides et réponses" required><button type="submit">Recherche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>5 min de lecture</span>
           </div>
@@ -212,7 +213,7 @@
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Connectez votre compte</strong> &mdash; ajoutez à MailVault votre compte Gmail, Outlook, Yahoo, ou n'importe quel compte IMAP. La connexion se fait de façon sécurisée sur TLS, avec prise en charge d'OAuth2 pour Google et Microsoft.</li>
             <li><strong>Choisissez les e-mails à archiver</strong> &mdash; parcourez votre boîte mail et sélectionnez les e-mails à enregistrer en local. Vous pouvez choisir des messages un par un, des conversations entières, ou faire une sélection en masse par plage de dates.</li>
-            <li><strong>Archivez sur le disque</strong> &mdash; MailVault télécharge l'e-mail complet &mdash; en-têtes, corps, mise en forme HTML et toutes les pièces jointes &mdash; et enregistre chaque message sur votre ordinateur sous forme de fichier <code>.eml</code> standard. Les fichiers sont organisés dans une structure Maildir, par compte et par dossier.</li>
+            <li><strong>Archivez sur le disque</strong> &mdash; MailVault télécharge l'e-mail complet &mdash; en-têtes, corps, mise en forme HTML et toutes les pièces jointes &mdash; et enregistre chaque message sur votre ordinateur sous forme de fichier <code>.eml</code> standard. Les fichiers sont organisés dans une structure Maildir, par compte et par dossier. Ces indications sur la structure des fichiers concernent le format Maildir utilisé par défaut. Paramètres → Stockage propose aussi le stockage JMAP, qui conserve les octets des messages d’origine avec des enregistrements JSON et déduplique les messages identiques.</li>
             <li><strong>Vérifiez votre archive</strong> &mdash; avant de supprimer quoi que ce soit du serveur, ouvrez quelques e-mails archivés dans MailVault pour confirmer qu'ils sont complets. Vérifiez que les pièces jointes sont intactes. Cherchez un message précis pour vous assurer qu'il est bien là.</li>
             <li><strong>Supprimez du serveur</strong> &mdash; une fois certain que l'archive locale est complète, supprimez du serveur les e-mails archivés. L'espace côté serveur est libéré, mais vous gardez chaque message sur votre disque.</li>
           </ul>
@@ -236,18 +237,18 @@
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Pas consultable</strong> &mdash; un fichier .mbox n'est qu'un énorme bloc de texte. Vous ne pouvez pas facilement y faire une recherche ni parcourir les messages un par un sans l'importer dans un autre client de messagerie.</li>
             <li><strong>Risque de corruption</strong> &mdash; si le fichier se corrompt, vous risquez de perdre toute l'archive. Avec des fichiers <code>.eml</code> individuels, comme ceux qu'utilise MailVault, un fichier corrompu ne touche qu'un seul e-mail.</li>
-            <li><strong>Tout ou rien</strong> &mdash; Takeout exporte tout. Vous ne pouvez pas archiver sélectivement certains dossiers ou certaines plages de dates.</li>
+            <li><strong>Une sélection différente</strong> &mdash; Takeout permet de choisir des libellés Gmail, mais exporte un instantané, sans proposer un archivage suivi d’une suppression sur une période donnée.</li>
             <li><strong>Aucun fonctionnement dans la durée</strong> &mdash; Takeout est un export ponctuel. Il ne vous donne pas de méthode pour archiver et libérer de l'espace régulièrement.</li>
           </ul>
 
           <p>
-            MailVault enregistre chaque e-mail dans un fichier <code>.eml</code> individuel &mdash; le format standard RFC 5322, que tout client de messagerie sait ouvrir. Votre archive n'est enfermée dans aucun format ni aucun outil propriétaire.
+            MailVault enregistre chaque e-mail dans un fichier <code>.eml</code> individuel &mdash; le format standard RFC 5322 que les applications compatibles EML peuvent ouvrir. Votre archive n'est enfermée dans aucun format ni aucun outil propriétaire.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Mise en cache en arrière-plan : constituez votre archive automatiquement</h3>
 
           <p>
-            Si vous voulez archiver toute votre boîte sans sélectionner les e-mails à la main, MailVault dispose d'une mise en cache en arrière-plan. Elle télécharge le contenu des messages pendant que vous parcourez votre boîte, et construit progressivement une archive locale de toute la boîte. Une fois tout mis en cache localement, vous pouvez supprimer sur le serveur en sachant que vous avez une copie complète.
+            Le cache en arrière-plan sert à la lecture quotidienne ; il ne prouve pas qu’une archive complète est conservée. Garder le récent peut supprimer du contenu ancien en cache, et Index seul peut conserver les données de recherche sans le message complet. Archivez explicitement les messages nécessaires ou lancez une sauvegarde manuelle avec Tous les e-mails (télécharger depuis le serveur), puis vérifiez les messages enregistrés et une sauvegarde distincte. Collectionneur (Premium) télécharge et conserve automatiquement tout l’historique des dossiers.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Le résultat final</h3>
@@ -279,7 +280,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Voir dans MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/fr/manual-backup.webp"><img src="/assets/help-media/fr/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Sauvegarder tous les comptes et vérifier la fin de l’opération · MailVault version 2.20.0 fr" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Sauvegarder tous les comptes et vérifier la fin de l’opération</figcaption><video controls playsinline preload="none" poster="/assets/help-media/fr/manual-backup.jpg" aria-label="Sauvegarder tous les comptes et vérifier la fin de l’opération · MailVault version 2.20.0 fr" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/fr/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/fr/manual-backup.vtt" srclang="fr" label="Français" default></video></figure><details class="mv-help-contents"><summary>Transcription de la vidéo</summary><p>Lancer la sauvegarde de tous les comptes dans les paramètres de sauvegarde. Suivre la progression jusqu’à la fin de la sauvegarde.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Une création de Graphic Meat</p><h2 id="studio-title">Découvrez les personnes derrière MailVault.</h2><p>Nous sommes Graphic Meat, un studio de produits indépendant qui crée des logiciels utiles depuis 2013. MailVault est l’un de nos produits. Venez nous rencontrer et découvrir nos autres projets.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Découvrir Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visiter Graphic Meat, le studio derrière MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Plus de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Transformez vos photos en livre prêt à imprimer.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espace de travail local pour les notes et le code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Transférez vos e-mails vers un nouveau fournisseur.</span></a></div></div></aside><footer class="mv-footer">
@@ -303,5 +304,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Capture d’écran du produit"><button type="button">Fermer la capture d’écran</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

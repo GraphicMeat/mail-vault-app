@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">오래된 메일을 잃지 않고 Hotmail과 Outlook.com의 공간을 비우는 방법</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">오래된 메일을 잃지 않고 Hotmail과 Outlook.com의 공간을 비우는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">시작하기 전에: 계획을 바꾸는 두 가지 사실</a></li><li><a href="#help-section-2">1단계: 어느 폴더가 공간을 쓰는지 보기</a></li><li><a href="#help-section-3">2단계: 지운 편지함 비우기</a></li><li><a href="#help-section-4">3단계: 가장 큰 메일 찾기</a></li><li><a href="#help-section-5">4단계: 오래된 메일의 로컬 사본 간직하기</a></li><li><a href="#help-section-6">5단계: Outlook.com에서 오래된 메일 지우기</a></li><li><a href="#help-section-7">6단계: 지운 편지함을 다시 비우고 기다리기</a></li><li><a href="#help-section-8">각 단계가 지우는 것</a></li><li><a href="#help-section-9">지우면 안 되는 것</a></li><li><a href="#help-section-10">자주 묻는 질문</a></li><li><a href="#help-section-11">다음에 할 일</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8분 분량</span>
             <span aria-hidden="true">&middot;</span>
@@ -235,14 +236,14 @@
             </ol>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">시작하기 전에: 계획을 바꾸는 두 가지 사실</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">시작하기 전에: 계획을 바꾸는 두 가지 사실</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>한도는 두 가지입니다.</strong> 무료 계정에는 메일용 15 GB와 Microsoft 클라우드 저장 공간 5 GB가 있습니다. Microsoft에 따르면 클라우드 저장 공간은 OneDrive와 Outlook.com 첨부 파일이 함께 씁니다. 둘 중 하나라도 가득 차면 메일을 보내거나 받을 수 없습니다.</li>
             <li><strong>지우는 것과 공간을 비우는 것은 다릅니다.</strong> 지운 메일은 지운 편지함으로 가며, 그 폴더를 비우거나 30일 뒤 제거될 때까지 계속 용량에 포함됩니다.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">1단계: 어느 폴더가 공간을 쓰는지 보기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">1단계: 어느 폴더가 공간을 쓰는지 보기</h2>
 
           <p>
             Outlook.com에 로그인하십시오. <strong>설정</strong>, <strong>계정</strong>, <strong>스토리지</strong>를 차례로 고르십시오. 페이지에 폴더마다 차지하는 공간이 나옵니다. 가장 큰 폴더 세 개를 적어 두십시오. 마지막에 다시 확인합니다.
@@ -252,7 +253,7 @@
             같은 페이지에서 폴더의 모든 항목을, 또는 3, 6, 12개월보다 오래된 항목만 영구히 지울 수 있습니다. 아직 받은 편지함, 보낸 편지함, 보관에는 쓰지 마십시오. 지운 뒤에는 그 메일을 되찾을 수 없습니다.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">2단계: 지운 편지함 비우기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">2단계: 지운 편지함 비우기</h2>
 
           <p>
             <strong>지운 편지함</strong> 폴더를 열고 메일을 선택해 지우십시오. 먼저 폴더를 훑어보십시오. 실수로 지운 메일이 들어 있을 때가 있습니다.
@@ -263,7 +264,7 @@
             <li><strong>정크 메일</strong>은 저절로 비워집니다. Outlook.com은 그곳의 항목을 10일 뒤에 지우므로, 많이 쌓이는 일은 드뭅니다.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">3단계: 가장 큰 메일 찾기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">3단계: 가장 큰 메일 찾기</h2>
 
           <p>
             큰 폴더를 여십시오. 메시지 목록 위에서 <strong>필터</strong> &gt; <strong>정렬 기준</strong> &gt; <strong>크기</strong>를 고르십시오. 가장 작은 메일이 위에 있으면 한 번 더 고르십시오. 큰 첨부 파일이 있는 메일 몇 통이 짧은 메일 수천 통보다 공간을 더 쓰는 경우가 많습니다.
@@ -281,7 +282,7 @@
             Microsoft는 첨부 파일 아래에 나타나는 <strong>OneDrive에 저장</strong>도 권합니다. 조심해서 쓰십시오. OneDrive는 첨부 파일과 같은 5 GB 클라우드 저장 공간을 씁니다. 문제가 클라우드 저장 공간이라면 파일을 그쪽으로 옮겨도 도움이 되지 않습니다.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">4단계: 오래된 메일의 로컬 사본 간직하기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">4단계: 오래된 메일의 로컬 사본 간직하기</h2>
 
           <p>
             1~3단계는 무언가를 버려서 공간을 비웁니다. 다시 필요할 수 있는 몇 년 치 메일(영수증, 계약서, 편지, 가족 사진)은 먼저 컴퓨터에 사본을 만드십시오. 그러면 잃지 않고 온라인에서 지울 수 있습니다.
@@ -298,7 +299,7 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/selection-dialog-archive-720.webp 720w, /screenshots/ko/selection-dialog-archive-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ko/selection-dialog-archive-light-720.webp 720w, /screenshots/ko/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="선택한 메일에 대한 MailVault의 작업 선택 대화 상자. 보관이 선택되어 있으며, 보관에는 보관함에 복사합니다. 서버에도 그대로 남습니다라고 적혀 있습니다. 그 아래에 보관 취소, 서버에서 삭제, 보관 후 삭제, 모든 곳에서 삭제가 있습니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/selection-dialog-archive-720.webp 720w, /screenshots/ko/selection-dialog-archive-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ko/selection-dialog-archive-light-720.webp 720w, /screenshots/ko/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="선택한 메일에 대한 MailVault의 작업 선택 대화 상자. 보관이 선택되어 있으며, 보관에는 보관함에 복사합니다. 서버에도 그대로 남습니다라고 적혀 있습니다. 그 아래에 보관 취소, 서버에서 삭제, 보관 후 삭제, 모든 곳에서 삭제가 있습니다. · MailVault version 2.16.0 ko" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">보관은 안전한 첫 단계입니다. 사본을 만들고 서버에서는 아무것도 바꾸지 않습니다. 대화 상자 위쪽 안내에 선택한 메일 중 몇 통이 이미 볼트에 있는지 나옵니다.</figcaption>
           </figure>
 
@@ -306,7 +307,7 @@
             이제 사본을 확인하십시오. 사이드바에서 폴더 목록을 <strong>Vault</strong>로 바꾸십시오. 가장 오래된 메일 몇 통을 열고, 첨부 파일 한두 개를 열고, 기억나는 것을 검색해 보십시오. 메일은 한 통씩 표준 <code>.eml</code> 파일로 컴퓨터에 저장되므로 다른 메일 앱에서도 열 수 있습니다.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">5단계: Outlook.com에서 오래된 메일 지우기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">5단계: Outlook.com에서 오래된 메일 지우기</h2>
 
           <p>사본이 제대로 되었다고 확신하면, 서버에서 메일을 지우는 방법은 세 가지입니다.</p>
 
@@ -317,22 +318,22 @@
           </ul>
 
           <div class="my-8">
-            <figure class="mv-clip" data-clip="archive-delete"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/ko/archive-delete.jpg" width="960" height="660" aria-label="MailVault가 &quot;보관한 뒤 서버에서 삭제할까요?&quot;라고 묻고, 보관 후 삭제하기를 클릭하면 진행률이 420 중 420에 이르며, 보관함 보기에는 2022년에 보관한 메일 420통이 그대로 나열됩니다. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ko/archive-delete.mp4" type="video/mp4"></video></div>
+            <figure class="mv-clip" data-clip="archive-delete"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/ko/archive-delete.jpg" width="960" height="660" aria-label="MailVault가 &quot;보관한 뒤 서버에서 삭제할까요?&quot;라고 묻고, 보관 후 삭제하기를 클릭하면 진행률이 420 중 420에 이르며, 보관함 보기에는 2022년에 보관한 메일 420통이 그대로 나열됩니다. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ko/archive-delete.mp4" type="video/mp4"></video></div>
             <figcaption><strong class="mv-clip-title">보관 후 삭제 (Premium)</strong><span class="mv-clip-text">보관 후 삭제하기를 고르면 2022년 메일 420통이 보관된 뒤 서버에서 삭제됩니다. 보관함 보기에는 420통이 그대로 남아 있습니다.</span></figcaption></figure>
           </div>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/archive-success-720.webp 720w, /screenshots/ko/archive-success-1440.webp 1440w, /screenshots/ko/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/archive-success-light-1440.webp" srcset="/screenshots/ko/archive-success-light-720.webp 720w, /screenshots/ko/archive-success-light-1440.webp 1440w, /screenshots/ko/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="보관 작업을 마친 MailVault 받은편지함. 오른쪽 아래 카드에 작업 완료가 표시됩니다. 머리글에 폴더의 메일 중 몇 통이 보관함에 있음인지 나오고, 목록 아래 범례가 서버에만 있음, 보관함에 있음, 유일한 사본, 백업 드라이브에 있음을 설명합니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/archive-success-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/archive-success-720.webp 720w, /screenshots/ko/archive-success-1440.webp 1440w, /screenshots/ko/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ko/archive-success-light-1440.webp" srcset="/screenshots/ko/archive-success-light-720.webp 720w, /screenshots/ko/archive-success-light-1440.webp 1440w, /screenshots/ko/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="보관 작업을 마친 MailVault 받은편지함. 오른쪽 아래 카드에 작업 완료가 표시됩니다. 머리글에 폴더의 메일 중 몇 통이 보관함에 있음인지 나오고, 목록 아래 범례가 서버에만 있음, 보관함에 있음, 유일한 사본, 백업 드라이브에 있음을 설명합니다. · MailVault version 2.16.0 ko" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">작업이 끝나면 MailVault에 작업 완료가 표시됩니다. 목록 아래 범례가 메일마다 어디에 있는지 알려 줍니다. 서버에만 있는지, 볼트에 있는지, 볼트에 유일한 사본으로 있는지. 카드 아래의 진행 표시줄은 다른 작업의 것입니다.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">6단계: 지운 편지함을 다시 비우고 기다리기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">6단계: 지운 편지함을 다시 비우고 기다리기</h2>
 
           <p>
             Outlook.com에서든 다른 앱에서든 지운 메일은 먼저 지운 편지함으로 갈 수 있습니다. Outlook.com에서 지운 편지함을 열고 다시 비우십시오. 그런 다음 <strong>설정</strong> &gt; <strong>계정</strong> &gt; <strong>스토리지</strong>로 돌아가 적어 둔 숫자와 비교하십시오. Microsoft에 따르면 변경 사항이 반영되기까지 최대 24시간이 걸릴 수 있으므로, 숫자가 아직 그대로라고 더 지우지는 마십시오.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">각 단계가 지우는 것</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">각 단계가 지우는 것</h2>
 
           <div class="scroll-x overflow-x-auto">
             <table class="w-full text-left text-sm border-collapse">
@@ -368,7 +369,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">지우면 안 되는 것</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-9">지우면 안 되는 것</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>사본이 하나뿐인 것.</strong> 영수증, 청구서, 세금 서류, 계약서, 보증서, 의료 및 법률 관련 서신. 먼저 보관하십시오.</li>
@@ -382,7 +383,7 @@
             지운 편지함은 백업이 아닙니다. Microsoft는 그곳의 항목을 30일 뒤에 제거합니다.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-10">자주 묻는 질문</h2>
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">메일을 지웠는데 왜 Hotmail이 여전히 가득 차 있습니까?</h3>
@@ -404,7 +405,7 @@
             <p>비워지는 공간은 많지 않습니다. Outlook.com은 정크 메일의 항목을 10일 뒤에 저절로 지웁니다. 어느 폴더가 정말 가장 큰지는 설정의 스토리지 페이지에서 확인하십시오.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">다음에 할 일</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-11">다음에 할 일</h2>
 
           <p>
             오늘 1~3단계를 해서 한도 아래로 내려가십시오. 그다음 오래된 메일을 컴퓨터에 복사하고, 한 해씩 나누어 온라인에서 지우십시오. Mac에서 사본을 만드는 다른 방법과 비교하려면 <a href="/ko/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com 메일을 Mac에 백업하는 방법</a>을 읽으십시오. <a href="/ko/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">오래된 메일을 잃지 않고 메일 저장 공간을 비우는 방법</a>에서 설명하듯, 같은 방법이 Gmail과 다른 제공업체에서도 통합니다. 대신 Microsoft 365를 고민하고 있다면 <a href="/ko/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">로컬 보관 vs 저장 공간 추가 구매</a>를 보십시오.
@@ -426,7 +427,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -450,5 +451,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

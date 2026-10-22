@@ -99,7 +99,6 @@
   "6ed7c0ac7594": "Die meisten Anbieter halten gelöschte Post eine bestimmte Zeit im Papierkorb, bevor sie endgültig entfernt wird, und bis dahin zählt sie weiter gegen dein Kontingent. Löschst du aus Speichergründen, leere den Papierkorb von Hand, sobald du dir deiner Auswahl sicher bist, statt auf die automatische Bereinigung zu warten.",
   "c4dad737ac1d": "Den Backup-Schritt mit MailVault erledigen",
   "1ba02c8886f8": "Sichern, bevor du massenweise löschst",
-  "178ba4515f44": "MailVault archiviert dein vollständiges Postfach als einzelne, durchsuchbare .eml-Dateien, sodass das Löschen Tausender alter E-Mails vom Server kein Risiko trägt.",
   "faf1c669524d": "Ist es sicher, alte E-Mails massenweise zu löschen, ohne jede einzelne vorher zu lesen?",
   "76c8003f72d8": "Ja, solange du vorher ein vollständiges Backup archiviert und geprüft hast. Sobald du eine bestätigte lokale Kopie von allem hast, kannst du nach Absender, Kategorie oder Zeitraum im Block löschen, ohne Tausende Nachrichten einzeln durchzusehen.",
   "f81d13d6fa85": "Woher weiß ich, dass mein E-Mail-Backup wirklich vollständig ist, bevor ich etwas lösche?",

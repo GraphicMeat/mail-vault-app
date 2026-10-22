@@ -57,6 +57,7 @@
   "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
 }
   </script>
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
   <header class="mv-header">
@@ -86,16 +87,16 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20"><div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content"><div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 mb-8">← 返回博客</a>
-<article><header class="mb-8"><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">本地邮件存储与云端邮件：哪份副本由你掌控？</h1></header>
+<article><header class="mb-8"><h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">本地邮件存储与云端邮件：哪份副本由你掌控？</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">区分投递、同步与保留</a></li><li><a href="#help-section-2">比较实际取舍</a></li><li><a href="#help-section-3">隐私取决于整体配置</a></li><li><a href="#help-section-4">结合两者的配置方式</a></li><li><a href="#help-section-5">根据必须保留下来的内容选择</a></li><li><a href="#help-section-6">相关指南</a></li></ul></details><!-- help-contents:end --></header>
 <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
 <p>本地邮件存储与云端邮件，解决的是同一问题的不同部分。服务提供商接收邮件，并让当前邮箱能在多台设备上使用。本地归档则提供一份可在自己电脑上保留和检查的副本。很多人两者都需要。</p>
-<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2">区分投递、同步与保留</h2>
+<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">区分投递、同步与保留</h2>
 <p>投递将邮件送达账户。同步在客户端与服务器之间反映变化。保留则为以后留下副本。把邮件移到服务器上名为“归档”的文件夹，只是改变它在邮箱中的位置，并不会自动在 Mac 上创建独立副本。</p>
-<p>在 MailVault 中，明确执行归档的邮件以 .eml 文件存放在本地 Maildir 目录树中。即使从服务提供商处删除邮件，保存的副本也可以继续保留。删除服务器邮件前，请确认归档已完成，并验证邮件及附件能够打开。</p>
-<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2">比较实际取舍</h2>
+<p>在 MailVault 中，明确执行归档的邮件以 .eml 文件存放在本地 Maildir 目录树中。即使从服务提供商处删除邮件，保存的副本也可以继续保留。删除服务器邮件前，请确认归档已完成，并验证邮件及附件能够打开。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
+<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-2">比较实际取舍</h2>
 <ul>
 <li><strong>访问。</strong>云端邮件便于在多台联网设备上使用。本地归档可在存放它的电脑上访问；如果保存了完整邮件，也可离线使用。</li>
 <li><strong>控制权。</strong>服务提供商管理服务器副本。本地归档文件和备份的存放位置由你选择。</li>
@@ -103,11 +104,11 @@
 <li><strong>存储。</strong>服务器配额与本地磁盘空间是两种不同的限制。下载邮件不会释放服务器空间；确认副本已保存后，删除服务器上的副本才会释放空间。</li>
 <li><strong>维护。</strong>服务提供商负责运营其服务。你则需要维护本地存储的健康、做好保护，并检查备份。</li>
 </ul>
-<figure class="mv-search-diagram"><button class="mv-shot" type="button" data-image aria-label="MailVault 在邮件旁显示服务器和本地归档状态。"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="MailVault 在邮件旁显示服务器和本地归档状态。 · MailVault version 2.16.0" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture></button><figcaption>每封邮件的状态有助于区分服务提供商的副本和磁盘上的副本。</figcaption></figure>
-<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2">隐私取决于整体配置</h2>
+<figure class="mv-search-diagram"><a class="mv-shot" data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/state-icons-light-1440.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/zh/state-icons-light-1440.webp" srcset="/screenshots/zh/state-icons-light-720.webp 720w, /screenshots/zh/state-icons-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="MailVault 在邮件旁显示服务器和本地归档状态。 · MailVault version 2.16.0 zh" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a><figcaption>每封邮件的状态有助于区分服务提供商的副本和磁盘上的副本。</figcaption></figure>
+<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">隐私取决于整体配置</h2>
 <p>本地搜索让归档检索留在你的电脑上。这不会使普通邮件变成端到端加密，也不会让服务提供商停止处理新邮件。本地文件同样需要防止未授权访问。如果将保管库放入云同步文件夹，该文件夹所属的服务就成了归档的另一个存储位置。</p>
 <p>不同云服务在访问控制、加密和保留策略上各不相同。应评估实际服务及其设置，而不是认为所有托管存储都一样。关于 Mac 这一端的选择，请参阅<a href="/zh/blog/private-email-archive-for-mac.html">私人归档检查清单</a>。</p>
-<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2">结合两者的配置方式</h2>
+<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-4">结合两者的配置方式</h2>
 <ol>
 <li>继续使用现有服务提供商收发邮件。</li>
 <li>在 MailVault 中归档想要保留的文件夹和年份的邮件。</li>
@@ -115,8 +116,8 @@
 <li>将归档备份到另一块驱动器，并检查那份副本。</li>
 <li>完成这些步骤后，再决定哪些服务器邮件不必继续在线保留。</li>
 </ol>
-<figure class="mv-search-diagram"><button class="mv-shot" type="button" data-image aria-label="MailVault 设置，用于指定日常归档和第二个存储位置。"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/settings-backup-720.webp 720w, /screenshots/zh/settings-backup-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/zh/settings-backup-light-1440.webp" srcset="/screenshots/zh/settings-backup-light-720.webp 720w, /screenshots/zh/settings-backup-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="MailVault 设置，用于指定日常归档和第二个存储位置。 · MailVault version 2.16.0" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture></button><figcaption>另一块驱动器上的第二份副本，防范的是与失去服务访问权限不同的风险。</figcaption></figure>
-<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2">根据必须保留下来的内容选择</h2>
+<figure class="mv-search-diagram"><a class="mv-shot" data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/settings-backup-light-1440.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/settings-backup-720.webp 720w, /screenshots/zh/settings-backup-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px"><img src="/screenshots/zh/settings-backup-light-1440.webp" srcset="/screenshots/zh/settings-backup-light-720.webp 720w, /screenshots/zh/settings-backup-light-1440.webp 1440w" sizes="(max-width: 768px) 92vw, 720px" width="1440" height="932" alt="MailVault 设置，用于指定日常归档和第二个存储位置。 · MailVault version 2.16.0 zh" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a><figcaption>另一块驱动器上的第二份副本，防范的是与失去服务访问权限不同的风险。</figcaption></figure>
+<h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-5">根据必须保留下来的内容选择</h2>
 <p>如果你最重视在多台设备上便捷访问，就在服务提供商处保留足够满足该流程的邮件。如果账户关闭后仍须保留旧记录，就维护经过验证的独立归档。如果要应对 Mac 明天就故障的可能性，应增加经过测试的备份，而不是只依赖归档。</p>
 <p>MailVault 的手动归档和手动备份免费。Premium 增加定时备份以及归档并删除的组合流程。先保留一个项目的历史邮件，再用<a href="/zh/blog/best-email-backup-software-for-mac.html">备份选择指南</a>规划整个归档的恢复方案。</p>
 
@@ -124,8 +125,8 @@
 <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">用你自己的一个邮件文件夹试试看。</p>
 <p>从免费的手动归档、本地邮件搜索和手动备份开始。需要自动化时，再比较各个方案。</p>
 <div class="flex flex-wrap gap-3"><a href="/zh/get-started.html?plan=free" data-acquisition-event="cta_click" data-acquisition-placement="article" data-acquisition-destination="free" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium">免费下载</a><a href="/zh/pricing.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400">对比方案</a></div></div>
-<h2 class="text-2xl font-semibold">相关指南</h2><ul><li><a href="/zh/blog/best-email-archive-app-for-mac.html">如何选择适合 Mac 的邮件归档应用</a></li><li><a href="/zh/blog/offline-email-search-for-mac.html">Mac 离线邮件搜索：无需联网也能查找邮件</a></li><li><a href="/zh/blog/private-email-archive-for-mac.html">Mac 私人邮件归档：保留自己掌控的副本</a></li><li><a href="/zh/blog/how-to-search-thousands-of-emails-fast.html">如何快速搜索数千封邮件</a></li><li><a href="/zh/blog/best-email-backup-software-for-mac.html">Mac 邮件备份软件：以恢复能力为选择标准</a></li></ul>
-</div></article></div></main>
+<h2 class="text-2xl font-semibold" id="help-section-6">相关指南</h2><ul><li><a href="/zh/blog/best-email-archive-app-for-mac.html">如何选择适合 Mac 的邮件归档应用</a></li><li><a href="/zh/blog/offline-email-search-for-mac.html">Mac 离线邮件搜索：无需联网也能查找邮件</a></li><li><a href="/zh/blog/private-email-archive-for-mac.html">Mac 私人邮件归档：保留自己掌控的副本</a></li><li><a href="/zh/blog/how-to-search-thousands-of-emails-fast.html">如何快速搜索数千封邮件</a></li><li><a href="/zh/blog/best-email-backup-software-for-mac.html">Mac 邮件备份软件：以恢复能力为选择标准</a></li></ul>
+</div></article></div><!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
 <dialog class="mv-lightbox" aria-label="产品截图"><button type="button" class="mv-button mv-secondary" data-close-image>关闭截图</button><img src="/screenshots/zh/thread-view-1440.webp" alt="MailVault 收件箱 · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
@@ -134,5 +135,6 @@
 </dialog>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

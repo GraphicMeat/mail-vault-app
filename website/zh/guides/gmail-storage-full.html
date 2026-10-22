@@ -38,7 +38,7 @@
   "description": "Gmail 提示存储已满，新邮件开始退信。这里讲什么才真正能腾出空间、什么不能，以及如何把旧邮件归档到本地，而不是每月付钱给 Google。",
   "url": "https://mailvaultapp.com/zh/guides/gmail-storage-full.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,14 +211,14 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail 存储空间满了？这样解决</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail 存储空间满了？这样解决</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 分钟阅读</span>
           </div>
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <h2>释放 Gmail 存储空间而不丢失邮件：先验证的检查清单</h2>
+          <h2 id="help-section-1">释放 Gmail 存储空间而不丢失邮件：先验证的检查清单</h2>
           <p>Gmail 的归档按钮只会移除收件箱标签，不会将邮件移出 Google 的服务器。下载到本地的归档则不同。若要在保留可读副本的同时释放空间，请按以下顺序操作：</p>
           <ol class="list-decimal pl-6 space-y-2">
           <li>选择一小批旧邮件或大邮件。先按照 <a href="/zh/guides/backup-gmail-to-eml.html">Gmail 转 EML 指南</a>将它们保存在本地。</li>
@@ -273,8 +274,7 @@
           </p>
 
           <p>
-            这正是 MailVault 的用途。它是一款适用于 macOS、Windows 和 Linux 的免费桌面应用，通过 IMAP 连接 Gmail（使用正规的 Google OAuth 登录，不用折腾应用专用密码），把每封邮件下载为标准的 <code>.eml</code> 文件，并按 Maildir 文件夹结构整理在你的磁盘上。确认归档完整之后 &mdash; 打开几封邮件，搜索一封你记得的邮件，检查附件能否打开 &mdash; 你就可以放心地从 Gmail 删除原件，收回你的存储配额。
-          </p>
+            这正是 MailVault 的用途。它是一款适用于 macOS、Windows 和 Linux 的免费桌面应用，通过 IMAP 连接 Gmail（使用正规的 Google OAuth 登录，不用折腾应用专用密码），把每封邮件下载为标准的 <code>.eml</code> 文件，并按 Maildir 文件夹结构整理在你的磁盘上。确认归档完整之后 &mdash; 打开几封邮件，搜索一封你记得的邮件，检查附件能否打开 &mdash; 你就可以放心地从 Gmail 删除原件，收回你的存储配额。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
 
           <p>
             MailVault 里不限次数的手动归档永久免费。如果你想让它按计划自动运行，而不是自己分批归档，那是高级功能（$4/月 或 $25/年；年付含 14 天免费试用）&mdash; 但要一次性清理一个满了的 Gmail 账户，免费的手动归档就够了。
@@ -323,7 +323,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -351,5 +351,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

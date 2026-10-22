@@ -4,6 +4,60 @@ Real footage of the real app for the preview video. The recorder, the clip
 checks and the `actions.json` schema are documented in
 `video/capture/README.md`; this folder holds what drives the app.
 
+## Localized help media
+
+`bash scripts/footage/help-media.sh /private/tmp/help-run` queues one Mac mini
+build and one fresh app launch for each of the nine website locales. The
+`help-media` launch group records local search, the privacy switch, and manual
+backup using each locale's UI and fictional demo mailbox. It uses no extra
+English-only mail or synthetic history. Recording itself runs the existing
+cause/effect assertions; `check.json` validates the encoded files and text scans.
+This helper alone opts into isolated idle infrastructure on other ports. The
+shared `captureGuard.mjs` still refuses any MailVault app, active UI test,
+occupied capture port, non-orphan infrastructure, or missing global runner lock.
+The normal footage commands retain their strict driver/mock refusal. Both shell
+preflight and WebDriver launch record PID and listener-port evidence; neither
+guard stops another process.
+Help-media preflight may wait up to ten minutes under the runner lock for a
+previous test's descendants to exit naturally. It polls the same read-only
+guard, then refuses with evidence if conflicts remain; defaults never wait.
+
+The capture display must provide **2x HiDPI backing** at the requested window
+size. Verify both `probe.json` and the real WebView's `devicePixelRatio`; a
+nominal display mode change is insufficient. If setup requires a temporary
+display change, first record the original mode, choose an available 2x mode
+with the same logical desktop size, and apply it for the login session with
+`CGBeginDisplayConfiguration`, `CGConfigureDisplayWithDisplayMode`, and
+`CGCompleteDisplayConfiguration(..., .forSession)`. A process-scoped
+`CGDisplaySetDisplayMode` can revert as soon as its setup process exits. Recheck
+the backing scale from a separate process before recording. Restore the exact
+original mode after the last take finishes, while this job still owns the
+global runner and before another UI job can start. Keep the before/after and
+restore log with the capture evidence. Mode IDs are display-specific; do not
+reuse one from another session or machine.
+
+After checking the source frames, run
+`python3 scripts/footage/publish-help-media.py /private/tmp/help-run` on an
+encoding machine with ffmpeg, ffprobe, and Pillow. It refuses a failed recording
+or an unapproved version. It writes `/assets/help-media/<locale>/` stills,
+videos, posters and localized WebVTT captions, plus `website/help-media.json`
+and `capture-evidence.json`. All UI pixels come from the new Mac mini footage.
+The publisher adds the invariant `MailVault version X.X.X <locale>` stamp in
+bottom padding, leaving every captured UI pixel unobscured. Stills decode a
+representative raw frame at 1440px wide. Search stills retain the query panel
+alongside the results; the manifest records the actual source time and crop.
+
+The manifest records the actual mini snapshot commit, app build version,
+locale, recording checks, source-frame time/crop, durations, descriptions,
+transcripts, and SHA-256 hashes. The source snapshot commit is the temporary
+minijob commit, which can include uncommitted work; it is not a release tag.
+Retain the run tar outside the repository to reproduce or audit the source.
+Search cuts between query entry and results. The backup demonstration uses a
+write-tested folder in its disposable profile; it proves backup files were
+written, not the presence of a physical external drive. Setup is off camera.
+
+## Capture infrastructure
+
 | File | What it is |
 | --- | --- |
 | `run.sh` | The whole mini job: build, boot, run one spec, check every clip, write the S7 listing, stream a tar back. |

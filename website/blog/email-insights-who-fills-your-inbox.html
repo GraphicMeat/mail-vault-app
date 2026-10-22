@@ -115,6 +115,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/email-insights-who-fills-your-inbox.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
   <header class="mv-header">
@@ -142,13 +143,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← Back to Blog</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-08" class="text-sm text-primary-500 font-medium">October 8, 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Email Insights in MailVault: Who Fills Your Inbox, and When</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Email Insights in MailVault: Who Fills Your Inbox, and When</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">What Insights shows</a></li><li><a href="#help-section-2">Find who sends you the most mail</a></li><li><a href="#help-section-3">Which senders take the most space?</a></li><li><a href="#help-section-4">See when mail piles up</a></li><li><a href="#help-section-5">Act on what you found</a></li><li><a href="#help-section-6">Computed on your computer</a></li><li><a href="#help-section-7">Frequently asked questions</a></li><li><a href="#help-section-8">What to do next</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7 min read</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -165,11 +166,11 @@
           </div>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="insights"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/en/insights.jpg" width="960" height="660" aria-label="Insights is opened and its Activity tab shows a heatmap of received and sent mail, one square per day. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/en/insights.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="insights"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/en/insights.jpg" width="960" height="660" aria-label="Insights is opened and its Activity tab shows a heatmap of received and sent mail, one square per day. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/en/insights.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">Insights</strong><span class="mv-clip-text">Open Insights and a heatmap shows the mail you received and sent each day, built from the headers already on your computer.</span></figcaption></figure>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">What Insights shows</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">What Insights shows</h2>
           <p>Insights opens full screen from the sidebar and has three tabs. They share the same controls at the top: which account, which date range (last 30 days, last 90 days, last 12 months or dates you choose), which direction (mail received, mail sent, or both), and a <strong>Hide likely automated senders</strong> checkbox. That last one takes out senders whose mail looks machine-sent: a no-reply address, or the List-Id, List-Unsubscribe or bulk Precedence headers that mailing lists add.</p>
 
           <div class="overflow-x-auto">
@@ -203,7 +204,7 @@
 
           <p>Every view is clickable. Click a bubble, a point on a lane or a day, and the matching messages open in a list, where you can read them without leaving Insights.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Find who sends you the most mail</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Find who sends you the most mail</h2>
           <ol class="list-decimal pl-6 space-y-2">
             <li>Open Insights and pick the account in <strong>Accounts</strong>. Insights looks at one account at a time.</li>
             <li>Set <strong>Date range</strong> to <em>Last 12 months</em> and <strong>Direction</strong> to <em>Received</em>.</li>
@@ -213,11 +214,11 @@
           <p>Then do it twice: once with Hide likely automated senders off, once with it on. The first list is usually newsletters, shops and notifications. The second is the people you actually correspond with, which is often much shorter.</p>
 
           <figure class="my-6">
-            <img src="/screenshots/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="The Insights Sender map in MailVault. Bubbles marked with two-letter initials surround a circle labelled You. The caption reads: Bubble area shows message count. Distance shows time since last contact, measured at 24 September 2026. Below the map, Sort senders is set to Latest interaction. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/insights-map-1440.webp"><img src="/screenshots/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="The Insights Sender map in MailVault. Bubbles marked with two-letter initials surround a circle labelled You. The caption reads: Bubble area shows message count. Distance shows time since last contact, measured at 24 September 2026. Below the map, Sort senders is set to Latest interaction. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">The Sender map on a test account. Bigger bubbles send more mail, closer bubbles wrote more recently. The sort control under the map starts at Latest interaction.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Which senders take the most space?</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">Which senders take the most space?</h2>
           <p>Here Insights has a limit worth knowing: it counts messages, not megabytes. A sender with 900 short notifications fills the map, while a client who sent six large PDFs barely shows. Message count is a rough stand-in for space, good for finding clutter, not for finding the heavy mail.</p>
           <p>For the heavy mail, look at attachments. Text is small; files are what make a message large. Two ways to find them in MailVault:</p>
           <ul class="list-disc pl-6 space-y-2">
@@ -226,16 +227,16 @@
           </ul>
           <p>Combine the two: Insights tells you who sends a lot, and the search tells you which of them send big.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">See when mail piles up</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">See when mail piles up</h2>
           <p>The <strong>Activity</strong> tab is the quickest picture of your email year. Each square is a day; darker squares mean more mail. Patterns show up fast: a wave of mail every Monday, a quiet August, a week in spring when a project buried your inbox. Click a square and you see exactly what arrived that day.</p>
           <p>The <strong>Timeline</strong> tab tells the same story per sender. A newsletter shows as a steady row of dots, a busy client as a dense cluster, and a relationship that went one-sided as a lane of circles with no diamonds. Change <strong>Timeline detail</strong> between weeks, days and messages to zoom in.</p>
 
           <figure class="my-6">
-            <img src="/screenshots/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="The Insights Timeline tab in MailVault on a test account, showing 82 email events, 82 received and 5 sent. Notes under the total read Based on mail available on this device, Some mail is missing from this device. Counts may be incomplete, and 51 events use a fallback date. Below, one lane per sender from 25 September 2025 to 24 September 2026, with dots for received mail. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/insights-timeline-1440.webp"><img src="/screenshots/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="The Insights Timeline tab in MailVault on a test account, showing 82 email events, 82 received and 5 sent. Notes under the total read Based on mail available on this device, Some mail is missing from this device. Counts may be incomplete, and 51 events use a fallback date. Below, one lane per sender from 25 September 2025 to 24 September 2026, with dots for received mail. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">The Timeline, one lane per sender. Note the coverage lines under the total: this test account had only part of its mail on the device, and Insights says so instead of guessing.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Act on what you found</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Act on what you found</h2>
           <p>Insights is for looking. The cleanup happens in the normal mail view, and Explorer makes it quick:</p>
           <ol class="list-decimal pl-6 space-y-2">
             <li>Go back to the folder and switch the message list from <strong>List</strong> to <strong>Explorer</strong>.</li>
@@ -245,19 +246,19 @@
           </ol>
 
           <figure class="my-6">
-            <img src="/screenshots/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="MailVault Explorer with Browse by set to Sender. A summary row reads 20 groups, 82 emails, 13 unread. Each sender row has a checkbox, a name, an address and counts, for example Theo Lomas, 6 emails, 6 in vault, 1 unread. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/explorer-sender-detail-1002.webp"><img src="/screenshots/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="MailVault Explorer with Browse by set to Sender. A summary row reads 20 groups, 82 emails, 13 unread. Each sender row has a checkbox, a name, an address and counts, for example Theo Lomas, 6 emails, 6 in vault, 1 unread. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Explorer by sender. The checkbox on a row selects all of that sender's loaded mail in the folder, ready to archive or delete.</figcaption>
           </figure>
 
           <p>For mailing lists, there is a shorter route. When a sender's mail carries an unsubscribe link, the sender details in Insights show an <strong>Unsubscribe</strong> button. MailVault always asks first. If the list supports one-click unsubscribe and the message passed DKIM, MailVault sends the request itself; otherwise it opens the list's unsubscribe page in your browser, or a ready-made unsubscribe email.</p>
           <p>If you find the same kinds of mail coming back every month, <a href="/features/email-cleanup.html" class="text-primary-500 hover:text-primary-600 underline">Email Cleanup</a> (Premium) can sort newsletters, promotions and other categories and keep, archive or delete each one, with rules by age per account and folder.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Computed on your computer</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">Computed on your computer</h2>
           <p>Insights reads the message headers MailVault already holds on your disk: sender, recipients and dates, from the cached headers of folders you have opened and the messages in your vault. It does not read message bodies or attachments to draw the charts, and nothing is sent to MailVault. There is no MailVault account involved, and the charts work with the network off.</p>
           <p>Two actions do reach out, and only when you choose them. Opening a message from Insights loads it the normal way, which can mean downloading it from your own mail server. Unsubscribe contacts the mailing list, as described above.</p>
           <p>Because Insights only knows what is on this device, it tells you how complete the picture is. A note under the controls reads "Based on mail available on this device", and <strong>Coverage details</strong> lists each folder with how many headers are stored locally next to how many messages the server is known to hold. If some mail is missing, it says counts may be incomplete. If a message had no reliable date, it says how many events use a fallback date. Treat a quiet month as a fact only when coverage is complete. To make it complete, save more of the mailbox to your computer first; our guide on <a href="/guides/what-is-an-email-vault.html" class="text-primary-500 hover:text-primary-600 underline">what an email vault is and how to build one</a> covers that.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Frequently asked questions</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">Frequently asked questions</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Is MailVault Insights free?</h3>
           <p>Yes. Insights and Explorer are part of the free app, with no account and no sign-in. They arrived in MailVault 2.13.0.</p>
@@ -274,7 +275,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Can Insights tell me which senders use the most storage?</h3>
           <p>Not directly. Insights ranks senders by message count, not by size. To find large mail, use the Attachments view or a search such as from:name has:attachment.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">What to do next</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">What to do next</h2>
           <p>Open Insights on your busiest account, sort the Sender map by message count, and look at the top ten with automated senders shown and hidden. Note the newsletters you no longer read and the notification senders that could go to a folder or a rule. The <a href="/features/insights.html" class="text-primary-500 hover:text-primary-600 underline">Insights feature page</a> and the <a href="/faq/explorer-and-insights.html" class="text-primary-500 hover:text-primary-600 underline">Explorer and Insights FAQ</a> have more detail. If your mailbox is close to its limit, the guide to <a href="/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">what to do when Outlook storage is full</a> picks up from here.</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -285,11 +286,12 @@
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Read your mail. Keep your mail.</p></div><nav aria-label="Explore MailVault"><a href="/use-cases.html">Use cases</a><a href="/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/faq.html">FAQ</a><a href="/docs.html">Help</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

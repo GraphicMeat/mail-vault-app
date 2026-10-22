@@ -61,6 +61,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/cloud-vs-local-email-search.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/cloud-vs-local-email-search.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
   <header class="mv-header">
@@ -88,13 +89,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-01" class="text-sm text-primary-500 font-medium">2026 年 10 月 1 日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail 的 AI 搜索正在扩展。你的邮件搜索应该在云端运行，还是在你的电脑上？</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail 的 AI 搜索正在扩展。你的邮件搜索应该在云端运行，还是在你的电脑上？</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">先想清楚你需要的是答案还是文件</a></li><li><a href="#help-section-2">本地搜索依赖的是另一样东西</a></li><li><a href="#help-section-3">云端 AI 和本地 AI 是两个不同的选择</a></li><li><a href="#help-section-4">一个你可以自己做的小对比</a></li><li><a href="#help-section-5">MailVault 的做法</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>3 分钟阅读</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -102,23 +103,23 @@
 <p>当你想不起邮件主题时，问一句「修改后的报价是谁发的？」比猜关键词要容易。邮件搜索正朝着这种对话的方式发展。但一个有用的答案和一份经久的记录，解决的是不同的问题。</p>
 <p>2026 年 9 月 15 日，Google 宣布更大范围地推出 <a href="https://workspaceupdates.googleblog.com/2026/09/gmail-searchs-ai-overviews-now-available-globally.html" class="text-primary-500 hover:text-primary-600 underline">Gmail 搜索中的 AI 概览</a>。符合条件的用户可以用自然语言提问，并获得基于自己邮件的摘要。此次扩展覆盖受支持的付费方案，且 Gmail 需设为英文；Google 列出的排除范围包括 EEA、英国、瑞士和日本的个人账户。此外还需开启相应的智能功能设置。</p>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/cloud-local-search.svg" width="640" height="804" loading="lazy" decoding="async" alt="两种搜索路径：本地检索在电脑上搜索已下载的邮件；云端 AI 在远程处理问题，返回一个需要你核对的答案。"><figcaption>搜索在哪里进行，和 AI 在哪里处理，是两个不同的选择。请检查覆盖范围、账户资格和服务商的设置。</figcaption></figure>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">先想清楚你需要的是答案还是文件</h2>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/cloud-local-search.svg"><img src="/assets/blog/cloud-local-search.svg" width="640" height="804" loading="lazy" decoding="async" alt="两种搜索路径：本地检索在电脑上搜索已下载的邮件；云端 AI 在远程处理问题，返回一个需要你核对的答案。"></a><figcaption>搜索在哪里进行，和 AI 在哪里处理，是两个不同的选择。请检查覆盖范围、账户资格和服务商的设置。</figcaption></figure>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">先想清楚你需要的是答案还是文件</h2>
 <p>假设一位承包商发来一份报价，接着又发来修改后的报价，然后在回复中又做了更正。摘要可以帮你很快了解来龙去脉。但如果你准备批准一笔付款，你仍然需要打开原始邮件，确认哪个版本才是最新的。</p>
 <p>对于收据、签过字的附件或一条确切的指示，目标通常是检索：找到包含证据的那份文件。对于一场冗长的讨论，目标可能是理解：不必读完每一条回复就弄清对话内容。围绕这一区别来选择工具。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">本地搜索依赖的是另一样东西</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-2">本地搜索依赖的是另一样东西</h2>
 <p>本地索引搜索的是已经存放在你电脑上的内容。相关邮件一旦下载并建立索引，你无需借助服务商的搜索服务就能找到它们。这在火车上、服务中断时，或原账户无法再访问之后都很有用。</p>
 <p>局限在于覆盖范围。如果你的客户端只保留最近三个月的邮件，离线搜索就找不到一张从未下载过的十年前的发票。有些客户端只保存邮件头或预览，而不保存完整邮件。在把空结果当作这封邮件从未存在的证据之前，先检查你的下载设置。</p>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="本地搜索流程：已保存的邮件写入 SQLite 索引；查询返回结果，打开某个结果时读取保存下来的原件。"><figcaption>结果列表来自索引。原始邮件始终可供阅读和核对。</figcaption></figure>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">云端 AI 和本地 AI 是两个不同的选择</h2>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/local-search-flow.svg"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="本地搜索流程：已保存的邮件写入 SQLite 索引；查询返回结果，打开某个结果时读取保存下来的原件。"></a><figcaption>结果列表来自索引。原始邮件始终可供阅读和核对。</figcaption></figure>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">云端 AI 和本地 AI 是两个不同的选择</h2>
 <p>「AI 搜索」描述的是一种交互方式，而不是处理发生在哪里。模型可能在你的电脑上运行，也可能使用远程服务，或者把本地检索与远程理解结合起来。一个安装在桌面上的应用，同样可以把邮件内容发送给云服务商。</p>
 <p>在启用某项功能之前，弄清楚哪些内容会离开设备、由哪个服务商接收，以及哪些设置决定数据的保留和训练用途。阅读适用于你具体账户类型的政策。不要以为每一种个人服务和办公方案的条款都一样。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">一个你可以自己做的小对比</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-4">一个你可以自己做的小对比</h2>
 <p>从你自己的邮箱里选三项任务：找一张收据，找出某个附件的最新版本，理解一个很长的会话。用你能用的各种搜索工具分别试一试。</p>
 <ul><li><strong>准确性：</strong>你找到正确的原始邮件了吗？</li><li><strong>覆盖范围：</strong>旧文件夹和已归档的邮件包括在内了吗？</li><li><strong>可追溯性：</strong>你能核对答案背后的来源吗？</li><li><strong>离线访问：</strong>断网时你能重复这次检索吗？</li></ul>
 <p>如果你在评估一项新的外部服务，请使用不敏感的示例。比较的是任务的实际结果，而不是答案听起来有多漂亮。</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 的做法</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-5">MailVault 的做法</h2>
 <p>MailVault 为保存在你磁盘上的邮件建立本地全文索引。你可以按发件人、日期、附件和文件夹筛选，然后打开保存下来的邮件。它的 AI 写作和会话摘要工具可以使用在你电脑上运行的模型，也可以使用你选择的服务商；这些与普通的全文搜索是分开的。</p>
 <p>一种实用的做法是：用摘要来了解大致情况，用原始邮件来做决定。让底层的归档保持可迁移，检查你需要的时间段已经下载，并<a href="/zh/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">了解本地索引的工作原理</a>。当来源依然便于查看时，更快的答案才最有用。</p>
 
@@ -131,11 +132,12 @@
         </div>
       </article>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/search-local.webp"><img src="/assets/help-media/zh/search-local.webp" width="1440" height="1056" loading="lazy" alt="在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>在本地邮件中搜索Priya并显示结果</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/search-local.jpg" aria-label="在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/search-local.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/search-local.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在搜索框中输入Priya。 运行搜索并查看保存在此电脑上的匹配邮件。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@
   "description": "Erstelle ein lokales E-Mail-Backup unter Linux: Verbinde dein Postfach, archiviere als EML, prüfe Anhänge offline und bewahre eine zweite Kopie auf einem anderen Laufwerk auf.",
   "url": "https://mailvaultapp.com/de/guides/backup-email-linux.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-email-linux.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-email-linux.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Hilfethemen</summary><nav aria-label="Themen im Hilfecenter"><a href="/de/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault-Hilfe</a><a href="/de/faq/getting-started.html">Erste Schritte</a><a href="/de/faq/storage-and-vault.html">Speicherort und dein Vault</a><a href="/de/faq/providers.html">E-Mail-Anbieter</a><a href="/de/faq/backup-and-restore.html">Backup und Wiederherstellung</a><a href="/de/faq/explorer-and-insights.html">Explorer und Einblicke</a><a href="/de/faq/scheduled-send.html">Geplanter Versand</a><a href="/de/faq/premium.html">Kostenlos und Premium</a><a href="/de/faq/troubleshooting.html">Fehlerbehebung</a><a href="/de/docs.html#guides" class="mv-help-divider">Praktische Anleitungen</a><a href="/de/docs.html#articles">Artikel</a><a href="/de/features.html">Funktionsübersicht</a><a href="/changelog.html">Versionshinweise</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/de/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,33 +172,33 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Anleitungen für E-Mail-Backups · <time datetime="2026-10-15">15. Oktober 2026</time></p>
-          <h1>E-Mails unter Linux als EML sichern</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <p data-i18n-block>Ein E-Mail-Backup unter Linux sollte sowohl eine Löschung beim Anbieter als auch einen Laufwerksausfall überstehen. Archiviere Nachrichten zunächst in einem unabhängigen lokalen Tresor und bewahre dann eine zweite Kopie an einem anderen Ort auf. Die Linux-App von MailVault speichert archivierte E-Mails als einzelne EML-Dateien in Maildir-Ordnern.</p>
-          <h2 data-i18n-block>1. Linux-App installieren und ein Konto verbinden</h2>
+          <h1>E-Mails unter Linux als EML sichern</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">1. Linux-App installieren und ein Konto verbinden</a></li><li><a href="#help-section-2">2. Vor dem Backup ein Archiv erstellen</a></li><li><a href="#help-section-3">Prüfe das Archiv, bevor du dich darauf verlässt</a></li><li><a href="#help-section-4">3. Die Kopie auf dem Laufwerk schützen</a></li><li><a href="#help-section-5">Kann ich das automatisieren?</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>Ein E-Mail-Backup unter Linux sollte sowohl eine Löschung beim Anbieter als auch einen Laufwerksausfall überstehen. Archiviere Nachrichten zunächst in einem unabhängigen lokalen Tresor und bewahre dann eine zweite Kopie an einem anderen Ort auf. Die Linux-App von MailVault speichert archivierte E-Mails als einzelne EML-Dateien in Maildir-Ordnern. Diese Angaben zur Dateistruktur gelten für das Standardformat Maildir. Unter Einstellungen → Speicher gibt es auch JMAP-Speicher, der die ursprünglichen Nachrichtenbytes mit JSON-Datensätzen aufbewahrt und identische Nachrichten dedupliziert.</p>
+          <h2 data-i18n-block id="help-section-1">1. Linux-App installieren und ein Konto verbinden</h2>
           <p data-i18n-block>Nutze die Linux-Links auf <a href="/de/get-started.html">der Downloadseite</a> und wähle das Paket und die Architektur passend zu deinem System. Folge der aktuellen Installationsanleitung dort, statt Befehle für eine andere Distribution zu kopieren. Füge Gmail- oder Microsoft-Konten über die unterstützte Anmeldung hinzu oder gib die Verbindungsdaten deines IMAP-Anbieters ein. Organisationen können den Zugriff unabhängig vom Betriebssystem einschränken.</p>
-          <h2 data-i18n-block>2. Vor dem Backup ein Archiv erstellen</h2>
+          <h2 data-i18n-block id="help-section-2">2. Vor dem Backup ein Archiv erstellen</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Vergleiche Posteingang, Gesendet und eigene Ordner mit deinem Webmail. Berücksichtige ältere Ordner und Labels, die du behalten möchtest.</li>
           <li data-i18n-block>Wähle in den Massenaktionen die Ordner und den Zeitraum und dann <strong>Archivieren</strong>. So werden lokale Kopien erstellt, ohne E-Mails vom Server zu entfernen.</li>
           <li data-i18n-block>Lass die App laufen, bis der Vorgang abgeschlossen ist. Prüfe Fehler und versuche fehlende Nachrichten erneut zu archivieren, bevor du das Archiv als vollständig betrachtest.</li>
           <li data-i18n-block>Wähle die Quelle <strong>Tresor</strong> und prüfe Nachrichten aus mehreren Jahren samt Anhängen.</li></ol>
-          <h2 data-i18n-block>Prüfe das Archiv, bevor du dich darauf verlässt</h2>
+          <h2 data-i18n-block id="help-section-3">Prüfe das Archiv, bevor du dich darauf verlässt</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Wechsle die Nachrichtenquelle zu <strong>Tresor</strong> statt Server oder Alle. Suche nach einer alten Nachricht, die du kennst.</li>
           <li data-i18n-block>Trenne die Netzwerkverbindung und öffne einige archivierte Nachrichten aus verschiedenen Ordnern und Jahren. Öffne auch ihre Anhänge. Eine Betreffzeile in einer Liste beweist nicht, dass der Nachrichtentext gespeichert ist.</li>
           <li data-i18n-block>Öffne in den Einstellungen <strong>Sichern &amp; Wiederherstellen</strong> und nutze <strong>Sicherung exportieren</strong>. Wähle einen Speicherort auf einem zweiten Laufwerk. Die ZIP-Datei enthält den Tresor, Konten und Einstellungen; Nachrichten, die nur auf dem Server liegen, sind nicht enthalten.</li>
           <li data-i18n-block>Prüfe, ob sich die ZIP-Datei öffnen lässt, .eml-Dateien enthält und die gewünschten Ordner umfasst. Teste bei wichtigen E-Mails die Wiederherstellung einer Kopie in einer separaten Installation, bevor du etwas löschst.</li></ol>
-          <h2 data-i18n-block>3. Die Kopie auf dem Laufwerk schützen</h2>
+          <h2 data-i18n-block id="help-section-4">3. Die Kopie auf dem Laufwerk schützen</h2>
           <p data-i18n-block>Nutze ein zweites Laufwerk für das exportierte Backup. Ein zweiter Ordner auf demselben Laufwerk schützt nicht vor dessen Ausfall. Prüfe bei einem Wechsellaufwerk vor einem geplanten Durchlauf, ob es eingebunden und beschreibbar ist. Speichere private E-Mails auf verschlüsselten Datenträgern und bewahre die Zugangsdaten zur Wiederherstellung des Backups so auf, dass du sie nach dem Verlust des Computers erreichen kannst.</p>
           <p data-i18n-block>Mit Maildir sind einzelne Nachrichten übertragbar, der aktive Tresor enthält jedoch auch App-Metadaten. Nutze bei einer laufenden Installation vorzugsweise die Sicherungs- und Exportfunktion der App. Wenn du den gesamten Tresor auf Dateisystemebene kopierst, schließe die App vorher, damit du keine Dateien während eines Schreibvorgangs erfasst.</p>
-          <h2 data-i18n-block>Kann ich das automatisieren?</h2>
+          <h2 data-i18n-block id="help-section-5">Kann ich das automatisieren?</h2>
           <p data-i18n-block>MailVault Premium unterstützt geplante Sicherungen. Beginne mit einer erfolgreichen manuellen Archivierung und einer geprüften Wiederherstellung, bevor du einen Zeitplan aktivierst. Falls du lieber im Terminal arbeitest, vergleiche Werkzeuge anhand von Authentifizierungsunterstützung, Speicherformat, Löschverhalten und Wiederherstellungsablauf mit unserer <a href="/de/guides/imap-backup-tool-checklist.html">IMAP-Backup-Checkliste</a>.</p>
           <p data-i18n-block>Siehe auch <a href="/de/guides/linux-email-archive.html">ein E-Mail-Archiv für Linux auswählen</a> und <a href="/de/guides/keep-emails-after-server-deletion.html">E-Mails nach dem Löschen vom Server behalten</a>. Die begleitenden Mac-Aufnahmen an anderen Stellen dieser Anleitungen zeigen den gemeinsamen App-Ablauf, keine Linux-Desktopsitzung.</p>
           <p data-i18n-block><a href="/de/get-started.html">Lade MailVault kostenlos herunter</a>, um dein erstes lokales Archiv zu erstellen. Manuelle Archivierung ist kostenlos; automatische Archivierung, geplante Sicherungen und Archivieren &amp; löschen erfordern <a href="/de/pricing.html">Premium</a>.</p>
           <p data-i18n-block>Weitere praktische Anleitungen: <a href="/de/guides/backup-gmail-to-eml.html">Gmail als EML-Dateien sichern</a> · <a href="/de/guides/export-outlook-to-eml.html">Outlook-E-Mails als EML exportieren</a> · <a href="/de/guides/download-all-emails-mac.html">Alle E-Mails auf dem Mac herunterladen</a> · <a href="/de/guides/linux-email-archive.html">Ein lokales E-Mail-Archiv für Linux: Worauf du achten solltest</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>In MailVault ansehen</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/de/manual-backup.webp"><img src="/assets/help-media/de/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Alle Konten sichern und den Abschluss prüfen · MailVault version 2.20.0 de" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Alle Konten sichern und den Abschluss prüfen</figcaption><video controls playsinline preload="none" poster="/assets/help-media/de/manual-backup.jpg" aria-label="Alle Konten sichern und den Abschluss prüfen · MailVault version 2.20.0 de" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/de/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/de/manual-backup.vtt" srclang="de" label="Deutsch" default></video></figure><details class="mv-help-contents"><summary>Videotranskript</summary><p>In den Sicherungseinstellungen die Sicherung aller Konten starten. Den Fortschritt bis zum Abschluss der Sicherung verfolgen.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -225,5 +226,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Produkt-Screenshot"><button type="button">Screenshot schließen</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

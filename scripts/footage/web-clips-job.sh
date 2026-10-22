@@ -43,9 +43,13 @@ for l in $LOCALES; do for th in $THEMES; do if [ "$th" = light ]; then VARIANTS=
 GROUPS_JSON="$ROOT/scripts/footage/web-clips.groups.json"
 CLIP_GROUPS="${WEBCLIP_GROUPS:-$(node -e 'console.log(require(process.argv[1]).default.join(" "))' "$GROUPS_JSON")}"
 CLIP_GROUPS="$(printf '%s' "$CLIP_GROUPS" | tr ',' ' ')"
+if [ "$CLIP_GROUPS" = help-media ] && [ "${FOOTAGE_ALLOW_IDLE_FOREIGN:-0}" = 1 ]; then
+  export FOOTAGE_GUARD_WAIT_SECONDS="${FOOTAGE_GUARD_WAIT_SECONDS:-600}"
+fi
 OUT="$(mktemp -d -t mvall)"
 BIN="$(mktemp -d -t mvbin)"
 HOMEDIR=""
+OWNERSHIP_FILE=""
 export FOOTAGE_PORT="${FOOTAGE_PORT:-4468}"
 export FOOTAGE_WINDOW="${FOOTAGE_WINDOW:-1536x928}"
 export FOOTAGE_CAPTURE="${FOOTAGE_CAPTURE:-app}"
@@ -53,25 +57,16 @@ FOOTAGE_CAP="$ROOT/src-tauri/capabilities/footage.json"
 CAF=""
 JOB0=$(date +%s)
 DAY0="$(date +%F)"
-PHASES=()   # "name seconds" lines for job.json
+PHASES=("preflight 0")   # nonempty for macOS Bash 3 + nounset, even on early refusal
 
 phase() { PHASES+=("$1 $2"); }
 step() { echo; echo "== $* ($(date +%H:%M:%S))"; }
 
-# Ours: the driver on our port, anything under this clone's target/ (app,
-# daemon, mock servers) or our temp bin (recorder).
+# Ownership is written by onPrepare only AFTER its launch guard succeeds.
+# A refused preflight/launch therefore has nothing it may stop.
 stop_app() {
-  pkill -f "tauri-wd-shots --port $FOOTAGE_PORT" 2>/dev/null
-  pkill -f "$ROOT/target/" 2>/dev/null
-  pkill -f "$BIN/" 2>/dev/null
-  for _ in $(seq 1 20); do
-    pgrep -f "$ROOT/target/|tauri-wd-shots --port $FOOTAGE_PORT|$BIN/" >/dev/null || return 0
-    sleep 0.5
-  done
-  pkill -9 -f "$ROOT/target/|tauri-wd-shots --port $FOOTAGE_PORT|$BIN/" 2>/dev/null
-  sleep 1
-  pgrep -fl "$ROOT/target/|tauri-wd-shots --port $FOOTAGE_PORT|$BIN/" && echo "stop_app: processes survived SIGKILL"
-  return 0
+  [ -n "$OWNERSHIP_FILE" ] && [ -f "$OWNERSHIP_FILE" ] || return 0
+  node scripts/footage/lib/captureOwnership.mjs "$OWNERSHIP_FILE"
 }
 
 write_job_json() {
@@ -80,7 +75,9 @@ write_job_json() {
     const phases = Object.fromEntries(ph.map((l) => { const [n, s] = l.split(" "); return [n, Number(s)]; }));
     require("fs").writeFileSync(`${out}/job.json`, JSON.stringify({ mode, locales: locales.split(" "), groups: groups.split(" "),
       themes: process.env.WEBCLIP_THEMES || "dark", builds: Number(builds), wallSeconds: Math.round(Date.now() / 1000 - Number(t0)), phases, host: require("os").hostname(),
-      tz: Intl.DateTimeFormat().resolvedOptions().timeZone, startedLocal: new Date(Number(t0) * 1000).toString() }, null, 2));
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone, startedLocal: new Date(Number(t0) * 1000).toString(),
+      sourceCommit: require("child_process").execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+      appVersion: JSON.parse(require("fs").readFileSync("package.json", "utf8")).version }, null, 2));
   ' "$OUT" "$MODE" "$LOCALES" "$CLIP_GROUPS" "$JOB0" "${BUILDS:-0}" "${PHASES[@]}"
 }
 
@@ -108,8 +105,10 @@ disk_ok() {
 
 # ── Preflight ───────────────────────────────────────────────────────────────
 step "preflight: mode $MODE, locales $LOCALES, themes $THEMES, groups $CLIP_GROUPS, $(date), TZ $(date +%Z)"
-live="$(pgrep -fl "tauri-wd|mock-imap-server" | grep -vE "runjob\.sh|lockf|minijob" || true)"
-if [ -n "$live" ]; then echo "$live"; echo "a driver or mock server is live; one app instance at a time"; exit 1; fi
+if ! node scripts/footage/lib/captureGuard.mjs > "$OUT/preflight-guard.json"; then
+  cat "$OUT/preflight-guard.json"; exit 1
+fi
+cat "$OUT/preflight-guard.json"
 disk_ok || exit 1
 caffeinate -u -d -i -t 21600 & CAF=$!
 osascript -e 'tell application "System Events" to key code 53' 2>&1 || true
@@ -195,11 +194,13 @@ run_group() {
   [ -n "$clips" ] || { echo "group $group: nothing of WEBCLIP_ONLY in it"; rmdir "$G" 2>/dev/null; return 0; }
   step "$ph $v/$group ($theme): $clips (HOME $HOMEDIR)"
   local t0; t0=$(date +%s)
+  OWNERSHIP_FILE="$G/ownership.json"
   # shellcheck disable=SC2046
   env $(printf '%s\n' "$envs" | tr '\n' ' ') \
     FOOTAGE_LOCALE="$loc" FOOTAGE_THEME="$theme" FOOTAGE_ONLY="$clips" FOOTAGE_VERIFY="$verify" \
     FOOTAGE_ALIGN_STRICT="$([ "$verify" = 1 ] && echo 0 || echo 1)" \
     FOOTAGE_SCENE=web-clips FOOTAGE_OUT="$G" FOOTAGE_RECORDER="$BIN/recorder" FOOTAGE_DATA_DIR="$HOMEDIR" \
+    FOOTAGE_OWNERSHIP_FILE="$OWNERSHIP_FILE" FOOTAGE_BIN_DIR="$BIN" \
     npx wdio run wdio.footage.conf.js > "$G/run.log" 2>&1
   local rc=$?
   echo "wdio exit $rc in $(( $(date +%s) - t0 )) s"

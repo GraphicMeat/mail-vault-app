@@ -29,7 +29,6 @@
   "1a88113e53ee": "Téléchargement de MailVault {release}. S’il ne démarre pas, utilisez le bouton ci-dessus.",
   "93c3e0b8c5fb": "Le bouton ouvre la page de la dernière version. Choisissez-y le fichier pour votre ordinateur.",
   "757da7c8028f": "Le téléchargement n’a pas pu démarrer automatiquement. Le bouton ouvre la page de la dernière version ; choisissez-y le fichier pour votre ordinateur.",
-  "af2a175acc52": "Où MailVault range votre courrier sur le disque, quelle part en reste sur cet ordinateur, pourquoi il utilise .eml et Maildir, et comment déplacer le coffre vers un autre disque.",
   "384095550461": "Quelle part de mon courrier reste sur cet ordinateur ?",
   "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Collectionneur</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> : un mode de téléchargement qui récupère chaque dossier et tout l'historique en arrière-plan et les conserve sur cet ordinateur, au lieu d'une période récente seulement</span>",
   "7f9bb36583b5": "Voir les 14 fonctionnalités",

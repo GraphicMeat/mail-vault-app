@@ -38,7 +38,7 @@
   "description": "O Gmail diz que seu armazenamento está cheio e as mensagens novas estão voltando. Veja o que realmente libera espaço, o que não libera e como arquivar e-mails antigos localmente em vez de pagar ao Google todo mês.",
   "url": "https://mailvaultapp.com/pt-br/guides/gmail-storage-full.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Pular para o conteúdo</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Tópicos de ajuda</summary><nav aria-label="Tópicos da central de ajuda"><a href="/pt-br/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ajuda do MailVault</a><a href="/pt-br/faq/getting-started.html">Primeiros passos</a><a href="/pt-br/faq/storage-and-vault.html">Armazenamento e seu cofre</a><a href="/pt-br/faq/providers.html">Provedores de e-mail</a><a href="/pt-br/faq/backup-and-restore.html">Backup e restauração</a><a href="/pt-br/faq/explorer-and-insights.html">Explorer e Estatísticas</a><a href="/pt-br/faq/scheduled-send.html">Envio agendado</a><a href="/pt-br/faq/premium.html">Gratuito e Premium</a><a href="/pt-br/faq/troubleshooting.html">Solução de problemas</a><a href="/pt-br/docs.html#guides" class="mv-help-divider">Guias práticos</a><a href="/pt-br/docs.html#articles">Artigos</a><a href="/pt-br/features.html">Referência de recursos</a><a href="/changelog.html">Notas da versão</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,14 +211,14 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Armazenamento do Gmail cheio? Veja como resolver</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Armazenamento do Gmail cheio? Veja como resolver</h1><!-- help-intro:start --><form class="mv-help-search" action="/pt-br/docs.html" method="get" role="search"><label for="help-q">Pesquisar na documentação, nas perguntas frequentes e nos artigos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Pesquisar em todos os guias e respostas" required><button type="submit">Pesquisa</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 min de leitura</span>
           </div>
         </header>
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <h2>Libere espaço no Gmail sem perder e-mails: uma lista que começa pela verificação</h2>
+          <h2 id="help-section-1">Libere espaço no Gmail sem perder e-mails: uma lista que começa pela verificação</h2>
           <p>O botão Arquivar do Gmail remove o marcador Caixa de entrada; ele não retira os e-mails dos servidores do Google. Um arquivo local baixado é diferente. Siga esta ordem para recuperar espaço mantendo cópias legíveis:</p>
           <ol class="list-decimal pl-6 space-y-2">
           <li>Escolha um pequeno lote de mensagens antigas ou grandes. Salve-as localmente primeiro usando o <a href="/pt-br/guides/backup-gmail-to-eml.html">guia do Gmail para EML</a>.</li>
@@ -273,8 +274,7 @@
           </p>
 
           <p>
-            É exatamente para isso que o MailVault foi feito. É um app de desktop gratuito para macOS, Windows e Linux que se conecta ao Gmail por IMAP (com o login OAuth do Google de verdade, sem mexer com senhas de app), baixa cada e-mail como um arquivo <code>.eml</code> padrão e os organiza numa estrutura de pastas Maildir no seu disco. Depois de confirmar que o arquivo está completo &mdash; abra alguns e-mails, pesquise um de que você se lembra, confira se um anexo abre &mdash; você pode excluir com segurança os originais do Gmail e recuperar sua cota.
-          </p>
+            É exatamente para isso que o MailVault foi feito. É um app de desktop gratuito para macOS, Windows e Linux que se conecta ao Gmail por IMAP (com o login OAuth do Google de verdade, sem mexer com senhas de app), baixa cada e-mail como um arquivo <code>.eml</code> padrão e os organiza numa estrutura de pastas Maildir no seu disco. Depois de confirmar que o arquivo está completo &mdash; abra alguns e-mails, pesquise um de que você se lembra, confira se um anexo abre &mdash; você pode excluir com segurança os originais do Gmail e recuperar sua cota. Estas instruções sobre a estrutura dos arquivos se referem ao formato padrão Maildir. Configurações → Armazenamento também oferece armazenamento JMAP, que mantém os bytes originais das mensagens com registros JSON e elimina mensagens idênticas duplicadas.</p>
 
           <p>
             O arquivamento manual e sem limite no MailVault é gratuito para sempre. Se você quiser que ele rode automaticamente com uma agenda, em vez de arquivar em lotes na mão, isso é um recurso premium ($4/mês ou $25/ano; 14 dias de teste grátis no anual) &mdash; mas, para uma faxina única de uma conta cheia do Gmail, o arquivamento manual gratuito é tudo de que você precisa.
@@ -323,7 +323,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Veja no MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/pt-br/manual-backup.webp"><img src="/assets/help-media/pt-br/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Fazer backup de todas as contas e confirmar a conclusão</figcaption><video controls playsinline preload="none" poster="/assets/help-media/pt-br/manual-backup.jpg" aria-label="Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/pt-br/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/pt-br/manual-backup.vtt" srclang="pt-BR" label="Português (Brasil)" default></video></figure><details class="mv-help-contents"><summary>Transcrição do vídeo</summary><p>Inicie o backup de todas as contas nas configurações de backup. Acompanhe o progresso até a conclusão do backup.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -351,5 +351,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura de tela do produto"><button type="button">Fechar captura de tela</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

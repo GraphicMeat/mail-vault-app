@@ -38,7 +38,7 @@
   "description": "在 Linux 上创建本地邮件备份：连接邮箱，归档为 EML，离线验证附件，并在另一块硬盘上保留第二份副本。",
   "url": "https://mailvaultapp.com/zh/guides/backup-email-linux.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-email-linux.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-email-linux.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,33 +172,33 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">邮件备份指南 · <time datetime="2026-10-15">2026年10月15日</time></p>
-          <h1>如何在 Linux 上将邮件备份为 EML</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <p data-i18n-block>Linux 邮件备份应能应对服务商删除邮件和硬盘故障。先将邮件归档到独立的本地保险库，再在其他位置保留第二份副本。MailVault 的 Linux 应用会将归档邮件以独立的 EML 文件保存在 Maildir 文件夹中。</p>
-          <h2 data-i18n-block>1. 安装 Linux 应用并连接账户</h2>
+          <h1>如何在 Linux 上将邮件备份为 EML</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">1. 安装 Linux 应用并连接账户</a></li><li><a href="#help-section-2">2. 先归档，再备份</a></li><li><a href="#help-section-3">先验证归档，再依赖它</a></li><li><a href="#help-section-4">3. 保护磁盘上的副本</a></li><li><a href="#help-section-5">可以自动执行吗？</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>Linux 邮件备份应能应对服务商删除邮件和硬盘故障。先将邮件归档到独立的本地保险库，再在其他位置保留第二份副本。MailVault 的 Linux 应用会将归档邮件以独立的 EML 文件保存在 Maildir 文件夹中。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
+          <h2 data-i18n-block id="help-section-1">1. 安装 Linux 应用并连接账户</h2>
           <p data-i18n-block>使用<a href="/zh/get-started.html">下载页面</a>上的 Linux 下载链接，选择适合您系统的软件包和架构。请遵循该页面的当前安装说明，不要照搬其他发行版的命令。通过支持的登录流程添加 Gmail 或 Microsoft 账户，或输入 IMAP 服务商提供的连接信息。无论使用哪种操作系统，组织都可能限制访问。</p>
-          <h2 data-i18n-block>2. 先归档，再备份</h2>
+          <h2 data-i18n-block id="help-section-2">2. 先归档，再备份</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>将收件箱、已发送和自定义文件夹与网页邮箱进行核对。把需要保留的旧文件夹和标签也包含在内。</li>
           <li data-i18n-block>在批量操作中，选择文件夹和日期范围，然后选择<strong>归档</strong>。这会创建本地副本，不会移除服务器上的邮件。</li>
           <li data-i18n-block>让应用保持运行，直到任务完成。在认定归档完整之前，检查失败项目，并重试遗漏的邮件。</li>
           <li data-i18n-block>选择<strong>保险库</strong>来源，检查不同年份的邮件及其附件。</li></ol>
-          <h2 data-i18n-block>先验证归档，再依赖它</h2>
+          <h2 data-i18n-block id="help-section-3">先验证归档，再依赖它</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>将邮件来源切换为<strong>保险库</strong>，而不是服务器或全部。搜索一封您记得的旧邮件。</li>
           <li data-i18n-block>断开网络，打开几封来自不同文件夹、不同年份的归档邮件，也打开它们的附件。列表中有邮件主题，并不能证明邮件正文已保存。</li>
           <li data-i18n-block>在设置中打开<strong>备份与恢复</strong>，使用<strong>导出备份</strong>。选择第二块硬盘上的位置。ZIP 包含保险库、账户和设置，不包含只存在于服务器上的邮件。</li>
           <li data-i18n-block>检查 ZIP 能否打开、是否包含 .eml 文件，以及是否包含您打算保留的文件夹。对于重要邮件，删除任何内容前，请在单独安装的应用中测试恢复一份副本。</li></ol>
-          <h2 data-i18n-block>3. 保护磁盘上的副本</h2>
+          <h2 data-i18n-block id="help-section-4">3. 保护磁盘上的副本</h2>
           <p data-i18n-block>将导出的备份放在第二块硬盘上。同一块硬盘中的另一个文件夹无法防范该硬盘故障。如果是可移动硬盘，请在定时任务运行前确认它已挂载且可写。将私人邮件存放在加密存储中，并把备份恢复凭据保存在即使丢失电脑也能取用的地方。</p>
           <p data-i18n-block>Maildir 使单封邮件易于迁移，但正在使用的保险库还包含应用元数据。对于运行中的应用，请优先使用应用自身的备份/导出流程。如果要在文件系统层面复制整个保险库，请先关闭应用，以免复制到尚未写完的文件。</p>
-          <h2 data-i18n-block>可以自动执行吗？</h2>
+          <h2 data-i18n-block id="help-section-5">可以自动执行吗？</h2>
           <p data-i18n-block>MailVault Premium 支持定时备份。启用定时任务前，请先成功完成一次手动归档，并验证恢复流程。如果您偏好终端操作，请参照 <a href="/zh/guides/imap-backup-tool-checklist.html">IMAP 备份检查清单</a>，比较工具的身份验证支持、存储格式、删除行为和恢复流程。</p>
           <p data-i18n-block>另请参阅<a href="/zh/guides/linux-email-archive.html">选择 Linux 邮件归档工具</a>和<a href="/zh/guides/keep-emails-after-server-deletion.html">服务器删除后仍保留邮件</a>。这些指南其他部分附带的 Mac 录屏演示了共通的应用流程，并非 Linux 桌面实录。</p>
           <p data-i18n-block><a href="/zh/get-started.html">免费下载 MailVault</a>，创建您的第一份本地归档。手动归档免费；自动归档、定时备份和归档并删除需要 <a href="/zh/pricing.html">Premium</a>。</p>
           <p data-i18n-block>更多实用指南：<a href="/zh/guides/backup-gmail-to-eml.html">如何将 Gmail 备份为 EML 文件</a> · <a href="/zh/guides/export-outlook-to-eml.html">如何将 Outlook 邮件导出为 EML</a> · <a href="/zh/guides/download-all-emails-mac.html">如何在 Mac 上下载所有邮件</a> · <a href="/zh/guides/linux-email-archive.html">选择 Linux 本地邮件归档工具：需要检查什么</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -225,5 +226,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

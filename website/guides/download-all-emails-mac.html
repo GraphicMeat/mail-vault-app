@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-emails-mac.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-emails-mac.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,22 +172,22 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Email backup guides · <time datetime="2026-10-15">October 15, 2026</time></p>
-          <h1>How to Download All Your Emails on Mac</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>How to Download All Your Emails on Mac</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>On this page</summary><ul><li><a href="#help-section-1">Option 1: export mailboxes from Apple Mail</a></li><li><a href="#help-section-2">Option 2: make a searchable EML archive with MailVault</a></li><li><a href="#help-section-3">Verify the archive before relying on it</a></li><li><a href="#search-local-archive-video">Short demo: search your local archive</a></li><li><a href="#help-section-4">Why “all emails” needs a folder checklist</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>To download all your emails on a Mac, choose between an Apple Mail mailbox export and a dedicated local archive. The important part is completeness: Inbox alone is rarely the whole account, and a synced mailbox can still reflect server deletions.</p>
-          <h2 data-i18n-block>Option 1: export mailboxes from Apple Mail</h2>
+          <h2 data-i18n-block id="help-section-1">Option 1: export mailboxes from Apple Mail</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Connect your account in Apple Mail and allow it to finish fetching messages. Check Inbox, Sent and every folder you need, including older mail.</li>
           <li data-i18n-block>Select the mailboxes you want in the sidebar, then choose <strong>Mailbox → Export Mailbox</strong>.</li>
           <li data-i18n-block>Choose a folder on your Mac or an external drive. Apple Mail exports mailbox data in MBOX format.</li>
           <li data-i18n-block>Keep a second copy and test an import using <strong>File → Import Mailboxes</strong>. Open representative messages and attachments from the imported copy.</li></ol>
           <p data-i18n-block>These menu names and the MBOX format are documented in <a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac">Apple’s mailbox import and export guide</a>. An exported mailbox is a separate artifact: simply leaving the account connected in Mail is not the same backup.</p>
-          <h2 data-i18n-block>Option 2: make a searchable EML archive with MailVault</h2>
+          <h2 data-i18n-block id="help-section-2">Option 2: make a searchable EML archive with MailVault</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Download the macOS build from <a href="/get-started.html">Get started</a> and add your email account. Use Google or Microsoft sign-in where available.</li>
           <li data-i18n-block>Make a folder checklist: Inbox, Sent, custom folders and any labels containing mail outside the Inbox. Make archived or hidden provider folders visible to the connection if needed.</li>
           <li data-i18n-block>Use bulk operations to select the required folders and dates, then choose <strong>Archive</strong>. Wait for completion and investigate any failures or skipped folders.</li>
           <li data-i18n-block>Switch the source to <strong>Vault</strong> to inspect the independent local copies. Messages in the vault use .eml files; those only visible under Server are not part of the archive yet.</li></ol>
-          <h2 data-i18n-block>Verify the archive before relying on it</h2>
+          <h2 data-i18n-block id="help-section-3">Verify the archive before relying on it</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Switch the message source to <strong>Vault</strong>, rather than Server or All. Search for an old message you recognize.</li>
           <li data-i18n-block>Disconnect from the network and open a few archived messages from different folders and years. Open their attachments too. A subject line in a list is not proof that the message body is saved.</li>
@@ -199,14 +200,14 @@
           <p data-i18n-block class="text-sm">Demo with fictional mail, edited from the existing macOS demo recordings. Account sign-in and some preparation happen off camera; this is not a live provider connection.</p>
           <details><summary data-i18n-block>Read the demo description</summary>
           <p data-i18n-block>The demo searches fictional mail in a prepared vault. Verify your own archive by opening old messages and attachments while disconnected, then keep a second copy on a different drive.</p></details></section>
-          <h2 data-i18n-block>Why “all emails” needs a folder checklist</h2>
+          <h2 data-i18n-block id="help-section-4">Why “all emails” needs a folder checklist</h2>
           <p data-i18n-block>A desktop connection can only archive what the provider exposes to it. Hidden Gmail labels, a second account, an online archive, or an administrator restriction can leave gaps. Compare the folder list in the provider’s web app with the app’s list, then sample the oldest and newest messages in each important folder. Gmail label overlap can also make raw counts misleading; the same message may appear under more than one label.</p>
           <p data-i18n-block>For account-specific instructions, read <a href="/guides/backup-gmail-to-eml.html">Gmail to EML</a>, <a href="/guides/export-outlook-to-eml.html">Outlook to EML</a> or <a href="/guides/export-icloud-mail.html">export iCloud Mail</a>. If you are moving from a Windows archive tool, start with <a href="/guides/mailstore-alternative-mac.html">MailStore alternatives for Mac</a>.</p>
           <p data-i18n-block><a href="/get-started.html">Download MailVault for free</a> to make your first local archive. Manual archiving is free; automated archiving, scheduled backups and Archive &amp; Delete require <a href="/pricing.html">Premium</a>.</p>
           <p data-i18n-block>More practical guides: <a href="/guides/backup-gmail-to-eml.html">How to Back Up Gmail to EML Files</a> · <a href="/guides/export-outlook-to-eml.html">How to Export Outlook Email to EML</a> · <a href="/guides/backup-email-linux.html">How to Back Up Email on Linux as EML</a> · <a href="/guides/linux-email-archive.html">A Local Email Archive for Linux: What to Check</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -234,5 +235,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

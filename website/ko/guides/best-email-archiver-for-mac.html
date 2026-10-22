@@ -38,7 +38,7 @@
   "description": "Mac용 최고의 메일 보관 도구는 메일에 따라 다릅니다. macOS 도구 일곱 가지를 형식, 검색, 원본, 가격, 오픈소스, Apple Silicon 지원으로 비교합니다.",
   "url": "https://mailvaultapp.com/ko/guides/best-email-archiver-for-mac.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">필요에 따라 고른 Mac용 최고의 메일 보관 도구</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">필요에 따라 고른 Mac용 최고의 메일 보관 도구</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">평가 기준</a></li><li><a href="#help-section-2">일곱 가지 도구 나란히 보기</a></li><li><a href="#help-section-3">용도별 추천</a></li><li><a href="#help-section-4">자주 묻는 질문</a></li><li><a href="#help-section-5">다음에 할 일</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8분 분량</span>
             <span aria-hidden="true">&middot;</span>
@@ -228,7 +229,7 @@
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-2">빠른 선택</p>
             <ul class="list-disc pl-6 space-y-2">
               <li><strong>여러 메일 앱을 아우르는 전용 보관본:</strong> Mail Archiver X.</li>
-              <li><strong>무료, 제공업체 계정을 일반 .eml 파일로 간직:</strong> MailVault.</li>
+              <li><strong>무료, 제공업체 계정을 일반 .eml 파일로 간직:</strong> MailVault. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</li>
               <li><strong>이미 Thunderbird를 쓴다면 무료 오픈소스:</strong> ImportExportTools NG를 붙인 Thunderbird.</li>
               <li><strong>Apple Mail이나 Gmail의 데이터베이스:</strong> MailSteward.</li>
               <li><strong>메일과 문서를 한 라이브러리에:</strong> EagleFiler.</li>
@@ -237,7 +238,7 @@
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">평가 기준</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-1">평가 기준</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>저장 형식.</strong> 일반 .eml이나 mbox 파일은 몇 년이 지나도 다른 앱에서 열립니다. 전용 데이터베이스는 검색이 더 빠를 수 있지만 한 앱에 묶이므로, 내보내기가 되는지 확인합니다.</li>
@@ -249,7 +250,7 @@
             <li><strong>Apple Silicon.</strong> 네이티브인지, Rosetta 2에 기대는지.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">일곱 가지 도구 나란히 보기</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-2">일곱 가지 도구 나란히 보기</h2>
 
           <p class="text-sm text-slate-500 dark:text-slate-400">마지막 확인: 2026년 10월. 가격은 각 업체 사이트 기준 세전 미국 달러입니다. 구입하기 전에 각 사이트에서 현재 가격을 확인하십시오.</p>
 
@@ -326,14 +327,14 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">용도별 추천</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-3">용도별 추천</h2>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Mail Archiver X: 여러 메일 앱을 아우르는 최고의 전용 보관 도구</h3>
           <p>
             Moth Software의 Mail Archiver X(버전 8.2.4, 2026년 9월)는 Apple Mail, Outlook, Thunderbird, Postbox, Gmail과 iCloud를 포함한 IMAP 계정, mbox 파일에서 메일을 가져와 하나의 보관본으로 모으며, 보낸 사람, 제목, 본문, 첨부 파일을 대상으로 단순 검색과 필터 검색을 제공합니다. mbox와 PDF로 내보낼 수 있어, 앱 없이 읽을 수 있는 기록이 필요할 때 편리합니다. 목록에서 가장 완전한 순수 보관 도구이며, 메일이 여러 데스크톱 앱에 흩어져 있다면 이것을 고르십시오.
           </p>
           <p>
-            <strong>주의할 점:</strong> 보관본이 앱 자체의 내부 데이터베이스에 있으므로, 언젠가 떠날 때를 대비해 내보내기를 계획하십시오. 표준 라이선스는 $49.95입니다. Pro 서버판은 연간 구독이며, 유효한 Pro 라이선스가 없으면 메일을 보여 줄 수는 있지만 보관하거나 내보낼 수는 없습니다. Easy판은 보관본당 메일 10,000통으로 제한되고 예약 기능이 없습니다.
+            <strong>주의할 점:</strong> 데이터베이스 방식에서는 앱 내부 데이터베이스에 메일을 저장하므로 해당 형식을 사용한다면 내보내기를 계획하세요. Mail Archiver X는 MBOX나 PDF로 직접 저장할 수도 있습니다. 표준 라이선스는 $49.95입니다. Pro 서버 에디션은 연간 구독이며 유효한 Pro 라이선스가 없어도 메일을 볼 수는 있지만 보관하거나 내보낼 수는 없습니다. Easy 에디션은 보관본당 10,000통으로 제한되며 예약 기능이 없습니다.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. MailVault: 제공업체 계정을 일반 파일로 간직하는 최고의 무료 방법</h3>
@@ -342,10 +343,10 @@
           </p>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/search-results-720.webp 720w, /screenshots/ko/search-results-1440.webp 1440w, /screenshots/ko/search-results-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/ko/search-results-light-1440.webp" srcset="/screenshots/ko/search-results-light-720.webp 720w, /screenshots/ko/search-results-light-1440.webp 1440w, /screenshots/ko/search-results-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Rack and Rind에 대한 MailVault 검색 결과. 검색창 아래 줄에 INBOX에서 결과 7개를 찾았으며 로컬 7개, 서버 0개라고 적혀 있고, 목록에 일치하는 메시지 일곱 개가 보입니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/search-results-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/search-results-720.webp 720w, /screenshots/ko/search-results-1440.webp 1440w, /screenshots/ko/search-results-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ko/search-results-light-1440.webp" srcset="/screenshots/ko/search-results-light-720.webp 720w, /screenshots/ko/search-results-light-1440.webp 1440w, /screenshots/ko/search-results-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Rack and Rind에 대한 MailVault 검색 결과. 검색창 아래 줄에 INBOX에서 결과 7개를 찾았으며 로컬 7개, 서버 0개라고 적혀 있고, 목록에 일치하는 메시지 일곱 개가 보입니다. · MailVault version 2.16.0 ko" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">검색은 Mac에 있는 메일 사본에서 실행됩니다. 여기서는 결과 7개가 모두 로컬 파일에서 나왔고 서버에서는 하나도 나오지 않았습니다.</figcaption>
           </figure>
 
@@ -354,10 +355,10 @@
           </p>
 
           <figure class="my-6">
-            <picture>
-              <source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/selection-dialog-archive-720.webp 720w, /screenshots/ko/selection-dialog-archive-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
-              <img src="/screenshots/ko/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ko/selection-dialog-archive-light-720.webp 720w, /screenshots/ko/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault의 63개 메일의 작업 선택 대화 상자. 서버에 63개, 여기 보관됨 32개라고 표시되며, 보관, 보관 취소, 서버에서 삭제, 보관 후 삭제, 모든 곳에서 삭제를 제공하고 보관이 선택되어 있습니다. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
-            </picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/selection-dialog-archive-light-2880.webp"><picture>
+              <source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/selection-dialog-archive-720.webp 720w, /screenshots/ko/selection-dialog-archive-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px">
+              <img src="/screenshots/ko/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ko/selection-dialog-archive-light-720.webp 720w, /screenshots/ko/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ko/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault의 63개 메일의 작업 선택 대화 상자. 서버에 63개, 여기 보관됨 32개라고 표시되며, 보관, 보관 취소, 서버에서 삭제, 보관 후 삭제, 모든 곳에서 삭제를 제공하고 보관이 선택되어 있습니다. · MailVault version 2.16.0 ko" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko">
+            </picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">보관은 선택한 메일을 볼트에 복사하고 서버 사본은 그대로 두며, 무료입니다. 서버에서 지우기 전에 사본을 하나씩 확인하는 보관 후 삭제는 Premium입니다.</figcaption>
           </figure>
 
@@ -399,7 +400,7 @@
             목록에 없는 것: 인기 있는 무료 보관 도구 MailStore Home은 Windows 전용입니다. MailStore가 지원 시스템으로 밝힌 것은 Windows 10과 Windows 11입니다. MailStore에서 옮겨 오는 중이라면 <a href="/ko/guides/mailstore-alternatives-compared.html">MailStore 대안 비교</a>를 보십시오.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">자주 묻는 질문</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-4">자주 묻는 질문</h2>
 
           <div class="pt-2">
             <h3 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Mac용 최고의 무료 메일 보관 도구는 무엇입니까?</h3>
@@ -421,7 +422,7 @@
             <p>데이터베이스는 한 앱 안에서 검색을 빠르게 해 줄 수 있습니다. 일반 .eml이나 mbox 파일은 어느 한 도구가 사라진 뒤에도 오랫동안 다른 앱에서 열 수 있습니다. 보관 도구가 데이터베이스를 쓴다면 이따금 mbox나 eml로 사본을 내보내십시오.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">다음에 할 일</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100" id="help-section-5">다음에 할 일</h2>
 
           <p>
             메일이 있는 곳에 맞는 표의 행을 골라, 그 도구를 계정 하나에 시험해 보고, 믿기 전에 보관된 메시지 몇 개를 그 도구 밖에서 열어 보십시오. 무엇을 시험할지는 <a href="/ko/guides/imap-backup-tool-checklist.html">IMAP 백업 도구 체크리스트</a>에 있습니다. MailVault가 맞는다면, 무료로 내려받을 수 있고 만들어야 할 계정도 없습니다.
@@ -443,7 +444,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -467,5 +468,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

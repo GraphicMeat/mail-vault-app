@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-emails-mac.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-emails-mac.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,22 +172,22 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Guías de copias de correo · <time datetime="2026-10-15">15 de octubre de 2026</time></p>
-          <h1>Cómo descargar todos tus correos en Mac</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>Cómo descargar todos tus correos en Mac</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">Opción 1: exporta buzones desde Apple Mail</a></li><li><a href="#help-section-2">Opción 2: crea un archivo EML con búsquedas en MailVault</a></li><li><a href="#help-section-3">Verifica el archivo antes de confiar en él</a></li><li><a href="#search-local-archive-video">Demostración breve: busca en tu archivo local</a></li><li><a href="#help-section-4">Por qué «todos los correos» requiere una lista de carpetas</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>Para descargar todos tus correos en un Mac, elige entre una exportación de buzones de Apple Mail y un archivo local dedicado. Lo importante es que esté completo: la bandeja de entrada rara vez es toda la cuenta, y un buzón sincronizado puede seguir reflejando las eliminaciones del servidor.</p>
-          <h2 data-i18n-block>Opción 1: exporta buzones desde Apple Mail</h2>
+          <h2 data-i18n-block id="help-section-1">Opción 1: exporta buzones desde Apple Mail</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Conecta tu cuenta en Apple Mail y deja que termine de obtener los mensajes. Revisa la bandeja de entrada, los enviados y todas las carpetas que necesites, incluido el correo antiguo.</li>
           <li data-i18n-block>Selecciona los buzones que quieras en la barra lateral y elige <strong>Buzón → Exportar buzón</strong>.</li>
           <li data-i18n-block>Elige una carpeta de tu Mac o de una unidad externa. Apple Mail exporta los datos de los buzones en formato MBOX.</li>
           <li data-i18n-block>Guarda otra copia y prueba una importación con <strong>Archivo → Importar buzones</strong>. Abre mensajes y adjuntos representativos de la copia importada.</li></ol>
           <p data-i18n-block>Estos nombres de menús y el formato MBOX se documentan en la <a href="https://support.apple.com/guide/mail/import-or-export-mailboxes-mlhlp1030/mac">guía de Apple para importar y exportar buzones</a>. Un buzón exportado es una copia independiente: dejar la cuenta conectada en Mail no equivale a esa copia de seguridad.</p>
-          <h2 data-i18n-block>Opción 2: crea un archivo EML con búsquedas en MailVault</h2>
+          <h2 data-i18n-block id="help-section-2">Opción 2: crea un archivo EML con búsquedas en MailVault</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Descarga la versión para macOS desde <a href="/es/get-started.html">Primeros pasos</a> y añade tu cuenta de correo. Usa el inicio de sesión de Google o Microsoft cuando esté disponible.</li>
           <li data-i18n-block>Haz una lista de carpetas: bandeja de entrada, enviados, carpetas personalizadas y cualquier etiqueta con correo fuera de la bandeja de entrada. Si hace falta, permite que la conexión vea las carpetas archivadas u ocultas del proveedor.</li>
           <li data-i18n-block>Usa las operaciones masivas para seleccionar las carpetas y fechas necesarias y elige <strong>Archivar</strong>. Espera a que termine e investiga cualquier error o carpeta omitida.</li>
           <li data-i18n-block>Cambia el origen a <strong>Bóveda</strong> para revisar las copias locales independientes. Los mensajes de la bóveda usan archivos .eml; los que solo se ven en Servidor aún no forman parte del archivo.</li></ol>
-          <h2 data-i18n-block>Verifica el archivo antes de confiar en él</h2>
+          <h2 data-i18n-block id="help-section-3">Verifica el archivo antes de confiar en él</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Cambia el origen de los mensajes a <strong>Bóveda</strong>, en lugar de Servidor o Todo. Busca un mensaje antiguo que reconozcas.</li>
           <li data-i18n-block>Desconecta la red y abre algunos mensajes archivados de distintas carpetas y años. Abre también sus adjuntos. Un asunto en una lista no demuestra que el cuerpo del mensaje esté guardado.</li>
@@ -199,14 +200,14 @@
           <p data-i18n-block class="text-sm">Demostración con correo ficticio, editada a partir de las grabaciones de demostración de macOS existentes. El inicio de sesión y parte de la preparación suceden fuera de cámara; no es una conexión en directo con un proveedor.</p>
           <details><summary data-i18n-block>Lee la descripción de la demostración</summary>
           <p data-i18n-block>La demostración busca correo ficticio en una bóveda preparada. Verifica tu propio archivo abriendo mensajes antiguos y adjuntos sin conexión, y guarda después otra copia en una unidad distinta.</p></details></section>
-          <h2 data-i18n-block>Por qué «todos los correos» requiere una lista de carpetas</h2>
+          <h2 data-i18n-block id="help-section-4">Por qué «todos los correos» requiere una lista de carpetas</h2>
           <p data-i18n-block>Una conexión de escritorio solo puede archivar lo que el proveedor le muestra. Las etiquetas ocultas de Gmail, una segunda cuenta, un archivo en línea o una restricción del administrador pueden dejar huecos. Compara la lista de carpetas de la aplicación web del proveedor con la de la aplicación y revisa una muestra de los mensajes más antiguos y recientes de cada carpeta importante. Las etiquetas superpuestas de Gmail también pueden hacer engañosos los recuentos brutos; un mismo mensaje puede aparecer con más de una etiqueta.</p>
           <p data-i18n-block>Para instrucciones específicas de cada cuenta, lee <a href="/es/guides/backup-gmail-to-eml.html">Gmail a EML</a>, <a href="/es/guides/export-outlook-to-eml.html">Outlook a EML</a> o <a href="/es/guides/export-icloud-mail.html">exportar iCloud Mail</a>. Si vienes de una herramienta de archivado para Windows, empieza por las <a href="/es/guides/mailstore-alternative-mac.html">alternativas a MailStore para Mac</a>.</p>
           <p data-i18n-block><a href="/es/get-started.html">Descarga MailVault gratis</a> para crear tu primer archivo local. El archivado manual es gratuito; el archivado automático, las copias programadas y Archivar y eliminar requieren <a href="/es/pricing.html">Premium</a>.</p>
           <p data-i18n-block>Más guías prácticas: <a href="/es/guides/backup-gmail-to-eml.html">Cómo guardar Gmail en archivos EML</a> · <a href="/es/guides/export-outlook-to-eml.html">Cómo exportar correos de Outlook a EML</a> · <a href="/es/guides/backup-email-linux.html">Cómo hacer una copia del correo en Linux como EML</a> · <a href="/es/guides/linux-email-archive.html">Un archivo local de correo para Linux: qué comprobar</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Verlo en MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/es/manual-backup.webp"><img src="/assets/help-media/es/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Crear una copia de todas las cuentas y comprobar que termina</figcaption><video controls playsinline preload="none" poster="/assets/help-media/es/manual-backup.jpg" aria-label="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/es/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/es/manual-backup.vtt" srclang="es" label="Español" default></video></figure><details class="mv-help-contents"><summary>Transcripción del vídeo</summary><p>Iniciar la copia de seguridad de todas las cuentas en los ajustes de copia de seguridad. Seguir el progreso hasta que termine la copia.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -234,5 +235,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@
   "description": "Un vault della posta può essere un archivio locale tuo, una casella cifrata ospitata o un archivio di conformità. Le differenze, e come crearne uno gratis.",
   "url": "https://mailvaultapp.com/it/guides/what-is-an-email-vault.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -151,6 +151,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Vai al contenuto</a>
@@ -198,7 +199,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Argomenti di aiuto</summary><nav aria-label="Argomenti del centro assistenza"><a href="/it/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Aiuto di MailVault</a><a href="/it/faq/getting-started.html">Per iniziare</a><a href="/it/faq/storage-and-vault.html">Archiviazione e il tuo vault</a><a href="/it/faq/providers.html">Provider di posta</a><a href="/it/faq/backup-and-restore.html">Backup e ripristino</a><a href="/it/faq/explorer-and-insights.html">Explorer e Statistiche</a><a href="/it/faq/scheduled-send.html">Invio programmato</a><a href="/it/faq/premium.html">Gratuito e Premium</a><a href="/it/faq/troubleshooting.html">Risoluzione dei problemi</a><a href="/it/docs.html#guides" class="mv-help-divider">Guide pratiche</a><a href="/it/docs.html#articles">Articoli</a><a href="/it/features.html">Riferimento delle funzioni</a><a href="/changelog.html">Note di rilascio</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -208,7 +209,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Che cos'è un vault della posta? Tre significati, e come costruire il tuo</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Che cos'è un vault della posta? Tre significati, e come costruire il tuo</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>In questa pagina</summary><ul><li><a href="#help-section-1">Tre cose che si intendono con "vault della posta"</a></li><li><a href="#help-section-2">Quale di questi è MailVault</a></li><li><a href="#help-section-3">Un vault non è un client di posta che rispecchia il server</a></li><li><a href="#help-section-4">Come costruire il tuo vault della posta in 10 minuti</a></li><li><a href="#help-section-5">Custodia: cosa succede alla tua posta se il provider chiude l'account</a></li><li><a href="#help-section-6">Domande frequenti</a></li><li><a href="#help-section-7">Cosa fare adesso</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 min di lettura</span>
           </div>
@@ -226,11 +227,11 @@
               <li><strong>Vault della posta locale:</strong> una copia della tua posta sul tuo disco che resta anche quando il server la elimina. Ce l'hai tu.</li>
               <li><strong>Casella sicura ospitata:</strong> posta conservata cifrata sui server di un provider. Privata rispetto agli altri, ma pur sempre un account gestito da qualcun altro.</li>
               <li><strong>Archivio di conformità:</strong> una copia di ogni messaggio gestita da un'azienda, conservata per un certo numero di anni per audit e richieste legali.</li>
-              <li>MailVault è il primo tipo: un'app desktop gratuita per macOS, Windows e Linux che conserva la tua posta come semplici file <code>.eml</code> sul tuo computer.</li>
+              <li>MailVault è il primo tipo: un'app desktop gratuita per macOS, Windows e Linux che conserva la tua posta come semplici file <code>.eml</code> sul tuo computer. Queste istruzioni sulla struttura dei file si riferiscono al formato predefinito Maildir. Impostazioni → Archiviazione offre anche l’archiviazione JMAP, che conserva i byte originali dei messaggi con record JSON e deduplica i messaggi identici.</li>
             </ul>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Tre cose che si intendono con "vault della posta"</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">Tre cose che si intendono con "vault della posta"</h2>
 
           <p>
             Una ricerca di <em>email vault</em> o <em>mail vault</em> restituisce strumenti molto diversi, perché molti prodotti usano questa parola. Ecco ciascun significato in breve, senza riferimento a un prodotto in particolare.
@@ -290,7 +291,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Quale di questi è MailVault</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Quale di questi è MailVault</h2>
 
           <p>
             MailVault è il primo tipo. È un'app email desktop per macOS, Windows e Linux, e tiene una copia della tua posta in un vault sul tuo computer. Ogni messaggio è un semplice file <code>.eml</code> in cartelle in stile Maildir, quindi Apple Mail, Thunderbird o un editor di testo possono aprirlo senza MailVault. Accedi con il tuo provider email, mai con MailVault: Gmail e Microsoft 365 tramite le loro pagine di accesso, Outlook.com tramite Microsoft Graph e qualsiasi altro provider tramite IMAP. Il tuo computer parla direttamente con il tuo server di posta, e i server di MailVault non vedono mai i tuoi messaggi. Il codice sorgente è su GitHub.
@@ -301,11 +302,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/local-vault-720.webp 720w, /screenshots/it/local-vault-1440.webp 1440w, /screenshots/it/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/it/local-vault-light-1440.webp" srcset="/screenshots/it/local-vault-light-720.webp 720w, /screenshots/it/local-vault-light-1440.webp 1440w, /screenshots/it/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault con la scheda Cassaforte selezionata sotto Cartelle. L&#39;intestazione della posta in arrivo mostra un conteggio Nella tua cassaforte, e una legenda in fondo all&#39;elenco spiega le icone delle righe: Solo sul server, Nella tua cassaforte, Unica copia, Sul disco di backup. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/it/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/it/local-vault-720.webp 720w, /screenshots/it/local-vault-1440.webp 1440w, /screenshots/it/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/it/local-vault-light-1440.webp" srcset="/screenshots/it/local-vault-light-720.webp 720w, /screenshots/it/local-vault-light-1440.webp 1440w, /screenshots/it/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault con la scheda Cassaforte selezionata sotto Cartelle. L&#39;intestazione della posta in arrivo mostra un conteggio Nella tua cassaforte, e una legenda in fondo all&#39;elenco spiega le icone delle righe: Solo sul server, Nella tua cassaforte, Unica copia, Sul disco di backup. · MailVault version 2.16.0 it" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 it"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 it</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">La scheda Cassaforte mostra solo ciò che è salvato sul tuo computer. L'intestazione conta quanta parte della cartella è nel tuo vault, e l'icona di ogni riga dice dove si trova quel messaggio.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Un vault non è un client di posta che rispecchia il server</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">Un vault non è un client di posta che rispecchia il server</h2>
 
           <p>
             La maggior parte delle app di posta sono specchi. Mostrano ciò che c'è sul server e tengono una cache locale per velocità. Quando il server elimina un messaggio, lo specchio lo elimina anche lui alla sincronizzazione successiva. È giusto per tenere allineati telefono, portatile e webmail, e sbagliato per conservare la posta.
@@ -317,7 +318,7 @@
             Un dettaglio conta. MailVault tiene anche una cache di lavoro, e per impostazione predefinita (la modalità di download Tieni i recenti) rimuove dal computer le copie in cache più vecchie di qualche mese, mentre il server conserva la sua copia. La posta in cache non è il vault; la posta archiviata e quella salvata nei backup non vengono mai rimosse da nessuna modalità di download. Per questo i passaggi qui sotto finiscono con un backup o un'archiviazione esplicita.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Come costruire il tuo vault della posta in 10 minuti</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">Come costruire il tuo vault della posta in 10 minuti</h2>
 
           <p>
             I dieci minuti sono per la configurazione. Il download di una casella grande continua poi in background, e quanto ci vuole dipende dalle dimensioni della casella e dalla tua connessione. I sei passaggi qui sotto usano solo l'app gratuita.
@@ -333,7 +334,7 @@
           </ol>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/it/manual-backup.jpg" width="960" height="660" aria-label="Si preme Esegui ora il backup di tutti gli account e scorre una barra di avanzamento. La scheda del backup passa da 5 copie non sono ancora nella tua cassaforte a Ogni copia è nella tua cassaforte, ultimo backup adesso, 48 email. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/it/manual-backup.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="manual-backup"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/it/manual-backup.jpg" width="960" height="660" aria-label="Si preme Esegui ora il backup di tutti gli account e scorre una barra di avanzamento. La scheda del backup passa da 5 copie non sono ancora nella tua cassaforte a Ogni copia è nella tua cassaforte, ultimo backup adesso, 48 email. · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/it/manual-backup.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">Backup manuali</strong><span class="mv-clip-text">Premi Esegui ora il backup di tutti gli account e una barra di avanzamento scorre finché la scheda dice che ogni copia è nella tua cassaforte.</span></figcaption></figure>
           </div>
 
@@ -342,11 +343,11 @@
           </p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/it/selection-dialog-archive-720.webp 720w, /screenshots/it/selection-dialog-archive-1440.webp 1440w, /screenshots/it/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/it/selection-dialog-archive-light-1440.webp" srcset="/screenshots/it/selection-dialog-archive-light-720.webp 720w, /screenshots/it/selection-dialog-archive-light-1440.webp 1440w, /screenshots/it/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="La finestra Scegli l&#39;azione in MailVault per una selezione di email. Mostra quante sono sul server e quante sono archiviate qui, avvisa che rimuovere dall&#39;archivio elimina la copia nel vault, ed elenca Archivia, Rimuovi dall&#39;archivio, Elimina dal server, Archivia ed elimina ed Elimina ovunque, con Archivia selezionato. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/it/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/it/selection-dialog-archive-720.webp 720w, /screenshots/it/selection-dialog-archive-1440.webp 1440w, /screenshots/it/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/it/selection-dialog-archive-light-1440.webp" srcset="/screenshots/it/selection-dialog-archive-light-720.webp 720w, /screenshots/it/selection-dialog-archive-light-1440.webp 1440w, /screenshots/it/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="La finestra Scegli l&#39;azione in MailVault per una selezione di email. Mostra quante sono sul server e quante sono archiviate qui, avvisa che rimuovere dall&#39;archivio elimina la copia nel vault, ed elenca Archivia, Rimuovi dall&#39;archivio, Elimina dal server, Archivia ed elimina ed Elimina ovunque, con Archivia selezionato. · MailVault version 2.16.0 it" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 it"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 it</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Archiviare a mano la posta selezionata. Archivia copia i messaggi nel vault e lascia stare il server. La finestra conta ciò che è già archiviato prima che tu scelga qualcosa di più rischioso.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Custodia: cosa succede alla tua posta se il provider chiude l'account</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Custodia: cosa succede alla tua posta se il provider chiude l'account</h2>
 
           <p>
             La tua posta in arrivo vive su un'infrastruttura gestita da qualcun altro, con termini che può cambiare. Gli account vengono bloccati quando si perde un numero di telefono o un'app di autenticazione. I datori di lavoro chiudono le caselle il giorno in cui qualcuno se ne va. I provider eliminano gli account inattivi: Google, per esempio, dice che può eliminare un Account Google inattivo da due anni, insieme ai suoi contenuti (<a href="https://support.google.com/accounts/answer/12418290" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">le norme di Google sugli account inattivi</a>). Il nostro articolo sul perché <a href="/it/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">il tuo provider email non è un backup</a> esamina questi casi più nel dettaglio.
@@ -365,7 +366,7 @@
             Se sai che un account sta per chiudere, costruisci prima il vault e controllalo nella scheda Cassaforte prima di perdere l'accesso. Se sei su un Mac e stai ancora confrontando strumenti, <a href="/it/guides/email-archiving-for-mac.html" class="text-primary-500 hover:text-primary-600 underline">archiviazione della posta su Mac</a> tratta la scelta più in generale.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Domande frequenti</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">Domande frequenti</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Un vault della posta è la stessa cosa di un backup?</h3>
           <p>Quasi, ma non del tutto. Un backup è una copia da cui ripristini quando qualcosa si rompe. Un vault è una copia che usi anche: la leggi e ci cerchi ogni giorno, e conserva i messaggi dopo che il server li ha eliminati. MailVault può anche scrivere una seconda copia su un disco esterno, che è il backup del tuo vault.</p>
@@ -379,7 +380,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">Cosa succede al mio vault se smetto di pagare Premium?</h3>
           <p>Non viene eliminato nulla. Lettura, ricerca, archiviazione e backup manuali sono gratuiti, e un abbonamento Premium scaduto non rimuove mai la posta dal tuo computer. Perdi gli extra Premium, come i backup programmati e Archivia ed elimina.</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Cosa fare adesso</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">Cosa fare adesso</h2>
 
           <p>
             Il modo più rapido per giudicare un vault locale è costruirne uno con un solo account e guardare la scheda Cassaforte. La <a href="/it/features/local-vault.html" class="text-primary-500 hover:text-primary-600 underline">pagina della funzione vault locale</a> ha i dettagli sulla struttura dei file e sullo spostamento del vault su un altro disco, e la pagina dei <a href="/it/pricing.html" class="text-primary-500 hover:text-primary-600 underline">prezzi</a> elenca cosa aggiunge Premium. Una volta che la tua posta è nel vault, <a href="/it/blog/email-insights-who-fills-your-inbox.html" class="text-primary-500 hover:text-primary-600 underline">Statistiche di MailVault</a> può mostrarti chi la riempie.
@@ -397,7 +398,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Guarda in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/it/manual-backup.webp"><img src="/assets/help-media/it/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Eseguire il backup di tutti gli account e verificarne il completamento</figcaption><video controls playsinline preload="none" poster="/assets/help-media/it/manual-backup.jpg" aria-label="Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/it/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/it/manual-backup.vtt" srclang="it" label="Italiano" default></video></figure><details class="mv-help-contents"><summary>Trascrizione del video</summary><p>Avviare il backup di tutti gli account nelle impostazioni di backup. Seguire l’avanzamento fino al completamento del backup.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creazione di Graphic Meat</p><h2 id="studio-title">Conosci le persone dietro MailVault.</h2><p>Siamo Graphic Meat, uno studio indipendente che crea software utile dal 2013. MailVault è uno dei nostri prodotti. Vieni a conoscerci e scopri a cos'altro stiamo lavorando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conosci Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, lo studio dietro MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Altro da Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Trasforma le tue foto in un libro pronto per la stampa.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Uno spazio di lavoro locale per note e codice.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Sposta la tua email presso un nuovo provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -421,5 +422,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Schermata del prodotto"><button type="button">Chiudi schermata</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -155,6 +155,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -203,7 +204,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html" aria-current="page">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -216,25 +217,25 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">定时发送</h1>
+      <h1 class="text-4xl font-bold mb-2">定时发送</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">什么是定时发送？</a></li><li><a href="#help-section-2">可以按别人的时区定时发送吗？</a></li><li><a href="#help-section-3">MailVault 怎么知道收件人的时区？</a></li><li><a href="#help-section-4">如何修改、重新安排或取消定时邮件？</a></li><li><a href="#help-section-5">定时邮件要发出，MailVault 必须开着吗？</a></li><li><a href="#help-section-6">哪些免费，哪些需要 Premium？</a></li><li><a href="#help-section-7">订阅结束后，定时邮件会怎样？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">现在写好邮件，让 MailVault 在确切的日期和时间、按任意时区发送。定时属于 Premium 功能；最多 5 分钟的发送延迟免费。</p>
 
       <div class="space-y-4">
 
         <article id="what-is-scheduled-send" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">什么是定时发送？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">什么是定时发送？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>定时发送会先保留你写好的邮件，并在你选择的日期和时间、按你选择的时区发出。在写邮件窗口中，点击<strong>发送</strong>旁的箭头打开<strong>定时发送</strong>，选择日期和时间，确认下方的时区，然后点击<strong>安排</strong>。</p>
               <p>点击<strong>明天上午8点</strong>或<strong>周一上午8点</strong>，即可按所选时区一键填入时间。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/premium-scheduled-send-720.webp 720w, /screenshots/zh/premium-scheduled-send-1440.webp 1440w, /screenshots/zh/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/premium-scheduled-send-light-1440.webp" srcset="/screenshots/zh/premium-scheduled-send-light-720.webp 720w, /screenshots/zh/premium-scheduled-send-light-1440.webp 1440w, /screenshots/zh/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="打开了“定时发送”面板的 MailVault 新邮件：一封定在纽约时间上午 8:00 发送的回复，时区根据收件人最近的邮件推荐 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
-              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">一封定在纽约时间上午 8:00 发送的回复，时区根据收件人最近的邮件推荐。</figcaption>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/premium-scheduled-send-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/premium-scheduled-send-720.webp 720w, /screenshots/zh/premium-scheduled-send-1440.webp 1440w, /screenshots/zh/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/premium-scheduled-send-light-1440.webp" srcset="/screenshots/zh/premium-scheduled-send-light-720.webp 720w, /screenshots/zh/premium-scheduled-send-light-1440.webp 1440w, /screenshots/zh/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="打开了“定时发送”面板的 MailVault 新邮件：一封定在纽约时间上午 8:00 发送的回复，时区根据收件人最近的邮件推荐 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">一封定于纽约上午 8:00 发送的回复，时区根据收件人的上一封邮件建议。</figcaption>
             </figure>
         </article>
 
         <article id="schedule-time-zones" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">可以按别人的时区定时发送吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">可以按别人的时区定时发送吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>可以，任意时区都行。列表中每个时区都标有 UTC 偏移，例如 <strong>(UTC-04:00) New York</strong>，并可按城市或偏移搜索：输入 <strong>+2</strong> 即可看到比 UTC 快两小时的时区。城市名称以英文显示，例如 Shanghai。显示的偏移是邮件发出时生效的偏移，因此在时钟调整之后发送的邮件也会标注正确。</p>
               <p>字段下方会显示你所在地和所选时区的当前时间，以及邮件按你本地时间何时发出。在安排之前，你可以用自己的时钟核对纽约时间上午 8:00 的发送。</p>
@@ -242,7 +243,7 @@
         </article>
 
         <article id="suggested-time-zone" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 怎么知道收件人的时区？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">MailVault 怎么知道收件人的时区？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>它会推荐一个，你也随时可以改选。每封邮件都带有发件人的 UTC 偏移，MailVault 会读取第一位收件人最近发给你的那封邮件中的偏移，并选出对应的时区。字段下方的提示会说明该推荐来自对方最近的邮件。同一个偏移可能对应多个地方，请核对城市。</p>
               <p>如果对方从未给你写过信，MailVault 会使用你上次给对方定时发送邮件时选的时区。两者都没有时，就从你自己的时区开始。你亲手选定的时区不会被替换。</p>
@@ -250,7 +251,7 @@
         </article>
 
         <article id="edit-scheduled-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何修改、重新安排或取消定时邮件？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">如何修改、重新安排或取消定时邮件？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>定时邮件会在侧边栏的<strong>定时发送</strong>文件夹中等待。点击一封即可在写邮件窗口中打开，修改收件人、正文或时间。在你保存更改之前，它会按原来的安排保持不变。</p>
               <p>文件夹中的每封邮件还有<strong>重新安排</strong>、<strong>取消</strong>和<strong>立即发送</strong>按钮。</p>
@@ -258,7 +259,7 @@
         </article>
 
         <article id="send-while-closed" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">定时邮件要发出，MailVault 必须开着吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">定时邮件要发出，MailVault 必须开着吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>只要它能在后台持续运行，就不必开着。定时邮件由 MailVault 的后台助手发送。在设置 &rsaquo; <strong>诊断</strong> &rsaquo; <strong>后台守护进程</strong>中开启<strong>在后台持续运行</strong>后，助手会在你退出后继续运行，并在登录时启动，因此即使应用已关闭，邮件也会准时发出。</p>
               <p>如果该设置已关闭，或你的 MailVault 无法在后台持续运行，定时邮件会在你下次打开 MailVault 时发出。“定时发送”文件夹会说明你属于哪种情况，并提供前往该设置的链接。</p>
@@ -266,7 +267,7 @@
         </article>
 
         <article id="scheduled-send-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">哪些免费，哪些需要 Premium？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">哪些免费，哪些需要 Premium？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>把邮件定在指定的日期和时间发送属于 Premium 功能。将发送延迟最多 5 分钟是免费的：单封邮件用<strong>发送</strong>旁的菜单，所有邮件用设置中的<strong>发送延迟</strong>。</p>
               <p>没有 Premium 时，定时发送面板会说明这一点，并提供<strong>升级</strong>。<a href="/zh/pricing.html#premium-scheduled-send" class="text-primary-500 hover:text-primary-600 underline">查看 Premium 包含的功能</a>。</p>
@@ -274,7 +275,7 @@
         </article>
 
         <article id="subscription-ends" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">订阅结束后，定时邮件会怎样？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">订阅结束后，定时邮件会怎样？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>它们仍会在你设定的时间发出。编辑和重新安排需要再次拥有 Premium，但你仍可以在“定时发送”文件夹中立即发送或取消它们。</p>
             </div>
@@ -299,7 +300,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -322,5 +323,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

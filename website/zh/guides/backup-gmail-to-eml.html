@@ -38,7 +38,7 @@
   "description": "将一封 Gmail 邮件保存为 EML，或在本地归档整个邮箱。比较 Gmail 下载、Google Takeout 和 MailVault，并验证备份。",
   "url": "https://mailvaultapp.com/zh/guides/backup-gmail-to-eml.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-gmail-to-eml.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-gmail-to-eml.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,22 +172,22 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">邮件备份指南 · <time datetime="2026-10-15">2026年10月15日</time></p>
-          <h1>如何将 Gmail 备份为 EML 文件</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>如何将 Gmail 备份为 EML 文件</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">无需安装软件，保存一封 Gmail 邮件</a></li><li><a href="#help-section-2">将整个 Gmail 邮箱备份为独立的 EML 文件</a></li><li><a href="#help-section-3">先验证归档，再依赖它</a></li><li><a href="#backup-archived-email-video">简短演示：为保险库另做一份备份</a></li><li><a href="#help-section-4">Gmail EML 备份与 Google Takeout 比较</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>要将 Gmail 备份为 <code>.eml</code>，单封邮件可使用<strong>下载邮件</strong>，整个邮箱则可使用将每封邮件保存为 EML 的桌面应用归档。Google Takeout 也是一种有用的备份方式，但它导出的邮件采用 MBOX，而不是独立的 EML 文件。开始前请先确定所需的格式。</p>
-          <h2 data-i18n-block>无需安装软件，保存一封 Gmail 邮件</h2>
+          <h2 data-i18n-block id="help-section-1">无需安装软件，保存一封 Gmail 邮件</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>在桌面浏览器中打开 Gmail，再打开所需邮件。</li>
           <li data-i18n-block>打开邮件的三点<strong>更多</strong>菜单，再选择<strong>下载邮件</strong>。</li>
           <li data-i18n-block>保留下载的 .eml 文件，并在桌面邮件应用中打开，检查内容。对其他需要的邮件重复这些操作。</li></ol>
           <p data-i18n-block>这些步骤遵循 <a href="https://support.google.com/mail/answer/9261412?hl=en">Google 的邮件下载说明</a>。保存收据或几封重要邮件时很方便，但对整个邮箱逐封重复操作会很慢。</p>
-          <h2 data-i18n-block>将整个 Gmail 邮箱备份为独立的 EML 文件</h2>
+          <h2 data-i18n-block id="help-section-2">将整个 Gmail 邮箱备份为独立的 EML 文件</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>安装 MailVault，通过 Google 登录添加 Google 账户。检查请求的访问权限。如果是工作或学校账户，管理员可能会限制第三方访问。</li>
           <li data-i18n-block>选择需要的文件夹或标签。除了收件箱，也要包含已发送邮件和旧文件夹。如果某个标签未显示，请检查 Gmail 的 IMAP 可见性设置。</li>
           <li data-i18n-block>打开批量操作流程，选择日期范围，然后选择<strong>归档</strong>。这会将邮件保存在本地，不删除服务器副本。先从较小范围开始，便于检查结果。</li>
           <li data-i18n-block>归档操作完成前，请勿合上电脑或开始清理。由于服务商的下载限制，大型账户可能需要分多次处理。</li>
-          <li data-i18n-block>打开 MailVault 的邮件存储设置，找到保险库位置。归档邮件以 .eml 文件保存在 Maildir 结构中；不要重命名或移动正在使用的保险库内的文件。</li></ol>
-          <h2 data-i18n-block>先验证归档，再依赖它</h2>
+          <li data-i18n-block>打开 MailVault 的邮件存储设置，找到保险库位置。归档邮件以 .eml 文件保存在 Maildir 结构中；不要重命名或移动正在使用的保险库内的文件。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</li></ol>
+          <h2 data-i18n-block id="help-section-3">先验证归档，再依赖它</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>将邮件来源切换为<strong>保险库</strong>，而不是服务器或全部。搜索一封您记得的旧邮件。</li>
           <li data-i18n-block>断开网络，打开几封来自不同文件夹、不同年份的归档邮件，也打开它们的附件。列表中有邮件主题，并不能证明邮件正文已保存。</li>
@@ -199,14 +200,14 @@
           <p data-i18n-block class="text-sm">本演示使用虚构邮件，由现有 macOS 演示录屏剪辑而成。账户登录和部分准备工作在画面外完成，并未实时连接邮件服务商。</p>
           <details><summary data-i18n-block>阅读演示说明</summary>
           <p data-i18n-block>邮件归档完成后，选择备份位置并运行备份。录屏使用虚构邮件和预先准备好的目标位置。第二份副本可以防范电脑丢失；只存在于服务器上的邮件必须先归档。</p></details></section>
-          <h2 data-i18n-block>Gmail EML 备份与 Google Takeout 比较</h2>
+          <h2 data-i18n-block id="help-section-4">Gmail EML 备份与 Google Takeout 比较</h2>
           <p data-i18n-block>如果需要独立的邮件文件和可搜索、可日常使用的归档，请选择 EML。如果需要由 Google 准备的账户导出文件，请选择 <a href="https://support.google.com/accounts/answer/3024190?hl=en">Google Takeout</a>。Takeout 邮件采用 MBOX；从 Takeout 下载 ZIP 并不会将它转换为 EML。如果您已有导出文件，MailVault 也支持在备份与恢复中导入 MBOX。</p>
           <p data-i18n-block>下载邮件或将邮件移入 Gmail 的归档都不会释放存储空间。验证两份本地副本后，请阅读<a href="/zh/guides/gmail-storage-full.html">如何释放 Gmail 存储空间而不丢失邮件</a>。要进一步比较格式，请参阅<a href="/zh/guides/download-all-gmail-emails.html">下载所有 Gmail 邮件</a>。</p>
           <p data-i18n-block><a href="/zh/get-started.html">免费下载 MailVault</a>，创建您的第一份本地归档。手动归档免费；自动归档、定时备份和归档并删除需要 <a href="/zh/pricing.html">Premium</a>。</p>
           <p data-i18n-block>更多实用指南：<a href="/zh/guides/export-outlook-to-eml.html">如何将 Outlook 邮件导出为 EML</a> · <a href="/zh/guides/download-all-emails-mac.html">如何在 Mac 上下载所有邮件</a> · <a href="/zh/guides/backup-email-linux.html">如何在 Linux 上将邮件备份为 EML</a> · <a href="/zh/guides/linux-email-archive.html">选择 Linux 本地邮件归档工具：需要检查什么</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -234,5 +235,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

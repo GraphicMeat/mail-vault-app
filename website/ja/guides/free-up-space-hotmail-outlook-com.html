@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">古いメールを失わずに Hotmail と Outlook.com の空き容量を増やす方法</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">古いメールを失わずに Hotmail と Outlook.com の空き容量を増やす方法</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">始める前に：計画を左右する 2 つの事実</a></li><li><a href="#help-section-2">ステップ 1：どのフォルダが容量を使っているかを見る</a></li><li><a href="#help-section-3">ステップ 2：削除済みアイテムを空にする</a></li><li><a href="#help-section-4">ステップ 3：最も大きなメールを見つける</a></li><li><a href="#help-section-5">ステップ 4：古いメールのローカルのコピーを残す</a></li><li><a href="#help-section-6">ステップ 5：古いメールを Outlook.com から削除する</a></li><li><a href="#help-section-7">ステップ 6：削除済みアイテムをもう一度空にして待つ</a></li><li><a href="#help-section-8">各ステップで削除されるもの</a></li><li><a href="#help-section-9">削除してはいけないもの</a></li><li><a href="#help-section-10">よくある質問</a></li><li><a href="#help-section-11">次にすること</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8分で読めます</span>
             <span aria-hidden="true">&middot;</span>
@@ -235,14 +236,14 @@
             </ol>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">始める前に：計画を左右する 2 つの事実</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">始める前に：計画を左右する 2 つの事実</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>上限は 2 つあります。</strong>無料のアカウントには、メール用の 15 GB と、Microsoft のクラウドストレージ 5 GB があります。Microsoft によると、クラウドストレージは OneDrive と Outlook.com の添付ファイルで共有されます。どちらか一方でもいっぱいになると、メールを送受信できません。</li>
             <li><strong>削除することと容量を空けることは同じではありません。</strong>削除したメールは削除済みアイテムに移り、そのフォルダを空にするか、30 日後に削除されるまでは容量に数えられます。</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 1：どのフォルダが容量を使っているかを見る</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">ステップ 1：どのフォルダが容量を使っているかを見る</h2>
 
           <p>
             Outlook.com にサインインします。<strong>設定</strong>、<strong>アカウント</strong>、<strong>ストレージ</strong>の順に選びます。このページには、各フォルダが使っている容量が表示されます。大きい 3 つのフォルダを書き留めてください。最後にもう一度確認します。
@@ -252,7 +253,7 @@
             同じページで、フォルダ内のすべてのアイテム、または 3、6、12 か月より古いアイテムだけを完全に削除できます。受信トレイ、送信済みアイテム、アーカイブにはまだ使わないでください。後からそのメールを取り戻すことはできません。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 2：削除済みアイテムを空にする</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">ステップ 2：削除済みアイテムを空にする</h2>
 
           <p>
             <strong>削除済みアイテム</strong>のフォルダを開き、メールを選んで削除します。先にフォルダの中に目を通してください。誤って削除したメールが入っていることがあります。
@@ -263,7 +264,7 @@
             <li><strong>迷惑メール</strong>は自動的に空になります。Outlook.com はそこにあるアイテムを 10 日後に削除するので、たいして溜まりません。</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 3：最も大きなメールを見つける</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">ステップ 3：最も大きなメールを見つける</h2>
 
           <p>
             大きなフォルダを開きます。メッセージ一覧の上部で<strong>フィルター</strong> &gt; <strong>並べ替え</strong> &gt; <strong>サイズ</strong>を選びます。最も小さいメールが上にある場合は、もう一度選んでください。大きな添付ファイル付きの数通のメールが、何千通もの短いメールより多くの容量を使っていることはよくあります。
@@ -281,7 +282,7 @@
             Microsoft は、添付ファイルの下に表示される <strong>OneDrive に保存</strong>もすすめています。これには注意してください。OneDrive は添付ファイルと同じ 5 GB のクラウドストレージを使います。問題がクラウドストレージなら、そこにファイルを移しても解決しません。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 4：古いメールのローカルのコピーを残す</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">ステップ 4：古いメールのローカルのコピーを残す</h2>
 
           <p>
             ステップ 1〜3 は、ものを捨てることで容量を空けます。また必要になるかもしれない何年分ものメール（領収書、契約書、手紙、家族からの写真）は、先にコンピュータにコピーを作ってください。そうすれば、失わずにオンラインで削除できます。
@@ -298,7 +299,7 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="選択したメールに対する MailVault の「操作を選択」ダイアログで、アーカイブが選択されています。アーカイブには「保管庫にコピーします。サーバーにも残ります。」とあります。その下に、アーカイブから戻す、サーバーから削除、アーカイブして削除、すべてから削除が並んでいます。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="選択したメールに対する MailVault の「操作を選択」ダイアログで、アーカイブが選択されています。アーカイブには「保管庫にコピーします。サーバーにも残ります。」とあります。その下に、アーカイブから戻す、サーバーから削除、アーカイブして削除、すべてから削除が並んでいます。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">アーカイブは安全な最初のステップです。コピーを作り、サーバー上では何も変えません。ダイアログの上部の注記に、選んだメールのうち何件がすでに保管庫にあるかが表示されます。</figcaption>
           </figure>
 
@@ -306,7 +307,7 @@
             次にコピーを確認します。サイドバーでフォルダ一覧を<strong>保管庫</strong>に切り替えます。最も古いメールをいくつか開き、添付ファイルを 1 つか 2 つ開き、覚えているものを検索します。各メールは標準的な <code>.eml</code> ファイルとしてコンピュータに保存されているので、ほかのメールアプリでも開けます。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 5：古いメールを Outlook.com から削除する</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">ステップ 5：古いメールを Outlook.com から削除する</h2>
 
           <p>コピーに問題がないと確信できたら、サーバーからメールを削除する方法は 3 つあります。</p>
 
@@ -317,22 +318,22 @@
           </ul>
 
           <div class="my-8">
-            <figure class="mv-clip" data-clip="archive-delete"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/ja/archive-delete.jpg" width="960" height="660" aria-label="MailVault が「アーカイブしてからサーバーから削除しますか？」と尋ね、「アーカイブして削除する」をクリックすると、進行状況が 420 件中 420 件に達し、保管庫ビューには 2022 年の 420 件のアーカイブ済みメッセージが引き続き表示されています。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/archive-delete.mp4" type="video/mp4"></video></div>
+            <figure class="mv-clip" data-clip="archive-delete"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/ja/archive-delete.jpg" width="960" height="660" aria-label="MailVault が「アーカイブしてからサーバーから削除しますか？」と尋ね、「アーカイブして削除する」をクリックすると、進行状況が 420 件中 420 件に達し、保管庫ビューには 2022 年の 420 件のアーカイブ済みメッセージが引き続き表示されています。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/archive-delete.mp4" type="video/mp4"></video></div>
             <figcaption><strong class="mv-clip-title">アーカイブして削除 (Premium)</strong><span class="mv-clip-text">「アーカイブして削除する」を選ぶと、2022 年の 420 件のメッセージがアーカイブされてから、サーバーから削除されます。保管庫ビューには 420 件がそのまま残っています。</span></figcaption></figure>
           </div>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/archive-success-720.webp 720w, /screenshots/ja/archive-success-1440.webp 1440w, /screenshots/ja/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/archive-success-light-1440.webp" srcset="/screenshots/ja/archive-success-light-720.webp 720w, /screenshots/ja/archive-success-light-1440.webp 1440w, /screenshots/ja/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="アーカイブのジョブの後の MailVault の受信トレイ。右下の隅のカードには「操作が完了しました」とあります。ヘッダーにはフォルダのメールのうち何件が保管庫にあるかが表示され、一覧の下の凡例が「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」を説明しています。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/archive-success-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/archive-success-720.webp 720w, /screenshots/ja/archive-success-1440.webp 1440w, /screenshots/ja/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/ja/archive-success-light-1440.webp" srcset="/screenshots/ja/archive-success-light-720.webp 720w, /screenshots/ja/archive-success-light-1440.webp 1440w, /screenshots/ja/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="アーカイブのジョブの後の MailVault の受信トレイ。右下の隅のカードには「操作が完了しました」とあります。ヘッダーにはフォルダのメールのうち何件が保管庫にあるかが表示され、一覧の下の凡例が「サーバーのみ」「保管庫にあります」「唯一のコピー」「バックアップドライブ上」を説明しています。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">ジョブが終わると、MailVault に「操作が完了しました」と表示されます。一覧の下の凡例で、各メールがどこにあるか（サーバーのみ、保管庫、または唯一のコピーとして保管庫）がわかります。カードの下の進行バーは別のジョブのものです。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">ステップ 6：削除済みアイテムをもう一度空にして待つ</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">ステップ 6：削除済みアイテムをもう一度空にして待つ</h2>
 
           <p>
             Outlook.com やほかのアプリで削除したメールは、まず削除済みアイテムに入ることがあります。Outlook.com で削除済みアイテムを開き、もう一度空にします。それから<strong>設定</strong> &gt; <strong>アカウント</strong> &gt; <strong>ストレージ</strong>に戻り、書き留めた数字と比べます。Microsoft によると、変更が反映されるまで最大 24 時間かかることがあるので、数字がまだ変わらないからといって、さらに削除しないでください。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">各ステップで削除されるもの</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">各ステップで削除されるもの</h2>
 
           <div class="scroll-x overflow-x-auto">
             <table class="w-full text-left text-sm border-collapse">
@@ -368,7 +369,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">削除してはいけないもの</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-9">削除してはいけないもの</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>コピーが 1 つしかないもの。</strong>領収書、請求書、税金の書類、契約書、保証書、医療や法律に関する書面。先にアーカイブしてください。</li>
@@ -382,7 +383,7 @@
             削除済みアイテムはバックアップではありません。Microsoft はそこにあるアイテムを 30 日後に削除します。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-10">よくある質問</h2>
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">メールを削除したのに Hotmail がいっぱいのままなのはなぜですか？</h3>
@@ -404,7 +405,7 @@
             <p>たいして空きません。Outlook.com は迷惑メールのアイテムを 10 日後に自動で削除します。どのフォルダが本当に大きいかは、設定のストレージのページで確認してください。</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">次にすること</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-11">次にすること</h2>
 
           <p>
             今日のうちにステップ 1〜3 を済ませて、上限を下回るようにします。それから古いメールをコンピュータにコピーし、1 年分ずつまとめてオンラインで削除します。Mac でそのコピーを作るほかの方法を比べるには、<a href="/ja/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">Outlook.com のメールを Mac にバックアップする方法</a>を読んでください。<a href="/ja/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">古いメールを失わずにメールの容量を空ける方法</a>で説明しているとおり、同じ方法は Gmail やほかのプロバイダーでも使えます。代わりに Microsoft 365 を検討しているなら、<a href="/ja/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">ローカルでのアーカイブとストレージの追加購入の比較</a>を参照してください。
@@ -426,7 +427,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -450,5 +451,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -13,6 +13,7 @@
     "update:demo-preview": "node scripts/update-demo-preview.mjs",
     "build:website-css": "tailwindcss -c website/tailwind.config.js -i website/src/tailwind.css -o website/assets/tailwind.css --minify",
     "build:search-index": "node scripts/build-search-index.mjs",
+    "build:help-center": "node scripts/build-help-center.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

@@ -85,6 +85,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=3">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -132,7 +133,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -143,7 +144,7 @@
       <article>
         <header class="mb-8">
           <time datetime="2026-08-25" class="text-sm text-primary-500 font-medium">2026年8月25日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">GDPRの制裁金が総額61.1億ユーロに — 「すべてを永久に保管」はコンプライアンス上のリスクか</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">GDPRの制裁金が総額61.1億ユーロに — 「すべてを永久に保管」はコンプライアンス上のリスクか</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>7分で読めます</span>
           </div>
@@ -152,7 +153,7 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            2026年3月時点で、EU全体のGDPRの制裁金は累計およそ&euro;61.1億に達し、記録された執行事例は2,685件に及びます（CMSのGDPR Enforcement Tracker Report 2025/2026による）。このデータセットには、1件で&euro;12億に上る事例もあります。GDPRが新しかった2018年に自社のリスクをどう見ていたにせよ、8年を経た執行の傾向はもはや机上の話ではありません &mdash; データの取り扱いを誤った企業にとって、着実で、十分に記録されたコストの発生源です。
+            2026年3月時点で、EU で記録された GDPR の制裁金総額は約 &euro;61.1億に達し、金額と日付が記録された制裁金は2,685件でした。出典は <a href="https://cms.law/en/gbr/publication/gdpr-enforcement-tracker-report/numbers-and-figures/">CMS GDPR Enforcement Tracker Report 2025/2026</a> です。情報が不完全な記録も含めると、報告書の件数は3,062件です。個別の制裁金は最大 &euro;12億に上ります。2018年に GDPR が導入された当時、組織がどのようにリスクを評価していたとしても、8年後の執行はもはや仮定の話ではありません。不適切にデータを扱う企業にとって、実例が記録された継続的な費用となっています。
           </p>
 
           <p>
@@ -176,7 +177,7 @@
           </p>
 
           <p>
-            隣接する分野の執行にも同じ姿勢が見えます。フランスのCNILとイタリアのGaranteは、いずれも2026年4月に、受信トレイを個人の私生活の延長として扱う正式なガイダンスを出しました &mdash; メールのトラッキングピクセルに関する新しい規則では、受信者のメールボックスの中で起きたことを目に見えない形で報告する仕組みに、事前の同意を求めています。保管の執行とは別の仕組みですが、根底にある姿勢は同じです。規制当局は、方針の文書がどこかに存在するかどうかではなく、企業がメールの中身に対して何をしているのかを具体的に見ているのです。
+            隣接する分野の執行にも同じ姿勢が見えます。 フランスの CNIL とイタリアの Garante は、受信トレイを個人の私生活の延長と捉える正式なガイダンスを2026年4月に発表しました &mdash; ガイダンスは一般に追跡ピクセルへの同意を求めますが、明確な例外と移行措置があります。具体的な用途に適用される規制当局のルールを確認してください。 保管の執行とは別の仕組みですが、根底にある姿勢は同じです。規制当局は、方針の文書がどこかに存在するかどうかではなく、企業がメールの中身に対して何をしているのかを具体的に見ているのです。
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">実際に通用する保管スケジュール</h3>
@@ -208,16 +209,15 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">個人のアーカイブはどこに位置づくのか</h3>
 
           <p>
-            個人や小さなチームには、ここに現実の緊張があります。保管の規律は古いメールをサーバーから消すことを求めますが、コンプライアンスの規則が実際のメールボックスに置くなと言うからといって、15年分のやり取りを失いたい人はいません。答えは、バックアップの危険に当てはまるのと同じものです &mdash; <em>サーバーに残すもの</em>と<em>コピーを取っておくもの</em>を分けることです。
+            ローカルアーカイブは記録の保存場所を変えますが、保存期間の義務をなくすものではありません。個人データを含む業務メールについては、各分類を保持する理由、アクセスできる相手、削除すべき時期を定めてください。その方針をサーバーのメール、ローカルアーカイブ、バックアップのコピーすべてに適用してください。保持を続けるには有効な目的や法的義務が必要であり、サーバーから移すだけで根拠が生まれるわけではありません。<a href="https://www.cnil.fr/fr/passer-laction/les-durees-de-conservation-des-donnees">CNIL の保存期間ガイダンス</a>をご覧ください。
           </p>
 
           <p>
-            MailVaultは、IMAPやOAuthのアカウントのすべてのフォルダを、自分のディスク上の1通ずつの<code>.eml</code>ファイルとしてアーカイブします。提供元のメールボックスとはまったく無関係です。おかげで、実際に使っているアカウントで保管の取り決めを本当に守れます &mdash; 正当な期間を過ぎたものを消しても &mdash; もとの記録は失われません。記録はすでに、自分が管理する場所に、どのクライアントでも開ける形式で置かれているからです。手動のバックアップは無料で無制限です。アーカイブを自動で最新に保つスケジュール実行のバックアップは$4/月または$25/年のPremiumの機能で、年額プランには14日間のトライアルが付きます。
-          </p>
+            MailVaultは、IMAPやOAuthのアカウントのすべてのフォルダを、自分のディスク上の1通ずつの<code>.eml</code>ファイルとしてアーカイブします。提供元のメールボックスとはまったく無関係です。 保持する権利のある記録に限ってローカルコピーを使い、アクセス管理と削除予定の対象に含めてください。MailVault は、組織で一元管理する保存ポリシー、法的保全、コンプライアンス認証を提供しません。 手動のバックアップは無料で無制限です。アーカイブを自動で最新に保つスケジュール実行のバックアップは$4/月または$25/年のPremiumの機能で、年額プランには14日間のトライアルが付きます。 このファイル構成の説明は、標準の Maildir 形式を対象としています。設定 → ストレージでは JMAP ストレージも選択でき、元のメッセージのバイト列を JSON レコードとともに保持し、同一メッセージの重複を排除します。</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">スケジュールどおりに削除する。それでも記録は残す。</p>
-            <p class="text-sm mb-4">MailVaultは、すべてのフォルダを検索できて持ち運べる.emlファイルとして、お使いのディスクにアーカイブします &mdash; サーバー側で説明のつく保管方針を守っても、何かを永久に失うことにはなりません。</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">根拠を示せる記録を保持し、すべてのコピーに保存期間のルールを適用してください。</p>
+            <p class="text-sm mb-4">MailVault は全フォルダーを、検索可能で持ち運べる .eml ファイルとして自分のディスクにアーカイブします &mdash; 対象は保持が認められる記録です。ローカルコピーにも保存期間、削除、アクセスの管理が必要です。</p>
             <div class="flex flex-wrap gap-3">
               <a href="/ja/#download" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
                 MailVaultをダウンロード
@@ -236,7 +236,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -260,5 +260,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

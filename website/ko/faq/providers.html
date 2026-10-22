@@ -147,6 +147,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -195,7 +196,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html" aria-current="page">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -208,20 +209,20 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">이메일 제공업체</h1>
+      <h1 class="text-4xl font-bold mb-2">이메일 제공업체</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">MailVault는 Gmail과 Outlook에서도 작동합니까?</a></li><li><a href="#help-section-2">Outlook.com 계정은 어떻게 연결합니까?</a></li><li><a href="#help-section-3">Proton Mail에서 MailVault를 어떻게 사용합니까?</a></li><li><a href="#help-section-4">로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?</a></li><li><a href="#help-section-5">별칭으로 보내려면 어떻게 합니까?</a></li><li><a href="#help-section-6">Fastmail 또는 다른 JMAP 계정은 어떻게 연결하나요?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail, Microsoft 365, Outlook.com, Proton Mail 및 Fastmail 같은 JMAP 서버에 연결하고 별칭으로 메일을 보냅니다.</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault는 Gmail과 Outlook에서도 작동합니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault는 Gmail과 Outlook에서도 작동합니까?</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               네. MailVault는 Gmail, Outlook, Fastmail 같은 JMAP 서버 및 IMAP을 지원하는 모든 이메일 서비스에서 사용할 수 있습니다. Gmail은 OAuth2를 통해 Google 계정으로 직접 로그인하므로 IMAP을 수동으로 설정할 필요가 없습니다. Microsoft 365 Business 및 Enterprise 계정은 OAuth2를 통해 Microsoft 계정으로 직접 로그인할 수 있으며, 2단계 인증도 원활하게 지원합니다. 개인용 Outlook.com, Hotmail 및 Live.com 계정은 <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">Microsoft Graph API를 통해 연결합니다</a>.
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Outlook.com 계정은 어떻게 연결합니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Outlook.com 계정은 어떻게 연결합니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">MailVault는 개인용 Outlook.com, Hotmail, Live.com 계정을 <strong>Microsoft Graph API</strong>로 연결합니다. 계정을 추가하고 Microsoft 계정으로 로그인을 고른 다음 브라우저에서 로그인을 마치십시오. MailVault가 개인 Microsoft 계정을 알아보고 알아서 Graph를 쓰므로 입력할 IMAP 설정이 없습니다.</p>
               <p class="mb-4">이 계정들에 IMAP을 쓰지 않는 것은 2024년 말부터 이어진 Microsoft IMAP의 OAuth2 로그인 문제 때문입니다. 메일 읽기, 삭제, 읽음 또는 읽지 않음 표시, 이동, 백업은 다른 계정과 똑같이 작동합니다.</p>
@@ -237,7 +238,7 @@
         </article>
 
         <article id="proton-mail-bridge" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Proton Mail에서 MailVault를 어떻게 사용합니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">Proton Mail에서 MailVault를 어떻게 사용합니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Proton Mail은 메일을 종단 간 암호화하므로 IMAP을 직접 열어 두지 않습니다. MailVault(또는 다른 제3자 메일 클라이언트)에 연결하려면 <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a>가 필요합니다 — 사용자 컴퓨터에서 돌면서 암호화된 메일함을 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>의 표준 IMAP/SMTP로 노출해 주는 Proton의 데스크톱 앱입니다. Bridge는 유료 Proton Mail 요금제가 있어야 하며 Proton 무료 등급에서는 쓸 수 없습니다.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">설정 순서:</p>
@@ -255,24 +256,24 @@
                   </ul>
                 </li>
               </ol>
-              <p class="mb-4">MailVault가 동기화하는 동안에는 Proton Mail Bridge가 배경에서 돌고 있어야 합니다 — Bridge가 닫혀 있으면 MailVault는 메일함에 닿을 수 없습니다. 이미 보관해 둔 메일은 Bridge가 닫혀 있어도 MailVault에서 그대로 읽고 검색할 수 있습니다. MailVault는 로컬 우선이라 Bridge에서 실시간으로 받아 오는 대신 자기 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> 저장소에서 읽기 때문입니다.</p>
+              <p class="mb-4">MailVault가 동기화하는 동안에는 Proton Mail Bridge가 배경에서 돌고 있어야 합니다 — Bridge가 닫혀 있으면 MailVault는 메일함에 닿을 수 없습니다. 이미 보관해 둔 메일은 Bridge가 닫혀 있어도 MailVault에서 그대로 읽고 검색할 수 있습니다. MailVault는 로컬 우선이라 Bridge에서 실시간으로 받아 오는 대신 자기 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> 저장소에서 읽기 때문입니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
               <p>Bridge는 자체 서명 TLS 인증서로 로컬 IMAP/SMTP 서버를 보호합니다. MailVault는 로컬(<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>) 연결에 대해 이를 자동으로 처리하므로 인증서를 직접 설치할 필요가 없습니다.</p>
             </div>
         </article>
 
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">가능합니다. <a href="#send-from-an-alias" class="text-primary-500 hover:underline">별칭으로 보내려면 어떻게 합니까?</a>에 나온 대로 주소를 계정의 별칭으로 추가한 뒤, 메일을 쓸 때 보낸 사람 줄에서 고르거나 기본으로 지정하십시오. Fastmail을 비롯해, 로그인하는 주소와 남에게 알려 주는 주소가 다른 제공업체에서 흔한 설정입니다.</p>
               <p>보내는 메일의 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 주소만 변경됩니다. 사용자 이름과 비밀번호는 그대로이며, MailVault는 설정한 계정으로 계속 로그인합니다. <strong>Reply-To 헤더는 추가되지 않습니다</strong> &mdash; 답장은 발신 주소로 도착합니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/compose-email-720.webp 720w, /screenshots/ko/compose-email-1440.webp 1440w, /screenshots/ko/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/compose-email-light-1440.webp" srcset="/screenshots/ko/compose-email-light-720.webp 720w, /screenshots/ko/compose-email-light-1440.webp 1440w, /screenshots/ko/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서식 있는 편집을 갖춘 MailVault 작성·답장 창 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/compose-email-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/compose-email-720.webp 720w, /screenshots/ko/compose-email-1440.webp 1440w, /screenshots/ko/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/compose-email-light-1440.webp" srcset="/screenshots/ko/compose-email-light-720.webp 720w, /screenshots/ko/compose-email-light-1440.webp 1440w, /screenshots/ko/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서식 있는 편집을 갖춘 MailVault 작성·답장 창 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
             </figure>
         </article>
 
         <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">별칭으로 보내려면 어떻게 합니까?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">별칭으로 보내려면 어떻게 합니까?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4"><strong>설정 &rarr; 계정</strong>을 열어 계정을 고른 다음 <strong>별칭</strong> 섹션으로 가십시오. 계정이 보내는 데 쓰는 모든 주소가 로그인 주소부터, 이어서 각 별칭 순으로 나옵니다. 새 메시지의 보낸 사람 줄에 있는 <strong>주소 추가</strong> 링크도 같은 섹션을 엽니다.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">별칭 추가와 설정:</p>
@@ -295,7 +296,7 @@
         </article>
 
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Fastmail 또는 다른 JMAP 계정은 어떻게 연결하나요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Fastmail 또는 다른 JMAP 계정은 어떻게 연결하나요?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>계정을 추가할 때 Fastmail을 선택하고, Fastmail 설정에서 Mail 및 Submission 접근 권한을 부여한 API 토큰을 붙여 넣습니다. 다른 서버라면 JMAP을 선택하고 해당 서버의 비밀번호 또는 API 토큰을 사용합니다. 도메인이 세션 URL을 공개하면 MailVault가 이를 찾습니다. 그렇지 않으면 전체 HTTPS 세션 URL을 입력하십시오. 검색된 서버가 낯설다면 자격 증명을 보내기 전에 확인하십시오. 새 메일은 푸시로 수신하며, 사용할 수 없으면 폴링으로 전환합니다. 보내는 주소는 서버의 발신자 정보에서 가져옵니다. Fastmail은 IMAP 앱 비밀번호 옵션도 제공합니다.</p></div>
         </article>
 
@@ -318,7 +319,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -341,5 +342,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cloud Backup Means a Vendor Can Read Your Email Forever. Local Backup Means Only You Can. - MailVault Blog</title>
-  <meta name="description" content="A third-party cloud backup service for your mailbox doesn't remove the single point of failure — it adds a second company with continuous access to every message you've ever sent or received. Here's the actual architecture difference, and why local backup closes it.">
+  <title>Cloud Email Backup and Local Archives: Who Can Access the Copy? - MailVault Blog</title>
+  <meta name="description" content="Compare cloud email backups and local archives by encryption, key ownership, access controls and recovery. Local files also need disk protection and a separate backup.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/blog/cloud-backup-vendor-reads-your-email.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://mailvaultapp.com/blog/cloud-backup-vendor-reads-your-email.html">
-  <meta property="og:title" content="Cloud Backup Means a Vendor Can Read Your Email Forever. Local Backup Means Only You Can.">
-  <meta property="og:description" content="A third-party cloud backup service for your mailbox doesn't remove the single point of failure — it adds a second company with continuous access to every message you've ever sent or received. Here's the actual architecture difference, and why local backup closes it.">
+  <meta property="og:title" content="Cloud Email Backup and Local Archives: Who Can Access the Copy?">
+  <meta property="og:description" content="Compare cloud email backups and local archives by encryption, key ownership, access controls and recovery. Local files also need disk protection and a separate backup.">
   <meta property="og:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Cloud Backup Means a Vendor Can Read Your Email Forever. Local Backup Means Only You Can.">
-  <meta name="twitter:description" content="A third-party cloud backup service for your mailbox doesn't remove the single point of failure — it adds a second company with continuous access to every message you've ever sent or received. Here's the actual architecture difference, and why local backup closes it.">
+  <meta name="twitter:title" content="Cloud Email Backup and Local Archives: Who Can Access the Copy?">
+  <meta name="twitter:description" content="Compare cloud email backups and local archives by encryption, key ownership, access controls and recovery. Local files also need disk protection and a separate backup.">
   <meta name="twitter:image:alt" content="MailVault: Fast search. Private mail. Yours to keep. Free for macOS, Windows and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -85,6 +85,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=3">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -132,7 +133,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -143,7 +144,7 @@
       <article>
         <header class="mb-8">
           <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">August 28, 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cloud Backup Means a Vendor Can Read Your Email Forever. Local Backup Means Only You Can.</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cloud Email Backup and Local Archives: Who Can Access the Copy?</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 min read</span>
           </div>
@@ -156,7 +157,7 @@
           </p>
 
           <p>
-            You didn't remove the single point of failure. You added a second company with a standing copy of every email you've ever sent or received, plus the credentials or delegated access needed to keep pulling in new mail forever.
+            A cloud-to-cloud backup can create an independent recovery copy, while adding another service and access grant to evaluate. How long it retains mail and who can read that copy depend on its configuration, encryption and contract.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What a Cloud Backup Vendor Actually Holds</h3>
@@ -166,7 +167,7 @@
           </p>
 
           <p>
-            For as long as the subscription runs, the backup provider &mdash; and, by extension, anyone who successfully compromises their systems &mdash; has continuous access to your full email history. Not a snapshot from the day you signed up. An ongoing, growing archive that gets more valuable to an attacker every year it accumulates. You've traded "my provider has my mail" for "my provider and a backup vendor both have my mail," which is strictly more exposure, not less.
+            A continuously updated backup may retain a growing message history. Assess the service’s delegated permissions, retention, encryption keys and restore controls, including what happens when access is revoked or the subscription ends. A second copy can improve recovery while introducing different access risks.
           </p>
 
           <p>
@@ -180,11 +181,11 @@
           </p>
 
           <p>
-            A copy sitting on a vendor's servers can be read by that vendor's employees under the right internal access conditions, subpoenaed by a court with jurisdiction over the vendor, exposed if the vendor is breached, or handed over if the vendor is acquired by a company with different data-handling norms than the one you originally trusted. None of those outcomes require anything to go wrong on your end. They're properties of the copy existing on someone else's infrastructure at all.
+            Access depends on the service’s encryption, key ownership and permissions. A provider holding decryption keys may be able to access stored mail; a properly implemented client-side encrypted backup can limit that access. Check the specific service’s policy, deletion terms and restore process rather than assuming every cloud copy is readable by its vendor.
           </p>
 
           <p>
-            A copy sitting on your own disk has exactly one of those risk categories: your own device security. That's a real responsibility &mdash; full-disk encryption, a locked-down machine, your own backup of the backup if you want extra redundancy &mdash; but it's a bounded, single risk you control directly, not an open-ended one you're trusting a third party to manage on your behalf indefinitely.
+            A local copy depends on device security, disk health, physical access and your backup arrangement. MailVault’s message files are not an encrypted vault by themselves. Use disk encryption and a separate tested backup; if you place those files in a cloud-synchronized folder, that service also becomes part of the storage arrangement.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Local Backup Also Just Survives More Things</h3>
@@ -197,10 +198,10 @@
 
           <p>
             MailVault connects to your existing IMAP or OAuth email account and archives every folder as individual <code>.eml</code> files &mdash; written straight to your own disk. There's no MailVault-operated server holding a copy of your mail in the middle. We can't read your archive, because we never receive it; the connection is between your device and your provider, and the resulting files live only where you put them.
-          </p>
+           These file-layout instructions use the default Maildir format. Settings → Storage also offers JMAP storage, which keeps original message bytes with JSON records and deduplicates identical messages.</p>
 
           <p>
-            The format matters here too: <code>.eml</code> is a plain, open standard readable by any mail client, not a proprietary database that locks your archive to one piece of software or one company's continued existence. Manual, unlimited local backups are free, full stop. Scheduled backups that keep the archive current automatically, without you remembering to run one, are a $4/month or $25/year premium feature &mdash; the yearly plan includes a 14-day trial.
+            The format matters here too: <code>.eml</code> is a plain, open standard readable by mail apps supporting EML, not a proprietary database that locks your archive to one piece of software or one company's continued existence. Manual, unlimited local backups are free, full stop. Scheduled backups that keep the archive current automatically, without you remembering to run one, are a $4/month or $25/year premium feature &mdash; the yearly plan includes a 14-day trial.
           </p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -224,7 +225,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -248,5 +249,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

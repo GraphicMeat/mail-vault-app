@@ -181,3 +181,22 @@ invariant suffix. It also preserves the version title and metadata. Keep localiz
 screenshot/clip routing on every build; never replace a localized description with English.
 New media needs a manifest entry with capture evidence or an explicit compatibility
 review. Synchronize the root homepage after applying tags.
+
+## Help center
+
+Run `node ../scripts/build-help-center.mjs` before extraction (included in
+`npm run i18n`). It enhances the English FAQ, guides and articles in place and
+rebuilds the unified directory. Edit the English article bodies, not their
+generated sidebars or contents lists. Existing URLs and FAQ anchors are public
+contracts. Run the generator twice when changing it and check that the second
+run produces no further diff.
+
+New help recordings live in `assets/help-media/<locale>/`, are committed with
+their posters and captions, and are described by `help-media.json`. They come
+from the localized application on the Mac mini. Each image and video has a
+visible footer and accessible description ending in the actual capture version
+and locale, for example `MailVault version 2.20.0 en`. Translate the description,
+keep that phrase intact, and substitute the locale code for translated pages.
+Never substitute English screenshots or videos for missing localized captures.
+Keep the recording's caption track, transcript, accessible name and poster in
+the same language. Historical screenshots retain their real older version.

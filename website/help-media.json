@@ -1,0 +1,1224 @@
+{
+  "version": "2.20.0",
+  "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+  "evidence": "/assets/help-media/capture-evidence.json",
+  "captureKind": "capture",
+  "recordedAt": "Thu Oct 22 2026 15:50:35 GMT+0300 (Eastern European Summer Time)",
+  "captureHost": "M4s-Mac-mini.local",
+  "provenance": [
+    "New ScreenCaptureKit recordings of the real Tauri app running on the Mac mini through testq + minijob.",
+    "UI language and fictional demo mailbox use the locale catalog. Dark graphite theme; fresh profile per locale.",
+    "The capture build enables webdriver; the harness hides the sidebar version and button focus rings. No app UI is redrawn.",
+    "Search is prepared with a local archive and cut between query entry and results. Backup destination is a write-tested temporary folder, not a physical external drive; setup is off camera, and longer waits may be cut.",
+    "Images and posters are decoded from these new raw recordings at a representative moment; the manifest records the source time and crop. Search stills retain the query panel alongside the results. MP4s use the feature-card crops and trims from those same recordings. A version/locale footer is added below the UI.",
+    "The Mac mini display was temporarily switched to its existing 2x mode before recording; the adjustment log is retained with the evidence."
+  ],
+  "locales": {
+    "en": {
+      "appLocale": "en",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/en/search-local.webp",
+          "imageAlt": "Search local messages for Priya and display matching mail · MailVault version 2.20.0 en",
+          "video": "/assets/help-media/en/search-local.mp4",
+          "videoLabel": "Search local messages for Priya and display matching mail · MailVault version 2.20.0 en",
+          "poster": "/assets/help-media/en/search-local.jpg",
+          "posterAlt": "Search local messages for Priya and display matching mail · MailVault version 2.20.0 en",
+          "captions": "/assets/help-media/en/search-local.vtt",
+          "transcript": [
+            "Enter Priya in the search field.",
+            "Run the search and review matching messages stored on this computer."
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 313,
+          "sourceSHA256": "2d113b9aadc47c7e099e2cafd6b993ba1f22273eebf4fbe4624248b7e70dbd03",
+          "posterSeconds": 3.524,
+          "sourceFrameSeconds": 3.953,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "0540fe5a9a4cd98a80cbd433bf44278aa3d2dd6052e34d29eeebaf86441ccf69",
+            "webp": "49fb857f41011b1ea61722adff265ded2cd2e0ccb517cdd2748625d758f351bd",
+            "jpg": "7b5b7398ecae2d1ceb44b43fa4787e6824c42eca8086b47397b9763e384577ec",
+            "vtt": "82adb3920fa4c421cae3dab49f3b89b51430a1add61abd178c3f9e102af829f7"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/en/privacy-mode.webp",
+          "imageAlt": "Enable privacy mode to hide names and addresses · MailVault version 2.20.0 en",
+          "video": "/assets/help-media/en/privacy-mode.mp4",
+          "videoLabel": "Enable privacy mode to hide names and addresses · MailVault version 2.20.0 en",
+          "poster": "/assets/help-media/en/privacy-mode.jpg",
+          "posterAlt": "Enable privacy mode to hide names and addresses · MailVault version 2.20.0 en",
+          "captions": "/assets/help-media/en/privacy-mode.vtt",
+          "transcript": [
+            "Select the privacy shield in the sidebar.",
+            "Privacy mode masks names and email addresses in the mailbox."
+          ],
+          "duration": 4.366667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 278,
+          "sourceSHA256": "7815a6d606845b49d11e9d69884e0f32a6f480ca64c0fa139ee33a1ade59d663",
+          "posterSeconds": 3.27,
+          "sourceFrameSeconds": 3.553,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "752216ea0e8ca5c96980e9a09c10f62a4afa85ec0cbf029b738da16aaf83d9f9",
+            "webp": "fe28535a7fb073ead31563db80f876fd6fb15237ed6637df5b84d2d8b73aca22",
+            "jpg": "c34a04786191b33b6bfc6dd97b21dac80de18d9f47b38429234c9404a83b8b39",
+            "vtt": "58c94b64d3ff4aad7bf2d873b0e5b8d6b150f34e62fee91695e0c086a6747eea"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/en/manual-backup.webp",
+          "imageAlt": "Back up all accounts and verify completion · MailVault version 2.20.0 en",
+          "video": "/assets/help-media/en/manual-backup.mp4",
+          "videoLabel": "Back up all accounts and verify completion · MailVault version 2.20.0 en",
+          "poster": "/assets/help-media/en/manual-backup.jpg",
+          "posterAlt": "Back up all accounts and verify completion · MailVault version 2.20.0 en",
+          "captions": "/assets/help-media/en/manual-backup.vtt",
+          "transcript": [
+            "Select Back up all accounts in Backup settings.",
+            "Watch backup progress until the run finishes."
+          ],
+          "duration": 6.433333,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 412,
+          "sourceSHA256": "509ada770c918059ef15fba44eaa145056e2f61e1878c05ddb6be059de8f51dd",
+          "posterSeconds": 4.83,
+          "sourceFrameSeconds": 5.26,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "2fd9201737a752f1dd8d6e247bb49656c1a3e9f7663215f6922a586b845efd9d",
+            "webp": "a1edda45d4e536c813c3931edfd05d23915a18d66282a9a1222748e079ca2690",
+            "jpg": "ac830f54dccde7346a2822789a6d5230ff3ca9199c7ae8b7de5df9d2944b17f9",
+            "vtt": "0418f00617bdb62498102aa6a6bdab4a4d62581097a103c0923477269a027106"
+          }
+        }
+      }
+    },
+    "de": {
+      "appLocale": "de",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/de/search-local.webp",
+          "imageAlt": "Lokale Nachrichten nach Priya durchsuchen und Treffer anzeigen · MailVault version 2.20.0 de",
+          "video": "/assets/help-media/de/search-local.mp4",
+          "videoLabel": "Lokale Nachrichten nach Priya durchsuchen und Treffer anzeigen · MailVault version 2.20.0 de",
+          "poster": "/assets/help-media/de/search-local.jpg",
+          "posterAlt": "Lokale Nachrichten nach Priya durchsuchen und Treffer anzeigen · MailVault version 2.20.0 de",
+          "captions": "/assets/help-media/de/search-local.vtt",
+          "transcript": [
+            "Priya in das Suchfeld eingeben.",
+            "Die Suche starten und die lokal gespeicherten Treffer ansehen."
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 de",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 312,
+          "sourceSHA256": "d6d54ecf8e14faa82f1cfb9996aa6313857b6ba1c8dff586d6b68864770fac65",
+          "posterSeconds": 3.501,
+          "sourceFrameSeconds": 3.925,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "76a18fe23913254ba6a648a55c32560785d777e8b499576a0757fdc788c8650b",
+            "webp": "efbb9886830bb542aabe77c9d3da2853bdbbf182f9e0aefa906ed9dab7348625",
+            "jpg": "8836d4a8ea84927ca90f4c588524cd33a2bf67cd3ca71234630b4879ced49e32",
+            "vtt": "bf186f6e116392706b883a26052efd86e83f00fccdac1aef7726bd6a917c2121"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/de/privacy-mode.webp",
+          "imageAlt": "Datenschutzmodus aktivieren, um Namen und Adressen zu verbergen · MailVault version 2.20.0 de",
+          "video": "/assets/help-media/de/privacy-mode.mp4",
+          "videoLabel": "Datenschutzmodus aktivieren, um Namen und Adressen zu verbergen · MailVault version 2.20.0 de",
+          "poster": "/assets/help-media/de/privacy-mode.jpg",
+          "posterAlt": "Datenschutzmodus aktivieren, um Namen und Adressen zu verbergen · MailVault version 2.20.0 de",
+          "captions": "/assets/help-media/de/privacy-mode.vtt",
+          "transcript": [
+            "Das Datenschutz-Schild in der Seitenleiste auswählen.",
+            "Der Datenschutzmodus verdeckt Namen und E-Mail-Adressen."
+          ],
+          "duration": 4.366667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 de",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 278,
+          "sourceSHA256": "14a1d9d2462c76240d25deac7ca1494b57f3d450bcb2cc008e4289d65551e4ab",
+          "posterSeconds": 3.27,
+          "sourceFrameSeconds": 3.552,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "f573bc57c5073a9f6b95473ae49df9d638c5d7530ab861fdd7076304e33a21f3",
+            "webp": "bcbffcab7d35882b2eb3236af726aa1f3b50ba0c41ba8a2e220f7f35678ab68f",
+            "jpg": "4d19c7b87e1ce00f01db79a95705aa00b9fb920416eec0105df3d521e21c626c",
+            "vtt": "77750e422cc1d5658cf44e97a5a8ce7e7043f20f7e7d14b195392dd15405c4cc"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/de/manual-backup.webp",
+          "imageAlt": "Alle Konten sichern und den Abschluss prüfen · MailVault version 2.20.0 de",
+          "video": "/assets/help-media/de/manual-backup.mp4",
+          "videoLabel": "Alle Konten sichern und den Abschluss prüfen · MailVault version 2.20.0 de",
+          "poster": "/assets/help-media/de/manual-backup.jpg",
+          "posterAlt": "Alle Konten sichern und den Abschluss prüfen · MailVault version 2.20.0 de",
+          "captions": "/assets/help-media/de/manual-backup.vtt",
+          "transcript": [
+            "In den Sicherungseinstellungen die Sicherung aller Konten starten.",
+            "Den Fortschritt bis zum Abschluss der Sicherung verfolgen."
+          ],
+          "duration": 6.466667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 de",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "de",
+          "recordingVerified": true,
+          "recordingFrames": 413,
+          "sourceSHA256": "88919a16f730187cb80de82e8d890af75ddc728efef64140389fa852176e3a2d",
+          "posterSeconds": 4.85,
+          "sourceFrameSeconds": 5.277,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "5a74d87a53b99676a16bf5b02642b6139590a0a2f7c9096bb009aa8f26c7058c",
+            "webp": "8f382e6cdd1a2715b53d07f48d698e09344e8970d80302abaabd4ff53fcf70a1",
+            "jpg": "24e83f34123912c3eb401e742c551fec9069c87ebdfec1a5c6ba928f8a9eb999",
+            "vtt": "4e7535defbee408c312b9cb5f58d99389b902c3247980de2274e26319af014e2"
+          }
+        }
+      }
+    },
+    "fr": {
+      "appLocale": "fr",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/fr/search-local.webp",
+          "imageAlt": "Rechercher Priya dans les messages locaux et afficher les résultats · MailVault version 2.20.0 fr",
+          "video": "/assets/help-media/fr/search-local.mp4",
+          "videoLabel": "Rechercher Priya dans les messages locaux et afficher les résultats · MailVault version 2.20.0 fr",
+          "poster": "/assets/help-media/fr/search-local.jpg",
+          "posterAlt": "Rechercher Priya dans les messages locaux et afficher les résultats · MailVault version 2.20.0 fr",
+          "captions": "/assets/help-media/fr/search-local.vtt",
+          "transcript": [
+            "Saisir Priya dans le champ de recherche.",
+            "Lancer la recherche et consulter les messages enregistrés sur cet ordinateur."
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 fr",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 312,
+          "sourceSHA256": "c7bde913d9294a46dc627746e782c771706bd63f172544bc4101fdc9498b3eae",
+          "posterSeconds": 3.509,
+          "sourceFrameSeconds": 3.933,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "fefb879efaf04851a754c590b1cff13d1de0f4041ae374cf4566e6aa850df8b3",
+            "webp": "d01b5998e172455aa723731bcc0104ea2128ede7b057875ec17e093f6ff7cb41",
+            "jpg": "467266b94ae520e3c3bd330d14f1c3be5c628cf8850cf2968cec84a915e32ca9",
+            "vtt": "05b56f460f50b80ae8ec13e9a8efd1736bb5d3c2ea366d0d69577741cbee72a7"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/fr/privacy-mode.webp",
+          "imageAlt": "Activer le mode confidentialité pour masquer les noms et les adresses · MailVault version 2.20.0 fr",
+          "video": "/assets/help-media/fr/privacy-mode.mp4",
+          "videoLabel": "Activer le mode confidentialité pour masquer les noms et les adresses · MailVault version 2.20.0 fr",
+          "poster": "/assets/help-media/fr/privacy-mode.jpg",
+          "posterAlt": "Activer le mode confidentialité pour masquer les noms et les adresses · MailVault version 2.20.0 fr",
+          "captions": "/assets/help-media/fr/privacy-mode.vtt",
+          "transcript": [
+            "Sélectionner le bouclier de confidentialité dans la barre latérale.",
+            "Le mode confidentialité masque les noms et les adresses e-mail."
+          ],
+          "duration": 4.366667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 fr",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 278,
+          "sourceSHA256": "bedbb1b67a6fd5261832f2c28c74cf8ffabb34eefed44767d530428000d35428",
+          "posterSeconds": 3.27,
+          "sourceFrameSeconds": 3.551,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "3355b29a2fc58c074d73cd194acca23eaed8d138cb0b5cf3a97a9f43f5dcd470",
+            "webp": "7e1f28d09b694946ccb19dfa2b291b53e38c804f154c5a2ab3a08e0af1f5447c",
+            "jpg": "980c69b4881a5e432e71d9dc36e8ccfd10779f2ce3f90a0808dfe7ebb2de0e69",
+            "vtt": "0262dd21e0e8006884362e697acef07920ad6e527c15ac90eb6ebb11cb055119"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/fr/manual-backup.webp",
+          "imageAlt": "Sauvegarder tous les comptes et vérifier la fin de l’opération · MailVault version 2.20.0 fr",
+          "video": "/assets/help-media/fr/manual-backup.mp4",
+          "videoLabel": "Sauvegarder tous les comptes et vérifier la fin de l’opération · MailVault version 2.20.0 fr",
+          "poster": "/assets/help-media/fr/manual-backup.jpg",
+          "posterAlt": "Sauvegarder tous les comptes et vérifier la fin de l’opération · MailVault version 2.20.0 fr",
+          "captions": "/assets/help-media/fr/manual-backup.vtt",
+          "transcript": [
+            "Lancer la sauvegarde de tous les comptes dans les paramètres de sauvegarde.",
+            "Suivre la progression jusqu’à la fin de la sauvegarde."
+          ],
+          "duration": 6.466667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 fr",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "fr",
+          "recordingVerified": true,
+          "recordingFrames": 413,
+          "sourceSHA256": "8d599b5c6189fcc0f93463200f0c282106a38e8ca10c26719f40b3d20b47f9d2",
+          "posterSeconds": 4.85,
+          "sourceFrameSeconds": 5.277,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "3dfd0d7a41be2de2f0c032b2165d6f743dd62a895f25ca5ab7a426ba015448a7",
+            "webp": "595d85f7b6ee57bdbe11b19552030826ab147f90f7771934123437b8486ea273",
+            "jpg": "063616dcb3a298bee300e3f197e45f81ab6a09b85fdb2273b9603fe9cab83234",
+            "vtt": "21016c07909fb71b7d45b75c68c9c5bc3766db1c223c0ee441210dfb98e4c425"
+          }
+        }
+      }
+    },
+    "es": {
+      "appLocale": "es",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/es/search-local.webp",
+          "imageAlt": "Buscar a Priya en los mensajes locales y mostrar los resultados · MailVault version 2.20.0 es",
+          "video": "/assets/help-media/es/search-local.mp4",
+          "videoLabel": "Buscar a Priya en los mensajes locales y mostrar los resultados · MailVault version 2.20.0 es",
+          "poster": "/assets/help-media/es/search-local.jpg",
+          "posterAlt": "Buscar a Priya en los mensajes locales y mostrar los resultados · MailVault version 2.20.0 es",
+          "captions": "/assets/help-media/es/search-local.vtt",
+          "transcript": [
+            "Escribir Priya en el campo de búsqueda.",
+            "Iniciar la búsqueda y revisar los mensajes guardados en este equipo."
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 es",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 312,
+          "sourceSHA256": "6b698700b1c78891190d6d37985f10cd6f4bcb1303111a1e6056a5163ab30cec",
+          "posterSeconds": 3.5075,
+          "sourceFrameSeconds": 3.9295,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "95625712bbcb76c4b392cb869a00b549b6e60918997dbdecd15b37d6a910998d",
+            "webp": "91b067b180e3818ed23556566f24b3fb75a1f259516238163ec6c6402d5f36a4",
+            "jpg": "ea3e07ce6129877aee70d53d59545ecfbe523a6ad625b1dcb2e7f24ad3b816bf",
+            "vtt": "de87a9a2bd0d26d55fda3185aedd28d178df548b83b1870b983ac9e1820b04fa"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/es/privacy-mode.webp",
+          "imageAlt": "Activar el modo de privacidad para ocultar nombres y direcciones · MailVault version 2.20.0 es",
+          "video": "/assets/help-media/es/privacy-mode.mp4",
+          "videoLabel": "Activar el modo de privacidad para ocultar nombres y direcciones · MailVault version 2.20.0 es",
+          "poster": "/assets/help-media/es/privacy-mode.jpg",
+          "posterAlt": "Activar el modo de privacidad para ocultar nombres y direcciones · MailVault version 2.20.0 es",
+          "captions": "/assets/help-media/es/privacy-mode.vtt",
+          "transcript": [
+            "Seleccionar el escudo de privacidad en la barra lateral.",
+            "El modo de privacidad oculta nombres y direcciones de correo."
+          ],
+          "duration": 4.333008,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 es",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 277,
+          "sourceSHA256": "43e7dc5fa815428ec0a72153c900fd3803c76aabe38eceabcfa30e8b45844c6e",
+          "posterSeconds": 3.26,
+          "sourceFrameSeconds": 3.538,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "c89e4379cfd51419afeeaf2007d9c4eecad24b36e0dc197b46b289617e5fcdb7",
+            "webp": "7370446868e04e79e88d2b33a35638a613e1b4ebfd49884bb7561eb1ead78a91",
+            "jpg": "3f07d0abdae9d823979a41d82ee9a362a8ce1eb88e1eb6470b6f71675803c9b0",
+            "vtt": "3fedd55f4669bf0cd5bc746c1376862cb214e375415c5f482e54bb59e9af96b8"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/es/manual-backup.webp",
+          "imageAlt": "Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es",
+          "video": "/assets/help-media/es/manual-backup.mp4",
+          "videoLabel": "Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es",
+          "poster": "/assets/help-media/es/manual-backup.jpg",
+          "posterAlt": "Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es",
+          "captions": "/assets/help-media/es/manual-backup.vtt",
+          "transcript": [
+            "Iniciar la copia de seguridad de todas las cuentas en los ajustes de copia de seguridad.",
+            "Seguir el progreso hasta que termine la copia."
+          ],
+          "duration": 6.466667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 es",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "es",
+          "recordingVerified": true,
+          "recordingFrames": 413,
+          "sourceSHA256": "2f4afd413998d0fbf322974edb39ad2c9e82345962c22b89dffb895745140676",
+          "posterSeconds": 4.85,
+          "sourceFrameSeconds": 5.277,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "28ba532da19f0af7766ef6a2aa925d1cd070e345446b216980ffd7c1e3b468f5",
+            "webp": "5c72222d5b5beb3eb3ee8eaa52fa7ad05000210e5de7fd52258e1509d4e0daac",
+            "jpg": "7bb00f12ea15ad32f320b58b30d0be6121fca4e6c181a6e0cc19781836f22c68",
+            "vtt": "e7aa8dfb7bcd0090e892759966dd40ea71e88997e0fd13d23f1955c4984e297b"
+          }
+        }
+      }
+    },
+    "it": {
+      "appLocale": "it",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/it/search-local.webp",
+          "imageAlt": "Cercare Priya nei messaggi locali e mostrare i risultati · MailVault version 2.20.0 it",
+          "video": "/assets/help-media/it/search-local.mp4",
+          "videoLabel": "Cercare Priya nei messaggi locali e mostrare i risultati · MailVault version 2.20.0 it",
+          "poster": "/assets/help-media/it/search-local.jpg",
+          "posterAlt": "Cercare Priya nei messaggi locali e mostrare i risultati · MailVault version 2.20.0 it",
+          "captions": "/assets/help-media/it/search-local.vtt",
+          "transcript": [
+            "Digitare Priya nel campo di ricerca.",
+            "Avviare la ricerca e consultare i messaggi salvati su questo computer."
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 it",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 312,
+          "sourceSHA256": "d5ac71941b33b1521254b4f755bdc6d7b5f617d1b15a27bbcaed6a0f9999ced0",
+          "posterSeconds": 3.5065,
+          "sourceFrameSeconds": 3.9325,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "2d015c764f4c54e9c6c8df389e88aa483596229a92e7c21fdb56fc4cdf4f6070",
+            "webp": "a52ec061f538edcb6347ff8516b927a2dd13eb479fbcab1f3e12bea3ac59fb0a",
+            "jpg": "0dbcfd4e44dda13c6c2a030b59384d29307fae9a1bdcc821639e5fef1fd34e16",
+            "vtt": "677d98d96415d244ad204a950d690cc0e0333f30c1e15b0d67a849bb3b90f560"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/it/privacy-mode.webp",
+          "imageAlt": "Attivare la modalità privacy per nascondere nomi e indirizzi · MailVault version 2.20.0 it",
+          "video": "/assets/help-media/it/privacy-mode.mp4",
+          "videoLabel": "Attivare la modalità privacy per nascondere nomi e indirizzi · MailVault version 2.20.0 it",
+          "poster": "/assets/help-media/it/privacy-mode.jpg",
+          "posterAlt": "Attivare la modalità privacy per nascondere nomi e indirizzi · MailVault version 2.20.0 it",
+          "captions": "/assets/help-media/it/privacy-mode.vtt",
+          "transcript": [
+            "Selezionare lo scudo della privacy nella barra laterale.",
+            "La modalità privacy nasconde nomi e indirizzi e-mail."
+          ],
+          "duration": 4.366667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 it",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 278,
+          "sourceSHA256": "c509ff14533f601be58fb14ba75eb34175d3727eb5aeb4b153d3d4bf6daf6a01",
+          "posterSeconds": 3.27,
+          "sourceFrameSeconds": 3.556,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "ba511f0b8a8f9e8cc66dd2ccff9e717bdd7d09e5e82c07304a2bfde7902f9d0d",
+            "webp": "b5ccc7c8d15d9372d937ac294c9231c10cfa55bb9874a991142f893cedb7bec0",
+            "jpg": "ec6d20d32a3eb84e4897527497a8f13f62fc748ae4396a20788cd3915770d81b",
+            "vtt": "0f2d04cc0ade1d9c12199ac9b56d893ebfe8457098b8e6a7d25453fda62dc863"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/it/manual-backup.webp",
+          "imageAlt": "Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it",
+          "video": "/assets/help-media/it/manual-backup.mp4",
+          "videoLabel": "Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it",
+          "poster": "/assets/help-media/it/manual-backup.jpg",
+          "posterAlt": "Eseguire il backup di tutti gli account e verificarne il completamento · MailVault version 2.20.0 it",
+          "captions": "/assets/help-media/it/manual-backup.vtt",
+          "transcript": [
+            "Avviare il backup di tutti gli account nelle impostazioni di backup.",
+            "Seguire l’avanzamento fino al completamento del backup."
+          ],
+          "duration": 6.566667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 it",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "it",
+          "recordingVerified": true,
+          "recordingFrames": 419,
+          "sourceSHA256": "fa96c5fe33df2471e886b0c4e7128383d51293cff988ac5083e98120542a44d3",
+          "posterSeconds": 4.93,
+          "sourceFrameSeconds": 5.357,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "1ae5fe2119bda7a0e25be4aa8049db77c095681e891b383e2a9780dfa01a464e",
+            "webp": "c2126ef5d704d9166078ca5141d8fe85c28b08f24aaa36c3488855edf8b68e94",
+            "jpg": "e1de8c4e9e69a6c571d358752e57e7c607b32d1cc94bbe4df7daa792cc7bafa9",
+            "vtt": "2ba2a8f3fadb145fdc8b560de444c752077874a81921cbc4d7ea179886efc165"
+          }
+        }
+      }
+    },
+    "ja": {
+      "appLocale": "ja",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/ja/search-local.webp",
+          "imageAlt": "ローカルのメールからPriyaを検索して結果を表示する · MailVault version 2.20.0 ja",
+          "video": "/assets/help-media/ja/search-local.mp4",
+          "videoLabel": "ローカルのメールからPriyaを検索して結果を表示する · MailVault version 2.20.0 ja",
+          "poster": "/assets/help-media/ja/search-local.jpg",
+          "posterAlt": "ローカルのメールからPriyaを検索して結果を表示する · MailVault version 2.20.0 ja",
+          "captions": "/assets/help-media/ja/search-local.vtt",
+          "transcript": [
+            "検索欄にPriyaと入力します。",
+            "検索を実行し、このコンピュータに保存されたメールを確認します。"
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 ja",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 313,
+          "sourceSHA256": "97f9ce4dc9ee38afe4f5f6ba2320c37e23fd07861b26b6871f6d7ceb0cd6b1f0",
+          "posterSeconds": 3.513,
+          "sourceFrameSeconds": 3.94,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "f683107d66eb5cff172ad064141ce24e58bbf17fa3f32964d1629da6062a6168",
+            "webp": "aa2c7aed775775e34a40e0cd97ece9c87e527554cf38bcb2a6d9dd4743781b59",
+            "jpg": "aa0f2a51b0ef6a8df14e3e4f2e38b967f8f82a1e23d254c704f05b7be2fd3a8e",
+            "vtt": "5c506a055a733023378d9941615f8c2d97a1fa9db08877c4fb33d93aeefccca0"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/ja/privacy-mode.webp",
+          "imageAlt": "プライバシーモードを有効にして名前とアドレスを隠す · MailVault version 2.20.0 ja",
+          "video": "/assets/help-media/ja/privacy-mode.mp4",
+          "videoLabel": "プライバシーモードを有効にして名前とアドレスを隠す · MailVault version 2.20.0 ja",
+          "poster": "/assets/help-media/ja/privacy-mode.jpg",
+          "posterAlt": "プライバシーモードを有効にして名前とアドレスを隠す · MailVault version 2.20.0 ja",
+          "captions": "/assets/help-media/ja/privacy-mode.vtt",
+          "transcript": [
+            "サイドバーのプライバシーシールドを選択します。",
+            "プライバシーモードにより名前とメールアドレスが隠されます。"
+          ],
+          "duration": 4.366667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 ja",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 278,
+          "sourceSHA256": "0e19d23e903964e53caa55167b08d8a5233dfe85f71ad49aa801e2520a8a1cd3",
+          "posterSeconds": 3.27,
+          "sourceFrameSeconds": 3.551,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "5a6b95412855d29465c98ab5764299a51a9d9c990e1a43b00c9262febbe002da",
+            "webp": "aff28e69020ec3c0237526960f2a70f855f92cc4d6eee603c8896768c2afef9e",
+            "jpg": "f1702935aaebe137a4a802784e393d597aa19ce39780e70b2245159ed915463e",
+            "vtt": "3ca3eac08e6d74b84b23cffd0b6fc33f534d44a734d5a116ebb0c3a0d26340ff"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/ja/manual-backup.webp",
+          "imageAlt": "すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja",
+          "video": "/assets/help-media/ja/manual-backup.mp4",
+          "videoLabel": "すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja",
+          "poster": "/assets/help-media/ja/manual-backup.jpg",
+          "posterAlt": "すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja",
+          "captions": "/assets/help-media/ja/manual-backup.vtt",
+          "transcript": [
+            "バックアップ設定ですべてのアカウントのバックアップを開始します。",
+            "バックアップが完了するまで進行状況を確認します。"
+          ],
+          "duration": 6.6,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 ja",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "ja",
+          "recordingVerified": true,
+          "recordingFrames": 420,
+          "sourceSHA256": "2a0f9fe56aca4b218c0e18beb4563645e228a398d748d1a9ca17f5d1edb0051a",
+          "posterSeconds": 4.94,
+          "sourceFrameSeconds": 5.37,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "9912f94a775ac862e4ad7f6b597e8c7f6d7493755a9e1cd645b7f8a57aa86bea",
+            "webp": "9c2ef3faa70c32ef23c5343446b6cd527b814a0b8ab4101f856ba55955e588e8",
+            "jpg": "7877d87d7d77b51c8cf38de8ce23791670b0f5ab9b62f7fff2db28813be8d071",
+            "vtt": "0a761adffc7dcb20afa0172e2156e17362b7f29d48ec5e07e2ed0ede93db702c"
+          }
+        }
+      }
+    },
+    "ko": {
+      "appLocale": "ko",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/ko/search-local.webp",
+          "imageAlt": "로컬 메시지에서 Priya를 검색하고 결과 표시 · MailVault version 2.20.0 ko",
+          "video": "/assets/help-media/ko/search-local.mp4",
+          "videoLabel": "로컬 메시지에서 Priya를 검색하고 결과 표시 · MailVault version 2.20.0 ko",
+          "poster": "/assets/help-media/ko/search-local.jpg",
+          "posterAlt": "로컬 메시지에서 Priya를 검색하고 결과 표시 · MailVault version 2.20.0 ko",
+          "captions": "/assets/help-media/ko/search-local.vtt",
+          "transcript": [
+            "검색창에 Priya를 입력합니다.",
+            "검색을 실행하고 이 컴퓨터에 저장된 메시지를 확인합니다."
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 ko",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 312,
+          "sourceSHA256": "6906f0e7f00256bf64c2e7a313b84fc3699b9c3698ff4049c3968eafbbc22f5b",
+          "posterSeconds": 3.5035,
+          "sourceFrameSeconds": 3.9305,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "3a057440e739eff7e97dac8376a85c02d72ab1557b6070e8be24de81b2de4f8a",
+            "webp": "59af94afe87eeb28f2841a228a5affd3a2d55ee8ecd912cc70cceb8cf0ef5090",
+            "jpg": "e5b00b602b1e35aad4ca342f3c54d4b856d7c5e8f9459300c0f6b152848fbbc7",
+            "vtt": "6fdc498d6b27dd7b863db2dbec843b00f4894b6811790d5f7a6ba63af5ce6828"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/ko/privacy-mode.webp",
+          "imageAlt": "개인정보 보호 모드를 켜서 이름과 주소 숨기기 · MailVault version 2.20.0 ko",
+          "video": "/assets/help-media/ko/privacy-mode.mp4",
+          "videoLabel": "개인정보 보호 모드를 켜서 이름과 주소 숨기기 · MailVault version 2.20.0 ko",
+          "poster": "/assets/help-media/ko/privacy-mode.jpg",
+          "posterAlt": "개인정보 보호 모드를 켜서 이름과 주소 숨기기 · MailVault version 2.20.0 ko",
+          "captions": "/assets/help-media/ko/privacy-mode.vtt",
+          "transcript": [
+            "사이드바에서 개인정보 보호 방패를 선택합니다.",
+            "개인정보 보호 모드가 이름과 이메일 주소를 가립니다."
+          ],
+          "duration": 4.366016,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 ko",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 278,
+          "sourceSHA256": "593de8a4db53dc5ae06af36f7af2c274eab9369ff41473ba40d9a67c9b008bf2",
+          "posterSeconds": 3.27,
+          "sourceFrameSeconds": 3.552,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "7e7bec973b0ecc80a6cdc278523ba36e58e02db9b4863ca71c4b74545cd0762e",
+            "webp": "2608c1ad5b30198fc1e4f8b7932f44cd8f339f895e82a99cd1ba832fe77dab5a",
+            "jpg": "aec8b6d1efc23b80abb34a7ce7b5839f3305f7c4d20c07c7cf0cfa74f4586679",
+            "vtt": "a1dadf520c6b928756159b9f902c92ad523e403b151dac1f97ec853c655eb93d"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/ko/manual-backup.webp",
+          "imageAlt": "모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko",
+          "video": "/assets/help-media/ko/manual-backup.mp4",
+          "videoLabel": "모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko",
+          "poster": "/assets/help-media/ko/manual-backup.jpg",
+          "posterAlt": "모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko",
+          "captions": "/assets/help-media/ko/manual-backup.vtt",
+          "transcript": [
+            "백업 설정에서 모든 계정의 백업을 시작합니다.",
+            "백업이 끝날 때까지 진행 상황을 확인합니다."
+          ],
+          "duration": 6.466667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 ko",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "ko",
+          "recordingVerified": true,
+          "recordingFrames": 412,
+          "sourceSHA256": "50e39829e90e9930d75af41a4ed18e4d639307fd789b15da3b789a4f3787d619",
+          "posterSeconds": 4.84,
+          "sourceFrameSeconds": 5.267,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "e7c6d874739f4d9754444fad726e4908221e37504cf94f4b6093347371cb53e3",
+            "webp": "7b60db71c130a206099bf06cff5a1086745a83bc23db29915086faafc14ecd14",
+            "jpg": "f79a3af96179a95b47a508feda480c9190b57b1bdf6169634a8ae3e0448cdfe1",
+            "vtt": "68b37cf7ceb05e6dff0c4b6336d9546fea24323473f5676e6c417199bb846993"
+          }
+        }
+      }
+    },
+    "zh": {
+      "appLocale": "zh-Hans",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/zh/search-local.webp",
+          "imageAlt": "在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh",
+          "video": "/assets/help-media/zh/search-local.mp4",
+          "videoLabel": "在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh",
+          "poster": "/assets/help-media/zh/search-local.jpg",
+          "posterAlt": "在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh",
+          "captions": "/assets/help-media/zh/search-local.vtt",
+          "transcript": [
+            "在搜索框中输入Priya。",
+            "运行搜索并查看保存在此电脑上的匹配邮件。"
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 zh",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "zh-Hans",
+          "recordingVerified": true,
+          "recordingFrames": 312,
+          "sourceSHA256": "bb8adc4b1135dfcb524549f88e12d0e5cc4b1169f1b91b53a26beaa5c1880abf",
+          "posterSeconds": 3.509,
+          "sourceFrameSeconds": 3.931,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "abebeb043cd6106cb5a612cb1f16ff1ebdcf13019e56154f3b076c3851e6f995",
+            "webp": "789bb3e37c755e89ec7f19e411e547807db160ab22a7f63c7f19a6e8e8b89359",
+            "jpg": "eb381f5b95a6a423d9a0bd2caee65c1e5dc6962144b292e3c979083c38bd4597",
+            "vtt": "3fa1335ca71c75a75005a2ac2af60b12a562aa36ed06161d302b9040793319fc"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/zh/privacy-mode.webp",
+          "imageAlt": "启用隐私模式以隐藏姓名和地址 · MailVault version 2.20.0 zh",
+          "video": "/assets/help-media/zh/privacy-mode.mp4",
+          "videoLabel": "启用隐私模式以隐藏姓名和地址 · MailVault version 2.20.0 zh",
+          "poster": "/assets/help-media/zh/privacy-mode.jpg",
+          "posterAlt": "启用隐私模式以隐藏姓名和地址 · MailVault version 2.20.0 zh",
+          "captions": "/assets/help-media/zh/privacy-mode.vtt",
+          "transcript": [
+            "选择侧边栏中的隐私盾牌。",
+            "隐私模式会遮蔽姓名和电子邮件地址。"
+          ],
+          "duration": 4.333008,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 zh",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "zh-Hans",
+          "recordingVerified": true,
+          "recordingFrames": 277,
+          "sourceSHA256": "249ad41ec72b5c2e1e56aa454f09a48f550f02ae4398d6607b34d3ae83efba79",
+          "posterSeconds": 3.26,
+          "sourceFrameSeconds": 3.543,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "c448aa723ee2c96af0e1ac7709f17dc957ee8808877ced2ac44ea4387a15fcaa",
+            "webp": "3f2083f08739bfc205a0d56c98a35c457bf70e67618e13282a8e80a5716491e6",
+            "jpg": "06867e302992aacb3dc7721607177706ae45fc4deb91833ff4d2a521a419ba02",
+            "vtt": "d2ee628a3363339356d6730f20756979d0baa783620b9c82392d465b5d032602"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/zh/manual-backup.webp",
+          "imageAlt": "备份所有账户并确认完成 · MailVault version 2.20.0 zh",
+          "video": "/assets/help-media/zh/manual-backup.mp4",
+          "videoLabel": "备份所有账户并确认完成 · MailVault version 2.20.0 zh",
+          "poster": "/assets/help-media/zh/manual-backup.jpg",
+          "posterAlt": "备份所有账户并确认完成 · MailVault version 2.20.0 zh",
+          "captions": "/assets/help-media/zh/manual-backup.vtt",
+          "transcript": [
+            "在备份设置中开始备份所有账户。",
+            "查看进度，直到备份完成。"
+          ],
+          "duration": 6.566667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 zh",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "zh-Hans",
+          "recordingVerified": true,
+          "recordingFrames": 420,
+          "sourceSHA256": "2e43bb96fe06edf0172f0f2bdbd6e4ebc3dcee43bbed5c3542478934815ed051",
+          "posterSeconds": 4.93,
+          "sourceFrameSeconds": 5.358,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "b7c71bd43aed44819b843db212c7ef56f6af2785bdc011ab30cf3c6e386cd142",
+            "webp": "7e7e06ad1e06014d8f9ee3eec3f36fb19c389bd54724d690dae25c4daba1b02c",
+            "jpg": "2f66bb3f7f063b24758a038b3087df3bbc899866e257c24525528d4a6b31db3a",
+            "vtt": "3f65eb199602ed42f090afc68ea8f7404a9d34771a4ca1af544cc58a87f314ee"
+          }
+        }
+      }
+    },
+    "pt-br": {
+      "appLocale": "pt-BR",
+      "workflows": {
+        "search-local": {
+          "image": "/assets/help-media/pt-br/search-local.webp",
+          "imageAlt": "Pesquisar Priya nas mensagens locais e exibir os resultados · MailVault version 2.20.0 pt-br",
+          "video": "/assets/help-media/pt-br/search-local.mp4",
+          "videoLabel": "Pesquisar Priya nas mensagens locais e exibir os resultados · MailVault version 2.20.0 pt-br",
+          "poster": "/assets/help-media/pt-br/search-local.jpg",
+          "posterAlt": "Pesquisar Priya nas mensagens locais e exibir os resultados · MailVault version 2.20.0 pt-br",
+          "captions": "/assets/help-media/pt-br/search-local.vtt",
+          "transcript": [
+            "Digite Priya no campo de pesquisa.",
+            "Execute a pesquisa e veja as mensagens salvas neste computador."
+          ],
+          "duration": 4.8,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 pt-br",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "pt-BR",
+          "recordingVerified": true,
+          "recordingFrames": 312,
+          "sourceSHA256": "0ab16cd9b674290f4684c6079b47ca172dfdbe0d0eef0d19807a4b6c6978b6aa",
+          "posterSeconds": 3.5105,
+          "sourceFrameSeconds": 3.9355,
+          "sourceCropPixels": [
+            524,
+            236,
+            1400,
+            963
+          ],
+          "sha256": {
+            "mp4": "939cf3e38322f163fa940110be6e593a1e97c6752bac3023d6606048745a9160",
+            "webp": "5df5d705d86483dfa069fa5914882ed7ed3fab3a920af2f2babfa1550f5bad93",
+            "jpg": "954d742a066fac7d23ba3b845fef273d0975aad9bbee7e9ccdc7d8f4f77606bb",
+            "vtt": "1822c08ffcf3091f22c1d68c484e072a44892ac83cb93f08e811803b99b9f282"
+          }
+        },
+        "privacy-mode": {
+          "image": "/assets/help-media/pt-br/privacy-mode.webp",
+          "imageAlt": "Ativar o modo de privacidade para ocultar nomes e endereços · MailVault version 2.20.0 pt-br",
+          "video": "/assets/help-media/pt-br/privacy-mode.mp4",
+          "videoLabel": "Ativar o modo de privacidade para ocultar nomes e endereços · MailVault version 2.20.0 pt-br",
+          "poster": "/assets/help-media/pt-br/privacy-mode.jpg",
+          "posterAlt": "Ativar o modo de privacidade para ocultar nomes e endereços · MailVault version 2.20.0 pt-br",
+          "captions": "/assets/help-media/pt-br/privacy-mode.vtt",
+          "transcript": [
+            "Selecione o escudo de privacidade na barra lateral.",
+            "O modo de privacidade oculta nomes e endereços de e-mail."
+          ],
+          "duration": 4.366667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 pt-br",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "pt-BR",
+          "recordingVerified": true,
+          "recordingFrames": 277,
+          "sourceSHA256": "440457fd73cf182b19f6b645267d6c655a9fc1481f87638a5065ce4731467c2c",
+          "posterSeconds": 3.26,
+          "sourceFrameSeconds": 3.54,
+          "sourceCropPixels": [
+            8,
+            788,
+            1520,
+            1045
+          ],
+          "sha256": {
+            "mp4": "a462e54afbb1c731c9460a2e06e1b5869999e33fc25f0406b7a625b3daa94963",
+            "webp": "ac0a140ea3b6482631764130509a88c9671cfa5fdff8ee283a7e51c6f7252c87",
+            "jpg": "143c73d6dc2c3705be9b5b89972898fb29bcce63b038aa71ee301929cd7750d1",
+            "vtt": "c39b946a9ba6d4d70a86a113e133114c8fc9c96df46003f25e6412c563b0dccb"
+          }
+        },
+        "manual-backup": {
+          "image": "/assets/help-media/pt-br/manual-backup.webp",
+          "imageAlt": "Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br",
+          "video": "/assets/help-media/pt-br/manual-backup.mp4",
+          "videoLabel": "Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br",
+          "poster": "/assets/help-media/pt-br/manual-backup.jpg",
+          "posterAlt": "Fazer backup de todas as contas e confirmar a conclusão · MailVault version 2.20.0 pt-br",
+          "captions": "/assets/help-media/pt-br/manual-backup.vtt",
+          "transcript": [
+            "Inicie o backup de todas as contas nas configurações de backup.",
+            "Acompanhe o progresso até a conclusão do backup."
+          ],
+          "duration": 6.466667,
+          "imageSize": [
+            1440,
+            1056
+          ],
+          "videoSize": [
+            960,
+            704
+          ],
+          "stamp": "MailVault version 2.20.0 pt-br",
+          "captureVersion": "2.20.0",
+          "captureCommit": "a554911800d69fe29e902747add60c61ce5246bb",
+          "captureLocale": "pt-BR",
+          "recordingVerified": true,
+          "recordingFrames": 414,
+          "sourceSHA256": "e0496f9ec0c6bf3775ab5dd18ff7ce17d345ebbd39781a491ba866d2228ff642",
+          "posterSeconds": 4.86,
+          "sourceFrameSeconds": 5.288,
+          "sourceCropPixels": [
+            940,
+            410,
+            1680,
+            1155
+          ],
+          "sha256": {
+            "mp4": "43684b287afceba49f3662de1e51c27aff5595bb885d676a43919d6242bbc085",
+            "webp": "3ad759b9ef3aa4175a460b388fb8327951b539a3821abfee37b86a7e60f523b1",
+            "jpg": "87b0919be1c359fa892f6d376d80baf994d528231fbe457236d66fe3bc0db035",
+            "vtt": "4cb1ff1dca463af129cee231405fc629cd5857652e40fcb7cc02e38710d8efd1"
+          }
+        }
+      }
+    }
+  }
+}

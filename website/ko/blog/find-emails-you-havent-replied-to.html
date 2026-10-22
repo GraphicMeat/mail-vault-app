@@ -59,6 +59,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/find-emails-you-havent-replied-to.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/find-emails-you-havent-replied-to.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
   <header class="mv-header">
@@ -86,13 +87,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-20" class="text-sm text-primary-500 font-medium">2026년 10월 20일</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">아직 답장하지 않은 이메일을 찾는 방법</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">아직 답장하지 않은 이메일을 찾는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#open">답장 필요 보기부터 시작하기</a></li><li><a href="#scope">기본 목록에 포함되는 항목</a></li><li><a href="#review">결과를 활용해 매일 짧게 확인하기</a></li><li><a href="#follow-up">30일 범위를 넘는 장기 후속 조치 관리하기</a></li><li><a href="#missing">예상한 메시지가 보이지 않는 경우</a></li><li><a href="#free">무료로 제공되는 범위는?</a></li></ul></details><!-- help-contents:end -->
           <p class="text-sm text-slate-500">MailVault 작성 · 읽는 시간 4분</p>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -104,13 +105,13 @@
 <h2 id="open">답장 필요 보기부터 시작하기</h2>
 <p>사이드바에서 <strong>보기 → 답장 필요</strong>를 엽니다. 기본 보기의 이름을 바꾸거나 삭제했다면 <strong>설정 → 보기</strong>를 확인합니다. 여기에서 기존 보기를 편집할 수 있으며 저장된 검색을 보기로 만들 수도 있습니다.</p>
 <p>결과를 활용하기 전에 계정 동기화와 로컬 색인 업데이트가 끝나도록 기다립니다. 보기는 MailVault에서 사용할 수 있는 정보를 검색합니다. 불러오지 않은 계정이나 폴더에 답장하지 않은 메일이 없다는 것을 입증하지는 못합니다.</p>
-<figure class="mv-search-diagram"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-views-detail-720.webp 720w, /screenshots/ko/settings-views-detail-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/ko/settings-views-detail-light-1708.webp" srcset="/screenshots/ko/settings-views-detail-light-720.webp 720w, /screenshots/ko/settings-views-detail-light-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px" width="854" height="212" loading="lazy" decoding="async" alt="MailVault의 저장된 보기: 답장 필요, 별표, 첨부 파일, 사용자 지정 청구서 보기 · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture><figcaption>답장 필요는 기본 보기 중 하나입니다. 이 스크린샷에는 사용자 지정 청구서 보기도 표시되어 있습니다. 무료 요금제에서는 총 3개의 보기를 사용할 수 있습니다.</figcaption></figure>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/settings-views-detail-light-1708.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-views-detail-720.webp 720w, /screenshots/ko/settings-views-detail-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px"><img src="/screenshots/ko/settings-views-detail-light-1708.webp" srcset="/screenshots/ko/settings-views-detail-light-720.webp 720w, /screenshots/ko/settings-views-detail-light-1708.webp 1708w" sizes="(max-width: 760px) 92vw, 720px" width="854" height="212" loading="lazy" decoding="async" alt="MailVault의 저장된 보기: 답장 필요, 별표, 첨부 파일, 사용자 지정 청구서 보기 · MailVault version 2.16.0 ko" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a><figcaption>답장 필요는 기본 보기 중 하나입니다. 이 스크린샷에는 사용자 지정 청구서 보기도 표시되어 있습니다. 무료 요금제에서는 총 3개의 보기를 사용할 수 있습니다.</figcaption></figure>
 <h2 id="scope">기본 목록에 포함되는 항목</h2>
 <p>수정하지 않은 답장 필요 기본 보기는 다음 조건을 충족하는 메시지를 선택합니다.</p>
 <ul><li>나에게 온 메시지입니다.</li><li>내가 보낸 메시지가 아닙니다.</li><li>답장한 것으로 표시되지 않았습니다.</li><li>최근 <strong>30일</strong> 이내의 메시지입니다.</li><li>휴지통, 정크 또는 보관함으로 식별된 폴더에 있지 않습니다.</li></ul>
 <p>보기를 편집할 수 있으므로 결과가 다르면 현재 필터를 확인합니다. 날짜 범위는 중요합니다. 6주 전에 받은 미답장 요청은 아직 살펴봐야 하더라도 기본 보기에 나타나지 않습니다.</p>
 <p><strong>답장 필요는 메시지의 답장 완료 플래그를 사용합니다. 대화 전체가 해결되었는지 추론하지 않습니다.</strong> 알림 메일은 답장이 전혀 필요하지 않을 수 있습니다. 새 메시지로 답장을 보내거나 원본의 플래그를 업데이트하지 않는 다른 앱에서 답장했다면 원본이 목록에 남을 수 있습니다. 답장한 것으로 표시된 메시지에도 약속한 작업이 남아 있을 수 있습니다.</p>
-<figure class="mv-search-diagram"><video controls playsinline preload="none" width="960" height="660" poster="/assets/clips/ko/views.jpg" aria-label="MailVault 저장된 보기 시연 · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ko/views.mp4" type="video/mp4"><a href="/assets/clips/ko/views.mp4">짧은 시연 보기</a>.</video><figcaption id="clip-description">약 5초, 소리 없음. 사이드바에서 첨부 파일을 선택하면 메시지 316개가 표시됩니다. 답장 필요를 선택하면 41개가 표시됩니다. 영상은 다시 첨부 파일로 돌아갑니다. 이 수치는 시연용이며, 사람이 답해야 하는 메시지가 무엇인지 나타내는 지표가 아닙니다.</figcaption></figure>
+<figure class="mv-search-diagram"><video controls="" playsinline="" preload="none" width="960" height="660" poster="/assets/clips/ko/views.jpg" aria-label="MailVault 저장된 보기 시연 · Reviewed for MailVault version 2.20.0" aria-describedby="clip-description" style="display:block;width:100%;height:auto;border-radius:14px" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ko/views.mp4" type="video/mp4"><a href="/assets/clips/ko/views.mp4">짧은 시연 보기</a>.</video><figcaption id="clip-description">약 5초, 소리 없음. 사이드바에서 첨부 파일을 선택하면 메시지 316개가 표시됩니다. 답장 필요를 선택하면 41개가 표시됩니다. 영상은 다시 첨부 파일로 돌아갑니다. 이 수치는 시연용이며, 사람이 답해야 하는 메시지가 무엇인지 나타내는 지표가 아닙니다.</figcaption></figure>
 <h2 id="review">결과를 활용해 매일 짧게 확인하기</h2>
 <ol><li><strong>원본 메시지를 열고 대화를 읽습니다.</strong> 이후의 대화에서 질문에 이미 답했는지 확인합니다.</li><li><strong>답할 수 있을 때 답장합니다.</strong> 같은 설명을 반복한다면 <a href="/ko/blog/email-templates-for-client-replies.html">저장된 답장 템플릿</a>을 사용하고 상대에 맞게 수정합니다.</li><li><strong>작업이 남아 있는 메시지에 별표를 표시합니다.</strong> 초안을 쓰거나 수신 확인을 보냈다고 작업이 끝난 것은 아닙니다. 아직 조치가 필요한 항목에 나만의 표시를 남깁니다.</li><li><strong>별표 보기도 확인합니다.</strong> 읽음/읽지 않음을 완료/미완료 대신 사용하지 말고, 조치가 끝나면 별표를 해제합니다.</li></ol>
 <p>별표에는 “내가 아직 할 일이 있음”과 같이 일관된 의미를 부여합니다. 이미 별표를 즐겨찾는 메시지에 쓰고 있다면 전용 수동 태그를 선택합니다. 표시는 어떤 의미로 붙였는지 알고 있을 때만 도움이 됩니다.</p>
@@ -130,17 +131,18 @@
             <p class="text-sm mb-4">MailVault에서 이 작업 흐름을 사용해 볼 수 있습니다. macOS, Windows, Linux를 지원합니다.</p>
             <div class="flex flex-wrap gap-3">
               <a class="mv-button mv-blog-cta mv-blog-cta-primary" href="/ko/get-started.html?plan=free" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="download">MailVault 무료 다운로드</a>
-              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ko" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="demo">데모 살펴보기 ↗</a>
+              <a class="mv-button mv-secondary mv-blog-cta mv-blog-cta-secondary" href="/demo/?lang=ko" target="_blank" rel="noopener" data-acquisition-event="blog_cta" data-acquisition-placement="find-emails-you-havent-replied-to" data-acquisition-destination="demo" aria-label="새 창에서 MailVault 데모 열기">데모 살펴보기 ↗</a>
             </div>
           </div>
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

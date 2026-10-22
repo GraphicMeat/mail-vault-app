@@ -38,7 +38,7 @@
   "description": "Guarda un mensaje de Gmail en EML o archiva todo un buzón localmente. Compara las descargas de Gmail, Google Takeout y MailVault, y verifica después tu copia de seguridad.",
   "url": "https://mailvaultapp.com/es/guides/backup-gmail-to-eml.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-gmail-to-eml.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-gmail-to-eml.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,22 +172,22 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Guías de copias de correo · <time datetime="2026-10-15">15 de octubre de 2026</time></p>
-          <h1>Cómo guardar Gmail en archivos EML</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <h1>Cómo guardar Gmail en archivos EML</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">Guarda un mensaje de Gmail sin instalar nada</a></li><li><a href="#help-section-2">Haz una copia de todo un buzón de Gmail en archivos EML individuales</a></li><li><a href="#help-section-3">Verifica el archivo antes de confiar en él</a></li><li><a href="#backup-archived-email-video">Demostración breve: crea una copia aparte de tu bóveda</a></li><li><a href="#help-section-4">Copia de Gmail en EML frente a Google Takeout</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
           <p data-i18n-block>Para guardar Gmail en <code>.eml</code>, usa <strong>Descargar mensaje</strong> para un correo individual o archiva tu buzón con una aplicación de escritorio que guarde cada mensaje como EML. Google Takeout también es una opción útil para hacer copias, pero exporta el correo en MBOX en lugar de archivos EML individuales. Elige el formato que necesitas antes de empezar.</p>
-          <h2 data-i18n-block>Guarda un mensaje de Gmail sin instalar nada</h2>
+          <h2 data-i18n-block id="help-section-1">Guarda un mensaje de Gmail sin instalar nada</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Abre Gmail en un navegador de escritorio y abre el mensaje que quieras.</li>
           <li data-i18n-block>Usa el menú de tres puntos <strong>Más</strong> del mensaje y, después, <strong>Descargar mensaje</strong>.</li>
           <li data-i18n-block>Conserva el archivo .eml descargado y ábrelo en una aplicación de correo de escritorio para comprobar su contenido. Repite el proceso con los demás mensajes que necesites.</li></ol>
           <p data-i18n-block>Estos pasos siguen las <a href="https://support.google.com/mail/answer/9261412?hl=en">instrucciones de Google para descargar mensajes</a>. Es una opción cómoda para un recibo o unos pocos mensajes importantes; repetirla para todo un buzón es lento.</p>
-          <h2 data-i18n-block>Haz una copia de todo un buzón de Gmail en archivos EML individuales</h2>
+          <h2 data-i18n-block id="help-section-2">Haz una copia de todo un buzón de Gmail en archivos EML individuales</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Instala MailVault y añade tu cuenta de Google con el inicio de sesión de Google. Revisa los permisos solicitados. Si es una cuenta de trabajo o de estudios, tu administrador puede restringir el acceso de terceros.</li>
           <li data-i18n-block>Elige las carpetas o etiquetas que necesites. Incluye los enviados y las carpetas antiguas, no solo la bandeja de entrada. Revisa la visibilidad IMAP de Gmail si falta alguna etiqueta.</li>
           <li data-i18n-block>Abre las operaciones masivas, selecciona el intervalo de fechas y elige <strong>Archivar</strong>. Esto guarda el correo localmente sin eliminar las copias del servidor. Empieza por un intervalo pequeño para comprobar el resultado.</li>
           <li data-i18n-block>Espera a que termine el archivado antes de cerrar el ordenador o empezar una limpieza. Las cuentas grandes pueden necesitar varias sesiones debido a los límites de descarga del proveedor.</li>
-          <li data-i18n-block>Abre los ajustes de almacenamiento de correo de MailVault para localizar tu bóveda. Los mensajes archivados se guardan como archivos .eml en una estructura Maildir; no cambies el nombre ni muevas archivos dentro de la bóveda activa.</li></ol>
-          <h2 data-i18n-block>Verifica el archivo antes de confiar en él</h2>
+          <li data-i18n-block>Abre los ajustes de almacenamiento de correo de MailVault para localizar tu bóveda. Los mensajes archivados se guardan como archivos .eml en una estructura Maildir; no cambies el nombre ni muevas archivos dentro de la bóveda activa. Estas instrucciones sobre la estructura de archivos se refieren al formato Maildir predeterminado. Ajustes → Almacenamiento también ofrece almacenamiento JMAP, que conserva los bytes originales de los mensajes con registros JSON y elimina los duplicados de mensajes idénticos.</li></ol>
+          <h2 data-i18n-block id="help-section-3">Verifica el archivo antes de confiar en él</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Cambia el origen de los mensajes a <strong>Bóveda</strong>, en lugar de Servidor o Todo. Busca un mensaje antiguo que reconozcas.</li>
           <li data-i18n-block>Desconecta la red y abre algunos mensajes archivados de distintas carpetas y años. Abre también sus adjuntos. Un asunto en una lista no demuestra que el cuerpo del mensaje esté guardado.</li>
@@ -199,14 +200,14 @@
           <p data-i18n-block class="text-sm">Demostración con correo ficticio, editada a partir de las grabaciones de demostración de macOS existentes. El inicio de sesión y parte de la preparación suceden fuera de cámara; no es una conexión en directo con un proveedor.</p>
           <details><summary data-i18n-block>Lee la descripción de la demostración</summary>
           <p data-i18n-block>Una vez archivados los mensajes, elige una ubicación y ejecuta la copia de seguridad. La grabación muestra correo ficticio y un destino preparado. Una segunda copia protege frente a la pérdida del ordenador; primero debes archivar los mensajes que solo están en el servidor.</p></details></section>
-          <h2 data-i18n-block>Copia de Gmail en EML frente a Google Takeout</h2>
+          <h2 data-i18n-block id="help-section-4">Copia de Gmail en EML frente a Google Takeout</h2>
           <p data-i18n-block>Usa EML si quieres archivos de mensajes individuales y un archivo de trabajo con búsquedas. Usa <a href="https://support.google.com/accounts/answer/3024190?hl=en">Google Takeout</a> si quieres una exportación de la cuenta preparada por Google. El correo de Takeout está en MBOX; descargar un ZIP de Takeout no lo convierte a EML. MailVault también permite importar MBOX en Copia y restauración si ya tienes una exportación.</p>
           <p data-i18n-block>Ni descargar mensajes ni moverlos al archivo de Gmail libera espacio. Para recuperarlo, lee <a href="/es/guides/gmail-storage-full.html">cómo liberar espacio en Gmail sin perder correos</a> después de verificar ambas copias locales. Para una comparación más amplia de formatos, consulta <a href="/es/guides/download-all-gmail-emails.html">descargar todos los correos de Gmail</a>.</p>
           <p data-i18n-block><a href="/es/get-started.html">Descarga MailVault gratis</a> para crear tu primer archivo local. El archivado manual es gratuito; el archivado automático, las copias programadas y Archivar y eliminar requieren <a href="/es/pricing.html">Premium</a>.</p>
           <p data-i18n-block>Más guías prácticas: <a href="/es/guides/export-outlook-to-eml.html">Cómo exportar correos de Outlook a EML</a> · <a href="/es/guides/download-all-emails-mac.html">Cómo descargar todos tus correos en Mac</a> · <a href="/es/guides/backup-email-linux.html">Cómo hacer una copia del correo en Linux como EML</a> · <a href="/es/guides/linux-email-archive.html">Un archivo local de correo para Linux: qué comprobar</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Verlo en MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/es/manual-backup.webp"><img src="/assets/help-media/es/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Crear una copia de todas las cuentas y comprobar que termina</figcaption><video controls playsinline preload="none" poster="/assets/help-media/es/manual-backup.jpg" aria-label="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/es/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/es/manual-backup.vtt" srclang="es" label="Español" default></video></figure><details class="mv-help-contents"><summary>Transcripción del vídeo</summary><p>Iniciar la copia de seguridad de todas las cuentas en los ajustes de copia de seguridad. Seguir el progreso hasta que termine la copia.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -234,5 +235,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

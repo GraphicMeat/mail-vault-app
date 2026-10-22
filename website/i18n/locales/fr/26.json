@@ -15,7 +15,6 @@
   "3afa38a8833e": "Le nettoyage est-il la même chose que la rédaction par IA ?",
   "6ecb1a5060dc": "Non. La rédaction par IA dispose de ses propres paramètres de fournisseur pour Apple Intelligence, un modèle téléchargé ou un point de terminaison compatible comme Ollama. Changer ce fournisseur ne modifie pas le classificateur du nettoyage.",
   "eea32a5141b1": "Supprimer retire la copie du serveur sans créer d'abord de copie dans le coffre. Utilisez Archiver dans le nettoyage pour enregistrer et vérifier une copie locale avant de la supprimer du serveur. La Capsule temporelle peut afficher l'historique enregistré, mais ne peut pas récupérer un message qui n'a jamais été sauvegardé.",
-  "3e016ad79e11": "Connectez Yahoo avec un mot de passe d'application, archivez vos dossiers et vérifiez votre copie locale.",
   "c7beb003a3af": "Sélecteur de contacts et carnet d'adresses — suggestions pendant la rédaction, historique des contacts, fusion et import/export vCard",
   "2820f998042a": "Vos e-mails restent sur votre ordinateur. MailVault vérifie les expéditeurs, stocke les identifiants dans le Trousseau macOS, le Gestionnaire d'informations d'identification Windows ou Linux Secret Service, et fonctionne dans un bac à sable. Aucun service MailVault de stockage des e-mails, aucune télémétrie. Les points de terminaison IA facultatifs ne reçoivent que le texte que vous approuvez ; les e-mails Gmail restent sur l'appareil."
 }

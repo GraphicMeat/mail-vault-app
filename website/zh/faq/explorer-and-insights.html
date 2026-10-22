@@ -163,6 +163,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -211,7 +212,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html" aria-current="page">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -224,49 +225,49 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Explorer 与 邮件分析</h1>
+      <h1 class="text-4xl font-bold mb-2">Explorer 与 邮件分析</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">Explorer 是什么？</a></li><li><a href="#help-section-2">可以看到某个人发给我的全部邮件吗？</a></li><li><a href="#help-section-3">“日期 → 会话”有什么用？</a></li><li><a href="#help-section-4">在 Explorer 里还能搜索吗？</a></li><li><a href="#help-section-5">邮件分析 是什么？</a></li><li><a href="#help-section-6">时间线和活动视图显示什么？</a></li><li><a href="#help-section-7">邮件分析 会把我的邮件发送到别处吗？</a></li><li><a href="#help-section-8">Explorer 和 邮件分析 属于 Premium 吗？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">看待你已有邮箱的两种方式：Explorer 把它分组，邮件分析 把它画成图。两者都免费，也都只读取你硬盘上已有的内容。</p>
 
       <div class="space-y-4">
 
         <article id="what-is-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorer 是什么？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">Explorer 是什么？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>Explorer 是浏览你已有邮件的第二种方式。它不再只给你一份长长的列表，而是把当前文件夹里的邮件折叠成可以逐层走进去的分组 — 按<strong>日期</strong>、按<strong>发件人</strong>，或者按<strong>日期再按会话</strong>。用邮件列表上方的<strong>列表 / Explorer</strong>控件即可切换；邮件不会被移动、复制或重新归档，切回列表后一切照旧。</p>
               <p>每个分组在你打开之前就会告诉你里面有什么：包含多少封邮件、其中多少封已经保存在保险库里、还有多少封未读。打开分组后，里面的邮件与常规列表中的显示完全一致，阅读器相同，可用操作也相同。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/explorer-date-720.webp 720w, /screenshots/zh/explorer-date-1440.webp 1440w, /screenshots/zh/explorer-date-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/explorer-date-light-1440.webp" srcset="/screenshots/zh/explorer-date-light-720.webp 720w, /screenshots/zh/explorer-date-light-1440.webp 1440w, /screenshots/zh/explorer-date-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer 按日期对邮箱分组，某个月份分组显示邮件数、保险库数和未读数 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/explorer-date-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/explorer-date-720.webp 720w, /screenshots/zh/explorer-date-1440.webp 1440w, /screenshots/zh/explorer-date-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/explorer-date-light-1440.webp" srcset="/screenshots/zh/explorer-date-light-720.webp 720w, /screenshots/zh/explorer-date-light-1440.webp 1440w, /screenshots/zh/explorer-date-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer 按日期对邮箱分组，某个月份分组显示邮件数、保险库数和未读数 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">按日期浏览：以月为单位，想要更细的粒度也可以按日。</figcaption>
             </figure>
         </article>
 
         <article id="explorer-by-sender" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">可以看到某个人发给我的全部邮件吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">可以看到某个人发给我的全部邮件吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>可以 — 把<strong>浏览方式</strong>设为<strong>发件人</strong>。每位联系人会成为一个分组，装下他们在当前文件夹中的全部邮件，最新的在前，行上显示最近一封的日期。</p>
               <p>分组行上的复选框会一次选中其中全部邮件，于是“归档这份订阅邮件发来的所有内容”只需两次点击，而不用长长地按住 Shift 点选。删除和导出同理。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/explorer-sender-720.webp 720w, /screenshots/zh/explorer-sender-1440.webp 1440w, /screenshots/zh/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/explorer-sender-light-1440.webp" srcset="/screenshots/zh/explorer-sender-light-720.webp 720w, /screenshots/zh/explorer-sender-light-1440.webp 1440w, /screenshots/zh/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer 按发件人分组，每位联系人一个分组 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/explorer-sender-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/explorer-sender-720.webp 720w, /screenshots/zh/explorer-sender-1440.webp 1440w, /screenshots/zh/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/explorer-sender-light-1440.webp" srcset="/screenshots/zh/explorer-sender-light-720.webp 720w, /screenshots/zh/explorer-sender-light-1440.webp 1440w, /screenshots/zh/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer 按发件人分组，每位联系人一个分组 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">按发件人浏览：每位联系人一个分组，可以整组选中。</figcaption>
             </figure>
         </article>
 
         <article id="explorer-conversation" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">“日期 &rarr; 会话”有什么用？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">“日期 &rarr; 会话”有什么用？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>它多嵌套了一层。顶层仍然是月（或日），但打开之后看到的是这段时间里发生的<em>会话</em>，而不是零散的邮件。打开一个会话即可阅读，或者用<strong>打开完整会话</strong>把它交给常规的会话视图。</p>
               <p>如果你只大致记得某件事发生在什么时候，却记不清是谁发来的，这就是适合的视图。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/explorer-conversation-720.webp 720w, /screenshots/zh/explorer-conversation-1440.webp 1440w, /screenshots/zh/explorer-conversation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/explorer-conversation-light-1440.webp" srcset="/screenshots/zh/explorer-conversation-light-720.webp 720w, /screenshots/zh/explorer-conversation-light-1440.webp 1440w, /screenshots/zh/explorer-conversation-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer 处于“日期再按会话”模式，显示归入某个月份下的会话 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
-              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">日期 &rarr; 会话：打开某个月，看到的是这个月里的会话。</figcaption>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/explorer-conversation-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/explorer-conversation-720.webp 720w, /screenshots/zh/explorer-conversation-1440.webp 1440w, /screenshots/zh/explorer-conversation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/explorer-conversation-light-1440.webp" srcset="/screenshots/zh/explorer-conversation-light-720.webp 720w, /screenshots/zh/explorer-conversation-light-1440.webp 1440w, /screenshots/zh/explorer-conversation-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer 处于“日期再按会话”模式，显示归入某个月份下的会话 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">日期 → 对话：展开月份，即可查看其中的邮件会话。</figcaption>
             </figure>
         </article>
 
         <article id="searching-in-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">在 Explorer 里还能搜索吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">在 Explorer 里还能搜索吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>可以，而且分两个层次。Explorer 内的搜索框会过滤你当前所在的分组，这是在一个很大的发件人分组或月份分组里找某封邮件的最快方式。如果你想搜索的是整个邮箱，<strong>搜索整个邮箱</strong>会切回列表并打开常规搜索。</p>
               <p>Explorer 还会记住你上次的位置。你的分组方式、日期粒度以及当时打开的分组会按文件夹、按账户保留，重启后依然在。</p>
@@ -274,37 +275,37 @@
         </article>
 
         <article id="what-is-insights" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">邮件分析 是什么？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">邮件分析 是什么？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>邮件分析 是一个关于你与谁往来的全屏视图，从侧边栏的 <strong>邮件分析</strong> 进入。它读取 MailVault 已经存在你硬盘上的邮件头 — 发件人、收件人和日期 — 并用三种方式把它们画出来。</p>
               <p><strong>发件人地图</strong>把你放在中间，每位联系人作为一个气泡围绕在你周围。气泡的面积代表这个人占了多少封邮件；离中心的距离代表你上一次收到他来信已经过去多久。最近联系频繁的人又近又大；多年前只写过一次的人则又远又小。</p>
               <p>点击任意气泡即可查看背后的邮件，并在不离开页面的情况下阅读。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/insights-map-720.webp 720w, /screenshots/zh/insights-map-1440.webp 1440w, /screenshots/zh/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/insights-map-light-1440.webp" srcset="/screenshots/zh/insights-map-light-720.webp 720w, /screenshots/zh/insights-map-light-1440.webp 1440w, /screenshots/zh/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 邮件分析 发件人地图，联系人画成气泡，大小取决于邮件数量，位置取决于最近联系时间 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/insights-map-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/insights-map-720.webp 720w, /screenshots/zh/insights-map-1440.webp 1440w, /screenshots/zh/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/insights-map-light-1440.webp" srcset="/screenshots/zh/insights-map-light-720.webp 720w, /screenshots/zh/insights-map-light-1440.webp 1440w, /screenshots/zh/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 邮件分析 发件人地图，联系人画成气泡，大小取决于邮件数量，位置取决于最近联系时间 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">发件人地图：气泡面积代表数量，距离代表距上一封邮件过去了多久。</figcaption>
             </figure>
         </article>
 
         <article id="insights-timeline-activity" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">时间线和活动视图显示什么？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">时间线和活动视图显示什么？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p><strong>时间线</strong>为每位发件人在真实时间轴上安排一条泳道，圆点代表你收到的邮件，菱形代表你发出的邮件。一段关系从开始、到沉寂、再到变成单向，都能在这个视图里看出来。可以在周、日和单封邮件之间缩放。</p>
               <p><strong>活动</strong>是一张日历网格，一天一个方块，颜色深浅代表那天有多少邮件往来。点击某一天就能看到当天到底收到了什么。</p>
               <p>三种视图共用顶部的同一组控件：看哪个账户、看哪段日期范围 — 30 天、90 天、12 个月或你自己选的日期 — 以及看收到的邮件、发出的邮件还是两者。<strong>隐藏疑似自动发件人</strong>只需一次勾选，就能把订阅邮件和 no-reply 地址移出画面。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/insights-timeline-720.webp 720w, /screenshots/zh/insights-timeline-1440.webp 1440w, /screenshots/zh/insights-timeline-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/insights-timeline-light-1440.webp" srcset="/screenshots/zh/insights-timeline-light-720.webp 720w, /screenshots/zh/insights-timeline-light-1440.webp 1440w, /screenshots/zh/insights-timeline-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 邮件分析 时间线，每位发件人一条泳道，收到和发出的邮件沿时间轴标出 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/insights-timeline-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/insights-timeline-720.webp 720w, /screenshots/zh/insights-timeline-1440.webp 1440w, /screenshots/zh/insights-timeline-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/insights-timeline-light-1440.webp" srcset="/screenshots/zh/insights-timeline-light-720.webp 720w, /screenshots/zh/insights-timeline-light-1440.webp 1440w, /screenshots/zh/insights-timeline-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 邮件分析 时间线，每位发件人一条泳道，收到和发出的邮件沿时间轴标出 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">时间线：每位发件人一条泳道，收到和发出分开标记。</figcaption>
             </figure>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/insights-activity-720.webp 720w, /screenshots/zh/insights-activity-1440.webp 1440w, /screenshots/zh/insights-activity-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/insights-activity-light-1440.webp" srcset="/screenshots/zh/insights-activity-light-720.webp 720w, /screenshots/zh/insights-activity-light-1440.webp 1440w, /screenshots/zh/insights-activity-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 邮件分析 活动日历，一张按每天邮件量深浅着色的日期网格 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/insights-activity-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/insights-activity-720.webp 720w, /screenshots/zh/insights-activity-1440.webp 1440w, /screenshots/zh/insights-activity-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/insights-activity-light-1440.webp" srcset="/screenshots/zh/insights-activity-light-720.webp 720w, /screenshots/zh/insights-activity-light-1440.webp 1440w, /screenshots/zh/insights-activity-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 邮件分析 活动日历，一张按每天邮件量深浅着色的日期网格 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">活动：一年的邮件一眼看尽，一天一个方块。</figcaption>
             </figure>
         </article>
 
         <article id="insights-privacy" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">邮件分析 会把我的邮件发送到别处吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">邮件分析 会把我的邮件发送到别处吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>不会。邮件分析 完全由已经存在你自己机器上的邮件头数据构建 — 你打开过的文件夹的缓存邮件头，以及保险库中的邮件。不会读取邮件正文，不会触碰附件，也不会向任何服务上传任何内容。无需注册账户，断网也能使用。</p>
               <p>因为它只能描述这台设备上的邮件，邮件分析 会把这一点明说：控件下方的覆盖范围说明会列出它读取了哪些文件夹、每个文件夹有多少已在本地缓存，这样一个看起来很安静的月份就不会被误当成事实，而其实那里只是缺了数据。</p>
@@ -312,7 +313,7 @@
         </article>
 
         <article id="insights-explorer-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorer 和 邮件分析 属于 Premium 吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-8">Explorer 和 邮件分析 属于 Premium 吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>不属于。两者都是免费的，在免费版中就能使用，无需账户，也不用登录。它们从 MailVault 2.13.0 开始提供。</p>
               <p>请注意，邮件分析 与阅读窗格里那个更早的<strong>发件人面板</strong>不是一回事，后者显示的是你与当前这封邮件作者之间的往来历史。它仍然存在，同样免费；邮件分析 则是面向整个邮箱的视图。</p>
@@ -338,7 +339,7 @@
         </div>
       </div>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/search-local.webp"><img src="/assets/help-media/zh/search-local.webp" width="1440" height="1056" loading="lazy" alt="在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>在本地邮件中搜索Priya并显示结果</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/search-local.jpg" aria-label="在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/search-local.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/search-local.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在搜索框中输入Priya。 运行搜索并查看保存在此电脑上的匹配邮件。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -361,5 +362,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

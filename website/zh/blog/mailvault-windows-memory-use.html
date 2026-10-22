@@ -43,6 +43,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-windows-memory-use.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
   <header class="mv-header">
@@ -70,13 +71,14 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-09-26" class="text-sm text-primary-500 font-medium">2026 年 9 月 26 日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 在 Windows 上占用多少内存？我们做了实测</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 在 Windows 上占用多少内存？我们做了实测</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <p>这是一篇历史开发文章，介绍发布时的版本和实现。当前的 MailVault 2.20 使用 Rust 后台守护进程，支持 IMAP、Microsoft Graph 和 JMAP。有关设置和行为，请参阅当前帮助页面。</p>
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>6 分钟阅读</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -87,7 +89,7 @@
           <p>测试使用本地测试邮件服务器上的两个邮箱账户：一个收件箱有 58 封邮件，另一个有 10,000 封。一次自动化运行像真人一样操作真实的应用：打开 MailVault，打开小收件箱，然后切换到大账户，等到全部 10,000 条邮件标题都出现在列表中。它把整个列表从头滚动到尾，然后让应用静置十分钟。每一步都会记录 MailVault 拥有的每个进程的内存。</p>
           <p>这台笔记本电脑是一台 MSI，配备 Intel Core i7-13620H 和 16 GB 内存，接着电源运行 Windows 11 23H2。它不是一台干净的机器：其他应用也开着，包括另一份 MailVault，所以请把它当作一台普通、繁忙的电脑。我们把整个测试完整做了三遍，每次都用全新的空白配置文件，下面的数字是这三次运行的范围。所用的构建是 MailVault 2.16 打开测试钩子后的优化发布版本，因此和正式下载版接近，但并非逐字节相同。</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上显示有 58 封邮件的小测试收件箱，侧边栏中有两个测试账户，阅读窗格为空。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/windows-memory-58-inbox-1440.webp"><img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上显示有 58 封邮件的小测试收件箱，侧边栏中有两个测试账户，阅读窗格为空。 · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">我们测量的第一个时刻：MailVault 在 Windows 11 上打开小测试收件箱，截取自测试运行本身。</figcaption>
           </figure>
 
@@ -114,7 +116,7 @@ background helper, 10,000 msgs    22 – 23 MB
 app window                        11 – 13 MB</code></pre>
           <p>第二列是提交大小：每个进程已经保留的私有内存，无论它此刻是否驻留在内存中。我们是在第一次运行之后才加上这一列的，所以它只覆盖两次而不是三次运行。它对最后一行尤其重要：几分钟没有操作之后，Windows 会从不使用内存的进程手里收回内存，任务管理器的数字会降到约 110 MB。这部分内存不是 MailVault 释放的，而是 Windows 收走的，提交大小显示应用仍然保留着约 310 MB，等你回来时可以要回。如果只想要一个数字来说明 MailVault 在 Windows 上的代价，就用这个：加载大邮箱时大约 300 MB。</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上选中了大测试账户。收件箱标题显示 10,000 封邮件，列表底部是最早的测试邮件。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/windows-memory-10k-inbox-1440.webp"><img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault 在 Windows 11 上选中了大测试账户。收件箱标题显示 10,000 封邮件，列表底部是最早的测试邮件。 · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">全部 10,000 条邮件标题已加载，列表也滚动到了末尾，也就是“已加载 10,000 封邮件”这一行对应的时刻。收件箱显示 10,000 封邮件，保险库计数器显示为 0，因为这次测试中没有任何邮件被归档。</figcaption>
           </figure>
 
@@ -137,22 +139,22 @@ app window                        11 – 13 MB</code></pre>
           <p>唯一会出现内存跳升的时刻，是你第一次打开一个大账户。MailVault 会把这个邮箱缓存的全部邮件标题一次性加载进列表，这样排序、计数和筛选才能作用于整个邮箱，而不只是你已经滚动过的那部分。渲染进程在构建这份列表时会短暂地大致翻倍，之后又会归还大部分。</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 290" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2c" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
-<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="254.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">0</text>
-<line x1="70" y1="195.0" x2="700" y2="195.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="195.0" x2="700" y2="195.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="199.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">100</text>
-<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="144.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">200</text>
-<line x1="70" y1="85.0" x2="700" y2="85.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="85.0" x2="700" y2="85.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="89.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">300</text>
-<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="34.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">400</text>
 <text x="101.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">0 s</text>
 <text x="227.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">20 s</text>
 <text x="353.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">40 s</text>
 <text x="479.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">60 s</text>
 <text x="605.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">80 s</text>
-<line x1="101.5" y1="30" x2="101.5" y2="250" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="101.5" y1="30" x2="101.5" y2="250" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <polyline points="70.0,148.7 101.5,107.5 133.0,48.8 164.5,68.2 196.0,68.6 227.5,129.4 259.0,131.4 290.5,131.7 322.0,131.7 353.5,131.7 385.0,131.8 416.5,131.7 448.0,131.7 479.5,131.8 511.0,131.6 542.5,135.2 574.0,135.3 605.5,135.3 637.0,135.0 668.5,135.1 700.0,135.1" fill="none" stroke="#6366f1" stroke-opacity="1" stroke-width="2" stroke-linejoin="round"><title>1: 366 MB</title></polyline>
 <polyline points="70.0,124.4 101.5,91.8 133.0,51.7 164.5,48.4 196.0,118.5 227.5,119.8 259.0,119.8 290.5,119.8 322.0,123.1 353.5,122.9 385.0,122.8 416.5,122.8 448.0,122.9 479.5,122.9 511.0,123.2 542.5,126.9 574.0,139.5 605.5,140.2 637.0,140.1 668.5,139.7 700.0,139.9" fill="none" stroke="#6366f1" stroke-opacity="0.7" stroke-width="2" stroke-linejoin="round"><title>2: 367 MB</title></polyline>
 <polyline points="70.0,127.1 101.5,101.9 133.0,56.5 164.5,53.9 196.0,112.4 227.5,112.3 259.0,119.6 290.5,119.8 322.0,123.2 353.5,123.3 385.0,123.5 416.5,123.4 448.0,123.4 479.5,123.5 511.0,123.6 542.5,123.4 574.0,127.1 605.5,127.0 637.0,126.9 668.5,127.1 700.0,130.3" fill="none" stroke="#6366f1" stroke-opacity="0.45" stroke-width="2" stroke-linejoin="round"><title>3: 356 MB</title></polyline>
@@ -165,7 +167,7 @@ app window                        11 – 13 MB</code></pre>
           <p>我们在 9 月 22 日，也就是 Windows 测试的四天前，在一台配备 16 GB 内存的 Apple M4 Mac mini 上做了同样的测试。启动时和峰值时的总量都很接近。加载大邮箱后，Windows 的数字更低；空闲时由于前面说的内存收回，数字要低得多。</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
-<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">启动时，58 封邮件</th></tr>
+<tbody><tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">启动时，58 封邮件</th></tr>
 <tr><td style="padding:4px 0">Windows，任务管理器内存<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:36.1%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">209–224 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Windows，提交大小<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.6%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–298 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Mac，活动监视器内存<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:30.0%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">180 MB</span></span></td></tr>
@@ -181,7 +183,7 @@ app window                        11 – 13 MB</code></pre>
 <tr><td style="padding:4px 0">Windows，任务管理器内存<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:18.7%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">102–122 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Windows，提交大小<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:52.2%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">308–318 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Mac，活动监视器内存<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:41.4%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">234–263 MB</span></span></td></tr>
-</table></div>
+</tbody></table></div>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">所有 MailVault 进程的总内存。每根柱子都标注了各次运行间的数值范围，柱子的长度取该范围的中点。</figcaption>
           </figure>
           <p>请把这理解为两组并列的测量结果，而不是一场比赛。两套系统统计内存的方式并不相同：Mac 上活动监视器的数字包含了 macOS 已经压缩过的内存，而任务管理器的数字不包含 Windows 收回的内存，提交大小统计的是已保留、但可能从未被用到的内存。两台机器本身也不同，Mac 上的构建版本还早了四天。这次对比说明的是：MailVault 在两个系统上占用的内存量级相当，都在几百兆字节的低端，而且在我们观察的十分钟闲置时间里，它在两个系统上都没有增长。</p>
@@ -203,11 +205,12 @@ app window                        11 – 13 MB</code></pre>
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

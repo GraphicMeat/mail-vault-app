@@ -155,6 +155,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -203,7 +204,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html" aria-current="page">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -216,25 +217,25 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">예약 발송</h1>
+      <h1 class="text-4xl font-bold mb-2">예약 발송</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">예약 발송이란 무엇인가요?</a></li><li><a href="#help-section-2">다른 사람의 시간대로 예약할 수 있나요?</a></li><li><a href="#help-section-3">MailVault는 받는 사람의 시간대를 어떻게 알까요?</a></li><li><a href="#help-section-4">예약한 이메일을 바꾸거나 일정을 변경하거나 취소하려면?</a></li><li><a href="#help-section-5">예약한 이메일이 발송되려면 MailVault가 열려 있어야 하나요?</a></li><li><a href="#help-section-6">무료인 것과 Premium이 필요한 것은 무엇인가요?</a></li><li><a href="#help-section-7">구독이 끝나면 예약한 이메일은 어떻게 되나요?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">지금 이메일을 써 두면 MailVault가 정확한 날짜와 시간에, 어느 시간대로든 보냅니다. 예약은 Premium 기능이며, 최대 5분의 보내기 지연은 무료입니다.</p>
 
       <div class="space-y-4">
 
         <article id="what-is-scheduled-send" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">예약 발송이란 무엇인가요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">예약 발송이란 무엇인가요?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>예약 발송은 작성한 이메일을 보관해 두었다가 원하는 날짜와 시간에, 원하는 시간대 기준으로 보냅니다. 작성 화면에서 <strong>보내기</strong> 옆 화살표를 클릭해 <strong>예약 발송</strong>을 열고, 날짜와 시간을 고른 뒤 아래 시간대를 확인하고 <strong>예약</strong>을 클릭합니다.</p>
               <p><strong>내일 오전 8시</strong>와 <strong>월요일 오전 8시</strong>를 누르면 선택한 시간대 기준으로 시간이 한 번에 입력됩니다.</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/premium-scheduled-send-720.webp 720w, /screenshots/ko/premium-scheduled-send-1440.webp 1440w, /screenshots/ko/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/premium-scheduled-send-light-1440.webp" srcset="/screenshots/ko/premium-scheduled-send-light-720.webp 720w, /screenshots/ko/premium-scheduled-send-light-1440.webp 1440w, /screenshots/ko/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="예약 발송 패널을 연 MailVault 새 메시지: 뉴욕 시간 오전 8:00로 설정한 답장, 받는 사람의 최근 이메일에서 추천된 시간대 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
-              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">뉴욕 시간 오전 8:00로 예약한 답장. 시간대는 받는 사람의 최근 이메일에서 추천되었습니다.</figcaption>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ko/premium-scheduled-send-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/premium-scheduled-send-720.webp 720w, /screenshots/ko/premium-scheduled-send-1440.webp 1440w, /screenshots/ko/premium-scheduled-send-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/premium-scheduled-send-light-1440.webp" srcset="/screenshots/ko/premium-scheduled-send-light-720.webp 720w, /screenshots/ko/premium-scheduled-send-light-1440.webp 1440w, /screenshots/ko/premium-scheduled-send-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="예약 발송 패널을 연 MailVault 새 메시지: 뉴욕 시간 오전 8:00로 설정한 답장, 받는 사람의 최근 이메일에서 추천된 시간대 · MailVault version 2.16.0 ko" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="932" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ko"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ko</span></a>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">뉴욕 시간 오전 8:00으로 예약된 답장입니다. 수신자의 마지막 이메일을 바탕으로 시간대가 제안됩니다.</figcaption>
             </figure>
         </article>
 
         <article id="schedule-time-zones" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">다른 사람의 시간대로 예약할 수 있나요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">다른 사람의 시간대로 예약할 수 있나요?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>네, 어느 시간대든 가능합니다. 목록에는 <strong>(UTC-04:00) New York</strong>처럼 각 시간대가 UTC 오프셋과 함께 표시되며, 도시나 오프셋으로 검색할 수 있습니다. <strong>+2</strong>를 입력하면 UTC보다 두 시간 빠른 시간대가 나옵니다. 도시 이름은 Seoul처럼 영어로 표시됩니다. 표시되는 오프셋은 이메일이 발송되는 시점의 것이므로, 시간 변경 이후의 발송도 올바르게 표시됩니다.</p>
               <p>입력란 아래에는 내가 있는 곳과 선택한 시간대의 현재 시각, 그리고 이메일이 내 시간으로 언제 나가는지가 표시됩니다. 뉴욕 시간 오전 8:00 발송을 예약하기 전에 내 시계와 비교해 볼 수 있습니다.</p>
@@ -242,7 +243,7 @@
         </article>
 
         <article id="suggested-time-zone" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault는 받는 사람의 시간대를 어떻게 알까요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">MailVault는 받는 사람의 시간대를 어떻게 알까요?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>MailVault가 시간대를 추천하며, 언제든 다른 시간대를 고를 수 있습니다. 모든 이메일에는 보낸 사람의 UTC 오프셋이 들어 있으므로, MailVault는 첫 번째 받는 사람이 마지막으로 보낸 이메일의 오프셋을 읽고 그에 맞는 시간대를 고릅니다. 입력란 아래의 안내가 그 사람의 최근 이메일에서 추천되었음을 알려 줍니다. 한 오프셋이 여러 지역에 해당할 수 있으니 도시를 확인하십시오.</p>
               <p>그 사람에게서 받은 이메일이 없으면, 지난번 그 사람에게 이메일을 예약할 때 고른 시간대를 사용합니다. 둘 다 없으면 내 시간대에서 시작합니다. 직접 고른 시간대는 바뀌지 않습니다.</p>
@@ -250,7 +251,7 @@
         </article>
 
         <article id="edit-scheduled-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">예약한 이메일을 바꾸거나 일정을 변경하거나 취소하려면?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">예약한 이메일을 바꾸거나 일정을 변경하거나 취소하려면?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>예약한 이메일은 사이드바의 <strong>예약됨</strong> 폴더에서 기다립니다. 하나를 클릭하면 작성 화면에서 열려 받는 사람, 본문, 시간을 바꿀 수 있습니다. 변경 사항을 저장할 때까지는 원래 예약 그대로 유지됩니다.</p>
               <p>폴더의 각 이메일에는 <strong>일정 변경</strong>, <strong>취소</strong>, <strong>지금 보내기</strong> 버튼도 있습니다.</p>
@@ -258,7 +259,7 @@
         </article>
 
         <article id="send-while-closed" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">예약한 이메일이 발송되려면 MailVault가 열려 있어야 하나요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">예약한 이메일이 발송되려면 MailVault가 열려 있어야 하나요?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>백그라운드에서 계속 실행할 수 있다면 열어 둘 필요가 없습니다. 예약 이메일은 MailVault의 백그라운드 도우미가 발송합니다. 설정 &rsaquo; <strong>진단</strong> &rsaquo; <strong>백그라운드 데몬</strong>에서 <strong>백그라운드에서 계속 실행</strong>을 켜면 도우미가 앱을 종료한 뒤에도 계속 실행되고 로그인할 때 시작되므로, 앱이 닫혀 있어도 이메일이 제시간에 발송됩니다.</p>
               <p>이 설정이 꺼져 있거나 사용 중인 MailVault가 백그라운드에서 계속 실행될 수 없으면, 예약한 이메일은 다음에 MailVault를 열 때 발송됩니다. 어느 경우인지는 예약됨 폴더에 표시되며, 설정으로 가는 링크도 있습니다.</p>
@@ -266,7 +267,7 @@
         </article>
 
         <article id="scheduled-send-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">무료인 것과 Premium이 필요한 것은 무엇인가요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">무료인 것과 Premium이 필요한 것은 무엇인가요?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>정해진 날짜와 시간에 이메일을 예약하는 것은 Premium 기능입니다. 최대 5분까지 보내기를 늦추는 것은 무료입니다. 이메일마다 <strong>보내기</strong> 옆 메뉴를 쓰거나, 모든 이메일에 설정의 <strong>보내기 지연</strong>을 쓰면 됩니다.</p>
               <p>Premium이 없으면 예약 발송 패널에 그 내용이 표시되고 <strong>업그레이드</strong>가 제공됩니다. <a href="/ko/pricing.html#premium-scheduled-send" class="text-primary-500 hover:text-primary-600 underline">Premium에 포함된 기능 보기</a>.</p>
@@ -274,7 +275,7 @@
         </article>
 
         <article id="subscription-ends" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">구독이 끝나면 예약한 이메일은 어떻게 되나요?</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">구독이 끝나면 예약한 이메일은 어떻게 되나요?</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
               <p>설정한 시간에 그대로 발송됩니다. 편집과 일정 변경에는 다시 Premium이 필요하지만, 예약됨 폴더에서 지금 보내거나 취소하는 것은 계속 할 수 있습니다.</p>
             </div>
@@ -299,7 +300,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -322,5 +323,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

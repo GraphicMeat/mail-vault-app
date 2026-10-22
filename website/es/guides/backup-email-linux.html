@@ -38,7 +38,7 @@
   "description": "Crea una copia local del correo en Linux: conecta tu buzón, archiva en EML, comprueba los adjuntos sin conexión y guarda otra copia en una unidad distinta.",
   "url": "https://mailvaultapp.com/es/guides/backup-email-linux.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-email-linux.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-email-linux.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,33 +172,33 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">Guías de copias de correo · <time datetime="2026-10-15">15 de octubre de 2026</time></p>
-          <h1>Cómo hacer una copia del correo en Linux como EML</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <p data-i18n-block>Una copia de correo en Linux debería resistir tanto una eliminación en el proveedor como un fallo de disco. Empieza archivando los mensajes en una bóveda local independiente y guarda después otra copia en otro lugar. La aplicación de MailVault para Linux guarda el correo archivado como archivos EML individuales en carpetas Maildir.</p>
-          <h2 data-i18n-block>1. Instala la aplicación para Linux y conecta una cuenta</h2>
+          <h1>Cómo hacer una copia del correo en Linux como EML</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">1. Instala la aplicación para Linux y conecta una cuenta</a></li><li><a href="#help-section-2">2. Crea un archivo antes de hacer una copia de seguridad</a></li><li><a href="#help-section-3">Verifica el archivo antes de confiar en él</a></li><li><a href="#help-section-4">3. Protege la copia del disco</a></li><li><a href="#help-section-5">¿Puedo automatizarlo?</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>Una copia de correo en Linux debería resistir tanto una eliminación en el proveedor como un fallo de disco. Empieza archivando los mensajes en una bóveda local independiente y guarda después otra copia en otro lugar. La aplicación de MailVault para Linux guarda el correo archivado como archivos EML individuales en carpetas Maildir. Estas instrucciones sobre la estructura de archivos se refieren al formato Maildir predeterminado. Ajustes → Almacenamiento también ofrece almacenamiento JMAP, que conserva los bytes originales de los mensajes con registros JSON y elimina los duplicados de mensajes idénticos.</p>
+          <h2 data-i18n-block id="help-section-1">1. Instala la aplicación para Linux y conecta una cuenta</h2>
           <p data-i18n-block>Usa los enlaces de Linux de <a href="/es/get-started.html">la página de descargas</a> y elige el paquete y la arquitectura adecuados para tu sistema. Sigue las instrucciones de instalación actuales de esa página en lugar de copiar comandos para otra distribución. Añade cuentas de Gmail o Microsoft con el inicio de sesión compatible, o introduce los datos de conexión de tu proveedor IMAP. Una organización puede restringir el acceso con independencia del sistema operativo.</p>
-          <h2 data-i18n-block>2. Crea un archivo antes de hacer una copia de seguridad</h2>
+          <h2 data-i18n-block id="help-section-2">2. Crea un archivo antes de hacer una copia de seguridad</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Compara la bandeja de entrada, los enviados y las carpetas personalizadas con tu correo web. Incluye las carpetas y etiquetas antiguas que quieras conservar.</li>
           <li data-i18n-block>En las operaciones masivas, elige las carpetas y el intervalo de fechas, y selecciona <strong>Archivar</strong>. Esto crea las copias locales sin quitar correo del servidor.</li>
           <li data-i18n-block>Deja la aplicación abierta hasta que termine la tarea. Revisa los errores y vuelve a intentar archivar los mensajes que falten antes de dar el archivo por completo.</li>
           <li data-i18n-block>Elige el origen <strong>Bóveda</strong> y revisa mensajes de varios años, incluidos sus adjuntos.</li></ol>
-          <h2 data-i18n-block>Verifica el archivo antes de confiar en él</h2>
+          <h2 data-i18n-block id="help-section-3">Verifica el archivo antes de confiar en él</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>Cambia el origen de los mensajes a <strong>Bóveda</strong>, en lugar de Servidor o Todo. Busca un mensaje antiguo que reconozcas.</li>
           <li data-i18n-block>Desconecta la red y abre algunos mensajes archivados de distintas carpetas y años. Abre también sus adjuntos. Un asunto en una lista no demuestra que el cuerpo del mensaje esté guardado.</li>
           <li data-i18n-block>En Ajustes, abre <strong>Copia y restauración</strong> y usa <strong>Exportar copia</strong>. Elige una ubicación en una segunda unidad. El ZIP contiene la bóveda, las cuentas y los ajustes; excluye los mensajes que solo existen en el servidor.</li>
           <li data-i18n-block>Comprueba que el ZIP se abre, contiene archivos .eml e incluye las carpetas que querías conservar. Para el correo importante, prueba a restaurar una copia en otra instalación antes de eliminar nada.</li></ol>
-          <h2 data-i18n-block>3. Protege la copia del disco</h2>
+          <h2 data-i18n-block id="help-section-4">3. Protege la copia del disco</h2>
           <p data-i18n-block>Usa otra unidad para la copia exportada. Una segunda carpeta en el mismo disco no protege frente a un fallo de ese disco. Si la unidad es extraíble, comprueba que esté montada y permita escribir antes de una ejecución programada. Guarda el correo privado en almacenamiento cifrado y conserva las credenciales de recuperación de la copia en un lugar al que puedas acceder tras perder el ordenador.</p>
           <p data-i18n-block>Maildir hace que los mensajes individuales sean portables, pero la bóveda activa también contiene metadatos de la aplicación. Es preferible usar la función de copia y exportación de la aplicación para una instalación en uso. Si copias toda la bóveda desde el sistema de archivos, cierra antes la aplicación para evitar copiar archivos a medio escribir.</p>
-          <h2 data-i18n-block>¿Puedo automatizarlo?</h2>
+          <h2 data-i18n-block id="help-section-5">¿Puedo automatizarlo?</h2>
           <p data-i18n-block>MailVault Premium permite programar copias de seguridad. Empieza con un archivado manual correcto y una restauración verificada antes de activar una programación. Si prefieres trabajar en la terminal, compara las herramientas por su autenticación, formato de almacenamiento, comportamiento al eliminar y proceso de restauración en nuestra <a href="/es/guides/imap-backup-tool-checklist.html">lista de comprobación de copias IMAP</a>.</p>
           <p data-i18n-block>Consulta también <a href="/es/guides/linux-email-archive.html">cómo elegir un archivo de correo para Linux</a> y <a href="/es/guides/keep-emails-after-server-deletion.html">cómo conservar el correo tras eliminarlo del servidor</a>. Las grabaciones de Mac que acompañan otras partes de estas guías muestran el funcionamiento compartido de la aplicación, no una sesión de escritorio Linux.</p>
           <p data-i18n-block><a href="/es/get-started.html">Descarga MailVault gratis</a> para crear tu primer archivo local. El archivado manual es gratuito; el archivado automático, las copias programadas y Archivar y eliminar requieren <a href="/es/pricing.html">Premium</a>.</p>
           <p data-i18n-block>Más guías prácticas: <a href="/es/guides/backup-gmail-to-eml.html">Cómo guardar Gmail en archivos EML</a> · <a href="/es/guides/export-outlook-to-eml.html">Cómo exportar correos de Outlook a EML</a> · <a href="/es/guides/download-all-emails-mac.html">Cómo descargar todos tus correos en Mac</a> · <a href="/es/guides/linux-email-archive.html">Un archivo local de correo para Linux: qué comprobar</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Verlo en MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/es/manual-backup.webp"><img src="/assets/help-media/es/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Crear una copia de todas las cuentas y comprobar que termina</figcaption><video controls playsinline preload="none" poster="/assets/help-media/es/manual-backup.jpg" aria-label="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/es/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/es/manual-backup.vtt" srclang="es" label="Español" default></video></figure><details class="mv-help-contents"><summary>Transcripción del vídeo</summary><p>Iniciar la copia de seguridad de todas las cuentas en los ajustes de copia de seguridad. Seguir el progreso hasta que termine la copia.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -225,5 +226,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

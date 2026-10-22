@@ -85,6 +85,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=3">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -132,7 +133,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -143,7 +144,7 @@
       <article>
         <header class="mb-8">
           <time datetime="2026-08-25" class="text-sm text-primary-500 font-medium">2026년 8월 25일</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">GDPR 과징금 €61.1억 돌파 — "전부 영구 보관"은 컴플라이언스 위험일까요?</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">GDPR 과징금 €61.1억 돌파 — "전부 영구 보관"은 컴플라이언스 위험일까요?</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>7분 분량</span>
           </div>
@@ -152,7 +153,7 @@
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
           <p>
-            CMS GDPR Enforcement Tracker Report 2025/2026에 따르면, 2026년 3월 기준 EU 전역의 누적 GDPR 과징금은 약 &euro;61.1억에 이르며, 기록된 집행 사례는 2,685건입니다. 이 데이터에서 개별 사건의 과징금은 최대 &euro;12억에 달합니다. GDPR이 처음 시행된 2018년에 조직의 위험 모델이 어떤 모습이었든, 8년이 지난 지금의 집행 양상은 더 이상 이론이 아닙니다 &mdash; 데이터 취급을 잘못한 기업에게는 꾸준하고 충분히 기록된 비용 항목입니다.
+            2026년 3월 기준, EU에서 기록된 GDPR 과징금 총액은 약 &euro;61.1억이며 금액과 날짜가 기록된 과징금은 2,685건입니다. 출처는 <a href="https://cms.law/en/gbr/publication/gdpr-enforcement-tracker-report/numbers-and-figures/">CMS GDPR Enforcement Tracker Report 2025/2026</a>입니다. 정보가 불완전한 항목까지 포함하면 보고서에는 3,062건이 기록되어 있습니다. 개별 과징금은 최대 &euro;12억에 이릅니다. 2018년 GDPR 도입 당시 조직의 위험 평가가 어떠했든, 8년이 지난 지금의 집행은 더 이상 이론적인 문제가 아닙니다. 데이터를 부적절하게 처리하는 기업이 실제로 부담하는 비용으로 꾸준히 기록되고 있습니다.
           </p>
 
           <p>
@@ -176,7 +177,7 @@
           </p>
 
           <p>
-            인접 분야의 집행에서도 같은 흐름이 보입니다. 프랑스 CNIL과 이탈리아 Garante는 2026년 4월 모두 공식 지침을 내어 받은편지함을 개인의 사생활의 연장으로 다루었습니다 &mdash; 메일 추적 픽셀에 관한 새 규칙은, 수신자의 메일함 안에서 벌어지는 일을 보이지 않게 보고하는 무엇이든 사전 동의를 받도록 요구합니다. 보존 규제와는 다른 장치이지만, 그 밑에 깔린 태도는 같습니다. 감독 기관은 정책 문서가 어딘가에 있는지가 아니라, 기업이 메일의 내용을 가지고 무엇을 하는지를 들여다보고 있습니다.
+            인접 분야의 집행에서도 같은 흐름이 보입니다. 프랑스 CNIL과 이탈리아 Garante는 2026년 4월 받은편지함을 개인 사생활의 연장으로 다루는 공식 지침을 발표했습니다 &mdash; 지침은 일반적으로 추적 픽셀에 동의를 요구하지만 정해진 예외와 전환 조치가 있습니다. 구체적인 용도에 해당하는 감독기관의 규칙을 확인하세요. 보존 규제와는 다른 장치이지만, 그 밑에 깔린 태도는 같습니다. 감독 기관은 정책 문서가 어딘가에 있는지가 아니라, 기업이 메일의 내용을 가지고 무엇을 하는지를 들여다보고 있습니다.
           </p>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">실제로 버티는 보존 일정</h3>
@@ -208,16 +209,15 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">개인 보관본은 여기서 어디에 놓이는가</h3>
 
           <p>
-            개인과 소규모 팀에는 여기에 진짜 긴장이 있습니다. 보존 원칙은 오래된 메일을 서버에서 지우라고 하지만, 실사용 메일함이 더는 그것을 들고 있으면 안 된다는 규정 때문에 15년치 서신을 잃고 싶은 사람은 없습니다. 해법은 백업 위험에 적용되는 것과 같습니다 &mdash; <em>서버에 남는 것</em>과 <em>사본을 간직하는 것</em>을 분리하는 것입니다.
+            로컬 아카이브는 기록의 위치만 바꾸며 보존 의무를 없애지 않습니다. 개인정보가 포함된 업무 메일은 각 범주를 보관하는 이유, 접근할 사람, 삭제할 시점을 정하세요. 서버 메일, 로컬 아카이브, 백업 사본 모두에 이 정책을 적용하세요. 계속 보관하려면 유효한 목적이나 법적 의무가 있어야 하며, 서버에서 옮기는 것만으로 근거가 생기지는 않습니다. <a href="https://www.cnil.fr/fr/passer-laction/les-durees-de-conservation-des-donnees">CNIL의 보존 지침</a>을 확인하세요.
           </p>
 
           <p>
-            MailVault는 IMAP이나 OAuth 계정의 모든 폴더를 자기 디스크에 개별 <code>.eml</code> 파일로 보관하며, 제공업체의 메일함과는 아무 상관이 없습니다. 그래서 실사용 계정에 보존 일정을 실제로 적용할 여지가 생깁니다 &mdash; 정당한 기간이 지난 것을 지우면서도 &mdash; 밑에 깔린 기록을 잃지 않습니다. 그 기록은 이미 사용자가 관리하는 곳에, 어떤 클라이언트로도 열 수 있는 형식으로 있기 때문입니다. 수동 백업은 무료이고 제한이 없습니다. 보관본을 자동으로 최신으로 유지해 주는 예약 백업은 $4/월 또는 $25/년의 Premium 기능이며, 연간 요금제에는 14일 체험이 있습니다.
-          </p>
+            MailVault는 IMAP이나 OAuth 계정의 모든 폴더를 자기 디스크에 개별 <code>.eml</code> 파일로 보관하며, 제공업체의 메일함과는 아무 상관이 없습니다.  보관할 권한이 있는 기록에만 로컬 사본을 사용하고 접근 제어 및 삭제 일정에 포함하세요. MailVault는 중앙에서 시행하는 보존 정책, 법적 보존, 규정 준수 인증을 제공하지 않습니다. 수동 백업은 무료이고 제한이 없습니다. 보관본을 자동으로 최신으로 유지해 주는 예약 백업은 $4/월 또는 $25/년의 Premium 기능이며, 연간 요금제에는 14일 체험이 있습니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트와 JSON 레코드를 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">일정대로 지우되, 기록은 남기십시오.</p>
-            <p class="text-sm mb-4">MailVault는 모든 폴더를 검색 가능하고 어디로든 옮길 수 있는 .eml 파일로 사용자의 디스크에 보관합니다 &mdash; 그래서 서버에 방어 가능한 보존 정책을 적용해도 무언가를 영영 잃지 않습니다.</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">근거를 설명할 수 있는 기록을 보관하고 모든 사본에 보존 규칙을 적용하세요.</p>
+            <p class="text-sm mb-4">MailVault는 모든 폴더를 자신의 디스크에 검색과 이동이 가능한 .eml 파일로 보관합니다 &mdash; 보관할 권한이 있는 기록에 한합니다. 로컬 사본에도 보존, 삭제, 접근 제어가 필요합니다.</p>
             <div class="flex flex-wrap gap-3">
               <a href="/ko/#download" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
                 MailVault 다운로드
@@ -236,7 +236,7 @@
       </article>
 
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>Graphic Meat는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오입니다. MailVault도 그중 하나입니다. 저희를 만나고 다른 작업도 살펴보세요.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 만나기 <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault를 만든 스튜디오 Graphic Meat 방문"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat의 다른 제품</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks 앱 <span aria-hidden="true">↗</span></strong><span>사진을 인쇄 준비가 된 책으로 만드세요.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>메모와 코드를 위한 로컬 작업 공간입니다.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>이메일을 새 제공업체로 옮기세요.</span></a></div></div></aside><footer class="mv-footer">
@@ -260,5 +260,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

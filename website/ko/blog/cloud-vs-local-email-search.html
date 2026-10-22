@@ -61,6 +61,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/cloud-vs-local-email-search.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/cloud-vs-local-email-search.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
   <header class="mv-header">
@@ -88,13 +89,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-01" class="text-sm text-primary-500 font-medium">2026년 10월 1일</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail의 AI 검색이 확대됩니다. 메일 검색은 클라우드에서 해야 할까요, 내 컴퓨터에서 해야 할까요?</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail의 AI 검색이 확대됩니다. 메일 검색은 클라우드에서 해야 할까요, 내 컴퓨터에서 해야 할까요?</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">답이 필요한지 문서가 필요한지 정하십시오</a></li><li><a href="#help-section-2">로컬 검색은 의존하는 대상이 다릅니다</a></li><li><a href="#help-section-3">클라우드 AI와 로컬 AI는 별개의 선택입니다</a></li><li><a href="#help-section-4">직접 해 볼 수 있는 작은 비교</a></li><li><a href="#help-section-5">MailVault의 방식</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>3분 분량</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -102,23 +103,23 @@
 <p>제목이 기억나지 않을 때는 키워드를 짐작하기보다 “수정 견적서를 누가 보냈지?”라고 묻는 편이 쉽게 느껴집니다. 메일 검색은 그런 대화 방식으로 옮겨 가고 있습니다. 하지만 쓸모 있는 답과 오래 남는 기록은 서로 다른 문제를 해결합니다.</p>
 <p>2026년 9월 15일, Google은 <a href="https://workspaceupdates.googleblog.com/2026/09/gmail-searchs-ai-overviews-now-available-globally.html" class="text-primary-500 hover:text-primary-600 underline">Gmail 검색의 AI 개요</a>를 더 넓게 제공한다고 발표했습니다. 대상 사용자는 자연어로 질문하고 자신의 메일을 바탕으로 한 요약을 받을 수 있습니다. 확대 대상은 Gmail 언어가 영어로 설정된 지원 유료 요금제이며, Google은 EEA, 영국, 스위스, 일본의 개인 계정을 제외 대상으로 밝히고 있습니다. 필요한 스마트 기능 설정도 적용됩니다.</p>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/cloud-local-search.svg" width="640" height="804" loading="lazy" decoding="async" alt="두 가지 검색 경로: 로컬 검색은 컴퓨터에 내려받은 메시지를 검색하고, 클라우드 AI는 질문을 원격으로 처리해 확인이 필요한 답을 돌려줍니다."><figcaption>검색 위치와 AI 처리는 별개의 선택입니다. 범위, 계정 자격, 제공업체 설정을 확인하십시오.</figcaption></figure>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">답이 필요한지 문서가 필요한지 정하십시오</h2>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/cloud-local-search.svg"><img src="/assets/blog/cloud-local-search.svg" width="640" height="804" loading="lazy" decoding="async" alt="두 가지 검색 경로: 로컬 검색은 컴퓨터에 내려받은 메시지를 검색하고, 클라우드 AI는 질문을 원격으로 처리해 확인이 필요한 답을 돌려줍니다."></a><figcaption>검색 위치와 AI 처리는 별개의 선택입니다. 범위, 계정 자격, 제공업체 설정을 확인하십시오.</figcaption></figure>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-1">답이 필요한지 문서가 필요한지 정하십시오</h2>
 <p>업체가 견적서를 보내고, 이어 수정 견적서를 보내고, 답장으로 정정 내용을 보냈다고 해 봅시다. 요약은 상황을 빠르게 파악하는 데 도움이 됩니다. 하지만 결제를 승인하려는 참이라면 여전히 원본 메시지를 열어 어느 버전이 최신인지 확인해야 합니다.</p>
 <p>영수증, 서명된 첨부 파일, 정확한 지시 사항이라면 목표는 대개 찾아내기, 즉 증거가 담긴 문서를 찾는 것입니다. 긴 논의라면 목표는 해석, 즉 모든 답장을 읽지 않고 대화를 이해하는 것일 수 있습니다. 이 차이를 기준으로 도구를 고르십시오.</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">로컬 검색은 의존하는 대상이 다릅니다</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-2">로컬 검색은 의존하는 대상이 다릅니다</h2>
 <p>로컬 인덱스는 이미 컴퓨터에 저장된 내용을 검색합니다. 관련 메시지를 내려받아 색인해 두면 제공업체의 검색 서비스에 묻지 않고도 찾아낼 수 있습니다. 기차 안에서, 서비스 장애 중에, 또는 원래 계정에 더 이상 접근할 수 없게 된 뒤에 유용합니다.</p>
 <p>한계는 범위입니다. 클라이언트가 최근 석 달 치만 보관한다면, 내려받은 적 없는 10년 전 청구서는 오프라인 검색으로 찾을 수 없습니다. 어떤 클라이언트는 메시지 전체 없이 헤더나 미리 보기만 저장합니다. 결과가 비었다고 그 메일이 없었다고 단정하기 전에 다운로드 설정을 확인하십시오.</p>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="로컬 검색 흐름: 저장된 메시지가 SQLite 인덱스로 들어가고, 쿼리가 결과를 돌려주며, 결과를 열면 저장된 원본을 읽습니다."><figcaption>결과 목록은 인덱스에서 나옵니다. 원본 메시지는 그대로 남아 있어 읽고 확인할 수 있습니다.</figcaption></figure>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">클라우드 AI와 로컬 AI는 별개의 선택입니다</h2>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/local-search-flow.svg"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="로컬 검색 흐름: 저장된 메시지가 SQLite 인덱스로 들어가고, 쿼리가 결과를 돌려주며, 결과를 열면 저장된 원본을 읽습니다."></a><figcaption>결과 목록은 인덱스에서 나옵니다. 원본 메시지는 그대로 남아 있어 읽고 확인할 수 있습니다.</figcaption></figure>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-3">클라우드 AI와 로컬 AI는 별개의 선택입니다</h2>
 <p>“AI 검색”은 상호작용 방식을 가리킬 뿐, 처리가 어디서 이루어지는지를 말하지 않습니다. 모델은 내 컴퓨터에서 돌 수도, 원격 서비스를 쓸 수도, 로컬 검색과 원격 해석을 섞을 수도 있습니다. 데스크톱에 설치한 앱이라도 메시지 내용을 클라우드 제공업체로 보낼 수 있습니다.</p>
 <p>기능을 켜기 전에 무엇이 기기를 떠나는지, 어느 제공업체가 그것을 받는지, 보존과 학습은 어떤 설정이 정하는지 알아보십시오. 자신의 계정 유형에 해당하는 정책을 읽으십시오. 모든 개인용 서비스와 업무용 요금제의 약관이 같다고 가정하지 마십시오.</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">직접 해 볼 수 있는 작은 비교</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-4">직접 해 볼 수 있는 작은 비교</h2>
 <p>자신의 메일함에서 세 가지 작업을 고르십시오. 영수증 찾기, 첨부 파일의 최신 버전 확인하기, 긴 스레드 이해하기. 쓸 수 있는 검색 도구로 각각 시도해 보십시오.</p>
 <ul><li><strong>정확성:</strong> 올바른 원본 메시지에 도달했습니까?</li><li><strong>범위:</strong> 오래된 폴더와 보관된 메시지도 포함되었습니까?</li><li><strong>추적 가능성:</strong> 답 뒤에 있는 출처를 확인할 수 있었습니까?</li><li><strong>오프라인 접근:</strong> 연결 없이도 같은 검색을 되풀이할 수 있었습니까?</li></ul>
 <p>새 외부 서비스를 평가한다면 민감하지 않은 예를 쓰십시오. 답이 얼마나 매끄럽게 들리는지가 아니라 실제 작업 결과를 비교하십시오.</p>
-<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault의 방식</h2>
+<h2 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2" id="help-section-5">MailVault의 방식</h2>
 <p>MailVault는 디스크에 보관된 메일로 로컬 전문 인덱스를 만듭니다. 보낸 사람, 날짜, 첨부 파일, 폴더로 거른 다음 저장된 메시지를 열 수 있습니다. AI 작성 도구와 스레드 요약 도구는 내 컴퓨터에서 실행되는 모델이나 직접 고른 제공업체를 쓸 수 있으며, 일반 전문 검색과는 별개입니다.</p>
 <p>실용적인 방법은 요약으로 방향을 잡고 결정은 원본 메시지를 보고 내리는 것입니다. 바탕이 되는 보관본은 옮길 수 있는 형태로 두고, 필요한 기간이 내려받아져 있는지 확인하고, <a href="/ko/blog/search-50000-emails-in-milliseconds.html" class="text-primary-500 hover:text-primary-600 underline">로컬 인덱스가 어떻게 작동하는지 알아 두십시오</a>. 빠른 답은 출처를 쉽게 들여다볼 수 있을 때 가장 쓸모가 있습니다.</p>
 
@@ -131,11 +132,12 @@
         </div>
       </article>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/search-local.webp"><img src="/assets/help-media/ko/search-local.webp" width="1440" height="1056" loading="lazy" alt="로컬 메시지에서 Priya를 검색하고 결과 표시 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>로컬 메시지에서 Priya를 검색하고 결과 표시</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/search-local.jpg" aria-label="로컬 메시지에서 Priya를 검색하고 결과 표시 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/search-local.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/search-local.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>검색창에 Priya를 입력합니다. 검색을 실행하고 이 컴퓨터에 저장된 메시지를 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat가 만들었습니다</p><h2 id="studio-title">MailVault를 만든 사람들을 만나 보세요.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>메일을 읽고, 메일을 보관하세요.</p></div><nav aria-label="MailVault 살펴보기"><a href="/ko/use-cases.html">사용 사례</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">새로운 소식</a><a href="/ko/faq.html">FAQ</a><a href="/ko/docs.html">도움말</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub의 코드 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 제작: <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

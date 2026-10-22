@@ -147,6 +147,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -195,7 +196,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html" aria-current="page">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="パンくずリスト" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -208,20 +209,20 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">メールプロバイダ</h1>
+      <h1 class="text-4xl font-bold mb-2">メールプロバイダ</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultはGmailやOutlookで使えますか？</a></li><li><a href="#help-section-2">Outlook.com のアカウントを接続するには？</a></li><li><a href="#help-section-3">Proton MailでMailVaultを使うにはどうすればよいですか？</a></li><li><a href="#help-section-4">ログインに使うアドレスとは別のアドレスから送信できますか？</a></li><li><a href="#help-section-5">エイリアスから送信するには？</a></li><li><a href="#help-section-6">Fastmail やほかの JMAP アカウントにはどう接続しますか？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail、Microsoft 365、Outlook.com、Proton Mail、Fastmail などの JMAP サーバーに接続し、エイリアスから送信します。</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVaultはGmailやOutlookで使えますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVaultはGmailやOutlookで使えますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               はい。MailVault は Gmail、Outlook、Fastmail などの JMAP サーバー、および IMAP 対応のメールサービスで使えます。Gmail には OAuth2 を使って Google アカウントで直接サインインでき、IMAP の手動設定は不要です。Microsoft 365 Business および Enterprise アカウントは、OAuth2 を使って Microsoft アカウントで直接サインインでき、2 要素認証にも対応しています。個人用の Outlook.com、Hotmail、Live.com アカウントは<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">Microsoft Graph API 経由で接続します</a>。
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Outlook.com のアカウントを接続するには？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">Outlook.com のアカウントを接続するには？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">MailVault は、個人の Outlook.com、Hotmail、Live.com のアカウントを <strong>Microsoft Graph API</strong> 経由で接続します。アカウントを追加し、「Microsoft でサインイン」を選んで、ブラウザでサインインを完了してください。MailVault は個人の Microsoft アカウントを認識して自動的に Graph を使うので、入力する IMAP の設定はありません。</p>
               <p class="mb-4">これらのアカウントで IMAP を使わないのは、2024 年後半に始まった、OAuth2 でのサインインに関する Microsoft の IMAP の問題があるためです。メールの閲覧、削除、既読・未読の設定、移動、バックアップは、ほかのアカウントと同じように使えます。</p>
@@ -237,7 +238,7 @@
         </article>
 
         <article id="proton-mail-bridge" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Proton MailでMailVaultを使うにはどうすればよいですか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">Proton MailでMailVaultを使うにはどうすればよいですか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Proton Mailはメールを端から端まで暗号化するため、IMAPを直接には公開していません。MailVault（やほかの第三者のメールクライアント）につなぐには<a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a>が必要です — Protonが提供するデスクトップアプリで、自分のコンピューター上で動き、暗号化されたメールボックスを<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>の標準的なIMAPとSMTPとして見せます。Bridgeには有料のProton Mailのプランが必要で、Protonの無料の枠では使えません。</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">設定の手順:</p>
@@ -255,24 +256,24 @@
                   </ul>
                 </li>
               </ol>
-              <p class="mb-4">MailVaultが同期するあいだ、Proton Mail Bridgeは背後で動いている必要があります — Bridgeが閉じていると、MailVaultはメールボックスに届きません。すでにアーカイブしたメールは、Bridgeが閉じていてもMailVaultの中でそのまま読め、検索できます。MailVaultはローカルを主とし、Bridgeから直接ではなく自身の<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code>の保存領域から読むからです。</p>
+              <p class="mb-4">MailVaultが同期するあいだ、Proton Mail Bridgeは背後で動いている必要があります — Bridgeが閉じていると、MailVaultはメールボックスに届きません。すでにアーカイブしたメールは、Bridgeが閉じていてもMailVaultの中でそのまま読め、検索できます。MailVaultはローカルを主とし、Bridgeから直接ではなく自身の<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code>の保存領域から読むからです。 このファイル構成の説明は、標準のMaildir形式を対象としています。設定 → ストレージではJMAPストレージも選択でき、元のメッセージのバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。</p>
               <p>Bridgeは、自身のローカルのIMAPとSMTPのサーバーを自己署名のTLS証明書で保護します。MailVaultはローカル（<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>）の接続についてこれを自動で扱うので、証明書を手でインストールする必要はありません。</p>
             </div>
         </article>
 
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">ログインに使うアドレスとは別のアドレスから送信できますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">ログインに使うアドレスとは別のアドレスから送信できますか？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">はい。<a href="#send-from-an-alias" class="text-primary-500 hover:underline">エイリアスから送信するには？</a>の説明どおりにアドレスをアカウントのエイリアスとして追加し、メールを書くときに送信者の行で選ぶか、既定にします。Fastmailや、サインインに使うアドレスと人に伝えるアドレスが違う提供元では、よくあることです。</p>
               <p>変更されるのは、送信メールの <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> アドレスだけです。ユーザー名とパスワードはそのままで、MailVault は設定済みのアカウントで引き続きサインインします。<strong>Reply-To ヘッダーは追加されません</strong> &mdash; 返信は送信に使ったアドレスに届きます。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/compose-email-720.webp 720w, /screenshots/ja/compose-email-1440.webp 1440w, /screenshots/ja/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/compose-email-light-1440.webp" srcset="/screenshots/ja/compose-email-light-720.webp 720w, /screenshots/ja/compose-email-light-1440.webp 1440w, /screenshots/ja/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="リッチテキスト編集を備えたMailVaultの作成・返信画面 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/compose-email-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/compose-email-720.webp 720w, /screenshots/ja/compose-email-1440.webp 1440w, /screenshots/ja/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/compose-email-light-1440.webp" srcset="/screenshots/ja/compose-email-light-720.webp 720w, /screenshots/ja/compose-email-light-1440.webp 1440w, /screenshots/ja/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="リッチテキスト編集を備えたMailVaultの作成・返信画面 · MailVault version 2.16.0 ja" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             </figure>
         </article>
 
         <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">エイリアスから送信するには？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">エイリアスから送信するには？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4"><strong>設定 &rarr; アカウント</strong>を開き、アカウントを選んで<strong>エイリアス</strong>のセクションに進みます。アカウントが送信に使うすべてのアドレスが、ログインアドレス、続いて各エイリアスの順に並びます。新しいメッセージの送信者の行にある<strong>アドレスを追加</strong>リンクからも同じセクションが開きます。</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">エイリアスの追加と設定:</p>
@@ -295,7 +296,7 @@
         </article>
 
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Fastmail やほかの JMAP アカウントにはどう接続しますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Fastmail やほかの JMAP アカウントにはどう接続しますか？</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>アカウント追加時に Fastmail を選び、Fastmail の設定で Mail と Submission へのアクセスを許可した API トークンを貼り付けます。ほかのサーバーでは JMAP を選び、そのパスワードまたは API トークンを使います。ドメインがセッション URL を公開していれば、MailVault が検出します。公開していなければ、完全な HTTPS セッション URL を入力してください。検出されたサーバーに見覚えがない場合は、認証情報を送る前に確認してください。新着メールはプッシュで取得し、利用できない場合はポーリングに切り替えます。送信アドレスにはサーバーの差出人情報を使います。Fastmail では IMAP 用のアプリパスワードも利用できます。</p></div>
         </article>
 
@@ -318,7 +319,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -341,5 +342,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

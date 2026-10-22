@@ -43,6 +43,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
   <header class="mv-header">
@@ -70,13 +71,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Hilfethemen</summary><nav aria-label="Themen im Hilfecenter"><a href="/de/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault-Hilfe</a><a href="/de/faq/getting-started.html">Erste Schritte</a><a href="/de/faq/storage-and-vault.html">Speicherort und dein Vault</a><a href="/de/faq/providers.html">E-Mail-Anbieter</a><a href="/de/faq/backup-and-restore.html">Backup und Wiederherstellung</a><a href="/de/faq/explorer-and-insights.html">Explorer und Einblicke</a><a href="/de/faq/scheduled-send.html">Geplanter Versand</a><a href="/de/faq/premium.html">Kostenlos und Premium</a><a href="/de/faq/troubleshooting.html">Fehlerbehebung</a><a href="/de/docs.html#guides" class="mv-help-divider">Praktische Anleitungen</a><a href="/de/docs.html#articles">Artikel</a><a href="/de/features.html">Funktionsübersicht</a><a href="/changelog.html">Versionshinweise</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/de/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← Zurück zum Blog</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-09-21" class="text-sm text-primary-500 font-medium">21. September 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">50.000 E-Mails in Millisekunden durchsuchen: So funktioniert der lokale Index von MailVault</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">50.000 E-Mails in Millisekunden durchsuchen: So funktioniert der lokale Index von MailVault</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7 Min. Lesezeit</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -102,40 +103,40 @@ index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>Zwei Dinge lassen sich aus dieser Tabelle ablesen. Erstens hängt die Zeit nicht von der Zahl der Treffer ab: 15 Treffer brauchten länger als 2.500, denn Zeit kostet die Form der Abfrage (eine Phrase aus zwei Wörtern ist mehr Arbeit als ein einzelnes Wort), nicht die Menge der zurückgegebenen Mail. Zweitens zeigt die Liste höchstens die neuesten 500 Treffer und sagt das, wenn es mehr gibt, sodass das Anzeigen der Ergebnisse begrenzte Arbeit ist, egal wie viele Nachrichten passen.</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-50k-results-1440.webp"><img src="/screenshots/de/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault-Suchergebnisse für das Wort invoice in einem Tresor mit 50.000 Nachrichten. Unter dem Suchfeld steht, dass die Liste die neuesten 500 von etwa 2.500 gespeicherten Treffern in allen Ordnern zeigt, darunter eine Liste von Nachrichtenzeilen. · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/search-50k-results-light-1440.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-50k-results-1440.webp"><img src="/screenshots/de/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault-Suchergebnisse für das Wort invoice in einem Tresor mit 50.000 Nachrichten. Unter dem Suchfeld steht, dass die Liste die neuesten 500 von etwa 2.500 gespeicherten Treffern in allen Ordnern zeigt, darunter eine Liste von Nachrichtenzeilen. · MailVault version 2.15.0 de" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0 de"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.15.0 de</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Dieselbe Art von Suche in der App: „invoice“ über einen Tresor mit 50.000 Nachrichten. Die Liste zeigt die neuesten 500 von etwa 2.500 gespeicherten Treffern und sagt das auch. Die wenigen Zeilen ganz oben stammen aus den Demo-Postfächern, die sich dieses Fenster teilen, und die Tresorordner heißen Projects, Correspondence und Clients statt wie im Benchmark.</figcaption>
           </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
 <desc id="f1d">Five bars: last 7 days with no words 1.0 ms, Japanese query 4.5 ms, invoice 7.4 ms, budget meeting 14.0 ms, update 4999 14.0 ms. Every bar ends before the 16.7 ms mark, which is one screen refresh at 60 Hz.</desc>
-<line x1="190.0" y1="32" x2="190.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="190.0" y1="32" x2="190.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="190.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">0</text>
-<line x1="315.0" y1="32" x2="315.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="315.0" y1="32" x2="315.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="315.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">5</text>
-<line x1="440.0" y1="32" x2="440.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="440.0" y1="32" x2="440.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="440.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">10</text>
-<line x1="565.0" y1="32" x2="565.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="565.0" y1="32" x2="565.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="565.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">15</text>
-<line x1="690.0" y1="32" x2="690.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="690.0" y1="32" x2="690.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="690.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">20</text>
 <text x="440.0" y="310" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">milliseconds, search plus building the result rows</text>
 <text x="178" y="62" text-anchor="end" font-size="14" fill="currentColor">last 7 days, no words</text>
-<rect x="190" y="46" width="25.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="46" width="25.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="223.0" y="63" font-size="14" font-weight="700" fill="currentColor">1 ms</text>
 <text x="178" y="106" text-anchor="end" font-size="14" fill="currentColor">会議 (Japanese)</text>
-<rect x="190" y="90" width="112.5" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="90" width="112.5" height="24" rx="3" fill="#6366f1"></rect>
 <text x="310.5" y="107" font-size="14" font-weight="700" fill="currentColor">4.5 ms</text>
 <text x="178" y="150" text-anchor="end" font-size="14" fill="currentColor">invoice</text>
-<rect x="190" y="134" width="185.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="134" width="185.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="383.0" y="151" font-size="14" font-weight="700" fill="currentColor">7.4 ms</text>
 <text x="178" y="194" text-anchor="end" font-size="14" fill="currentColor">budget meeting</text>
-<rect x="190" y="178" width="350.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="178" width="350.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="548.0" y="195" font-size="14" font-weight="700" fill="currentColor">14 ms</text>
 <text x="178" y="238" text-anchor="end" font-size="14" fill="currentColor">update 4999</text>
-<rect x="190" y="222" width="350.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="222" width="350.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="548.0" y="239" font-size="14" font-weight="700" fill="currentColor">14 ms</text>
-<line x1="607.5" y1="32" x2="607.5" y2="260" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+<line x1="607.5" y1="32" x2="607.5" y2="260" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"></line>
 <text x="607.5" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">one 60 Hz screen refresh: 16.7 ms</text>
 </svg>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Suchzeit pro Abfrage bei 50.000 Nachrichten. Jeder Balken endet vor dem nächsten Bildschirm-Refresh bei 60 Hz.</figcaption>
@@ -143,7 +144,7 @@ status check             5 ms</code></pre>
 
           <p>Der einmalige Aufwand ist der Aufbau des Index: etwa elf Sekunden für 50.000 Nachrichten, ungefähr 4.000 Nachrichten pro Sekunde, und 225 MB Speicherplatz. Er läuft im Hintergrund, du kannst MailVault währenddessen weiter nutzen, und danach werden nur neue und geänderte Nachrichten indexiert.</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-50k-index-1440.webp"><img src="/screenshots/de/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault, Einstellungen, Tab Speicher, Karte Suchindex mit der Anzeige 50.000 / 50.000 indexiert und etwa 270 MB, dazu Schalter für Nachrichtentext, Anhangstext und Text in Bildern. · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/search-50k-index-light-1440.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-50k-index-1440.webp"><img src="/screenshots/de/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault, Einstellungen, Tab Speicher, Karte Suchindex mit der Anzeige 50.000 / 50.000 indexiert und etwa 270 MB, dazu Schalter für Nachrichtentext, Anhangstext und Text in Bildern. · MailVault version 2.15.0 de" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0 de"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.15.0 de</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Einstellungen, Speicher, Suchindex nach Abschluss des Aufbaus: 50.000 von 50.000 Nachrichten indexiert, etwa 270 MB auf der Festplatte. Das ist ein eigener Lauf in der App, deshalb weicht die Größe von den 225 MB in der Benchmark-Tabelle oben ab.</figcaption>
           </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Wie sich 1 ms und 7 ms anfühlen</h3>
@@ -152,34 +153,34 @@ status check             5 ms</code></pre>
 <svg viewBox="0 0 720 250" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2t f2d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f2t">How long is a millisecond? Search times on a logarithmic time scale</title>
 <desc id="f2d">A logarithmic ruler from 1 millisecond to 100 seconds. MailVault search sits between 1 and 14 milliseconds, close to one screen refresh at 16.7 milliseconds and far below the 100 millisecond point at which a response feels instant. The old file-by-file search projected to 88 seconds on a 20,000-message folder.</desc>
-<line x1="40" y1="110" x2="680" y2="110" stroke="currentColor" stroke-opacity=".5" stroke-width="3"/>
-<line x1="40.0" y1="103" x2="40.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="40" y1="110" x2="680" y2="110" stroke="currentColor" stroke-opacity=".5" stroke-width="3"></line>
+<line x1="40.0" y1="103" x2="40.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="40.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">1 ms</text>
-<line x1="168.0" y1="103" x2="168.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="168.0" y1="103" x2="168.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="168.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">10 ms</text>
-<line x1="296.0" y1="103" x2="296.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="296.0" y1="103" x2="296.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="296.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">100 ms</text>
-<line x1="424.0" y1="103" x2="424.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="424.0" y1="103" x2="424.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="424.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">1 s</text>
-<line x1="552.0" y1="103" x2="552.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="552.0" y1="103" x2="552.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="552.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">10 s</text>
-<line x1="680.0" y1="103" x2="680.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="680.0" y1="103" x2="680.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="680.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">100 s</text>
-<rect x="40.0" y="100" width="146.7" height="20" rx="4" fill="#6366f1"/>
+<rect x="40.0" y="100" width="146.7" height="20" rx="4" fill="#6366f1"></rect>
 <text x="40.0" y="64" font-size="15" font-weight="700" fill="#6366f1">MailVault search on 50,000 messages: 1 to 14 ms</text>
-<line x1="196.5" y1="118" x2="196.5" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="196.5" y1="118" x2="196.5" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="196.5" y="148" text-anchor="start" font-size="13" font-weight="700" fill="#d97706">one screen refresh</text>
 <text x="196.5" y="164" text-anchor="start" font-size="12" fill="currentColor" fill-opacity=".95">16.7 ms at 60 Hz</text>
-<line x1="296.0" y1="118" x2="296.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="296.0" y1="118" x2="296.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="296.0" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">feels instant</text>
 <text x="296.0" y="208" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">under 100 ms</text>
-<line x1="424.0" y1="118" x2="424.0" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="424.0" y1="118" x2="424.0" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="424.0" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">flow of thought</text>
 <text x="424.0" y="164" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">up to 1 s</text>
-<line x1="552.0" y1="118" x2="552.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="552.0" y1="118" x2="552.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="552.0" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">attention lost</text>
 <text x="552.0" y="208" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">after 10 s</text>
-<line x1="672.9" y1="118" x2="672.9" y2="132" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="672.9" y1="118" x2="672.9" y2="132" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="672.9" y="148" text-anchor="end" font-size="13" font-weight="700" fill="#dc2626">old search</text>
 <text x="672.9" y="164" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".95">88 s (projected)</text>
 </svg>
@@ -189,7 +190,7 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Servermail, Archiv und Backup: eine Suche</h3>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-results-1440.webp"><img src="/screenshots/de/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault-Suchergebnisse zu einer Abfrage, mit der Legende unten, die die Markierungen „nur auf dem Server“, „in deinem Vault“, „einzige Kopie“ und „auf Backup-Laufwerk“ erklärt · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/search-results-light-1440.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-results-1440.webp"><img src="/screenshots/de/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault-Suchergebnisse zu einer Abfrage, mit der Legende unten, die die Markierungen „nur auf dem Server“, „in deinem Vault“, „einzige Kopie“ und „auf Backup-Laufwerk“ erklärt · MailVault version 2.16.0 de" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 de"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 de</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Jedes Ergebnis zeigt, wo die Nachricht liegt: nur auf dem Server, in deinem Vault, die einzige Kopie oder auf deinem Backup-Laufwerk.</figcaption>
           </figure>
           <p>MailVault hält drei Arten von Mail nebeneinander: vom Server synchronisierte Nachrichten, von dir archivierte Nachrichten und aus einem Backup wiederhergestellte Nachrichten. Sie alle landen als Dateien im selben Vault und gehen deshalb in denselben Index. Im Test lag die Mail in einem Posteingang, einem Archiv und einem Gesendet-Ordner, und eine Abfrage deckte alles ab. Woher eine Nachricht stammt, ändert nichts daran, wie schnell sie gefunden wird.</p>
@@ -198,9 +199,9 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Die Technik: eine sehr schnelle, sehr einfache SQL-Datenbank</h3>
           <p>Es gibt keinen Suchserver und keinen Cloud-Dienst. Der Index ist eine einzige SQLite-Datei in deinem Vault, und SQLite ist wahrscheinlich die am weitesten verbreitete Datenbank der Welt. MailVault nutzt deren Volltextsuchmaschine FTS5 mit einem <strong>Trigram</strong>-Tokenizer: Jedes Wort wird als überlappende Drei-Buchstaben-Stücke gespeichert. Deshalb kannst du „voic“ eintippen und „invoice“ finden, ohne Platzhalter und ohne Ganzwort-Regeln. Akzente werden vereinheitlicht, sodass „reunion“ auch „Réunion“ findet. Japanisch und Chinesisch, die keine Leerzeichen zwischen Wörtern verwenden, laufen über eine zweite, dafür gebaute Tabelle.</p>
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Ablauf der lokalen Suche: Gespeicherte Nachrichten speisen einen SQLite-Index; eine Abfrage liefert Treffer, und beim Öffnen eines Treffers wird das gespeicherte Original gelesen."><figcaption>Die Trefferliste kommt aus dem Index. Die Originalnachricht bleibt zum Lesen und Prüfen verfügbar.</figcaption></figure>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/local-search-flow.svg"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="Ablauf der lokalen Suche: Gespeicherte Nachrichten speisen einen SQLite-Index; eine Abfrage liefert Treffer, und beim Öffnen eines Treffers wird das gespeicherte Original gelesen."></a><figcaption>Die Trefferliste kommt aus dem Index. Die Originalnachricht bleibt zum Lesen und Prüfen verfügbar.</figcaption></figure>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice wird in inv, nvo, voi, oic und ice zerlegt. Die Abfrage voic teilt die Stücke voi und oic."><figcaption>Überlappende Stücke aus drei Zeichen machen die Suche nach Teilzeichenketten möglich. Das zeigt die Tokenisierung, nicht den vollständigen Ablauf einer Abfrage.</figcaption></figure>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/trigram-search.svg"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice wird in inv, nvo, voi, oic und ice zerlegt. Die Abfrage voic teilt die Stücke voi und oic."></a><figcaption>Überlappende Stücke aus drei Zeichen machen die Suche nach Teilzeichenketten möglich. Das zeigt die Tokenisierung, nicht den vollständigen Ablauf einer Abfrage.</figcaption></figure>
 
           <p>Die Geschwindigkeit kommt aus drei schlichten Entscheidungen:</p>
           <ul>
@@ -240,11 +241,12 @@ status check             5 ms</code></pre>
         </div>
       </article>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>In MailVault ansehen</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/de/search-local.webp"><img src="/assets/help-media/de/search-local.webp" width="1440" height="1056" loading="lazy" alt="Lokale Nachrichten nach Priya durchsuchen und Treffer anzeigen · MailVault version 2.20.0 de" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Lokale Nachrichten nach Priya durchsuchen und Treffer anzeigen</figcaption><video controls playsinline preload="none" poster="/assets/help-media/de/search-local.jpg" aria-label="Lokale Nachrichten nach Priya durchsuchen und Treffer anzeigen · MailVault version 2.20.0 de" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/de/search-local.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/de/search-local.vtt" srclang="de" label="Deutsch" default></video></figure><details class="mv-help-contents"><summary>Videotranskript</summary><p>Priya in das Suchfeld eingeben. Die Suche starten und die lokal gespeicherten Treffer ansehen.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/de/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Lies deine E-Mails. Behalte deine E-Mails.</p></div><nav aria-label="MailVault entdecken"><a href="/de/use-cases.html">Anwendungsfälle</a><a href="/de/blog.html">Blog</a><a href="/changelog.html">Neuigkeiten</a><a href="/de/faq.html">FAQ</a><a href="/de/docs.html">Hilfe</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code auf GitHub ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Gemacht von <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Datenschutz</a><a href="/terms.html">AGB</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Produkt-Screenshot"><button type="button">Screenshot schließen</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

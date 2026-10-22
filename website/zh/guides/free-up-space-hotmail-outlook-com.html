@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何在不丢失旧邮件的前提下为 Hotmail 和 Outlook.com 腾出空间</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何在不丢失旧邮件的前提下为 Hotmail 和 Outlook.com 腾出空间</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">开始之前：会改变计划的两个事实</a></li><li><a href="#help-section-2">第 1 步：看看哪些文件夹占用了空间</a></li><li><a href="#help-section-3">第 2 步：清空「已删除邮件」</a></li><li><a href="#help-section-4">第 3 步：找出最大的邮件</a></li><li><a href="#help-section-5">第 4 步：在本地保留一份旧邮件的副本</a></li><li><a href="#help-section-6">第 5 步：从 Outlook.com 删除旧邮件</a></li><li><a href="#help-section-7">第 6 步：再次清空「已删除邮件」，然后等待</a></li><li><a href="#help-section-8">每一步移除了什么</a></li><li><a href="#help-section-9">哪些不要删</a></li><li><a href="#help-section-10">常见问题</a></li><li><a href="#help-section-11">下一步做什么</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 分钟阅读</span>
             <span aria-hidden="true">&middot;</span>
@@ -235,14 +236,14 @@
             </ol>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">开始之前：会改变计划的两个事实</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">开始之前：会改变计划的两个事实</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>有两项限额。</strong>免费账户有 15 GB 邮件空间和 5 GB Microsoft 云存储空间。Microsoft 表示，云存储空间由 OneDrive 和你的 Outlook.com 附件共享。只要其中一项满了，你就无法收发邮件。</li>
             <li><strong>删除并不等于腾出空间。</strong>删除的邮件会进入「已删除邮件」，在你清空该文件夹之前，或者 30 天后被移除之前，它仍然占用空间。</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">第 1 步：看看哪些文件夹占用了空间</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">第 1 步：看看哪些文件夹占用了空间</h2>
 
           <p>
             登录 Outlook.com。依次选择<strong>设置</strong>、<strong>帐户</strong>、<strong>存储</strong>。这个页面会显示每个文件夹占用了多少空间。记下最大的三个文件夹。最后你还会再检查它们。
@@ -252,7 +253,7 @@
             同一个页面可以永久删除某个文件夹中的所有项目，或者只删除 3、6 或 12 个月以前的项目。暂时不要对收件箱、已发送邮件或存档使用它。删除之后，你无法找回那些邮件。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">第 2 步：清空「已删除邮件」</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">第 2 步：清空「已删除邮件」</h2>
 
           <p>
             打开<strong>已删除邮件</strong>文件夹，选中邮件并删除它们。先浏览一下这个文件夹。里面有时会有你误删的邮件。
@@ -263,7 +264,7 @@
             <li><strong>垃圾邮件</strong>会自动清空。Outlook.com 会在 10 天后删除其中的项目，所以它很少占用很多空间。</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">第 3 步：找出最大的邮件</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">第 3 步：找出最大的邮件</h2>
 
           <p>
             打开一个大文件夹。在邮件列表顶部，选择<strong>筛选</strong> &gt; <strong>排序依据</strong> &gt; <strong>大小</strong>。如果最小的邮件排在最上面，就再选一次。几封带大附件的邮件，占用的空间往往比几千封短邮件还多。
@@ -281,7 +282,7 @@
             Microsoft 还建议使用附件下方出现的<strong>保存到 OneDrive</strong>。使用时要小心。OneDrive 和你的附件使用的是同样的 5 GB 云存储空间。如果你的问题出在云存储上，把文件移到那里并没有帮助。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">第 4 步：在本地保留一份旧邮件的副本</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">第 4 步：在本地保留一份旧邮件的副本</h2>
 
           <p>
             第 1 到第 3 步是靠扔掉东西来腾出空间。对于你可能还会用到的多年邮件（收据、合同、信件、家人发来的照片），先在你的电脑上做一份副本。这样你就可以在线删除它们而不会丢失。
@@ -298,7 +299,7 @@
           </ol>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/selection-dialog-archive-720.webp 720w, /screenshots/zh/selection-dialog-archive-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/selection-dialog-archive-light-1440.webp" srcset="/screenshots/zh/selection-dialog-archive-light-720.webp 720w, /screenshots/zh/selection-dialog-archive-light-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 针对选中邮件的「选择操作」对话框，当前选中「归档」。「归档」的说明为「复制到保险库。服务器上也会保留。」下方是「取消归档」、「从服务器删除」、「归档并删除」和「全部删除」。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/selection-dialog-archive-720.webp 720w, /screenshots/zh/selection-dialog-archive-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/selection-dialog-archive-light-1440.webp" srcset="/screenshots/zh/selection-dialog-archive-light-720.webp 720w, /screenshots/zh/selection-dialog-archive-light-1440.webp 1440w, /screenshots/zh/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault 针对选中邮件的「选择操作」对话框，当前选中「归档」。「归档」的说明为「复制到保险库。服务器上也会保留。」下方是「取消归档」、「从服务器删除」、「归档并删除」和「全部删除」。 · MailVault version 2.16.0 zh" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">「归档」是稳妥的第一步：它制作副本，不改变服务器上的任何内容。对话框顶部的提示会说明选中的邮件中有多少封已经在保险库里。</figcaption>
           </figure>
 
@@ -306,7 +307,7 @@
             现在检查副本。在侧边栏中，把文件夹列表切换到<strong>保险库</strong>。打开几封最旧的邮件，打开一两个附件，再搜索一个你记得的内容。每封邮件都以标准 <code>.eml</code> 文件保存在你的电脑上，所以其他邮件应用也能打开它。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">第 5 步：从 Outlook.com 删除旧邮件</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">第 5 步：从 Outlook.com 删除旧邮件</h2>
 
           <p>当你确定副本没问题时，有三种方法可以把邮件从服务器上移除。</p>
 
@@ -317,22 +318,22 @@
           </ul>
 
           <div class="my-8">
-            <figure class="mv-clip" data-clip="archive-delete"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/zh/archive-delete.jpg" width="960" height="660" aria-label="MailVault 询问“先归档再从服务器删除？”，点击“归档并删除”，进度达到 420/420，Vault 视图仍列出 2022 年已归档的 420 封邮件。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/archive-delete.mp4" type="video/mp4"></video></div>
+            <figure class="mv-clip" data-clip="archive-delete"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/zh/archive-delete.jpg" width="960" height="660" aria-label="MailVault 询问“先归档再从服务器删除？”，点击“归档并删除”，进度达到 420/420，Vault 视图仍列出 2022 年已归档的 420 封邮件。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/zh/archive-delete.mp4" type="video/mp4"></video></div>
             <figcaption><strong class="mv-clip-title">归档并删除（Premium）</strong><span class="mv-clip-text">选择“归档并删除”，2022 年的 420 封邮件会先归档，再从服务器删除。Vault 视图里仍有全部 420 封。</span></figcaption></figure>
           </div>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/archive-success-720.webp 720w, /screenshots/zh/archive-success-1440.webp 1440w, /screenshots/zh/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/archive-success-light-1440.webp" srcset="/screenshots/zh/archive-success-light-720.webp 720w, /screenshots/zh/archive-success-light-1440.webp 1440w, /screenshots/zh/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="归档任务完成后的 MailVault 收件箱。右下角的卡片显示「操作已完成」。标题显示该文件夹中有多少封邮件「在你的保险库中」，列表下方的图例解释了「仅在服务器」、「在你的保险库中」、「唯一副本」和「在备份盘上」。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/archive-success-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/archive-success-720.webp 720w, /screenshots/zh/archive-success-1440.webp 1440w, /screenshots/zh/archive-success-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/zh/archive-success-light-1440.webp" srcset="/screenshots/zh/archive-success-light-720.webp 720w, /screenshots/zh/archive-success-light-1440.webp 1440w, /screenshots/zh/archive-success-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="归档任务完成后的 MailVault 收件箱。右下角的卡片显示「操作已完成」。标题显示该文件夹中有多少封邮件「在你的保险库中」，列表下方的图例解释了「仅在服务器」、「在你的保险库中」、「唯一副本」和「在备份盘上」。 · MailVault version 2.16.0 zh" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">任务结束时，MailVault 会显示「操作已完成」。列表下方的图例告诉你每封邮件在哪里：仅在服务器上、在你的保险库中，或者在你的保险库中作为唯一副本。卡片下方的进度条属于另一项任务。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">第 6 步：再次清空「已删除邮件」，然后等待</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">第 6 步：再次清空「已删除邮件」，然后等待</h2>
 
           <p>
             你删除的邮件，无论是在 Outlook.com 中还是从其他应用删除的，都可能先进入「已删除邮件」。在 Outlook.com 中打开「已删除邮件」并再次清空。然后回到<strong>设置</strong> &gt; <strong>帐户</strong> &gt; <strong>存储</strong>，与你之前记下的数字对比。Microsoft 表示，变化最长可能需要 24 小时才会显示，所以不要因为数字还没变就删更多。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">每一步移除了什么</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">每一步移除了什么</h2>
 
           <div class="scroll-x overflow-x-auto">
             <table class="w-full text-left text-sm border-collapse">
@@ -368,7 +369,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">哪些不要删</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-9">哪些不要删</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>任何只有一份的东西。</strong>收据、发票、税务文件、合同、保修单、医疗和法律信函。先把它们归档。</li>
@@ -382,7 +383,7 @@
             「已删除邮件」不是备份。Microsoft 会在 30 天后移除其中的项目。
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-10">常见问题</h2>
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">为什么我删除邮件之后，Hotmail 还是满的？</h3>
@@ -404,7 +405,7 @@
             <p>它很少能腾出多少空间。Outlook.com 会在 10 天后自动删除「垃圾邮件」中的项目。查看「设置」中的存储页面，看看哪些文件夹才是真正最大的。</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">下一步做什么</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-11">下一步做什么</h2>
 
           <p>
             今天就完成第 1 到第 3 步，让占用降到上限以下。然后把旧邮件复制到你的电脑上，再分批在线删除，一次一年。要比较在 Mac 上制作这份副本的其他方法，请阅读<a href="/zh/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">如何把 Outlook.com 邮件备份到 Mac</a>。同样的方法也适用于 Gmail 和其他服务商，详见<a href="/zh/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">如何在不丢失旧邮件的前提下腾出邮箱空间</a>。如果你在考虑改用 Microsoft 365，请参阅<a href="/zh/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">本地归档与付费购买更多存储空间</a>。
@@ -426,7 +427,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -450,5 +451,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

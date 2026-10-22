@@ -4,25 +4,33 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const VERSION_SUFFIX = /(?:\s*[·—-]\s*)?(?:Reviewed for )?MailVault version \d+\.\d+\.\d+\s*$/;
+export const VERSION_SUFFIX = /(?:\s*[·—-]\s*)?(?:Reviewed for )?MailVault version \d+\.\d+\.\d+(?: (?:en|de|fr|es|it|ja|ko|zh|pt-br))?\s*$/;
 export const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'website/media-versions.json'), 'utf8'));
+const helpFile = path.join(ROOT, 'website/help-media.json');
+const helpManifest = fs.existsSync(helpFile) ? JSON.parse(fs.readFileSync(helpFile,'utf8')) : null;
 
 export function assetKey(src) {
   const clean = src.split(/[?#]/)[0];
+  if (clean.startsWith('/assets/help-media/')) return clean.replace(/\.(?:webp|jpg|mp4|vtt)$/, '');
   if (clean.startsWith('/screenshots/')) return clean.replace(/^\/screenshots\/(?:de|fr|es|it|pt-br|ja|ko|zh)\//, '/screenshots/').replace(/-(?:light-)?\d+\.webp$/, '');
   if (clean.startsWith('/assets/clips/')) return clean.replace(/\/clips\/(?:de|fr|es|it|pt-br|ja|ko|zh)\//, '/clips/en/').replace(/(?:-poster)?(?:\.light)?\.(?:mp4|jpg)$/, '');
   return clean.replace(/\/videos\/guides\/(?:de|fr|es|it|pt-br|ja|ko|zh)\//, '/videos/guides/');
 }
 
 export function mediaRecord(src, records = manifest.captures) {
-  return records.find(record => record.assets.includes(assetKey(src))) || null;
+  const known = records.find(record => record.assets.includes(assetKey(src)));
+  if (known) return known;
+  const help = /^\/assets\/help-media\/([^/]+)\/([^/.]+)\.(?:webp|jpg|mp4)$/.exec(src);
+  const workflow = help && helpManifest?.locales?.[help[1]]?.workflows?.[help[2]];
+  if (workflow && [workflow.image,workflow.video,workflow.poster].includes(src)) return { version:helpManifest.version, kind:'capture', locale:help[1] };
+  return null;
 }
 export function captureVersion(src, records = manifest.captures) {
   return mediaRecord(src, records)?.version || null;
 }
-export const versionLabel = record => `${record.kind === 'reviewed' ? 'Reviewed for ' : ''}MailVault version ${record.version}`;
+export const versionLabel = record => `${record.kind === 'reviewed' ? 'Reviewed for ' : ''}MailVault version ${record.version}${record.locale ? ` ${record.locale}` : ''}`;
 export function isAppMedia(src) {
-  return /^\/(?:screenshots\/|assets\/(?:clips\/|videos\/guides\/|blog\/email-client-reviews\/mailvault-|demo-preview-))/.test(src);
+  return /^\/(?:screenshots\/|assets\/(?:help-media\/|clips\/|videos\/guides\/|blog\/email-client-reviews\/mailvault-|demo-preview-))/.test(src);
 }
 
 // Source-range edits preserve hand-written HTML, script strings, and localized links.
@@ -59,13 +67,15 @@ export function tagMedia(html, records = manifest.captures, descriptions = new M
     }
     if (!description) throw new Error(`Missing descriptive ${name}: ${item.src}`);
     const base = description.replace(VERSION_SUFFIX, '').trim();
-    const label = version ? `${base} · ${versionLabel(record)}` : base;
+    const lang = description.match(/MailVault version \d+\.\d+\.\d+ (en|de|fr|es|it|ja|ko|zh|pt-br)$/)?.[1];
+    const labelRecord = lang && !record?.locale ? { ...record, locale:lang } : record;
+    const label = version ? `${base} · ${versionLabel(labelRecord)}` : base;
     let tag = attribute(item.tag, name, label);
     if (version) {
       tag = attribute(tag, 'data-mailvault-version', version);
       tag = attribute(tag, 'data-mailvault-version-kind', record.kind || 'capture');
       // The native tooltip exposes the capture version without moving image layout.
-      tag = attribute(tag, 'title', versionLabel(record));
+      tag = attribute(tag, 'title', versionLabel(labelRecord));
     }
     if (label !== description) translations.push({ from: base, to: label, suffix: version ? ` · ${versionLabel(record)}` : '' });
     if (tag !== item.tag) edits.push({ ...item, tag });
@@ -87,7 +97,8 @@ export function validateMedia(html, records = manifest.captures) {
     if (!version) { errors.push(`${item.src}: capture version has not been verified`); continue; }
     if (item.attrs['data-mailvault-version'] !== version) errors.push(`${item.src}: expected data-mailvault-version=${version}`);
     if (item.attrs['data-mailvault-version-kind'] !== (record.kind || 'capture')) errors.push(`${item.src}: missing or incorrect version kind`);
-    if (!label?.endsWith(versionLabel(record)) || !label.replace(VERSION_SUFFIX, '').trim()) errors.push(`${item.src}: ${name} needs a description and capture version`);
+    const labelMatches = label?.endsWith(versionLabel(record)) || (!record.locale && label?.match(/ (en|de|fr|es|it|ja|ko|zh|pt-br)$/) && label.replace(/ (en|de|fr|es|it|ja|ko|zh|pt-br)$/, '').endsWith(versionLabel(record)));
+    if (!labelMatches || !label.replace(VERSION_SUFFIX, '').trim()) errors.push(`${item.src}: ${name} needs a description and capture version`);
   }
   return errors;
 }

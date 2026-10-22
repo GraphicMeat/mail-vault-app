@@ -38,7 +38,7 @@
     "description": "Back up Yahoo Mail using an app password and IMAP. Save a local archive with MailVault and keep a second copy on another drive.",
     "url": "https://mailvaultapp.com/guides/yahoo-mail-backup.html",
     "datePublished": "2026-07-15",
-    "dateModified": "2026-07-15",
+    "dateModified": "2026-10-22",
     "author": {
       "@type": "Organization",
       "name": "MailVault"
@@ -66,7 +66,7 @@
         "name": "Does Yahoo Mail support app passwords?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. Yahoo Mail does not offer app-specific passwords the way Gmail or iCloud do. If a backup tool asks you to generate one specifically for Yahoo, that guidance is outdated &mdash; connect using your regular Yahoo sign-in through the client's standard IMAP connection flow instead."
+          "text": "Yes. For a mail app such as MailVault that does not use Yahoo’s branded sign-in page, generate an app password in Yahoo Account Security → External connections and use it instead of your normal password. Yahoo controls whether an account is eligible to create one."
         }
       },
       {
@@ -74,15 +74,15 @@
         "name": "What are Yahoo's IMAP settings?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "IMAP server imap.mail.yahoo.com on port 993 with SSL/TLS. For sending mail, SMTP server smtp.mail.yahoo.com on port 465 or 587 with SSL/TLS."
+          "text": "IMAP server imap.mail.yahoo.com on port 993 with SSL/TLS. For sending mail, SMTP server smtp.mail.yahoo.com on port 465 with SSL/TLS or port 587 with STARTTLS."
         }
       },
       {
         "@type": "Question",
-        "name": "Why would I back up Yahoo Mail if it already gives 1 TB of free storage?",
+        "name": "Why back up Yahoo Mail when the account already has online storage?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Storage limits aren't usually the issue with Yahoo. The common reasons are wanting an offline archive independent of any one provider, preparing to migrate to a different email service, or simply wanting peace of mind after Yahoo's history of ownership changes and past account security incidents."
+          "text": "Yahoo’s current help lists 20 GB of free storage, so check the allowance shown in your account. A local backup also gives you an offline archive independent of Yahoo and a copy to keep when moving to another provider."
         }
       },
       {
@@ -90,7 +90,7 @@
         "name": "Can I still use IMAP with Yahoo Mail in 2026?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Yahoo continues to support standard IMAP and SMTP access for third-party mail clients through its normal sign-in flow."
+          "text": "Yes. Yahoo continues to support standard IMAP and SMTP access for third-party mail clients using an app password in clients that do not use Yahoo’s branded sign-in."
         }
       }
     ]
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How to Back Up Yahoo Mail to Your Computer</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How to Back Up Yahoo Mail to Your Computer</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 min read</span>
           </div>
@@ -267,22 +268,22 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Does Yahoo Mail support app passwords?</p>
-            <p>No. Yahoo Mail does not offer app-specific passwords the way Gmail or iCloud do. If a backup tool asks you to generate one specifically for Yahoo, that guidance is outdated &mdash; connect using your regular Yahoo sign-in through the client's standard IMAP connection flow instead.</p>
+            <p>Yes. For a mail app such as MailVault that does not use Yahoo’s branded sign-in page, generate an app password in Yahoo Account Security → External connections and use it instead of your normal password. Yahoo controls whether an account is eligible to create one.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">What are Yahoo's IMAP settings?</p>
-            <p>IMAP server imap.mail.yahoo.com on port 993 with SSL/TLS. For sending mail, SMTP server smtp.mail.yahoo.com on port 465 or 587 with SSL/TLS.</p>
+            <p>IMAP server imap.mail.yahoo.com on port 993 with SSL/TLS. For sending mail, SMTP server smtp.mail.yahoo.com on port 465 with SSL/TLS or port 587 with STARTTLS.</p>
           </div>
 
           <div class="pt-2">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Why would I back up Yahoo Mail if it already gives 1 TB of free storage?</p>
-            <p>Storage limits aren't usually the issue with Yahoo. The common reasons are wanting an offline archive independent of any one provider, preparing to migrate to a different email service, or simply wanting peace of mind after Yahoo's history of ownership changes and past account security incidents.</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Why back up Yahoo Mail when the account already has online storage?</p>
+            <p>Yahoo’s current help lists 20 GB of free storage, so check the allowance shown in your account. A local backup also gives you an offline archive independent of Yahoo and a copy to keep when moving to another provider.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Can I still use IMAP with Yahoo Mail in 2026?</p>
-            <p>Yes. Yahoo continues to support standard IMAP and SMTP access for third-party mail clients through its normal sign-in flow.</p>
+            <p>Yes. Yahoo continues to support standard IMAP and SMTP access for third-party mail clients using an app password in clients that do not use Yahoo’s branded sign-in.</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
@@ -293,7 +294,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>See it in MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/en/manual-backup.webp"><img src="/assets/help-media/en/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Back up all accounts and verify completion</figcaption><video controls playsinline preload="none" poster="/assets/help-media/en/manual-backup.jpg" aria-label="Back up all accounts and verify completion · MailVault version 2.20.0 en" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/en/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/en/manual-backup.vtt" srclang="en" label="English" default></video></figure><details class="mv-help-contents"><summary>Video transcript</summary><p>Select Back up all accounts in Backup settings. Watch backup progress until the run finishes.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
@@ -317,5 +318,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

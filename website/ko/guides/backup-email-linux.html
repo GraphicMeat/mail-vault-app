@@ -38,7 +38,7 @@
   "description": "Linux에서 로컬 이메일 백업을 만듭니다. 메일함을 연결하고 EML로 보관한 뒤 오프라인에서 첨부 파일을 확인하고 다른 드라이브에 두 번째 사본을 보관합니다.",
   "url": "https://mailvaultapp.com/ko/guides/backup-email-linux.html",
   "datePublished": "2026-10-15",
-  "dateModified": "2026-10-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -112,6 +112,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-email-linux.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-email-linux.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">본문으로 건너뛰기</a>
@@ -160,7 +161,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>도움말 주제</summary><nav aria-label="도움말 센터 주제"><a href="/ko/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 도움말</a><a href="/ko/faq/getting-started.html">시작하기</a><a href="/ko/faq/storage-and-vault.html">저장소와 볼트</a><a href="/ko/faq/providers.html">이메일 제공업체</a><a href="/ko/faq/backup-and-restore.html">백업과 복원</a><a href="/ko/faq/explorer-and-insights.html">Explorer와 메일 분석</a><a href="/ko/faq/scheduled-send.html">예약 발송</a><a href="/ko/faq/premium.html">무료와 Premium</a><a href="/ko/faq/troubleshooting.html">문제 해결</a><a href="/ko/docs.html#guides" class="mv-help-divider">실용 가이드</a><a href="/ko/docs.html#articles">글</a><a href="/ko/features.html">기능 안내</a><a href="/changelog.html">릴리스 노트</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -171,33 +172,33 @@
       <article>
           <header class="mb-8">
           <p data-i18n-block class="text-sm">이메일 백업 가이드 · <time datetime="2026-10-15">2026년 10월 15일</time></p>
-          <h1>Linux에서 이메일을 EML로 백업하는 방법</h1></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
-          <p data-i18n-block>Linux의 이메일 백업은 제공업체에서 메일을 삭제하거나 디스크가 고장 나도 남아 있어야 합니다. 먼저 독립적인 로컬 보관함에 메시지를 보관한 뒤 다른 곳에 두 번째 사본을 보관하십시오. MailVault Linux 앱은 보관한 메일을 Maildir 폴더에 개별 EML 파일로 저장합니다.</p>
-          <h2 data-i18n-block>1. Linux 앱을 설치하고 계정 연결하기</h2>
+          <h1>Linux에서 이메일을 EML로 백업하는 방법</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">1. Linux 앱을 설치하고 계정 연결하기</a></li><li><a href="#help-section-2">2. 백업하기 전에 먼저 보관하기</a></li><li><a href="#help-section-3">보관한 메일을 신뢰하기 전에 검증하기</a></li><li><a href="#help-section-4">3. 디스크 사본 보호하기</a></li><li><a href="#help-section-5">자동화할 수 있습니까?</a></li></ul></details><!-- help-contents:end --></header><div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p data-i18n-block>Linux의 이메일 백업은 제공업체에서 메일을 삭제하거나 디스크가 고장 나도 남아 있어야 합니다. 먼저 독립적인 로컬 보관함에 메시지를 보관한 뒤 다른 곳에 두 번째 사본을 보관하십시오. MailVault Linux 앱은 보관한 메일을 Maildir 폴더에 개별 EML 파일로 저장합니다. 이 파일 구조 설명은 기본 Maildir 형식을 기준으로 합니다. 설정 → 저장소에서는 원본 메시지 바이트를 JSON 레코드와 함께 보관하고 동일한 메시지의 중복을 제거하는 JMAP 저장소도 선택할 수 있습니다.</p>
+          <h2 data-i18n-block id="help-section-1">1. Linux 앱을 설치하고 계정 연결하기</h2>
           <p data-i18n-block><a href="/ko/get-started.html">다운로드 페이지</a>의 Linux 다운로드 링크에서 시스템에 맞는 패키지와 아키텍처를 선택하십시오. 다른 배포판의 명령을 복사하는 대신 해당 페이지의 최신 설치 안내를 따르십시오. 지원되는 로그인 절차로 Gmail 또는 Microsoft 계정을 추가하거나 IMAP 제공업체가 제공한 연결 정보를 입력하십시오. 조직은 운영체제와 관계없이 접근을 제한할 수 있습니다.</p>
-          <h2 data-i18n-block>2. 백업하기 전에 먼저 보관하기</h2>
+          <h2 data-i18n-block id="help-section-2">2. 백업하기 전에 먼저 보관하기</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>받은편지함, 보낸편지함, 사용자 지정 폴더를 웹메일과 대조하십시오. 보관하려는 오래된 폴더와 라벨도 포함하십시오.</li>
           <li data-i18n-block>일괄 작업에서 폴더와 날짜 범위를 지정한 뒤 <strong>보관</strong>을 선택하십시오. 서버에서 메일을 제거하지 않고 로컬 사본을 만듭니다.</li>
           <li data-i18n-block>작업이 끝날 때까지 앱을 실행해 두십시오. 보관이 완료되었다고 판단하기 전에 실패 항목을 검토하고 누락된 메시지를 다시 시도하십시오.</li>
           <li data-i18n-block><strong>보관함</strong> 소스를 선택하고 여러 연도의 메시지와 첨부 파일을 확인하십시오.</li></ol>
-          <h2 data-i18n-block>보관한 메일을 신뢰하기 전에 검증하기</h2>
+          <h2 data-i18n-block id="help-section-3">보관한 메일을 신뢰하기 전에 검증하기</h2>
           <ol class="list-decimal pl-6 space-y-2">
           <li data-i18n-block>메시지 소스를 서버나 전체가 아닌 <strong>보관함</strong>으로 전환하십시오. 기억나는 오래된 메시지를 검색하십시오.</li>
           <li data-i18n-block>네트워크 연결을 끊고 서로 다른 폴더와 연도의 보관된 메시지를 몇 개 열어 보십시오. 첨부 파일도 열어 보십시오. 목록에 제목이 보인다는 것만으로 메시지 본문이 저장되었다고 할 수는 없습니다.</li>
           <li data-i18n-block>설정에서 <strong>백업 및 복원</strong>을 열고 <strong>백업 내보내기</strong>를 사용하십시오. 두 번째 드라이브의 위치를 선택하십시오. ZIP에는 보관함, 계정, 설정이 포함되며 서버에만 있는 메시지는 제외됩니다.</li>
           <li data-i18n-block>ZIP이 열리는지, .eml 파일이 들어 있는지, 보존하려던 폴더가 포함되어 있는지 확인하십시오. 중요한 메일이라면 무엇이든 삭제하기 전에 별도로 설치한 앱에서 사본을 복원해 보십시오.</li></ol>
-          <h2 data-i18n-block>3. 디스크 사본 보호하기</h2>
+          <h2 data-i18n-block id="help-section-4">3. 디스크 사본 보호하기</h2>
           <p data-i18n-block>내보낸 백업에는 두 번째 드라이브를 사용하십시오. 같은 디스크의 다른 폴더는 디스크 고장에 대비한 보호 수단이 아닙니다. 이동식 드라이브라면 예약 실행 전에 마운트되어 있고 쓰기가 가능한지 확인하십시오. 개인 메일은 암호화된 저장소에 보관하고, 컴퓨터를 잃어버려도 접근할 수 있는 곳에 백업 복구용 인증 정보를 보관하십시오.</p>
           <p data-i18n-block>Maildir는 개별 메시지를 옮기기 쉽게 해 주지만, 사용 중인 보관함에는 앱 메타데이터도 있습니다. 실행 중인 앱에서는 앱의 백업/내보내기 기능을 우선 사용하십시오. 파일시스템에서 전체 보관함을 복사한다면 쓰기 도중의 파일이 복사되지 않도록 먼저 앱을 종료하십시오.</p>
-          <h2 data-i18n-block>자동화할 수 있습니까?</h2>
+          <h2 data-i18n-block id="help-section-5">자동화할 수 있습니까?</h2>
           <p data-i18n-block>MailVault Premium은 예약 백업을 지원합니다. 예약을 활성화하기 전에 수동 보관을 성공적으로 마치고 복원도 검증하십시오. 터미널 작업을 선호한다면 <a href="/ko/guides/imap-backup-tool-checklist.html">IMAP 백업 체크리스트</a>에서 인증 지원, 저장 형식, 삭제 동작, 복원 절차를 기준으로 도구를 비교하십시오.</p>
           <p data-i18n-block><a href="/ko/guides/linux-email-archive.html">Linux용 이메일 보관 도구 선택</a>과 <a href="/ko/guides/keep-emails-after-server-deletion.html">서버에서 삭제한 후에도 메일 보관하기</a>도 참조하십시오. 이 가이드의 다른 부분에 있는 Mac 녹화 영상은 공통 앱 작업 흐름을 보여 주며 Linux 데스크톱에서 녹화한 것은 아닙니다.</p>
           <p data-i18n-block><a href="/ko/get-started.html">MailVault를 무료로 다운로드</a>하고 첫 로컬 보관함을 만드십시오. 수동 보관은 무료입니다. 자동 보관, 예약 백업, 보관 후 삭제에는 <a href="/ko/pricing.html">Premium</a>이 필요합니다.</p>
           <p data-i18n-block>더 많은 실용 가이드: <a href="/ko/guides/backup-gmail-to-eml.html">Gmail을 EML 파일로 백업하는 방법</a> · <a href="/ko/guides/export-outlook-to-eml.html">Outlook 이메일을 EML로 내보내는 방법</a> · <a href="/ko/guides/download-all-emails-mac.html">Mac에서 모든 이메일을 다운로드하는 방법</a> · <a href="/ko/guides/linux-email-archive.html">Linux용 로컬 이메일 보관 도구: 확인할 사항</a></p></div></article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVault에서 보기</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ko/manual-backup.webp"><img src="/assets/help-media/ko/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>모든 계정을 백업하고 완료 확인</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ko/manual-backup.jpg" aria-label="모든 계정을 백업하고 완료 확인 · MailVault version 2.20.0 ko" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ko/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ko/manual-backup.vtt" srclang="ko" label="한국어" default></video></figure><details class="mv-help-contents"><summary>동영상 대본</summary><p>백업 설정에서 모든 계정의 백업을 시작합니다. 백업이 끝날 때까지 진행 상황을 확인합니다.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div>
@@ -225,5 +226,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="제품 스크린샷"><button type="button">스크린샷 닫기</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

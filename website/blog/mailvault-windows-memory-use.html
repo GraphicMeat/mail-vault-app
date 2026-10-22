@@ -43,6 +43,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-windows-memory-use.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-windows-memory-use.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
   <header class="mv-header">
@@ -70,13 +71,14 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Help topics</summary><nav aria-label="Help center topics"><a href="/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault help</a><a href="/faq/getting-started.html">Getting Started</a><a href="/faq/storage-and-vault.html">Storage and Your Vault</a><a href="/faq/providers.html">Email Providers</a><a href="/faq/backup-and-restore.html">Backup and Restore</a><a href="/faq/explorer-and-insights.html">Explorer and Insights</a><a href="/faq/scheduled-send.html">Scheduled Send</a><a href="/faq/premium.html">Free and Premium</a><a href="/faq/troubleshooting.html">Troubleshooting</a><a href="/docs.html#guides" class="mv-help-divider">Practical guides</a><a href="/docs.html#articles">Articles</a><a href="/features.html">Feature reference</a><a href="/changelog.html">Release notes</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← Back to Blog</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-09-26" class="text-sm text-primary-500 font-medium">September 26, 2026</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How Much Memory Does MailVault Use on Windows? We Measured It</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How Much Memory Does MailVault Use on Windows? We Measured It</h1><!-- help-intro:start --><form class="mv-help-search" action="/docs.html" method="get" role="search"><label for="help-q">Search documentation, FAQ and articles</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Search every guide and answer" required><button type="submit">Search</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <p>Historical engineering post: this describes the release and implementation at publication. Current MailVault 2.20 uses a Rust background daemon and supports IMAP, Microsoft Graph and JMAP; consult the current help pages for setup and behavior.</p>
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>6 min read</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -87,7 +89,7 @@
           <p>The test uses two email accounts on a local test mail server: one with 58 messages in its inbox and one with 10,000. An automated run drives the real app the way a person would. It opens MailVault, opens the small inbox, then switches to the large account and waits until all 10,000 message headers are in the list. It scrolls the whole list from top to bottom, then leaves the app alone for ten minutes. At each step it records the memory of every process MailVault owns.</p>
           <p>The laptop was an MSI with an Intel Core i7-13620H and 16 GB of memory, running Windows 11 23H2 on mains power. It was not a clean machine: other apps were open, including another copy of MailVault, so treat this as a normal, busy computer. We did the whole test three times, each time with a fresh, empty profile, and the figures below are the range across those three runs. The build was an optimized release build of MailVault 2.16 with the test hooks switched on, so it is close to, but not byte for byte, the download.</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault on Windows 11 showing the small test inbox with 58 emails, two test accounts in the sidebar and an empty reading pane. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/windows-memory-58-inbox-1440.webp"><img src="/screenshots/windows-memory-58-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault on Windows 11 showing the small test inbox with 58 emails, two test accounts in the sidebar and an empty reading pane. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">The first moment we measure: MailVault on Windows 11 with the small test inbox open, captured during the test run itself.</figcaption>
           </figure>
 
@@ -114,7 +116,7 @@ background helper, 10,000 msgs    22 – 23 MB
 app window                        11 – 13 MB</code></pre>
           <p>The second column is commit size: the private memory each process has reserved, whether it is in RAM at the moment or not. We added it after the first run, so it covers two runs rather than three. It matters for the last row. After a few minutes without input, Windows takes memory away from processes that are not using it and Task Manager's number drops to about 110 MB. That memory is not freed by MailVault, it is set aside by Windows, and commit size shows the app still holds about 310 MB it can get back when you return. If you want one number for what MailVault costs on Windows, use that one: roughly 300 MB with a large mailbox.</p>
           <figure class="my-6">
-            <img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault on Windows 11 with the large test account selected. The inbox header reads 10,000 emails and the list shows the oldest test messages at the bottom. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/windows-memory-10k-inbox-1440.webp"><img src="/screenshots/windows-memory-10k-inbox-1440.webp" width="1440" height="877" loading="lazy" alt="MailVault on Windows 11 with the large test account selected. The inbox header reads 10,000 emails and the list shows the oldest test messages at the bottom. · MailVault version 2.16.0 en" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 en"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 en</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">All 10,000 headers loaded and the list scrolled to its end, the moment of the "10,000 messages loaded" row. The inbox says 10,000 emails, and the vault counter reads 0 because nothing had been archived in this test.</figcaption>
           </figure>
 
@@ -137,22 +139,22 @@ app window                        11 – 13 MB</code></pre>
           <p>The one moment memory jumps is when you open a large account for the first time. MailVault loads every cached header of that mailbox into the list at once, so sorting, counts and filters work on the whole mailbox and not just the part you have scrolled past. The renderer briefly roughly doubles while it builds that list, then gives most of it back.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 290" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2c" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
-<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="250.0" x2="700" y2="250.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="254.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">0</text>
-<line x1="70" y1="195.0" x2="700" y2="195.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="195.0" x2="700" y2="195.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="199.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">100</text>
-<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="140.0" x2="700" y2="140.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="144.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">200</text>
-<line x1="70" y1="85.0" x2="700" y2="85.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="85.0" x2="700" y2="85.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="89.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">300</text>
-<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>
+<line x1="70" y1="30.0" x2="700" y2="30.0" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"></line>
 <text x="62" y="34.0" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".8">400</text>
 <text x="101.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">0 s</text>
 <text x="227.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">20 s</text>
 <text x="353.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">40 s</text>
 <text x="479.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">60 s</text>
 <text x="605.5" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".8">80 s</text>
-<line x1="101.5" y1="30" x2="101.5" y2="250" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="101.5" y1="30" x2="101.5" y2="250" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <polyline points="70.0,148.7 101.5,107.5 133.0,48.8 164.5,68.2 196.0,68.6 227.5,129.4 259.0,131.4 290.5,131.7 322.0,131.7 353.5,131.7 385.0,131.8 416.5,131.7 448.0,131.7 479.5,131.8 511.0,131.6 542.5,135.2 574.0,135.3 605.5,135.3 637.0,135.0 668.5,135.1 700.0,135.1" fill="none" stroke="#6366f1" stroke-opacity="1" stroke-width="2" stroke-linejoin="round"><title>1: 366 MB</title></polyline>
 <polyline points="70.0,124.4 101.5,91.8 133.0,51.7 164.5,48.4 196.0,118.5 227.5,119.8 259.0,119.8 290.5,119.8 322.0,123.1 353.5,122.9 385.0,122.8 416.5,122.8 448.0,122.9 479.5,122.9 511.0,123.2 542.5,126.9 574.0,139.5 605.5,140.2 637.0,140.1 668.5,139.7 700.0,139.9" fill="none" stroke="#6366f1" stroke-opacity="0.7" stroke-width="2" stroke-linejoin="round"><title>2: 367 MB</title></polyline>
 <polyline points="70.0,127.1 101.5,101.9 133.0,56.5 164.5,53.9 196.0,112.4 227.5,112.3 259.0,119.6 290.5,119.8 322.0,123.2 353.5,123.3 385.0,123.5 416.5,123.4 448.0,123.4 479.5,123.5 511.0,123.6 542.5,123.4 574.0,127.1 605.5,127.0 637.0,126.9 668.5,127.1 700.0,130.3" fill="none" stroke="#6366f1" stroke-opacity="0.45" stroke-width="2" stroke-linejoin="round"><title>3: 356 MB</title></polyline>
@@ -165,7 +167,7 @@ app window                        11 – 13 MB</code></pre>
           <p>We ran the same test on an Apple M4 Mac mini with 16 GB on 22 September, four days before the Windows runs. The totals are close at launch and at the peak. Windows shows less with the big mailbox loaded, and much less when idle because of the trimming described above.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
-<tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">At launch, 58 messages</th></tr>
+<tbody><tr><th style="text-align:left;padding:14px 0 2px;font-weight:700">At launch, 58 messages</th></tr>
 <tr><td style="padding:4px 0">Windows, Task Manager memory<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:36.1%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">209–224 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Windows, commit size<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:49.6%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">297–298 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Mac, Activity Monitor memory<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:30.0%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">180 MB</span></span></td></tr>
@@ -181,7 +183,7 @@ app window                        11 – 13 MB</code></pre>
 <tr><td style="padding:4px 0">Windows, Task Manager memory<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:18.7%;background:#6366f1;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">102–122 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Windows, commit size<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:52.2%;background:#0d9488;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">308–318 MB</span></span></td></tr>
 <tr><td style="padding:4px 0">Mac, Activity Monitor memory<span style="display:flex;align-items:center;gap:8px;margin-top:2px"><span style="display:block;height:12px;width:41.4%;background:#d97706;border-radius:0 4px 4px 0"></span><span style="font-size:13px;font-weight:600;white-space:nowrap">234–263 MB</span></span></td></tr>
-</table></div>
+</tbody></table></div>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Total memory of all MailVault processes. Each bar is labeled with its range across runs, and its length is the middle of that range.</figcaption>
           </figure>
           <p>Please read this as two measurements next to each other, not as a race. The two systems count memory differently. Activity Monitor's figure on the Mac includes memory that macOS has compressed, while Task Manager's leaves out memory Windows has trimmed, and commit size counts memory that was reserved but may never have been touched. The machines differ, and the Mac build was four days older. What the comparison does show is that MailVault costs about the same order of memory on both systems, in the low hundreds of megabytes, and that on neither system did it grow during the ten idle minutes we watched.</p>
@@ -203,11 +205,12 @@ app window                        11 – 13 MB</code></pre>
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Read your mail. Keep your mail.</p></div><nav aria-label="Explore MailVault"><a href="/use-cases.html">Use cases</a><a href="/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/faq.html">FAQ</a><a href="/docs.html">Help</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

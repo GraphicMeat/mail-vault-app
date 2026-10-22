@@ -60,7 +60,7 @@
       "name": "MailVaultはどのようにメールをバックアップしますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault はメールサーバーに接続し（IMAP、または個人の Outlook.com のアカウントなら Microsoft Graph）、各メールを標準的な .eml ファイルとして Maildir 形式で保管庫にダウンロードします。1 通のメールがディスク上の 1 つのファイルで、人が読め、持ち運べ、どのメールクライアントとも互換性があります。メッセージが保管庫に入れば、サーバーのコピーを削除して容量を空けられます。ローカルのコピーには影響しません。"
+        "text": "MailVaultはIMAP、個人用Outlook.comアカウント向けのMicrosoft Graph、またはJMAPでメールサーバーに接続します。メールを保持するには、必要なメッセージを明示的にアーカイブするか、「すべてのメール（サーバーから取得）」で手動バックアップを実行します。標準のMaildirストレージ形式では、保存したメッセージはコンピュータ上のMaildirフォルダ内の標準的な.emlファイルとなり、EML対応アプリで読めます。オプションのJMAPストレージは、元のバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。サーバー上のコピーを削除する前に、アーカイブしたメッセージと添付ファイルを開き、必要なフォルダと期間のメールが含まれていることを確認し、別のバックアップ先にある2つ目のコピーも検証してください。受信トレイやキャッシュにメッセージが表示されるだけでは、アーカイブ済みとは確認できません。"
       }
     },
     {
@@ -68,7 +68,7 @@
       "name": "メールをアーカイブすると何が起きますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "アーカイブすると、（まだキャッシュされていなければ）サーバーからメール全体をダウンロードし、ファイル名にA（アーカイブ済み）のフラグを付けた.emlファイルとしてディスクに保存します。アーカイブしたメールはローカルの表示モードに現れ、バックアップにも含まれます。自分で明示的に削除しない限り、メールはサーバーに残ります。"
+        "text": "アーカイブすると、未キャッシュの場合はサーバーからメール全体をダウンロードし、Maildir ストレージではファイル名に A（アーカイブ済み）フラグを付けた .eml ファイルとして保存します。JMAP ストレージでは、このフラグをメッセージのレコードに記録します。 アーカイブしたメールはローカルの表示モードに現れ、バックアップにも含まれます。 自分で明示的に削除しない限り、メールはサーバーに残ります。"
       }
     },
     {
@@ -147,6 +147,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
@@ -195,7 +196,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html" aria-current="page">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="パンくずリスト" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -208,30 +209,30 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">バックアップと復元</h1>
+      <h1 class="text-4xl font-bold mb-2">バックアップと復元</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultはどのようにメールをバックアップしますか？</a></li><li><a href="#help-section-2">メールをアーカイブすると何が起きますか？</a></li><li><a href="#help-section-3">アーカイブしてサーバーから削除すると何が起きますか？</a></li><li><a href="#help-section-4">サーバーからメールを削除するとどうなりますか？</a></li><li><a href="#help-section-5">バックアップと復元はどのように動作しますか？</a></li><li><a href="#help-section-6">自動バックアップを実行する時刻を選べますか？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">MailVaultがメールをどうアーカイブするのか、アーカイブしてから削除するとサーバー側のコピーはどうなるのか、自動バックアップがいつ実行されるのか、保管庫を書き出して読み戻す方法。</p>
 
       <div class="space-y-4">
 
         <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVaultはどのようにメールをバックアップしますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVaultはどのようにメールをバックアップしますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault はメールサーバーに接続し（IMAP、または個人の Outlook.com のアカウントなら Microsoft Graph）、各メールを標準的な <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml ファイル</a>としてダウンロードし、コンピュータに <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 形式で保存します。1 通のメールがディスク上の 1 つのファイルで、人が読め、持ち運べ、どのメールクライアントとも互換性があります。メッセージが保管庫に入れば、サーバーのコピーを削除して容量を空けられます。ローカルのコピーには影響しません。
+              MailVaultはIMAP、個人用Outlook.comアカウント向けのMicrosoft Graph、またはJMAPでメールサーバーに接続します。メールを保持するには、必要なメッセージを明示的にアーカイブするか、「すべてのメール（サーバーから取得）」で手動バックアップを実行します。標準のMaildirストレージ形式では、保存したメッセージはコンピュータ上の<a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>フォルダ内の標準的な<a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.emlファイル</a>となり、EML対応アプリで読めます。オプションのJMAPストレージは、元のバイト列をJSONレコードとともに保持し、同一メッセージの重複を排除します。サーバー上のコピーを削除する前に、アーカイブしたメッセージと添付ファイルを開き、必要なフォルダと期間のメールが含まれていることを確認し、別のバックアップ先にある2つ目のコピーも検証してください。受信トレイやキャッシュにメッセージが表示されるだけでは、アーカイブ済みとは確認できません。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/archive-progress-720.webp 720w, /screenshots/ja/archive-progress-1440.webp 1440w, /screenshots/ja/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/archive-progress-light-1440.webp" srcset="/screenshots/ja/archive-progress-light-720.webp 720w, /screenshots/ja/archive-progress-light-1440.webp 1440w, /screenshots/ja/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="一括バックアップの進行を示すMailVaultのアーカイブ進捗バー · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/archive-progress-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/archive-progress-720.webp 720w, /screenshots/ja/archive-progress-1440.webp 1440w, /screenshots/ja/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/archive-progress-light-1440.webp" srcset="/screenshots/ja/archive-progress-light-720.webp 720w, /screenshots/ja/archive-progress-light-1440.webp 1440w, /screenshots/ja/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="一括バックアップの進行を示すMailVaultのアーカイブ進捗バー · MailVault version 2.16.0 ja" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             </figure>
         </article>
 
         <article id="archive-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">メールをアーカイブすると何が起きますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">メールをアーカイブすると何が起きますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              アーカイブすると、（まだキャッシュされていなければ）サーバーからメールの全体をダウンロードし、ファイル名に<strong>A</strong>（Archived）のフラグを付けた.emlファイルとしてディスクに保存します。すでにローカルにキャッシュされていた場合、MailVaultはファイル名を変えてアーカイブのフラグを足すだけです。アーカイブしたメールは<strong>Vault</strong>の表示に現れ、バックアップにも含まれます。サーバー側のコピーは、自分で削除するまで手つかずのままです。
+              アーカイブすると、（まだキャッシュされていなければ）サーバーからメールの全体をダウンロードし、ファイル名に<strong>A</strong>（Archived）のフラグを付けた.emlファイルとしてディスクに保存します。 メールがすでにローカルにキャッシュされている場合、MailVault はその既存のローカルメッセージをアーカイブ済みにします。 アーカイブしたメールは<strong>Vault</strong>の表示に現れ、バックアップにも含まれます。 サーバー側のコピーは、自分で削除するまで手つかずのままです。
             </p>
         </article>
 
         <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">アーカイブしてサーバーから削除すると何が起きますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">アーカイブしてサーバーから削除すると何が起きますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               Premium の機能である<strong>アーカイブして削除</strong>は、3 つの手順を順に実行します。メッセージを .eml ファイルとして保管庫にコピーし、コピーが本当にあることを確認し、そのあとで初めてサーバーから削除します。確認に通らなかったものはサーバーに残ります &mdash; コピーに失敗しても原本を失うことはありません。処理後、その行には<strong>唯一のコピー</strong>と表示されます。そのメッセージが残っているのは保管庫だけ、という意味で、バックアップドライブをつないでおく合図でもあります。</p>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
@@ -243,27 +244,27 @@
         </article>
 
         <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">サーバーからメールを削除するとどうなりますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">サーバーからメールを削除するとどうなりますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               先にアーカイブしたものは保管庫に残り、その後サーバーで何が起きても影響を受けません — それがこの製品の存在理由です。アーカイブ<em>していない</em>ものはサーバーのコピーとともに消えます。そのため MailVault は、削除する前にすべてのメッセージの状態を各行に表示します。サーバーにある、保管庫にある、またはその両方です。安全な方法は<strong>アーカイブして削除</strong>（Premium）で、各メッセージを保管庫にコピーしてそこで検証してから、サーバーから削除します。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーのみ、ローカルにアーカイブ済み、ローカルのみの各状態をメッセージごとにアイコンで示すMailVaultの受信トレイ · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/state-icons-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーのみ、ローカルにアーカイブ済み、ローカルのみの各状態をメッセージごとにアイコンで示すMailVaultの受信トレイ · MailVault version 2.16.0 ja" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             </figure>
         </article>
 
         <article id="backup-and-restore" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">バックアップと復元はどのように動作しますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">バックアップと復元はどのように動作しますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               MailVaultは、すべての.emlファイルと、内部のIDではなくメールアドレスでメールをアカウントに対応付ける<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code>を含んだZIPアーカイブとして、メールを書き出します。これにより、バックアップは別の環境へ持ち運べます。書き出す対象は<strong>すべてのメール</strong>か<strong>アーカイブ済みのみ</strong>かを選べます。取り込みは冪等です — 同じメールがすでにローカルにあれば、重複しません。まだ設定していないアカウントのメールがバックアップに含まれていれば、MailVaultが自動でそのアカウントを作ります（設定でパスワードを入れ直すだけです）。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/settings-backup-light-1440.webp" srcset="/screenshots/ja/settings-backup-light-720.webp 720w, /screenshots/ja/settings-backup-light-1440.webp 1440w, /screenshots/ja/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="ZIPの書き出し、読み込み、ThunderbirdやApple Mail向けのMBOX書き出しを備えたMailVaultのバックアップと復元の設定 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/settings-backup-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/settings-backup-light-1440.webp" srcset="/screenshots/ja/settings-backup-light-720.webp 720w, /screenshots/ja/settings-backup-light-1440.webp 1440w, /screenshots/ja/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="ZIPの書き出し、読み込み、ThunderbirdやApple Mail向けのMBOX書き出しを備えたMailVaultのバックアップと復元の設定 · MailVault version 2.16.0 ja" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             </figure>
         </article>
 
         <article id="backup-at-set-hours" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">自動バックアップを実行する時刻を選べますか？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">自動バックアップを実行する時刻を選べますか？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               はい、<a href="/ja/pricing.html" class="text-primary-500 hover:underline">Premium</a> で使えます。<strong>設定 &rarr; バックアップと復元 &rarr; バックアップのスケジュール</strong>には 4 つの頻度があります。1 時間ごと、1 日 1 回、週 1 回、そして<strong>指定した時刻</strong>です。「指定した時刻」を選ぶと 24 時間すべてのグリッドが表示されるので、必要な時刻、たとえば 07、12、22 を選びます。MailVault はその各時刻の正時にバックアップし、その間には実行しません。どの頻度もアプリがアイドル状態のときだけ実行されるので、作業中にバックアップが始まることはありません。
             </p>
@@ -271,7 +272,7 @@
               指定した時刻は、Time Machine など別のものが独自のスケジュールで使っている外付けドライブ上の保管庫やバックアップミラーのための機能です。そのドライブが空いている時刻を選んでください。選んだ時刻が来たときに MailVault が処理中だった場合、その回は後から埋め合わせずに見送られ、次の実行は次に選んだ時刻になります。
             </p>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-backup-hours-720.webp 720w, /screenshots/ja/premium-backup-hours-1440.webp 1440w, /screenshots/ja/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/premium-backup-hours-light-1440.webp" srcset="/screenshots/ja/premium-backup-hours-light-720.webp 720w, /screenshots/ja/premium-backup-hours-light-1440.webp 1440w, /screenshots/ja/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault のバックアップのスケジュールを「指定した時刻」にし、24 時間のグリッドで 07、12、22 を選んだ画面 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/premium-backup-hours-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-backup-hours-720.webp 720w, /screenshots/ja/premium-backup-hours-1440.webp 1440w, /screenshots/ja/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/premium-backup-hours-light-1440.webp" srcset="/screenshots/ja/premium-backup-hours-light-720.webp 720w, /screenshots/ja/premium-backup-hours-light-1440.webp 1440w, /screenshots/ja/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault のバックアップのスケジュールを「指定した時刻」にし、24 時間のグリッドで 07、12、22 を選んだ画面 · MailVault version 2.16.0 ja" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             </figure>
         </article>
 
@@ -294,7 +295,7 @@
         </div>
       </div>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>MailVaultで確認する</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/ja/manual-backup.webp"><img src="/assets/help-media/ja/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>すべてのアカウントをバックアップして完了を確認する</figcaption><video controls playsinline preload="none" poster="/assets/help-media/ja/manual-backup.jpg" aria-label="すべてのアカウントをバックアップして完了を確認する · MailVault version 2.20.0 ja" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/ja/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/ja/manual-backup.vtt" srclang="ja" label="日本語" default></video></figure><details class="mv-help-contents"><summary>動画の文字起こし</summary><p>バックアップ設定ですべてのアカウントのバックアップを開始します。 バックアップが完了するまで進行状況を確認します。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちは Graphic Meat です。2013 年から役に立つソフトウェアを作る独立系プロダクトスタジオです。MailVault もその一つです。私たちと、ほかに取り組んでいることをご覧ください。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat について <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="MailVault を制作したスタジオ、Graphic Meat を見る"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat のほかの製品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>写真を印刷用の本にします。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>メモとコードのためのローカルワークスペース。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>メールを新しいプロバイダーへ移します。</span></a></div></div></aside><footer class="mv-footer">
@@ -317,5 +318,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

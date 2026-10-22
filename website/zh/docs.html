@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>邮件备份 &amp; 本地归档指南 — MailVault</title>
-  <meta name="description" content="MailVault 文档、安装指南和归档流程。了解如何在本地归档邮件、腾出服务器空间，以及设置你的账户。">
+  <title>MailVault 帮助中心 — 常见问题、指南与文章</title>
+  <meta name="description" content="搜索 MailVault 文档、常见问题解答和文章。了解如何连接账户、在本地归档邮件、验证备份，并参照中文应用操作指南完成各项操作。">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/docs.html">
   <meta name="theme-color" content="#6366f1">
@@ -12,8 +12,8 @@
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/zh/docs.html">
-  <meta property="og:title" content="邮件备份 &amp; 本地归档指南 — MailVault">
-  <meta property="og:description" content="MailVault 文档、安装指南和归档流程。了解如何在本地归档邮件、腾出服务器空间，以及设置你的账户。">
+  <meta property="og:title" content="MailVault 帮助中心 — 常见问题、指南与文章">
+  <meta property="og:description" content="搜索 MailVault 文档、常见问题解答和文章。了解如何连接账户、在本地归档邮件、验证备份，并参照中文应用操作指南完成各项操作。">
   <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta property="og:image:width" content="1200">
@@ -23,8 +23,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="邮件备份 &amp; 本地归档指南 — MailVault">
-  <meta name="twitter:description" content="MailVault 文档、安装指南和归档流程。了解如何在本地归档邮件、腾出服务器空间，以及设置你的账户。">
+  <meta name="twitter:title" content="MailVault 帮助中心 — 常见问题、指南与文章">
+  <meta name="twitter:description" content="搜索 MailVault 文档、常见问题解答和文章。了解如何连接账户、在本地归档邮件、验证备份，并参照中文应用操作指南完成各项操作。">
   <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -51,8 +51,8 @@
 {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
-  "name": "文档 - MailVault",
-  "description": "MailVault 文档、安装指南和归档流程。",
+  "name": "MailVault 帮助中心 — 常见问题、指南与文章",
+  "description": "搜索 MailVault 文档、常见问题解答和文章。了解如何连接账户、在本地归档邮件、验证备份，并参照中文应用操作指南完成各项操作。",
   "url": "https://mailvaultapp.com/zh/docs.html",
   "isPartOf": {
     "@type": "WebSite",
@@ -96,6 +96,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -143,241 +144,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-32 pb-20">
-    <div class="mv-wrap mv-directory">
-
-      <h1 class="text-4xl font-bold mb-2">文档</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">指南、工作流程，以及用好 MailVault 所需的答案。</p>
-
-      <!-- Search is progressive enhancement over the index below: with scripting
-           off the box stays hidden and every guide is still one link away. -->
-      <div id="mv-docs-search" hidden class="mb-8">
-        <input id="mv-docs-q" type="search" autocomplete="off" data-mv-search data-index="#mv-docs-index" data-heading="#mv-docs-heading" data-results="#mv-docs-results" data-empty="#mv-docs-empty" data-row=".mv-doc" data-group=".mv-docs-group" aria-label="搜索文档、指南和常见问题" placeholder="搜索文档、指南和常见问题" aria-controls="mv-docs-results" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
-      </div>
-
-      <div id="mv-docs-results" hidden class="grid gap-4 mb-8"></div>
-
-      <!-- Reference — the three destinations people arrive looking for. -->
-      <h2 class="text-2xl font-bold mb-4">参考</h2>
-      <div class="grid gap-4 sm:grid-cols-3 mb-14">
-
-        <a href="/zh/faq.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </div>
-          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">常见问题</h3>
-          <p class="text-sm text-slate-600 dark:text-slate-400">关于 MailVault、邮件格式、存储、安全和服务商的常见问题。</p>
-        </a>
-
-        <a href="/zh/features.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
-            </svg>
-          </div>
-          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">全部功能</h3>
-          <p class="text-sm text-slate-600 dark:text-slate-400">完整功能列表，包含邮件管理、安全、性能等方面的细节。</p>
-        </a>
-
-        <a href="/changelog.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
-            </svg>
-          </div>
-          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">更新日志</h3>
-          <p class="text-sm text-slate-600 dark:text-slate-400">版本历史，以及每个版本带来的新变化。</p>
-        </a>
-
-      </div>
-
-      <h2 id="mv-docs-heading" class="text-2xl font-bold mb-6">指南</h2>
-      <p id="mv-docs-empty" hidden class="text-slate-500 dark:text-slate-400">站内没有与该搜索匹配的内容。</p>
-
-      <div id="mv-docs-index" class="space-y-8"><section class="mv-docs-group my-10" aria-labelledby="backup-guides"><h2 id="backup-guides">实用邮件备份指南</h2><div class="grid gap-4 sm:grid-cols-2"><a class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 p-6" href="/zh/guides/backup-gmail-to-eml.html"><h3>如何将 Gmail 备份为 EML 文件</h3><p>将一封 Gmail 邮件保存为 EML，或在本地归档整个邮箱。比较 Gmail 下载、Google Takeout 和 MailVault，并验证备份。</p></a><a class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 p-6" href="/zh/guides/export-outlook-to-eml.html"><h3>如何将 Outlook 邮件导出为 EML</h3><p>将 Outlook 邮件导出为 EML，了解 PST 和 MSG 的区别，并在本地归档 Outlook.com 或 Microsoft 365 邮件，验证备份是否完整。</p></a><a class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 p-6" href="/zh/guides/download-all-emails-mac.html"><h3>如何在 Mac 上下载所有邮件</h3><p>使用 Apple Mail 或 MailVault，在 Mac 上下载完整的本地邮件归档。检查文件夹、保存附件，并离线验证备份。</p></a><a class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 p-6" href="/zh/guides/backup-email-linux.html"><h3>如何在 Linux 上将邮件备份为 EML</h3><p>在 Linux 上创建本地邮件备份：连接邮箱，归档为 EML，离线验证附件，并在另一块硬盘上保留第二份副本。</p></a><a class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 p-6" href="/zh/guides/linux-email-archive.html"><h3>选择 Linux 本地邮件归档工具：需要检查什么</h3><p>根据文件格式、离线访问、服务商支持和恢复选项，选择 Linux 邮件归档工具。附有实用的 MailVault 试用检查清单。</p></a></div></section>
-
-        <div class="mv-docs-group">
-          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">释放空间</h3>
-          <div class="grid gap-4 sm:grid-cols-2">
-
-            <a href="/zh/guides/free-up-email-storage.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何腾出邮件存储空间</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">邮箱满了？先把邮件归档到本地，再安全地从服务器删除以回收空间。</p>
-            </a>
-
-            <a href="/zh/guides/gmail-storage-full.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Gmail 存储空间满了？这样解决</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">按省力程度排序，哪些做法真正能腾出 Gmail 空间 &mdash; 以及如何让问题不再复发。</p>
-            </a>
-
-            <a href="/zh/guides/outlook-hotmail-mailbox-full.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Outlook.com / Hotmail 邮箱满了？</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">如何查看是什么占用了存储空间，并在付费扩容前把旧邮件归档。</p>
-            </a>
-
-            <a href="/zh/guides/outlook-storage-full-what-to-do.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Outlook 存储空间已满？该怎么办</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">弄清是哪一项额度满了，花 5 分钟做几项检查，然后清理、把旧邮件留在电脑上，或者购买存储空间。</p>
-            </a>
-
-            <a href="/zh/guides/free-up-space-hotmail-outlook-com.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">为 Hotmail 和 Outlook.com 腾出空间</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">清空「已删除邮件」，找出最大的邮件，在本地保留旧邮件的副本，再在线删除。</p>
-            </a>
-
-            <a href="/zh/guides/delete-thousands-of-old-emails-safely.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何安全地删除成千上万封旧邮件</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">一套安全的批量删除旧邮件流程，不会丢掉你以后可能还需要的东西。</p>
-            </a>
-
-          </div>
-        </div>
-
-        <div class="mv-docs-group">
-          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">归档与备份</h3>
-          <div class="grid gap-4 sm:grid-cols-2">
-
-            <a href="/zh/guides/archive-imap-emails-locally.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何在本地归档 IMAP 邮件</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">了解如何在 macOS、Windows 和 Linux 上把 IMAP 邮件下载并归档到本地存储。</p>
-            </a>
-
-            <a href="/zh/guides/email-archiving-for-mac.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Mac 上的邮件归档</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">归档、备份与同步的区别，macOS 上有哪些选择，该保留哪种格式，以及如何建立并检查本地归档。</p>
-            </a>
-
-            <a href="/zh/guides/best-email-archiver-for-mac.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Mac 上最好的邮件归档工具</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">按格式、搜索、来源和价格对比七款 macOS 工具，并按你的需求挑选。</p>
-            </a>
-
-            <a href="/zh/guides/back-up-outlook-com-email-to-mac.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">把 Outlook.com 邮件备份到 Mac</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">备份 Outlook.com 和 Hotmail 邮件的四种方法，各自保存了什么，以及如何检查。</p>
-            </a>
-
-            <a href="/zh/guides/what-is-an-email-vault.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">什么是邮件保险库？</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">这个词的三种含义，MailVault 属于哪一种，以及如何建立你自己的保险库。</p>
-            </a>
-
-            <a href="/zh/guides/keep-emails-after-server-deletion.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何在服务器删除邮件后仍然保留它们</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">从服务器删除邮件而不丢失它们。先归档到本地，永久保存。</p>
-            </a>
-
-            <a href="/zh/guides/backup-email-before-closing-account.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">注销账号前先备份邮件</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">一份分步清单，在账号被永久关闭前备份每一个文件夹。</p>
-            </a>
-
-            <a href="/zh/guides/email-archiving-for-freelancers.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">自由职业者与小企业的邮件归档</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">客户邮件往往是你唯一的范围与确认记录 &mdash; 如何把它永久留住。</p>
-            </a>
-
-          </div>
-        </div>
-
-        <div class="mv-docs-group">
-          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">各服务商指南</h3>
-          <div class="grid gap-4 sm:grid-cols-2">
-
-            <a href="/zh/guides/download-all-gmail-emails.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何下载你全部的 Gmail 邮件</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Google Takeout 与 IMAP 归档 &mdash; 各自怎么运作，以及你真正需要的是哪一个。</p>
-            </a>
-
-            <a href="/zh/guides/leave-gmail-keep-your-emails.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何离开 Gmail 而不丢邮件</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">打算换服务商？先把 Gmail 的历史邮件归档，再按自己的节奏迁移。</p>
-            </a>
-
-            <a href="/zh/guides/yahoo-mail-backup.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何备份 Yahoo Mail</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">使用应用密码连接 Yahoo，归档文件夹并验证本地副本。</p>
-            </a>
-
-            <a href="/zh/guides/export-icloud-mail.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">如何把 iCloud 邮件导出到电脑</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">iCloud 没有内置的导出按钮 &mdash; 这里是可行的 IMAP 与应用专用密码设置方法。</p>
-            </a>
-
-          </div>
-        </div>
-
-        <div class="mv-docs-group">
-          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">对比</h3>
-          <div class="grid gap-4 sm:grid-cols-2">
-
-            <a href="/zh/compare/mail-client-vs-mail-vault.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">邮件客户端 vs 邮件保险库</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">镜像会遗忘，保险库会留住。看看配备保险库的完整邮件客户端 MailVault，跟你现在用的邮件客户端有什么不同。</p>
-            </a>
-
-            <a href="/zh/compare/mailvault-vs-apple-mail.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault 与 Apple Mail 对比</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">MailVault 的专用归档能力，与 Apple Mail 在本地邮件备份上的对比。</p>
-            </a>
-
-            <a href="/zh/compare/mailvault-vs-thunderbird.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault 与 Thunderbird 对比</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">对比归档流程、存储格式，以及哪一个更适合长期保存邮件。</p>
-            </a>
-
-            <a href="/zh/compare/mailvault-vs-paying-for-storage.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault 与花钱买更多存储空间</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">别再为更多邮件存储空间付费。归档到本地，然后降级套餐。</p>
-            </a>
-
-            <a href="/zh/guides/mailstore-alternative-mac.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Mac 上的 MailStore 替代方案</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">MailStore 没有 Mac 版？看看 MailVault，它把 Gmail、Outlook 和 IMAP 邮件以普通 .eml 文件归档到本地。</p>
-            </a>
-
-            <a href="/zh/guides/mailstore-server-alternative.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailStore Server 替代方案</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">谁需要公司级归档，谁需要桌面归档，以及各自的选择。</p>
-            </a>
-
-            <a href="/zh/compare/mailvault-vs-mailstore-home.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault 与 MailStore Home 对比</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">平台、价格、来源、存储格式，以及各自的优势所在。</p>
-            </a>
-
-            <a href="/zh/guides/mailstore-alternatives-compared.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailStore 替代方案对比</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">按使用场景排列的七种选择，从个人归档工具到归档服务器。</p>
-            </a>
-
-            <a href="/zh/guides/imap-backup-tool-checklist.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
-              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">IMAP 备份工具：该看哪些地方</h4>
-              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">一份评估任何邮件备份工具的诚实清单 &mdash; 文件格式、认证方式和数据归属。</p>
-            </a>
-
-          </div>
-        </div>
-
-      </div>
-
-      <!-- CTA -->
-      <div class="mt-12 text-center">
-        <p class="text-slate-600 dark:text-slate-400 mb-4">还有其他问题？</p>
-        <div class="flex flex-col sm:flex-row gap-4 justify-center">
-          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
-            在 GitHub 上提问
-          </a>
-          <a href="https://graphicmeat.com/contact" target="_blank" rel="noopener" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
-            联系我们
-          </a>
-        </div>
-      </div>
-
-    </div>
-  </main>
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" aria-current="page" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content"><nav class="mv-help-breadcrumb" aria-label="面包屑导航"><a href="/zh/">MailVault</a> / 帮助中心</nav><h1>MailVault 帮助中心</h1><p class="mv-lead">连接账户、保留本地副本，了解 MailVault 的使用方法。指南、解答和文章都在这里。</p><div class="mv-help-search" data-mv-search-container hidden><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" autocomplete="off" data-mv-search data-index="#help-directory" data-results="#help-results" data-empty="#help-empty" data-row=".mv-help-row" data-group=".mv-help-group" placeholder="搜索所有指南和解答" aria-controls="help-results"><button type="button" data-help-clear>清除</button></div><p id="help-empty" hidden role="status">没有匹配结果。请尝试搜索功能名称、服务提供商或操作。</p></div><div id="help-results" hidden aria-live="polite"></div><div id="help-directory" class="mv-help-directory"><section class="mv-help-group" id="topics"><h2>查找你要完成的操作</h2><table class="mv-help-table"><caption>从主题开始</caption><thead><tr><th scope="col">主题</th><th scope="col">你将了解</th></tr></thead><tbody><tr class="mv-help-row"><td><a href="/zh/faq/getting-started.html">快速上手</a></td><td>MailVault 是什么、支持哪些邮件服务商、能在什么系统上运行，以及它如何保护你的邮件隐私。</td></tr><tr class="mv-help-row"><td><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a></td><td>MailVault 将邮件保存在哪里，Maildir 和 JMAP 存储有何不同，以及如何移动或转换保险库。</td></tr><tr class="mv-help-row"><td><a href="/zh/faq/providers.html">邮件服务商</a></td><td>连接 Gmail、Microsoft 365、Outlook.com、Proton Mail 和 Fastmail 等 JMAP 服务器，并使用别名发信。</td></tr><tr class="mv-help-row"><td><a href="/zh/faq/backup-and-restore.html">备份与恢复</a></td><td>MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么、自动备份在什么时候运行，以及如何导出并重新导入你的保险库。</td></tr><tr class="mv-help-row"><td><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a></td><td>MailVault Explorer 如何按日期、发件人或会话对邮箱分组，以及 邮件分析 的发件人地图、时间线和活动视图分别显示什么 — 两者都免费，也都基于你硬盘上已有的邮件构建。</td></tr><tr class="mv-help-row"><td><a href="/zh/faq/scheduled-send.html">定时发送</a></td><td>MailVault 定时发送的工作方式：选择确切的日期、时间和时区，让 MailVault 推荐收件人的时区，并管理定时邮件。哪些属于 Premium，哪些仍然免费。</td></tr><tr class="mv-help-row"><td><a href="/zh/faq/premium.html">免费版与 Premium</a></td><td>每位 MailVault 用户免费拥有的功能，以及 MailVault Premium 额外提供的部分。</td></tr><tr class="mv-help-row"><td><a href="/zh/faq/troubleshooting.html">疑难解答</a></td><td>修复人们最常遇到的问题：Gmail 每日带宽上限、Linux 上拼写检查不显示下划线，以及服务器上新建的文件夹尚未出现。</td></tr></tbody></table></section><section class="mv-help-group" id="questions"><h2>快速解答</h2><ul id="mv-faq-index" class="mv-help-questions"><li id="what-is-mailvault" class="mv-help-row mv-faq-q"><a href="/zh/faq/getting-started.html#what-is-mailvault">MailVault 是什么？</a></li><li id="supported-email-providers" class="mv-help-row mv-faq-q"><a href="/zh/faq/getting-started.html#supported-email-providers">MailVault 支持哪些邮件服务商？</a></li><li id="system-requirements" class="mv-help-row mv-faq-q"><a href="/zh/faq/getting-started.html#system-requirements">系统要求是什么？</a></li><li id="row-highlighting" class="mv-help-row mv-faq-q"><a href="/zh/faq/getting-started.html#row-highlighting">可以更改打开的邮件的高亮方式吗？</a></li><li id="change-the-layout" class="mv-help-row mv-faq-q"><a href="/zh/faq/getting-started.html#change-the-layout">可以更改 MailVault 的外观和布局吗？</a></li><li id="data-security" class="mv-help-row mv-faq-q"><a href="/zh/faq/getting-started.html#data-security">我的数据安全吗？</a></li><li id="contacts" class="mv-help-row mv-faq-q"><a href="/zh/faq/getting-started.html#contacts">通讯录在哪里？</a></li><li id="where-are-emails-stored" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#where-are-emails-stored">我的邮件存在哪里？</a></li><li id="download-modes" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#download-modes">我的邮件有多少会留在这台电脑上？</a></li><li id="eml-and-maildir" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#eml-and-maildir">.eml 文件和 Maildir 是什么？为什么重要？</a></li><li id="offline-access" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#offline-access">我可以离线查看邮件吗？</a></li><li id="attachments" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#attachments">附件是怎么处理的？</a></li><li id="change-mail-storage-folder" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#change-mail-storage-folder">我可以把邮件存到默认的应用文件夹以外吗？</a></li><li id="external-backup-location" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#external-backup-location">什么是外部备份位置（第二份副本）？</a></li><li id="jmap-storage" class="mv-help-row mv-faq-q"><a href="/zh/faq/storage-and-vault.html#jmap-storage">可以更改保险库的存储格式吗？</a></li><li id="gmail-and-outlook" class="mv-help-row mv-faq-q"><a href="/zh/faq/providers.html#gmail-and-outlook">MailVault 支持 Gmail 和 Outlook 吗？</a></li><li id="microsoft-outlook-oauth2" class="mv-help-row mv-faq-q"><a href="/zh/faq/providers.html#microsoft-outlook-oauth2">如何连接我的 Outlook.com 账户？</a></li><li id="proton-mail-bridge" class="mv-help-row mv-faq-q"><a href="/zh/faq/providers.html#proton-mail-bridge">如何用 MailVault 收发 Proton Mail？</a></li><li id="send-from-different-address" class="mv-help-row mv-faq-q"><a href="/zh/faq/providers.html#send-from-different-address">我可以用与登录地址不同的地址发信吗？</a></li><li id="send-from-an-alias" class="mv-help-row mv-faq-q"><a href="/zh/faq/providers.html#send-from-an-alias">如何用别名发信？</a></li><li id="jmap-accounts" class="mv-help-row mv-faq-q"><a href="/zh/faq/providers.html#jmap-accounts">如何连接 Fastmail 或其他 JMAP 账户？</a></li><li id="how-does-backup-work" class="mv-help-row mv-faq-q"><a href="/zh/faq/backup-and-restore.html#how-does-backup-work">MailVault 如何备份邮件？</a></li><li id="archive-email" class="mv-help-row mv-faq-q"><a href="/zh/faq/backup-and-restore.html#archive-email">归档一封邮件时会发生什么？</a></li><li id="archive-and-delete" class="mv-help-row mv-faq-q"><a href="/zh/faq/backup-and-restore.html#archive-and-delete">归档并从服务器删除时会发生什么？</a></li><li id="delete-from-server" class="mv-help-row mv-faq-q"><a href="/zh/faq/backup-and-restore.html#delete-from-server">如果我从服务器删除邮件会怎样？</a></li><li id="backup-and-restore" class="mv-help-row mv-faq-q"><a href="/zh/faq/backup-and-restore.html#backup-and-restore">备份和恢复是怎么工作的？</a></li><li id="backup-at-set-hours" class="mv-help-row mv-faq-q"><a href="/zh/faq/backup-and-restore.html#backup-at-set-hours">可以指定自动备份在哪些时间运行吗？</a></li><li id="what-is-explorer" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#what-is-explorer">Explorer 是什么？</a></li><li id="explorer-by-sender" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#explorer-by-sender">可以看到某个人发给我的全部邮件吗？</a></li><li id="explorer-conversation" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#explorer-conversation">“日期 → 会话”有什么用？</a></li><li id="searching-in-explorer" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#searching-in-explorer">在 Explorer 里还能搜索吗？</a></li><li id="what-is-insights" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#what-is-insights">邮件分析 是什么？</a></li><li id="insights-timeline-activity" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#insights-timeline-activity">时间线和活动视图显示什么？</a></li><li id="insights-privacy" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#insights-privacy">邮件分析 会把我的邮件发送到别处吗？</a></li><li id="insights-explorer-premium" class="mv-help-row mv-faq-q"><a href="/zh/faq/explorer-and-insights.html#insights-explorer-premium">Explorer 和 邮件分析 属于 Premium 吗？</a></li><li id="what-is-scheduled-send" class="mv-help-row mv-faq-q"><a href="/zh/faq/scheduled-send.html#what-is-scheduled-send">什么是定时发送？</a></li><li id="schedule-time-zones" class="mv-help-row mv-faq-q"><a href="/zh/faq/scheduled-send.html#schedule-time-zones">可以按别人的时区定时发送吗？</a></li><li id="suggested-time-zone" class="mv-help-row mv-faq-q"><a href="/zh/faq/scheduled-send.html#suggested-time-zone">MailVault 怎么知道收件人的时区？</a></li><li id="edit-scheduled-email" class="mv-help-row mv-faq-q"><a href="/zh/faq/scheduled-send.html#edit-scheduled-email">如何修改、重新安排或取消定时邮件？</a></li><li id="send-while-closed" class="mv-help-row mv-faq-q"><a href="/zh/faq/scheduled-send.html#send-while-closed">定时邮件要发出，MailVault 必须开着吗？</a></li><li id="scheduled-send-premium" class="mv-help-row mv-faq-q"><a href="/zh/faq/scheduled-send.html#scheduled-send-premium">哪些免费，哪些需要 Premium？</a></li><li id="subscription-ends" class="mv-help-row mv-faq-q"><a href="/zh/faq/scheduled-send.html#subscription-ends">订阅结束后，定时邮件会怎样？</a></li><li id="is-mailvault-free" class="mv-help-row mv-faq-q"><a href="/zh/faq/premium.html#is-mailvault-free">MailVault 是免费的吗？</a></li><li id="block-email-trackers" class="mv-help-row mv-faq-q"><a href="/zh/faq/premium.html#block-email-trackers">MailVault 能拦截邮件跟踪像素吗？</a></li><li id="is-scheduled-send-free" class="mv-help-row mv-faq-q"><a href="/zh/faq/premium.html#is-scheduled-send-free">定时发送免费吗？</a></li><li id="share-screenshots-privately" class="mv-help-row mv-faq-q"><a href="/zh/faq/premium.html#share-screenshots-privately">我能在不暴露通信对象的情况下分享截图或录制 MailVault 吗？</a></li><li id="gmail-bandwidth-limits" class="mv-help-row mv-faq-q"><a href="/zh/faq/troubleshooting.html#gmail-bandwidth-limits">Gmail 的带宽限制是多少？备份触发限制时会怎样？</a></li><li id="linux-spellcheck-dictionary" class="mv-help-row mv-faq-q"><a href="/zh/faq/troubleshooting.html#linux-spellcheck-dictionary">为什么 Linux 上的拼写检查不给任何单词加下划线？</a></li><li id="folder-list-refresh" class="mv-help-row mv-faq-q"><a href="/zh/faq/troubleshooting.html#folder-list-refresh">我在服务器上新建了文件夹 — MailVault 多久会显示它？</a></li><li id="no-internet-connection" class="mv-help-row mv-faq-q"><a href="/zh/faq/troubleshooting.html#no-internet-connection">MailVault 提示“没有互联网连接”，但我的网络是通的。为什么？</a></li></ul></section><section class="mv-help-group" id="guides"><span id="backup-guides"></span><h2>实用指南</h2><table class="mv-help-table"><caption>邮箱操作分步指南</caption><thead><tr><th scope="col">主题</th><th scope="col">你将了解</th></tr></thead><tbody><tr class="mv-help-row"><td><a href="/zh/guides/archive-imap-emails-locally.html">如何在 Mac、Windows 和 Linux 上本地归档 IMAP 邮件</a></td><td>了解如何在 macOS、Windows 和 Linux 上把 IMAP 邮件归档到本地存储。以 .eml 文件永久保存邮件，腾出服务器空间，离线也能查看全部内容。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/back-up-outlook-com-email-to-mac.html">如何把 Outlook.com 和 Hotmail 邮件备份到你的 Mac</a></td><td>把 Outlook.com 和 Hotmail 邮件备份到 Mac 的四种方法：Mac 版 Outlook、Apple Mail、Thunderbird 和 MailVault。各自保存什么，以及如何检查。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/backup-email-before-closing-account.html">注销账号前如何备份你的邮件</a></td><td>准备注销邮箱账号、离职，或者要关掉一家公司？这里是一份分步清单，在账号和数据彻底消失之前备份每一封邮件。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/backup-email-linux.html">如何在 Linux 上将邮件备份为 EML</a></td><td>在 Linux 上创建本地邮件备份：连接邮箱，归档为 EML，离线验证附件，并在另一块硬盘上保留第二份副本。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/backup-gmail-to-eml.html">如何将 Gmail 备份为 EML 文件</a></td><td>将一封 Gmail 邮件保存为 EML，或在本地归档整个邮箱。比较 Gmail 下载、Google Takeout 和 MailVault，并验证备份。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/best-email-archiver-for-mac.html">Mac 上最好的邮件归档工具，按你的需求挑选</a></td><td>Mac 上最好的邮件归档工具取决于你的邮件。按格式、搜索、来源、价格、是否开源和 Apple Silicon支持对比七款 macOS 工具。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/delete-thousands-of-old-emails-safely.html">如何安全地删除成千上万封旧邮件</a></td><td>面对一个装着几万封旧邮件的邮箱？这里是一套安全的批量删除流程，不会丢掉你以后可能还需要的东西。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/download-all-emails-mac.html">如何在 Mac 上下载所有邮件</a></td><td>使用 Apple Mail 或 MailVault，在 Mac 上下载完整的本地邮件归档。检查文件夹、保存附件，并离线验证备份。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/download-all-gmail-emails.html">如何下载你全部的 Gmail 邮件</a></td><td>把 Gmail 账户里的每封邮件下载下来，实际有两条路：Google Takeout 的单个 .mbox 导出，或者把邮件存成一个个可搜索 .eml 文件的 IMAP 归档工具。这里说明两者各自怎么运作。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/email-archiving-for-freelancers.html">自由职业者与小企业的邮件归档</a></td><td>客户邮件往往是你关于范围、审批和付款条款的唯一记录。这里讲自由职业者和小企业如何建立一份永久、可搜索的客户邮件本地归档。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/email-archiving-for-mac.html">如何在 Mac 上归档你的邮件并长久保存</a></td><td>Mac 邮件归档详解：归档、备份与同步的区别，macOS 上有哪些选择，该保留哪种格式，以及如何建立并检查本地归档。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/export-icloud-mail.html">如何把 iCloud 邮件导出到电脑</a></td><td>iCloud 邮件没有内置的导出按钮。这里讲如何用 IMAP 和应用专用密码，真正拿到一份可搜索的 @icloud.com 或 @me.com 邮件本地副本。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/export-outlook-to-eml.html">如何将 Outlook 邮件导出为 EML</a></td><td>将 Outlook 邮件导出为 EML，了解 PST 和 MSG 的区别，并在本地归档 Outlook.com 或 Microsoft 365 邮件，验证备份是否完整。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/free-up-email-storage.html">如何在不丢旧邮件的前提下腾出邮件存储空间</a></td><td>邮箱满了？用 MailVault 把邮件归档到本地，然后安全地从服务器删除。腾出 Gmail、Outlook 或任意 IMAP 的存储空间，什么也不会丢。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/free-up-space-hotmail-outlook-com.html">如何在不丢失旧邮件的前提下为 Hotmail 和 Outlook.com 腾出空间</a></td><td>分步为 Hotmail 和 Outlook.com 腾出空间：清空「已删除邮件」，找出最大的邮件，在本地保留旧邮件的副本，再在线删除。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/gmail-storage-full.html">Gmail 存储空间满了？这样解决</a></td><td>Gmail 提示存储已满，新邮件开始退信。这里讲什么才真正能腾出空间、什么不能，以及如何把旧邮件归档到本地，而不是每月付钱给 Google。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/imap-backup-tool-checklist.html">IMAP 备份工具：该看哪些地方</a></td><td>一份评估任何 IMAP 邮件备份工具的诚实清单 &mdash; 文件格式、文件夹处理、OAuth 支持，以及这个工具消失之后你的归档会怎么样。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/keep-emails-after-server-deletion.html">从服务器删除邮件之后如何还能保留它们</a></td><td>从服务器删除邮件而不丢失它们。MailVault 在删除之前把邮件归档成本地的 .eml 文件 —— 可搜索、可离线，永远属于你。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/leave-gmail-keep-your-emails.html">如何离开 Gmail 而不丢邮件</a></td><td>打算离开 Gmail？这里讲如何在迁到新邮件服务商的同时，保留一份 Gmail 当前所有内容的完整、可搜索的本地副本。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/linux-email-archive.html">选择 Linux 本地邮件归档工具：需要检查什么</a></td><td>根据文件格式、离线访问、服务商支持和恢复选项，选择 Linux 邮件归档工具。附有实用的 MailVault 试用检查清单。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/mailstore-alternative-mac.html">Mac 上的 MailStore 替代方案：MailVault</a></td><td>MailStore 没有 Mac 版？MailVault 是一款适用于 macOS、Windows 和 Linux 的免费应用，把 Gmail、Outlook 和 IMAP 邮件以普通 .eml 文件归档到本地。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/mailstore-alternatives-compared.html">MailStore 替代方案：七种选择，按使用场景分类</a></td><td>按使用场景划分的 MailStore 替代方案：适用于 Mac、Linux 和 Windows 的个人归档工具、开源归档服务器，以及 Microsoft 365 或 Google Workspace 的工具。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/mailstore-server-alternative.html">MailStore Server 替代方案：按归档的使用者来挑选</a></td><td>面向企业的 MailStore Server 替代方案（Piler、Mail-Archiver、Open Archiver、Purview、Google 保险柜），以及什么情况下个人只需要桌面归档。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/outlook-hotmail-mailbox-full.html">Outlook.com / Hotmail 邮箱满了？这样解决</a></td><td>Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/outlook-storage-full-what-to-do.html">Outlook 存储空间已满：先找出是什么满了，再解决它</a></td><td>Outlook 提示存储空间已满？找出是哪项限额满了，花 5 分钟检查，然后选择：清理、把旧邮件留在电脑上，或者购买存储空间。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/what-is-an-email-vault.html">什么是邮件保险库？三种含义，以及如何建立你自己的保险库</a></td><td>邮件保险库可以指由你拥有的本地归档、托管的加密邮箱或合规归档。它们有何不同，以及如何免费建立你自己的保险库。</td></tr><tr class="mv-help-row"><td><a href="/zh/guides/yahoo-mail-backup.html">如何把 Yahoo Mail 备份到电脑</a></td><td>使用应用密码和 IMAP 备份 Yahoo Mail。通过 MailVault 保存本地归档，并在另一块驱动器上保留第二份副本。</td></tr></tbody></table></section><section class="mv-help-group" id="articles"><span id="email-client-series"></span><h2>文章</h2><table class="mv-help-table"><caption>产品使用方法、比较和开发笔记</caption><thead><tr><th scope="col">主题</th><th scope="col">你将了解</th></tr></thead><tbody><tr class="mv-help-row"><td><a href="/zh/blog/apple-mail-review-mailvault-comparison.html">Apple Mail 评测：Mac 默认客户端与 MailVault，谁更适合保存你的邮件</a></td><td>Apple Mail 与 MailVault 对比：Mac 内置客户端、邮箱导出、本地归档、AI 写作和跨平台访问。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/best-email-archive-app-for-mac.html">如何选择适合 Mac 的邮件归档应用</a></td><td>选择 Mac 邮件归档应用时，检查离线访问、文件可迁移性、附件保留和备份方式，了解 MailVault 适合哪些需求。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/best-email-backup-software-for-mac.html">Mac 邮件备份软件：以恢复能力为选择标准</a></td><td>通过测试邮件覆盖范围、独立副本和恢复过程来选择 Mac 邮件备份软件。比较手动导出、Mac 备份和 MailVault 的使用流程。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/canary-ai-email-review-mailvault-comparison.html">Canary Mail 评测：混合 AI 隐私与 MailVault 的设备端选项</a></td><td>Canary Mail 与 MailVault 对比：本地收件箱智能、云端 AI 起草、加密方案、可迁移归档和设备端摘要。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/cloud-backup-vendor-reads-your-email.html">云端邮件备份与本地归档：谁能访问副本？</a></td><td>请从加密、密钥归属、访问控制和恢复能力比较云端邮件备份与本地归档。本地文件同样需要磁盘保护和独立备份。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/cloud-vs-local-email-search.html">Gmail 的 AI 搜索正在扩展。你的邮件搜索应该在云端运行，还是在你的电脑上？</a></td><td>比较 Gmail 不断扩展的 AI 搜索与本地邮件搜索：便利性、原始邮件、离线访问，以及对归档的掌控。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/does-archiving-gmail-free-up-space.html">在 Gmail 中归档能释放空间吗？</a></td><td>Gmail 归档整理的是收件箱，不会释放存储空间。了解在 Gmail 中归档与在删除邮件前保存独立副本之间的区别。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/em-client-review-mailvault-comparison.html">eM Client 评测：一体化工作区与 MailVault 的可迁移归档</a></td><td>eM Client 与 MailVault 对比：邮件和日历工具、免费许可的限制、备份、本地归档和定价选择。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/email-insights-who-fills-your-inbox.html">MailVault 的邮件分析：谁在塞满你的收件箱，又是在什么时候</a></td><td>谁给你发的邮件最多，邮件又在什么时候堆积？MailVault 邮件分析根据你电脑上的邮件头回答这两个问题。如何解读并据此行动。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/email-provider-not-a-backup.html">你的邮件服务商不是备份</a></td><td>Gmail、Outlook 和 Yahoo 是为投递邮件而生的，不是为保存邮件而生的。账号被锁、误删和政策变动，都可能在几分钟内抹掉多年的邮件。这里说清楚真正的备份是什么样子。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/email-templates-for-client-replies.html">客户回复邮件模板：3个可重复使用的示例</a></td><td>在MailVault中保存可重复使用的客户回复模板。试用3个示例，将其插入草稿，并在发送前按实际情况修改细节。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/find-emails-you-havent-replied-to.html">如何找出尚未回复的邮件</a></td><td>使用MailVault的待回复视图查找尚未回复的邮件。了解其30天范围，检查回复标记，并单独管理长期跟进清单。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/gdpr-fines-indefinite-email-retention.html">GDPR 罚款已达 61.1 亿欧元 — 「什么都永久保留」算不算合规风险？</a></td><td>GDPR 执法罚款已在 2,685 起案件中超过 61.1 亿欧元，监管机构也越来越把无限期保留邮件本身视为违规，而不只是一个附带问题。存储限制原则究竟要求什么，以及如何在不违反它的前提下保留自己的归档。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/gmail-gemini-review-mailvault-comparison.html">Gmail 搭配 Gemini 评测：内置云端 AI 与 MailVault 的本地掌控</a></td><td>Gmail 搭配 Gemini 与 MailVault 对比：收件箱 AI、方案资格、Google 集成、本地邮件所有权和设备端邮件辅助。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/gmail-oauth2.html">接入 Gmail OAuth2：一套流程，两家服务商</a></td><td>我们如何把已有的 Microsoft OAuth2 流程做成与服务商无关的实现，从而给 MailVault 加上 Gmail OAuth2。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/gmail-storage-squeeze.html">Gmail 存储空间收紧——以及你为什么该自己留一份</a></td><td>Google 正在测试给新账号 5GB 免费存储而不是 15GB，并会删除闲置两年的账号。这里说明 MailVault 如何在你自己的磁盘上保留一份永久的 Gmail 本地副本。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/gmail-third-party-changes-2027.html">Gmail 将停止第三方「以其他地址发送」和 POP 收取：2027 年 1 月之前你可以怎么做</a></td><td>Gmail 2027 年 1 月的变化对非 Google 账户、已有邮件，以及在桌面客户端里管理多个地址意味着什么。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/how-to-check-email-backup.html">如何在需要之前检查邮件备份</a></td><td>打开已保存的邮件、附件以及独立的恢复副本，检查邮件备份。了解离线测试能证明什么，以及不能证明什么。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/how-to-search-thousands-of-emails-fast.html">如何快速搜索数千封邮件</a></td><td>用可重复的搜索流程查找旧发票、附件和对话。结合有辨识度的关键词、发件人和日期筛选，以及完整的本地归档。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/how-we-test-mailvault.html">我们如何测试 MailVault：600+ 项测试、真实邮件、真实服务器</a></td><td>走进 MailVault 的测试策略：四层共 600+ 项自动化测试、500 封预置邮件、针对真实 IMAP 服务器的压力测试，以及在真实桌面应用中的端到端场景。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/leave-email-provider-safely.html">如何更换邮箱服务商而不丢失多年的邮件</a></td><td>一份实用的邮箱迁移清单：盘点文件夹，保存邮件和附件，核验归档，并在关闭旧账户前测试新账户。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/local-email-storage-vs-cloud-email.html">本地邮件存储与云端邮件：哪份副本由你掌控？</a></td><td>从访问、隐私、恢复和维护几个方面比较本地邮件存储与云端邮件。了解如何用 MailVault 归档补充现有邮件服务。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/mailbird-review-mailvault-comparison.html">Mailbird 评测：统一的桌面收件箱与 MailVault 的邮件所有权</a></td><td>Mailbird 与 MailVault 对比：统一收件箱、集成、免费账户的限制、应用备份和可迁移的本地邮件存储。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/mailvault-240-stability.html">MailVault 2.4.0：一次稳定性更新</a></td><td>MailVault 2.4.0 的幕后：修复 Outlook 取到错误邮件的问题、消除跨账户串场、驯服沙盒守护进程，并让版本发布可以安全回滚。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/mailvault-windows-memory-use.html">MailVault 在 Windows 上占用多少内存？我们做了实测</a></td><td>我们在 Windows 11 上运行了和 Mac 上相同的 10,000 封邮件内存测试：启动时约 210 MB，打开大邮箱时短暂冲高到接近 365 MB，后台助手约占 23 MB。每个进程都画成了图表。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/ms365-100gb-mailbox-price-hike.html">Microsoft 的100GB企业邮箱：存储与价格有哪些变化</a></td><td>Microsoft 365 Business 邮箱在2026年7月至9月期间从50GB增加至100GB，同时进行了按套餐区分的价格调整。 盒子更大，并不改变是谁在保管你的数据——这里说明为什么容量从来都不是真正的问题。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/notion-mail-closing.html">Notion Mail 即将关闭：需要保存什么，MailVault 能保留什么</a></td><td>Notion 宣布于2026年9月22日关闭 Mail。这篇历史迁移指南说明哪些内容保留在 Gmail，以及本地归档可以保存什么。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/offline-email-search-for-mac.html">Mac 离线邮件搜索：无需联网也能查找邮件</a></td><td>在 Mac 上准备可搜索的本地邮件归档。了解哪些功能可离线使用、哪些内容必须提前下载，以及出行前如何检查 MailVault。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/organize-invoice-emails-automatically.html">如何自动整理账单邮件</a></td><td>使用标签和经过验证的自动标签规则整理账单邮件。预览匹配结果，整理旧邮件，创建月度视图，无需移动邮件。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/outlook-oauth-odyssey.html">Outlook OAuth 漂流记：IMAP 坏了，Graph 万岁</a></td><td>一次 Microsoft 服务端的 IMAP 回归，如何逼着我们注册自己的 Azure AD 应用、用 Rust 写出完整的 Graph API 传输层，并一路排掉七个连环故障。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/outlook-review-mailvault-comparison.html">Outlook 评测：Microsoft 365 的便利与 MailVault 的本地所有权</a></td><td>Outlook 与 MailVault 对比：Microsoft 365 工作流、桌面端导出、离线邮件、定价模式和本地邮件所有权。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/phishing-beyond-suspicious-links.html">网络钓鱼早已不止可疑链接：日历邀请、二维码和附带的邮件</a></td><td>识别藏在日历邀请、二维码和附带邮件里的网络钓鱼，并在登录或批准付款之前做几项实用的检查。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/private-email-archive-for-mac.html">Mac 私人邮件归档：保留自己掌控的副本</a></td><td>通过本地邮件文件、设备内搜索和单独备份，在 Mac 上建立私人邮件归档。了解本地存储能保护什么，又不能保护什么。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/refactoring-mailvault-from-monolith-to-modules.html">重构 MailVault：从单体到模块</a></td><td>我们如何重构 MailVault 的代码库——把 4,300 行的 store 拆成职责清晰的模块，把邮件加载重新设计为双流架构，并规划出一套五阶段拆分方案，同时不破坏任何一个功能。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/sandbox-signing-saga.html">macOS 沙盒签名历险记（或者说 v1.4.0 到 v1.4.5 为什么会存在）</a></td><td>macOS 代码签名和 App Sandbox 如何差点把 MailVault 干趴下，以及为此发出的六个补丁版本。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/search-50000-emails-in-milliseconds.html">50,000 封邮件，毫秒级搜索：MailVault 的本地索引如何工作</a></td><td>我们为 MailVault 在 50,000 封邮件的邮箱上的搜索计时：每个查询 7 到 14 毫秒。测试结果、背后的 SQLite 技术，以及 Premium 如何加入附件搜索和 Vision 图片搜索。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/shortwave-ai-email-review-mailvault-comparison.html">Shortwave 评测：AI 邮件搜索与 MailVault 的本地归档</a></td><td>Shortwave 与 MailVault 对比：AI 搜索、基于 Gmail 的账户支持、云端处理、搜索历史限制和离线原件。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/spark-ai-email-review-mailvault-comparison.html">Spark AI 评测：收件箱专注与 MailVault 的本地 AI 和备份</a></td><td>Spark 与 MailVault 对比：智能收件箱整理、AI 助手的账户支持、订阅额度、本地处理和备份。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/superhuman-ai-email-review-mailvault-comparison.html">Superhuman Mail 评测：云端 AI 效率与 MailVault 的本地 AI</a></td><td>Superhuman Mail 与 MailVault 对比：AI 收件箱工作流、Gmail/Outlook 支持、订阅费用、本地 AI 和邮件所有权。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/thunderbird-review-mailvault-comparison.html">Thunderbird 评测：一款免费邮件客户端，与 MailVault 的对比</a></td><td>Thunderbird 与 MailVault 对比：免费桌面邮件、离线访问、配置文件备份、可迁移归档和日常易用性。</td></tr><tr class="mv-help-row"><td><a href="/zh/blog/which-personal-emails-should-you-keep.html">哪些私人邮件值得保留？</a></td><td>从有意义的对话到有用的附件，判断哪些私人邮件值得保留，并开始建立一个容易查找的小型存档。</td></tr></tbody></table></section></div><!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
 <div class="mv-wrap">
@@ -400,5 +167,6 @@
   <script defer src="/search.js?v=1"></script>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

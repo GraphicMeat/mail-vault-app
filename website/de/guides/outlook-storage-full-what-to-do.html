@@ -38,7 +38,7 @@
   "description": "Outlook meldet vollen Speicher? Finde heraus, welches Limit voll ist, mach die 5-Minuten-Prüfungen und wähle: aufräumen, lokal behalten oder Speicher kaufen.",
   "url": "https://mailvaultapp.com/de/guides/outlook-storage-full-what-to-do.html",
   "datePublished": "2026-10-08",
-  "dateModified": "2026-10-08",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -161,6 +161,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Zum Inhalt springen</a>
@@ -208,7 +209,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Hilfethemen</summary><nav aria-label="Themen im Hilfecenter"><a href="/de/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault-Hilfe</a><a href="/de/faq/getting-started.html">Erste Schritte</a><a href="/de/faq/storage-and-vault.html">Speicherort und dein Vault</a><a href="/de/faq/providers.html">E-Mail-Anbieter</a><a href="/de/faq/backup-and-restore.html">Backup und Wiederherstellung</a><a href="/de/faq/explorer-and-insights.html">Explorer und Einblicke</a><a href="/de/faq/scheduled-send.html">Geplanter Versand</a><a href="/de/faq/premium.html">Kostenlos und Premium</a><a href="/de/faq/troubleshooting.html">Fehlerbehebung</a><a href="/de/docs.html#guides" class="mv-help-divider">Praktische Anleitungen</a><a href="/de/docs.html#articles">Artikel</a><a href="/de/features.html">Funktionsübersicht</a><a href="/changelog.html">Versionshinweise</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/de/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -218,7 +219,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook-Speicher voll: Finde heraus, was voll ist, und behebe es</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook-Speicher voll: Finde heraus, was voll ist, und behebe es</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">Was passiert, wenn der Outlook-Speicher voll ist</a></li><li><a href="#help-section-2">Schritt 1: Finde heraus, welche Art von Konto du hast</a></li><li><a href="#help-section-3">Schritt 2: Postfach oder Cloud-Speicher?</a></li><li><a href="#help-section-4">Die 5-Minuten-Prüfungen</a></li><li><a href="#help-section-5">Deine drei Möglichkeiten, der Reihe nach</a></li><li><a href="#help-section-6">Wann du was wählst</a></li><li><a href="#help-section-7">Hinweise zur Outlook-Desktop-App</a></li><li><a href="#help-section-8">Häufige Fragen</a></li><li><a href="#help-section-9">Wie es weitergeht</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>8 Min. Lesezeit</span>
             <span aria-hidden="true">&middot;</span>
@@ -242,7 +243,7 @@
             <p class="text-sm mt-3">Es kann bis zu 24 Stunden dauern, bis Änderungen angezeigt werden.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Was passiert, wenn der Outlook-Speicher voll ist</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">Was passiert, wenn der Outlook-Speicher voll ist</h2>
 
           <p>Microsoft beschreibt drei Situationen. Alle stoppen deine E-Mails, es lohnt sich also, noch am selben Tag zu handeln.</p>
 
@@ -252,7 +253,7 @@
             <li><strong>Dein Arbeits- oder Schulpostfach ist voll.</strong> Du kannst keine Nachrichten senden oder empfangen, und wer dir schreibt, bekommt eine Fehlermeldung, dass dein Postfach voll ist. Vorher schickt Microsoft Warn-E-Mails und Hinweise in der App, wenn das Postfach fast voll ist.</li>
           </ul>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Schritt 1: Finde heraus, welche Art von Konto du hast</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">Schritt 1: Finde heraus, welche Art von Konto du hast</h2>
 
           <p>Die Lösung hängt davon ab, wer das Limit festlegt. Finde deine Zeile in der Tabelle.</p>
 
@@ -299,7 +300,7 @@
             Die Outlook-App auf deinem Mac, PC oder Handy zeigt in der Regel dasselbe Postfach wie die Website. Meldet Outlook.com, dass das Postfach voll ist, meldet die App das auch, und Platz, den du an einer Stelle freigibst, ist überall frei.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Schritt 2: Postfach oder Cloud-Speicher?</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">Schritt 2: Postfach oder Cloud-Speicher?</h2>
 
           <p>
             Bei einem privaten Konto füllen sich die beiden Limits aus unterschiedlichen Gründen. Dein <strong>Postfach</strong> enthält deine E-Mails, Kontakte und deinen Kalender. Dein <strong>Microsoft-Cloud-Speicher</strong> enthält OneDrive-Dateien und -Fotos, den OneDrive-Papierkorb und laut Microsoft deine Outlook.com-Anhänge. Ein OneDrive voller Fotos kann also deine E-Mails stoppen, auch wenn du deinen Posteingang nie anrührst.
@@ -309,7 +310,7 @@
             Microsofts eigene Hilfeseiten beschreiben diese Aufteilung nicht alle gleich. Rate nicht. Sieh dir beide Zahlen an, bevor du etwas löschst.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Die 5-Minuten-Prüfungen</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">Die 5-Minuten-Prüfungen</h2>
 
           <ol class="list-decimal pl-6 space-y-2">
             <li><strong>Prüfe deinen E-Mail-Speicher.</strong> Melde dich bei Outlook.com an und wähle <strong>Einstellungen</strong> &gt; <strong>Konto</strong> &gt; <strong>Speicher</strong>. Du siehst, wie viel Platz jeder Ordner belegt.</li>
@@ -324,7 +325,7 @@
             Auf der Seite Speicher kannst du auch alle Elemente eines Ordners endgültig löschen oder nur Elemente, die älter als 3, 6 oder 12 Monate sind. Das geht schnell, ist aber endgültig. Nutze es nur für Ordner, die du nicht brauchst oder die du schon kopiert hast.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Deine drei Möglichkeiten, der Reihe nach</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">Deine drei Möglichkeiten, der Reihe nach</h2>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Aufräumen</h3>
 
@@ -339,11 +340,10 @@
           </p>
 
           <p>
-            MailVault ist eine kostenlose Desktop-App für macOS, Windows und Linux, die genau das macht. Sie speichert jede E-Mail als normale <code>.eml</code>-Datei auf deinem Computer. Mit der kostenlosen App sind es zwei Schritte: <strong>Archivieren</strong> kopiert die E-Mails in deinen Tresor, dann entfernt <strong>Vom Server löschen</strong> sie aus Outlook.com. <strong>Archivieren &amp; löschen</strong> in einem Schritt, das jede Kopie prüft, bevor es die Kopie auf dem Server entfernt, gehört zu Premium. Siehe <a href="/de/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">So funktioniert Archivieren &amp; löschen</a>.
-          </p>
+            MailVault ist eine kostenlose Desktop-App für macOS, Windows und Linux, die genau das macht. Sie speichert jede E-Mail als normale <code>.eml</code>-Datei auf deinem Computer. Mit der kostenlosen App sind es zwei Schritte: <strong>Archivieren</strong> kopiert die E-Mails in deinen Tresor, dann entfernt <strong>Vom Server löschen</strong> sie aus Outlook.com. <strong>Archivieren &amp; löschen</strong> in einem Schritt, das jede Kopie prüft, bevor es die Kopie auf dem Server entfernt, gehört zu Premium. Siehe <a href="/de/features/archive-and-delete.html" class="text-primary-500 hover:text-primary-600 underline">So funktioniert Archivieren &amp; löschen</a>. Diese Angaben zur Dateistruktur gelten für das Standardformat Maildir. Unter Einstellungen → Speicher gibt es auch JMAP-Speicher, der die ursprünglichen Nachrichtenbytes mit JSON-Datensätzen aufbewahrt und identische Nachrichten dedupliziert.</p>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/selection-dialog-archive-720.webp 720w, /screenshots/de/selection-dialog-archive-1440.webp 1440w, /screenshots/de/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/de/selection-dialog-archive-light-1440.webp" srcset="/screenshots/de/selection-dialog-archive-light-720.webp 720w, /screenshots/de/selection-dialog-archive-light-1440.webp 1440w, /screenshots/de/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Der Dialog Aktion wählen von MailVault für eine Auswahl von E-Mails. Er listet Archivieren, Aus dem Archiv holen, Vom Server löschen, Archivieren und löschen sowie Überall löschen, jeweils mit einer einzeiligen Erklärung, über einem Hinweis, dass einige der E-Mails schon archiviert sind. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/selection-dialog-archive-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/de/selection-dialog-archive-720.webp 720w, /screenshots/de/selection-dialog-archive-1440.webp 1440w, /screenshots/de/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/de/selection-dialog-archive-light-1440.webp" srcset="/screenshots/de/selection-dialog-archive-light-720.webp 720w, /screenshots/de/selection-dialog-archive-light-1440.webp 1440w, /screenshots/de/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="Der Dialog Aktion wählen von MailVault für eine Auswahl von E-Mails. Er listet Archivieren, Aus dem Archiv holen, Vom Server löschen, Archivieren und löschen sowie Überall löschen, jeweils mit einer einzeiligen Erklärung, über einem Hinweis, dass einige der E-Mails schon archiviert sind. · MailVault version 2.16.0 de" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 de"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 de</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Nachdem du Nachrichten ausgewählt hast, fragt MailVault, was damit passieren soll. Archivieren behält die Kopie auf dem Server. Vom Server löschen entfernt nur die Kopie auf dem Server. Archivieren &amp; löschen (Premium) macht beides und prüft vorher jede Kopie.</figcaption>
           </figure>
 
@@ -386,7 +386,7 @@
             </table>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Wann du was wählst</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">Wann du was wählst</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>E-Mails kommen gerade zurück.</strong> Leere zuerst Gelöschte Elemente. Das geht schnell und entfernt nur E-Mails, die du schon gelöscht hast. Plane dann noch diese Woche eine dauerhaftere Lösung.</li>
@@ -400,7 +400,7 @@
             Wenn du dich fürs Archivieren entscheidest, leg zuerst die Kopie an und lösche danach. Unsere Anleitung zum <a href="/de/guides/back-up-outlook-com-email-to-mac.html" class="text-primary-500 hover:text-primary-600 underline">Sichern von Outlook.com-E-Mails auf einem Mac</a> vergleicht die Wege, diese Kopie anzulegen, und <a href="/de/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">E-Mail-Speicher freigeben, ohne alte E-Mails zu verlieren</a> erklärt dieselbe Idee für jeden Anbieter.
           </p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Hinweise zur Outlook-Desktop-App</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">Hinweise zur Outlook-Desktop-App</h2>
 
           <ul class="list-disc pl-6 space-y-2">
             <li><strong>Das klassische Outlook für Windows</strong> hat <strong>File</strong> &gt; <strong>Tools</strong> &gt; <strong>Mailbox Cleanup</strong> (in der deutschen Oberfläche entsprechend übersetzt). Es zeigt die Größe deines Postfachs und seiner Ordner, findet Elemente, die älter als ein Datum oder größer als eine bestimmte Größe sind, und leert Gelöschte Elemente.</li>
@@ -408,11 +408,11 @@
           </ul>
 
           <figure class="my-6">
-            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/local-vault-720.webp 720w, /screenshots/de/local-vault-1440.webp 1440w, /screenshots/de/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/de/local-vault-light-1440.webp" srcset="/screenshots/de/local-vault-light-720.webp 720w, /screenshots/de/local-vault-light-1440.webp 1440w, /screenshots/de/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault mit ausgewähltem Filter Tresor in der Seitenleiste. Der Kopf des Posteingangs zeigt In deinem Tresor mit der Zahl der gespeicherten E-Mails des Ordners, und jede Nachrichtenzeile hat ein Tresor-Symbol. Eine Legende unter der Liste erklärt Nur auf dem Server, In deinem Tresor, Einzige Kopie und Auf dem Sicherungslaufwerk. · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/de/local-vault-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/de/local-vault-720.webp 720w, /screenshots/de/local-vault-1440.webp 1440w, /screenshots/de/local-vault-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px"><img src="/screenshots/de/local-vault-light-1440.webp" srcset="/screenshots/de/local-vault-light-720.webp 720w, /screenshots/de/local-vault-light-1440.webp 1440w, /screenshots/de/local-vault-light-2880.webp 2880w" sizes="(max-width: 800px) 92vw, 720px" width="1440" height="932" loading="lazy" decoding="async" alt="MailVault mit ausgewähltem Filter Tresor in der Seitenleiste. Der Kopf des Posteingangs zeigt In deinem Tresor mit der Zahl der gespeicherten E-Mails des Ordners, und jede Nachrichtenzeile hat ein Tresor-Symbol. Eine Legende unter der Liste erklärt Nur auf dem Server, In deinem Tresor, Einzige Kopie und Auf dem Sicherungslaufwerk. · MailVault version 2.16.0 de" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 de"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 de</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Der Filter Tresor zeigt die E-Mails, die auf deinem Computer gespeichert sind. Die Kopfzeile, die mit In deinem Tresor beginnt, sagt dir, wie viel von diesem Ordner dort eine Kopie hat. Die Fortschrittskarte in der Ecke gehört zu einem anderen Auftrag.</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Häufige Fragen</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">Häufige Fragen</h2>
 
           <div class="pt-2">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Wie viel kostenlosen Speicher hat Outlook.com?</h3>
@@ -439,7 +439,7 @@
             <p>Nur, wenn du woanders eine Kopie hast. Elemente in Gelöschte Elemente werden nach 30 Tagen entfernt. Speichere zuerst eine Kopie alter E-Mails auf deinem Computer und prüfe, ob sich die Kopie öffnen lässt, bevor du etwas löschst.</p>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Wie es weitergeht</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-9">Wie es weitergeht</h2>
 
           <p>
             Mach heute die 5-Minuten-Prüfungen, damit keine E-Mails mehr zurückkommen. Entscheide dann, was mit deinen alten E-Mails passieren soll. Wenn du sie behalten willst, ohne für mehr Online-Speicher zu zahlen, behält MailVault eine Kopie auf deinem eigenen Computer als einfache <code>.eml</code>-Dateien, und die kostenlose App kann in zwei Schritten archivieren und vom Server löschen. Es gibt kein MailVault-Konto, und deine E-Mails laufen nicht über einen MailVault-Server.
@@ -461,7 +461,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>In MailVault ansehen</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/de/manual-backup.webp"><img src="/assets/help-media/de/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Alle Konten sichern und den Abschluss prüfen · MailVault version 2.20.0 de" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Alle Konten sichern und den Abschluss prüfen</figcaption><video controls playsinline preload="none" poster="/assets/help-media/de/manual-backup.jpg" aria-label="Alle Konten sichern und den Abschluss prüfen · MailVault version 2.20.0 de" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/de/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/de/manual-backup.vtt" srclang="de" label="Deutsch" default></video></figure><details class="mv-help-contents"><summary>Videotranskript</summary><p>In den Sicherungseinstellungen die Sicherung aller Konten starten. Den Fortschritt bis zum Abschluss der Sicherung verfolgen.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Eine Kreation von Graphic Meat</p><h2 id="studio-title">Lerne die Menschen hinter MailVault kennen.</h2><p>Wir sind Graphic Meat, ein unabhängiges Produktstudio, das seit 2013 nützliche Software entwickelt. MailVault ist eines unserer Produkte. Lerne uns kennen und sieh dir an, woran wir sonst arbeiten.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat kennenlernen <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat besuchen, das Studio hinter MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Mehr von Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Mach aus deinen Fotos ein druckfertiges Buch.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Ein lokaler Arbeitsbereich für Notizen und Code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Verschiebe deine E-Mails zu einem neuen Anbieter.</span></a></div></div></aside><footer class="mv-footer">
@@ -485,5 +485,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Produkt-Screenshot"><button type="button">Screenshot schließen</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

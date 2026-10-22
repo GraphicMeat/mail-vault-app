@@ -38,7 +38,7 @@
   "description": "iCloud 邮件没有内置的导出按钮。这里讲如何用 IMAP 和应用专用密码，真正拿到一份可搜索的 @icloud.com 或 @me.com 邮件本地副本。",
   "url": "https://mailvaultapp.com/zh/guides/export-icloud-mail.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -66,7 +66,7 @@
       "name": "为什么 iCloud 邮件需要应用专用密码？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Apple 要求 Apple ID 开启两步验证，并且不允许第三方邮件客户端用你平常的 Apple ID 密码登录。请在 appleid.apple.com 的「登录与安全」下生成一个独立的应用专用密码，用它来登录。"
+        "text": "MailVault 的手动 IMAP 连接使用应用专用密码，而不是普通 Apple 账户密码。创建密码需要双重认证。请在 Apple 账户的“登录与安全”→“应用专用密码”中生成。"
       }
     },
     {
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何把 iCloud 邮件导出到电脑</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何把 iCloud 邮件导出到电脑</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 分钟阅读</span>
           </div>
@@ -225,7 +226,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 1 步：生成应用专用密码</h3>
 
           <p>
-            Apple 要求你的 Apple ID 开启两步验证，并且不允许第三方应用用你平常的 Apple ID 密码登录。作为替代，你要专门为邮件访问生成一个独立的应用专用密码：
+            MailVault 的手动 IMAP 连接需要使用应用专用密码。创建密码需要在 Apple 账户上启用双重认证。Apple 也支持在部分其他客户端中授权账户，请遵循实际使用的应用对应的说明：
           </p>
 
           <ul class="list-disc pl-6 space-y-2">
@@ -258,8 +259,7 @@
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">用 MailVault 导出 iCloud 邮件</h3>
 
           <p>
-            MailVault 是一款适用于 macOS、Windows 和 Linux 的免费桌面邮件应用。使用上面的 IMAP 设置和 应用专用密码添加你的 iCloud 账户，选择你需要的文件夹，MailVault 就会把每封邮件下载为一个单独的 <code>.eml</code> 文件，按标准的 Maildir 结构整理在你的磁盘上。因为每封邮件都是一个独立的文件，你得到的是一个可以搜索、可以浏览的本地归档 &mdash; 而不是一个必须先导入别处才能使用的巨大导出文件。
-          </p>
+            MailVault 是一款适用于 macOS、Windows 和 Linux 的免费桌面邮件应用。使用上面的 IMAP 设置和 应用专用密码添加你的 iCloud 账户，选择你需要的文件夹，MailVault 就会把每封邮件下载为一个单独的 <code>.eml</code> 文件，按标准的 Maildir 结构整理在你的磁盘上。因为每封邮件都是一个独立的文件，你得到的是一个可以搜索、可以浏览的本地归档 &mdash; 而不是一个必须先导入别处才能使用的巨大导出文件。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
 
           <p>
             手动归档免费且不限次数。如果你希望 iCloud 邮件备份按计划自动保持最新，那属于 MailVault Premium（$4/月 或 $25/年；年付含 14 天免费试用）。
@@ -282,7 +282,7 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">为什么 iCloud 邮件需要应用专用密码？</p>
-            <p>Apple 要求 Apple ID 开启两步验证，并且不允许第三方邮件客户端用你平常的 Apple ID 密码登录。请在 appleid.apple.com 的「登录与安全」下生成一个独立的应用专用密码，用它来登录。</p>
+            <p>MailVault 的手动 IMAP 连接使用应用专用密码，而不是普通 Apple 账户密码。创建密码需要双重认证。请在 Apple 账户的“登录与安全”→“应用专用密码”中生成。</p>
           </div>
 
           <div class="pt-2">
@@ -308,7 +308,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/manual-backup.webp"><img src="/assets/help-media/zh/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>备份所有账户并确认完成</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/manual-backup.jpg" aria-label="备份所有账户并确认完成 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/manual-backup.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在备份设置中开始备份所有账户。 查看进度，直到备份完成。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -332,5 +332,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

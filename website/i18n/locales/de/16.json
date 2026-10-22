@@ -29,7 +29,6 @@
   "1a88113e53ee": "MailVault {release} wird heruntergeladen. Falls nichts passiert, nutze die Schaltfläche oben.",
   "93c3e0b8c5fb": "Die Schaltfläche öffnet die neueste Release-Seite. Wähle dort die Datei für deinen Computer.",
   "757da7c8028f": "Der Download konnte nicht von selbst starten. Die Schaltfläche öffnet die neueste Release-Seite; wähle dort die Datei für deinen Computer.",
-  "af2a175acc52": "Wo MailVault deine Mail auf der Festplatte ablegt, wie viel davon auf diesem Computer bleibt, warum es .eml und Maildir nutzt und wie du den Vault auf ein anderes Laufwerk verschiebst.",
   "384095550461": "Wie viel meiner Mail bleibt auf diesem Computer?",
   "4c8e335eac9f": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Sammler</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span>: Ein Download-Modus, der jeden Ordner und den gesamten Verlauf im Hintergrund lädt und auf diesem Computer behält, statt nur eines kürzlichen Zeitraums</span>",
   "7f9bb36583b5": "Alle 14 Funktionen anzeigen",

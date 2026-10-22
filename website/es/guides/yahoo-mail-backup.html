@@ -38,7 +38,7 @@
   "description": "Haz una copia de seguridad de Yahoo Mail con una contraseña de aplicación e IMAP. Guarda un archivo local con MailVault y conserva una segunda copia en otra unidad.",
   "url": "https://mailvaultapp.com/es/guides/yahoo-mail-backup.html",
   "datePublished": "2026-07-15",
-  "dateModified": "2026-07-15",
+  "dateModified": "2026-10-22",
   "author": {
     "@type": "Organization",
     "name": "MailVault"
@@ -66,7 +66,7 @@
       "name": "¿Yahoo Mail admite contraseñas de aplicación?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. Yahoo Mail no ofrece contraseñas específicas de aplicación como Gmail o iCloud. Si una herramienta de copia te pide generar una precisamente para Yahoo, esa indicación está desfasada: conéctate con tu inicio de sesión normal de Yahoo mediante el flujo de conexión IMAP estándar del cliente."
+        "text": "Sí. Para una app como MailVault que no usa la página de acceso de Yahoo, genera una contraseña de aplicación en Seguridad de la cuenta de Yahoo → Conexiones externas y úsala en lugar de tu contraseña habitual. Yahoo decide qué cuentas pueden crear una."
       }
     },
     {
@@ -74,15 +74,15 @@
       "name": "¿Cuáles son los ajustes IMAP de Yahoo?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Servidor IMAP imap.mail.yahoo.com en el puerto 993 con SSL/TLS. Para enviar, servidor SMTP smtp.mail.yahoo.com en el puerto 465 o 587 con SSL/TLS."
+        "text": "Servidor IMAP imap.mail.yahoo.com en el puerto 993 con SSL/TLS. Para enviar correo, usa el servidor SMTP smtp.mail.yahoo.com en el puerto 465 con SSL/TLS o el puerto 587 con STARTTLS."
       }
     },
     {
       "@type": "Question",
-      "name": "¿Por qué copiar Yahoo Mail si ya da 1 TB de almacenamiento gratis?",
+      "name": "¿Por qué hacer una copia de Yahoo Mail si la cuenta ya tiene almacenamiento en línea?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Con Yahoo, el problema no suele ser el límite de almacenamiento. Las razones habituales son querer un archivo sin conexión independiente de cualquier proveedor, prepararse para migrar a otro servicio de correo o, simplemente, quedarse tranquilo después del historial de cambios de propiedad y de incidentes de seguridad de Yahoo."
+        "text": "La ayuda actual de Yahoo indica 20 GB de almacenamiento gratuito, así que comprueba el cupo que muestra tu cuenta. Una copia local también te da un archivo sin conexión independiente de Yahoo y una copia que conservar al cambiar de proveedor."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "¿Puedo seguir usando IMAP con Yahoo Mail en 2026?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sí. Yahoo sigue admitiendo el acceso estándar por IMAP y SMTP para clientes de correo de terceros mediante su flujo de inicio de sesión habitual."
+        "text": "Sí. Yahoo sigue admitiendo el acceso estándar por IMAP y SMTP para clientes de terceros, mediante una contraseña de aplicación si no usan la página de acceso de Yahoo."
       }
     }
   ]
@@ -153,6 +153,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
@@ -200,7 +201,7 @@
 </div>
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
@@ -210,7 +211,7 @@
 
       <article>
         <header class="mb-8">
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cómo hacer una copia de seguridad de Yahoo Mail en tu ordenador</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cómo hacer una copia de seguridad de Yahoo Mail en tu ordenador</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>6 min de lectura</span>
           </div>
@@ -267,22 +268,22 @@
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Yahoo Mail admite contraseñas de aplicación?</p>
-            <p>No. Yahoo Mail no ofrece contraseñas específicas de aplicación como Gmail o iCloud. Si una herramienta de copia te pide generar una precisamente para Yahoo, esa indicación está desfasada: conéctate con tu inicio de sesión normal de Yahoo mediante el flujo de conexión IMAP estándar del cliente.</p>
+            <p>Sí. Para una app como MailVault que no usa la página de acceso de Yahoo, genera una contraseña de aplicación en Seguridad de la cuenta de Yahoo → Conexiones externas y úsala en lugar de tu contraseña habitual. Yahoo decide qué cuentas pueden crear una.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Cuáles son los ajustes IMAP de Yahoo?</p>
-            <p>Servidor IMAP imap.mail.yahoo.com en el puerto 993 con SSL/TLS. Para enviar, servidor SMTP smtp.mail.yahoo.com en el puerto 465 o 587 con SSL/TLS.</p>
+            <p>Servidor IMAP imap.mail.yahoo.com en el puerto 993 con SSL/TLS. Para enviar correo, usa el servidor SMTP smtp.mail.yahoo.com en el puerto 465 con SSL/TLS o el puerto 587 con STARTTLS.</p>
           </div>
 
           <div class="pt-2">
-            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Por qué copiar Yahoo Mail si ya da 1 TB de almacenamiento gratis?</p>
-            <p>Con Yahoo, el problema no suele ser el límite de almacenamiento. Las razones habituales son querer un archivo sin conexión independiente de cualquier proveedor, prepararse para migrar a otro servicio de correo o, simplemente, quedarse tranquilo después del historial de cambios de propiedad y de incidentes de seguridad de Yahoo.</p>
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Por qué hacer una copia de Yahoo Mail si la cuenta ya tiene almacenamiento en línea?</p>
+            <p>La ayuda actual de Yahoo indica 20 GB de almacenamiento gratuito, así que comprueba el cupo que muestra tu cuenta. Una copia local también te da un archivo sin conexión independiente de Yahoo y una copia que conservar al cambiar de proveedor.</p>
           </div>
 
           <div class="pt-2">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Puedo seguir usando IMAP con Yahoo Mail en 2026?</p>
-            <p>Sí. Yahoo sigue admitiendo el acceso estándar por IMAP y SMTP para clientes de correo de terceros mediante su flujo de inicio de sesión habitual.</p>
+            <p>Sí. Yahoo sigue admitiendo el acceso estándar por IMAP y SMTP para clientes de terceros, mediante una contraseña de aplicación si no usan la página de acceso de Yahoo.</p>
           </div>
 
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
@@ -293,7 +294,7 @@
       </article>
 
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>Verlo en MailVault</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/es/manual-backup.webp"><img src="/assets/help-media/es/manual-backup.webp" width="1440" height="1056" loading="lazy" alt="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>Crear una copia de todas las cuentas y comprobar que termina</figcaption><video controls playsinline preload="none" poster="/assets/help-media/es/manual-backup.jpg" aria-label="Crear una copia de todas las cuentas y comprobar que termina · MailVault version 2.20.0 es" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/es/manual-backup.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/es/manual-backup.vtt" srclang="es" label="Español" default></video></figure><details class="mv-help-contents"><summary>Transcripción del vídeo</summary><p>Iniciar la copia de seguridad de todas las cuentas en los ajustes de copia de seguridad. Seguir el progreso hasta que termine la copia.</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creación de Graphic Meat</p><h2 id="studio-title">Conoce a las personas detrás de MailVault.</h2><p>Somos Graphic Meat, un estudio de productos independiente que crea software útil desde 2013. MailVault es una de las cosas que hacemos. Ven a conocernos y descubre en qué más estamos trabajando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conoce Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, el estudio detrás de MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Más de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Convierte tus fotos en un libro listo para imprimir.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espacio de trabajo local para notas y código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mueve tu correo a un proveedor nuevo.</span></a></div></div></aside><footer class="mv-footer">
@@ -317,5 +318,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

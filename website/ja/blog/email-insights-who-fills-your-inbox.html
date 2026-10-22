@@ -115,6 +115,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/email-insights-who-fills-your-inbox.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/email-insights-who-fills-your-inbox.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">本文へ移動</a>
   <header class="mv-header">
@@ -142,13 +143,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>ヘルプのトピック</summary><nav aria-label="ヘルプセンターのトピック"><a href="/ja/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVaultヘルプ</a><a href="/ja/faq/getting-started.html">はじめに</a><a href="/ja/faq/storage-and-vault.html">保存場所と保管庫</a><a href="/ja/faq/providers.html">メールプロバイダ</a><a href="/ja/faq/backup-and-restore.html">バックアップと復元</a><a href="/ja/faq/explorer-and-insights.html">Explorerとメール分析</a><a href="/ja/faq/scheduled-send.html">送信の予約</a><a href="/ja/faq/premium.html">無料版とPremium</a><a href="/ja/faq/troubleshooting.html">トラブルシューティング</a><a href="/ja/docs.html#guides" class="mv-help-divider">実践ガイド</a><a href="/ja/docs.html#articles">記事</a><a href="/ja/features.html">機能リファレンス</a><a href="/changelog.html">リリースノート</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← ブログに戻る</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-10-08" class="text-sm text-primary-500 font-medium">2026年10月8日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault のメール分析：誰が、いつ受信トレイを埋めているのか</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault のメール分析：誰が、いつ受信トレイを埋めているのか</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">メール分析でわかること</a></li><li><a href="#help-section-2">最も多くメールを送ってくる相手を見つける</a></li><li><a href="#help-section-3">最も容量を使っている送信者は？</a></li><li><a href="#help-section-4">メールがたまる時期を見る</a></li><li><a href="#help-section-5">見つけたことに対処する</a></li><li><a href="#help-section-6">コンピュータ上で計算</a></li><li><a href="#help-section-7">よくある質問</a></li><li><a href="#help-section-8">次にすること</a></li></ul></details><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7分で読めます</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -165,11 +166,11 @@
           </div>
 
           <div class="my-8">
-<figure class="mv-clip" data-clip="insights"><div class="mv-clip-media"><video muted loop playsinline preload="none" poster="/assets/clips/ja/insights.jpg" width="960" height="660" aria-label="「メール分析」を開くと、「アクティビティ」タブに、受信と送信のメールを 1 日 1 マスで示すヒートマップが表示されます。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/insights.mp4" type="video/mp4"></video></div>
+<figure class="mv-clip" data-clip="insights"><div class="mv-clip-media"><video muted="" loop="" playsinline="" preload="none" poster="/assets/clips/ja/insights.jpg" width="960" height="660" aria-label="「メール分析」を開くと、「アクティビティ」タブに、受信と送信のメールを 1 日 1 マスで示すヒートマップが表示されます。 · Reviewed for MailVault version 2.20.0" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"><source src="/assets/clips/ja/insights.mp4" type="video/mp4"></video></div>
 <figcaption><strong class="mv-clip-title">メール分析</strong><span class="mv-clip-text">「メール分析」を開くと、受信したメールと送信したメールを日ごとに示すヒートマップが表示されます。コンピュータ上にあるヘッダーから作られます。</span></figcaption></figure>
           </div>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">メール分析でわかること</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-1">メール分析でわかること</h2>
           <p>メール分析はサイドバーから全画面で開き、3 つのタブがあります。上部の操作はどのタブでも共通です。アカウント、期間（過去30日間、過去90日間、過去12か月間、または指定した期間）、送受信（受信したメール、送信したメール、またはその両方）、そして<strong>自動送信と思われる送信者を非表示</strong>のチェックボックスです。最後のものは、機械が送ったように見えるメールの送信者を除外します。no-reply のアドレスや、メーリングリストが付ける List-Id、List-Unsubscribe、一括配信の Precedence ヘッダーがあるものです。</p>
 
           <div class="overflow-x-auto">
@@ -203,7 +204,7 @@
 
           <p>どのビューもクリックできます。バブル、列上の点、日をクリックすると、一致するメッセージが一覧で開き、メール分析から離れずに読めます。</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">最も多くメールを送ってくる相手を見つける</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-2">最も多くメールを送ってくる相手を見つける</h2>
           <ol class="list-decimal pl-6 space-y-2">
             <li>メール分析を開き、<strong>アカウント</strong>でアカウントを選びます。メール分析は一度に 1 つのアカウントを対象にします。</li>
             <li><strong>期間</strong>を<em>過去12か月間</em>に、<strong>送受信</strong>を<em>受信</em>にします。</li>
@@ -213,11 +214,11 @@
           <p>そして 2 回試します。1 回目は「自動送信と思われる送信者を非表示」をオフにして、2 回目はオンにして。1 つ目の一覧はたいていニュースレター、ショップ、通知です。2 つ目は実際にやり取りしている人たちで、たいていずっと短くなります。</p>
 
           <figure class="my-6">
-            <img src="/screenshots/ja/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault のメール分析の送信者マップ。2 文字のイニシャルが付いたバブルが、「自分」と書かれた円を囲んでいます。説明文には「バブルの面積はメッセージ数を表します。距離は最後の連絡からの時間を表し、2026年9月24日時点で計測しています」とあります。マップの下では、送信者の並び順が「最近のやり取り」に設定されています。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/insights-map-1440.webp"><img src="/screenshots/ja/insights-map-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault のメール分析の送信者マップ。2 文字のイニシャルが付いたバブルが、「自分」と書かれた円を囲んでいます。説明文には「バブルの面積はメッセージ数を表します。距離は最後の連絡からの時間を表し、2026年9月24日時点で計測しています」とあります。マップの下では、送信者の並び順が「最近のやり取り」に設定されています。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">テスト用アカウントの送信者マップ。大きなバブルほど多くのメールを送り、近いバブルほど最近送ってきています。マップの下の並び順の操作は、最初は「最近のやり取り」になっています。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">最も容量を使っている送信者は？</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-3">最も容量を使っている送信者は？</h2>
           <p>ここで知っておきたいメール分析の限界があります。数えるのはメッセージの件数で、メガバイトではありません。短い通知を 900 通送ってくる送信者はマップを埋めますが、大きな PDF を 6 通送ってきたクライアントはほとんど目立ちません。メッセージ数は容量の大まかな目安で、雑多なメールを見つけるのには向いていますが、重いメールを見つけるのには向いていません。</p>
           <p>重いメールを見つけるには、添付ファイルを見てください。テキストは小さく、メッセージを大きくするのはファイルです。MailVault で見つける方法は 2 つあります。</p>
           <ul class="list-disc pl-6 space-y-2">
@@ -226,16 +227,16 @@
           </ul>
           <p>2 つを組み合わせましょう。メール分析は誰がたくさん送ってくるかを、検索はそのうち誰が大きなものを送ってくるかを教えてくれます。</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">メールがたまる時期を見る</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-4">メールがたまる時期を見る</h2>
           <p><strong>アクティビティ</strong>タブは、1 年間のメールを最も手早く把握できる画面です。1 マスが 1 日で、濃いマスほどメールが多いことを表します。パターンはすぐに見えてきます。毎週月曜日に押し寄せるメール、静かな 8 月、プロジェクトで受信トレイが埋まった春の 1 週間。マスをクリックすると、その日に届いたものが正確にわかります。</p>
           <p><strong>タイムライン</strong>タブは、同じことを送信者ごとに示します。ニュースレターは一定の間隔で並ぶ点として、忙しいクライアントは密集した塊として、一方通行になった関係はひし形のない円だけの列として現れます。<strong>タイムラインの詳細度</strong>を週、日、メッセージに切り替えて拡大できます。</p>
 
           <figure class="my-6">
-            <img src="/screenshots/ja/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="テスト用アカウントでの MailVault のメール分析のタイムラインタブ。メールの送受信 82 件、受信 82 件、送信 5 件と表示されています。合計の下の注記には「このデバイスで利用できるメールに基づきます」「このデバイスにないメールがあります。件数は完全ではない可能性があります。」「代替の日付を使用する送受信が 51 件あります」とあります。その下に、2025年9月25日から2026年9月24日まで送信者ごとに 1 列が並び、受信したメールが点で示されています。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/insights-timeline-1440.webp"><img src="/screenshots/ja/insights-timeline-1440.webp" width="1440" height="932" loading="lazy" alt="テスト用アカウントでの MailVault のメール分析のタイムラインタブ。メールの送受信 82 件、受信 82 件、送信 5 件と表示されています。合計の下の注記には「このデバイスで利用できるメールに基づきます」「このデバイスにないメールがあります。件数は完全ではない可能性があります。」「代替の日付を使用する送受信が 51 件あります」とあります。その下に、2025年9月25日から2026年9月24日まで送信者ごとに 1 列が並び、受信したメールが点で示されています。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">タイムライン。送信者ごとに 1 列です。合計の下にあるデータ範囲の行に注目してください。このテスト用アカウントはメールの一部しかデバイスになく、メール分析は推測せずにそのことを示しています。</figcaption>
           </figure>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">見つけたことに対処する</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-5">見つけたことに対処する</h2>
           <p>メール分析は見るためのものです。整理は通常のメール画面で行い、Explorer を使うと手早く済みます。</p>
           <ol class="list-decimal pl-6 space-y-2">
             <li>フォルダに戻り、メッセージ一覧を<strong>一覧</strong>から <strong>Explorer</strong> に切り替えます。</li>
@@ -245,19 +246,19 @@
           </ol>
 
           <figure class="my-6">
-            <img src="/screenshots/ja/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="分類方法を「送信者」にした MailVault の Explorer。概要の行には 20 グループ、82 通、未読 13 通とあります。送信者の各行にはチェックボックス、名前、アドレス、件数があり、たとえば Theo Lomas は 6 通、保管庫に 6 通、未読 1 通です。 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/ja/explorer-sender-detail-1002.webp"><img src="/screenshots/ja/explorer-sender-detail-1002.webp" width="1002" height="1506" loading="lazy" alt="分類方法を「送信者」にした MailVault の Explorer。概要の行には 20 グループ、82 通、未読 13 通とあります。送信者の各行にはチェックボックス、名前、アドレス、件数があり、たとえば Theo Lomas は 6 通、保管庫に 6 通、未読 1 通です。 · MailVault version 2.16.0 ja" class="rounded-xl border border-slate-200 dark:border-slate-700 mx-auto" style="max-width:420px;width:100%;height:auto" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 ja"><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 ja</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">送信者別の Explorer。行のチェックボックスで、そのフォルダにある読み込み済みのその送信者のメールをすべて選択でき、そのままアーカイブや削除ができます。</figcaption>
           </figure>
 
           <p>メーリングリストには、もっと短い方法があります。送信者のメールに配信停止のリンクがある場合、メール分析の送信者の詳細に<strong>配信停止</strong>ボタンが表示されます。MailVault は必ず先に確認します。リストがワンクリックでの配信停止に対応していて、メッセージが DKIM の検証に通っていれば、MailVault が自分でリクエストを送ります。そうでなければ、リストの配信停止ページをブラウザで開くか、用意された配信停止のメールを開きます。</p>
           <p>同じ種類のメールが毎月届くなら、<a href="/ja/features/email-cleanup.html" class="text-primary-500 hover:text-primary-600 underline">メール整理</a>（Premium）でニュースレター、プロモーションなどのカテゴリに振り分け、それぞれを保持、アーカイブ、削除できます。アカウントとフォルダごとに経過期間のルールも設定できます。</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">コンピュータ上で計算</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-6">コンピュータ上で計算</h2>
           <p>メール分析は、MailVault がすでにディスクに持っているメッセージのヘッダーを読みます。開いたことのあるフォルダのキャッシュされたヘッダーと、保管庫にあるメッセージから、送信者、受信者、日付を取得します。グラフを描くためにメッセージの本文や添付ファイルを読むことはなく、MailVault に何かが送られることもありません。MailVault のアカウントは関係せず、グラフはネットワークがオフでも動作します。</p>
           <p>外部に接続する操作が 2 つありますが、あなたが選んだときだけです。メール分析からメッセージを開くと通常の方法で読み込まれるため、自分のメールサーバーからダウンロードすることがあります。配信停止は、上で説明したとおりメーリングリストに連絡します。</p>
           <p>メール分析はこのデバイスにあるものしか知らないため、全体像がどこまで完全かを示します。操作の下には「このデバイスで利用できるメールに基づきます」と表示され、<strong>データ範囲の詳細</strong>には、フォルダごとに、ローカルに保存されたヘッダーの件数と、サーバーにあるとわかっているメッセージの件数が並びます。一部のメールがない場合は、件数が完全ではない可能性があると表示されます。信頼できる日付のないメッセージがあれば、代替の日付を使っている件数が表示されます。静かな月を事実として扱うのは、データ範囲が完全なときだけにしてください。完全にするには、まずメールボックスのより多くをコンピュータに保存します。その方法は<a href="/ja/guides/what-is-an-email-vault.html" class="text-primary-500 hover:text-primary-600 underline">メール保管庫とは何か、その作り方</a>のガイドで説明しています。</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-7">よくある質問</h2>
 
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault のメール分析は無料ですか？</h3>
           <p>はい。メール分析と Explorer は無料のアプリに含まれ、アカウントもサインインも不要です。MailVault 2.13.0 で加わりました。</p>
@@ -274,7 +275,7 @@
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 pt-2">メール分析で、最もストレージを使っている送信者はわかりますか？</h3>
           <p>直接にはわかりません。メール分析は送信者をサイズではなくメッセージ数で順位付けします。大きなメールを見つけるには、添付ファイルのビューか、from:name has:attachment のような検索を使ってください。</p>
 
-          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4">次にすること</h2>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 pt-4" id="help-section-8">次にすること</h2>
           <p>最もメールの多いアカウントでメール分析を開き、送信者マップをメッセージ数で並べ替え、自動送信の送信者を表示した場合と非表示にした場合の上位 10 件を見てください。もう読んでいないニュースレターと、フォルダやルールに回せる通知の送信者を書き留めます。詳しくは<a href="/ja/features/insights.html" class="text-primary-500 hover:text-primary-600 underline">メール分析の機能ページ</a>と <a href="/ja/faq/explorer-and-insights.html" class="text-primary-500 hover:text-primary-600 underline">Explorer とメール分析の FAQ</a> を参照してください。メールボックスが上限に近いなら、<a href="/ja/guides/outlook-storage-full-what-to-do.html" class="text-primary-500 hover:text-primary-600 underline">Outlook のストレージがいっぱいになったときの対処法</a>のガイドがここから先を引き継ぎます。</p>
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -285,11 +286,12 @@
         </div>
       </article>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat の作品</p><h2 id="studio-title">MailVault を作る人々をご紹介します。</h2><p>私たちはGraphic Meatです。2013年から役立つソフトウェアを作っている独立系プロダクトスタジオです。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meatを見る ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>メールを読む。メールを残す。</p></div><nav aria-label="MailVault を見る"><a href="/ja/use-cases.html">利用例</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">新着情報</a><a href="/ja/faq.html">FAQ</a><a href="/ja/docs.html">ヘルプ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub のコード ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. 制作： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="製品スクリーンショット"><button type="button">スクリーンショットを閉じる</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

@@ -147,6 +147,7 @@
   <!-- /i18n:alternates -->
 <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
@@ -195,7 +196,7 @@
 <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main id="main" class="pt-32 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html" aria-current="page">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="mv-wrap mv-directory">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -208,20 +209,20 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">邮件服务商</h1>
+      <h1 class="text-4xl font-bold mb-2">邮件服务商</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>本页内容</summary><ul><li><a href="#help-section-1">MailVault 支持 Gmail 和 Outlook 吗？</a></li><li><a href="#help-section-2">如何连接我的 Outlook.com 账户？</a></li><li><a href="#help-section-3">如何用 MailVault 收发 Proton Mail？</a></li><li><a href="#help-section-4">我可以用与登录地址不同的地址发信吗？</a></li><li><a href="#help-section-5">如何用别名发信？</a></li><li><a href="#help-section-6">如何连接 Fastmail 或其他 JMAP 账户？</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">连接 Gmail、Microsoft 365、Outlook.com、Proton Mail 和 Fastmail 等 JMAP 服务器，并使用别名发信。</p>
 
       <div class="space-y-4">
 
         <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 支持 Gmail 和 Outlook 吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-1">MailVault 支持 Gmail 和 Outlook 吗？</h2>
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               可以。MailVault 支持 Gmail、Outlook、Fastmail 等 JMAP 服务器，以及任何支持 IMAP 的邮件服务。Gmail 可使用 OAuth2 直接通过 Google 账户登录，无需手动设置 IMAP。Microsoft 365 Business 和 Enterprise 账户可使用 OAuth2 直接通过 Microsoft 账户登录，并顺畅支持双重身份验证。个人 Outlook.com、Hotmail 和 Live.com 账户<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">通过 Microsoft Graph API 连接</a>。
             </p>
         </article>
 
         <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何连接我的 Outlook.com 账户？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-2">如何连接我的 Outlook.com 账户？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">MailVault 通过 <strong>Microsoft Graph API</strong> 连接个人 Outlook.com、Hotmail 和 Live.com 账户。添加账户，选择「使用 Microsoft 账户登录」，然后在浏览器中完成登录。MailVault 会识别出这是个人 Microsoft 账户并自动使用 Graph，所以无需填写任何 IMAP 设置。</p>
               <p class="mb-4">它不对这些账户使用 IMAP，原因是 Microsoft 的 IMAP 从 2024 年底开始在 OAuth2 登录上出现问题。阅读、删除、标为已读或未读、移动和备份邮件，都与其他账户一样正常。</p>
@@ -237,7 +238,7 @@
         </article>
 
         <article id="proton-mail-bridge" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何用 MailVault 收发 Proton Mail？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-3">如何用 MailVault 收发 Proton Mail？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">Proton Mail 对邮件做端到端加密，所以不直接开放 IMAP。要把它接到 MailVault（或任何第三方邮件客户端），需要 <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> —— 这是 Proton 提供的桌面应用，跑在你自己的电脑上，把你加密的邮箱以标准 IMAP/SMTP 的形式暴露在 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code> 上。Bridge 需要付费的 Proton Mail 套餐；免费版用不了。</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">设置步骤：</p>
@@ -255,24 +256,24 @@
                   </ul>
                 </li>
               </ol>
-              <p class="mb-4">MailVault 同步的时候，Proton Mail Bridge 必须在后台运行 —— Bridge 关了，MailVault 就够不到邮箱。不过就算 Bridge 关着，你已经归档的邮件在 MailVault 里照样能完整地阅读和搜索，因为 MailVault 是本地优先的，它读的是自己的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> 存储，而不是实时向 Bridge 要。</p>
+              <p class="mb-4">MailVault 同步的时候，Proton Mail Bridge 必须在后台运行 —— Bridge 关了，MailVault 就够不到邮箱。不过就算 Bridge 关着，你已经归档的邮件在 MailVault 里照样能完整地阅读和搜索，因为 MailVault 是本地优先的，它读的是自己的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> 存储，而不是实时向 Bridge 要。 这些文件结构说明适用于默认的 Maildir 格式。设置 → 存储还提供 JMAP 存储，将原始邮件字节与 JSON 记录一起保留，并对相同邮件去重。</p>
               <p>Bridge 用一张自签名 TLS 证书来保护它本地的 IMAP/SMTP 服务。对本地（<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>）连接，MailVault 会自动处理这一点，不需要你手动安装证书。</p>
             </div>
         </article>
 
         <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我可以用与登录地址不同的地址发信吗？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-4">我可以用与登录地址不同的地址发信吗？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">可以。按照<a href="#send-from-an-alias" class="text-primary-500 hover:underline">如何用别名发信？</a>中的说明把该地址添加为账户的别名，写信时在发件人一栏选中它，或把它设为默认。在 Fastmail 上，以及任何“登录用的地址不是你对外给的地址”的服务商那里，这都很常见。</p>
               <p>只会更改发出邮件的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 地址。用户名和密码保持不变，MailVault 仍使用你设置的账户登录，而且<strong>不会添加 Reply-To 标头</strong> &mdash; 回复会发送到你用来发信的地址。</p>
             </div>
             <figure class="px-6 pb-5">
-              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/compose-email-720.webp 720w, /screenshots/zh/compose-email-1440.webp 1440w, /screenshots/zh/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/compose-email-light-1440.webp" srcset="/screenshots/zh/compose-email-light-720.webp 720w, /screenshots/zh/compose-email-light-1440.webp 1440w, /screenshots/zh/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 撰写与回复窗口，支持富文本编辑 · MailVault version 2.16.0" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+              <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/compose-email-light-2880.webp"><picture><source data-shot-dark="" media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/compose-email-720.webp 720w, /screenshots/zh/compose-email-1440.webp 1440w, /screenshots/zh/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/zh/compose-email-light-1440.webp" srcset="/screenshots/zh/compose-email-light-720.webp 720w, /screenshots/zh/compose-email-light-1440.webp 1440w, /screenshots/zh/compose-email-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 撰写与回复窗口，支持富文本编辑 · MailVault version 2.16.0 zh" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             </figure>
         </article>
 
         <article id="send-from-an-alias" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何用别名发信？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-5">如何用别名发信？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">打开<strong>设置 &rarr; 账户</strong>，选中账户，进入它的<strong>别名</strong>部分。这里列出该账户用来发信的所有地址：先是登录地址，然后是各个别名。新邮件发件人一栏中的<strong>添加地址</strong>链接也会打开同一部分。</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">添加和设置别名：</p>
@@ -295,7 +296,7 @@
         </article>
 
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何连接 Fastmail 或其他 JMAP 账户？</h2>
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">如何连接 Fastmail 或其他 JMAP 账户？</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>添加账户时选择 Fastmail，并粘贴在 Fastmail 设置中授予 Mail 和 Submission 访问权限的 API 令牌。对于其他服务器，选择 JMAP 并使用其密码或 API 令牌。如果域名发布了会话 URL，MailVault 会自动发现；否则请输入完整的 HTTPS 会话 URL。对于发现的陌生服务器，请在发送凭据之前确认。新邮件使用推送接收，无法使用推送时回退到轮询；发件地址来自服务器上的发件身份。Fastmail 也提供 IMAP 应用密码选项。</p></div>
         </article>
 
@@ -318,7 +319,7 @@
         </div>
       </div>
     </div>
-  </main>
+  </div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <!-- Footer -->
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
@@ -341,5 +342,6 @@
 
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
 <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>

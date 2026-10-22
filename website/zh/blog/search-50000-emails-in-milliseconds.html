@@ -43,6 +43,7 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/search-50000-emails-in-milliseconds.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/help-center.css?v=1">
 </head>
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
   <header class="mv-header">
@@ -70,13 +71,13 @@
     <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
   </header>
 
-  <main id="main" class="pt-24 pb-20">
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
       <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 返回博客</a>
       <article>
         <header class="mb-8">
           <time datetime="2026-09-21" class="text-sm text-primary-500 font-medium">2026 年 9 月 21 日</time>
-          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">50,000 封邮件，毫秒级搜索：MailVault 的本地索引如何工作</h1>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">50,000 封邮件，毫秒级搜索：MailVault 的本地索引如何工作</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
           <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7 分钟阅读</span></div>
         </header>
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -102,40 +103,40 @@ index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>这张表有两点值得看。第一，耗时与匹配数量无关：15 条命中比 2,500 条用得更久，因为花时间的是查询的形态（两个词的短语比单个词更费事），而不是返回多少邮件。第二，列表最多显示最新的 500 条匹配，超出时会明确说明，所以无论匹配多少封邮件，绘制结果的工作量都是有上限的。</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-results-1440.webp"><img src="/screenshots/zh/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 在一个包含 50,000 封邮件的保管库中搜索 invoice 一词的结果。搜索框下方的标题说明列表显示所有文件夹中约 2,500 条已保存匹配结果里最新的 500 条，下面是一列邮件行。 · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/search-50k-results-light-1440.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-results-1440.webp"><img src="/screenshots/zh/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 在一个包含 50,000 封邮件的保管库中搜索 invoice 一词的结果。搜索框下方的标题说明列表显示所有文件夹中约 2,500 条已保存匹配结果里最新的 500 条，下面是一列邮件行。 · MailVault version 2.15.0 zh" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.15.0 zh</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">应用中的同类搜索：在一个包含 50,000 封邮件的保管库里搜索“invoice”。列表显示约 2,500 条已保存匹配结果中最新的 500 条，并明确说明了这一点。顶部的几行来自共用这个窗口的演示邮箱，保管库的文件夹名为 Projects、Correspondence 和 Clients，与基准测试中的不同。</figcaption>
           </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
 <desc id="f1d">Five bars: last 7 days with no words 1.0 ms, Japanese query 4.5 ms, invoice 7.4 ms, budget meeting 14.0 ms, update 4999 14.0 ms. Every bar ends before the 16.7 ms mark, which is one screen refresh at 60 Hz.</desc>
-<line x1="190.0" y1="32" x2="190.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="190.0" y1="32" x2="190.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="190.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">0</text>
-<line x1="315.0" y1="32" x2="315.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="315.0" y1="32" x2="315.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="315.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">5</text>
-<line x1="440.0" y1="32" x2="440.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="440.0" y1="32" x2="440.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="440.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">10</text>
-<line x1="565.0" y1="32" x2="565.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="565.0" y1="32" x2="565.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="565.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">15</text>
-<line x1="690.0" y1="32" x2="690.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<line x1="690.0" y1="32" x2="690.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"></line>
 <text x="690.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">20</text>
 <text x="440.0" y="310" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">milliseconds, search plus building the result rows</text>
 <text x="178" y="62" text-anchor="end" font-size="14" fill="currentColor">last 7 days, no words</text>
-<rect x="190" y="46" width="25.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="46" width="25.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="223.0" y="63" font-size="14" font-weight="700" fill="currentColor">1 ms</text>
 <text x="178" y="106" text-anchor="end" font-size="14" fill="currentColor">会議 (Japanese)</text>
-<rect x="190" y="90" width="112.5" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="90" width="112.5" height="24" rx="3" fill="#6366f1"></rect>
 <text x="310.5" y="107" font-size="14" font-weight="700" fill="currentColor">4.5 ms</text>
 <text x="178" y="150" text-anchor="end" font-size="14" fill="currentColor">invoice</text>
-<rect x="190" y="134" width="185.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="134" width="185.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="383.0" y="151" font-size="14" font-weight="700" fill="currentColor">7.4 ms</text>
 <text x="178" y="194" text-anchor="end" font-size="14" fill="currentColor">budget meeting</text>
-<rect x="190" y="178" width="350.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="178" width="350.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="548.0" y="195" font-size="14" font-weight="700" fill="currentColor">14 ms</text>
 <text x="178" y="238" text-anchor="end" font-size="14" fill="currentColor">update 4999</text>
-<rect x="190" y="222" width="350.0" height="24" rx="3" fill="#6366f1"/>
+<rect x="190" y="222" width="350.0" height="24" rx="3" fill="#6366f1"></rect>
 <text x="548.0" y="239" font-size="14" font-weight="700" fill="currentColor">14 ms</text>
-<line x1="607.5" y1="32" x2="607.5" y2="260" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+<line x1="607.5" y1="32" x2="607.5" y2="260" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"></line>
 <text x="607.5" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">one 60 Hz screen refresh: 16.7 ms</text>
 </svg>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">在 50,000 封邮件上每个查询的搜索耗时。每根柱子都在 60 Hz 下一次屏幕刷新之前结束。</figcaption>
@@ -143,7 +144,7 @@ status check             5 ms</code></pre>
 
           <p>一次性的成本是构建索引：50,000 封邮件大约十一秒，约每秒 4,000 封，占用 225 MB 磁盘。它在后台进行，运行期间你可以继续使用 MailVault，之后只会为新增和变更的邮件建立索引。</p>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-index-1440.webp"><img src="/screenshots/zh/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 设置的“存储”标签页中的搜索索引卡片，显示已索引 50,000 / 50,000 和约 270 MB，并带有邮件正文、附件文本和图片文字的开关。 · MailVault version 2.15.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/search-50k-index-light-1440.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-index-1440.webp"><img src="/screenshots/zh/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 设置的“存储”标签页中的搜索索引卡片，显示已索引 50,000 / 50,000 和约 270 MB，并带有邮件正文、附件文本和图片文字的开关。 · MailVault version 2.15.0 zh" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.15.0" data-mailvault-version-kind="capture" title="MailVault version 2.15.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.15.0 zh</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">设置、存储、搜索索引构建完成后的状态：50,000 封邮件中已索引 50,000 封，磁盘占用约 270 MB。这是在应用中单独进行的一次运行，因此大小与上方基准测试表中的 225 MB 不同。</figcaption>
           </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1 ms 和 7 ms 是什么感觉</h3>
@@ -152,34 +153,34 @@ status check             5 ms</code></pre>
 <svg viewBox="0 0 720 250" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2t f2d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f2t">How long is a millisecond? Search times on a logarithmic time scale</title>
 <desc id="f2d">A logarithmic ruler from 1 millisecond to 100 seconds. MailVault search sits between 1 and 14 milliseconds, close to one screen refresh at 16.7 milliseconds and far below the 100 millisecond point at which a response feels instant. The old file-by-file search projected to 88 seconds on a 20,000-message folder.</desc>
-<line x1="40" y1="110" x2="680" y2="110" stroke="currentColor" stroke-opacity=".5" stroke-width="3"/>
-<line x1="40.0" y1="103" x2="40.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="40" y1="110" x2="680" y2="110" stroke="currentColor" stroke-opacity=".5" stroke-width="3"></line>
+<line x1="40.0" y1="103" x2="40.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="40.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">1 ms</text>
-<line x1="168.0" y1="103" x2="168.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="168.0" y1="103" x2="168.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="168.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">10 ms</text>
-<line x1="296.0" y1="103" x2="296.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="296.0" y1="103" x2="296.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="296.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">100 ms</text>
-<line x1="424.0" y1="103" x2="424.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="424.0" y1="103" x2="424.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="424.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">1 s</text>
-<line x1="552.0" y1="103" x2="552.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="552.0" y1="103" x2="552.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="552.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">10 s</text>
-<line x1="680.0" y1="103" x2="680.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<line x1="680.0" y1="103" x2="680.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"></line>
 <text x="680.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">100 s</text>
-<rect x="40.0" y="100" width="146.7" height="20" rx="4" fill="#6366f1"/>
+<rect x="40.0" y="100" width="146.7" height="20" rx="4" fill="#6366f1"></rect>
 <text x="40.0" y="64" font-size="15" font-weight="700" fill="#6366f1">MailVault search on 50,000 messages: 1 to 14 ms</text>
-<line x1="196.5" y1="118" x2="196.5" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="196.5" y1="118" x2="196.5" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="196.5" y="148" text-anchor="start" font-size="13" font-weight="700" fill="#d97706">one screen refresh</text>
 <text x="196.5" y="164" text-anchor="start" font-size="12" fill="currentColor" fill-opacity=".95">16.7 ms at 60 Hz</text>
-<line x1="296.0" y1="118" x2="296.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="296.0" y1="118" x2="296.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="296.0" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">feels instant</text>
 <text x="296.0" y="208" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">under 100 ms</text>
-<line x1="424.0" y1="118" x2="424.0" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="424.0" y1="118" x2="424.0" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="424.0" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">flow of thought</text>
 <text x="424.0" y="164" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">up to 1 s</text>
-<line x1="552.0" y1="118" x2="552.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="552.0" y1="118" x2="552.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="552.0" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">attention lost</text>
 <text x="552.0" y="208" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">after 10 s</text>
-<line x1="672.9" y1="118" x2="672.9" y2="132" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="672.9" y1="118" x2="672.9" y2="132" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3"></line>
 <text x="672.9" y="148" text-anchor="end" font-size="13" font-weight="700" fill="#dc2626">old search</text>
 <text x="672.9" y="164" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".95">88 s (projected)</text>
 </svg>
@@ -189,7 +190,7 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">服务器邮件、归档和备份：一次搜索</h3>
           <figure class="my-6">
-            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-results-1440.webp"><img src="/screenshots/zh/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 某个查询的搜索结果，底部的图例说明了仅在服务器、在你的保险库里、唯一副本和在备份驱动器上这几种标记 · MailVault version 2.16.0" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0"></picture>
+            <a data-help-image="" aria-haspopup="dialog" href="/screenshots/zh/search-results-light-1440.webp"><picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-results-1440.webp"><img src="/screenshots/zh/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 某个查询的搜索结果，底部的图例说明了仅在服务器、在你的保险库里、唯一副本和在备份驱动器上这几种标记 · MailVault version 2.16.0 zh" class="rounded-xl border border-slate-200 dark:border-slate-700" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0 zh"></picture><span class="mv-help-stamp" translate="no" aria-hidden="true">MailVault version 2.16.0 zh</span></a>
             <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">每条结果都会说明邮件存放在哪里：仅在服务器上、在你的保险库里、唯一副本，或在你的备份驱动器上。</figcaption>
           </figure>
           <p>MailVault 把三类邮件并排放在一起：从服务器同步来的邮件、你归档的邮件，以及从备份还原的邮件。它们最终都是同一个保险库里的文件，所以都进入同一个索引。在测试中，邮件分布在收件箱、归档和已发送文件夹里，一次查询就覆盖了全部。邮件从哪里来，并不影响它被找到的速度。</p>
@@ -198,9 +199,9 @@ status check             5 ms</code></pre>
 
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">技术：一个非常快、非常简单的 SQL 数据库</h3>
           <p>没有搜索服务器，也没有云服务。索引就是保险库里的一个 SQLite 文件，而 SQLite 大概是全世界部署最广泛的数据库。MailVault 使用它的全文搜索引擎 FTS5，并配上 <strong>trigram</strong> 分词器：每个词都会被存成相互重叠的三字母片段。所以你输入“voic”就能找到“invoice”，无需通配符，也没有整词匹配的限制。重音符号会被折叠，因此搜索“reunion”也能找到“Réunion”。日语和中文的词与词之间没有空格，它们会走另一张专门为此建立的表。</p>
-<figure class="mv-search-diagram"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="本地搜索流程：已保存的邮件写入 SQLite 索引；查询返回结果，打开某个结果时读取保存下来的原件。"><figcaption>结果列表来自索引。原始邮件始终可供阅读和核对。</figcaption></figure>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/local-search-flow.svg"><img src="/assets/blog/local-search-flow.svg" width="640" height="890" loading="lazy" decoding="async" alt="本地搜索流程：已保存的邮件写入 SQLite 索引；查询返回结果，打开某个结果时读取保存下来的原件。"></a><figcaption>结果列表来自索引。原始邮件始终可供阅读和核对。</figcaption></figure>
 
-<figure class="mv-search-diagram"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice 被拆分为 inv、nvo、voi、oic 和 ice。查询词 voic 与它共享 voi 和 oic 两个片段。"><figcaption>相互重叠的三字符片段让子串匹配成为可能。这里展示的是分词方式，而不是一次完整的查询执行过程。</figcaption></figure>
+<figure class="mv-search-diagram"><a data-help-image="" aria-haspopup="dialog" href="/assets/blog/trigram-search.svg"><img src="/assets/blog/trigram-search.svg" width="640" height="470" loading="lazy" decoding="async" alt="Invoice 被拆分为 inv、nvo、voi、oic 和 ice。查询词 voic 与它共享 voi 和 oic 两个片段。"></a><figcaption>相互重叠的三字符片段让子串匹配成为可能。这里展示的是分词方式，而不是一次完整的查询执行过程。</figcaption></figure>
 
           <p>速度来自三个朴素的决定：</p>
           <ul>
@@ -240,11 +241,12 @@ status check             5 ms</code></pre>
         </div>
       </article>
     </div>
-  </main>
+  <!-- help-demo:start --><section class="mv-help-demo"><h2>在 MailVault 中查看</h2><figure class="mv-help-media"><a data-help-image aria-haspopup="dialog" href="/assets/help-media/zh/search-local.webp"><img src="/assets/help-media/zh/search-local.webp" width="1440" height="1056" loading="lazy" alt="在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"></a><figcaption>在本地邮件中搜索Priya并显示结果</figcaption><video controls playsinline preload="none" poster="/assets/help-media/zh/search-local.jpg" aria-label="在本地邮件中搜索Priya并显示结果 · MailVault version 2.20.0 zh" data-mailvault-version="2.20.0" data-mailvault-version-kind="capture"><source src="/assets/help-media/zh/search-local.mp4" type="video/mp4"><track kind="captions" src="/assets/help-media/zh/search-local.vtt" srclang="zh-Hans" label="简体中文" default></video></figure><details class="mv-help-contents"><summary>视频文字稿</summary><p>在搜索框中输入Priya。 运行搜索并查看保存在此电脑上的匹配邮件。</p></details></section><!-- help-demo:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
 
   <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家从 2013 年起打造实用软件的独立产品工作室。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">了解 Graphic Meat ↗</a></div></div></aside>
   <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>阅读你的邮件。保留你的邮件。</p></div><nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a></div></div></div></footer>
   <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
   <script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=1"></script>
 </body>
 </html>
