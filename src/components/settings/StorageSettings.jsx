@@ -105,8 +105,18 @@ export function StorageSettings({ accounts, onUpgrade }) {
       setCleanupRunning(!!status.running);
       if (status.lastRun) showCleanupLastRun(status.lastRun);
     }, () => {});
-    const keep = (p) => p.then((fn) => { if (alive) offs.push(fn); else fn(); });
-    keep(onCleanupRun((p) => {
+    // `start` makes one subscription. Without a Tauri runtime `listen()`
+    // rejects or throws: that is "no events here", never an unhandled
+    // rejection (which fails a vitest run and CI).
+    const keep = (start) => {
+      let sub;
+      try { sub = Promise.resolve(start()); } catch { return; }
+      sub.then((fn) => {
+        if (typeof fn !== 'function') return;
+        if (alive) offs.push(fn); else fn();
+      }, () => {});
+    };
+    keep(() => onCleanupRun((p) => {
       if (p.state === 'running') setCleanupRunning(true);
       if (p.state === 'done') {
         setCleanupRunning(false);
@@ -114,8 +124,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
       }
     }));
     import('@tauri-apps/api/event').then(({ listen }) => {
-      keep(listen('daemon-reconnected', ask));
-      keep(listen('daemon-events-lagged', ask));
+      keep(() => listen('daemon-reconnected', ask));
+      keep(() => listen('daemon-events-lagged', ask));
     }).catch(() => {});
     ask();
     return () => { alive = false; offs.forEach((fn) => fn()); };
