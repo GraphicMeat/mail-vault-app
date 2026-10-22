@@ -44,7 +44,7 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
-import { useBodyScan, scanBody, scanHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
+import { useBodyScan, scanForFrame, scanHead, getCachedTrackers, getCachedAlerts, LINK_ALERT_STYLE } from '../services/bodyScan';
 import { recordTrackerSummary, recordLinkAlert } from '../services/rowVerdicts';
 import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation, inLocalFolder, vaultHas } from '../stores/slices/unifiedHelpers';
 import { isRowArchived, withArchivedState } from '../utils/quickActionFacts';
@@ -640,12 +640,13 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       : textToHtml(selectedEmail.text);
     // The popup is a second renderer of the same mail: a beacon
     // stripped in the pane but left in the window still fires.
-    const popupScan = await scanBody(bodyHtml, { key: scopeKey, blocking: trackerBlocking });
+    const popupScan = await scanForFrame(bodyHtml, { key: scopeKey, blocking: trackerBlocking });
     const popupBody = popupScan.html;
     // The renderer owns the window under it (no iframe page, no Dark Reader).
-    // An unscanned body is not handed to it: it would load every image.
-    if (altRenderer?.openWindow) {
-      if (popupScan.scanned) void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: selectedEmail.subject || 'Email' })).catch(() => {});
+    // An unscanned body is not handed to it (it would load every image): it
+    // takes the file:// window below, whose CSP refuses remote images.
+    if (altRenderer?.openWindow && popupScan.scanned) {
+      void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: selectedEmail.subject || 'Email' })).catch(() => {});
       return;
     }
     // The popup loads from file:// and inherits no CSP, so its meta

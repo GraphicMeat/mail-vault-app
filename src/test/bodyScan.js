@@ -35,6 +35,7 @@ export async function stubBodyScan(importOriginal, answer = (html) => bodyScanAn
     peekBodyScan: (html, opts) => ask(html, opts),
     useBodyScan: (html, opts) => ask(html, opts),
     scanBody: async (html, opts) => ask(html, opts),
+    scanForFrame: async (html, opts) => ask(html, opts),
   };
 }
 

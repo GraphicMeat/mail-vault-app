@@ -94,6 +94,12 @@ export function bodyStamp(html) {
 
 const KEPT = 500;
 const answers = new Map();
+/**
+ * How long a scan may take before the body is framed as unscanned (remote
+ * images refused). The shell bounds `body.scan` at 30 s (`reply_timeout`);
+ * this holds even when the reply never comes back to the window at all.
+ */
+export const SCAN_BUDGET_MS = 30000;
 // The last answer per message key, for the row and header tooltips.
 const trackersByKey = new Map();
 const alertsByKey = new Map();
@@ -144,14 +150,18 @@ export function scanBody(html, opts = {}) {
   if (entry) return entry.promise;
   const body = stripGoogleFontImports(html);
   entry = {};
-  entry.promise = send('body.scan', { html: body, blocking: !!opts.blocking, links: !!opts.links, texts: bodyTexts() }).then(
+  let timer;
+  const budget = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('body.scan did not answer in time')), SCAN_BUDGET_MS);
+  });
+  const asked = send('body.scan', { html: body, blocking: !!opts.blocking, links: !!opts.links, texts: bodyTexts() });
+  entry.promise = Promise.race([asked, budget]).finally(() => clearTimeout(timer)).then(
     (ans) => {
       entry.value = framed(body, ans);
       if (opts.key) {
         trackersByKey.set(opts.key, entry.value.trackers);
         if (opts.links) alertsByKey.set(opts.key, entry.value.alerts);
       }
-      noteFramedBody(entry.value, opts.key || bodyStamp(html), !!opts.blocking);
       return entry.value;
     },
     (e) => {
@@ -161,8 +171,34 @@ export function scanBody(html, opts = {}) {
     },
   );
   answers.set(id, entry);
-  if (answers.size > KEPT) answers.delete(answers.keys().next().value);
+  evict();
   return entry.promise;
+}
+
+// The oldest answered scans go first. One still being asked is never dropped:
+// its answer would land in an entry nobody can find.
+function evict() {
+  if (answers.size <= KEPT) return;
+  for (const [id, entry] of answers) {
+    if (answers.size <= KEPT) return;
+    if (entry.value) answers.delete(id);
+  }
+}
+
+/** What a frame draws, counted for Network Activity once per message (and only then). */
+function noteFramed(scan, html, opts = {}) {
+  if (scan?.scanned && html) noteFramedBody(scan, opts.key || bodyStamp(html), !!opts.blocking);
+}
+
+/**
+ * `scanBody` for a renderer outside React (the pop-out windows): the answer is
+ * framed, so it counts for Network Activity. A scan nobody frames (the list's
+ * tracker backfill) counts nothing.
+ */
+export async function scanForFrame(html, opts = {}) {
+  const scan = await scanBody(html, opts);
+  noteFramed(scan, html, opts);
+  return scan;
 }
 
 /**
@@ -173,20 +209,26 @@ export function scanBody(html, opts = {}) {
 export function useBodyScan(html, opts = {}) {
   const { key = null, blocking = false, links = false } = opts;
   const id = html ? idOf(html, { key, blocking, links }) : '';
-  const [failed, setFailed] = useState(null);
-  const [, setTick] = useState(0);
-  const value = peekBodyScan(html, { key, blocking, links });
+  // The last answer this renderer got, kept here too: the shared cache may
+  // drop it (500 other bodies scanned meanwhile) while the frame still shows it.
+  const [held, setHeld] = useState(null);
+  const value = peekBodyScan(html, { key, blocking, links }) ?? (held?.id === id ? held.scan : undefined);
   useEffect(() => {
-    if (!html || peekBodyScan(html, { key, blocking, links })) return undefined;
+    if (!html) return undefined;
+    const known = peekBodyScan(html, { key, blocking, links });
+    if (known) {
+      setHeld({ id, scan: known });
+      return undefined;
+    }
     let live = true;
     scanBody(html, { key, blocking, links }).then((scan) => {
-      if (!live) return;
-      if (scan.scanned) setTick(n => n + 1);
-      else setFailed({ id, scan });
+      if (live) setHeld({ id, scan });
     });
     return () => { live = false; };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  return value ?? (failed?.id === id ? failed.scan : undefined);
+  // What this frame draws is what Network Activity counts (once per message).
+  useEffect(() => { noteFramed(value, html, { key, blocking }); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  return value;
 }
 
 /** The trackers last found for a scoped key, or null. */

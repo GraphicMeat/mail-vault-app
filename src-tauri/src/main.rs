@@ -3019,6 +3019,11 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "local_index_append" | "local_index_remove" | "custody_status" | "maildir_repair_generation"
         | "maildir_orphan_stats" | "mail_search_start" | "mail_search_cancel" | "vault_rebind_uids" => Some(Duration::from_secs(30)),
 
+        // A message is framed only once its body scan answers: unbounded, a
+        // hung daemon left every reader blank. Bounded, the app frames the
+        // body unscanned, with remote images refused (services/bodyScan.js).
+        "body.scan" | "body.verdicts" | "body.classify_links" | "body.info" => Some(Duration::from_secs(30)),
+
         // H3c: a message the vault has no copy of is downloaded by these
         // (`raw_message`). The daemon bounds its whole fallback at 60s
         // (`FALLBACK_BOUND`: this message's lock, keychain, connect, the 45s

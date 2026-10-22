@@ -42,7 +42,7 @@ import { useViewBuilderStore } from '../../stores/viewBuilderStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
-import { useBodyScan, scanBody, scanHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
+import { useBodyScan, scanForFrame, scanHead, checkLinkAlert, LINK_ALERT_STYLE } from '../../services/bodyScan';
 import { recordTrackerSummary, recordLinkAlert } from '../../services/rowVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName, threadRowMembers } from '../../utils/emailParser';
@@ -556,12 +556,13 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
               if (!rawHtml) return;
               const bodyHtml = getEmailBodyContent(rawHtml);
               // Same body, second window — strip there too.
-              const popupScan = await scanBody(bodyHtml, { key: scopeKey, blocking: trackerBlocking });
+              const popupScan = await scanForFrame(bodyHtml, { key: scopeKey, blocking: trackerBlocking });
               const popupBody = popupScan.html;
               // The renderer owns the window under it (no iframe page, no Dark Reader).
-              // An unscanned body is not handed to it: it would load every image.
-              if (altRenderer?.openWindow) {
-                if (popupScan.scanned) void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: email.subject || 'Email' })).catch(() => {});
+              // An unscanned body is not handed to it (it would load every image):
+              // it takes the file:// window below, whose CSP refuses remote images.
+              if (altRenderer?.openWindow && popupScan.scanned) {
+                void Promise.resolve(altRenderer.openWindow({ html: popupBody, dark: emailDarkMode, title: email.subject || 'Email' })).catch(() => {});
                 return;
               }
               // file:// popup inherits no CSP; DR needs the meta's nonce to run.
