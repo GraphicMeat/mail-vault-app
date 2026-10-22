@@ -173,7 +173,7 @@ export async function readNativeSnapshot(accountIds = browser.mockAccounts.map(a
       if (reply?.ok === false) throw new Error(`${method} failed: ${JSON.stringify(reply.error)}`);
       return reply;
     });
-    (async () => {
+    const walk = async () => {
       const begin = await call('insights_begin_snapshot', { accountIds: ids });
       const rows = [], pageSizes = [];
       let cursor = null;
@@ -185,11 +185,24 @@ export async function readNativeSnapshot(accountIds = browser.mockAccounts.map(a
       } finally {
         await call('insights_release_snapshot', { snapshotId: begin.snapshotId }).catch(() => {});
       }
-      (window.__E2E_INSIGHTS_SNAPSHOTS__ ||= {})[slot] = rows;
-      return { begin, pageSizes, count: rows.length };
+      return { begin, rows, pageSizes };
+    };
+    (async () => {
+      // A header the app caches mid-walk makes the snapshot stale, by
+      // design; walk a fresh one, as the daemon's own build does.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const { begin, rows, pageSizes } = await walk();
+          (window.__E2E_INSIGHTS_SNAPSHOTS__ ||= {})[slot] = rows;
+          return { begin, pageSizes, count: rows.length, attempts: attempt };
+        } catch (error) {
+          if (attempt >= 4 || !/"code":"snapshotStale"/.test(String(error?.message))) throw error;
+        }
+      }
     })().then(done, error => done({ __error: String(error?.message || error) }));
   }, accountIds, key);
   assert.ok(!summary?.__error, summary?.__error);
+  if (summary.attempts > 1) console.log(`[insights] native snapshot went stale; read on attempt ${summary.attempts}`);
   assert.ok(summary.pageSizes.every(size => size <= 1000), 'Native page size stays bounded');
   const rows = [];
   try {
