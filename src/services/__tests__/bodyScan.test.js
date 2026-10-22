@@ -13,7 +13,7 @@ vi.mock('../daemonClient', () => ({
   DaemonError: class DaemonError extends Error {},
 }));
 
-const { scanBody, peekBodyScan, getCachedAlerts, getCachedTrackers, scanHead, classifyLinks, trackerPatternCount, bodyTexts, BODY_TEXT_KEYS, UNSCANNED_HEAD, _resetBodyScans } = await import('../bodyScan');
+const { scanBody, scanForFrame, SCAN_BUDGET_MS, peekBodyScan, getCachedAlerts, getCachedTrackers, scanHead, classifyLinks, trackerPatternCount, bodyTexts, BODY_TEXT_KEYS, UNSCANNED_HEAD, _resetBodyScans } = await import('../bodyScan');
 const { useNetActivityStore } = await import('../../stores/netActivityStore');
 const { setLocale } = await import('../../i18n/index.js');
 
@@ -105,10 +105,43 @@ describe('scanBody', () => {
     expect(getCachedAlerts('a-INBOX-8')).toBeNull();
   });
 
-  it('counts what the frame loads and what it blocks for Network Activity', async () => {
+  it('counts what a frame loads and what it blocks for Network Activity, a frame it draws only', async () => {
+    // A scan nobody frames (the list's tracker backfill) loads nothing.
     await scanBody(BEACON, { key: 'a-INBOX-9', blocking: true });
     await Promise.resolve();
+    expect(useNetActivityStore.getState().remoteImages).toEqual({ blocked: 0, loaded: 0 });
+    // A pop-out window frames what it scanned.
+    await scanForFrame(BEACON, { key: 'a-INBOX-9', blocking: true });
+    await Promise.resolve();
     expect(useNetActivityStore.getState().remoteImages).toEqual({ blocked: 1, loaded: 0 });
+  });
+
+  it('a daemon that never answers is "not scanned" after the budget, so the frame refuses remote images', async () => {
+    vi.useFakeTimers();
+    try {
+      harness.daemonCall.mockImplementation(() => new Promise(() => {}));
+      let got;
+      scanBody(BEACON, { key: 'a-INBOX-11' }).then((scan) => { got = scan; });
+      await vi.advanceTimersByTimeAsync(SCAN_BUDGET_MS - 1);
+      expect(got).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(2);
+      expect(got).toMatchObject({ scanned: false, html: BEACON });
+      expect(scanHead(got)).toBe(UNSCANNED_HEAD);
+      // Not kept: the next look asks again.
+      expect(peekBodyScan(BEACON, { key: 'a-INBOX-11' })).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never evicts a scan still being asked: its answer is kept when it lands', async () => {
+    let release;
+    harness.daemonCall.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const pending = scanBody(BEACON, { key: 'a-INBOX-12' });
+    for (let i = 0; i < 520; i++) await scanBody(`<p>${i}</p>`, { key: `b-INBOX-${i}` });
+    release({ trackers: [], count: 0, https: 0, summary: null, html: null, alerts: null, maxAlertLevel: null });
+    await pending;
+    expect(peekBodyScan(BEACON, { key: 'a-INBOX-12' })).toMatchObject({ scanned: true });
   });
 
   it('the frame head carries the link marks only when a link is flagged', async () => {

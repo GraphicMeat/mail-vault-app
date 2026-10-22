@@ -4707,6 +4707,13 @@ mod tests {
     }
 
     #[test]
+    fn reply_timeout_bounds_the_body_scan_so_a_hung_daemon_frames_unscanned() {
+        for method in ["body.scan", "body.verdicts", "body.classify_links", "body.info"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
+    }
+
+    #[test]
     fn reply_timeout_is_none_for_legacy_dotted_methods() {
         assert_eq!(crate::reply_timeout("sync.now"), None);
         assert_eq!(crate::reply_timeout("daemon.heartbeat"), None);
