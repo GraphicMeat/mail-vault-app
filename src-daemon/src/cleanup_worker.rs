@@ -90,6 +90,8 @@ pub struct CleanupState {
     pub(crate) tx: OnceLock<UnboundedSender<Cmd>>,
     /// Serialises the last-run file.
     pub(crate) file: Mutex<()>,
+    /// The account a run is working on now. `abd.start` refuses it.
+    pub(crate) account: Mutex<Option<String>>,
 }
 
 impl CleanupState {
@@ -100,6 +102,20 @@ impl CleanupState {
 
     pub(crate) fn release(&self) {
         self.running.store(false, SeqCst);
+    }
+
+    /// Take `account` for this run's engine jobs.
+    pub(crate) fn hold_account(&self, account: &str) {
+        *self.account.lock().unwrap_or_else(|p| p.into_inner()) = Some(account.to_string());
+    }
+
+    pub(crate) fn release_account(&self) {
+        *self.account.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
+
+    /// A run is working on `account` now.
+    pub(crate) fn holds(&self, account: &str) -> bool {
+        self.account.lock().unwrap_or_else(|p| p.into_inner()).as_deref() == Some(account)
     }
 
     pub(crate) fn send(&self, cmd: Cmd) -> Result<(), String> {
@@ -177,35 +193,58 @@ pub(crate) struct Picked {
     pub validity: HashMap<(String, String), Option<u32>>,
 }
 
-/// Blocking. `Err` is the JS's "nothing runs" (no premium, no enabled rule).
-pub(crate) fn pick(state: &Arc<DaemonState>, settings: &Value, now_ms: i64) -> Result<Picked, cleanup_rules::NoRun> {
+/// Why `pick` has no selection.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum NoPick {
+    /// The JS's "nothing runs" (no premium, no enabled rule).
+    NoRun(cleanup_rules::NoRun),
+    /// The vault or a cache could not be read: that is not "no mail", so
+    /// nothing is decided and nothing is recorded (the next check retries).
+    Unavailable,
+}
+
+/// Blocking. A mailbox list or header cache that does not exist is "nothing
+/// cached" (the JS skipped such an account or folder); one that cannot be
+/// READ fails the whole pick.
+pub(crate) fn pick(state: &Arc<DaemonState>, settings: &Value, now_ms: i64) -> Result<Picked, NoPick> {
     let accounts = read_accounts(&state.app_dir);
     let mut validity = HashMap::new();
+    let failed = std::cell::Cell::new(false);
     let selection = cleanup_rules::select(
         settings,
         &accounts,
         now_ms,
-        |account| {
-            crate::handlers::cache::load_mailbox_listing(state, account)
-                .ok()
-                .flatten()
-                .and_then(|t| serde_json::from_str(&t).ok())
+        |account| match crate::handlers::cache::load_mailbox_listing(state, account) {
+            Ok(text) => text.and_then(|t| serde_json::from_str(&t).ok()),
+            Err(_) => {
+                failed.set(true);
+                None
+            }
         },
         |account, folder| {
-            let text = common::vault_root(state).ok().and_then(|root| {
+            let read = common::vault_root(state).and_then(|root| {
                 let order = crate::handlers::cache::header_order(&root, account, folder);
                 crate::custody::with_conn(state, |c| {
                     mailvault_core::custody::cache::load_headers(c, account, folder, None, order)
                 })
-                .ok()
-                .flatten()
             });
+            let text = match read {
+                Ok(t) => t,
+                Err(_) => {
+                    failed.set(true);
+                    return Vec::new();
+                }
+            };
             let parsed: Value = text.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
             let v = parsed.get("uidValidity").and_then(Value::as_u64).and_then(|v| u32::try_from(v).ok());
             validity.insert((account.to_string(), folder.to_string()), v);
             parsed.get("emails").and_then(Value::as_array).cloned().unwrap_or_default()
         },
-    )?;
+    )
+    .map_err(NoPick::NoRun)?;
+    if failed.get() {
+        return Err(NoPick::Unavailable);
+    }
     Ok(Picked { selection, validity })
 }
 
@@ -653,8 +692,58 @@ async fn run_account<S: JobOps>(ar: &AccountRun<'_>, ops: &mut S, work: &Account
     tally
 }
 
+/// One account's share of a run, with the account already held.
+async fn account_pass(
+    state: &Arc<DaemonState>,
+    w: &AccountWork,
+    n: u64,
+    mirror: &Option<PathBuf>,
+    mirror_wanted: bool,
+    validity: &HashMap<(String, String), Option<u32>>,
+) -> Tally {
+    let all_skipped = Tally { skipped: n + w.protected, ..Tally::default() };
+    // The user's own Archive & delete job has the account.
+    if state.abd.handle(&w.account_id).is_some_and(|h| !h.is_over()) {
+        return all_skipped;
+    }
+    if mirror_wanted && mirror.is_none() {
+        // A drive is configured and this run cannot read it: an unplugged
+        // drive is not an empty one.
+        return all_skipped;
+    }
+    let cfg = match crate::oauth_tokens::resolve(state, &w.account_id, crate::oauth_tokens::Read::Quiet).await {
+        Ok(c) => c,
+        Err(_) => return all_skipped,
+    };
+    let kind = abd_worker::kind_of(&cfg);
+    if matches!(kind, Kind::Graph | Kind::ImapOauth) {
+        abd_worker::lease_daemon_token(state, &w.account_id, None).await;
+    }
+    let ar = AccountRun { state, account_id: w.account_id.clone(), cfg: cfg.clone(), kind, mirror: mirror.clone(), validity };
+    let email = cfg.email.clone();
+    mailvault_core::net_activity::with_account(email, async {
+        match kind {
+            Kind::Graph => {
+                let mut ops = abd_worker::new_graph_ops(state, &cfg.email, &w.account_id);
+                run_account(&ar, &mut ops, w).await
+            }
+            Kind::Jmap => {
+                let mut ops = abd_worker::new_jmap_ops(&cfg);
+                run_account(&ar, &mut ops, w).await
+            }
+            _ => {
+                let (effective, _) = abd_worker::with_lease(state, cfg.clone(), &w.account_id);
+                let mut ops = abd_worker::new_imap_ops(state, effective);
+                run_account(&ar, &mut ops, w).await
+            }
+        }
+    })
+    .await
+}
+
 /// One whole run. `None` when nothing runs at all (no premium, no enabled
-/// rule): like the JS, such a "run" is not recorded.
+/// rule), like the JS, and when the vault or a cache cannot be read: such a
+/// "run" is not recorded, so the next hourly check tries again.
 pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<String>) -> Option<RunResult> {
     let now = state.clock.now_ms();
     let st = Arc::clone(state);
@@ -668,7 +757,14 @@ pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<Strin
     })
     .await
     .ok()?;
-    let (work, validity, mirror_wanted) = picked.ok()?;
+    let (work, validity, mirror_wanted) = match picked {
+        Ok(p) => p,
+        Err(NoPick::Unavailable) => {
+            info!("cleanup: the vault or its caches cannot be read; nothing ran, the next check tries again");
+            return None;
+        }
+        Err(NoPick::NoRun(_)) => return None,
+    };
     let mirror: Option<PathBuf> = if mirror_wanted {
         mirror_root.map(PathBuf::from).filter(|p| p.is_dir())
     } else {
@@ -681,48 +777,11 @@ pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<Strin
             tally.skipped += w.protected;
             continue;
         }
-        // The user's own Archive & delete job has the account.
-        if state.abd.handle(&w.account_id).is_some_and(|h| !h.is_over()) {
-            tally.skipped += n + w.protected;
-            continue;
-        }
-        if mirror_wanted && mirror.is_none() {
-            // A drive is configured and this run cannot read it: an unplugged
-            // drive is not an empty one.
-            tally.skipped += n + w.protected;
-            continue;
-        }
-        let cfg = match crate::oauth_tokens::resolve(state, &w.account_id, crate::oauth_tokens::Read::Quiet).await {
-            Ok(c) => c,
-            Err(_) => {
-                tally.skipped += n + w.protected;
-                continue;
-            }
-        };
-        let kind = abd_worker::kind_of(&cfg);
-        if matches!(kind, Kind::Graph | Kind::ImapOauth) {
-            abd_worker::lease_daemon_token(state, &w.account_id, None).await;
-        }
-        let ar = AccountRun { state, account_id: w.account_id.clone(), cfg: cfg.clone(), kind, mirror: mirror.clone(), validity: &validity };
-        let email = cfg.email.clone();
-        let t = mailvault_core::net_activity::with_account(email, async {
-            match kind {
-                Kind::Graph => {
-                    let mut ops = abd_worker::new_graph_ops(state, &cfg.email, &w.account_id);
-                    run_account(&ar, &mut ops, w).await
-                }
-                Kind::Jmap => {
-                    let mut ops = abd_worker::new_jmap_ops(&cfg);
-                    run_account(&ar, &mut ops, w).await
-                }
-                _ => {
-                    let (effective, _) = abd_worker::with_lease(state, cfg.clone(), &w.account_id);
-                    let mut ops = abd_worker::new_imap_ops(state, effective);
-                    run_account(&ar, &mut ops, w).await
-                }
-            }
-        })
-        .await;
+        // Held BEFORE the abd check: `abd.start` checks the hold after it has
+        // registered its job, so of two that race, one always sees the other.
+        state.cleanup.hold_account(&w.account_id);
+        let t = account_pass(state, w, n, &mirror, mirror_wanted, &validity).await;
+        state.cleanup.release_account();
         tally.add(t);
     }
     let result = RunResult { archived: tally.archived, deleted: tally.deleted, skipped: tally.skipped, at: state.clock.now_ms() };
@@ -737,6 +796,8 @@ pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<Strin
 async fn run_claimed(state: Arc<DaemonState>, mirror_root: Option<String>) {
     let outcome = std::panic::AssertUnwindSafe(run_once(&state, mirror_root));
     let result = futures::FutureExt::catch_unwind(outcome).await.ok().flatten();
+    // A run that panicked mid-account must not leave the account held.
+    state.cleanup.release_account();
     state.cleanup.release();
     state.events.emit(RUN_EVENT, json!({"state": "done", "ran": result.is_some(), "lastRun": result}));
 }

@@ -15,7 +15,7 @@
 //! The rules stay written by the app (the Storage settings form, through the
 //! settings document); nothing here writes `mailvault-settings`.
 
-use crate::cleanup_worker::{self, Cmd, RUN_EVENT};
+use crate::cleanup_worker::{self, Cmd, NoPick, RUN_EVENT};
 use crate::handlers::common;
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
@@ -64,7 +64,8 @@ async fn preview(state: &Arc<DaemonState>) -> Result<Value, String> {
         let settings = cleanup_worker::settings_state(&st);
         let now = st.clock.now_ms();
         match cleanup_worker::pick(&st, &settings, now) {
-            Err(NoRun::NotPremium | NoRun::NoEnabledRules) => json!({ "ran": false, "archived": 0, "deleted": 0 }),
+            Err(NoPick::Unavailable) => Err("errors.cleanupUnavailable".to_string()),
+            Err(NoPick::NoRun(NoRun::NotPremium | NoRun::NoEnabledRules)) => Ok(json!({ "ran": false, "archived": 0, "deleted": 0 })),
             Ok(p) => {
                 let ids: Vec<Value> = cleanup_rules::stored_rules(&settings).iter().map(|r| r.get("id").cloned().unwrap_or(Value::Null)).collect();
                 let work = cleanup_worker::group(&st, p.selection.candidates);
@@ -81,11 +82,11 @@ async fn preview(state: &Arc<DaemonState>) -> Result<Value, String> {
                     total += w.unique().len() as u64;
                 }
                 let rules: Vec<Value> = ids.into_iter().zip(matched).map(|(id, n)| json!({ "id": id, "matched": n })).collect();
-                json!({ "ran": true, "archived": 0, "deleted": total, "skipped": 0, "rules": rules })
+                Ok(json!({ "ran": true, "archived": 0, "deleted": total, "skipped": 0, "rules": rules }))
             }
         }
     })
-    .await
+    .await?
 }
 
 fn run_now(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {

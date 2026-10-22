@@ -380,6 +380,39 @@ async fn two_delete_rules_act_on_a_message_once() {
     assert_eq!(rig.uids("INBOX"), vec![2, 3]);
 }
 
+/// A vault that cannot be reached is not "no mail": nothing is recorded, so
+/// the next hourly check tries again instead of waiting a day.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unreachable_vault_records_no_run() {
+    let rig = Rig::new(inbox_and_trash(), json!([rule(json!({}))]));
+    rig.headers("INBOX", &[1, 2, 3]);
+    rig.archived("INBOX", 1);
+    let gated = DaemonState::for_test(rig.dir.clone(), rig.dir.clone(), false);
+
+    assert_eq!(run_once(&gated, None).await, None);
+    assert_eq!(last_run(&gated), None);
+    assert_eq!(rig.uids("INBOX"), vec![1, 2, 3]);
+    let p = handle_request_for_test(&gated, "cleanup.preview", json!({})).await;
+    assert_eq!(p.error.map(|e| e.message), Some("errors.cleanupUnavailable".to_string()));
+}
+
+/// The two engines never work one account at once: while a cleanup run holds
+/// it, `abd.start` is refused like a second job.
+#[tokio::test(flavor = "multi_thread")]
+async fn abd_start_refuses_an_account_a_cleanup_run_holds() {
+    let rig = Rig::new(inbox_and_trash(), json!([]));
+    let start = json!({
+        "accountId": ACCT, "previewId": "p1", "confirmed": true,
+        "mode": "archive_delete", "timing": "after_all", "deleteMode": "move_to_trash",
+    });
+    rig.state.cleanup.hold_account(ACCT);
+    let held = handle_request_for_test(&rig.state, "abd.start", start.clone()).await;
+    assert!(held.error.as_ref().is_some_and(|e| e.message.starts_with("E_ABD_JOB_EXISTS")), "{:?}", held.error.map(|e| e.message));
+    rig.state.cleanup.release_account();
+    let free = handle_request_for_test(&rig.state, "abd.start", start).await;
+    assert!(free.error.as_ref().is_some_and(|e| e.message.starts_with("E_ABD_PREVIEW_EXPIRED")), "control: it gets past the check");
+}
+
 /// Two runs never overlap: the slot is taken, `cleanup.run_now` says so.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_run_cannot_overlap_itself() {

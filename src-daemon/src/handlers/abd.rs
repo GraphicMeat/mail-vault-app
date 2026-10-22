@@ -200,8 +200,9 @@ async fn start(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String
     let mirror = opt_text(params, "mirrorRoot");
 
     // One job per account. A finished one is replaced; one whose file cannot be
-    // read is not (the user dismisses it first).
-    if state.abd.handle(&account).map_or(false, |h| !h.is_over()) {
+    // read is not (the user dismisses it first). An auto-cleanup run working
+    // on the account counts as a job too: the two engines never share one.
+    if state.abd.handle(&account).map_or(false, |h| !h.is_over()) || state.cleanup.holds(&account) {
         return Err(E_JOB_EXISTS.to_string());
     }
     let dir = jobfile::job_dir(&state.app_dir, &account)?;
@@ -259,6 +260,12 @@ async fn start(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String
             jobs.remove(&handle.account_id);
         }
     };
+    // Checked again now the job is registered: a cleanup run holds the
+    // account before it looks at `jobs`, so of the two one sees the other.
+    if state.cleanup.holds(&account) {
+        undo(state, &handle);
+        return Err(E_JOB_EXISTS.to_string());
+    }
 
     // The job exists on disk before the worker hears of it: a crash between the
     // two leaves a file the next start reads, not a job nobody knows about.
