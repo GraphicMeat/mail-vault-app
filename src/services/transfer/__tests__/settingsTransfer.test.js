@@ -14,6 +14,7 @@ vi.mock('../../../stores/settingsStore', () => ({
     setState: (patch) => { Object.assign(h.settings, patch); },
   },
   hasPremiumAccess: (profile) => profile?.premiumAccess === true,
+  FETCH_MODES: ['onDemand', 'keepRecent', 'indexOnly', 'hoarder'],
 }));
 vi.mock('../../../stores/themeStore', () => ({ useThemeStore: { getState: () => h.theme } }));
 vi.mock('../../../stores/safeStorage', () => ({ flushSafeStorage: (...a) => h.flush(...a) }));

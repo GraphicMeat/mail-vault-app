@@ -39,6 +39,15 @@ vi.mock('../authUtils', () => ({ hasValidCredentials: () => true, ensureFreshTok
 
 vi.mock('../api', () => ({ fetchMailboxes: vi.fn().mockResolvedValue([]) }));
 
+// The daemon's download mode for every account (`policy.accounts`): keep
+// every body, so these specs see every uid the pipeline is handed.
+vi.mock('../transport', () => ({
+  send: vi.fn(async (method, params) => {
+    if (method !== 'policy.accounts') throw new Error(`unexpected ${method}`);
+    return { accounts: Object.fromEntries(params.accounts.map((a) => [a.id, { fetch: { mode: 'hoarder', windowMonths: 0, hoarderPremium: false, keep: 'all', keepSinceMs: null }, transfer: {} }])) };
+  }),
+}));
+
 const store = vi.hoisted(() => ({ state: {} }));
 vi.mock('../../stores/mailStore', () => ({
   useMailStore: { getState: () => store.state, setState: vi.fn(), subscribe: () => () => {} },

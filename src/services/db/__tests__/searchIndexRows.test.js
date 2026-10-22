@@ -24,6 +24,12 @@ vi.mock('../../transport.js', () => ({
     if (cmd === 'local_index_read') return JSON.stringify(localIndexByMailbox[args.mailbox] || []);
     if (cmd === 'maildir_repair_generation') return { status: 'ok' };
     if (cmd === 'maildir_list') return [];
+    // The daemon's vault dir mapping (`policy.vault_mailboxes`), answered for
+    // the plain names these specs use: the first listed path whose spaces
+    // and slashes became `_`, else the directory itself.
+    if (cmd === 'policy.vault_mailboxes') {
+      return { mailboxes: args.dirs.map((d) => args.mailboxes.find((m) => m.replace(/[ /]/g, '_') === d) ?? d) };
+    }
     return null;
   }),
 }));

@@ -285,7 +285,10 @@ describe('summary', () => {
     await waitFor(() => expect(screen.getByTestId('abd-summary-no-limit')).toBeTruthy());
     view.unmount();
 
-    svc.summarize.mockImplementation(async () => ({ ...SUMMARY, estimate: { dailyLimitBytes: null, allowanceLeftBytes: null, days: 4, gmailCap: true } }));
+    // The daemon names Gmail's own cap as the limit it estimated against
+    // (abd/plan.rs: `gmailCap` comes with `dailyLimitBytes` set).
+    const GMAIL_CAP = 2500 * 1024 * 1024;
+    svc.summarize.mockImplementation(async () => ({ ...SUMMARY, estimate: { dailyLimitBytes: GMAIL_CAP, allowanceLeftBytes: GMAIL_CAP, days: 4, gmailCap: true } }));
     ready();
     renderSetup();
     await settled();
