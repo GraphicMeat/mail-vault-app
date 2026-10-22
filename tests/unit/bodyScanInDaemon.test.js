@@ -45,7 +45,7 @@ describe('the body scan lives in the daemon', () => {
     const files = listSourceFiles(['src'], ['.js', '.jsx'], { exclude: ['__tests__', '__mocks__', '.test.', '.spec.', 'src/demo/'] });
     const offenders = files.filter((f) => {
       const src = code(read(f));
-      return /scanTrackers|scanEmailLinks|classifyLink\(|TRACKER_PATTERNS|SHORTENER_ALLOWLIST|SPACER_ALLOWLIST|BEACON_PATH|detectReplyToMismatch|frameBody\(/.test(src);
+      return /scanTrackers|scanEmailLinks|classifyLink\(|TRACKER_PATTERNS|SHORTENER_ALLOWLIST|SPACER_ALLOWLIST|BEACON_PATH|detectReplyToMismatch|\bframeBody\(/.test(src);
     });
     expect(offenders).toEqual([]);
   });

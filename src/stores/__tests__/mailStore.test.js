@@ -1680,6 +1680,8 @@ describe('persisted link alerts are applied per account + mailbox', () => {
   };
 
   afterEach(() => { mockSettingsState.linkAlerts = {}; });
+  // Earlier tests derived the same rows: their answers (no alert) would be kept.
+  beforeEach(async () => { (await import('../../services/rowVerdicts'))._resetRowVerdicts(); });
 
   it('flags the message the alert was stored for', async () => {
     mockSettingsState.linkAlerts = { 'acct-1-INBOX-41': 'red' };
