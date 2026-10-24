@@ -1,12 +1,14 @@
 //! One named background worker per user bulk operation. Startup never adopts
 //! pending work; explicit Resume is the only entry after a daemon restart.
 use crate::{
-    handlers::{archive, backup, common},
+    handlers::{archive, common},
     server::DaemonState,
 };
 use mailvault_core::{
     bulk::{FrozenIntent, Group, Mailbox},
-    bulk_worker::{self, ArchiveOutcome, CopyProof, Identity, Ports, Selected, Workflow},
+    bulk_worker::{
+        self, ArchiveOutcome, CopyProof, Identity, Ports, Selected, StoredProof, Workflow,
+    },
 };
 use serde_json::{json, Value};
 use std::{
@@ -239,42 +241,70 @@ impl Ports for MailPorts {
         )
         .await;
         self.archive_base += g.uids.len();
-        result.map(|progress| {
+        result.map(|(progress, stored)| {
             self.archive_errors += progress.errors;
             ArchiveOutcome {
+                stored,
                 errors: progress.errors,
                 last_error: progress.last_error,
             }
         })
     }
-    async fn verify(&mut self, g: &Group, identity: &Identity) -> Result<Vec<u32>, String> {
-        let root = common::vault_root(&self.state)?;
-        let g = g.clone();
-        let identity = identity.clone();
+    async fn verify(
+        &mut self,
+        g: &Group,
+        _identity: &Identity,
+        stored: &[StoredProof],
+    ) -> Result<Vec<u32>, String> {
+        let (state, g, stored) = (self.state.clone(), g.clone(), stored.to_vec());
         common::blocking(move || {
-            let expected = match &identity {
-                Identity::Imap { message_ids, .. } => Some(message_ids),
-                _ => None,
-            };
-            mailvault_core::message_store::verify_archived(
-                &root,
-                &g.account_id,
-                &g.mailbox,
-                &g.uids,
-                expected,
-            )
-            .0
+            proved_sources(&state, &g, &g.uids, &stored).map(|sources| {
+                g.uids
+                    .iter()
+                    .copied()
+                    .filter(|uid| sources.contains_key(uid))
+                    .collect()
+            })
         })
-        .await
+        .await?
     }
-    async fn copy(&mut self, g: &Group, uids: &[u32]) -> Result<CopyProof, String> {
+    async fn copy(
+        &mut self,
+        g: &Group,
+        uids: &[u32],
+        stored: &[StoredProof],
+    ) -> Result<CopyProof, String> {
         let config = self.config(g).await?;
-        let proof=backup::backup_copy_uids(&self.state,json!({"accountId":g.account_id,"email":config.email,"mailbox":g.mailbox,"uids":uids,"mirrorRoot":self.mirror})).await?;
-        let list = |name: &str| serde_json::from_value(proof[name].clone()).unwrap_or_default();
+        let root = common::vault_root(&self.state)?;
+        let mirror = self.mirror.clone().ok_or("errors.bulkCopyChanged")?;
+        let (state, g, uids, stored) = (
+            self.state.clone(),
+            g.clone(),
+            uids.to_vec(),
+            stored.to_vec(),
+        );
+        let proof = common::blocking(move || {
+            let sources = proved_sources(&state, &g, &uids, &stored)?;
+            let expected = stored
+                .iter()
+                .map(|proof| (proof.uid, proof.sha256.clone()))
+                .collect();
+            mailvault_core::backup::copy_uids_to_mirror_proved(
+                &root,
+                std::path::Path::new(&mirror),
+                &g.account_id,
+                &config.email,
+                &g.mailbox,
+                &uids,
+                &sources,
+                &expected,
+            )
+        })
+        .await??;
         Ok(CopyProof {
-            verified: list("verified"),
-            missing: list("missing"),
-            mismatched: list("mismatched"),
+            verified: proof.verified,
+            missing: proof.missing,
+            mismatched: proof.mismatched,
         })
     }
     async fn delete(
@@ -284,34 +314,22 @@ impl Ports for MailPorts {
         identity: &Identity,
         bin: bool,
         cancel: Arc<AtomicBool>,
+        stored: &[StoredProof],
     ) -> Result<Vec<u32>, String> {
         let config = self.config(g).await?;
         // Copy proof is established by the worker. At the effect boundary,
         // verify the actual vault bytes again against the original Message-ID.
         if !bin {
-            let root = common::vault_root(&self.state)?;
-            let (g, uids, identity) = (g.clone(), uids.to_vec(), identity.clone());
-            let requested: HashSet<u32> = uids.iter().copied().collect();
-            let verified = common::blocking(move || {
-                let listing =
-                    mailvault_core::message_store::archived_paths(&root, &g.account_id, &g.mailbox);
-                let expected = match identity {
-                    Identity::Imap { message_ids, .. } => message_ids,
-                    _ => HashMap::new(),
-                };
-                mailvault_core::message_store::verify_archived_strict(
-                    &root,
-                    &g.account_id,
-                    &g.mailbox,
-                    &listing,
-                    &uids,
-                    &expected,
-                )
-                .0
-            })
-            .await?;
-            let verified: HashSet<u32> = verified.into_iter().collect();
-            if !requested.is_subset(&verified) {
+            let (state, g, uids, stored) = (
+                self.state.clone(),
+                g.clone(),
+                uids.to_vec(),
+                stored.to_vec(),
+            );
+            let requested: HashSet<_> = uids.iter().copied().collect();
+            let verified =
+                common::blocking(move || proved_sources(&state, &g, &uids, &stored)).await??;
+            if !requested.iter().all(|uid| verified.contains_key(uid)) {
                 return Err("errors.bulkCopyChanged".into());
             }
         }
@@ -331,6 +349,54 @@ impl Ports for MailPorts {
         .await
         .map(|(_, deleted)| deleted)
     }
+}
+
+/// No mailbox listing: the registry's writer-safe targeted lookup follows
+/// native flag renames. Unknown/changed entries never become byte proof.
+fn proved_sources(
+    state: &Arc<DaemonState>,
+    group: &Group,
+    uids: &[u32],
+    stored: &[StoredProof],
+) -> Result<HashMap<u32, std::path::PathBuf>, String> {
+    let proofs: HashMap<_, _> = stored.iter().map(|proof| (proof.uid, proof)).collect();
+    let mut sources = HashMap::new();
+    for uid in uids {
+        let Some(proof) = proofs.get(uid) else {
+            continue;
+        };
+        let path = common::with_mailbox_write(state, &group.account_id, &group.mailbox, |root| {
+            let name = state
+                .vault_registry
+                .known(&group.account_id, &group.mailbox, *uid)
+                .flatten()
+                .ok_or("errors.bulkCopyChanged")?;
+            if !mailvault_core::message_store::is_archived_entry(
+                root,
+                &group.account_id,
+                &group.mailbox,
+                &name,
+            ) {
+                return Err("errors.bulkCopyChanged".into());
+            }
+            let path = mailvault_core::message_store::entry_path(
+                root,
+                &group.account_id,
+                &group.mailbox,
+                &name,
+            );
+            let bytes = mailvault_core::message_store::read_path(&path)
+                .map_err(|_| "errors.bulkCopyChanged".to_string())?;
+            if mailvault_core::bulk_worker::bytes_hash(&bytes) != proof.sha256 {
+                return Err("errors.bulkCopyChanged".into());
+            }
+            Ok(path)
+        });
+        if let Ok(path) = path {
+            sources.insert(*uid, path);
+        }
+    }
+    Ok(sources)
 }
 
 pub(crate) fn launch(
@@ -862,7 +928,7 @@ mod tests {
             mailbox.messages[0].raw =
                 b"Message-ID: <replacement@test>\r\n\r\nreplacement\r\n".to_vec();
         });
-        let progress = mailvault_core::archive::run_config(
+        let (progress, _) = mailvault_core::archive::run_config(
             archive::archive_ctx(&state, dir.path().into()),
             "acc".into(),
             config,
@@ -950,5 +1016,54 @@ mod tests {
             original,
             "valid current B is not permission to remove archived A"
         );
+    }
+    fn seed_selection(state: &Arc<DaemonState>, mailbox: &str) {
+        std::fs::write(state.app_dir.join("accounts.json"), "[{\"id\":\"acc\"}]").unwrap();
+        crate::custody::with_conn(state, |c| {
+            mailvault_core::custody::cache::save_mailboxes(
+                c,
+                "acc",
+                &json!({"mailboxes":[{"path":mailbox,"name":mailbox}]}).to_string(),
+            )?;
+            mailvault_core::custody::cache::save_headers(
+                c,
+                "acc",
+                mailbox,
+                &json!({"uidValidity":1,"emails":[{"uid":7,"messageId":"<selected@test>"}]})
+                    .to_string(),
+            )
+        })
+        .unwrap();
+    }
+    #[test]
+    fn reviewed_selected_server_ignores_unselected_corrupt_local_sibling() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        seed_selection(&state, "INBOX");
+        let sibling = mailvault_core::vault_files::account_dir(&dir.path().join("Maildir"), "acc")
+            .join("Unselected");
+        std::fs::create_dir_all(&sibling).unwrap();
+        std::fs::write(
+            sibling.join(mailvault_core::local_folder::MARKER_FILE),
+            "{broken",
+        )
+        .unwrap();
+        let scope = serde_json::from_value(json!({"accountId":"acc","mailbox":"INBOX","keys":[7]}))
+            .unwrap();
+        assert!(freeze(&state, mailvault_core::bulk::Action::Archive, scope).is_ok());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn reviewed_selected_target_symlink_is_unknown_even_with_server_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        seed_selection(&state, "INBOX");
+        let account = mailvault_core::vault_files::account_dir(&dir.path().join("Maildir"), "acc");
+        std::fs::create_dir_all(&account).unwrap();
+        let other = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(other.path(), account.join("INBOX")).unwrap();
+        let scope = serde_json::from_value(json!({"accountId":"acc","mailbox":"INBOX","keys":[7]}))
+            .unwrap();
+        assert!(freeze(&state, mailvault_core::bulk::Action::Delete, scope).is_err());
     }
 }

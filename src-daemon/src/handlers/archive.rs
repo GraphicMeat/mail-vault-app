@@ -1451,7 +1451,7 @@ mod tests {
         let identity = mailvault_core::bulk_worker::Identity::Graph {
             ids: std::collections::HashMap::from([(7, "gid-7".into())]),
         };
-        let progress = mailvault_core::archive::run_config(
+        let (progress,_) = mailvault_core::archive::run_config(
             archive_ctx(&s, v.path().into()),
             "acc".into(),
             config,
@@ -1476,7 +1476,7 @@ mod tests {
         let identity = mailvault_core::bulk_worker::Identity::Graph {
             ids: std::collections::HashMap::from([(7, "original-id".into())]),
         };
-        let progress = mailvault_core::archive::run_config(
+        let (progress,_) = mailvault_core::archive::run_config(
             archive_ctx(&s, v.path().into()),
             "acc".into(),
             config,

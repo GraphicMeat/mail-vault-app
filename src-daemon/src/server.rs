@@ -1080,10 +1080,10 @@ mod tests {
             assert!(response.error.is_some(), "{method} must retain unreadable evidence");
         }
         assert!(mailvault_core::op_journal::pending_operation_read(dir.path()).is_err());
-        // This slice deliberately exposes no kickoff until a real worker exists.
-        for method in ["bulk.start", "bulk.resume"] {
-            let response = handle_request_for_test(&state, method, json!({"operationId":"current"})).await;
-            assert_eq!(response.error.unwrap().code, ipc::METHOD_NOT_FOUND);
+        // Implemented kickoffs must retain corrupt pending evidence too.
+        for method in ["bulk.start","bulk.resume"] {
+            let response=handle_request_for_test(&state,method,json!({"operationId":"current","type":"archive","scope":{"keys":[]}})).await;
+            assert_eq!(response.error.unwrap().message,"errors.bulkPendingRead");
         }
     }
 

@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
@@ -190,7 +190,7 @@ pub async fn run_with_backup(
     limit: Option<BackgroundLimit>,
 ) -> Result<ArchiveProgress, String> {
     let account:ImapConfig=serde_json::from_str(&account_json).map_err(|e|format!("Bad account JSON: {}",e))?;
-    run_with_backup_config(ctx,account_id,account,mailbox,uids,cancel,backup_path,account_email,remove_existing,operation,background,limit,None).await
+    run_with_backup_config(ctx,account_id,account,mailbox,uids,cancel,backup_path,account_email,remove_existing,operation,background,limit,None).await.map(|(progress,_)|progress)
 }
 
 /// Typed daemon-worker entry point. Credentials stay in memory and never
@@ -204,7 +204,7 @@ pub async fn run_config(
     cancel: Arc<AtomicBool>,
     background: bool,
     identity: crate::bulk_worker::Identity,
-) -> Result<ArchiveProgress, String> {
+) -> Result<(ArchiveProgress, Vec<crate::bulk_worker::StoredProof>), String> {
     if !identity.matches_transport(&account) {
         return Err("errors.bulkIdentityChanged".into());
     }
@@ -240,7 +240,7 @@ async fn run_with_backup_config(
     background: bool,
     limit: Option<BackgroundLimit>,
     identity:Option<Arc<crate::bulk_worker::Identity>>,
-) -> Result<ArchiveProgress, String> {
+) -> Result<(ArchiveProgress,Vec<crate::bulk_worker::StoredProof>), String> {
     let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
         crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox)
     }).transpose()?;
@@ -296,6 +296,10 @@ async fn run_with_backup_config(
     // daemon's own pool, per caller).
 
     // One listing of the vault folder and one of its mirror for the whole run.
+    if identity.is_some() {
+        let (ctx,account,mailbox)=(ctx.clone(),account_id.clone(),mailbox.clone());
+        tokio::task::spawn_blocking(move||ctx.registry.uid_sets(&ctx.root,&account,&mailbox).ok_or("errors.bulkIdentityUncertain".to_string())).await.map_err(|e|e.to_string())??;
+    }
     // Looking every uid up again was a read_dir per message, the mirror's on the
     // external drive the run is already struggling to keep up with.
     // ponytail: a copy another writer lands mid-run is not in the listing, and
@@ -482,9 +486,13 @@ async fn run_with_backup_config(
     }
 
     // Collect index entries from completed tasks
+    let mut stored=Vec::new();
     let mut index_entries: Vec<serde_json::Value> = Vec::new();
     while let Some(result) = set.join_next().await {
-        if let Ok(Some(entry)) = result {
+        if let Ok(Some(mut entry)) = result {
+            if let Some(proof)=entry.as_object_mut().and_then(|entry|entry.remove("_bulkProof")) {
+                if let Ok(proof)=serde_json::from_value::<crate::bulk_worker::StoredProof>(proof){stored.push(proof);}
+            }
             index_entries.push(entry);
         }
     }
@@ -495,6 +503,7 @@ async fn run_with_backup_config(
     // own route (Task 3.4) does the upsert in-process. Either way the daemon
     // does the upsert and logs the uid-less entries it skips, so only the
     // count is reported here.
+    let mut custody_saved=index_entries.is_empty();
     if !index_entries.is_empty() {
         let (ctx2, acct, mbx) = (Arc::clone(&ctx), account_id.clone(), mailbox.clone());
         // `written` counts entries handed to the sink, not entries actually
@@ -515,7 +524,7 @@ async fn run_with_backup_config(
                 match tokio::task::spawn_blocking(move || (ctx2.sinks.custody_append)(&acct, &mbx, entries_json))
                     .await
                 {
-                    Ok(Ok(_)) => info!("archive_emails: recorded {} custody entries", written),
+                    Ok(Ok(saved)) => {custody_saved=saved==written;info!("archive_emails: recorded {} custody entries", written)},
                     Ok(Err(e)) => warn!("archive_emails: custody write failed: {}", e),
                     Err(e) => warn!("archive_emails: custody write panicked: {}", e),
                 }
@@ -554,7 +563,8 @@ async fn run_with_backup_config(
     };
 
     emit(&ctx, result.clone());
-    Ok(result)
+    if !custody_saved {stored.clear();}
+    Ok((result,stored))
 }
 
 /// `(sinks.emit)("archive-progress", ...)`, serializing the payload once
@@ -629,6 +639,8 @@ async fn fetch_and_store(
     let flags = crate::vault_flags::store_flags(&server_flags);
     let root = ctx.root.clone();
     let raw_len = raw_bytes.len();
+    let bound=identity.is_some();
+    let sha256=bound.then(||crate::bulk_worker::bytes_hash(&raw_bytes));
 
     // Every fs call below is synchronous std::fs. On a runtime worker, an
     // external drive that Time Machine is reading blocks that worker — and with
@@ -639,8 +651,8 @@ async fn fetch_and_store(
     let gate = Arc::clone(&ctx.gate);
     let registry = Arc::clone(&ctx.registry);
     let account_key = account_id.to_string();
-    let (_filename, external_copy_failed, write_ms) = tokio::task::spawn_blocking(
-        move || -> Result<(String, bool, u64), String> {
+    let (_filename, external_copy_failed, write_ms,stored_proof) = tokio::task::spawn_blocking(
+        move || -> Result<(String, bool, u64,Option<crate::bulk_worker::StoredProof>), String> {
             use std::fs;
 
             // Each write is held under the gate across its `create_dir_all`
@@ -652,6 +664,7 @@ async fn fetch_and_store(
             // returning them, the same shape `vault_files::clear_cache` and
             // `migrate_json_to_eml` already use around their own per-file work.
             let mut filename = String::new();
+            let mut stored_proof=None;
             let mut external_copy_failed = false;
             let mut write_ms: u64 = 0;
 
@@ -666,10 +679,25 @@ async fn fetch_and_store(
             registry.serialized(&account_key, &mailbox_owned, || gate(&mut || {
                 crate::message_store::create_messages_dir(&root, &account_key, &mailbox_owned).map_err(|e| format!("mkdir: {}", e))?;
 
-                if let Some(listed) = &listed {
-                    crate::message_store::remove_listed(&root, &account_key, &mailbox_owned, uid, listed);
-                }
+                let previous=if bound {
+                    let name=registry.known(&account_key,&mailbox_owned,uid).ok_or("errors.bulkIdentityUncertain")?;
+                    match name {
+                        Some(name)=>{let path=crate::message_store::entry_path(&root,&account_key,&mailbox_owned,&name);
+                            let previous=crate::message_store::read_path(&path).map_err(|_|"errors.bulkCopyChanged".to_string())?;
+                            if previous!=raw_bytes{return Err("errors.bulkCopyChanged".into())}
+                            Some(path)
+                        }
+                        None=>None,
+                    }
+                }else{
+                    if let Some(listed)=&listed {crate::message_store::remove_listed(&root,&account_key,&mailbox_owned,uid,listed);}
+                    None
+                };
 
+                if bound {
+                    let target=crate::message_store::entry_path(&root,&account_key,&mailbox_owned,&crate::message_store::stored_name(&root,uid,&flags));
+                    if target.exists() && crate::message_store::read_path(&target).map_err(|_|"errors.bulkCopyChanged".to_string())?!=raw_bytes{return Err("errors.bulkCopyChanged".into())}
+                }
                 // The vault copy's name, which the mirror copy below takes too.
                 filename = crate::maildir::mirror_filename(uid, &flags);
                 started = std::time::Instant::now();
@@ -683,6 +711,10 @@ async fn fetch_and_store(
                         return Err(format!("write .eml: {}", e));
                     }
                 };
+                if bound {
+                    stored_proof=Some(crate::bulk_worker::StoredProof{uid,name:written.file_name().and_then(|n|n.to_str()).ok_or("errors.bulkCopyChanged")?.to_owned(),sha256:sha256.clone().ok_or("errors.bulkCopyChanged")?});
+                    if let Some(previous)=previous.filter(|previous|previous!=&written){crate::message_store::remove_listed(&root,&account_key,&mailbox_owned,uid,&previous);}
+                }
                 registry.upsert(&account_key, &mailbox_owned, uid, &written);
                 Ok(())
             }))?;
@@ -721,7 +753,7 @@ async fn fetch_and_store(
 
             write_ms = started.elapsed().as_millis() as u64;
 
-            Ok((filename, external_copy_failed, write_ms))
+            Ok((filename, external_copy_failed, write_ms,stored_proof))
         },
     )
     .await
@@ -735,6 +767,7 @@ async fn fetch_and_store(
     info!("archive_emails: stored UID {} ({} bytes{})", uid, raw_len,
         if external_copy_failed { ", external copy FAILED" } else { "" });
 
+    if let Some(proof)=stored_proof {index_entry["_bulkProof"]=serde_json::to_value(proof).map_err(|e|e.to_string())?;}
     index_entry["_external_copy_failed"] = serde_json::Value::Bool(external_copy_failed);
     Ok(index_entry)
 }

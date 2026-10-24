@@ -2677,6 +2677,45 @@ pub fn copy_uids_to_mirror_from(
     listing: &mut MirrorListing,
     sources: &std::collections::HashMap<u32, PathBuf>,
 ) -> Result<MirrorCopyOutcome, String> {
+    copy_uids_to_mirror_checked(vault_root,mirror_root,account_id,email,mailbox,uids,listing,sources,None)
+}
+
+/// User bulk copying uses the exact bytes proved by its archive/store result.
+/// Legacy backup callers retain their existing Message-ID/length comparison.
+pub fn copy_uids_to_mirror_proved(
+    vault_root: &Path,
+    mirror_root: &Path,
+    account_id: &str,
+    email: &str,
+    mailbox: &str,
+    uids: &[u32],
+    sources: &std::collections::HashMap<u32, PathBuf>,
+    expected: &std::collections::HashMap<u32, String>,
+) -> Result<MirrorCopyOutcome, String> {
+    copy_uids_to_mirror_checked(
+        vault_root,
+        mirror_root,
+        account_id,
+        email,
+        mailbox,
+        uids,
+        &mut MirrorListing::new(),
+        sources,
+        Some(expected),
+    )
+}
+
+fn copy_uids_to_mirror_checked(
+    vault_root: &Path,
+    mirror_root: &Path,
+    account_id: &str,
+    email: &str,
+    mailbox: &str,
+    uids: &[u32],
+    listing: &mut MirrorListing,
+    sources: &std::collections::HashMap<u32, PathBuf>,
+    expected: Option<&std::collections::HashMap<u32, String>>,
+) -> Result<MirrorCopyOutcome, String> {
     let mirror_cur = crate::maildir::mirror_cur(mirror_root, email, mailbox)?;
     let mut out = MirrorCopyOutcome::default();
     if uids.is_empty() {
@@ -2696,7 +2735,16 @@ pub fn copy_uids_to_mirror_from(
             out.missing.push(uid);
             continue;
         };
-        match copy_one_to_mirror(vault_root, account_id, mailbox, uid, src, &mirror_cur, listing) {
+        match copy_one_to_mirror(
+            vault_root,
+            account_id,
+            mailbox,
+            uid,
+            src,
+            &mirror_cur,
+            listing,
+            expected.and_then(|expected| expected.get(&uid).map(String::as_str)),
+        ) {
             CopyOne::Copied => {
                 out.copied.push(uid);
                 out.verified.push(uid);
@@ -2742,25 +2790,75 @@ fn copy_one_to_mirror(
     listed_src: &Path,
     mirror_cur: &Path,
     listing: &mut MirrorListing,
+    expected: Option<&str>,
 ) -> CopyOne {
     // A flag change renames the vault file after the listing: resolve by uid
     // once more before calling it gone.
-    let src = match crate::message_store::raw_path_listed(vault_root, account_id, mailbox, uid, listed_src) {
-        Some(p) => p,
-        None => return CopyOne::VaultGone,
+    let src = if expected.is_some() {
+        // Receipt paths come from a current targeted registry read. A rename
+        // after that read is unproved; do not relist a mailbox per source.
+        crate::message_store::listed_message(listed_src)
+            .map(|(_, blob, _)| blob)
+            .unwrap_or_else(|| listed_src.to_path_buf())
+    } else {
+        match crate::message_store::raw_path_listed(
+            vault_root, account_id, mailbox, uid, listed_src,
+        ) {
+            Some(path) => path,
+            None => return CopyOne::VaultGone,
+        }
     };
     // The vault file's name, or for a JMAP record's blob the Maildir name of
     // its uid under its flags: the mirror always holds `.eml` files.
-    let Some(name) = crate::message_store::copy_name(vault_root, account_id, mailbox, uid, &src) else {
+    let Some(name) = crate::message_store::copy_name(vault_root, account_id, mailbox, uid, &src)
+    else {
         return CopyOne::Failed;
     };
-    let dst_name = if name.ends_with(".eml") { name } else { format!("{name}.eml") };
+    let dst_name = if name.ends_with(".eml") {
+        name
+    } else {
+        format!("{name}.eml")
+    };
     let dst = mirror_cur.join(&dst_name);
 
     // What the drive already holds for this uid: the listing's entry if it is
     // still there, else a file under the exact destination name (a writer the
     // listing has not seen).
-    let existing = listing.files.get(&uid).filter(|p| p.exists()).cloned().or_else(|| dst.exists().then(|| dst.clone()));
+    let existing = listing
+        .files
+        .get(&uid)
+        .filter(|p| p.exists())
+        .cloned()
+        .or_else(|| dst.exists().then(|| dst.clone()));
+    if let Some(expected) = expected {
+        let bytes = match std::fs::read(&src) {
+            Ok(bytes) => bytes,
+            Err(_) => return CopyOne::VaultGone,
+        };
+        if crate::bulk_worker::bytes_hash(&bytes) != expected {
+            return CopyOne::Mismatch;
+        }
+        if let Some(existing) = existing {
+            if std::fs::read(&existing)
+                .is_ok_and(|bytes| crate::bulk_worker::bytes_hash(&bytes) == expected)
+            {
+                listing.files.insert(uid, existing);
+                return CopyOne::Present;
+            }
+            return CopyOne::Mismatch;
+        }
+        if write_durable(&dst, &bytes).is_err() {
+            return CopyOne::Failed;
+        }
+        if !std::fs::read(&dst)
+            .is_ok_and(|bytes| crate::bulk_worker::bytes_hash(&bytes) == expected)
+        {
+            let _ = std::fs::remove_file(&dst);
+            return CopyOne::Failed;
+        }
+        listing.files.insert(uid, dst);
+        return CopyOne::Copied;
+    }
     if let Some(existing) = existing {
         return if same_message(&src, &existing) {
             listing.files.insert(uid, existing);
@@ -2786,11 +2884,17 @@ fn copy_one_to_mirror(
     // Durable, not just atomic: the server copy is deleted on the strength of
     // this file, so it must be on the drive, not in the page cache.
     if let Err(e) = write_durable(&dst, &bytes) {
-        warn!("backup copy: write to the backup folder failed for uid {}: {}", uid, e);
+        warn!(
+            "backup copy: write to the backup folder failed for uid {}: {}",
+            uid, e
+        );
         return CopyOne::Failed;
     }
     if !same_message(&src, &dst) {
-        warn!("backup copy: the copy of uid {} did not read back the same, removing it", uid);
+        warn!(
+            "backup copy: the copy of uid {} did not read back the same, removing it",
+            uid
+        );
         let _ = std::fs::remove_file(&dst);
         return CopyOne::Failed;
     }

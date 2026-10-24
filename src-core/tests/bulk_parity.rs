@@ -226,3 +226,12 @@ fn duplicate_terminal_kickoff_attaches_without_new_worker_ownership() {
     );
     assert!(owner.active_id().is_none());
 }
+
+#[test]
+fn reviewed_all_provider_maps_roundtrip_through_real_coordinator_storage() {
+ use mailvault_core::bulk_worker::{Identity,Workflow};use std::collections::HashMap;
+ for identity in [Identity::Imap{validity:1,message_ids:HashMap::from([(7,"selected@test".into())])},Identity::Jmap{mailbox_id:"mb".into(),ids:HashMap::from([(7,"email-id".into())])},Identity::Graph{ids:HashMap::from([(7,"graph-id".into())])}] {
+  let dir=tempfile::tempdir().unwrap();let mut owner=Coordinator::load(dir.path());let intent=intent(json!([7]));owner.claim(dir.path(),"persist",intent.clone()).unwrap();let mut work=Workflow::new(intent);work.groups[0].identity=Some(identity.clone());work.groups[0].origin=Some("native-origin".into());owner.checkpoint(dir.path(),"persist",&work).unwrap();
+  assert_eq!(owner.status(dir.path()).unwrap()["active"]["id"],"persist");let mut restarted=Coordinator::load(dir.path());assert_eq!(restarted.resume_worker(dir.path(),"persist").unwrap().groups[0].identity,Some(identity));
+ }
+}

@@ -25,8 +25,14 @@ pub fn origin_hash(config: &crate::imap::ImapConfig) -> String {
             .jmap_session_url
             .as_deref()
             .and_then(|value| url::Url::parse(value).ok())
-            .map(|value| format!("{}{}", value.origin().ascii_serialization(), value.path())),
-        config.jmap_username
+            .map(|mut value| {
+                let _ = value.set_username("");
+                let _ = value.set_password(None);
+                value.set_fragment(None);
+                value.to_string()
+            }),
+        config.jmap_username,
+        config.jmap_auth
     ]);
     format!("{:x}", Sha256::digest(origin.to_string().as_bytes()))
 }
@@ -36,16 +42,47 @@ pub fn origin_hash(config: &crate::imap::ImapConfig) -> String {
 pub enum Identity {
     Imap {
         validity: u32,
+        #[serde(deserialize_with = "uid_map")]
         message_ids: HashMap<u32, String>,
     },
     Jmap {
         mailbox_id: String,
+        #[serde(deserialize_with = "uid_map")]
         ids: HashMap<u32, String>,
     },
     Graph {
+        #[serde(deserialize_with = "uid_map")]
         ids: HashMap<u32, String>,
     },
 }
+fn uid_map<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<HashMap<u32, String>, D::Error> {
+    let values = HashMap::<String, String>::deserialize(deserializer)?;
+    values
+        .into_iter()
+        .map(|(key, value)| {
+            let uid = key.parse::<u32>().map_err(serde::de::Error::custom)?;
+            if uid.to_string() != key {
+                return Err(serde::de::Error::custom("noncanonical UID key"));
+            }
+            Ok((uid, value))
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredProof {
+    pub uid: u32,
+    pub name: String,
+    pub sha256: String,
+}
+pub fn bytes_hash(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 impl Identity {
     pub fn matches_transport(&self, config: &crate::imap::ImapConfig) -> bool {
         if config.uses_jmap() {
@@ -97,6 +134,7 @@ impl Identity {
 }
 #[derive(Debug, Clone, Default)]
 pub struct ArchiveOutcome {
+    pub stored: Vec<StoredProof>,
     pub errors: usize,
     pub last_error: Option<String>,
 }
@@ -136,6 +174,8 @@ pub struct GroupState {
     pub identity: Option<Identity>,
     #[serde(default)]
     pub origin: Option<String>,
+    #[serde(default)]
+    pub stored: Vec<StoredProof>,
     pub verified: Vec<u32>,
     pub eligible: Vec<u32>,
     /// Recorded BEFORE dispatch. An attempted target lacking a durable outcome
@@ -167,6 +207,7 @@ impl Workflow {
                     selected: None,
                     identity: None,
                     origin: None,
+                    stored: vec![],
                     verified: vec![],
                     eligible: vec![],
                     attempted: vec![],
@@ -206,6 +247,24 @@ impl Workflow {
             && self.groups.iter().all(|group| {
                 let requested: HashSet<_> = group.group.uids.iter().copied().collect();
                 let attempted: HashSet<_> = group.attempted.iter().copied().collect();
+                let proved: HashSet<_> = group.stored.iter().map(|proof| proof.uid).collect();
+                if proved.len() != group.stored.len()
+                    || !proved.is_subset(&requested)
+                    || group.stored.iter().any(|proof| {
+                        proof.sha256.len() != 64
+                            || !proof.sha256.bytes().all(|b| b.is_ascii_hexdigit())
+                            || proof.name.is_empty()
+                            || proof.name.contains(['/', '\\', '\0'])
+                    })
+                {
+                    return false;
+                }
+                if intent.action() != Action::Delete
+                    && !group.verified.iter().all(|uid| proved.contains(uid))
+                {
+                    return false;
+                }
+
                 [
                     &group.verified,
                     &group.eligible,
@@ -254,8 +313,18 @@ pub trait Ports {
         cancel: Arc<AtomicBool>,
         identity: &Identity,
     ) -> Result<ArchiveOutcome, String>;
-    async fn verify(&mut self, group: &Group, identity: &Identity) -> Result<Vec<u32>, String>;
-    async fn copy(&mut self, group: &Group, uids: &[u32]) -> Result<CopyProof, String>;
+    async fn verify(
+        &mut self,
+        group: &Group,
+        identity: &Identity,
+        stored: &[StoredProof],
+    ) -> Result<Vec<u32>, String>;
+    async fn copy(
+        &mut self,
+        group: &Group,
+        uids: &[u32],
+        stored: &[StoredProof],
+    ) -> Result<CopyProof, String>;
     async fn delete(
         &mut self,
         group: &Group,
@@ -263,6 +332,7 @@ pub trait Ports {
         identity: &Identity,
         bin: bool,
         cancel: Arc<AtomicBool>,
+        stored: &[StoredProof],
     ) -> Result<Vec<u32>, String>;
 }
 fn exact(asked: &[u32], proof: &[u32]) -> Vec<u32> {
@@ -332,6 +402,11 @@ pub async fn run(
         group.eligible.clear();
         if action != Action::Archive {
             group.verified.clear();
+            group.stored.clear();
+        } else {
+            group
+                .stored
+                .retain(|proof| group.verified.contains(&proof.uid));
         }
     }
     phase(p, w, "identify", "starting").await?;
@@ -393,6 +468,14 @@ pub async fn run(
                         .ok_or("errors.bulkIdentityUncertain")?,
                 )
                 .await?;
+            let asked: HashSet<_> = g.uids.iter().copied().collect();
+            let mut seen = HashSet::new();
+            w.groups[i].stored.extend(
+                outcome
+                    .stored
+                    .into_iter()
+                    .filter(|proof| asked.contains(&proof.uid) && seen.insert(proof.uid)),
+            );
             w.errors += outcome.errors;
             if outcome.last_error.is_some() {
                 w.last_error = outcome.last_error;
@@ -409,15 +492,25 @@ pub async fn run(
             if g.uids.is_empty() {
                 continue;
             }
-            let proved = p
-                .verify(
+            let stored = &w.groups[i].stored;
+            let admitted: HashSet<_> = stored.iter().map(|proof| proof.uid).collect();
+            let requested = g.uids.len();
+            let mut g = g;
+            g.uids.retain(|uid| admitted.contains(uid));
+            w.result.kept_not_archived += requested - g.uids.len();
+            let proved = if g.uids.is_empty() {
+                vec![]
+            } else {
+                p.verify(
                     &g,
                     w.groups[i]
                         .identity
                         .as_ref()
                         .ok_or("errors.bulkIdentityUncertain")?,
+                    stored,
                 )
-                .await?;
+                .await?
+            };
             let verified = exact(&g.uids, &proved);
             w.result.kept_not_archived += g.uids.len() - verified.len();
             if action == Action::Archive {
@@ -440,6 +533,11 @@ pub async fn run(
         let mut drive_gone = false;
         for i in 0..w.groups.len() {
             let asked = w.groups[i].verified.clone();
+            let proofs: HashMap<_, _> = w.groups[i]
+                .stored
+                .iter()
+                .map(|proof| (proof.uid, proof.clone()))
+                .collect();
             for batch in asked.chunks(100) {
                 if cancelled(p, w, &cancel).await? {
                     return Ok(());
@@ -451,7 +549,11 @@ pub async fn run(
                 }
                 // Persist the copy intent as a bounded unit before external IO.
                 p.checkpoint(w).await?;
-                match p.copy(&w.groups[i].group, batch).await {
+                let batch_proofs: Vec<_> = batch
+                    .iter()
+                    .filter_map(|uid| proofs.get(uid).cloned())
+                    .collect();
+                match p.copy(&w.groups[i].group, batch, &batch_proofs).await {
                     Err(_) => {
                         drive_gone = true;
                         w.result.kept_backup_unreachable += batch.len()
@@ -492,12 +594,21 @@ pub async fn run(
     phase(p, w, "delete", "deleting").await?;
     for i in 0..w.groups.len() {
         let uids = w.groups[i].eligible.clone();
+        let proofs: HashMap<_, _> = w.groups[i]
+            .stored
+            .iter()
+            .map(|proof| (proof.uid, proof.clone()))
+            .collect();
         for batch in uids.chunks(5) {
             if cancelled(p, w, &cancel).await? {
                 return Ok(());
             }
             w.groups[i].attempted.extend_from_slice(batch);
             p.checkpoint(w).await?;
+            let batch_proofs: Vec<_> = batch
+                .iter()
+                .filter_map(|uid| proofs.get(uid).cloned())
+                .collect();
             let deleted = p
                 .delete(
                     &w.groups[i].group,
@@ -508,6 +619,7 @@ pub async fn run(
                         .ok_or("errors.bulkIdentityUncertain")?,
                     action == Action::Delete,
                     cancel.clone(),
+                    &batch_proofs,
                 )
                 .await?;
             let exact = exact(batch, &deleted);

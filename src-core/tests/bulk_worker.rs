@@ -1,5 +1,7 @@
 use mailvault_core::bulk::{Action, FrozenIntent, Group, Scope};
-use mailvault_core::bulk_worker::{self, ArchiveOutcome, CopyProof, Identity, Ports, Workflow};
+use mailvault_core::bulk_worker::{
+    self, ArchiveOutcome, CopyProof, Identity, Ports, StoredProof, Workflow,
+};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -65,11 +67,28 @@ impl Ports for Fake {
             return Err("archive failed".into());
         }
         Ok(ArchiveOutcome {
+            stored: if self.archive_errors == 0 {
+                g.uids
+                    .iter()
+                    .map(|uid| StoredProof {
+                        uid: *uid,
+                        name: format!("{uid}:2,A.eml"),
+                        sha256: bulk_worker::bytes_hash(uid.to_string().as_bytes()),
+                    })
+                    .collect()
+            } else {
+                vec![]
+            },
             errors: self.archive_errors,
             ..Default::default()
         })
     }
-    async fn verify(&mut self, g: &Group, _identity: &Identity) -> Result<Vec<u32>, String> {
+    async fn verify(
+        &mut self,
+        g: &Group,
+        _identity: &Identity,
+        _stored: &[StoredProof],
+    ) -> Result<Vec<u32>, String> {
         self.trace.push(
             json!({"effect":"verify","accountId":g.account_id,"mailbox":g.mailbox,"uids":g.uids}),
         );
@@ -92,7 +111,12 @@ impl Ports for Fake {
         }
         Ok(v)
     }
-    async fn copy(&mut self, g: &Group, uids: &[u32]) -> Result<CopyProof, String> {
+    async fn copy(
+        &mut self,
+        g: &Group,
+        uids: &[u32],
+        _stored: &[StoredProof],
+    ) -> Result<CopyProof, String> {
         self.trace.push(
             json!({"effect":"copy","accountId":g.account_id,"mailbox":g.mailbox,"uids":uids}),
         );
@@ -137,6 +161,7 @@ impl Ports for Fake {
         _identity: &Identity,
         bin: bool,
         _cancel: Arc<AtomicBool>,
+        _stored: &[StoredProof],
     ) -> Result<Vec<u32>, String> {
         self.trace.push(json!({"effect":"delete","accountId":g.account_id,"mailbox":g.mailbox,"uids":uids,"bin":bin}));
         if let Some((phase, cancel)) = &self.cancel_stage {
@@ -378,6 +403,11 @@ async fn archive_resume_preserves_exact_completed_folder_identities() {
         vec![json!("acc1:INBOX:1"), json!("acc2:Sent:1")],
     );
     w.groups[0].verified = vec![1];
+    w.groups[0].stored = vec![StoredProof {
+        uid: 1,
+        name: "1:2,A.eml".into(),
+        sha256: bulk_worker::bytes_hash(b"1"),
+    }];
     for group in &mut w.groups {
         group.identity = Some(Identity::Imap {
             validity: 1,
@@ -402,6 +432,11 @@ async fn fully_attempted_group_cannot_reenter_stale_copy_or_delete_lists() {
         let mut w = work(action, vec![json!(1)]);
         w.groups[0].attempted = vec![1];
         w.groups[0].verified = vec![1];
+        w.groups[0].stored = vec![StoredProof {
+            uid: 1,
+            name: "1:2,A.eml".into(),
+            sha256: bulk_worker::bytes_hash(b"1"),
+        }];
         w.groups[0].eligible = vec![1];
         let mut f = Fake::default();
         bulk_worker::run(&mut f, &mut w, Arc::new(AtomicBool::new(false)), true)
@@ -496,7 +531,16 @@ async fn captured_failure_copy_and_cancel_mail_decisions_match_real_js() {
         } else {
             assert_eq!(w.status, expected["status"].as_str().unwrap(), "{name}");
         }
-        if action == Action::ArchiveBackupDelete && expected["result"].is_object() {
+        if name == "cancel-delete" {
+            // JS emitted its cancel snapshot before its mocked delete reply.
+            // The daemon publishes terminal only after the actual UID outcome.
+            assert_eq!(expected["result"]["removed"], 0);
+            assert_eq!(w.result.removed, 1);
+        }
+        if action == Action::ArchiveBackupDelete
+            && expected["result"].is_object()
+            && name != "cancel-delete"
+        {
             assert_eq!(
                 serde_json::to_value(&w.result).unwrap(),
                 expected["result"],
@@ -571,5 +615,57 @@ async fn reviewed_failed_archive_cannot_turn_stale_uid_presence_into_delete_proo
             .iter()
             .any(|effect| effect["effect"] == "delete" || effect["effect"] == "copy"));
         assert_eq!(w.result.removed, 0);
+    }
+}
+
+#[test]
+fn reviewed_uid_map_rejects_ambiguous_or_overflowing_wire_keys() {
+    for key in ["07", "-1", "4294967296", "+7"] {
+        let mut ids = serde_json::Map::new();
+        ids.insert(key.to_owned(), json!("selected@test"));
+        let value = json!({"transport":"imap","validity":1,"message_ids":ids});
+        assert!(serde_json::from_value::<Identity>(value).is_err(), "{key}");
+    }
+}
+
+#[test]
+fn reviewed_mirror_proof_uses_raw_bytes_in_both_storage_formats() {
+    use mailvault_core::{backup, maildir, message_store};
+    for format in [message_store::Format::Maildir, message_store::Format::Jmap] {
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        message_store::set_vault_format(vault.path(), format).unwrap();
+        message_store::create_messages_dir(vault.path(), "acc", "INBOX").unwrap();
+        let raw = b"Message-ID: <same@test>\r\n\r\nselected B\r\n";
+        let old = b"Message-ID: <same@test>\r\n\r\nselected A\r\n";
+        let source = message_store::write_new(
+            vault.path(),
+            "acc",
+            "INBOX",
+            7,
+            raw,
+            &["archived".into()],
+            true,
+        )
+        .unwrap();
+        let sources = HashMap::from([(7, source)]);
+        let expected = HashMap::from([(7, bulk_worker::bytes_hash(raw))]);
+        let cur = maildir::mirror_cur(mirror.path(), "one@example.test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        let existing = cur.join("7.eml");
+        std::fs::write(&existing, old).unwrap();
+        let result = backup::copy_uids_to_mirror_proved(
+            vault.path(),
+            mirror.path(),
+            "acc",
+            "one@example.test",
+            "INBOX",
+            &[7],
+            &sources,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(result.mismatched, vec![7]);
+        assert_eq!(std::fs::read(&existing).unwrap(), old);
     }
 }
