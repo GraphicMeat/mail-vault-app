@@ -12,7 +12,9 @@ pub struct HeldBulkPaths(Mutex<HashMap<String, Hold>>);
 struct Hold {
     path: Option<String>,
     pending: bool,
+    revision: u64,
 }
+static NEXT_HOLD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 impl HeldBulkPaths {
     fn map(&self) -> std::sync::MutexGuard<'_, HashMap<String, Hold>> {
         self.0.lock().unwrap_or_else(|p| p.into_inner())
@@ -64,6 +66,7 @@ fn forward_flow(
                 return Err("errors.operationRunning".into());
             }
             hold.pending = true;
+            hold.revision = NEXT_HOLD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Some(hold.path.clone())
         } else {
             map.insert(
@@ -71,6 +74,7 @@ fn forward_flow(
                 Hold {
                     path: None,
                     pending: true,
+                    revision: NEXT_HOLD.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                 },
             );
             None
@@ -109,7 +113,13 @@ fn forward_flow(
     if let Some(hold) = held.map().get_mut(&id) {
         hold.pending = false;
     }
-    if result.is_err() {
+    if result.is_err()
+        || result
+            .as_ref()
+            .ok()
+            .and_then(|v| v["status"].as_str())
+            .is_some_and(|s| matches!(s, "complete" | "cancelled" | "error"))
+    {
         reconcile(held, ports)
     }
     result
@@ -125,24 +135,52 @@ fn release_frame(held: &HeldBulkPaths, ports: &dyn Ports, frame: &Value) {
     }
 }
 fn reconcile(held: &HeldBulkPaths, ports: &dyn Ports) {
+    // Snapshot reservations before status IO. A kickoff begun during that IO
+    // changes its revision, so a stale empty status cannot release its scope.
+    let reservations: Vec<_> = held
+        .map()
+        .iter()
+        .filter(|(_, hold)| !hold.pending)
+        .map(|(id, hold)| (id.clone(), hold.revision))
+        .collect();
+    if reservations.is_empty() {
+        return;
+    }
     let Ok(status) = ports.call("bulk.status", json!({}), BUDGET) else {
         return;
     };
-    let active = status["active"]["id"].as_str();
-    let ids: Vec<_> = held
-        .map()
-        .iter()
-        .filter(|(_, h)| !h.pending)
-        .map(|(id, _)| id.clone())
-        .collect();
-    for id in ids {
-        if active != Some(id.as_str()) {
-            if let Some(path) = held.take(&id) {
-                ports.release(&path)
+    if status.get("pending").is_none() {
+        return;
+    }
+    let active = match status.get("active") {
+        Some(Value::Null) => None,
+        Some(active) => match active["id"].as_str().filter(|id| !id.is_empty()) {
+            Some(id) => Some(id),
+            None => return,
+        },
+        None => return,
+    };
+    for (id, revision) in reservations {
+        if active == Some(id.as_str()) {
+            continue;
+        }
+        let path = {
+            let mut map = held.map();
+            if map
+                .get(&id)
+                .is_some_and(|hold| !hold.pending && hold.revision == revision)
+            {
+                map.remove(&id).and_then(|hold| hold.path)
+            } else {
+                None
             }
+        };
+        if let Some(path) = path {
+            ports.release(&path)
         }
     }
 }
+
 pub(crate) fn forward(
     app: &tauri::AppHandle,
     method: &str,
@@ -173,6 +211,7 @@ mod tests {
         calls: Mutex<Vec<(String, Value)>>,
         released: Mutex<Vec<String>>,
         fail: bool,
+        live: bool,
         terminal: bool,
     }
     impl Ports for Fake<'_> {
@@ -188,7 +227,7 @@ mod tests {
         fn call(&self, m: &str, p: Value, _: std::time::Duration) -> Result<Value, String> {
             self.calls.lock().unwrap().push((m.into(), p));
             if m == "bulk.status" {
-                return Ok(if self.fail {
+                return Ok(if self.live {
                     json!({"active":{"id":"op","type":"archive_backup_delete"},"pending":null})
                 } else {
                     json!({"active":null,"pending":null})
@@ -220,6 +259,7 @@ mod tests {
             calls: Mutex::new(vec![]),
             released: Mutex::new(vec![]),
             fail: false,
+            live: false,
             terminal: true,
         };
         forward_flow(
@@ -241,6 +281,7 @@ mod tests {
             calls: Mutex::new(vec![]),
             released: Mutex::new(vec![]),
             fail: true,
+            live: true,
             terminal: false,
         };
         assert!(forward_flow(
@@ -268,6 +309,7 @@ mod tests {
             calls: Mutex::new(vec![]),
             released: Mutex::new(vec![]),
             fail: true,
+            live: true,
             terminal: false,
         };
         for _ in 0..2 {
@@ -278,6 +320,114 @@ mod tests {
                 json!({"operationId":"op","type":"archive_backup_delete"}),
             );
         }
+        assert!(h.contains("op"));
+        assert!(p.released.lock().unwrap().is_empty());
+    }
+    #[test]
+    fn definitive_failed_kickoff_reconciles_and_releases_once() {
+        let h = HeldBulkPaths::default();
+        let p = Fake {
+            held: &h,
+            calls: Mutex::new(vec![]),
+            released: Mutex::new(vec![]),
+            fail: true,
+            live: false,
+            terminal: false,
+        };
+        assert!(forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","type":"archive_backup_delete"})
+        )
+        .is_err());
+        assert!(!h.contains("op"));
+        assert_eq!(p.released.lock().unwrap().as_slice(), ["/drive"]);
+    }
+    #[test]
+    fn stale_reconnect_status_cannot_release_a_newer_kickoff() {
+        struct Racing<'a> {
+            held: &'a HeldBulkPaths,
+            base: &'a Fake<'a>,
+        }
+        impl Ports for Racing<'_> {
+            fn resolve(&self) -> Option<String> {
+                self.base.resolve()
+            }
+            fn exists(&self, p: &str) -> bool {
+                self.base.exists(p)
+            }
+            fn release(&self, p: &str) {
+                self.base.release(p)
+            }
+            fn call(&self, m: &str, p: Value, b: Duration) -> Result<Value, String> {
+                if m == "bulk.status" {
+                    forward_flow(
+                        self.held,
+                        self.base,
+                        "bulk.start",
+                        json!({"operationId":"op","type":"archive_backup_delete"}),
+                    )?;
+                    Ok(json!({"active":null,"pending":null}))
+                } else {
+                    self.base.call(m, p, b)
+                }
+            }
+        }
+        let h = HeldBulkPaths::default();
+        let p = Fake {
+            held: &h,
+            calls: Mutex::new(vec![]),
+            released: Mutex::new(vec![]),
+            fail: false,
+            live: true,
+            terminal: false,
+        };
+        forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","type":"archive_backup_delete"}),
+        )
+        .unwrap();
+        reconcile(&h, &Racing { held: &h, base: &p });
+        assert!(h.contains("op"));
+        assert!(p.released.lock().unwrap().is_empty());
+    }
+    #[test]
+    fn unreadable_status_keeps_native_access() {
+        struct Broken<'a>(&'a Fake<'a>);
+        impl Ports for Broken<'_> {
+            fn resolve(&self) -> Option<String> {
+                self.0.resolve()
+            }
+            fn exists(&self, p: &str) -> bool {
+                self.0.exists(p)
+            }
+            fn release(&self, p: &str) {
+                self.0.release(p)
+            }
+            fn call(&self, _: &str, _: Value, _: Duration) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+        }
+        let h = HeldBulkPaths::default();
+        let p = Fake {
+            held: &h,
+            calls: Mutex::new(vec![]),
+            released: Mutex::new(vec![]),
+            fail: false,
+            live: true,
+            terminal: false,
+        };
+        forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","type":"archive_backup_delete"}),
+        )
+        .unwrap();
+        reconcile(&h, &Broken(&p));
         assert!(h.contains("op"));
         assert!(p.released.lock().unwrap().is_empty());
     }

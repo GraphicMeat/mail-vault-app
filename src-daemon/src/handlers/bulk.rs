@@ -46,19 +46,25 @@ pub(crate) async fn route(
                     }
                     let scope: Scope = serde_json::from_value(params["scope"].clone())
                         .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
-                    let intent = crate::bulk_worker::freeze(&state, action, scope)?;
+                    let work = crate::bulk_worker::freeze(&state, action, scope)?;
+                    let intent = work.intent.clone();
                     let (snapshot, duplicate) = {
                         let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
                         let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
                         let duplicate = bulk.active_id() == Some(operation_id);
                         let snapshot = bulk.claim(&state.app_dir, operation_id, intent.clone())?;
+                        if !duplicate && bulk.active_id() == Some(operation_id) {
+                            if let Err(e) = bulk.checkpoint(&state.app_dir, operation_id, &work) {
+                                let _ = bulk.drained(operation_id);
+                                return Err(e);
+                            }
+                        }
                         (
                             snapshot,
                             duplicate || bulk.active_id() != Some(operation_id),
                         )
                     };
                     if !duplicate {
-                        let work = mailvault_core::bulk_worker::Workflow::new(intent);
                         if let Err(e) = crate::bulk_worker::launch(
                             state.clone(),
                             operation_id.into(),

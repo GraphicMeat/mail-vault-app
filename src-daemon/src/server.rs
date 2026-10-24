@@ -1118,16 +1118,38 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
         let reply = handle_request_for_test(&state, "bulk.start", json!({"operationId":"empty-worker","type":"archive","scope":{"accountId":"a","mailbox":"INBOX","keys":[]}})).await;
-        assert!(reply.error.is_none(), "bulk.start must launch the real worker: {:?}", reply.error);
+        assert!(
+            reply.error.is_none(),
+            "bulk.start must launch the real worker: {:?}",
+            reply.error
+        );
         for _ in 0..100 {
-            let status = handle_request_for_test(&state, "bulk.status", json!({})).await.result.unwrap();
+            let status = handle_request_for_test(&state, "bulk.status", json!({}))
+                .await
+                .result
+                .unwrap();
             if status["active"].is_null() {
-                assert!(status["pending"].is_null(), "empty worker must reach terminal drain: {status}");
+                assert!(
+                    status["pending"].is_null(),
+                    "empty worker must reach terminal drain: {status}"
+                );
                 return;
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         panic!("empty worker never drained");
+    }
+
+    #[test]
+    fn bulk_worker_kickoff_future_stays_small() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let params = json!({"operationId":"future","type":"archive","scope":{"keys":[]}});
+        let future = crate::handlers::bulk::route(&state, "bulk.start", &params, json!(1));
+        assert!(
+            std::mem::size_of_val(&future) < 4096,
+            "bulk RPC must never own the large mail future"
+        );
     }
 
     fn err_message(resp: RpcResponse) -> String {

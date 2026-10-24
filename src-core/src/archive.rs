@@ -189,15 +189,47 @@ pub async fn run_with_backup(
     // `None` (a manual archive) never stops for it.
     limit: Option<BackgroundLimit>,
 ) -> Result<ArchiveProgress, String> {
+    let account:ImapConfig=serde_json::from_str(&account_json).map_err(|e|format!("Bad account JSON: {}",e))?;
+    run_with_backup_config(ctx,account_id,account,mailbox,uids,cancel,backup_path,account_email,remove_existing,operation,background,limit).await
+}
+
+/// Typed daemon-worker entry point. Credentials stay in memory and never
+/// require a new serialized account representation.
+pub async fn run_config(
+    ctx: Arc<ArchiveCtx>,
+    account_id: String,
+    account: ImapConfig,
+    mailbox: String,
+    uids: Vec<u32>,
+    cancel: Arc<AtomicBool>,
+    background: bool,
+) -> Result<ArchiveProgress, String> {
+    run_with_backup_config(
+        ctx, account_id, account, mailbox, uids, cancel, None, None, true, "archive", background,
+        None,
+    )
+    .await
+}
+
+async fn run_with_backup_config(
+    ctx: Arc<ArchiveCtx>,
+    account_id: String,
+    account: ImapConfig,
+    mailbox: String,
+    uids: Vec<u32>,
+    cancel: Arc<AtomicBool>,
+    backup_path: Option<String>,
+    account_email: Option<String>,
+    remove_existing: bool,
+    operation: &'static str,
+    background: bool,
+    limit: Option<BackgroundLimit>,
+) -> Result<ArchiveProgress, String> {
     let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
         crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox)
     }).transpose()?;
     let total = uids.len();
     info!("archive_emails: starting {} UIDs for account {}", total, account_id);
-
-    // Parse account config
-    let account: ImapConfig = serde_json::from_str(&account_json)
-        .map_err(|e| format!("Bad account JSON: {}", e))?;
 
     emit(&ctx, ArchiveProgress {
         total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None, external_copy_failures: 0, bandwidth_limited: false,
@@ -968,14 +1000,42 @@ pub async fn bulk_delete(
 /// The user bulk worker binds UIDVALIDITY on every deletion connection,
 /// including a fresh session after the pool retries a dead socket.
 pub async fn bulk_delete_bound(
-    ctx: Arc<ArchiveCtx>, account_id:String, account_json:String, mailbox:String,
-    uids:Vec<u32>, cancel:Arc<AtomicBool>, expected_validity:Option<u32>,
-) -> Result<(ArchiveProgress,Vec<u32>),String> {
+    ctx: Arc<ArchiveCtx>,
+    account_id: String,
+    account_json: String,
+    mailbox: String,
+    uids: Vec<u32>,
+    cancel: Arc<AtomicBool>,
+    expected_validity: Option<u32>,
+) -> Result<(ArchiveProgress, Vec<u32>), String> {
+    let account: ImapConfig =
+        serde_json::from_str(&account_json).map_err(|e| format!("Bad account JSON: {}", e))?;
+    bulk_delete_config(
+        ctx,
+        account_id,
+        account,
+        mailbox,
+        uids,
+        cancel,
+        expected_validity,
+        None,
+    )
+    .await
+}
+
+pub async fn bulk_delete_config(
+    ctx: Arc<ArchiveCtx>,
+    account_id: String,
+    account: ImapConfig,
+    mailbox: String,
+    uids: Vec<u32>,
+    cancel: Arc<AtomicBool>,
+    expected_validity: Option<u32>,
+    expected_ids: Option<std::collections::HashMap<u32, String>>,
+) -> Result<(ArchiveProgress, Vec<u32>), String> {
     let total = uids.len();
     info!("bulk_delete: starting {} UIDs for account {}", total, account_id);
 
-    let account: ImapConfig = serde_json::from_str(&account_json)
-        .map_err(|e| format!("Bad account JSON: {}", e))?;
 
     (ctx.sinks.emit)("bulk-operation-progress", serde_json::json!({
         "phase": "delete",
@@ -1007,6 +1067,7 @@ pub async fn bulk_delete_bound(
         let deleted = Arc::clone(&deleted);
         let cancel = Arc::clone(&cancel);
 
+        let expected_id=expected_ids.as_ref().and_then(|ids|ids.get(&uid)).cloned();
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
 
@@ -1014,7 +1075,7 @@ pub async fn bulk_delete_bound(
                 return;
             }
 
-            let result = delete_single_email(&ctx.pool, &account, &mailbox, uid, expected_validity).await;
+            let result = delete_single_email(&ctx.pool, &account, &mailbox, uid, expected_validity,expected_id.as_deref()).await;
 
             if result.is_ok() {
                 deleted.lock().unwrap_or_else(|p| p.into_inner()).push(uid);
@@ -1069,6 +1130,7 @@ async fn delete_single_email(
     mailbox: &str,
     uid: u32,
     expected_validity: Option<u32>,
+    expected_id: Option<&str>,
 ) -> Result<(), String> {
     // Retries once on a fresh connection when the pooled socket turns out to
     // have died while idle — the same one-line failure that made a single
@@ -1078,15 +1140,43 @@ async fn delete_single_email(
     // Background lane: the only caller is a bulk run (BulkOperationManager),
     // whose five workers would otherwise queue the message the user clicks.
     pool.run_uid_delete(account, false, |mut session| async move {
-        // Cached at session creation — read after checkout, like the move path.
-        let has_uidplus = pool.has_capability(account, "UIDPLUS").await;
         if let Some(validity) = expected_validity {
-            imap::abd_cmds::expunge_exact(&mut session, mailbox, &[uid], has_uidplus, Some(validity)).await?;
+            let actual = imap::abd_cmds::uid_validity(&mut session, mailbox).await?;
+            if actual != Some(validity) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            if let Some(expected) = expected_id {
+                let current = imap::abd_cmds::message_ids(&mut session, mailbox, &[uid]).await?;
+                if let Some((_, id)) = current.into_iter().find(|(u, _)| *u == uid) {
+                    if id
+                        .as_deref()
+                        .map(crate::maildir::normalize_message_id)
+                        .as_deref()
+                        != Some(crate::maildir::normalize_message_id(expected).as_str())
+                    {
+                        return Err("errors.bulkIdentityChanged".into());
+                    }
+                } else {
+                    return Ok(((), session, Some(mailbox.to_string())));
+                }
+            }
+            let caps = imap::abd_cmds::capabilities(&mut session).await?;
+            imap::abd_cmds::expunge_exact(
+                &mut session,
+                mailbox,
+                &[uid],
+                caps.uidplus,
+                Some(validity),
+            )
+            .await?;
         } else {
+            // Preserve the legacy route's capability/fallback contract.
+            let has_uidplus = pool.has_capability(account, "UIDPLUS").await;
             imap::delete_email(&mut session, mailbox, uid, true, has_uidplus).await?;
         }
         Ok(((), session, Some(mailbox.to_string())))
-    }).await
+    })
+    .await
 }
 
 #[cfg(test)]

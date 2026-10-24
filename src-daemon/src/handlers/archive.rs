@@ -101,18 +101,13 @@ pub(crate) fn archive_ctx(state: &Arc<DaemonState>, root: std::path::PathBuf) ->
 async fn capture_all(
     state: &Arc<DaemonState>,
     account_id: &str,
-    account_json: &str,
+    config: &crate::imap::ImapConfig,
     mailbox: &str,
     uids: Vec<u32>,
     cancel: &std::sync::atomic::AtomicBool,
 ) -> (Vec<u32>, usize) {
     use futures::StreamExt;
-    let Ok(config) = serde_json::from_str::<crate::imap::ImapConfig>(account_json) else {
-        // `bulk_delete` refuses the same JSON with its own error.
-        return (uids, 0);
-    };
     let total = uids.len();
-    let config = &config;
     let kept: Vec<u32> = futures::stream::iter(uids)
         .map(|uid| async move {
             if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -357,30 +352,74 @@ fn progress_reply(id: Value, result: Result<mailvault_core::archive::ArchiveProg
 /// Shared provider delete plus bin/cache/custody/reminder/classification work.
 /// Only the exact successful UID set is returned as completion evidence.
 pub(crate) async fn delete_with_outcomes(
-    state:&Arc<DaemonState>,account_id:String,account_json:String,mailbox:String,uids:Vec<u32>,bin:bool,
-    cancel:Arc<std::sync::atomic::AtomicBool>,identity:Option<&mailvault_core::bulk_worker::Identity>,
-)->Result<(archive::ArchiveProgress,Vec<u32>),String> {
-    let config:crate::imap::ImapConfig=serde_json::from_str(&account_json).map_err(|e|e.to_string())?;
+    state: &Arc<DaemonState>,
+    account_id: String,
+    account_json: String,
+    mailbox: String,
+    uids: Vec<u32>,
+    bin: bool,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
+    identity: Option<&mailvault_core::bulk_worker::Identity>,
+) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
+    let config: crate::imap::ImapConfig =
+        serde_json::from_str(&account_json).map_err(|e| e.to_string())?;
+    delete_with_config(
+        state, account_id, config, mailbox, uids, bin, cancel, identity,
+    )
+    .await
+}
+
+pub(crate) async fn delete_with_config(
+    state: &Arc<DaemonState>,
+    account_id: String,
+    config: crate::imap::ImapConfig,
+    mailbox: String,
+    uids: Vec<u32>,
+    bin: bool,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
+    identity: Option<&mailvault_core::bulk_worker::Identity>,
+) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
     // JMAP dispatch takes precedence, as in the archive runner. A Graph UID
     // is never sent down an IMAP lane or to Graph's different Trash operation.
-    if !config.uses_jmap() && config.uses_graph(){return Err("errors.bulkGraphDeleteUnsupported".into())}
-    let (uids,refused)=if bin {capture_all(state,&account_id,&account_json,&mailbox,uids,&cancel).await}else{(uids,0)};
-    let (acct,mb)=(account_id.clone(),mailbox.clone());
-    let result=if config.uses_jmap(){
-        bulk_delete_jmap_bound(state,account_id,&config,mailbox,uids,cancel,identity).await
-    }else{
-        let validity=match identity {
-            Some(mailvault_core::bulk_worker::Identity::Imap{validity,..})=>Some(*validity),
-            None=>None,
-            _=>return Err("errors.bulkIdentityChanged".into()),
-        };
-        archive::bulk_delete_bound(archive_ctx(state,std::path::PathBuf::new()),account_id,account_json,mailbox,uids,cancel,validity).await
+    if !config.uses_jmap() && config.uses_graph() {
+        return Err("errors.bulkGraphDeleteUnsupported".into());
+    }
+    let (uids, refused) = if bin {
+        capture_all(state, &account_id, &config, &mailbox, uids, &cancel).await
+    } else {
+        (uids, 0)
     };
-    let (mut p,deleted)=result?;
-    end_follow_ups_at(state,&acct,&mb,&deleted).await;
-    forget_classifications_at(state,&acct,&mb,&deleted).await;
-    record_server_deleted(state,&acct,&mb,deleted.clone()).await;
-    p.total+=refused;p.errors+=refused;Ok((p,deleted))
+    let (acct, mb) = (account_id.clone(), mailbox.clone());
+    let result = if config.uses_jmap() {
+        bulk_delete_jmap_bound(state, account_id, &config, mailbox, uids, cancel, identity).await
+    } else {
+        let (validity, ids) = match identity {
+            Some(mailvault_core::bulk_worker::Identity::Imap {
+                validity,
+                message_ids,
+            }) => (Some(*validity), Some(message_ids.clone())),
+            None => (None, None),
+            _ => return Err("errors.bulkIdentityChanged".into()),
+        };
+        archive::bulk_delete_config(
+            archive_ctx(state, std::path::PathBuf::new()),
+            account_id,
+            config,
+            mailbox,
+            uids,
+            cancel,
+            validity,
+            ids,
+        )
+        .await
+    };
+    let (mut p, deleted) = result?;
+    end_follow_ups_at(state, &acct, &mb, &deleted).await;
+    forget_classifications_at(state, &acct, &mb, &deleted).await;
+    record_server_deleted(state, &acct, &mb, deleted.clone()).await;
+    p.total += refused;
+    p.errors += refused;
+    Ok((p, deleted))
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────
@@ -1147,4 +1186,244 @@ mod tests {
         assert!(trap.accept().is_err(), "no IMAP dial");
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_bound_delete_checks_generation_on_the_deletion_connection() {
+        use mailvault_core::bulk_worker::Identity;
+        let (_v, s) = st(true);
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new().mailbox(inbox_with(&[7, 8]).with_uid_validity(2)),
+        );
+        let proof = Identity::Imap {
+            validity: 1,
+            message_ids: std::collections::HashMap::new(),
+        };
+        let (p, deleted) = delete_with_outcomes(
+            &s,
+            "acc".into(),
+            account_json_for(&server),
+            "INBOX".into(),
+            vec![7],
+            false,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Some(&proof),
+        )
+        .await
+        .unwrap();
+        assert_eq!((p.completed, p.errors), (0, 1));
+        assert!(deleted.is_empty());
+        assert!(
+            server
+                .commands()
+                .iter()
+                .all(|c| !c.contains("UID STORE") && !c.contains("EXPUNGE")),
+            "mismatched generation must refuse before mutation"
+        );
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_bound_delete_returns_exact_uids_and_keeps_other_folders() {
+        use mailvault_core::bulk_worker::Identity;
+        let (_v, s) = st(true);
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new()
+                .mailbox(inbox_with(&[7, 8]))
+                .mailbox({
+                    let mut m = inbox_with(&[7]);
+                    m.name = "Sent".into();
+                    m
+                }),
+        );
+        seed_headers(&s, &[7, 8]);
+        let proof = Identity::Imap {
+            validity: 1,
+            message_ids: std::collections::HashMap::new(),
+        };
+        let (p, deleted) = delete_with_outcomes(
+            &s,
+            "acc".into(),
+            account_json_for(&server),
+            "INBOX".into(),
+            vec![7],
+            false,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Some(&proof),
+        )
+        .await
+        .unwrap();
+        assert_eq!((p.completed, p.errors), (1, 0));
+        assert_eq!(deleted, vec![7]);
+        assert_eq!(cached_uids(&s), vec![8]);
+        let commands = server.commands();
+        assert!(commands.iter().any(|c| c.contains("UID EXPUNGE 7")));
+        assert!(commands
+            .iter()
+            .all(|c| !c.contains("MOVE") && !c.contains("UID COPY")));
+        assert!(server.state().mailboxes["Sent"]
+            .messages
+            .iter()
+            .any(|m| m.uid == 7));
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_bound_delete_without_uidplus_refuses_broad_expunge() {
+        use mailvault_core::bulk_worker::Identity;
+        let (_v, s) = st(true);
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new()
+                .without_cap("UIDPLUS")
+                .mailbox(inbox_with(&[7, 8])),
+        );
+        let proof = Identity::Imap {
+            validity: 1,
+            message_ids: std::collections::HashMap::new(),
+        };
+        let (p, deleted) = delete_with_outcomes(
+            &s,
+            "acc".into(),
+            account_json_for(&server),
+            "INBOX".into(),
+            vec![7],
+            false,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Some(&proof),
+        )
+        .await
+        .unwrap();
+        assert_eq!((p.completed, p.errors), (0, 1));
+        assert!(deleted.is_empty());
+        assert!(server
+            .commands()
+            .iter()
+            .all(|c| !c.contains("UID STORE") && !c.contains("EXPUNGE")));
+    }
+    #[tokio::test]
+    async fn bulk_bound_graph_delete_fails_before_capture_or_imap() {
+        let (_v, s) = st(true);
+        let result = delete_with_outcomes(
+            &s,
+            "acc".into(),
+            graph_account_json(),
+            "INBOX".into(),
+            vec![7],
+            true,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Some(&mailvault_core::bulk_worker::Identity::Graph),
+        )
+        .await;
+        assert_eq!(result.unwrap_err(), "errors.bulkGraphDeleteUnsupported");
+    }
+
+    #[tokio::test]
+    async fn bulk_bound_jmap_preserves_remove_label_and_destroy_if_last() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (_v, s) = st(true);
+        let listing = handle_request_for_test(
+            &s,
+            "imap_get_emails",
+            json!({"account":support::account_json(&m,port),"mailbox":"INBOX","page":1,"limit":50}),
+        )
+        .await
+        .result
+        .unwrap();
+        let uids: Vec<u32> = listing["emails"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["uid"].as_u64().unwrap() as u32)
+            .collect();
+        let config = support::config(&m, port);
+        let account = s.jmap.get(&config).await.unwrap();
+        let ids = account
+            .uid_to_id(&s, "acct1", "INBOX", &uids, false)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|(u, id)| id.map(|id| (u, id)))
+            .collect();
+        let proof = mailvault_core::bulk_worker::Identity::Jmap {
+            mailbox_id: "mb-inbox".into(),
+            ids,
+        };
+        let (p, deleted) = delete_with_config(
+            &s,
+            "acct1".into(),
+            config,
+            "INBOX".into(),
+            uids,
+            false,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Some(&proof),
+        )
+        .await
+        .unwrap();
+        assert_eq!((p.completed, p.errors), (2, 0));
+        assert_eq!(deleted.len(), 2);
+        m.read(|state| {
+            assert_eq!(
+                state.email("acc1", "e1").unwrap().mailbox_ids,
+                std::collections::BTreeSet::from(["mb-work".into()])
+            );
+            assert!(state.email("acc1", "e2").is_none());
+        });
+        assert!(trap.accept().is_err());
+    }
+    #[tokio::test]
+    async fn bulk_bound_jmap_absent_ledger_uid_is_not_deletion_authority() {
+        use crate::jmap_test_support as support;
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (_v, s) = st(true);
+        let config = support::config(&m, port);
+        let proof = mailvault_core::bulk_worker::Identity::Jmap {
+            mailbox_id: "mb-inbox".into(),
+            ids: std::collections::HashMap::new(),
+        };
+        let result = delete_with_config(
+            &s,
+            "acct1".into(),
+            config,
+            "INBOX".into(),
+            vec![10001],
+            false,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Some(&proof),
+        )
+        .await;
+        assert_eq!(result.unwrap_err(), "errors.bulkIdentityChanged");
+        assert_eq!(support::emails_in(&m, "mb-inbox").len(), 2);
+        assert!(trap.accept().is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_bound_delete_checks_original_message_on_the_effect_connection() {
+        use mailvault_core::bulk_worker::Identity;
+        let (_v, s) = st(true);
+        let server =
+            mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(inbox_with(&[7])));
+        let proof = Identity::Imap {
+            validity: 1,
+            message_ids: std::collections::HashMap::from([(
+                7,
+                "another-message@example.test".into(),
+            )]),
+        };
+        let (p, deleted) = delete_with_outcomes(
+            &s,
+            "acc".into(),
+            account_json_for(&server),
+            "INBOX".into(),
+            vec![7],
+            false,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Some(&proof),
+        )
+        .await
+        .unwrap();
+        assert_eq!((p.completed, p.errors), (0, 1));
+        assert!(deleted.is_empty());
+        assert!(server
+            .commands()
+            .iter()
+            .all(|c| !c.contains("UID STORE") && !c.contains("EXPUNGE")));
+    }
 }

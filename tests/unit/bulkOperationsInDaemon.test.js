@@ -1,5 +1,5 @@
 // Ordinary worker ownership; frontend manager cutover remains a later slice.
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
 import { createDemoBackend } from '../../src/demo/backend.js';
@@ -18,7 +18,7 @@ it('registers implemented bulk controls in daemon transport and router', () => {
   expect(forwarding).toBeGreaterThan(shell.indexOf('async fn daemon_rpc('));
   expect(forwarding).toBeLessThan(fastPath);
   const native = readFileSync('src-tauri/src/bulk.rs', 'utf8');
-  expect(native).toContain('set_root(&mut params,None)');
+  expect(native).toMatch(/set_root\(&mut params,\s*None\)/);
   expect(native).toContain('reconcile_after_channel_change');
   const oldManager = readFileSync('src/services/BulkOperationManager.js', 'utf8');
   expect(oldManager).toContain("send('archive_emails'");
@@ -106,4 +106,21 @@ it('the demo accepts consistent versioned grouping and opaque purge selections',
     await expect(demo.invoke('bulk.discard', { operationId: 'valid' })).resolves.toBeNull();
     expect(await demo.invoke('read_pending_operation')).toBeNull();
   }
+});
+
+it('demo kickoff returns before matching cancellation drains once', async () => {
+  vi.useFakeTimers();
+  try {
+    const demo=createDemoBackend();const events=[];demo.on('bulk-progress',({payload})=>events.push(payload));
+    const reply=await demo.invoke('bulk.start',{operationId:'demo-worker',type:'archive',scope:{keys:[]}});
+    expect(reply.status).toBe('starting');
+    await expect(demo.invoke('bulk.cancel',{operationId:'foreign'})).rejects.toThrow('errors.bulkStale');
+    await demo.invoke('bulk.cancel',{operationId:'demo-worker'});
+    expect((await demo.invoke('bulk.status')).active.status).toBe('cancelling');
+    expect(events.filter(e=>e.finished)).toHaveLength(0);
+    await vi.runAllTimersAsync();
+    expect(events.filter(e=>e.finished)).toHaveLength(1);
+    expect(events.at(-1).operation.status).toBe('cancelled');
+    expect((await demo.invoke('bulk.status')).active).toBeNull();
+  } finally {vi.useRealTimers();}
 });

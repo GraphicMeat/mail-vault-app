@@ -6,8 +6,8 @@
 use crate::op_journal;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::path::Path;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -82,14 +82,21 @@ fn target(key: &Value, scope: &Scope) -> Option<(String, String, u32)> {
             if mailbox.is_empty() || mailbox == "UNIFIED" {
                 return None;
             }
-            return Some((account.into(), mailbox.into(), numeric_uid(&raw[last + 1..])?));
+            return Some((
+                account.into(),
+                mailbox.into(),
+                numeric_uid(&raw[last + 1..])?,
+            ));
         }
     }
     if scope.spans {
         return None;
     }
     let account = scope.account_id.as_ref().filter(|a| !a.is_empty())?;
-    let mailbox = scope.mailbox.as_ref().filter(|m| !m.is_empty() && m.as_str() != "UNIFIED")?;
+    let mailbox = scope
+        .mailbox
+        .as_ref()
+        .filter(|m| !m.is_empty() && m.as_str() != "UNIFIED")?;
     // The old JS helper accepted out-of-range integers, but its u32 RPC
     // decoder refused them. Never cast them into a different server UID.
     let uid = match key {
@@ -101,7 +108,10 @@ fn target(key: &Value, scope: &Scope) -> Option<(String, String, u32)> {
 }
 
 pub fn group_targets(scope: &Scope) -> Grouped {
-    let mut grouped = Grouped { groups: Vec::new(), refused: Vec::new() };
+    let mut grouped = Grouped {
+        groups: Vec::new(),
+        refused: Vec::new(),
+    };
     let mut groups_by_mailbox = HashMap::new();
     let mut seen = HashSet::new();
     for key in &scope.keys {
@@ -109,11 +119,17 @@ pub fn group_targets(scope: &Scope) -> Grouped {
             grouped.refused.push(key.clone());
             continue;
         };
-        let index = *groups_by_mailbox.entry((account_id.clone(), mailbox.clone())).or_insert_with(|| {
-            let index = grouped.groups.len();
-            grouped.groups.push(Group { account_id, mailbox, uids: Vec::new() });
-            index
-        });
+        let index = *groups_by_mailbox
+            .entry((account_id.clone(), mailbox.clone()))
+            .or_insert_with(|| {
+                let index = grouped.groups.len();
+                grouped.groups.push(Group {
+                    account_id,
+                    mailbox,
+                    uids: Vec::new(),
+                });
+                index
+            });
         if seen.insert((index, uid)) {
             grouped.groups[index].uids.push(uid);
         }
@@ -134,7 +150,13 @@ impl FrozenIntent {
     /// Account ids and local folders come from daemon-owned current storage,
     /// never serialized account objects or client claims of local provenance.
     pub fn freeze(operation: Action, scope: Scope, accounts: &[String], local: &[Mailbox]) -> Self {
-        let mut intent = Self { operation, scope, groups: Vec::new(), refused: Vec::new(), skipped_local: 0 };
+        let mut intent = Self {
+            operation,
+            scope,
+            groups: Vec::new(),
+            refused: Vec::new(),
+            skipped_local: 0,
+        };
         // Purge needs provider/provenance resolution, rather than IMAP-only
         // grouping. Preserve every exact key until that separate proof step.
         if operation == Action::DeleteEverywhere {
@@ -144,8 +166,13 @@ impl FrozenIntent {
         intent.refused = grouped.refused;
         for group in grouped.groups {
             if !accounts.contains(&group.account_id) {
-                intent.refused.extend(group.uids.iter().map(|uid| group.key(*uid)));
-            } else if local.iter().any(|m| m.account_id == group.account_id && m.mailbox == group.mailbox) {
+                intent
+                    .refused
+                    .extend(group.uids.iter().map(|uid| group.key(*uid)));
+            } else if local
+                .iter()
+                .any(|m| m.account_id == group.account_id && m.mailbox == group.mailbox)
+            {
                 intent.skipped_local += group.uids.len();
             } else {
                 intent.groups.push(group);
@@ -153,17 +180,28 @@ impl FrozenIntent {
         }
         intent
     }
-    pub fn action(&self) -> Action { self.operation }
-    pub fn groups(&self) -> &[Group] { &self.groups }
+    pub fn action(&self) -> Action {
+        self.operation
+    }
+    pub fn groups(&self) -> &[Group] {
+        &self.groups
+    }
     pub fn target_keys(&self) -> Vec<Value> {
         if self.operation == Action::DeleteEverywhere {
             self.scope.keys.clone()
         } else {
-            self.groups.iter().flat_map(|g| g.uids.iter().map(|uid| g.key(*uid))).collect()
+            self.groups
+                .iter()
+                .flat_map(|g| g.uids.iter().map(|uid| g.key(*uid)))
+                .collect()
         }
     }
-    pub fn skipped(&self) -> usize { self.refused.len() }
-    pub fn skipped_local(&self) -> usize { self.skipped_local }
+    pub fn skipped(&self) -> usize {
+        self.refused.len()
+    }
+    pub fn skipped_local(&self) -> usize {
+        self.skipped_local
+    }
 }
 
 #[derive(Clone)]
@@ -178,8 +216,13 @@ struct Pending {
 impl Pending {
     fn parse(raw: Value) -> Result<Self, String> {
         let invalid = || "errors.bulkPendingInvalid".to_string();
-        let id = raw["id"].as_str().filter(|s| !s.is_empty()).ok_or_else(invalid)?.to_owned();
-        let operation: Action = serde_json::from_value(raw["type"].clone()).map_err(|_| invalid())?;
+        let id = raw["id"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(invalid)?
+            .to_owned();
+        let operation: Action =
+            serde_json::from_value(raw["type"].clone()).map_err(|_| invalid())?;
         let keys = raw["totalUids"].as_array().ok_or_else(invalid)?.clone();
         let completed = raw["completedUids"].as_array().ok_or_else(invalid)?.clone();
         let status = raw["status"].as_str().ok_or_else(invalid)?;
@@ -188,16 +231,35 @@ impl Pending {
             if version.as_u64() != Some(1) {
                 return Err("errors.bulkPendingVersion".into());
             }
-            let intent: FrozenIntent = serde_json::from_value(raw["intent"].clone()).map_err(|_| invalid())?;
+            let intent: FrozenIntent =
+                serde_json::from_value(raw["intent"].clone()).map_err(|_| invalid())?;
             if intent.operation != operation || intent.target_keys() != keys {
                 return Err(invalid());
             }
+            if let Some(worker) = raw.get("worker") {
+                let work: crate::bulk_worker::Workflow =
+                    serde_json::from_value(worker.clone()).map_err(|_| invalid())?;
+                if !work.valid_for(&intent) {
+                    return Err(invalid());
+                }
+            }
         }
-        Ok(Self { raw, id, operation, keys, completed, terminal })
+        Ok(Self {
+            raw,
+            id,
+            operation,
+            keys,
+            completed,
+            terminal,
+        })
     }
     fn remaining(&self) -> Vec<Value> {
         let completed: HashSet<_> = self.completed.iter().collect();
-        self.keys.iter().filter(|key| !completed.contains(key)).cloned().collect()
+        self.keys
+            .iter()
+            .filter(|key| !completed.contains(key))
+            .cloned()
+            .collect()
     }
     fn snapshot(&self, status: &str) -> Value {
         let remaining = self.remaining().len();
@@ -236,10 +298,16 @@ pub struct Coordinator {
 impl Coordinator {
     /// Startup only reads app.db; it never launches a worker or touches mail.
     pub fn load(data_dir: &Path) -> Self {
-        Self { active: None, pending: Self::read(data_dir) }
+        Self {
+            active: None,
+            pending: Self::read(data_dir),
+        }
     }
     fn read(data_dir: &Path) -> Result<Option<Pending>, String> {
-        op_journal::pending_operation_read(data_dir).map_err(|_| "errors.bulkPendingRead".to_string())?.map(Pending::parse).transpose()
+        op_journal::pending_operation_read(data_dir)
+            .map_err(|_| "errors.bulkPendingRead".to_string())?
+            .map(Pending::parse)
+            .transpose()
     }
     fn refresh(&mut self, data_dir: &Path) -> Result<(), String> {
         // The old facade still writes legacy records during migration. Disk
@@ -253,28 +321,46 @@ impl Coordinator {
     pub fn status(&mut self, data_dir: &Path) -> Result<Value, String> {
         self.refresh(data_dir)?;
         let active = self.active.as_ref().map(|a| a.snapshot.clone());
-        let pending = if active.is_some() { None } else {
-            self.pending().filter(|p| !p.terminal).map(|p| p.snapshot("awaitingResume"))
+        let pending = if active.is_some() {
+            None
+        } else {
+            self.pending()
+                .filter(|p| !p.terminal)
+                .map(|p| p.snapshot("awaitingResume"))
         };
         Ok(json!({"active":active, "pending":pending}))
     }
     /// Internal worker kickoff seam. No RPC may call this until its worker
     /// exists. The intent reaches durable storage before ownership is returned.
-    pub fn claim(&mut self, data_dir: &Path, id: &str, intent: FrozenIntent) -> Result<Value, String> {
+    pub fn claim(
+        &mut self,
+        data_dir: &Path,
+        id: &str,
+        intent: FrozenIntent,
+    ) -> Result<Value, String> {
         self.refresh(data_dir)?;
         if let Some(active) = &self.active {
             return if active.id == id && active.intent == intent {
                 Ok(active.snapshot.clone())
-            } else { Err("errors.operationRunning".into()) };
+            } else {
+                Err("errors.operationRunning".into())
+            };
         }
-        if let Some(pending)=self.pending().filter(|p|p.terminal && p.id==id) {
-            let previous:FrozenIntent=serde_json::from_value(pending.raw["intent"].clone()).map_err(|_|"errors.bulkStale".to_string())?;
-            return if previous==intent {Ok(pending.snapshot(pending.raw["status"].as_str().unwrap_or("complete")))}else{Err("errors.bulkStale".into())}
+        if let Some(pending) = self.pending().filter(|p| p.terminal && p.id == id) {
+            let previous: FrozenIntent = serde_json::from_value(pending.raw["intent"].clone())
+                .map_err(|_| "errors.bulkStale".to_string())?;
+            return if previous == intent {
+                Ok(pending.snapshot(pending.raw["status"].as_str().unwrap_or("complete")))
+            } else {
+                Err("errors.bulkStale".into())
+            };
         }
         if self.pending().is_some_and(|p| !p.terminal) {
             return Err("errors.bulkPendingChoice".into());
         }
-        if id.is_empty() { return Err("errors.bulkMissingId".into()); }
+        if id.is_empty() {
+            return Err("errors.bulkMissingId".into());
+        }
         let raw = json!({
             "schemaVersion":1, "id":id, "type":intent.operation,
             "accountId":intent.scope.account_id, "mailbox":intent.scope.mailbox,
@@ -284,82 +370,160 @@ impl Coordinator {
             "createdAt":chrono::Utc::now().to_rfc3339()
         });
         let record = Pending::parse(raw.clone())?;
-        op_journal::pending_operation_save(data_dir, &raw).map_err(|_| "errors.bulkPendingWrite".to_string())?;
+        op_journal::pending_operation_save(data_dir, &raw)
+            .map_err(|_| "errors.bulkPendingWrite".to_string())?;
         let snapshot = record.snapshot("starting");
         self.pending = Ok(Some(record));
-        self.active = Some(Active { id:id.into(), intent, snapshot:snapshot.clone(), cancel:std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)) });
+        self.active = Some(Active {
+            id: id.into(),
+            intent,
+            snapshot: snapshot.clone(),
+            cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        });
         Ok(snapshot)
     }
     /// Live provider counts are presentation only, never completion proof.
-    pub fn progress(&mut self,id:&str,completed:usize,errors:usize)->Option<Value> {
-        let active=self.active.as_mut().filter(|a|a.id==id)?;
-        active.snapshot["completed"]=json!(completed);active.snapshot["errors"]=json!(errors);Some(active.snapshot.clone())
+    pub fn progress(&mut self, id: &str, completed: usize, errors: usize) -> Option<Value> {
+        let active = self.active.as_mut().filter(|a| a.id == id)?;
+        active.snapshot["completed"] = json!(completed);
+        active.snapshot["errors"] = json!(errors);
+        Some(active.snapshot.clone())
     }
-    pub fn active_id(&self) -> Option<&str> { self.active.as_ref().map(|a| a.id.as_str()) }
-    pub fn cancel_token(&self, id: &str) -> Result<std::sync::Arc<std::sync::atomic::AtomicBool>, String> {
-        self.active.as_ref().filter(|a| a.id == id).map(|a| a.cancel.clone()).ok_or_else(|| "errors.bulkStale".into())
+    pub fn active_id(&self) -> Option<&str> {
+        self.active.as_ref().map(|a| a.id.as_str())
     }
-    pub fn resume_worker(&mut self, data_dir:&Path, id:&str) -> Result<crate::bulk_worker::Workflow,String> {
+    pub fn cancel_token(
+        &self,
+        id: &str,
+    ) -> Result<std::sync::Arc<std::sync::atomic::AtomicBool>, String> {
+        self.active
+            .as_ref()
+            .filter(|a| a.id == id)
+            .map(|a| a.cancel.clone())
+            .ok_or_else(|| "errors.bulkStale".into())
+    }
+    pub fn resume_worker(
+        &mut self,
+        data_dir: &Path,
+        id: &str,
+    ) -> Result<crate::bulk_worker::Workflow, String> {
         self.refresh(data_dir)?;
-        if self.active.is_some() {return Err("errors.operationRunning".into())}
-        let pending=self.matching(id)?;
-        let work:crate::bulk_worker::Workflow=serde_json::from_value(pending.raw["worker"].clone()).map_err(|_|"errors.bulkIdentityUncertain".to_string())?;
-        let intent:FrozenIntent=serde_json::from_value(pending.raw["intent"].clone()).map_err(|_|"errors.bulkPendingInvalid".to_string())?;
-        let valid=work.intent==intent && work.groups.iter().map(|g|&g.group).eq(intent.groups.iter()) && work.groups.iter().all(|g| {
-            [&g.verified,&g.eligible,&g.attempted,&g.deleted].iter().all(|v|v.iter().all(|u|g.group.uids.contains(u)) && v.iter().collect::<HashSet<_>>().len()==v.len()) && g.deleted.iter().all(|u|g.attempted.contains(u))
+        if self.active.is_some() {
+            return Err("errors.operationRunning".into());
+        }
+        let pending = self.matching(id)?;
+        let work: crate::bulk_worker::Workflow =
+            serde_json::from_value(pending.raw["worker"].clone())
+                .map_err(|_| "errors.bulkIdentityUncertain".to_string())?;
+        let intent: FrozenIntent = serde_json::from_value(pending.raw["intent"].clone())
+            .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
+        let valid = work.valid_for(&intent);
+        if !valid {
+            return Err("errors.bulkPendingInvalid".into());
+        }
+        if intent.operation == Action::DeleteEverywhere {
+            return Err("errors.bulkUnsupported".into());
+        }
+        let snapshot = pending.snapshot("starting");
+        self.active = Some(Active {
+            id: id.into(),
+            intent,
+            snapshot,
+            cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
-        if !valid {return Err("errors.bulkPendingInvalid".into())}
-        let snapshot=pending.snapshot("starting");
-        self.active=Some(Active{id:id.into(),intent,snapshot,cancel:std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))});
         Ok(work)
     }
-    pub fn checkpoint(&mut self,data_dir:&Path,id:&str,work:&crate::bulk_worker::Workflow)->Result<Value,String> {
+    pub fn checkpoint(
+        &mut self,
+        data_dir: &Path,
+        id: &str,
+        work: &crate::bulk_worker::Workflow,
+    ) -> Result<Value, String> {
         self.refresh(data_dir)?;
-        if !self.active.as_ref().is_some_and(|a|a.id==id && a.intent==work.intent){return Err("errors.bulkStale".into())}
-        let mut raw=self.pending().ok_or("errors.bulkStale")?.raw.clone();
-        raw["worker"]=serde_json::to_value(work).map_err(|_|"errors.bulkPendingWrite".to_string())?;
-        raw["completedUids"]=json!(work.completed_keys());raw["currentPhase"]=json!(work.phase);raw["status"]=json!(work.status);
-        raw["result"]=json!(work.result);raw["lastError"]=json!(work.last_error);raw["errors"]=json!(work.result.kept_delete_failed);
-        let pending=Pending::parse(raw.clone())?;
-        op_journal::pending_operation_save(data_dir,&raw).map_err(|_|"errors.bulkPendingWrite".to_string())?;
-        let snapshot=pending.snapshot(&work.status);self.pending=Ok(Some(pending));
-        self.active.as_mut().unwrap().snapshot=snapshot.clone();Ok(snapshot)
+        if !self
+            .active
+            .as_ref()
+            .is_some_and(|a| a.id == id && a.intent == work.intent)
+        {
+            return Err("errors.bulkStale".into());
+        }
+        let mut raw = self.pending().ok_or("errors.bulkStale")?.raw.clone();
+        raw["worker"] =
+            serde_json::to_value(work).map_err(|_| "errors.bulkPendingWrite".to_string())?;
+        raw["completedUids"] = json!(work.completed_keys());
+        raw["currentPhase"] = json!(work.phase);
+        raw["status"] = json!(work.status);
+        raw["result"] = json!(work.result);
+        raw["lastError"] = json!(work.last_error);
+        raw["errors"] = json!(work.errors);
+        let pending = Pending::parse(raw.clone())?;
+        op_journal::pending_operation_save(data_dir, &raw)
+            .map_err(|_| "errors.bulkPendingWrite".to_string())?;
+        let snapshot = pending.snapshot(&work.status);
+        self.pending = Ok(Some(pending));
+        self.active.as_mut().unwrap().snapshot = snapshot.clone();
+        Ok(snapshot)
     }
     /// Called only after all provider and blocking work has returned.
-    pub fn drained(&mut self,id:&str)->Result<Value,String> {
-        if self.active_id()!=Some(id){return Err("errors.bulkStale".into())}
+    pub fn drained(&mut self, id: &str) -> Result<Value, String> {
+        if self.active_id() != Some(id) {
+            return Err("errors.bulkStale".into());
+        }
         Ok(self.active.take().unwrap().snapshot)
     }
     pub fn resume_plan(&mut self, data_dir: &Path, id: &str) -> Result<ResumePlan, String> {
         self.refresh(data_dir)?;
-        if self.active.is_some() { return Err("errors.operationRunning".into()); }
+        if self.active.is_some() {
+            return Err("errors.operationRunning".into());
+        }
         let pending = self.matching(id)?;
         let keys = pending.remaining();
         let mut scope = if pending.raw.get("schemaVersion").is_some() {
-            serde_json::from_value::<FrozenIntent>(pending.raw["intent"].clone()).map_err(|_| "errors.bulkPendingInvalid".to_string())?.scope
+            serde_json::from_value::<FrozenIntent>(pending.raw["intent"].clone())
+                .map_err(|_| "errors.bulkPendingInvalid".to_string())?
+                .scope
         } else {
-            Scope { account_id:pending.raw["accountId"].as_str().map(str::to_owned), mailbox:pending.raw["mailbox"].as_str().map(str::to_owned), spans:false, keys:Vec::new() }
+            Scope {
+                account_id: pending.raw["accountId"].as_str().map(str::to_owned),
+                mailbox: pending.raw["mailbox"].as_str().map(str::to_owned),
+                spans: false,
+                keys: Vec::new(),
+            }
         };
         scope.keys = keys.clone();
-        Ok(ResumePlan { operation:pending.operation, scope, keys, requires_fresh_identity:true })
+        Ok(ResumePlan {
+            operation: pending.operation,
+            scope,
+            keys,
+            requires_fresh_identity: true,
+        })
     }
     fn matching(&self, id: &str) -> Result<&Pending, String> {
-        self.pending().filter(|p| p.id == id && !p.terminal)
+        self.pending()
+            .filter(|p| p.id == id && !p.terminal)
             .ok_or_else(|| "errors.bulkStale".into())
     }
     pub fn discard(&mut self, data_dir: &Path, id: &str) -> Result<(), String> {
         self.refresh(data_dir)?;
-        if self.active.is_some() { return Err("errors.operationRunning".into()); }
+        if self.active.is_some() {
+            return Err("errors.operationRunning".into());
+        }
         self.matching(id)?;
-        op_journal::pending_operation_clear(data_dir).map_err(|_| "errors.bulkPendingWrite".to_string())?;
+        op_journal::pending_operation_clear(data_dir)
+            .map_err(|_| "errors.bulkPendingWrite".to_string())?;
         self.pending = Ok(None);
         Ok(())
     }
     /// Compatibility writes may still update unversioned records, but cannot
     /// bypass the new owner or erase unreadable/future-version evidence.
     pub fn allow_legacy_write(&self, data_dir: &Path) -> Result<(), String> {
-        let raw = op_journal::pending_operation_read(data_dir).map_err(|_| "errors.bulkPendingRead".to_string())?;
-        if self.active.is_some() || raw.as_ref().is_some_and(|v| v.get("schemaVersion").is_some()) {
+        let raw = op_journal::pending_operation_read(data_dir)
+            .map_err(|_| "errors.bulkPendingRead".to_string())?;
+        if self.active.is_some()
+            || raw
+                .as_ref()
+                .is_some_and(|v| v.get("schemaVersion").is_some())
+        {
             return Err("errors.bulkOwned".into());
         }
         Ok(())

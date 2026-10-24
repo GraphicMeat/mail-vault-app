@@ -62,6 +62,11 @@ impl Identity {
     }
 }
 #[derive(Debug, Clone, Default)]
+pub struct ArchiveOutcome {
+    pub errors: usize,
+    pub last_error: Option<String>,
+}
+#[derive(Debug, Clone, Default)]
 pub struct CopyProof {
     pub verified: Vec<u32>,
     pub missing: Vec<u32>,
@@ -76,10 +81,22 @@ pub struct ResultCounts {
     pub kept_copy_mismatch: usize,
     pub kept_delete_failed: usize,
 }
+/// Native cache/ledger snapshot taken when the request freezes its selection,
+/// before a delayed worker can observe a newer cached mailbox generation.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Selected {
+    pub validity: Option<u32>,
+    pub cached_uids: Vec<u32>,
+    pub message_ids: HashMap<u32, String>,
+    pub jmap_ids: HashMap<u32, String>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupState {
     pub group: Group,
+    #[serde(default)]
+    pub selected: Option<Selected>,
     pub identity: Option<Identity>,
     pub verified: Vec<u32>,
     pub eligible: Vec<u32>,
@@ -96,6 +113,8 @@ pub struct Workflow {
     pub status: String,
     pub result: ResultCounts,
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub errors: usize,
     pub intent: FrozenIntent,
 }
 impl Workflow {
@@ -107,6 +126,7 @@ impl Workflow {
                 .cloned()
                 .map(|group| GroupState {
                     group,
+                    selected: None,
                     identity: None,
                     verified: vec![],
                     eligible: vec![],
@@ -118,8 +138,47 @@ impl Workflow {
             status: "starting".into(),
             result: ResultCounts::default(),
             last_error: None,
+            errors: 0,
             intent,
         }
+    }
+    pub fn valid_for(&self, intent: &FrozenIntent) -> bool {
+        self.intent == *intent
+            && matches!(
+                self.status.as_str(),
+                "starting"
+                    | "archiving"
+                    | "verifying"
+                    | "backingUp"
+                    | "deleting"
+                    | "complete"
+                    | "cancelled"
+                    | "error"
+            )
+            && matches!(
+                self.phase.as_str(),
+                "identify" | "archive" | "verify" | "copy" | "delete"
+            )
+            && self
+                .groups
+                .iter()
+                .map(|g| &g.group)
+                .eq(intent.groups().iter())
+            && self.groups.iter().all(|group| {
+                let requested: HashSet<_> = group.group.uids.iter().copied().collect();
+                let attempted: HashSet<_> = group.attempted.iter().copied().collect();
+                [
+                    &group.verified,
+                    &group.eligible,
+                    &group.attempted,
+                    &group.deleted,
+                ]
+                .iter()
+                .all(|uids| {
+                    let set: HashSet<_> = uids.iter().copied().collect();
+                    set.len() == uids.len() && set.is_subset(&requested)
+                }) && group.deleted.iter().all(|uid| attempted.contains(uid))
+            })
     }
     pub fn completed_keys(&self) -> Vec<serde_json::Value> {
         self.groups
@@ -142,7 +201,11 @@ impl Workflow {
 pub trait Ports {
     async fn checkpoint(&mut self, work: &Workflow) -> Result<(), String>;
     async fn identity(&mut self, group: &Group) -> Result<Identity, String>;
-    async fn archive(&mut self, group: &Group, cancel: Arc<AtomicBool>) -> Result<(), String>;
+    async fn archive(
+        &mut self,
+        group: &Group,
+        cancel: Arc<AtomicBool>,
+    ) -> Result<ArchiveOutcome, String>;
     async fn verify(&mut self, group: &Group, identity: &Identity) -> Result<Vec<u32>, String>;
     async fn copy(&mut self, group: &Group, uids: &[u32]) -> Result<CopyProof, String>;
     async fn delete(
@@ -183,6 +246,9 @@ async fn phase(
 ) -> Result<(), String> {
     w.phase = phase.into();
     w.status = status.into();
+    if phase == "copy" || phase == "delete" {
+        w.errors = 0;
+    }
     p.checkpoint(w).await
 }
 async fn cancelled(p: &mut impl Ports, w: &mut Workflow, c: &AtomicBool) -> Result<bool, String> {
@@ -205,13 +271,11 @@ pub async fn run(
     }
     w.result = ResultCounts::default();
     w.last_error = None;
+    w.errors = 0;
     for g in &w.groups {
         w.result.removed += g.deleted.len();
-        w.result.kept_delete_failed += g
-            .attempted
-            .iter()
-            .filter(|u| !g.deleted.contains(u))
-            .count();
+        let deleted: HashSet<_> = g.deleted.iter().copied().collect();
+        w.result.kept_delete_failed += g.attempted.iter().filter(|u| !deleted.contains(u)).count();
     }
     phase(p, w, "identify", "starting").await?;
     for i in 0..w.groups.len() {
@@ -252,7 +316,12 @@ pub async fn run(
             if g.uids.is_empty() {
                 continue;
             }
-            p.archive(&g, cancel.clone()).await?;
+            let outcome = p.archive(&g, cancel.clone()).await?;
+            w.errors += outcome.errors;
+            if outcome.last_error.is_some() {
+                w.last_error = outcome.last_error;
+            }
+
             p.checkpoint(w).await?;
         }
         if cancelled(p, w, &cancel).await? {
@@ -363,6 +432,7 @@ pub async fn run(
             let exact = exact(batch, &deleted);
             w.result.removed += exact.len();
             w.result.kept_delete_failed += batch.len() - exact.len();
+            w.errors += batch.len() - exact.len();
             w.groups[i].deleted.extend(exact);
             p.checkpoint(w).await?;
         }

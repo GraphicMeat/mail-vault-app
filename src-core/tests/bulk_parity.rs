@@ -159,3 +159,70 @@ fn large_selection_keeps_order_and_exact_legacy_key_types() {
     assert_eq!(plan.keys, expected);
     assert_eq!(owner.status(dir.path()).unwrap()["pending"]["remaining"], count / 2 + 2);
 }
+
+#[test]
+fn worker_checkpoints_keep_cross_folder_exact_outcomes_and_pending_choice() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!(["acc1:INBOX:7", "acc2:Sent:7"]));
+    owner.claim(dir.path(), "exact", intent.clone()).unwrap();
+    let mut work = mailvault_core::bulk_worker::Workflow::new(intent);
+    work.phase = "delete".into();
+    work.status = "deleting".into();
+    work.groups[0].attempted = vec![7];
+    work.groups[0].deleted = vec![7];
+    owner.checkpoint(dir.path(), "exact", &work).unwrap();
+    let mut restarted = Coordinator::load(dir.path());
+    let status = restarted.status(dir.path()).unwrap();
+    assert_eq!(status["pending"]["completed"], 1);
+    assert_eq!(status["pending"]["remaining"], 1);
+    let pending = op_journal::pending_operation_read(dir.path())
+        .unwrap()
+        .unwrap();
+    assert_eq!(pending["completedUids"], json!(["acc1:INBOX:7"]));
+    assert_eq!(pending["totalUids"], json!(["acc1:INBOX:7", "acc2:Sent:7"]));
+    let resumed = restarted.resume_worker(dir.path(), "exact").unwrap();
+    assert_eq!(resumed.groups[0].deleted, vec![7]);
+    assert!(resumed.groups[1].deleted.is_empty());
+}
+#[test]
+fn malformed_worker_evidence_is_retained_by_status_and_discard() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!([7]));
+    owner
+        .claim(dir.path(), "broken-worker", intent.clone())
+        .unwrap();
+    let mut raw = op_journal::pending_operation_read(dir.path())
+        .unwrap()
+        .unwrap();
+    let mut work = mailvault_core::bulk_worker::Workflow::new(intent);
+    work.groups[0].attempted = vec![999];
+    raw["worker"] = json!(work);
+    op_journal::pending_operation_save(dir.path(), &raw).unwrap();
+    let mut restarted = Coordinator::load(dir.path());
+    assert!(restarted.status(dir.path()).is_err());
+    assert!(restarted.discard(dir.path(), "broken-worker").is_err());
+    assert_eq!(
+        op_journal::pending_operation_read(dir.path())
+            .unwrap()
+            .unwrap(),
+        raw
+    );
+}
+#[test]
+fn duplicate_terminal_kickoff_attaches_without_new_worker_ownership() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!([]));
+    owner.claim(dir.path(), "terminal", intent.clone()).unwrap();
+    let mut work = mailvault_core::bulk_worker::Workflow::new(intent.clone());
+    work.status = "complete".into();
+    owner.checkpoint(dir.path(), "terminal", &work).unwrap();
+    owner.drained("terminal").unwrap();
+    assert_eq!(
+        owner.claim(dir.path(), "terminal", intent).unwrap()["status"],
+        "complete"
+    );
+    assert!(owner.active_id().is_none());
+}

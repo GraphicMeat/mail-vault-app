@@ -588,6 +588,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     // Sync tickets, MIME staging, listeners and pending operations are all
     // intentionally session-only. A reload must never send or resume work.
     pendingOperation = null;
+    activeBulk = null;
     syncTickets.clear();
     syncTicket = 0;
     builtMimes.clear();
@@ -1668,7 +1669,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; migrationState = null; snapshots.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; migrationState = null; snapshots.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }
