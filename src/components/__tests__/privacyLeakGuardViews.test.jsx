@@ -111,6 +111,21 @@ describe('privacy leak guard: views and settings', () => {
     expectNoLeak(document.body);
   });
 
+  it('view builder: sender chips and the list of who sends the view', async () => {
+    useViewStore.setState({
+      views: [{ id: 'v1', name: 'Receipts', def: { query: 'invoice' } }],
+      loadKeywords: vi.fn(async () => ({ available: true, keywords: [] })),
+      loadViewSenders: vi.fn(async () => ({ available: true,
+        senders: [{ name: JOANNA, address: JOANNA_ADDR, count: 2, own: false }, { name: '', address: ROKAS_ADDR, count: 1, own: true }] })),
+    });
+    render(<ViewBuilderPanel email={MESSAGE} accountId="own" mailbox="INBOX" onClose={() => {}} />);
+    await screen.findByTestId('view-builder-senders');
+    await act(async () => { fireEvent.click(await screen.findByTestId('view-builder-show-senders')); });
+    await screen.findByTestId('view-builder-who-0');
+    expect(document.body.textContent).toContain(MASKED_JOANNA);
+    expectNoLeak(document.body);
+  });
+
   it('explorer, by sender and by conversation', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 700, height: 500, top: 0, left: 0, right: 700, bottom: 500 });
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(500);

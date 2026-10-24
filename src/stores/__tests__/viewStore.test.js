@@ -17,7 +17,7 @@ vi.mock('../../services/cacheManager', () => ({
 
 const {
   useViewStore, viewLabel, viewLimitReached, MAX_FREE_VIEWS, effectiveViewConfig, viewPresentationStamp, viewDefaults,
-  scheduleViewCountsRefresh, __resetViewCountsForTests, refreshHiddenMembers, viewQueryIsEmpty,
+  scheduleViewCountsRefresh, __resetViewCountsForTests, refreshHiddenMembers, viewQueryIsEmpty, viewMessageKey,
 } = await import('../viewStore');
 const { useViewHideStore } = await import('../viewHideStore');
 const { useSettingsStore } = await import('../settingsStore');
@@ -850,5 +850,100 @@ describe('the view builder', () => {
     expect(params.term).toBe('invoice');
     expect(params.accounts.map(account => account.accountId)).toEqual(['acct-1']);
     expect(reply.total).toBe(2);
+  });
+});
+
+describe('who a view takes mail from', () => {
+  const daemon = (stored) => {
+    harness.daemonCall.mockImplementation(async (method, params) => {
+      if (method === 'views.list') return stored;
+      if (method === 'views.save') return params.view;
+      return {};
+    });
+  };
+  const saved = () => harness.daemonCall.mock.calls.filter(([method]) => method === 'views.save').map(([, params]) => params.view);
+  const BILLS = { ...MINE, id: 'bills', name: 'Bills', def: { query: 'invoice', senders: ['servico.lt'], excludeSenders: ['me@x.test'] } };
+
+  it('names a message the way the index keys it', () => {
+    expect(viewMessageKey({ messageId: '<abc@x.test>', uid: 4, _mailbox: 'INBOX' })).toBe('abc@x.test');
+    expect(viewMessageKey({ messageId: '  <abc@x.test> ', uid: 4, _mailbox: 'INBOX' })).toBe('abc@x.test');
+    expect(viewMessageKey({ uid: 4, vaultDir: 'Sent_Items', _mailbox: 'Sent Items' })).toBe('u:Sent_Items:4');
+    expect(viewMessageKey({ uid: 4 })).toBeNull();
+  });
+
+  it('allows senders: lowercased, deduped, and no longer blocked', async () => {
+    useViewStore.setState({ views: [BILLS] });
+    daemon([BILLS]);
+    const reply = await useViewStore.getState().addSendersToView('bills', ['Bills@Servico.lt', '@servico.lt', ' ', 'me@x.test']);
+    expect(reply).toEqual({ ok: true });
+    expect(saved()[0].def).toEqual({
+      query: 'invoice', senders: ['servico.lt', 'bills@servico.lt', 'me@x.test'], excludeSenders: [],
+    });
+  });
+
+  it('blocks senders: no longer allowed, every other filter kept', async () => {
+    useViewStore.setState({ views: [BILLS] });
+    daemon([BILLS]);
+    await useViewStore.getState().blockSendersInView('bills', ['servico.lt', 'news@shop.test']);
+    expect(saved()[0].def).toEqual({ query: 'invoice', senders: [], excludeSenders: ['me@x.test', 'servico.lt', 'news@shop.test'] });
+  });
+
+  it('takes a sender off both lists', async () => {
+    useViewStore.setState({ views: [BILLS] });
+    daemon([BILLS]);
+    await useViewStore.getState().removeSendersFromView('bills', ['me@x.test', 'SERVICO.lt']);
+    expect(saved()[0].def).toEqual({ query: 'invoice', senders: [], excludeSenders: [] });
+  });
+
+  it('saves nothing when a rule is already as asked', async () => {
+    useViewStore.setState({ views: [BILLS] });
+    daemon([BILLS]);
+    const reply = await useViewStore.getState().addSendersToView('bills', ['servico.lt']);
+    expect(reply).toEqual({ ok: true });
+    expect(saved()).toEqual([]);
+  });
+
+  it('keeps one message out of a view by its key, once', async () => {
+    useViewStore.setState({ views: [BILLS] });
+    daemon([BILLS]);
+    const email = { messageId: '<lease@x.test>', uid: 9, _mailbox: 'INBOX' };
+    expect(await useViewStore.getState().keepMessageOutOfView('bills', email)).toEqual({ ok: true });
+    expect(saved()[0].def.excludeMessages).toEqual(['lease@x.test']);
+    useViewStore.setState({ views: [{ ...BILLS, def: { ...BILLS.def, excludeMessages: ['lease@x.test'] } }] });
+    harness.daemonCall.mockClear();
+    daemon([BILLS]);
+    await useViewStore.getState().keepMessageOutOfView('bills', email);
+    expect(saved()).toEqual([]);
+  });
+
+  it('refuses a message it cannot key, and a view that is gone', async () => {
+    useViewStore.setState({ views: [BILLS] });
+    daemon([BILLS]);
+    expect(await useViewStore.getState().keepMessageOutOfView('bills', { uid: 3 })).toEqual({ ok: false, reason: 'unkeyed' });
+    expect(await useViewStore.getState().addSendersToView('nope', ['a.test'])).toEqual({ ok: false, reason: 'missing' });
+    expect(await useViewStore.getState().blockSendersInView('nope', ['a.test'])).toEqual({ ok: false, reason: 'missing' });
+    expect(saved()).toEqual([]);
+  });
+
+  it('makes a view of senders, named after the first word or else the first sender', async () => {
+    daemon([]);
+    await useViewStore.getState().createViewFromTerms([], { accountId: 'acct-1', senders: ['Servico.lt', 'servico.lt'] }, true);
+    const [view] = saved();
+    expect(view.name).toBe('servico.lt');
+    expect(view.def).toEqual({ query: '', accounts: ['acct-1'], mailboxes: [], senders: ['servico.lt'] });
+    harness.daemonCall.mockClear();
+    daemon([]);
+    await useViewStore.getState().createViewFromTerms(['utilities'], { accountId: 'acct-1', senders: ['servico.lt'] }, true);
+    expect(saved()[0]).toMatchObject({ name: 'utilities', def: { query: 'utilities', senders: ['servico.lt'] } });
+  });
+
+  it('asks who sends what a view finds, over every account', async () => {
+    harness.daemonCall.mockResolvedValueOnce({ available: true, senders: [{ address: 'a@x.test', name: '', count: 1, own: false }] });
+    const reply = await useViewStore.getState().loadViewSenders({ query: 'invoice' });
+    const [method, params] = harness.daemonCall.mock.calls[0];
+    expect(method).toBe('views.senders');
+    expect(params.def).toEqual({ query: 'invoice' });
+    expect(params.accounts.map(account => account.accountId)).toEqual(['acct-1']);
+    expect(reply.senders).toHaveLength(1);
   });
 });

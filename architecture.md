@@ -473,6 +473,8 @@ reply is cached (64 entries, keyed with the data dir and the Message-ID, so a
 reused uid misses) only for a body-indexed message, since an earlier answer
 changes once the indexer reaches it; the readiness gate runs before the cache,
 and an index lost mid-loop answers `available: false`, never "no words".
+
+A view also names its senders. `ViewDef.senders` allows only those, `exclude_senders` blocks them and `exclude_messages` drops single messages by `msg_key`; the three reach the index as `from_any`, `from_not` and `exclude_keys` and are ANDed with the words. A sender rule is one exact column compare, never a substring: a name with an `@` is a whole `from_addr_lc`, one without is a domain and takes its subdomains (`@d` or `.d` suffix), so `n@x.test` is not `ann@x.test`. `views.senders` answers who sends what the view finds with its sender rules left off (`core::query::sender_counts`, the same `where_clause` as a search), flagging the account's own addresses, so the builder can offer Allow, Block and Hide mail I sent. The app only sorts the answer into a standing per sender (`utils/senderRules.js`); the filtering is the daemon's.
 `views.keyword_detail` runs one search for a word across the accounts (none
 named is every account) and names the top ten senders and subjects among the
 first 2000 hits, subjects without `Re:`/`Fwd:`. Both are foreground RPCs

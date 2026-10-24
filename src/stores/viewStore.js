@@ -9,6 +9,7 @@ import { ownAddresses } from '../utils/ownAddresses';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { flattenMailboxes, resolveEmailLocation, rowIdentity } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
+import { normalizeSender } from '../utils/senderRules';
 import { appendTerms, parseGroups, serializeGroups } from '../utils/queryGroups';
 import { runAttachmentExport, startExportJob, viewExportKey } from '../services/attachmentExport';
 
@@ -83,6 +84,18 @@ export function viewLimitReached(views, premium) {
 /// builder warns first. Read through the parser: a saved `|| &&` is no words.
 export function viewQueryIsEmpty(view) {
   return !serializeGroups(parseGroups(view?.def?.query || ''));
+}
+
+const normalizedSenders = list => [...new Set((list || []).map(normalizeSender).filter(Boolean))];
+
+/// What the index calls a message (`MSG_KEY_SQL`): its Message-ID without the
+/// brackets, else its folder and uid. Null for a row that names no folder, so
+/// a view is never told to drop a key that no message holds.
+export function viewMessageKey(email) {
+  const id = String(email?.messageId ?? '').replace(/^[<>\s]+|[<>\s]+$/g, '');
+  if (id) return id;
+  const folder = email?.vaultDir || null;
+  return folder && email?.uid != null ? `u:${folder}:${email.uid}` : null;
 }
 
 /// The folders of one account, and which of them are its bin, junk and
@@ -308,8 +321,9 @@ export const useViewStore = create((set, get) => ({
   /// A new view of the builder's words, named after the first, reading the
   /// email's account and, when given, its folder. Through `createView`, so the
   /// free cap is decided in the one place: answers what it answers.
-  createViewFromTerms: async (terms, { accountId, mailbox = null } = {}, premium) => {
-    const name = (terms || []).map(term => String(term ?? '').trim()).find(Boolean) || '';
+  createViewFromTerms: async (terms, { accountId, mailbox = null, senders = [] } = {}, premium) => {
+    const allowed = normalizedSenders(senders);
+    const name = (terms || []).map(term => String(term ?? '').trim()).find(Boolean) || allowed[0] || '';
     const view = {
       id: globalThis.crypto?.randomUUID?.() || `view-${Date.now()}`,
       name,
@@ -321,10 +335,67 @@ export const useViewStore = create((set, get) => ({
         query: appendTerms('', terms),
         accounts: accountId ? [accountId] : [],
         mailboxes: mailbox ? [mailbox] : [],
+        ...(allowed.length ? { senders: allowed } : {}),
       },
     };
     return get().createView(view, premium);
   },
+
+  /// Rewrite a view's sender rules and save it, or save nothing when the rules
+  /// come out as they were. `change(def)` returns the new `{ senders,
+  /// excludeSenders, excludeMessages }`. A rule is one or the other: allowing a
+  /// sender lifts its block and blocking it lifts its allowance.
+  /// `{ ok: false, reason: 'missing' }` for a view that is gone.
+  changeViewRules: async (viewId, change) => {
+    let view = get().views.find(saved => saved.id === viewId);
+    if (!view) view = (await get().loadViews()).find(saved => saved.id === viewId);
+    if (!view) return { ok: false, reason: 'missing' };
+    const def = view.def || {};
+    const next = change(def);
+    const same = ['senders', 'excludeSenders', 'excludeMessages']
+      .every(key => JSON.stringify(next[key] ?? def[key] ?? []) === JSON.stringify(def[key] ?? []));
+    if (!same) await get().saveView({ ...view, def: { ...def, ...next } });
+    return { ok: true };
+  },
+
+  /// Only mail from these senders (an address, or a domain with its subdomains).
+  addSendersToView: (viewId, senders) => {
+    const add = normalizedSenders(senders);
+    return get().changeViewRules(viewId, def => ({
+      senders: normalizedSenders([...(def.senders || []), ...add]),
+      excludeSenders: normalizedSenders(def.excludeSenders).filter(sender => !add.includes(sender)),
+    }));
+  },
+
+  /// Never mail from these senders.
+  blockSendersInView: (viewId, senders) => {
+    const block = normalizedSenders(senders);
+    return get().changeViewRules(viewId, def => ({
+      senders: normalizedSenders(def.senders).filter(sender => !block.includes(sender)),
+      excludeSenders: normalizedSenders([...(def.excludeSenders || []), ...block]),
+    }));
+  },
+
+  /// Forget a sender's rule, allowed or blocked.
+  removeSendersFromView: (viewId, senders) => {
+    const drop = normalizedSenders(senders);
+    return get().changeViewRules(viewId, def => ({
+      senders: normalizedSenders(def.senders).filter(sender => !drop.includes(sender)),
+      excludeSenders: normalizedSenders(def.excludeSenders).filter(sender => !drop.includes(sender)),
+    }));
+  },
+
+  /// This one message does not belong, whoever sent it.
+  /// `{ ok: false, reason: 'unkeyed' }` for a row that cannot be keyed.
+  keepMessageOutOfView: async (viewId, email) => {
+    const key = viewMessageKey(email);
+    if (!key) return { ok: false, reason: 'unkeyed' };
+    return get().changeViewRules(viewId, def => ({ excludeMessages: [...new Set([...(def.excludeMessages || []), key])] }));
+  },
+
+  /// Who sends what a view's words find, its sender rules left off:
+  /// `{ available, senders: [{ address, name, count, own }] }`.
+  loadViewSenders: (def, limit = 20) => daemonCall('views.senders', { def, accounts: accountsPayload(), limit }),
 
   /// The open email's distinctive terms:
   /// `{ available, keywords: [{ term, tf, df, kind, source }] }`, `kind` one
