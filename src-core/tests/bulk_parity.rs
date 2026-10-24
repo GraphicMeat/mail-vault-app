@@ -278,3 +278,64 @@ fn earlier_drained_attempt_cannot_drain_a_resumed_execution() {
     );
     assert_eq!(owner.admission_receipt("same", "first")["state"], "done");
 }
+
+#[test]
+fn prepared_checkpoint_rejects_old_revision_and_attempt_before_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!([7]));
+    owner.claim_attempt(dir.path(), "owned", "A", intent.clone()).unwrap();
+    let work = mailvault_core::bulk_worker::Workflow::new(intent);
+    let first = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
+    let stale = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
+    owner.validate_checkpoint(&first).unwrap();
+    first.persist(dir.path()).unwrap();
+    owner.publish_checkpoint(&first).unwrap();
+    assert!(owner.validate_checkpoint(&stale).is_err());
+    let old_attempt = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
+    owner.drained_attempt("owned", "A").unwrap();
+    owner.resume_worker_attempt(dir.path(), "owned", "B").unwrap();
+    assert!(owner.validate_checkpoint(&old_attempt).is_err());
+    assert!(owner.checkpoint_seed("owned", "A").is_err());
+    assert_eq!(op_journal::pending_operation_read(dir.path()).unwrap().unwrap()["attemptId"], "B");
+}
+
+#[test]
+fn prepared_checkpoint_failure_keeps_committed_state_and_durable_restart_proof() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!([7]));
+    owner.claim_attempt(dir.path(), "owned", "A", intent.clone()).unwrap();
+    let mut work = mailvault_core::bulk_worker::Workflow::new(intent);
+    work.phase = "delete".into();
+    work.status = "deleting".into();
+    work.groups[0].attempted = vec![7];
+    let prepared = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
+    let blocked = dir.path().join("not-directory");
+    std::fs::write(&blocked, "blocked").unwrap();
+    assert!(prepared.persist(&blocked).is_err());
+    assert_eq!(owner.status(dir.path()).unwrap()["active"]["status"], "starting");
+    owner.validate_checkpoint(&prepared).unwrap();
+    prepared.persist(dir.path()).unwrap();
+    // Crash after durable commit, before publication: restart owns the new
+    // attempted uncertainty and never starts any work automatically.
+    let mut restarted = Coordinator::load(dir.path());
+    assert_eq!(restarted.status(dir.path()).unwrap()["pending"]["status"], "awaitingResume");
+    assert_eq!(restarted.resume_worker_attempt(dir.path(), "owned", "B").unwrap().groups[0].attempted, vec![7]);
+}
+
+#[test]
+fn exact_duplicate_start_attaches_without_resampling_removed_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!([7]));
+    owner.claim_attempt(dir.path(), "owned", "A", intent.clone()).unwrap();
+    let mut work = mailvault_core::bulk_worker::Workflow::new(intent);
+    work.status = "complete".into();
+    owner.checkpoint(dir.path(), "owned", &work).unwrap();
+    owner.drained_attempt("owned", "A").unwrap();
+    assert_eq!(owner.duplicate_start("owned", Action::Delete, &scope(json!([7]))).unwrap().unwrap()["status"], "complete");
+    assert!(owner.duplicate_start("owned", Action::Archive, &scope(json!([7]))).is_err());
+    assert!(owner.duplicate_start("owned", Action::Delete, &scope(json!([8]))).is_err());
+    assert!(owner.active_id().is_none());
+}

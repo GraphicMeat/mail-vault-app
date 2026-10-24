@@ -1226,15 +1226,13 @@ mod tests {
             .claim(&state.app_dir, "large", intent)
             .unwrap();
         // Seed the full worker, then measure the next actual steady-state checkpoint.
-        state.bulk.lock().unwrap().checkpoint(&state.app_dir, "large", &work).unwrap();
+        crate::bulk_worker::checkpoint(&state, "large", "large", &work).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let writer = state.clone();
         let checkpoint = std::thread::spawn(move || {
-            let _journal = writer.journal.lock().unwrap();
-            let mut bulk = writer.bulk.lock().unwrap();
             let started = Instant::now();
             tx.send(()).unwrap();
-            bulk.checkpoint(&writer.app_dir, "large", &work).unwrap();
+            crate::bulk_worker::checkpoint(&writer, "large", "large", &work).unwrap();
             started.elapsed()
         });
         rx.recv().unwrap();
@@ -1261,6 +1259,8 @@ mod tests {
         );
         assert_eq!(status.0.result.unwrap()["active"]["total"], 20000);
         assert!(cancel.0.error.is_none());
+        assert!(status.1 < std::time::Duration::from_millis(200), "20k active status exceeded foreground latency bound: {:?}", status.1);
+        assert!(cancel.1 < std::time::Duration::from_millis(200), "20k cancellation exceeded foreground latency bound: {:?}", cancel.1);
         assert!(state
             .bulk
             .lock()

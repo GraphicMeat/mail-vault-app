@@ -209,19 +209,51 @@ impl MailPorts {
         Ok(config)
     }
 }
+/// Preparation is selection-sized, so it owns no shared lock. The journal
+/// then fences owner changes through the encoded write and compact publish.
+pub(crate) fn checkpoint(
+    state: &Arc<DaemonState>,
+    id: &str,
+    attempt: &str,
+    work: &Workflow,
+) -> Result<Value, String> {
+    let seed = state
+        .bulk
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .checkpoint_seed(id, attempt)?;
+    let prepared = seed.prepare(work)?;
+    let snapshot = {
+        let _journal = state
+            .journal
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        state
+            .bulk
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .validate_checkpoint(&prepared)?;
+        prepared.persist(&state.app_dir)?;
+        state
+            .bulk
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .publish_checkpoint(&prepared)?
+    };
+    // prepared owns the retired potentially large record; free it only here.
+    drop(prepared);
+    Ok(snapshot)
+}
 impl Ports for MailPorts {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
-        let (state, id, mut w) = (self.state.clone(), self.id.clone(), w.clone());
+        let (state, id, attempt, mut w) = (
+            self.state.clone(),
+            self.id.clone(),
+            self.attempt.clone(),
+            w.clone(),
+        );
         w.last_error = w.last_error.as_deref().map(service_error);
-        let snapshot = common::blocking(move || {
-            let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-            state
-                .bulk
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .checkpoint(&state.app_dir, &id, &w)
-        })
-        .await??;
+        let snapshot = common::blocking(move || checkpoint(&state, &id, &attempt, &w)).await??;
         self.state.events.emit(
             "bulk-progress",
             json!({"operationId":self.id,"attemptId":self.attempt,"finished":false,"operation":snapshot}),
@@ -596,11 +628,16 @@ pub(crate) fn launch(
         .map_err(|_| "errors.bulkWorkerUnavailable".into())
 }
 fn drained(state: &Arc<DaemonState>, id: &str, attempt: &str) {
+    let journal = state
+        .journal
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     let snapshot = state
         .bulk
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .drained_attempt(id, attempt);
+    drop(journal);
     if let Ok(operation) = snapshot {
         state.events.emit(
             "bulk-progress",

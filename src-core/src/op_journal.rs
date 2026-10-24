@@ -129,8 +129,12 @@ pub fn pending_operation_read(data_dir: &Path) -> Result<Option<serde_json::Valu
 }
 
 pub fn pending_operation_save(data_dir: &Path, operation: &serde_json::Value) -> Result<(), String> {
+    pending_operation_save_encoded(data_dir, &operation.to_string())
+}
+
+pub(crate) fn pending_operation_save_encoded(data_dir: &Path, encoded: &str) -> Result<(), String> {
     crate::app_db::with(data_dir, |conn| {
-        crate::app_db::db::meta_set(conn, crate::app_db::ops::PENDING_OPERATION_KEY, &operation.to_string())
+        crate::app_db::db::meta_set(conn, crate::app_db::ops::PENDING_OPERATION_KEY, encoded)
     })
 }
 

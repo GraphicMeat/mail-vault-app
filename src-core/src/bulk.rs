@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -212,6 +213,7 @@ struct Pending {
     keys: Vec<Value>,
     completed: Vec<Value>,
     terminal: bool,
+    intent: Option<Arc<FrozenIntent>>,
 }
 impl Pending {
     fn parse(raw: Value) -> Result<Self, String> {
@@ -234,6 +236,7 @@ impl Pending {
             return Err(invalid());
         }
 
+        let mut frozen = None;
         if let Some(version) = raw.get("schemaVersion") {
             if version.as_u64() != Some(1) {
                 return Err("errors.bulkPendingVersion".into());
@@ -250,6 +253,7 @@ impl Pending {
                     return Err(invalid());
                 }
             }
+            frozen = Some(Arc::new(intent));
         }
         Ok(Self {
             raw,
@@ -258,6 +262,7 @@ impl Pending {
             keys,
             completed,
             terminal,
+            intent: frozen,
         })
     }
     fn remaining(&self) -> Vec<Value> {
@@ -317,10 +322,65 @@ struct Admission {
     owner_attempt: Option<String>,
 }
 
+pub struct CheckpointSeed {
+    base: Arc<Pending>,
+    id: String,
+    attempt: String,
+}
+pub struct PreparedCheckpoint {
+    base: Arc<Pending>,
+    pending: Arc<Pending>,
+    id: String,
+    attempt: String,
+    encoded: String,
+    snapshot: Value,
+}
+impl CheckpointSeed {
+    /// All selection-sized cloning, validation and JSON encoding happens here,
+    /// outside coordinator, journal and app.db locks.
+    pub fn prepare(
+        self,
+        work: &crate::bulk_worker::Workflow,
+    ) -> Result<PreparedCheckpoint, String> {
+        if self.base.intent.as_deref() != Some(&work.intent) {
+            return Err("errors.bulkStale".into());
+        }
+        let mut raw = self.base.raw.clone();
+        raw["attemptId"] = json!(self.attempt);
+        raw["worker"] =
+            serde_json::to_value(work).map_err(|_| "errors.bulkPendingWrite".to_string())?;
+        raw["completedUids"] = json!(work.completed_keys());
+        raw["currentPhase"] = json!(work.phase);
+        raw["status"] = json!(work.status);
+        raw["result"] = json!(work.result);
+        raw["lastError"] = json!(work.last_error);
+        raw["errors"] = json!(work.errors);
+        let encoded = raw.to_string();
+        let pending = Arc::new(Pending::parse(raw)?);
+        let snapshot = pending.snapshot(&work.status);
+        Ok(PreparedCheckpoint {
+            base: self.base,
+            pending,
+            id: self.id,
+            attempt: self.attempt,
+            encoded,
+            snapshot,
+        })
+    }
+}
+impl PreparedCheckpoint {
+    /// Must follow validate_checkpoint under the daemon journal fence. Keep
+    /// that fence through publish_checkpoint; no bulk lock is needed for IO.
+    pub fn persist(&self, data_dir: &Path) -> Result<(), String> {
+        op_journal::pending_operation_save_encoded(data_dir, &self.encoded)
+            .map_err(|_| "errors.bulkPendingWrite".into())
+    }
+}
+
 pub struct Coordinator {
     active: Option<Active>,
     admissions: HashMap<String, Admission>,
-    pending: Result<Option<Pending>, String>,
+    pending: Result<Option<Arc<Pending>>, String>,
 }
 impl Coordinator {
     /// Startup only reads app.db; it never launches a worker or touches mail.
@@ -331,10 +391,10 @@ impl Coordinator {
             pending: Self::read(data_dir),
         }
     }
-    fn read(data_dir: &Path) -> Result<Option<Pending>, String> {
+    fn read(data_dir: &Path) -> Result<Option<Arc<Pending>>, String> {
         op_journal::pending_operation_read(data_dir)
             .map_err(|_| "errors.bulkPendingRead".to_string())?
-            .map(Pending::parse)
+            .map(|raw| Pending::parse(raw).map(Arc::new))
             .transpose()
     }
     fn refresh(&mut self, data_dir: &Path) -> Result<(), String> {
@@ -344,9 +404,46 @@ impl Coordinator {
         self.pending.as_ref().map(|_| ()).map_err(Clone::clone)
     }
     fn pending(&self) -> Option<&Pending> {
-        self.pending.as_ref().ok().and_then(Option::as_ref)
+        self.pending.as_ref().ok().and_then(Option::as_deref)
+    }
+    pub fn active_status(&self) -> Option<Value> {
+        self.active
+            .as_ref()
+            .map(|active| json!({"active":active.snapshot,"pending":null}))
+    }
+    pub fn duplicate_start(
+        &self,
+        id: &str,
+        action: Action,
+        scope: &Scope,
+    ) -> Result<Option<Value>, String> {
+        if let Some(active) = &self.active {
+            return if active.id == id
+                && active.intent.operation == action
+                && active.intent.scope == *scope
+            {
+                Ok(Some(active.snapshot.clone()))
+            } else {
+                Err("errors.operationRunning".into())
+            };
+        }
+        if let Some(pending) = self
+            .pending()
+            .filter(|pending| pending.id == id && pending.terminal)
+        {
+            return match pending.intent.as_deref() {
+                Some(intent) if intent.operation == action && intent.scope == *scope => Ok(Some(
+                    pending.snapshot(pending.raw["status"].as_str().unwrap_or("complete")),
+                )),
+                _ => Err("errors.bulkStale".into()),
+            };
+        }
+        Ok(None)
     }
     pub fn status(&mut self, data_dir: &Path) -> Result<Value, String> {
+        if let Some(status) = self.active_status() {
+            return Ok(status);
+        }
         self.refresh(data_dir)?;
         let active = self.active.as_ref().map(|a| a.snapshot.clone());
         let pending = if active.is_some() {
@@ -413,7 +510,7 @@ impl Coordinator {
         op_journal::pending_operation_save(data_dir, &raw)
             .map_err(|_| "errors.bulkPendingWrite".to_string())?;
         let snapshot = record.snapshot("starting");
-        self.pending = Ok(Some(record));
+        self.pending = Ok(Some(Arc::new(record)));
         self.active = Some(Active {
             id: id.into(),
             attempt_id: attempt.into(),
@@ -482,7 +579,7 @@ impl Coordinator {
             .map_err(|_| "errors.bulkPendingWrite".to_string())?;
         let pending = Pending::parse(raw)?;
         let snapshot = pending.snapshot("starting");
-        self.pending = Ok(Some(pending));
+        self.pending = Ok(Some(Arc::new(pending)));
         self.active = Some(Active {
             id: id.into(),
             attempt_id: attempt.into(),
@@ -493,37 +590,73 @@ impl Coordinator {
         self.running_admission(id, attempt, attempt);
         Ok(work)
     }
+    /// O(1) immutable reference to this exact attempt and committed revision.
+    /// Preparing it grants no authority; validate again under the journal
+    /// fence before persistence, and retain that fence through publication.
+    pub fn checkpoint_seed(&self, id: &str, attempt: &str) -> Result<CheckpointSeed, String> {
+        if !self
+            .active
+            .as_ref()
+            .is_some_and(|active| active.id == id && active.attempt_id == attempt)
+        {
+            return Err("errors.bulkStale".into());
+        }
+        let pending = self
+            .pending
+            .as_ref()
+            .map_err(Clone::clone)?
+            .as_ref()
+            .ok_or("errors.bulkStale")?;
+        Ok(CheckpointSeed {
+            base: pending.clone(),
+            id: id.into(),
+            attempt: attempt.into(),
+        })
+    }
+    pub fn validate_checkpoint(&self, prepared: &PreparedCheckpoint) -> Result<(), String> {
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|active| active.id == prepared.id && active.attempt_id == prepared.attempt)
+            && self
+                .pending
+                .as_ref()
+                .ok()
+                .and_then(Option::as_ref)
+                .is_some_and(|pending| Arc::ptr_eq(pending, &prepared.base))
+        {
+            Ok(())
+        } else {
+            Err("errors.bulkStale".into())
+        }
+    }
+    /// Caller retains the journal fence from validation through this publish.
+    /// Borrow the prepared owner so its retired large base drops outside locks.
+    pub fn publish_checkpoint(&mut self, prepared: &PreparedCheckpoint) -> Result<Value, String> {
+        self.validate_checkpoint(prepared)?;
+        self.pending = Ok(Some(prepared.pending.clone()));
+        self.active.as_mut().unwrap().snapshot = prepared.snapshot.clone();
+        Ok(prepared.snapshot.clone())
+    }
+    /// Synchronous compatibility seam for callers already owning this value.
+    /// Daemon workers use seed/prepare/validate/persist/publish off bulk locks.
     pub fn checkpoint(
         &mut self,
         data_dir: &Path,
         id: &str,
         work: &crate::bulk_worker::Workflow,
     ) -> Result<Value, String> {
-        self.refresh(data_dir)?;
-        if !self
+        let attempt = self
             .active
             .as_ref()
-            .is_some_and(|a| a.id == id && a.intent == work.intent)
-        {
-            return Err("errors.bulkStale".into());
-        }
-        let mut raw = self.pending().ok_or("errors.bulkStale")?.raw.clone();
-        raw["attemptId"] = json!(self.active.as_ref().unwrap().attempt_id);
-        raw["worker"] =
-            serde_json::to_value(work).map_err(|_| "errors.bulkPendingWrite".to_string())?;
-        raw["completedUids"] = json!(work.completed_keys());
-        raw["currentPhase"] = json!(work.phase);
-        raw["status"] = json!(work.status);
-        raw["result"] = json!(work.result);
-        raw["lastError"] = json!(work.last_error);
-        raw["errors"] = json!(work.errors);
-        let pending = Pending::parse(raw.clone())?;
-        op_journal::pending_operation_save(data_dir, &raw)
-            .map_err(|_| "errors.bulkPendingWrite".to_string())?;
-        let snapshot = pending.snapshot(&work.status);
-        self.pending = Ok(Some(pending));
-        self.active.as_mut().unwrap().snapshot = snapshot.clone();
-        Ok(snapshot)
+            .filter(|active| active.id == id)
+            .ok_or("errors.bulkStale")?
+            .attempt_id
+            .clone();
+        let prepared = self.checkpoint_seed(id, &attempt)?.prepare(work)?;
+        self.validate_checkpoint(&prepared)?;
+        prepared.persist(data_dir)?;
+        self.publish_checkpoint(&prepared)
     }
     /// Called only after all provider and blocking work has returned.
     pub fn drained(&mut self, id: &str) -> Result<Value, String> {
@@ -679,6 +812,9 @@ impl Coordinator {
     /// Compatibility writes may still update unversioned records, but cannot
     /// bypass the new owner or erase unreadable/future-version evidence.
     pub fn allow_legacy_write(&self, data_dir: &Path) -> Result<(), String> {
+        if self.active.is_some() {
+            return Err("errors.bulkOwned".into());
+        }
         let raw = op_journal::pending_operation_read(data_dir)
             .map_err(|_| "errors.bulkPendingRead".to_string())?;
         if self.active.is_some()

@@ -67,6 +67,14 @@ pub(crate) async fn route(
                 }
                 let scope: Scope = serde_json::from_value(params["scope"].clone())
                     .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
+                if let Some(snapshot) = state
+                    .bulk
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner())
+                    .duplicate_start(operation_id, action, &scope)?
+                {
+                    return Ok(snapshot);
+                }
                 let work = crate::bulk_worker::freeze(&state, action, scope)?;
                 let (snapshot, duplicate) = {
                     let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
@@ -78,18 +86,26 @@ pub(crate) async fn route(
                         &attempt,
                         work.intent.clone(),
                     )?;
-                    if !duplicate && bulk.active_id() == Some(operation_id) {
-                        if let Err(error) = bulk.checkpoint(&state.app_dir, operation_id, &work) {
-                            let _ = bulk.drained_attempt(operation_id, &attempt);
-                            return Err(error);
-                        }
-                    }
                     (
                         snapshot,
                         duplicate || bulk.active_id() != Some(operation_id),
                     )
                 };
                 if !duplicate {
+                    if let Err(error) =
+                        crate::bulk_worker::checkpoint(&state, operation_id, &attempt, &work)
+                    {
+                        let _journal = state
+                            .journal
+                            .lock()
+                            .unwrap_or_else(|poison| poison.into_inner());
+                        let _ = state
+                            .bulk
+                            .lock()
+                            .unwrap_or_else(|poison| poison.into_inner())
+                            .drained_attempt(operation_id, &attempt);
+                        return Err(error);
+                    }
                     if let Err(error) = crate::bulk_worker::launch(
                         state.clone(),
                         operation_id.into(),
@@ -98,6 +114,10 @@ pub(crate) async fn route(
                         params["mirrorRoot"].as_str().map(str::to_owned),
                         false,
                     ) {
+                        let _journal = state
+                            .journal
+                            .lock()
+                            .unwrap_or_else(|poison| poison.into_inner());
                         let _ = state
                             .bulk
                             .lock()
@@ -130,6 +150,10 @@ pub(crate) async fn route(
                     params["mirrorRoot"].as_str().map(str::to_owned),
                     true,
                 ) {
+                    let _journal = state
+                        .journal
+                        .lock()
+                        .unwrap_or_else(|poison| poison.into_inner());
                     let _ = state
                         .bulk
                         .lock()
@@ -146,6 +170,26 @@ pub(crate) async fn route(
                 Ok(json!({"id":operation_id,"status":"cancelling"}))
             }
             _ => {
+                if method == "bulk.status" {
+                    let mut bulk = state
+                        .bulk
+                        .lock()
+                        .unwrap_or_else(|poison| poison.into_inner());
+                    let receipt = params["operationId"]
+                        .as_str()
+                        .zip(params["attemptId"].as_str());
+                    if let Some((operation, attempt)) = receipt {
+                        if params["fenceUnstarted"].as_bool() == Some(true) {
+                            bulk.fence_admission(operation, attempt)?;
+                        }
+                    }
+                    if let Some(mut status) = bulk.active_status() {
+                        if let Some((operation, attempt)) = receipt {
+                            status["admission"] = bulk.admission_receipt(operation, attempt);
+                        }
+                        return Ok(status);
+                    }
+                }
                 let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
                 let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
                 if method == "bulk.discard" {
