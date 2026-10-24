@@ -349,6 +349,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   const journal = [];
   let pendingOperation = null;
   let activeBulk = null;
+  const bulkAdmissions = new Map();
+  let bulkAttemptSeq = 0;
   const bulkPendingSnapshot = () => {
     const p = pendingOperation;
     if (!p) return null;
@@ -589,6 +591,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     // intentionally session-only. A reload must never send or resume work.
     pendingOperation = null;
     activeBulk = null;
+    bulkAdmissions.clear();
     syncTickets.clear();
     syncTicket = 0;
     builtMimes.clear();
@@ -1034,9 +1037,19 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         emit('demo:state', { type: 'journal' });
         return null;
       }
-      case 'bulk.status': return { active: clone(activeBulk), pending: activeBulk ? null : bulkPendingSnapshot() };
+      case 'bulk.status': {
+        const status = { active: clone(activeBulk), pending: activeBulk ? null : bulkPendingSnapshot() };
+        if (args.operationId && args.attemptId) {
+          if (args.fenceUnstarted && !bulkAdmissions.has(args.attemptId)) bulkAdmissions.set(args.attemptId, { operationId: args.operationId, attemptId: args.attemptId, state: 'fenced' });
+          const admission = bulkAdmissions.get(args.attemptId);
+          status.admission = admission?.operationId === args.operationId ? clone(admission) : null;
+        }
+        return status;
+      }
       case 'bulk.start': case 'bulk.resume': {
         if (typeof args.operationId !== 'string' || !args.operationId) throw new Error('errors.bulkMissingId');
+        const attemptId = args.attemptId || `demo-attempt-${++bulkAttemptSeq}`;
+        if (bulkAdmissions.get(attemptId)?.state === 'fenced') throw new Error('errors.bulkStale');
         if (activeBulk) {
           if (activeBulk.id === args.operationId) return clone(activeBulk);
           throw new Error('errors.operationRunning');
@@ -1051,18 +1064,20 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         if (bulkPendingSnapshot()) throw new Error('errors.bulkPendingChoice');
         if (!args.scope || !Array.isArray(args.scope.keys)) throw new Error('errors.bulkPendingInvalid');
         const total = args.scope.keys.length;
-        activeBulk = { id: args.operationId, type: args.type, status: 'starting', currentPhase: args.type === 'delete' ? 'delete' : 'archive', total, completed: 0, remaining: total, errors: 0, skipped: 0, skippedLocal: 0, simulated: true };
+        activeBulk = { id: args.operationId, attemptId, type: args.type, status: 'starting', currentPhase: args.type === 'delete' ? 'delete' : 'archive', total, completed: 0, remaining: total, errors: 0, skipped: 0, skippedLocal: 0, simulated: true };
+        bulkAdmissions.set(attemptId, { operationId: args.operationId, attemptId, state: 'running', ownerAttemptId: attemptId });
         const reply = clone(activeBulk);
         // A lifecycle stub, with no real provider/filesystem authority. Report
         // held messages honestly rather than pretending a browser deleted mail.
         setTimeout(() => {
-          if (!activeBulk || activeBulk.id !== args.operationId) return;
+          if (!activeBulk || activeBulk.id !== args.operationId || activeBulk.attemptId !== attemptId) return;
           activeBulk.status = activeBulk.status === 'cancelling' ? 'cancelled' : 'complete';
           activeBulk.result = { removed: 0, keptNotArchived: total, keptBackupUnreachable: 0, keptCopyMismatch: 0, keptDeleteFailed: 0 };
           const operation = clone(activeBulk); activeBulk = null;
-          emit('bulk-progress', { operationId: args.operationId, finished: true, operation });
+          bulkAdmissions.set(attemptId, { operationId: args.operationId, attemptId, state: 'done', ownerAttemptId: attemptId });
+          emit('bulk-progress', { operationId: args.operationId, attemptId, finished: true, operation });
         }, 0);
-        emit('bulk-progress', { operationId: args.operationId, finished: false, operation: reply });
+        emit('bulk-progress', { operationId: args.operationId, attemptId, finished: false, operation: reply });
         return reply;
       }
       case 'bulk.cancel': {
@@ -1669,7 +1684,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; migrationState = null; snapshots.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; bulkAdmissions.clear(); migrationState = null; snapshots.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }

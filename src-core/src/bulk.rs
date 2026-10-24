@@ -227,6 +227,13 @@ impl Pending {
         let completed = raw["completedUids"].as_array().ok_or_else(invalid)?.clone();
         let status = raw["status"].as_str().ok_or_else(invalid)?;
         let terminal = matches!(status, "complete" | "cancelled");
+        if raw
+            .get("attemptId")
+            .is_some_and(|attempt| attempt.as_str().is_none_or(|attempt| attempt.is_empty()))
+        {
+            return Err(invalid());
+        }
+
         if let Some(version) = raw.get("schemaVersion") {
             if version.as_u64() != Some(1) {
                 return Err("errors.bulkPendingVersion".into());
@@ -263,16 +270,20 @@ impl Pending {
     }
     fn snapshot(&self, status: &str) -> Value {
         let remaining = self.remaining().len();
-        json!({
-            "id":self.id, "type":self.operation, "status":status,
-            "currentPhase":self.raw.get("currentPhase").cloned().unwrap_or_else(|| json!(self.operation.initial_phase())),
-            "total":self.keys.len(), "completed":self.keys.len() - remaining,
-            "remaining":remaining, "errors":self.raw.get("errors").cloned().unwrap_or(json!(0)),
-            "skipped":self.raw.get("skipped").cloned().unwrap_or(json!(0)),
-            "skippedLocal":self.raw.get("skippedLocal").cloned().unwrap_or(json!(0)),
-            "result":self.raw.get("result").cloned().unwrap_or(Value::Null),
-            "lastError":self.raw.get("lastError").cloned().unwrap_or(Value::Null)
-        })
+        let mut snapshot = json!({
+           "id":self.id, "type":self.operation, "status":status,
+           "currentPhase":self.raw.get("currentPhase").cloned().unwrap_or_else(|| json!(self.operation.initial_phase())),
+           "total":self.keys.len(), "completed":self.keys.len() - remaining,
+           "remaining":remaining, "errors":self.raw.get("errors").cloned().unwrap_or(json!(0)),
+           "skipped":self.raw.get("skipped").cloned().unwrap_or(json!(0)),
+           "skippedLocal":self.raw.get("skippedLocal").cloned().unwrap_or(json!(0)),
+           "result":self.raw.get("result").cloned().unwrap_or(Value::Null),
+           "lastError":self.raw.get("lastError").cloned().unwrap_or(Value::Null)
+        });
+        if let Some(attempt) = self.raw.get("attemptId") {
+            snapshot["attemptId"] = attempt.clone();
+        }
+        snapshot
     }
 }
 
@@ -286,13 +297,29 @@ pub struct ResumePlan {
 }
 struct Active {
     id: String,
+    attempt_id: String,
     intent: FrozenIntent,
     snapshot: Value,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AdmissionState {
+    Freezing,
+    Running,
+    Done,
+    Fenced,
+    Rejected,
+}
+struct Admission {
+    operation_id: String,
+    state: AdmissionState,
+    owner_attempt: Option<String>,
+}
+
 pub struct Coordinator {
     active: Option<Active>,
+    admissions: HashMap<String, Admission>,
     pending: Result<Option<Pending>, String>,
 }
 impl Coordinator {
@@ -300,6 +327,7 @@ impl Coordinator {
     pub fn load(data_dir: &Path) -> Self {
         Self {
             active: None,
+            admissions: HashMap::new(),
             pending: Self::read(data_dir),
         }
     }
@@ -338,13 +366,25 @@ impl Coordinator {
         id: &str,
         intent: FrozenIntent,
     ) -> Result<Value, String> {
+        self.claim_attempt(data_dir, id, id, intent)
+    }
+    pub fn claim_attempt(
+        &mut self,
+        data_dir: &Path,
+        id: &str,
+        attempt: &str,
+        intent: FrozenIntent,
+    ) -> Result<Value, String> {
+        self.require_unfenced(id, attempt)?;
         self.refresh(data_dir)?;
         if let Some(active) = &self.active {
-            return if active.id == id && active.intent == intent {
-                Ok(active.snapshot.clone())
-            } else {
-                Err("errors.operationRunning".into())
-            };
+            if active.id == id && active.intent == intent {
+                let snapshot = active.snapshot.clone();
+                let owner = active.attempt_id.clone();
+                self.running_admission(id, attempt, &owner);
+                return Ok(snapshot);
+            }
+            return Err("errors.operationRunning".into());
         }
         if let Some(pending) = self.pending().filter(|p| p.terminal && p.id == id) {
             let previous: FrozenIntent = serde_json::from_value(pending.raw["intent"].clone())
@@ -362,7 +402,7 @@ impl Coordinator {
             return Err("errors.bulkMissingId".into());
         }
         let raw = json!({
-            "schemaVersion":1, "id":id, "type":intent.operation,
+            "schemaVersion":1, "id":id,"attemptId":attempt, "type":intent.operation,
             "accountId":intent.scope.account_id, "mailbox":intent.scope.mailbox,
             "intent":intent, "totalUids":intent.target_keys(), "completedUids":[],
             "currentPhase":intent.operation.initial_phase(), "status":"starting",
@@ -376,10 +416,12 @@ impl Coordinator {
         self.pending = Ok(Some(record));
         self.active = Some(Active {
             id: id.into(),
+            attempt_id: attempt.into(),
             intent,
             snapshot: snapshot.clone(),
             cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
+        self.running_admission(id, attempt, attempt);
         Ok(snapshot)
     }
     /// Live provider counts are presentation only, never completion proof.
@@ -407,6 +449,15 @@ impl Coordinator {
         data_dir: &Path,
         id: &str,
     ) -> Result<crate::bulk_worker::Workflow, String> {
+        self.resume_worker_attempt(data_dir, id, id)
+    }
+    pub fn resume_worker_attempt(
+        &mut self,
+        data_dir: &Path,
+        id: &str,
+        attempt: &str,
+    ) -> Result<crate::bulk_worker::Workflow, String> {
+        self.require_unfenced(id, attempt)?;
         self.refresh(data_dir)?;
         if self.active.is_some() {
             return Err("errors.operationRunning".into());
@@ -424,13 +475,22 @@ impl Coordinator {
         if intent.operation == Action::DeleteEverywhere {
             return Err("errors.bulkUnsupported".into());
         }
+        let mut raw = pending.raw.clone();
+        raw["attemptId"] = json!(attempt);
+        raw["status"] = json!("starting");
+        op_journal::pending_operation_save(data_dir, &raw)
+            .map_err(|_| "errors.bulkPendingWrite".to_string())?;
+        let pending = Pending::parse(raw)?;
         let snapshot = pending.snapshot("starting");
+        self.pending = Ok(Some(pending));
         self.active = Some(Active {
             id: id.into(),
+            attempt_id: attempt.into(),
             intent,
             snapshot,
             cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });
+        self.running_admission(id, attempt, attempt);
         Ok(work)
     }
     pub fn checkpoint(
@@ -448,6 +508,7 @@ impl Coordinator {
             return Err("errors.bulkStale".into());
         }
         let mut raw = self.pending().ok_or("errors.bulkStale")?.raw.clone();
+        raw["attemptId"] = json!(self.active.as_ref().unwrap().attempt_id);
         raw["worker"] =
             serde_json::to_value(work).map_err(|_| "errors.bulkPendingWrite".to_string())?;
         raw["completedUids"] = json!(work.completed_keys());
@@ -466,10 +527,111 @@ impl Coordinator {
     }
     /// Called only after all provider and blocking work has returned.
     pub fn drained(&mut self, id: &str) -> Result<Value, String> {
-        if self.active_id() != Some(id) {
+        let attempt = self
+            .active
+            .as_ref()
+            .filter(|active| active.id == id)
+            .ok_or("errors.bulkStale")?
+            .attempt_id
+            .clone();
+        self.drained_attempt(id, &attempt)
+    }
+    pub fn drained_attempt(&mut self, id: &str, attempt: &str) -> Result<Value, String> {
+        if !self
+            .active
+            .as_ref()
+            .is_some_and(|active| active.id == id && active.attempt_id == attempt)
+        {
             return Err("errors.bulkStale".into());
         }
-        Ok(self.active.take().unwrap().snapshot)
+        let active = self.active.take().unwrap();
+        for admission in self.admissions.values_mut() {
+            if admission.operation_id == id && admission.owner_attempt.as_deref() == Some(attempt) {
+                admission.state = AdmissionState::Done;
+            }
+        }
+        Ok(active.snapshot)
+    }
+    /// Admission evidence is in-memory only. A fence prevents even a request
+    /// dispatched after this status call from claiming the same attempt.
+    pub fn begin_admission(&mut self, id: &str, attempt: &str) -> Result<Option<Value>, String> {
+        if let Some(admission) = self.admissions.get(attempt) {
+            if admission.operation_id != id
+                || matches!(
+                    admission.state,
+                    AdmissionState::Fenced | AdmissionState::Rejected | AdmissionState::Done
+                )
+            {
+                return Err("errors.bulkStale".into());
+            }
+            return self
+                .active
+                .as_ref()
+                .filter(|active| active.id == id)
+                .map(|active| Some(active.snapshot.clone()))
+                .ok_or_else(|| "errors.operationRunning".into());
+        }
+        self.admissions.insert(
+            attempt.into(),
+            Admission {
+                operation_id: id.into(),
+                state: AdmissionState::Freezing,
+                owner_attempt: None,
+            },
+        );
+        Ok(None)
+    }
+    fn require_unfenced(&self, id: &str, attempt: &str) -> Result<(), String> {
+        if self.admissions.get(attempt).is_some_and(|admission| {
+            admission.operation_id != id || admission.state == AdmissionState::Fenced
+        }) {
+            return Err("errors.bulkStale".into());
+        }
+        Ok(())
+    }
+    fn running_admission(&mut self, id: &str, attempt: &str, owner: &str) {
+        self.admissions.insert(
+            attempt.into(),
+            Admission {
+                operation_id: id.into(),
+                state: AdmissionState::Running,
+                owner_attempt: Some(owner.into()),
+            },
+        );
+    }
+    pub fn finish_admission(&mut self, id: &str, attempt: &str, result: &Result<Value, String>) {
+        if let Some(admission) = self.admissions.get_mut(attempt).filter(|admission| {
+            admission.operation_id == id && admission.state == AdmissionState::Freezing
+        }) {
+            admission.state = if result.is_err() {
+                AdmissionState::Rejected
+            } else {
+                AdmissionState::Done
+            };
+        }
+    }
+    pub fn fence_admission(&mut self, id: &str, attempt: &str) -> Result<(), String> {
+        self.require_unfenced(id, attempt).or_else(|error| {
+            if self.admissions.get(attempt).is_some_and(|admission| {
+                admission.operation_id == id && admission.state == AdmissionState::Fenced
+            }) {
+                Ok(())
+            } else {
+                Err(error)
+            }
+        })?;
+        let admission = self.admissions.entry(attempt.into()).or_insert(Admission {
+            operation_id: id.into(),
+            state: AdmissionState::Fenced,
+            owner_attempt: None,
+        });
+        if admission.state == AdmissionState::Freezing {
+            admission.state = AdmissionState::Fenced;
+        }
+        Ok(())
+    }
+    pub fn admission_receipt(&self, id: &str, attempt: &str) -> Value {
+        self.admissions.get(attempt).filter(|admission|admission.operation_id==id).map(|admission|json!({"operationId":id,"attemptId":attempt,"state":match admission.state{AdmissionState::Freezing=>"freezing",AdmissionState::Running=>"running",AdmissionState::Done=>"done",AdmissionState::Fenced=>"fenced",AdmissionState::Rejected=>"rejected"},"ownerAttemptId":admission.owner_attempt})).unwrap_or(Value::Null)
     }
     pub fn resume_plan(&mut self, data_dir: &Path, id: &str) -> Result<ResumePlan, String> {
         self.refresh(data_dir)?;

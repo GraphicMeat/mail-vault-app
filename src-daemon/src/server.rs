@@ -6,8 +6,8 @@ use crate::idle_watch;
 use crate::imap;
 use crate::inference;
 use crate::ipc::{self, AuthHandshake, RpcRequest, RpcResponse};
-use crate::netgate::NetGate;
 use crate::llm;
+use crate::netgate::NetGate;
 use crate::sync_engine;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -121,7 +121,9 @@ pub struct DaemonState {
     pub vault_registry: Arc<mailvault_core::vault_registry::VaultRegistry>,
     /// Named local/server search runs. The handler removes entries by pointer
     /// identity so an older completion cannot unregister a newer run.
-    pub(crate) search_runs: std::sync::Mutex<std::collections::HashMap<String, Arc<crate::handlers::mail_search::SearchRun>>>,
+    pub(crate) search_runs: std::sync::Mutex<
+        std::collections::HashMap<String, Arc<crate::handlers::mail_search::SearchRun>>,
+    >,
     /// Task 2.9a: not opened at daemon startup by this task (Task 2.9b wires
     /// that, once nothing in the app still holds the exclusive lock on
     /// `custody.db`) — see `crate::custody`.
@@ -257,7 +259,9 @@ pub fn open_vault_registry(
     registry.set_on_change(Box::new(move |scope| match scope {
         // `nudge` maps its mailbox through `vault_dir_name`, which is
         // idempotent, so the directory name goes in as is.
-        Scope::Mailbox { account, vault_dir } => crate::search_index::nudge(&index, &account, &vault_dir),
+        Scope::Mailbox { account, vault_dir } => {
+            crate::search_index::nudge(&index, &account, &vault_dir)
+        }
         Scope::All => crate::search_index::sweep_soon(&index),
     }));
     info!("vault registry: opened in {:?}", started.elapsed());
@@ -359,7 +363,9 @@ pub async fn run(state: Arc<DaemonState>, endpoint: &Path) -> std::io::Result<()
 
     let name = endpoint.to_string_lossy().to_string();
 
-    let mut server = ServerOptions::new().first_pipe_instance(true).create(&name)?;
+    let mut server = ServerOptions::new()
+        .first_pipe_instance(true)
+        .create(&name)?;
     info!("Daemon listening on {}", name);
 
     loop {
@@ -414,22 +420,24 @@ pub fn spawn_on_own_thread(
     socket_path: PathBuf,
     on_failure: impl FnOnce(String) + Send + 'static,
 ) -> std::io::Result<std::thread::JoinHandle<()>> {
-    std::thread::Builder::new().name("ipc-server".into()).spawn(move || {
-        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
-            Ok(rt) => rt,
-            Err(e) => return on_failure(format!("server runtime failed to start: {e}")),
-        };
-        if let Err(e) = runtime.block_on(run(state, &socket_path)) {
-            on_failure(format!("server failed: {e}"));
-        }
-    })
+    std::thread::Builder::new()
+        .name("ipc-server".into())
+        .spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(e) => return on_failure(format!("server runtime failed to start: {e}")),
+            };
+            if let Err(e) = runtime.block_on(run(state, &socket_path)) {
+                on_failure(format!("server failed: {e}"));
+            }
+        })
 }
 
 /// Handle a single client connection: authenticate, then process requests.
-async fn handle_connection<S>(
-    state: Arc<DaemonState>,
-    stream: S,
-) -> std::io::Result<()>
+async fn handle_connection<S>(state: Arc<DaemonState>, stream: S) -> std::io::Result<()>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
 {
@@ -502,12 +510,21 @@ where
 /// (`oauth_tokens::inject`), so no handler ever sends the app's copy.
 async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcResponse {
     let method = req.method.clone();
-    let crate::oauth_tokens::Injection { injected, refusal } = crate::oauth_tokens::inject(state, &method, &mut req.params).await;
+    let crate::oauth_tokens::Injection { injected, refusal } =
+        crate::oauth_tokens::inject(state, &method, &mut req.params).await;
     if let Some(message) = refusal {
         return RpcResponse::error(req.id.unwrap_or(Value::Null), ipc::INTERNAL_ERROR, message);
     }
-    let resp = match req.params.get("accountEmail").and_then(Value::as_str).filter(|e| !e.is_empty()).map(str::to_owned) {
-        Some(email) => mailvault_core::net_activity::with_account(email, route_request(state, req)).await,
+    let resp = match req
+        .params
+        .get("accountEmail")
+        .and_then(Value::as_str)
+        .filter(|e| !e.is_empty())
+        .map(str::to_owned)
+    {
+        Some(email) => {
+            mailvault_core::net_activity::with_account(email, route_request(state, req)).await
+        }
         None => route_request(state, req).await,
     };
     if let Some(line) = jmap_refusal_log_line(&method, &resp) {
@@ -527,7 +544,9 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
 /// the e2e battery greps `daemon.log` for this code and expects none.
 fn jmap_refusal_log_line(method: &str, resp: &RpcResponse) -> Option<String> {
     let message = &resp.error.as_ref()?.message;
-    message.starts_with("E_JMAP_NOT_IMAP").then(|| format!("[jmap] {method}: {message}"))
+    message
+        .starts_with("E_JMAP_NOT_IMAP")
+        .then(|| format!("[jmap] {method}: {message}"))
 }
 
 /// Route a parsed RPC request to the appropriate handler.
@@ -554,192 +573,302 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         );
     }
 
-    if let Some(resp) = crate::handlers::daemon::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::daemon::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::search_index::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::search_index::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::mail_search::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::mail_search::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::vault_files::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::vault_files::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::vault::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::vault::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::archive::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::archive::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::backup::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::backup::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::abd::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::abd::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::insights::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::insights::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::export_fetch::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::export_fetch::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::unsubscribe::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::unsubscribe::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::deleted::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::deleted::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::backup_zip::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::backup_zip::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::mbox::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::mbox::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::migration::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::migration::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::restore::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::restore::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::cache::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::cache::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::bulk::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::bulk::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::journal::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::journal::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::custody::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::custody::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::vault_flags::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::vault_flags::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::imap::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::imap::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
-    if let Some(resp) = crate::handlers::smtp::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::smtp::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::compose::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::compose::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::graph::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::graph::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::oauth2::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::oauth2::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::dns::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::dns::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::tags::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::tags::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::auto_tags::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::auto_tags::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::views::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::views::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::notes::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::notes::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::portable::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::portable::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::transfer::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::transfer::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::fields::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::fields::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::scheduled::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::scheduled::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::snooze::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::snooze::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::follow_up::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::follow_up::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::pgp::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::pgp::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::ai::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::ai::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::release_notes::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::release_notes::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::fonts::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::fonts::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
     #[cfg(feature = "blitz-render")]
-    if let Some(resp) = crate::blitz::routes::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::blitz::routes::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::net_activity::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::net_activity::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::aliases::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::aliases::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::alias_store::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::alias_store::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::people::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::people::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::storage_format::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::storage_format::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::learning::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::learning::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::custody_probe::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::custody_probe::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::message::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::message::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::settings::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::settings::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::policy::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::policy::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::notify::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::notify::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::body::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::body::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
-    if let Some(resp) = crate::handlers::cleanup::route(state, &req.method, &req.params, id.clone()).await {
+    if let Some(resp) =
+        crate::handlers::cleanup::route(state, &req.method, &req.params, id.clone()).await
+    {
         return resp;
     }
 
@@ -758,10 +887,12 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         // The reads and the retention setting are `handlers::net_activity`.
         // `net.report` records one the app shell made itself (it normally
         // comes as a channel notification instead).
-        "net.report" => match mailvault_core::net_activity::record_reported(req.params["event"].clone()) {
-            Ok(()) => RpcResponse::success(id, serde_json::json!({"ok": true})),
-            Err(e) => RpcResponse::error(id, ipc::INVALID_PARAMS, e),
-        },
+        "net.report" => {
+            match mailvault_core::net_activity::record_reported(req.params["event"].clone()) {
+                Ok(()) => RpcResponse::success(id, serde_json::json!({"ok": true})),
+                Err(e) => RpcResponse::error(id, ipc::INVALID_PARAMS, e),
+            }
+        }
 
         // ── Keychain gate ───────────────────────────────────────────
         "keychain.status" => RpcResponse::success(id, crate::credentials::GATE.status()),
@@ -806,9 +937,10 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         // nothing ever read. transport.js routes every cache operation to the
         // Tauri sidecar implementation, and the daemon writes that same format
         // from sync_engine.
-
         "snapshot.create" => handle_snapshot_create(&state.data_dir, req.params, id),
-        "snapshot.create_from_maildir" => handle_snapshot_create_from_maildir(&state.data_dir, req.params, id),
+        "snapshot.create_from_maildir" => {
+            handle_snapshot_create_from_maildir(&state.data_dir, req.params, id)
+        }
         "snapshot.list" => handle_snapshot_list(&state.data_dir, req.params, id),
         "snapshot.load" => handle_snapshot_load(&state.data_dir, req.params, id),
         "snapshot.delete" => handle_snapshot_delete(&state.data_dir, req.params, id),
@@ -818,28 +950,49 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         "llm.download" => handle_llm_download(Arc::clone(&state.llm), req.params, id).await,
         "llm.cancel_download" => handle_llm_cancel_download(&state.llm, id).await,
         "llm.delete_model" => handle_llm_delete_model(&state.llm, req.params, id),
-        "llm.load" => handle_llm_load(&state.app_dir, &state.llm, &state.inference, req.params, id).await,
+        "llm.load" => {
+            handle_llm_load(&state.app_dir, &state.llm, &state.inference, req.params, id).await
+        }
         "llm.unload" => handle_llm_unload(&state.inference, id).await,
         "llm.classify" => handle_llm_classify(&state.inference, req.params, id).await,
 
         "classification.run" => handle_classification_run(Arc::clone(state), req.params, id).await,
-        "classification.reclassify_all" => handle_reclassify_all(Arc::clone(state), req.params, id).await,
+        "classification.reclassify_all" => {
+            handle_reclassify_all(Arc::clone(state), req.params, id).await
+        }
         "classification.cancel" => handle_classification_cancel(&state.classification, id).await,
         "classification.summary" => handle_classification_summary(&state.app_dir, req.params, id),
         "classification.results" => handle_classification_results(&state.app_dir, req.params, id),
         "classification.override" => handle_classification_override(&state.app_dir, req.params, id),
         "classification.status" => handle_classification_status(&state.classification, id).await,
 
+        "contacts_index.get" => {
+            handle_contacts_index_get(Arc::clone(&state.contacts), req.params, id)
+        }
 
-        "contacts_index.get" => handle_contacts_index_get(Arc::clone(&state.contacts), req.params, id),
-
-        _ => RpcResponse::error(id, ipc::METHOD_NOT_FOUND, format!("Unknown method: {}", req.method)),
+        _ => RpcResponse::error(
+            id,
+            ipc::METHOD_NOT_FOUND,
+            format!("Unknown method: {}", req.method),
+        ),
     }
 }
 
 #[cfg(test)]
-pub(crate) async fn handle_request_for_test(state: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
-    handle_request(state, RpcRequest { method: method.into(), params, id: Some(serde_json::json!(1)) }).await
+pub(crate) async fn handle_request_for_test(
+    state: &Arc<DaemonState>,
+    method: &str,
+    params: Value,
+) -> RpcResponse {
+    handle_request(
+        state,
+        RpcRequest {
+            method: method.into(),
+            params,
+            id: Some(serde_json::json!(1)),
+        },
+    )
+    .await
 }
 
 /// The open-file cap the test process lifts its soft limit to, or the hard
@@ -858,10 +1011,15 @@ fn lift_open_file_limit() {
     {
         static ONCE: std::sync::Once = std::sync::Once::new();
         ONCE.call_once(|| {
-            let mut lim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+            let mut lim = libc::rlimit {
+                rlim_cur: 0,
+                rlim_max: 0,
+            };
             // SAFETY: getrlimit/setrlimit only read and write the struct passed.
             unsafe {
-                if libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) == 0 && lim.rlim_cur < lim.rlim_max.min(TEST_OPEN_FILES) {
+                if libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) == 0
+                    && lim.rlim_cur < lim.rlim_max.min(TEST_OPEN_FILES)
+                {
                     lim.rlim_cur = lim.rlim_max.min(TEST_OPEN_FILES);
                     libc::setrlimit(libc::RLIMIT_NOFILE, &lim);
                 }
@@ -873,10 +1031,19 @@ fn lift_open_file_limit() {
 #[cfg(test)]
 impl DaemonState {
     /// A state wired the way main.rs wires it, but pointed at scratch dirs.
-    pub(crate) fn for_test(mail_dir: PathBuf, app_dir: PathBuf, mail_dir_ok: bool) -> Arc<DaemonState> {
+    pub(crate) fn for_test(
+        mail_dir: PathBuf,
+        app_dir: PathBuf,
+        mail_dir_ok: bool,
+    ) -> Arc<DaemonState> {
         // A gate whose probe always answers "online": these tests are about
         // routing and state, never about connectivity.
-        Self::for_test_with_probe(mail_dir, app_dir, mail_dir_ok, Arc::new(|| Box::pin(async { true })))
+        Self::for_test_with_probe(
+            mail_dir,
+            app_dir,
+            mail_dir_ok,
+            Arc::new(|| Box::pin(async { true })),
+        )
     }
 
     /// `for_test` with the network gate's probe scripted by the caller, for
@@ -925,7 +1092,12 @@ impl DaemonState {
         }
         sync_engine.attach_custody_db(Arc::clone(&custody.db));
         contacts.attach_db(Arc::clone(&custody.db));
-        let search_index = crate::search_index::SearchIndexState::new(mail_dir.clone(), app_dir_for_index.clone(), mail_dir_ok, events.clone());
+        let search_index = crate::search_index::SearchIndexState::new(
+            mail_dir.clone(),
+            app_dir_for_index.clone(),
+            mail_dir_ok,
+            events.clone(),
+        );
         search_index.attach_custody_db(Arc::clone(&custody.db));
         // A registry file of its own per state: many tests pass the vault dir
         // (or one shared dir) as `app_dir`, and one file under two roots wipes.
@@ -934,7 +1106,10 @@ impl DaemonState {
         // The worker process is spawned on the first call, so no reaper runs in tests.
         #[cfg(feature = "blitz-render")]
         let blitz = Arc::new(crate::blitz::RenderPool::new(|| {
-            crate::blitz::RenderHost::new(events.clone(), crate::blitz::WorkerCommand::current_exe().expect("current_exe"))
+            crate::blitz::RenderHost::new(
+                events.clone(),
+                crate::blitz::WorkerCommand::current_exe().expect("current_exe"),
+            )
         }));
         let state = Arc::new(DaemonState {
             net,
@@ -967,7 +1142,9 @@ impl DaemonState {
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
-            bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(&app_dir_for_index)),
+            bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(
+                &app_dir_for_index,
+            )),
             custody,
             run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
@@ -1051,15 +1228,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let pending = json!({"id":"old", "type":"delete", "accountId":"a", "mailbox":"INBOX", "totalUids":["a:Sent:7", "a:INBOX:8"], "completedUids":["a:Sent:7"], "status":"deleting", "currentPhase":"delete"});
         mailvault_core::op_journal::pending_operation_save(dir.path(), &pending).unwrap();
-        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
+        let state =
+            DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
         let status = handle_request_for_test(&state, "bulk.status", json!({})).await;
-        assert!(status.error.is_none(), "bulk.status must expose awaiting-resume ownership: {:?}", status.error);
+        assert!(
+            status.error.is_none(),
+            "bulk.status must expose awaiting-resume ownership: {:?}",
+            status.error
+        );
         let status = status.result.unwrap();
         assert_eq!(status["active"], Value::Null);
         assert_eq!(status["pending"]["id"], "old");
         assert_eq!(status["pending"]["status"], "awaitingResume");
         assert_eq!(status["pending"]["remaining"], 1);
-        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(), Some(pending));
+        assert_eq!(
+            mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(),
+            Some(pending)
+        );
     }
 
     #[tokio::test]
@@ -1067,50 +1252,114 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let raw = json!({"id":"current", "type":"archive", "accountId":"a", "mailbox":"Sent", "totalUids":[7], "completedUids":[], "status":"archiving", "currentPhase":"archive"});
         mailvault_core::op_journal::pending_operation_save(dir.path(), &raw).unwrap();
-        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
-        let stale = handle_request_for_test(&state, "bulk.discard", json!({"operationId":"old"})).await;
+        let state =
+            DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
+        let stale =
+            handle_request_for_test(&state, "bulk.discard", json!({"operationId":"old"})).await;
         assert!(stale.error.is_some());
-        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(), Some(raw));
-        let discarded = handle_request_for_test(&state, "bulk.discard", json!({"operationId":"current"})).await;
+        assert_eq!(
+            mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(),
+            Some(raw)
+        );
+        let discarded =
+            handle_request_for_test(&state, "bulk.discard", json!({"operationId":"current"})).await;
         assert!(discarded.error.is_none(), "{:?}", discarded.error);
         assert_eq!(discarded.result, Some(Value::Null));
-        mailvault_core::app_db::with(dir.path(), |conn| mailvault_core::app_db::db::meta_set(conn, mailvault_core::app_db::ops::PENDING_OPERATION_KEY, "{ invalid")).unwrap();
+        mailvault_core::app_db::with(dir.path(), |conn| {
+            mailvault_core::app_db::db::meta_set(
+                conn,
+                mailvault_core::app_db::ops::PENDING_OPERATION_KEY,
+                "{ invalid",
+            )
+        })
+        .unwrap();
         for method in ["bulk.status", "bulk.discard"] {
-            let response = handle_request_for_test(&state, method, json!({"operationId":"current"})).await;
-            assert!(response.error.is_some(), "{method} must retain unreadable evidence");
+            let response =
+                handle_request_for_test(&state, method, json!({"operationId":"current"})).await;
+            assert!(
+                response.error.is_some(),
+                "{method} must retain unreadable evidence"
+            );
         }
         assert!(mailvault_core::op_journal::pending_operation_read(dir.path()).is_err());
         // Implemented kickoffs must retain corrupt pending evidence too.
-        for method in ["bulk.start","bulk.resume"] {
-            let response=handle_request_for_test(&state,method,json!({"operationId":"current","type":"archive","scope":{"keys":[]}})).await;
-            assert_eq!(response.error.unwrap().message,"errors.bulkPendingRead");
+        for method in ["bulk.start", "bulk.resume"] {
+            let response = handle_request_for_test(
+                &state,
+                method,
+                json!({"operationId":"current","type":"archive","scope":{"keys":[]}}),
+            )
+            .await;
+            assert_eq!(response.error.unwrap().message, "errors.bulkPendingRead");
         }
     }
 
     #[tokio::test]
     async fn bulk_legacy_writes_cannot_replace_owned_or_future_records() {
         let dir = tempfile::tempdir().unwrap();
-        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
+        let state =
+            DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
         // A future version must remain readable to its eventual owner.
-        for record in [json!({"schemaVersion":99,"id":"future"}), json!({"schemaVersion":1,"id":"broken"})] {
+        for record in [
+            json!({"schemaVersion":99,"id":"future"}),
+            json!({"schemaVersion":1,"id":"broken"}),
+        ] {
             mailvault_core::op_journal::pending_operation_save(dir.path(), &record).unwrap();
-            for (method, params) in [("save_pending_operation", json!({"operation":{"id":"legacy"}})), ("clear_pending_operation", json!({}))] {
+            for (method, params) in [
+                (
+                    "save_pending_operation",
+                    json!({"operation":{"id":"legacy"}}),
+                ),
+                ("clear_pending_operation", json!({})),
+            ] {
                 let response = handle_request_for_test(&state, method, params).await;
-                assert!(response.error.is_some(), "{method} must retain existing evidence");
-                assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(), Some(record.clone()));
+                assert!(
+                    response.error.is_some(),
+                    "{method} must retain existing evidence"
+                );
+                assert_eq!(
+                    mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(),
+                    Some(record.clone())
+                );
             }
         }
         mailvault_core::op_journal::pending_operation_clear(dir.path()).unwrap();
         {
             let _journal = state.journal.lock().unwrap();
-            let scope = serde_json::from_value(json!({"accountId":"a", "mailbox":"INBOX", "keys":[7]})).unwrap();
-            let frozen = mailvault_core::bulk::FrozenIntent::freeze(mailvault_core::bulk::Action::Archive, scope, &["a".into()], &[]);
-            state.bulk.lock().unwrap().claim(dir.path(), "owned", frozen).unwrap();
+            let scope =
+                serde_json::from_value(json!({"accountId":"a", "mailbox":"INBOX", "keys":[7]}))
+                    .unwrap();
+            let frozen = mailvault_core::bulk::FrozenIntent::freeze(
+                mailvault_core::bulk::Action::Archive,
+                scope,
+                &["a".into()],
+                &[],
+            );
+            state
+                .bulk
+                .lock()
+                .unwrap()
+                .claim(dir.path(), "owned", frozen)
+                .unwrap();
         }
-        for (method, params) in [("save_pending_operation", json!({"operation":{"id":"legacy"}})), ("clear_pending_operation", json!({}))] {
-            assert!(handle_request_for_test(&state, method, params).await.error.is_some());
+        for (method, params) in [
+            (
+                "save_pending_operation",
+                json!({"operation":{"id":"legacy"}}),
+            ),
+            ("clear_pending_operation", json!({})),
+        ] {
+            assert!(handle_request_for_test(&state, method, params)
+                .await
+                .error
+                .is_some());
         }
-        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap()["id"], "owned");
+        assert_eq!(
+            mailvault_core::op_journal::pending_operation_read(dir.path())
+                .unwrap()
+                .unwrap()["id"],
+            "owned"
+        );
     }
 
     #[tokio::test]
@@ -1152,6 +1401,138 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn bulk_admission_fence_prevents_a_later_dispatched_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let status = handle_request_for_test(
+            &state,
+            "bulk.status",
+            json!({"operationId":"late","attemptId":"late-attempt","fenceUnstarted":true}),
+        )
+        .await
+        .result
+        .unwrap();
+        assert_eq!(status["admission"]["state"], "fenced");
+        let late=handle_request_for_test(&state,"bulk.start",json!({"operationId":"late","attemptId":"late-attempt","type":"archive","scope":{"keys":[]}})).await;
+        assert!(late.error.is_some());
+        assert!(
+            mailvault_core::op_journal::pending_operation_read(dir.path())
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_large_checkpoint_reports_foreground_control_latency() {
+        use mailvault_core::bulk::{Action, FrozenIntent, Scope};
+        use mailvault_core::bulk_worker::{Identity, Selected, Workflow};
+        use std::time::Instant;
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let intent = FrozenIntent::freeze(
+            Action::Delete,
+            Scope {
+                account_id: Some("a".into()),
+                mailbox: Some("INBOX".into()),
+                spans: false,
+                keys: (1..=20000).map(|uid| json!(uid)).collect(),
+            },
+            &["a".into()],
+            &[],
+        );
+        let mut work = Workflow::new(intent.clone());
+        let ids: std::collections::HashMap<_, _> = (1..=20000)
+            .map(|uid| (uid, format!("{uid}@selected.test")))
+            .collect();
+        work.groups[0].identity = Some(Identity::Imap {
+            validity: 1,
+            message_ids: ids.clone(),
+        });
+        work.groups[0].origin = Some("native-origin".into());
+        work.groups[0].selected = Some(Selected {
+            validity: Some(1),
+            cached_uids: (1..=20000).collect(),
+            message_ids: ids,
+            ..Default::default()
+        });
+        work.groups[0].attempted = vec![1, 2, 3, 4, 5];
+        work.groups[0].deleted = vec![1, 2, 3, 4, 5];
+        work.phase = "delete".into();
+        work.status = "deleting".into();
+        state
+            .bulk
+            .lock()
+            .unwrap()
+            .claim(&state.app_dir, "large", intent)
+            .unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let writer = state.clone();
+        let checkpoint = std::thread::spawn(move || {
+            let _journal = writer.journal.lock().unwrap();
+            let mut bulk = writer.bulk.lock().unwrap();
+            let started = Instant::now();
+            tx.send(()).unwrap();
+            bulk.checkpoint(&writer.app_dir, "large", &work).unwrap();
+            started.elapsed()
+        });
+        rx.recv().unwrap();
+        let status_started = Instant::now();
+        let cancel_started = status_started;
+        let (status, cancel) = tokio::join!(
+            async {
+                let reply = handle_request_for_test(&state, "bulk.status", json!({})).await;
+                (reply, status_started.elapsed())
+            },
+            async {
+                let reply =
+                    handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"large"}))
+                        .await;
+                (reply, cancel_started.elapsed())
+            }
+        );
+        let elapsed = checkpoint.join().unwrap();
+        println!(
+            "BULK_20K_CHECKPOINT_MS={} BULK_20K_STATUS_MS={} BULK_20K_CANCEL_MS={}",
+            elapsed.as_millis(),
+            status.1.as_millis(),
+            cancel.1.as_millis()
+        );
+        assert_eq!(status.0.result.unwrap()["active"]["total"], 20000);
+        assert!(cancel.0.error.is_none());
+        assert!(state
+            .bulk
+            .lock()
+            .unwrap()
+            .cancel_token("large")
+            .unwrap()
+            .load(std::sync::atomic::Ordering::SeqCst));
+    }
+    #[tokio::test]
+    async fn bulk_duplicate_attempt_still_checks_the_frozen_intent() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let intent = mailvault_core::bulk::FrozenIntent::freeze(
+            mailvault_core::bulk::Action::Archive,
+            scope,
+            &[],
+            &[],
+        );
+        state
+            .bulk
+            .lock()
+            .unwrap()
+            .claim(&state.app_dir, "same", intent)
+            .unwrap();
+        let reply = handle_request_for_test(
+            &state,
+            "bulk.start",
+            json!({"operationId":"same","attemptId":"same","type":"delete","scope":{"keys":[]}}),
+        )
+        .await;
+        assert_eq!(reply.error.unwrap().message, "errors.operationRunning");
+    }
     fn err_message(resp: RpcResponse) -> String {
         resp.error.map(|e| e.message).unwrap_or_default()
     }
@@ -1163,9 +1544,17 @@ mod tests {
     async fn a_test_state_lifts_the_open_file_limit() {
         let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let _s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
-        let mut lim = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        let mut lim = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
         assert_eq!(unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) }, 0);
-        assert!(lim.rlim_cur >= lim.rlim_max.min(TEST_OPEN_FILES), "soft {} of hard {}", lim.rlim_cur, lim.rlim_max);
+        assert!(
+            lim.rlim_cur >= lim.rlim_max.min(TEST_OPEN_FILES),
+            "soft {} of hard {}",
+            lim.rlim_cur,
+            lim.rlim_max
+        );
     }
 
     // ── The index yields to the user ───────────────────────────────────
@@ -1177,9 +1566,24 @@ mod tests {
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
         handle_request(&state, req("search_index_status", json!({}))).await;
         handle_request(&state, req("ping", json!({}))).await;
-        assert_eq!(state.search_index.last_foreground.load(SeqCst), 0, "index and health calls never hold the index back");
-        handle_request(&state, req("maildir_read_light", json!({"accountId": "a", "mailbox": "INBOX", "uid": 1}))).await;
-        assert_ne!(state.search_index.last_foreground.load(SeqCst), 0, "opening a message does");
+        assert_eq!(
+            state.search_index.last_foreground.load(SeqCst),
+            0,
+            "index and health calls never hold the index back"
+        );
+        handle_request(
+            &state,
+            req(
+                "maildir_read_light",
+                json!({"accountId": "a", "mailbox": "INBOX", "uid": 1}),
+            ),
+        )
+        .await;
+        assert_ne!(
+            state.search_index.last_foreground.load(SeqCst),
+            0,
+            "opening a message does"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1200,7 +1604,11 @@ mod tests {
         let dir = scratch("gate");
         let state = DaemonState::for_test(dir.clone(), dir.clone(), false);
 
-        let resp = handle_request(&state, req("contacts_index.get", json!({"accountIds": ["acc1"]}))).await;
+        let resp = handle_request(
+            &state,
+            req("contacts_index.get", json!({"accountIds": ["acc1"]})),
+        )
+        .await;
 
         let msg = err_message(resp);
         assert!(
@@ -1225,11 +1633,17 @@ mod tests {
             ("contacts_index.get", json!({"accountIds": ["a"]})),
             ("people.list", json!({})),
             ("people.contacts.top", json!({"accountIds": ["a"]})),
-            ("people.contacts.search", json!({"accountIds": ["a"], "query": "a"})),
+            (
+                "people.contacts.search",
+                json!({"accountIds": ["a"], "query": "a"}),
+            ),
             ("people.contacts.names", json!({"accountIds": ["a"]})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
-            assert!(msg.contains("Mail storage folder"), "{method} was not refused, got: {msg:?}");
+            assert!(
+                msg.contains("Mail storage folder"),
+                "{method} was not refused, got: {msg:?}"
+            );
         }
 
         // Pins `MAILVAULT_GRAPH_BASE` to the shared Graph mock before anything
@@ -1244,18 +1658,27 @@ mod tests {
             // this gate's prefix check — a live IMAP read has nothing to do
             // with the vault. Bogus host/port so this fails fast on a
             // connection error, never on the gate text this test checks for.
-            ("imap_get_mailboxes", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
+            (
+                "imap_get_mailboxes",
+                json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}}),
+            ),
             // Task 5.4b: same reasoning, write-path family. Bogus host/port
             // so this fails fast on a connection error too. A failed test is
             // a `success:false` result (no RPC error, so `err_message` is
             // empty), which still never contains the gate text.
-            ("imap_test_connection", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
+            (
+                "imap_test_connection",
+                json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}}),
+            ),
             // Task 5.5: SMTP is its own flat family, same reasoning — a live
             // SMTP probe has nothing to do with the vault gate. `imapHost` is
             // a required `ImapConfig` field even though this command never
             // dials IMAP, so it must be present for this to fail on the bogus
             // SMTP connection rather than on param deserialization.
-            ("smtp_test_connection", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1, "smtpHost": "127.0.0.1", "smtpPort": 1}})),
+            (
+                "smtp_test_connection",
+                json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1, "smtpHost": "127.0.0.1", "smtpPort": 1}}),
+            ),
             // Task 5.6: Graph is its own flat family too, same reasoning — a
             // live Graph HTTP call has nothing to do with the vault gate.
             // Unlike IMAP/SMTP, `GraphClient` takes no host/port in its
@@ -1264,7 +1687,10 @@ mod tests {
             // `handlers::graph`'s shared mock (guard held above). Setting the
             // variable to a dead port here would freeze that base for every
             // Graph test that runs after this one in the process.
-            ("graph_set_read", json!({"accessToken": "x", "messageId": "m1", "isRead": true})),
+            (
+                "graph_set_read",
+                json!({"accessToken": "x", "messageId": "m1", "isRead": true}),
+            ),
             // Task 5.7: OAuth2 is its own flat family too — a token exchange
             // has nothing to do with the vault gate. An unknown `state`
             // fails immediately in-process (no pending flow to await, no
@@ -1273,7 +1699,10 @@ mod tests {
             ("oauth2_exchange", json!({"state": "no-such-pending-flow"})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
-            assert!(!msg.contains("Mail storage folder"), "{method} must not be gated, got: {msg:?}");
+            assert!(
+                !msg.contains("Mail storage folder"),
+                "{method} must not be gated, got: {msg:?}"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1297,7 +1726,10 @@ mod tests {
         let dir = scratch("router");
         let state = DaemonState::for_test(dir.clone(), dir.clone(), false);
         let resp = handle_request(&state, req("daemon.heartbeat", json!({}))).await;
-        assert_eq!(resp.result.expect("heartbeat works with the vault gone")["buildId"], json!(mailvault_core::BUILD_ID));
+        assert_eq!(
+            resp.result.expect("heartbeat works with the vault gone")["buildId"],
+            json!(mailvault_core::BUILD_ID)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1348,7 +1780,10 @@ mod tests {
 
         let resp = handle_request(&state, req("sync.wait", json!({}))).await;
 
-        assert_eq!(resp.error.expect("must be an error").code, ipc::INVALID_PARAMS);
+        assert_eq!(
+            resp.error.expect("must be an error").code,
+            ipc::INVALID_PARAMS
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1359,7 +1794,10 @@ mod tests {
 
         let resp = handle_request(&state, req("sync.watch", json!({}))).await;
 
-        assert_eq!(resp.error.expect("must be an error").code, ipc::INVALID_PARAMS);
+        assert_eq!(
+            resp.error.expect("must be an error").code,
+            ipc::INVALID_PARAMS
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1424,7 +1862,9 @@ mod tests {
         });
 
         let resp = handle_request(&state, req("sync.now", payload)).await;
-        let result = resp.result.expect("sync.now must accept a payload with no password");
+        let result = resp
+            .result
+            .expect("sync.now must accept a payload with no password");
         let ticket = result["ticket"].as_u64().expect("ticket");
 
         let wait = handle_request(
@@ -1472,17 +1912,40 @@ mod tests {
         // The previous app saw gens 1 and 2 and came back with since=2.
         state.sync_engine.note_change("a1", "INBOX", 1, 0);
         state.sync_engine.note_change("a1", "INBOX", 1, 0);
-        let first = handle_request(&state, req("sync.events", json!({"since": 0, "timeoutMs": 10}))).await;
-        assert_eq!(first.result.expect("must succeed")["changes"].as_array().unwrap().len(), 2);
-        handle_request(&state, req("sync.events", json!({"since": 2, "timeoutMs": 10}))).await;
+        let first = handle_request(
+            &state,
+            req("sync.events", json!({"since": 0, "timeoutMs": 10})),
+        )
+        .await;
+        assert_eq!(
+            first.result.expect("must succeed")["changes"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        handle_request(
+            &state,
+            req("sync.events", json!({"since": 2, "timeoutMs": 10})),
+        )
+        .await;
 
         // It is killed; mail arrives while nobody listens; a new app polls cold.
         state.sync_engine.note_change("a1", "INBOX", 1, 0);
-        let cold = handle_request(&state, req("sync.events", json!({"since": null, "timeoutMs": 10}))).await;
+        let cold = handle_request(
+            &state,
+            req("sync.events", json!({"since": null, "timeoutMs": 10})),
+        )
+        .await;
 
         let result = cold.result.expect("must succeed");
         assert_eq!(result["gen"], json!(3));
-        let gens: Vec<u64> = result["changes"].as_array().unwrap().iter().map(|c| c["gen"].as_u64().unwrap()).collect();
+        let gens: Vec<u64> = result["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["gen"].as_u64().unwrap())
+            .collect();
         assert_eq!(gens, vec![3], "only the arrival nobody was told about");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1494,7 +1957,10 @@ mod tests {
 
         let resp = handle_request(&state, req("snapshot.list", json!({}))).await;
 
-        assert_eq!(resp.error.expect("must be an error").code, ipc::INVALID_PARAMS);
+        assert_eq!(
+            resp.error.expect("must be an error").code,
+            ipc::INVALID_PARAMS
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1506,7 +1972,10 @@ mod tests {
     /// itself (`sock_path` below) lives outside the filesystem, so it does
     /// not need this dir.
     fn sock_dir() -> PathBuf {
-        let p = std::env::temp_dir().join(format!("mv-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]));
+        let p = std::env::temp_dir().join(format!(
+            "mv-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..8]
+        ));
         std::fs::create_dir_all(&p).unwrap();
         p
     }
@@ -1550,15 +2019,25 @@ mod tests {
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
-            assert!(mailvault_core::transport::is_listening(&path), "server never bound {path:?}");
-            Served { dir, path, state, task }
+            assert!(
+                mailvault_core::transport::is_listening(&path),
+                "server never bound {path:?}"
+            );
+            Served {
+                dir,
+                path,
+                state,
+                task,
+            }
         }
 
         async fn connect(&self) -> (tokio::io::Lines<BufReader<ConnRead>>, ConnWrite) {
             #[cfg(unix)]
             let stream = tokio::net::UnixStream::connect(&self.path).await.unwrap();
             #[cfg(windows)]
-            let stream = tokio::net::windows::named_pipe::ClientOptions::new().open(&self.path).unwrap();
+            let stream = tokio::net::windows::named_pipe::ClientOptions::new()
+                .open(&self.path)
+                .unwrap();
             let (r, w) = tokio::io::split(stream);
             (BufReader::new(r).lines(), w)
         }
@@ -1575,7 +2054,11 @@ mod tests {
     }
 
     async fn recv(lines: &mut tokio::io::Lines<BufReader<ConnRead>>) -> Value {
-        let line = lines.next_line().await.unwrap().expect("server closed the connection");
+        let line = lines
+            .next_line()
+            .await
+            .unwrap()
+            .expect("server closed the connection");
         serde_json::from_str(&line).unwrap()
     }
 
@@ -1601,7 +2084,10 @@ mod tests {
         let (mut lines, mut w) = served.connect().await;
 
         send(&mut w, &format!(r#"{{"token":"{}"}}"#, served.state.token)).await;
-        assert_eq!(recv(&mut lines).await["result"], json!({"authenticated": true}));
+        assert_eq!(
+            recv(&mut lines).await["result"],
+            json!({"authenticated": true})
+        );
 
         send(&mut w, r#"{"jsonrpc":"2.0","method":"ping","id":7}"#).await;
         let resp = recv(&mut lines).await;
@@ -1625,23 +2111,36 @@ mod tests {
         let path = sock_path(&dir);
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
         let token = state.token.clone();
-        super::spawn_on_own_thread(Arc::clone(&state), path.clone(), |why| panic!("server died: {why}")).unwrap();
+        super::spawn_on_own_thread(Arc::clone(&state), path.clone(), |why| {
+            panic!("server died: {why}")
+        })
+        .unwrap();
         for _ in 0..200 {
-            if mailvault_core::transport::is_listening(&path) { break }
+            if mailvault_core::transport::is_listening(&path) {
+                break;
+            }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
-        assert!(mailvault_core::transport::is_listening(&path), "server never bound {path:?}");
+        assert!(
+            mailvault_core::transport::is_listening(&path),
+            "server never bound {path:?}"
+        );
 
         let (tx, rx) = std::sync::mpsc::channel();
         let socket = path.clone();
         let client = std::thread::spawn(move || {
             let (read, mut write) =
-                mailvault_core::transport::connect_sync(&socket, std::time::Duration::from_secs(5)).unwrap();
+                mailvault_core::transport::connect_sync(&socket, std::time::Duration::from_secs(5))
+                    .unwrap();
             let mut read = std::io::BufReader::new(read);
             writeln!(write, "{{\"token\":\"{token}\"}}").unwrap();
             let mut auth = String::new();
             read.read_line(&mut auth).unwrap();
-            writeln!(write, "{{\"jsonrpc\":\"2.0\",\"method\":\"ping\",\"id\":1}}").unwrap();
+            writeln!(
+                write,
+                "{{\"jsonrpc\":\"2.0\",\"method\":\"ping\",\"id\":1}}"
+            )
+            .unwrap();
             let mut reply = String::new();
             read.read_line(&mut reply).unwrap();
             tx.send((auth, reply)).unwrap();
@@ -1650,7 +2149,8 @@ mod tests {
         // The starting runtime is now dead to the world for 300ms.
         std::thread::sleep(std::time::Duration::from_millis(300));
 
-        let (auth, reply) = rx.recv_timeout(std::time::Duration::from_secs(5))
+        let (auth, reply) = rx
+            .recv_timeout(std::time::Duration::from_secs(5))
             .expect("the server must answer while the runtime that started it is parked");
         assert!(auth.contains("\"authenticated\":true"), "{auth}");
         assert!(reply.contains("\"pong\":true"), "{reply}");
@@ -1685,7 +2185,9 @@ mod tests {
         let other = scratch("second");
         let state2 = DaemonState::for_test(other.clone(), other.clone(), true);
 
-        let err = run(state2, &served.path).await.expect_err("binding a live socket must fail");
+        let err = run(state2, &served.path)
+            .await
+            .expect_err("binding a live socket must fail");
 
         // Windows has no AddrInUse-shaped error for this collision: a named
         // pipe's `FILE_FLAG_FIRST_PIPE_INSTANCE` (this crate's `run` always
@@ -1696,7 +2198,11 @@ mod tests {
         // caller of `run()` checks for `AddrInUse`), so this is a real OS
         // difference in wording, not a behavior gap — the second daemon is
         // refused either way.
-        let expected = if cfg!(windows) { std::io::ErrorKind::PermissionDenied } else { std::io::ErrorKind::AddrInUse };
+        let expected = if cfg!(windows) {
+            std::io::ErrorKind::PermissionDenied
+        } else {
+            std::io::ErrorKind::AddrInUse
+        };
         assert_eq!(err.kind(), expected);
         let _ = std::fs::remove_dir_all(&other);
         served.stop();
@@ -1708,7 +2214,11 @@ mod tests {
         let (mut lines, mut w) = served.connect().await;
         send(&mut w, &format!(r#"{{"token":"{}"}}"#, served.state.token)).await;
         recv(&mut lines).await;
-        send(&mut w, r#"{"jsonrpc":"2.0","method":"channel.open","id":3}"#).await;
+        send(
+            &mut w,
+            r#"{"jsonrpc":"2.0","method":"channel.open","id":3}"#,
+        )
+        .await;
         let opened = recv(&mut lines).await;
         assert_eq!(opened["result"], json!({"channel": true}));
         assert_eq!(opened["id"], json!(3));
@@ -1719,7 +2229,10 @@ mod tests {
     async fn an_open_channel_forwards_bus_events() {
         let served = Served::start().await;
         let (mut lines, _w) = open_channel(&served).await;
-        served.state.events.emit("search-index-progress", json!({"indexed": 5}));
+        served
+            .state
+            .events
+            .emit("search-index-progress", json!({"indexed": 5}));
         let ev = recv(&mut lines).await;
         assert_eq!(ev["method"], "event");
         assert_eq!(ev["params"]["name"], "search-index-progress");
@@ -1732,7 +2245,11 @@ mod tests {
     async fn a_ping_notification_on_the_channel_comes_back_as_an_event() {
         let served = Served::start().await;
         let (mut lines, mut w) = open_channel(&served).await;
-        send(&mut w, r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"n1"}}"#).await;
+        send(
+            &mut w,
+            r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"n1"}}"#,
+        )
+        .await;
         let ev = recv(&mut lines).await;
         assert_eq!(ev["params"]["name"], "daemon-ping");
         assert_eq!(ev["params"]["payload"], json!({"nonce": "n1"}));
@@ -1743,11 +2260,22 @@ mod tests {
     async fn an_unknown_notification_is_ignored_and_the_channel_stays_open() {
         let served = Served::start().await;
         let (mut lines, mut w) = open_channel(&served).await;
-        send(&mut w, r#"{"jsonrpc":"2.0","method":"nope.nope","params":{}}"#).await;
+        send(
+            &mut w,
+            r#"{"jsonrpc":"2.0","method":"nope.nope","params":{}}"#,
+        )
+        .await;
         send(&mut w, "not json").await;
-        send(&mut w, r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"after"}}"#).await;
+        send(
+            &mut w,
+            r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"after"}}"#,
+        )
+        .await;
         let ev = recv(&mut lines).await;
-        assert_eq!(ev["params"]["payload"]["nonce"], "after", "nothing was answered to the bad lines");
+        assert_eq!(
+            ev["params"]["payload"]["nonce"], "after",
+            "nothing was answered to the bad lines"
+        );
         served.stop();
     }
 
@@ -1789,7 +2317,11 @@ mod tests {
         // connection's forwarder before the notification below is sent.
         flood.await.expect("flood task panicked");
 
-        send(&mut w, r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"through-the-flood"}}"#).await;
+        send(
+            &mut w,
+            r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"through-the-flood"}}"#,
+        )
+        .await;
 
         let dispatched = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
@@ -1803,7 +2335,10 @@ mod tests {
         })
         .await
         .expect("dispatch must not hang while the client is not reading (deadlock regression)");
-        assert!(dispatched, "the daemon.ping notification sent after the flood was never dispatched");
+        assert!(
+            dispatched,
+            "the daemon.ping notification sent after the flood was never dispatched"
+        );
 
         served.stop();
     }

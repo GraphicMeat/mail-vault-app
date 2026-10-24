@@ -1,5 +1,5 @@
-//! User bulk RPCs validate/claim intent and return immediately. Mail work runs
-//! on its named background thread; only matching operation controls apply.
+//! User bulk RPCs only claim/control work. Admission receipts are registered
+//! before filesystem work, and a fence can rule out a late timed-out request.
 use crate::handlers::common::{blocking, done};
 use crate::{ipc::RpcResponse, server::DaemonState};
 use mailvault_core::bulk::{Action, Scope};
@@ -22,7 +22,7 @@ pub(crate) async fn route(
         None
     } else {
         match params["operationId"].as_str().filter(|s| !s.is_empty()) {
-            Some(s) => Some(s.to_string()),
+            Some(id) => Some(id.to_owned()),
             None => {
                 return Some(RpcResponse::error(
                     id,
@@ -32,106 +32,152 @@ pub(crate) async fn route(
             }
         }
     };
-    let (state, params, method) = (state.clone(), params.clone(), method.to_string());
-    Some(done(
-        id,
-        blocking(move || -> Result<Value, String> {
-            let operation_id = operation_id.as_deref().unwrap_or("");
-            match method.as_str() {
-                "bulk.start" => {
-                    let action: Action = serde_json::from_value(params["type"].clone())
-                        .map_err(|_| "errors.bulkUnsupported".to_string())?;
-                    if action == Action::DeleteEverywhere {
-                        return Err("errors.bulkUnsupported".into());
-                    }
-                    let scope: Scope = serde_json::from_value(params["scope"].clone())
-                        .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
-                    let work = crate::bulk_worker::freeze(&state, action, scope)?;
-                    let intent = work.intent.clone();
-                    let (snapshot, duplicate) = {
-                        let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-                        let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
-                        let duplicate = bulk.active_id() == Some(operation_id);
-                        let snapshot = bulk.claim(&state.app_dir, operation_id, intent.clone())?;
-                        if !duplicate && bulk.active_id() == Some(operation_id) {
-                            if let Err(e) = bulk.checkpoint(&state.app_dir, operation_id, &work) {
-                                let _ = bulk.drained(operation_id);
-                                return Err(e);
-                            }
-                        }
-                        (
-                            snapshot,
-                            duplicate || bulk.active_id() != Some(operation_id),
-                        )
-                    };
-                    if !duplicate {
-                        if let Err(e) = crate::bulk_worker::launch(
-                            state.clone(),
-                            operation_id.into(),
-                            work,
-                            params["mirrorRoot"].as_str().map(str::to_owned),
-                            false,
-                        ) {
-                            let _ = state
-                                .bulk
-                                .lock()
-                                .unwrap_or_else(|p| p.into_inner())
-                                .drained(operation_id);
-                            return Err(e);
-                        }
-                    }
-                    Ok(snapshot)
+    let kickoff = matches!(method, "bulk.start" | "bulk.resume");
+    let attempt = params["attemptId"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    if kickoff {
+        let begin = state
+            .bulk
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .begin_admission(operation_id.as_deref().unwrap(), &attempt);
+        match begin {
+            Ok(Some(snapshot)) if method == "bulk.resume" => {
+                return Some(RpcResponse::success(id, snapshot))
+            }
+            Ok(Some(_)) => {}
+            Err(error) => return Some(RpcResponse::error(id, crate::ipc::INTERNAL_ERROR, error)),
+            Ok(None) => {}
+        }
+    }
+    let receipt_context = kickoff.then(|| (operation_id.clone().unwrap(), attempt.clone()));
+    let receipt_state = state.clone();
+    let (state, params, method) = (state.clone(), params.clone(), method.to_owned());
+    let result = blocking(move || -> Result<Value, String> {
+        let operation_id = operation_id.as_deref().unwrap_or("");
+        match method.as_str() {
+            "bulk.start" => {
+                let action: Action = serde_json::from_value(params["type"].clone())
+                    .map_err(|_| "errors.bulkUnsupported".to_string())?;
+                if action == Action::DeleteEverywhere {
+                    return Err("errors.bulkUnsupported".into());
                 }
-                "bulk.resume" => {
-                    let work = {
-                        let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-                        let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
-                        if bulk.active_id() == Some(operation_id) {
-                            return bulk.status(&state.app_dir).map(|s| s["active"].clone());
+                let scope: Scope = serde_json::from_value(params["scope"].clone())
+                    .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
+                let work = crate::bulk_worker::freeze(&state, action, scope)?;
+                let (snapshot, duplicate) = {
+                    let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+                    let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+                    let duplicate = bulk.active_id() == Some(operation_id);
+                    let snapshot = bulk.claim_attempt(
+                        &state.app_dir,
+                        operation_id,
+                        &attempt,
+                        work.intent.clone(),
+                    )?;
+                    if !duplicate && bulk.active_id() == Some(operation_id) {
+                        if let Err(error) = bulk.checkpoint(&state.app_dir, operation_id, &work) {
+                            let _ = bulk.drained_attempt(operation_id, &attempt);
+                            return Err(error);
                         }
-                        bulk.resume_worker(&state.app_dir, operation_id)?
-                    };
-                    if work.intent.action() == Action::DeleteEverywhere {
-                        return Err("errors.bulkUnsupported".into());
                     }
-                    if let Err(e) = crate::bulk_worker::launch(
+                    (
+                        snapshot,
+                        duplicate || bulk.active_id() != Some(operation_id),
+                    )
+                };
+                if !duplicate {
+                    if let Err(error) = crate::bulk_worker::launch(
                         state.clone(),
                         operation_id.into(),
+                        attempt.clone(),
                         work,
                         params["mirrorRoot"].as_str().map(str::to_owned),
-                        true,
+                        false,
                     ) {
                         let _ = state
                             .bulk
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
-                            .drained(operation_id);
-                        return Err(e);
+                            .drained_attempt(operation_id, &attempt);
+                        return Err(error);
                     }
-                    Ok(json!({"id":operation_id,"status":"starting"}))
                 }
-                "bulk.cancel" => {
-                    let bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
-                    bulk.cancel_token(operation_id)?
-                        .store(true, Ordering::SeqCst);
-                    // Acknowledgement is not terminal. Only the drained worker
-                    // emits finished and permits the shell to release its scope.
-                    Ok(json!({"id":operation_id,"status":"cancelling"}))
-                }
-                _ => {
+                Ok(snapshot)
+            }
+            "bulk.resume" => {
+                let (work, snapshot) = {
                     let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
                     let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
-                    if method == "bulk.discard" {
-                        bulk.discard(&state.app_dir, operation_id)
-                            .map(|_| Value::Null)
-                    } else {
-                        bulk.status(&state.app_dir)
+                    if bulk.active_id() == Some(operation_id) {
+                        return bulk
+                            .status(&state.app_dir)
+                            .map(|status| status["active"].clone());
                     }
+                    let work =
+                        bulk.resume_worker_attempt(&state.app_dir, operation_id, &attempt)?;
+                    let snapshot = bulk.status(&state.app_dir)?["active"].clone();
+                    (work, snapshot)
+                };
+                if let Err(error) = crate::bulk_worker::launch(
+                    state.clone(),
+                    operation_id.into(),
+                    attempt.clone(),
+                    work,
+                    params["mirrorRoot"].as_str().map(str::to_owned),
+                    true,
+                ) {
+                    let _ = state
+                        .bulk
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .drained_attempt(operation_id, &attempt);
+                    return Err(error);
+                }
+                Ok(snapshot)
+            }
+            "bulk.cancel" => {
+                let bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+                bulk.cancel_token(operation_id)?
+                    .store(true, Ordering::SeqCst);
+                Ok(json!({"id":operation_id,"status":"cancelling"}))
+            }
+            _ => {
+                let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+                let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+                if method == "bulk.discard" {
+                    bulk.discard(&state.app_dir, operation_id)
+                        .map(|_| Value::Null)
+                } else {
+                    let receipt = params["operationId"]
+                        .as_str()
+                        .zip(params["attemptId"].as_str());
+                    if let Some((operation, attempt)) = receipt {
+                        if params["fenceUnstarted"].as_bool() == Some(true) {
+                            bulk.fence_admission(operation, attempt)?;
+                        }
+                    }
+                    let mut status = bulk.status(&state.app_dir)?;
+                    if let Some((operation, attempt)) = receipt {
+                        status["admission"] = bulk.admission_receipt(operation, attempt);
+                    }
+                    Ok(status)
                 }
             }
-        })
-        .await
-        .map_err(|_| "errors.bulkWorkerUnavailable".to_string())
-        .and_then(|r| r),
-    ))
+        }
+    })
+    .await
+    .map_err(|_| "errors.bulkWorkerUnavailable".to_string())
+    .and_then(|result| result);
+    if let Some((operation, attempt)) = receipt_context {
+        receipt_state
+            .bulk
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .finish_admission(&operation, &attempt, &result);
+    }
+    Some(done(id, result))
 }

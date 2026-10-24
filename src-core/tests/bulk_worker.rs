@@ -537,13 +537,14 @@ async fn captured_failure_copy_and_cancel_mail_decisions_match_real_js() {
             assert_eq!(expected["result"]["removed"], 0);
             assert_eq!(w.result.removed, 1);
         }
-        if action == Action::ArchiveBackupDelete
-            && expected["result"].is_object()
-            && name != "cancel-delete"
-        {
+        if action == Action::ArchiveBackupDelete && expected["result"].is_object() {
+            let mut expected_result = expected["result"].clone();
+            if name == "cancel-delete" {
+                expected_result["removed"] = json!(1);
+            }
             assert_eq!(
                 serde_json::to_value(&w.result).unwrap(),
-                expected["result"],
+                expected_result,
                 "{name}"
             );
         }
@@ -667,5 +668,30 @@ fn reviewed_mirror_proof_uses_raw_bytes_in_both_storage_formats() {
         .unwrap();
         assert_eq!(result.mismatched, vec![7]);
         assert_eq!(std::fs::read(&existing).unwrap(), old);
+        std::fs::remove_file(&existing).unwrap();
+        let copied = backup::copy_uids_to_mirror_proved(
+            vault.path(),
+            mirror.path(),
+            "acc",
+            "one@example.test",
+            "INBOX",
+            &[7],
+            &sources,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(copied.verified, vec![7]);
+        assert_eq!(copied.copied, vec![7]);
+        let saved = std::fs::read_dir(&cur)
+            .unwrap()
+            .flatten()
+            .find(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "eml")
+            })
+            .unwrap();
+        assert_eq!(std::fs::read(saved.path()).unwrap(), raw);
     }
 }

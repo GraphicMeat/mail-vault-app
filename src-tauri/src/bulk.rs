@@ -1,36 +1,34 @@
-//! Native authorization for operation-owned user bulk mirror access.
+//! Native bookmark authority belongs to one execution attempt. A timed-out
+//! request is released only after a matching drain or definitive admission
+//! fence/rejection, never from an instantaneous empty active snapshot.
 use crate::abd::{AppPorts, Ports};
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Mutex, time::Duration};
 use tauri::Manager;
 const BUDGET: Duration = Duration::from_secs(30);
-
-/// A reservation precedes resolve/call. Duplicate kickoffs never displace a
-/// live scope. None means authorization is being resolved or no drive exists.
 #[derive(Default)]
 pub struct HeldBulkPaths(Mutex<HashMap<String, Hold>>);
 struct Hold {
     path: Option<String>,
     pending: bool,
     revision: u64,
+    attempt: String,
 }
 static NEXT_HOLD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 impl HeldBulkPaths {
     fn map(&self) -> std::sync::MutexGuard<'_, HashMap<String, Hold>> {
         self.0.lock().unwrap_or_else(|p| p.into_inner())
     }
+    #[cfg(test)]
     fn contains(&self, id: &str) -> bool {
         self.map().contains_key(id)
     }
-    fn take(&self, id: &str) -> Option<String> {
-        self.map().remove(id).and_then(|h| h.path)
-    }
 }
 fn set_root(params: &mut Value, root: Option<&str>) {
-    if let Some(o) = params.as_object_mut() {
-        o.remove("mirrorRoot");
-        if let Some(r) = root {
-            o.insert("mirrorRoot".into(), json!(r));
+    if let Some(object) = params.as_object_mut() {
+        object.remove("mirrorRoot");
+        if let Some(root) = root {
+            object.insert("mirrorRoot".into(), json!(root));
         }
     }
 }
@@ -42,62 +40,138 @@ fn forward_flow(
 ) -> Result<Value, String> {
     let id = params["operationId"]
         .as_str()
-        .filter(|s| !s.is_empty())
+        .filter(|id| !id.is_empty())
         .ok_or("errors.bulkMissingId")?
-        .to_string();
+        .to_owned();
     set_root(&mut params, None);
-    let backup = if method == "bulk.resume" {
-        let status = ports.call("bulk.status", json!({}), BUDGET)?;
-        let op = [&status["active"], &status["pending"]]
-            .into_iter()
-            .find(|s| s["id"].as_str() == Some(&id))
-            .ok_or("errors.bulkStale")?;
-        op["type"] == "archive_backup_delete"
+    // Learn an already-active execution before acquiring a replacement scope.
+    let status = ports.call("bulk.status", json!({}), BUDGET)?;
+    let active =
+        (status["active"]["id"].as_str() == Some(id.as_str())).then_some(&status["active"]);
+    let resume = method == "bulk.resume";
+    let operation = if resume {
+        active
+            .or_else(|| {
+                (status["pending"]["id"].as_str() == Some(id.as_str()))
+                    .then_some(&status["pending"])
+            })
+            .ok_or("errors.bulkStale")?
     } else {
-        params["type"] == "archive_backup_delete"
+        &params
     };
+    let backup = operation["type"] == "archive_backup_delete";
+    let active_attempt = active
+        .and_then(|active| active["attemptId"].as_str())
+        .filter(|attempt| !attempt.is_empty());
     if !backup {
+        params["attemptId"] = json!(active_attempt
+            .map(str::to_owned)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()));
         return ports.call(method, params, BUDGET);
     }
-    let existing = {
+    let new_execution = resume && active.is_none();
+    let previous = if new_execution {
+        held.map()
+            .get(&id)
+            .map(|hold| (hold.attempt.clone(), hold.revision, hold.pending))
+    } else {
+        None
+    };
+    if let Some((old_attempt, _, pending)) = &previous {
+        if *pending {
+            return Err("errors.operationRunning".into());
+        }
+        let old = ports.call(
+            "bulk.status",
+            json!({"operationId":id,"attemptId":old_attempt,"fenceUnstarted":true}),
+            BUDGET,
+        )?;
+        let receipt = &old["admission"];
+        if old["active"]["id"].as_str() == Some(id.as_str())
+            || receipt["operationId"].as_str() != Some(id.as_str())
+            || receipt["attemptId"].as_str() != Some(old_attempt.as_str())
+            || !matches!(
+                receipt["state"].as_str(),
+                Some("done" | "fenced" | "rejected")
+            )
+        {
+            return Err("errors.operationRunning".into());
+        }
+    }
+
+    let revision = NEXT_HOLD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let (attempt, existing, old) = {
         let mut map = held.map();
         if let Some(hold) = map.get_mut(&id) {
+            if previous.as_ref().is_some_and(|(attempt, revision, _)| {
+                hold.attempt != *attempt || hold.revision != *revision
+            }) {
+                return Err("errors.operationRunning".into());
+            }
             if hold.pending {
                 return Err("errors.operationRunning".into());
             }
+            let old = if new_execution {
+                hold.path.take()
+            } else {
+                None
+            };
+            if new_execution {
+                hold.attempt = uuid::Uuid::new_v4().to_string();
+            }
+            if let Some(attempt) = active_attempt {
+                hold.attempt = attempt.to_owned();
+            }
             hold.pending = true;
-            hold.revision = NEXT_HOLD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Some(hold.path.clone())
+            hold.revision = revision;
+            (
+                hold.attempt.clone(),
+                (!new_execution).then(|| hold.path.clone()),
+                old,
+            )
         } else {
+            let attempt = active_attempt
+                .map(str::to_owned)
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
             map.insert(
                 id.clone(),
                 Hold {
                     path: None,
                     pending: true,
-                    revision: NEXT_HOLD.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                    revision,
+                    attempt: attempt.clone(),
                 },
             );
-            None
+            (attempt, None, None)
         }
     };
     let root = match existing {
         Some(root) => root,
         None => {
-            let resolved = ports.resolve();
-            let root = resolved.filter(|r| {
-                if ports.exists(r) {
+            let root = ports.resolve().filter(|root| {
+                if ports.exists(root) {
                     true
                 } else {
-                    ports.release(r);
+                    ports.release(root);
                     false
                 }
             });
-            // A terminal frame may have removed the reservation while resolve
-            // ran. Do not resurrect it, and release this acquisition once.
-            let mut map = held.map();
-            if let Some(slot) = map.get_mut(&id) {
-                slot.path = root.clone();
-            } else {
+            let parked = {
+                let mut map = held.map();
+                if let Some(hold) = map
+                    .get_mut(&id)
+                    .filter(|hold| hold.revision == revision && hold.attempt == attempt)
+                {
+                    hold.path = root.clone();
+                    true
+                } else {
+                    false
+                }
+            };
+            if let Some(old) = old {
+                ports.release(&old);
+            }
+            if !parked {
                 if let Some(root) = root {
                     ports.release(&root);
                 }
@@ -106,19 +180,34 @@ fn forward_flow(
             root
         }
     };
+    params["attemptId"] = json!(attempt);
     set_root(&mut params, root.as_deref());
     let result = ports.call(method, params, BUDGET);
-    // A timeout is ambiguous: the worker may already own the path. Query the
-    // actual owner, retaining the hold if status itself cannot be read.
-    if let Some(hold) = held.map().get_mut(&id) {
-        hold.pending = false;
+    let owner = result
+        .as_ref()
+        .ok()
+        .and_then(|reply| reply["attemptId"].as_str())
+        .filter(|owner| !owner.is_empty());
+    let adopted = owner.is_some_and(|owner| owner != attempt);
+    {
+        let mut map = held.map();
+        if let Some(hold) = map
+            .get_mut(&id)
+            .filter(|hold| hold.revision == revision && hold.attempt == attempt)
+        {
+            hold.pending = false;
+            if let Some(owner) = owner {
+                hold.attempt = owner.to_owned();
+            }
+        }
     }
     if result.is_err()
+        || adopted
         || result
             .as_ref()
             .ok()
-            .and_then(|v| v["status"].as_str())
-            .is_some_and(|s| matches!(s, "complete" | "cancelled" | "error"))
+            .and_then(|reply| reply["status"].as_str())
+            .is_some_and(|status| matches!(status, "complete" | "cancelled" | "error"))
     {
         reconcile(held, ports)
     }
@@ -128,48 +217,61 @@ fn release_frame(held: &HeldBulkPaths, ports: &dyn Ports, frame: &Value) {
     if frame["finished"] != true {
         return;
     }
-    if let Some(id) = frame["operationId"].as_str() {
-        if let Some(path) = held.take(id) {
-            ports.release(&path)
+    let Some((id, attempt)) = frame["operationId"]
+        .as_str()
+        .zip(frame["attemptId"].as_str())
+    else {
+        return;
+    };
+    let path = {
+        let mut map = held.map();
+        if map.get(id).is_some_and(|hold| hold.attempt == attempt) {
+            map.remove(id).and_then(|hold| hold.path)
+        } else {
+            None
         }
+    };
+    if let Some(path) = path {
+        ports.release(&path)
     }
 }
 fn reconcile(held: &HeldBulkPaths, ports: &dyn Ports) {
-    // Snapshot reservations before status IO. A kickoff begun during that IO
-    // changes its revision, so a stale empty status cannot release its scope.
     let reservations: Vec<_> = held
         .map()
         .iter()
         .filter(|(_, hold)| !hold.pending)
-        .map(|(id, hold)| (id.clone(), hold.revision))
+        .map(|(id, hold)| (id.clone(), hold.attempt.clone(), hold.revision))
         .collect();
-    if reservations.is_empty() {
-        return;
-    }
-    let Ok(status) = ports.call("bulk.status", json!({}), BUDGET) else {
-        return;
-    };
-    if status.get("pending").is_none() {
-        return;
-    }
-    let active = match status.get("active") {
-        Some(Value::Null) => None,
-        Some(active) => match active["id"].as_str().filter(|id| !id.is_empty()) {
-            Some(id) => Some(id),
-            None => return,
-        },
-        None => return,
-    };
-    for (id, revision) in reservations {
-        if active == Some(id.as_str()) {
+    for (id, attempt, revision) in reservations {
+        // If admission was delayed even before registration, this fence is
+        // remembered and the late request can never claim this same attempt.
+        let Ok(status) = ports.call(
+            "bulk.status",
+            json!({"operationId":id,"attemptId":attempt,"fenceUnstarted":true}),
+            BUDGET,
+        ) else {
+            continue;
+        };
+        if status["active"]["id"].as_str() == Some(id.as_str())
+            && status["active"]["attemptId"].as_str() == Some(attempt.as_str())
+        {
+            continue;
+        }
+        let receipt = &status["admission"];
+        if receipt["operationId"].as_str() != Some(id.as_str())
+            || receipt["attemptId"].as_str() != Some(attempt.as_str())
+            || !matches!(
+                receipt["state"].as_str(),
+                Some("done" | "fenced" | "rejected")
+            )
+        {
             continue;
         }
         let path = {
             let mut map = held.map();
-            if map
-                .get(&id)
-                .is_some_and(|hold| !hold.pending && hold.revision == revision)
-            {
+            if map.get(&id).is_some_and(|hold| {
+                !hold.pending && hold.revision == revision && hold.attempt == attempt
+            }) {
                 map.remove(&id).and_then(|hold| hold.path)
             } else {
                 None
@@ -180,7 +282,6 @@ fn reconcile(held: &HeldBulkPaths, ports: &dyn Ports) {
         }
     }
 }
-
 pub(crate) fn forward(
     app: &tauri::AppHandle,
     method: &str,
@@ -213,6 +314,8 @@ mod tests {
         fail: bool,
         live: bool,
         terminal: bool,
+        definitive: bool,
+        pending: bool,
     }
     impl Ports for Fake<'_> {
         fn resolve(&self) -> Option<String> {
@@ -225,13 +328,17 @@ mod tests {
             self.released.lock().unwrap().push(p.into());
         }
         fn call(&self, m: &str, p: Value, _: std::time::Duration) -> Result<Value, String> {
+            let attempt = p["attemptId"].clone();
             self.calls.lock().unwrap().push((m.into(), p));
             if m == "bulk.status" {
-                return Ok(if self.live {
-                    json!({"active":{"id":"op","type":"archive_backup_delete"},"pending":null})
+                let admission = if self.definitive {
+                    json!({"operationId":"op","attemptId":attempt,"state":"rejected"})
                 } else {
-                    json!({"active":null,"pending":null})
-                });
+                    Value::Null
+                };
+                return Ok(
+                    json!({"active":if self.live {json!({"id":"op","type":"archive_backup_delete","attemptId":attempt})}else{Value::Null},"pending":if self.pending {json!({"id":"op","type":"archive_backup_delete"})}else{Value::Null},"admission":admission}),
+                );
             }
             assert!(
                 self.held.contains("op"),
@@ -241,7 +348,7 @@ mod tests {
                 release_frame(
                     self.held,
                     self,
-                    &json!({"operationId":"op","finished":true}),
+                    &json!({"operationId":"op","attemptId":attempt,"finished":true}),
                 );
             }
             if self.fail {
@@ -250,6 +357,9 @@ mod tests {
                 Ok(json!({"id":"op"}))
             }
         }
+    }
+    fn current_terminal(held: &HeldBulkPaths) -> Value {
+        json!({"operationId":"op","attemptId":held.map().get("op").map(|hold|hold.attempt.clone()),"finished":true})
     }
     #[test]
     fn terminal_before_ack_releases_once_and_strips_client_path() {
@@ -261,6 +371,8 @@ mod tests {
             fail: false,
             live: false,
             terminal: true,
+            definitive: false,
+            pending: false,
         };
         forward_flow(
             &h,
@@ -271,7 +383,16 @@ mod tests {
         .unwrap();
         assert_eq!(*p.released.lock().unwrap(), vec!["/drive"]);
         assert!(!h.contains("op"));
-        assert_eq!(p.calls.lock().unwrap()[0].1["mirrorRoot"], "/drive");
+        assert_eq!(
+            p.calls
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(method, _)| method == "bulk.start")
+                .unwrap()
+                .1["mirrorRoot"],
+            "/drive"
+        );
     }
     #[test]
     fn ambiguous_timeout_retains_scope_for_live_worker_and_reconnect() {
@@ -283,6 +404,8 @@ mod tests {
             fail: true,
             live: true,
             terminal: false,
+            definitive: false,
+            pending: false,
         };
         assert!(forward_flow(
             &h,
@@ -298,7 +421,7 @@ mod tests {
         assert!(h.contains("op"));
         release_frame(&h, &p, &json!({"operationId":"op","finished":false}));
         assert!(h.contains("op"));
-        release_frame(&h, &p, &json!({"operationId":"op","finished":true}));
+        release_frame(&h, &p, &current_terminal(&h));
         assert_eq!(p.released.lock().unwrap().len(), 1);
     }
     #[test]
@@ -311,6 +434,8 @@ mod tests {
             fail: true,
             live: true,
             terminal: false,
+            definitive: false,
+            pending: false,
         };
         for _ in 0..2 {
             let _ = forward_flow(
@@ -333,6 +458,8 @@ mod tests {
             fail: true,
             live: false,
             terminal: false,
+            definitive: true,
+            pending: false,
         };
         assert!(forward_flow(
             &h,
@@ -361,14 +488,16 @@ mod tests {
                 self.base.release(p)
             }
             fn call(&self, m: &str, p: Value, b: Duration) -> Result<Value, String> {
-                if m == "bulk.status" {
+                if m == "bulk.status" && p.get("attemptId").is_some() {
                     forward_flow(
                         self.held,
                         self.base,
                         "bulk.start",
                         json!({"operationId":"op","type":"archive_backup_delete"}),
                     )?;
-                    Ok(json!({"active":null,"pending":null}))
+                    Ok(
+                        json!({"active":null,"pending":null,"admission":{"operationId":"op","attemptId":p["attemptId"],"state":"done"}}),
+                    )
                 } else {
                     self.base.call(m, p, b)
                 }
@@ -382,6 +511,8 @@ mod tests {
             fail: false,
             live: true,
             terminal: false,
+            definitive: false,
+            pending: false,
         };
         forward_flow(
             &h,
@@ -419,6 +550,8 @@ mod tests {
             fail: false,
             live: true,
             terminal: false,
+            definitive: false,
+            pending: false,
         };
         forward_flow(
             &h,
@@ -445,6 +578,9 @@ mod tests {
                 panic!("no scope was acquired")
             }
             fn call(&self, m: &str, p: Value, _: Duration) -> Result<Value, String> {
+                if m == "bulk.status" {
+                    return Ok(json!({"active":null,"pending":null}));
+                }
                 assert_eq!(m, "bulk.start");
                 self.0.lock().unwrap().push(p);
                 Ok(json!({"id":"op","status":"starting"}))
@@ -460,7 +596,7 @@ mod tests {
         )
         .unwrap();
         assert!(p.0.lock().unwrap()[0].get("mirrorRoot").is_none());
-        release_frame(&h, &p, &json!({"operationId":"op","finished":true}));
+        release_frame(&h, &p, &current_terminal(&h));
         assert!(!h.contains("op"));
     }
     #[test]
@@ -473,6 +609,8 @@ mod tests {
             fail: false,
             live: true,
             terminal: false,
+            definitive: false,
+            pending: false,
         };
         forward_flow(
             &h,
@@ -519,6 +657,8 @@ mod tests {
             fail: true,
             live: false,
             terminal: false,
+            definitive: false,
+            pending: false,
         };
         assert!(forward_flow(
             &h,
@@ -532,5 +672,40 @@ mod tests {
             "empty active status does not prove a timed-out admission cannot start later"
         );
         assert!(p.released.lock().unwrap().is_empty());
+    }
+    #[test]
+    fn delayed_first_terminal_cannot_release_scope_acquired_by_explicit_resume() {
+        let h = HeldBulkPaths::default();
+        let mut p = Fake {
+            held: &h,
+            calls: Mutex::new(vec![]),
+            released: Mutex::new(vec![]),
+            fail: false,
+            live: true,
+            terminal: false,
+            definitive: false,
+            pending: false,
+        };
+        forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","type":"archive_backup_delete"}),
+        )
+        .unwrap();
+        let old = current_terminal(&h);
+        p.live = false;
+        p.pending = true;
+        p.definitive = true;
+        forward_flow(&h, &p, "bulk.resume", json!({"operationId":"op"})).unwrap();
+        let current = current_terminal(&h);
+        assert_ne!(old["attemptId"], current["attemptId"]);
+        release_frame(&h, &p, &old);
+        release_frame(&h, &p, &old);
+        assert!(h.contains("op"));
+        assert_eq!(p.released.lock().unwrap().len(), 1);
+        release_frame(&h, &p, &current);
+        assert!(!h.contains("op"));
+        assert_eq!(p.released.lock().unwrap().len(), 2);
     }
 }

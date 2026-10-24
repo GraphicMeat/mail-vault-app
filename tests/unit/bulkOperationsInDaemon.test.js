@@ -20,6 +20,11 @@ it('registers implemented bulk controls in daemon transport and router', () => {
   const native = readFileSync('src-tauri/src/bulk.rs', 'utf8');
   expect(native).toMatch(/set_root\(&mut params,\s*None\)/);
   expect(native).toContain('reconcile_after_channel_change');
+  // Admission fencing extends existing bulk.status; it is not a new RPC.
+  expect(native).toContain('fenceUnstarted');
+  expect(router).toContain('fenceUnstarted');
+  expect(readFileSync('src/demo/backend.js', 'utf8')).toContain('fenceUnstarted');
+
   const oldManager = readFileSync('src/services/BulkOperationManager.js', 'utf8');
   expect(oldManager).toContain("send('archive_emails'");
   expect(server).toContain('crate::handlers::bulk::route(');
@@ -123,4 +128,11 @@ it('demo kickoff returns before matching cancellation drains once', async () => 
     expect(events.at(-1).operation.status).toBe('cancelled');
     expect((await demo.invoke('bulk.status')).active).toBeNull();
   } finally {vi.useRealTimers();}
+});
+
+it('demo status fences an unseen attempt before a late kickoff', async () => {
+  const demo=createDemoBackend();const status=await demo.invoke('bulk.status',{operationId:'late',attemptId:'unseen',fenceUnstarted:true});
+  expect(status.admission).toEqual({operationId:'late',attemptId:'unseen',state:'fenced'});
+  await expect(demo.invoke('bulk.start',{operationId:'late',attemptId:'unseen',type:'archive',scope:{keys:[]}})).rejects.toThrow('errors.bulkStale');
+  expect((await demo.invoke('bulk.status')).active).toBeNull();
 });
