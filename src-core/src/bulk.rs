@@ -400,14 +400,14 @@ pub struct PreparedResume {
 }
 impl ResumeSeed {
     pub fn prepare(self) -> Result<PreparedResume, String> {
-        let work: crate::bulk_worker::Workflow =
-            serde_json::from_value(self.base.raw["worker"].clone())
-                .map_err(|_| "errors.bulkIdentityUncertain".to_string())?;
         let intent = self
             .base
             .intent
             .as_deref()
             .ok_or("errors.bulkIdentityUncertain")?;
+        let work: crate::bulk_worker::Workflow =
+            serde_json::from_value(self.base.raw["worker"].clone())
+                .map_err(|_| "errors.bulkIdentityUncertain".to_string())?;
         if !work.valid_for(intent) {
             return Err("errors.bulkPendingInvalid".into());
         }
@@ -742,11 +742,14 @@ impl Coordinator {
             return Err("errors.operationRunning".into());
         }
         let pending = self.matching(id)?;
+        let intent = pending
+            .intent
+            .as_ref()
+            .ok_or("errors.bulkIdentityUncertain")?
+            .clone();
         let work: crate::bulk_worker::Workflow =
             serde_json::from_value(pending.raw["worker"].clone())
                 .map_err(|_| "errors.bulkIdentityUncertain".to_string())?;
-        let intent: FrozenIntent = serde_json::from_value(pending.raw["intent"].clone())
-            .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
         let valid = work.valid_for(&intent);
         if !valid {
             return Err("errors.bulkPendingInvalid".into());
@@ -766,7 +769,7 @@ impl Coordinator {
         self.active = Some(Active {
             id: id.into(),
             attempt_id: attempt.into(),
-            intent: Arc::new(intent),
+            intent,
             snapshot,
             cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         });

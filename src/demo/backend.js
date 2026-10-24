@@ -330,7 +330,7 @@ const reviveMessage = stored => {
   return row;
 };
 
-export function createDemoBackend({ initialSettings = {} } = {}) {
+export function createDemoBackend({ initialSettings = {}, initialPendingOperation = null } = {}) {
   const sessionNow = Date.now();
   let messages = seedMessages(sessionNow);
   let mailboxList = clone(MAILBOXES);
@@ -347,7 +347,9 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   let settingsVersion = 0;
   const listeners = new Map();
   const journal = [];
-  let pendingOperation = null;
+  // Startup recovery fixtures are separate from the legacy write API.
+  // The browser still has no native provider or persisted identity authority.
+  let pendingOperation = clone(initialPendingOperation);
   let activeBulk = null;
   const bulkAdmissions = new Map();
   let bulkAttemptSeq = 0;
@@ -386,8 +388,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       total: p.totalUids.length, completed: p.totalUids.length - remaining, remaining,
       errors: p.errors ?? 0, skipped: p.skipped ?? 0, skippedLocal: p.skippedLocal ?? 0, result: p.result ?? null, lastError: p.lastError ?? null };
   };
-  const allowLegacyPendingWrite = () => {
-    if (activeBulk || (pendingOperation && typeof pendingOperation === 'object' && 'schemaVersion' in pendingOperation)) throw new Error('errors.bulkOwned');
+  const allowLegacyPendingWrite = incoming => {
+    if ((incoming && typeof incoming === 'object' && 'schemaVersion' in incoming) || activeBulk || (pendingOperation && typeof pendingOperation === 'object' && 'schemaVersion' in pendingOperation)) throw new Error('errors.bulkOwned');
   };
   let migrationState = null;
   const timeCapsules = new Map();
@@ -1095,7 +1097,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         return null;
       }
       case 'read_pending_operation': return pendingOperation;
-      case 'save_pending_operation': allowLegacyPendingWrite(); pendingOperation = args.operation || null; return null;
+      case 'save_pending_operation': allowLegacyPendingWrite(args.operation); pendingOperation = args.operation || null; return null;
       case 'clear_pending_operation': allowLegacyPendingWrite(); pendingOperation = null; return null;
       case 'get_migration_state': return migrationState;
       case 'clear_migration_state_cmd': migrationState = null; return null;

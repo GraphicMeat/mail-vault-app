@@ -284,20 +284,41 @@ fn prepared_checkpoint_rejects_old_revision_and_attempt_before_write() {
     let dir = tempfile::tempdir().unwrap();
     let mut owner = Coordinator::load(dir.path());
     let intent = intent(json!([7]));
-    owner.claim_attempt(dir.path(), "owned", "A", intent.clone()).unwrap();
+    owner
+        .claim_attempt(dir.path(), "owned", "A", intent.clone())
+        .unwrap();
     let work = mailvault_core::bulk_worker::Workflow::new(intent);
-    let first = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
-    let stale = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
+    let first = owner
+        .checkpoint_seed("owned", "A")
+        .unwrap()
+        .prepare(&work)
+        .unwrap();
+    let stale = owner
+        .checkpoint_seed("owned", "A")
+        .unwrap()
+        .prepare(&work)
+        .unwrap();
     owner.validate_checkpoint(&first).unwrap();
     first.persist(dir.path()).unwrap();
     owner.publish_checkpoint(&first).unwrap();
     assert!(owner.validate_checkpoint(&stale).is_err());
-    let old_attempt = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
+    let old_attempt = owner
+        .checkpoint_seed("owned", "A")
+        .unwrap()
+        .prepare(&work)
+        .unwrap();
     owner.drained_attempt("owned", "A").unwrap();
-    owner.resume_worker_attempt(dir.path(), "owned", "B").unwrap();
+    owner
+        .resume_worker_attempt(dir.path(), "owned", "B")
+        .unwrap();
     assert!(owner.validate_checkpoint(&old_attempt).is_err());
     assert!(owner.checkpoint_seed("owned", "A").is_err());
-    assert_eq!(op_journal::pending_operation_read(dir.path()).unwrap().unwrap()["attemptId"], "B");
+    assert_eq!(
+        op_journal::pending_operation_read(dir.path())
+            .unwrap()
+            .unwrap()["attemptId"],
+        "B"
+    );
 }
 
 #[test]
@@ -305,23 +326,42 @@ fn prepared_checkpoint_failure_keeps_committed_state_and_durable_restart_proof()
     let dir = tempfile::tempdir().unwrap();
     let mut owner = Coordinator::load(dir.path());
     let intent = intent(json!([7]));
-    owner.claim_attempt(dir.path(), "owned", "A", intent.clone()).unwrap();
+    owner
+        .claim_attempt(dir.path(), "owned", "A", intent.clone())
+        .unwrap();
     let mut work = mailvault_core::bulk_worker::Workflow::new(intent);
     work.phase = "delete".into();
     work.status = "deleting".into();
     work.groups[0].attempted = vec![7];
-    let prepared = owner.checkpoint_seed("owned", "A").unwrap().prepare(&work).unwrap();
+    let prepared = owner
+        .checkpoint_seed("owned", "A")
+        .unwrap()
+        .prepare(&work)
+        .unwrap();
     let blocked = dir.path().join("not-directory");
     std::fs::write(&blocked, "blocked").unwrap();
     assert!(prepared.persist(&blocked).is_err());
-    assert_eq!(owner.status(dir.path()).unwrap()["active"]["status"], "starting");
+    assert_eq!(
+        owner.status(dir.path()).unwrap()["active"]["status"],
+        "starting"
+    );
     owner.validate_checkpoint(&prepared).unwrap();
     prepared.persist(dir.path()).unwrap();
     // Crash after durable commit, before publication: restart owns the new
     // attempted uncertainty and never starts any work automatically.
     let mut restarted = Coordinator::load(dir.path());
-    assert_eq!(restarted.status(dir.path()).unwrap()["pending"]["status"], "awaitingResume");
-    assert_eq!(restarted.resume_worker_attempt(dir.path(), "owned", "B").unwrap().groups[0].attempted, vec![7]);
+    assert_eq!(
+        restarted.status(dir.path()).unwrap()["pending"]["status"],
+        "awaitingResume"
+    );
+    assert_eq!(
+        restarted
+            .resume_worker_attempt(dir.path(), "owned", "B")
+            .unwrap()
+            .groups[0]
+            .attempted,
+        vec![7]
+    );
 }
 
 #[test]
@@ -329,80 +369,147 @@ fn exact_duplicate_start_attaches_without_resampling_removed_rows() {
     let dir = tempfile::tempdir().unwrap();
     let mut owner = Coordinator::load(dir.path());
     let intent = intent(json!([7]));
-    owner.claim_attempt(dir.path(), "owned", "A", intent.clone()).unwrap();
+    owner
+        .claim_attempt(dir.path(), "owned", "A", intent.clone())
+        .unwrap();
     let mut work = mailvault_core::bulk_worker::Workflow::new(intent);
     work.status = "complete".into();
     owner.checkpoint(dir.path(), "owned", &work).unwrap();
     owner.drained_attempt("owned", "A").unwrap();
-    assert_eq!(owner.duplicate_start("owned", Action::Delete, &scope(json!([7]))).unwrap().unwrap()["status"], "complete");
-    assert!(owner.duplicate_start("owned", Action::Archive, &scope(json!([7]))).is_err());
-    assert!(owner.duplicate_start("owned", Action::Delete, &scope(json!([8]))).is_err());
+    assert_eq!(
+        owner
+            .duplicate_start("owned", Action::Delete, &scope(json!([7])))
+            .unwrap()
+            .unwrap()["status"],
+        "complete"
+    );
+    assert!(owner
+        .duplicate_start("owned", Action::Archive, &scope(json!([7])))
+        .is_err());
+    assert!(owner
+        .duplicate_start("owned", Action::Delete, &scope(json!([8])))
+        .is_err());
     assert!(owner.active_id().is_none());
 }
 
 #[test]
 fn prepared_resume_fences_before_and_during_write_without_reusing_old_base() {
-    let dir=tempfile::tempdir().unwrap();
-    let mut owner=Coordinator::load(dir.path());
-    let intent=intent(json!([]));
-    owner.claim_attempt(dir.path(),"restore","A",intent.clone()).unwrap();
-    owner.checkpoint(dir.path(),"restore",&mailvault_core::bulk_worker::Workflow::new(intent)).unwrap();
-    owner.drained_attempt("restore","A").unwrap();
-    owner.begin_admission("restore","before").unwrap();
-    let before=owner.resume_seed("restore","before").unwrap().prepare().unwrap();
-    owner.fence_admission("restore","before").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!([]));
+    owner
+        .claim_attempt(dir.path(), "restore", "A", intent.clone())
+        .unwrap();
+    owner
+        .checkpoint(
+            dir.path(),
+            "restore",
+            &mailvault_core::bulk_worker::Workflow::new(intent),
+        )
+        .unwrap();
+    owner.drained_attempt("restore", "A").unwrap();
+    owner.begin_admission("restore", "before").unwrap();
+    let before = owner
+        .resume_seed("restore", "before")
+        .unwrap()
+        .prepare()
+        .unwrap();
+    owner.fence_admission("restore", "before").unwrap();
     assert!(owner.validate_resume(&before).is_err());
-    assert_eq!(op_journal::pending_operation_read(dir.path()).unwrap().unwrap()["attemptId"],"A");
-    owner.begin_admission("restore","during").unwrap();
-    let during=owner.resume_seed("restore","during").unwrap().prepare().unwrap();
+    assert_eq!(
+        op_journal::pending_operation_read(dir.path())
+            .unwrap()
+            .unwrap()["attemptId"],
+        "A"
+    );
+    owner.begin_admission("restore", "during").unwrap();
+    let during = owner
+        .resume_seed("restore", "during")
+        .unwrap()
+        .prepare()
+        .unwrap();
     owner.validate_resume(&during).unwrap();
     during.persist(dir.path()).unwrap();
-    owner.fence_admission("restore","during").unwrap();
+    owner.fence_admission("restore", "during").unwrap();
     assert!(owner.publish_resume(&during).is_err());
-    let status=owner.owned_status().unwrap().unwrap();
+    let status = owner.owned_status().unwrap().unwrap();
     assert!(status["active"].is_null());
-    assert_eq!(status["pending"]["attemptId"],"during");
-    assert_eq!(owner.admission_receipt("restore","during")["state"],"fenced");
+    assert_eq!(status["pending"]["attemptId"], "during");
+    assert_eq!(
+        owner.admission_receipt("restore", "during")["state"],
+        "fenced"
+    );
     assert!(owner.validate_resume(&before).is_err());
-    let mut reopened=Coordinator::load(dir.path());
-    assert_eq!(reopened.status(dir.path()).unwrap()["pending"]["attemptId"],"during");
-    owner.begin_admission("restore","fresh").unwrap();
-    let fresh=owner.resume_seed("restore","fresh").unwrap().prepare().unwrap();
+    let mut reopened = Coordinator::load(dir.path());
+    assert_eq!(
+        reopened.status(dir.path()).unwrap()["pending"]["attemptId"],
+        "during"
+    );
+    owner.begin_admission("restore", "fresh").unwrap();
+    let fresh = owner
+        .resume_seed("restore", "fresh")
+        .unwrap()
+        .prepare()
+        .unwrap();
     owner.validate_resume(&fresh).unwrap();
     fresh.persist(dir.path()).unwrap();
-    assert_eq!(owner.publish_resume(&fresh).unwrap()["attemptId"],"fresh");
+    assert_eq!(owner.publish_resume(&fresh).unwrap()["attemptId"], "fresh");
     assert!(owner.validate_resume(&during).is_err());
 }
 
 #[test]
 fn failed_resume_save_requires_fresh_disk_evidence_before_another_seed() {
-    let dir=tempfile::tempdir().unwrap();
-    let mut owner=Coordinator::load(dir.path());
-    let intent=intent(json!([]));
-    owner.claim_attempt(dir.path(),"restore","A",intent.clone()).unwrap();
-    owner.checkpoint(dir.path(),"restore",&mailvault_core::bulk_worker::Workflow::new(intent)).unwrap();
-    owner.drained_attempt("restore","A").unwrap();
-    let prepared=owner.resume_seed("restore","B").unwrap().prepare().unwrap();
-    let blocked=dir.path().join("not-dir"); std::fs::write(&blocked,"blocked").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let intent = intent(json!([]));
+    owner
+        .claim_attempt(dir.path(), "restore", "A", intent.clone())
+        .unwrap();
+    owner
+        .checkpoint(
+            dir.path(),
+            "restore",
+            &mailvault_core::bulk_worker::Workflow::new(intent),
+        )
+        .unwrap();
+    owner.drained_attempt("restore", "A").unwrap();
+    let prepared = owner
+        .resume_seed("restore", "B")
+        .unwrap()
+        .prepare()
+        .unwrap();
+    let blocked = dir.path().join("not-dir");
+    std::fs::write(&blocked, "blocked").unwrap();
     assert!(prepared.persist(&blocked).is_err());
     owner.invalidate_pending();
     assert!(owner.owned_status().is_none());
-    assert!(owner.resume_seed("restore","C").is_err());
-    let read=Coordinator::read_pending(dir.path());
+    assert!(owner.resume_seed("restore", "C").is_err());
+    let read = Coordinator::read_pending(dir.path());
     owner.install_pending(&read).unwrap();
-    assert_eq!(owner.owned_status().unwrap().unwrap()["pending"]["attemptId"],"A");
-    assert!(owner.resume_seed("restore","C").is_ok());
+    assert_eq!(
+        owner.owned_status().unwrap().unwrap()["pending"]["attemptId"],
+        "A"
+    );
+    assert!(owner.resume_seed("restore", "C").is_ok());
 }
 
 #[test]
 fn legacy_native_looking_hints_cannot_enter_compatibility_resume() {
-    let dir=tempfile::tempdir().unwrap();
-    let intent=intent(json!([]));
-    let work=mailvault_core::bulk_worker::Workflow::new(intent.clone());
-    let raw=json!({"id":"legacy","type":"delete","totalUids":[],"completedUids":[],"status":"starting","intent":intent,"worker":work});
-    op_journal::pending_operation_save(dir.path(),&raw).unwrap();
-    let mut owner=Coordinator::load(dir.path());
-    assert!(owner.resume_worker_attempt(dir.path(),"legacy","B").is_err(),"unversioned raw hints must never become native proof");
+    let dir = tempfile::tempdir().unwrap();
+    let intent = intent(json!([]));
+    let work = mailvault_core::bulk_worker::Workflow::new(intent.clone());
+    let raw = json!({"id":"legacy","type":"delete","totalUids":[],"completedUids":[],"status":"starting","intent":intent,"worker":work});
+    op_journal::pending_operation_save(dir.path(), &raw).unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    assert!(
+        owner
+            .resume_worker_attempt(dir.path(), "legacy", "B")
+            .is_err(),
+        "unversioned raw hints must never become native proof"
+    );
     assert!(owner.active_id().is_none());
-    assert_eq!(op_journal::pending_operation_read(dir.path()).unwrap(),Some(raw));
+    assert_eq!(
+        op_journal::pending_operation_read(dir.path()).unwrap(),
+        Some(raw)
+    );
 }

@@ -46,8 +46,7 @@ it('the demo retains exact pending identities until matching discard', async () 
 
 it('the demo preserves unknown-version and malformed evidence', async () => {
   for (const operation of [{ schemaVersion: 99, id: 'future' }, { schemaVersion: 1, id: 'broken' }]) {
-    const demo = createDemoBackend();
-    await demo.invoke('save_pending_operation', { operation });
+    const demo = createDemoBackend({ initialPendingOperation: operation });
     await expect(demo.invoke('bulk.status')).rejects.toThrow(/errors\.bulkPending/);
     await expect(demo.invoke('bulk.discard', { operationId: operation.id })).rejects.toThrow(/errors\.bulkPending/);
     await expect(demo.invoke('save_pending_operation', { operation: {} })).rejects.toThrow('errors.bulkOwned');
@@ -84,12 +83,11 @@ it('the demo refuses malformed or inconsistent versioned intent without discardi
     { ...valid, groups: [{ accountId: 'a', mailbox: 'Sent', uids: [7] }] },
   ];
   for (const intent of intents) {
-    const demo = createDemoBackend();
     const operation = {
       schemaVersion: 1, id: 'damaged', type: 'delete', accountId: 'a', mailbox: 'INBOX',
       totalUids: ['a:INBOX:7'], completedUids: [], status: 'starting', currentPhase: 'delete', intent,
     };
-    await demo.invoke('save_pending_operation', { operation });
+    const demo = createDemoBackend({ initialPendingOperation: operation });
     await expect(demo.invoke('bulk.discard', { operationId: 'damaged' })).rejects.toThrow('errors.bulkPendingInvalid');
     await expect(demo.invoke('bulk.status')).rejects.toThrow('errors.bulkPendingInvalid');
     expect(await demo.invoke('read_pending_operation')).toEqual(operation);
@@ -98,13 +96,12 @@ it('the demo refuses malformed or inconsistent versioned intent without discardi
 
 it('the demo accepts consistent versioned grouping and opaque purge selections', async () => {
   for (const type of ['delete', 'delete_everywhere']) {
-    const demo = createDemoBackend();
     const keys = type === 'delete' ? ['a:Work:Clients:7'] : [7, 'b:Sent:8'];
     const intent = {
       operation: type, scope: { keys }, refused: [], skippedLocal: 0,
       groups: type === 'delete' ? [{ accountId: 'a', mailbox: 'Work:Clients', uids: [7] }] : [],
     };
-    await demo.invoke('save_pending_operation', { operation: {
+    const operation = {
       schemaVersion: 1, id: 'valid', type, totalUids: keys, completedUids: [], status: 'starting', intent,
     } });
     expect((await demo.invoke('bulk.status')).pending.remaining).toBe(keys.length);
