@@ -58,3 +58,46 @@ it('every bulk service error is translated in all nine locales', () => {
   }
   expect(source).not.toContain('E_BULK_');
 });
+
+it('the demo refuses malformed or inconsistent versioned intent without discarding evidence', async () => {
+  const valid = {
+    operation: 'delete', scope: { accountId: 'a', mailbox: 'INBOX', keys: [7] },
+    groups: [{ accountId: 'a', mailbox: 'INBOX', uids: [7] }], refused: [], skippedLocal: 0,
+  };
+  const intents = [
+    {},
+    { ...valid, scope: {} },
+    { ...valid, groups: [{ accountId: 'a', mailbox: 'INBOX', uids: [4294967296] }] },
+    { ...valid, skippedLocal: -1 },
+    { ...valid, operation: 'archive' },
+    { ...valid, groups: [{ accountId: 'a', mailbox: 'Sent', uids: [7] }] },
+  ];
+  for (const intent of intents) {
+    const demo = createDemoBackend();
+    const operation = {
+      schemaVersion: 1, id: 'damaged', type: 'delete', accountId: 'a', mailbox: 'INBOX',
+      totalUids: ['a:INBOX:7'], completedUids: [], status: 'starting', currentPhase: 'delete', intent,
+    };
+    await demo.invoke('save_pending_operation', { operation });
+    await expect(demo.invoke('bulk.discard', { operationId: 'damaged' })).rejects.toThrow('errors.bulkPendingInvalid');
+    await expect(demo.invoke('bulk.status')).rejects.toThrow('errors.bulkPendingInvalid');
+    expect(await demo.invoke('read_pending_operation')).toEqual(operation);
+  }
+});
+
+it('the demo accepts consistent versioned grouping and opaque purge selections', async () => {
+  for (const type of ['delete', 'delete_everywhere']) {
+    const demo = createDemoBackend();
+    const keys = type === 'delete' ? ['a:Work:Clients:7'] : [7, 'b:Sent:8'];
+    const intent = {
+      operation: type, scope: { keys }, refused: [], skippedLocal: 0,
+      groups: type === 'delete' ? [{ accountId: 'a', mailbox: 'Work:Clients', uids: [7] }] : [],
+    };
+    await demo.invoke('save_pending_operation', { operation: {
+      schemaVersion: 1, id: 'valid', type, totalUids: keys, completedUids: [], status: 'starting', intent,
+    } });
+    expect((await demo.invoke('bulk.status')).pending.remaining).toBe(keys.length);
+    await expect(demo.invoke('bulk.discard', { operationId: 'valid' })).resolves.toBeNull();
+    expect(await demo.invoke('read_pending_operation')).toBeNull();
+  }
+});

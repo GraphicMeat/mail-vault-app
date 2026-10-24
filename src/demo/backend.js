@@ -353,9 +353,29 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
     if (!p) return null;
     if (typeof p !== 'object' || Array.isArray(p)) throw new Error('errors.bulkPendingInvalid');
     if ('schemaVersion' in p && p.schemaVersion !== 1) throw new Error('errors.bulkPendingVersion');
-    if (!p.id || !['archive', 'delete', 'archive_and_delete', 'archive_backup_delete', 'delete_everywhere'].includes(p.type)
+    if (typeof p.id !== 'string' || !p.id || !['archive', 'delete', 'archive_and_delete', 'archive_backup_delete', 'delete_everywhere'].includes(p.type)
       || !Array.isArray(p.totalUids) || !Array.isArray(p.completedUids) || typeof p.status !== 'string'
-      || (p.schemaVersion === 1 && !p.intent)) throw new Error('errors.bulkPendingInvalid');
+      ) throw new Error('errors.bulkPendingInvalid');
+    if (p.schemaVersion === 1) {
+      const intent = p.intent;
+      const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+      const optionalString = value => value == null || typeof value === 'string';
+      if (!object(intent) || intent.operation !== p.type || !object(intent.scope)
+        || !optionalString(intent.scope.accountId) || !optionalString(intent.scope.mailbox)
+        || (intent.scope.spans !== undefined && typeof intent.scope.spans !== 'boolean')
+        || !Array.isArray(intent.scope.keys) || !Array.isArray(intent.groups) || !Array.isArray(intent.refused)
+        || !Number.isInteger(intent.skippedLocal) || intent.skippedLocal < 0 || intent.skippedLocal >= 2 ** 64
+        || intent.groups.some(group => !object(group) || typeof group.accountId !== 'string' || typeof group.mailbox !== 'string'
+          || !Array.isArray(group.uids) || group.uids.some(uid => !Number.isInteger(uid) || uid < 0 || uid > 0xffffffff))) {
+        throw new Error('errors.bulkPendingInvalid');
+      }
+      const keys = p.type === 'delete_everywhere' ? intent.scope.keys
+        : intent.groups.flatMap(group => group.uids.map(uid => `${group.accountId}:${group.mailbox}:${uid}`));
+      // JSON object property order does not change a frozen selection key.
+      const canonicalKeys = values => JSON.stringify(values, (_key, value) => object(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : value);
+      if (canonicalKeys(keys) !== canonicalKeys(p.totalUids)) throw new Error('errors.bulkPendingInvalid');
+    }
     if (['complete', 'cancelled'].includes(p.status)) return null;
     const completed = new Set(p.completedUids);
     const remaining = p.totalUids.filter(key => !completed.has(key)).length;
