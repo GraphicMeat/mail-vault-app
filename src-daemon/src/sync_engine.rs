@@ -121,6 +121,8 @@ pub struct SyncEngine {
     /// process so an unfetchable mailbox can't retry in a loop — but NOT
     /// reported as `backfilling`, or the app would wait on it forever.
     backfill_gave_up: Mutex<HashSet<String>>,
+    #[cfg(test)]
+    backfill_pause: std::sync::Mutex<Option<Arc<tests::BackfillPause>>>,
     /// Shut while the host has no connectivity — every sync short-circuits
     /// rather than dialling nine accounts into a dead socket.
     net: Arc<NetGate>,
@@ -194,6 +196,8 @@ impl SyncEngine {
             contacts,
             backfilling: Mutex::new(HashSet::new()),
             backfill_gave_up: Mutex::new(HashSet::new()),
+            #[cfg(test)]
+            backfill_pause: std::sync::Mutex::new(None),
             net,
             mailbox_aliases: Mutex::new(HashMap::new()),
             sync_locks: Mutex::new(HashMap::new()),
@@ -1319,6 +1323,14 @@ impl SyncEngine {
                 "[backfill] {} ({}): {}/{} headers cached",
                 account.email, mailbox, written, missing.len()
             );
+            #[cfg(test)]
+            {
+                let pause = self.backfill_pause.lock().unwrap().take();
+                if let Some(pause) = pause {
+                    pause.reached.notify_one();
+                    pause.release.notified().await;
+                }
+            }
         }
 
         Ok(written)
@@ -2593,61 +2605,48 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// Pause the real producer at its existing between-chunk progress event.
-    /// This test-only subscriber avoids a timing race or production test hook.
-    struct NativeChunkPause {
-        reached: std::sync::mpsc::SyncSender<()>,
-        release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
-        once: std::sync::atomic::AtomicBool,
-        observed: Arc<std::sync::Mutex<Vec<String>>>,
+    #[tokio::test]
+    async fn reviewed_native_current_origin_transition_is_admitted() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|p| p.into_inner());
+        let dir = scratch_dir("current_native_transition");
+        let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let (account_a, account_b) = (account_for(&a), account_for(&b));
+        let engine = engine_for(&dir);
+        assert!(engine.sync_account(&account_a, "INBOX").await.success);
+        store_native_test_config(&dir.join("config.json"), &account_b);
+        let result = engine.sync_account(&account_b, "INBOX").await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(result.success, "an intended current-config origin change must be admitted: {:?}", result.error);
+        assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([1, 2]));
+        assert!(engine.cache_ctx("acc1", "INBOX").native_seed(&account_b.imap_config).unwrap().matches(&imap::NativeHeaderIdentity::new(&account_b.imap_config, "acc1", "INBOX", Some(1))));
+        let _ = fs::remove_dir_all(&dir);
     }
-    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for NativeChunkPause {
-        fn on_event(&self, event: &tracing::Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
-            struct Message(String);
-            impl tracing::field::Visit for Message {
-                fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-                    if field.name() == "message" { self.0 = format!("{value:?}"); }
-                }
-            }
-            let mut message = Message(String::new());
-            event.record(&mut message);
-            self.observed.lock().unwrap().push(message.0.clone());
-            if message.0.contains(&format!("{}/{} headers cached", BACKFILL_CHUNK, BACKFILL_CHUNK * 2))
-                && !self.once.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                self.reached.send(()).unwrap();
-                self.release.lock().unwrap().recv_timeout(std::time::Duration::from_secs(10)).unwrap();
-            }
-        }
+
+    /// Test synchronization is per engine and removed from non-test builds.
+    pub(super) struct BackfillPause {
+        pub(super) reached: tokio::sync::Notify,
+        pub(super) release: tokio::sync::Notify,
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn reviewed_native_backfill_pins_origin_between_chunks() {
-        use tracing::instrument::WithSubscriber;
-        use tracing_subscriber::prelude::*;
         let dir = scratch_dir("native_chunk_owner");
         let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", (BACKFILL_CHUNK * 2) as u32)));
         let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
         let (account_a, account_b) = (account_for(&a), account_for(&b));
         let engine = Arc::new(engine_for(&dir));
-        let (hit_tx, hit_rx) = std::sync::mpsc::sync_channel(1);
-        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
-        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let subscriber = tracing_subscriber::registry().with(NativeChunkPause {
-            reached: hit_tx, release: std::sync::Mutex::new(release_rx), once: std::sync::atomic::AtomicBool::new(false), observed: observed.clone(),
-        });
+        let pause = Arc::new(BackfillPause { reached: tokio::sync::Notify::new(), release: tokio::sync::Notify::new() });
+        *engine.backfill_pause.lock().unwrap() = Some(pause.clone());
         let running = engine.clone();
-        let job = tokio::spawn(async move { running.run_backfill(&account_a, "INBOX").await }.with_subscriber(subscriber));
-        let paused = tokio::task::spawn_blocking(move || hit_rx.recv_timeout(std::time::Duration::from_secs(10))).await.unwrap();
-        if let Err(error) = paused {
-            let _ = release_tx.send(());
-            let result = job.await.unwrap();
-            panic!("the actual first chunk must finish before replacing ownership: pause={error:?}, producer={result:?}, rows={}, observed={:?}", cached_count(&engine, "INBOX"), observed.lock().unwrap());
-        }
+        let job = tokio::spawn(async move { running.run_backfill(&account_a, "INBOX").await });
+        tokio::time::timeout(Duration::from_secs(10), pause.reached.notified()).await.expect("the actual first chunk must publish");
+        assert_eq!(cached_count(&engine, "INBOX"), BACKFILL_CHUNK);
         let io = engine.cache_ctx("acc1", "INBOX");
         let seed_b = io.native_seed(&account_b.imap_config).unwrap();
         io.write_bound_headers(&[test_header(3)], &seed_b, Some(1)).unwrap();
-        release_tx.send(()).unwrap();
-        assert_eq!(job.await.unwrap().unwrap_err(), "errors.bulkIdentityChanged", "the losing original operation must refuse its later chunk");
+        pause.release.notify_one();
+        assert_eq!(job.await.unwrap().unwrap_err(), "errors.bulkIdentityChanged");
         assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([3]), "later A chunks cannot adopt B as a new replacement expectation");
         assert!(io.native_seed(&account_b.imap_config).unwrap().matches(&imap::NativeHeaderIdentity::new(&account_b.imap_config, "acc1", "INBOX", Some(1))));
         let _ = fs::remove_dir_all(&dir);
