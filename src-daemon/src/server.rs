@@ -1431,6 +1431,7 @@ mod tests {
                 &["a".into()],
                 &[],
             );
+            assert_eq!(serde_json::to_value(&intent).unwrap()["scope"]["targetHints"].as_array().map(Vec::len), Some(20000));
             let mut work = Workflow::new(intent.clone());
             let ids: std::collections::HashMap<_, _> = (1..=20000)
                 .map(|uid| (uid, format!("{uid}@selected.test")))

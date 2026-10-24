@@ -1213,6 +1213,35 @@ mod tests {
         assert_eq!(selected.message_ids.get(&7).map(String::as_str), Some("original@test"));
     }
 
+    #[tokio::test]
+    async fn bulk_original_missing_mid_requires_actual_live_uid() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("INBOX").with_uid_validity(1)));
+        let mut original = selected();
+        original.message_ids.clear();
+        assert!(read_imap_identity(&state, &group(), &config(&server), &original).await.is_err(), "a missing MID still requires the original UID to exist");
+        assert!(!server.commands().iter().any(|c| c.contains("UID STORE") || c.contains("EXPUNGE")));
+    }
+
+    #[test]
+    fn bulk_original_snapshot_conflicts_and_zero_uid_refuse() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        seed_selection(&state, "INBOX");
+        let hint = json!({"accountId":"acc","mailbox":"INBOX","uid":7,"nativeIdentity":{"accountId":"acc","mailbox":"INBOX","uidValidity":1,"originHash":"original"},"messageIdPresent":true,"messageId":"<selected@test>"});
+        for change in [json!({"uid":0}), json!({"accountId":"other"}), json!({"nativeIdentity":null}), json!({"messageIdPresent":false,"messageId":"<conflict@test>"})] {
+            let mut invalid = hint.clone();
+            for (key, value) in change.as_object().unwrap() { invalid[key] = value.clone(); }
+            let scope = serde_json::from_value(json!({"accountId":"acc","mailbox":"INBOX","keys":[7],"targetHints":[invalid]})).unwrap();
+            assert!(freeze(&state, mailvault_core::bulk::Action::Delete, scope).is_err(), "conflict {change}");
+        }
+        let mut conflicting = hint.clone();
+        conflicting["messageId"] = json!("<replacement@test>");
+        let scope = serde_json::from_value(json!({"accountId":"acc","mailbox":"INBOX","keys":[7],"targetHints":[hint, conflicting]})).unwrap();
+        assert!(freeze(&state, mailvault_core::bulk::Action::Archive, scope).is_err());
+    }
+
     fn seed_selection(state: &Arc<DaemonState>, mailbox: &str) {
         std::fs::write(state.app_dir.join("accounts.json"), "[{\"id\":\"acc\"}]").unwrap();
         crate::custody::with_conn(state, |c| {
