@@ -351,3 +351,13 @@ it('drops a memo when native origin changes with otherwise equal metadata', asyn
   expect(await recall(id, 'INBOX', { ...META, nativeIdentity: { ...proof, originHash: 'origin-B' } }, io)).toBeNull();
   expect(io.listCachedUids).not.toHaveBeenCalled();
 });
+
+
+it('drops a memo when the original JMAP label changes with equal counters and origin', async () => {
+  const id = nextId();
+  const original = { accountId: id, mailbox: 'INBOX', uidValidity: 1, originHash: 'origin-A', jmapMailboxId: 'L1' };
+  remember(id, 'INBOX', [{ uid: 7, _nativeIdentity: original }], { ...META, nativeIdentity: original });
+  const io = fakeIo({ uids: [7] });
+  expect(await recall(id, 'INBOX', { ...META, nativeIdentity: { ...original, jmapMailboxId: 'L2' } }, io)).toBeNull();
+  expect(io.listCachedUids).not.toHaveBeenCalled();
+});

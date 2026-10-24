@@ -1865,6 +1865,38 @@ mod tests {
         assert!(state.bulk.lock().unwrap().claim_seed("new", "A").is_ok());
     }
 
+    #[test]
+    fn bulk_original_claim_failed_save_invalidates_empty_authority() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        mailvault_core::app_db::with(dir.path(), |conn| conn.execute_batch("CREATE TRIGGER deny_pending BEFORE INSERT ON meta BEGIN SELECT RAISE(ABORT, 'forced failure'); END;").map_err(|e| e.to_string())).unwrap();
+        state.bulk.lock().unwrap().begin_admission("new", "A").unwrap();
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let result = prepare_claim(&state, "new", "A", FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[]));
+        assert_eq!(result.unwrap_err(), "errors.bulkPendingWrite");
+        assert!(state.bulk.lock().unwrap().active_id().is_none());
+        assert!(state.bulk.lock().unwrap().claim_seed("new", "next").is_err());
+        assert!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().is_none());
+        mailvault_core::app_db::with(dir.path(), |conn| conn.execute_batch("DROP TRIGGER deny_pending;").map_err(|e| e.to_string())).unwrap();
+        reconcile_pending(&state).unwrap();
+        assert!(state.bulk.lock().unwrap().claim_seed("new", "next").is_ok());
+    }
+
+    #[tokio::test]
+    async fn bulk_original_legacy_failed_write_keeps_empty_seed_invalid() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let seed = state.bulk.lock().unwrap().claim_seed("new", "A").unwrap();
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let prepared = seed.prepare(FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[])).unwrap();
+        mailvault_core::app_db::with(dir.path(), |conn| conn.execute_batch("CREATE TRIGGER deny_pending BEFORE INSERT ON meta BEGIN SELECT RAISE(ABORT, 'forced failure'); END;").map_err(|e| e.to_string())).unwrap();
+        let reply = handle_request_for_test(&state, "save_pending_operation", json!({"operation":{"id":"legacy","type":"delete","totalUids":[7],"completedUids":[],"status":"deleting"}})).await;
+        assert!(reply.error.is_some());
+        assert!(state.bulk.lock().unwrap().validate_claim(&prepared).is_err());
+        assert!(state.bulk.lock().unwrap().active_id().is_none());
+        assert!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().is_none());
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn bulk_resume_io_never_blocks_status_or_inactive_cancel() {
         let dir = tempfile::tempdir().unwrap();

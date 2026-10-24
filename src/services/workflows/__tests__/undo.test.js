@@ -860,7 +860,7 @@ describe('undo puts the row back first, then the server follows', () => {
     mockVaultRebindUids.mockResolvedValueOnce({ rebound: [[7, 41]] });
     primeStore({ emails: [row(7), row(8)] });
     useMailStore.setState({
-      localEmails: [row(7, { source: 'local' })],
+      localEmails: [row(7, { source: 'local', _nativeIdentity: { accountId: 'a1', mailbox: 'INBOX', uidValidity: 1, originHash: 'old' } })],
       archivedEmailIds: new Set(['a1:INBOX:7']),
       _sortedEmailsFingerprint: '',
     });
@@ -875,6 +875,7 @@ describe('undo puts the row back first, then the server follows', () => {
       [expect.objectContaining({ serverDeleted: false })]);
     expect([...useMailStore.getState().archivedEmailIds]).toEqual(['a1:INBOX:41']);
     expect(useMailStore.getState().sortedEmails.filter(e => e.subject === 'm7')).toHaveLength(1);
+    expect(useMailStore.getState().localEmails.find(e => e.uid === 41)._nativeIdentity).toBeUndefined();
   });
 });
 

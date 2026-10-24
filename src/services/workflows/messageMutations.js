@@ -1423,7 +1423,9 @@ async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pa
     savedEmailIds: swapKeyed(now.savedEmailIds),
     localEmails: now.localEmails.map((e) => {
       const uid = localOf.get(_rowId(e, now));
-      return uid == null ? e : { ...e, uid, serverDeleted: false };
+      if (uid == null) return e;
+      const { _nativeIdentity, _nativeExpectedIdentity, ...unbound } = e;
+      return { ...unbound, uid, serverDeleted: false };
     }),
   });
   _refreshAfterFlagChange(useMailStore);
