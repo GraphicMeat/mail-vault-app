@@ -16,12 +16,14 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::sender_check::js_space;
 
-/// Words that say the mail carries a code, in the app's languages. Stems, so
-/// "verification", "verify" and "verified" all count.
+/// Words that say the mail carries a code, in the app's languages and
+/// Lithuanian ("kodas", "patvirtinimo"). Stems, so "verification", "verify"
+/// and "verified" all count. "kodėl" (why) is not "kod" + a case ending.
 static KEYWORDS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"(?i)(?-u:\b)(?:codes?|otp|passcode|pin|2fa|mfa|one[- ]?time|verif[0-9A-Za-z_]*|authenticat[0-9A-Za-z_]*|security|token|confirm[0-9A-Za-z_]*|sign[- ]?in|log[- ]?in)(?-u:\b)",
         r"|c[oó]digo|verificaci[oó]n|codice|verifica|best[äa]tigung|sicherheits|verifizier|einmal|v[ée]rification|s[ée]curit[ée]",
+        r"|kodas(?-u:\b)|kod[ąų]|kod(?:o|u|us|ai|e)(?-u:\b)|patvirtin|prisijung",
         r"|認証|確認コード|検証|ワンタイム|인증|확인 코드|验证码|驗證碼|校验码",
     ))
     .unwrap()
@@ -289,6 +291,22 @@ mod tests {
     fn an_ordinary_mail_is_not_worth_reading_the_body_for() {
         assert!(!body_may_hold_code("Weekly digest", "Here is what happened this week"));
         assert!(!body_may_hold_code("Your order has shipped", ""));
+    }
+
+    const IGNITIS_BODY: &str = "Sveiki,\n\nprašome patvirtinti savo el. paštą ir mano.ignitis.lt registracijos lange suvesti šį kodą:\n\n0468\nPatvirtinimo kodas\n\nJeigu nesiregistravote „Ignitis“ savitarnoje mano.ignitis.lt ir šį laišką gavote per klaidą, prašome jį ignoruoti ir ištrinti.";
+
+    #[test]
+    fn finds_a_lithuanian_code() {
+        assert_eq!(
+            find_verification_code("Mano.ignitis.lt registracijos patvirtinimo kodas", IGNITIS_BODY).as_deref(),
+            Some("0468")
+        );
+        assert!(body_may_hold_code("Mano.ignitis.lt registracijos patvirtinimo kodas", ""));
+    }
+
+    #[test]
+    fn a_lithuanian_why_is_not_a_code_word() {
+        assert!(!looks_like_code_mail("Kodėl taip nutiko", "Kodėl 1234 žmonės atėjo"));
     }
 
     #[test]
