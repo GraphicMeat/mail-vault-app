@@ -1490,6 +1490,58 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_resume_io_never_blocks_status_or_inactive_cancel() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let intent = FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[]);
+        state
+            .bulk
+            .lock()
+            .unwrap()
+            .claim(&state.app_dir, "restore", intent.clone())
+            .unwrap();
+        let work = Workflow::new(intent);
+        checkpoint(&state, "restore", "restore", &work).unwrap();
+        state
+            .bulk
+            .lock()
+            .unwrap()
+            .drained_attempt("restore", "restore")
+            .unwrap();
+        let writer = mailvault_core::app_db::db::open(dir.path()).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let worker_state = state.clone();
+        let resume = tokio::spawn(async move {
+            handle_request_for_test(
+                &worker_state,
+                "bulk.resume",
+                json!({"operationId":"restore","attemptId":"next"}),
+            )
+            .await
+        });
+        for _ in 0..200 {
+            if state.journal.try_lock().is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        assert!(state.journal.try_lock().is_err());
+        let control = tokio::time::timeout(Duration::from_millis(200), async {
+            tokio::join!(
+                handle_request_for_test(&state, "bulk.status", json!({})),
+                handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"restore"}))
+            )
+        })
+        .await;
+        writer.execute_batch("ROLLBACK").unwrap();
+        assert!(resume.await.unwrap().error.is_none());
+        let (status, cancel) = control
+            .expect("resume IO must not block pending status or inactive cancellation refusal");
+        assert!(status.error.is_none());
+        assert!(cancel.error.is_some());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn bulk_worker_checkpoint_io_never_blocks_active_status_or_cancel() {
         let dir = tempfile::tempdir().unwrap();
         let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
