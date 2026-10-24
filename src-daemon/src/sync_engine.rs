@@ -1277,17 +1277,16 @@ impl SyncEngine {
     ) -> Result<usize, String> {
         let io = self.cache_ctx(account.id.as_str(), mailbox);
         let seed = self.prepare_native_seed(&io, &account.imap_config).await?;
-        let server_uids = imap::search_all_uids(session, mailbox, false).await?;
+        let (listed_validity, listed) = imap::search_all_uid_flags_in_generation(session, mailbox).await?;
+        let server_uids: Vec<u32> = listed.into_iter().map(|(uid, _)| uid).collect();
         if server_uids.is_empty() {
             return Ok(0);
         }
 
-        // Only the original native owner can prove that retained UIDs are
-        // already cached. A legacy/other-origin transition must fetch the full
-        // provider set before its first checked publication clears old rows.
-        let same_origin = seed.expected.get("originHash").and_then(serde_json::Value::as_str)
-            == Some(seed.identity.origin_hash.as_str());
-        let have = if same_origin { cache_io(&io, |io| Ok(io.cached_uids())).await? } else { HashSet::new() };
+        // Cached UID presence is proof only inside the complete identity of
+        // this actual listing SELECT, including generation and provider origin.
+        let listed_identity = imap::NativeHeaderIdentity::new(&account.imap_config, &account.id, mailbox, listed_validity);
+        let have = if seed.matches(&listed_identity) { cache_io(&io, |io| Ok(io.cached_uids())).await? } else { HashSet::new() };
         // Newest first — the user is looking at the top of the list.
         let mut missing: Vec<u32> = server_uids
             .into_iter()
@@ -1308,6 +1307,7 @@ impl SyncEngine {
             let seed = seed.clone();
             let ((headers, _total), validity) =
                 imap::fetch_headers_by_uids_bound(session, mailbox, chunk).await?;
+            if validity != listed_validity { return Err("errors.bulkIdentityChanged".into()); }
             if headers.is_empty() {
                 warn!("[backfill] Empty response for a {}-UID chunk — stopping", chunk.len());
                 break;
@@ -2599,6 +2599,7 @@ mod tests {
         reached: std::sync::mpsc::SyncSender<()>,
         release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
         once: std::sync::atomic::AtomicBool,
+        observed: Arc<std::sync::Mutex<Vec<String>>>,
     }
     impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for NativeChunkPause {
         fn on_event(&self, event: &tracing::Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
@@ -2610,6 +2611,7 @@ mod tests {
             }
             let mut message = Message(String::new());
             event.record(&mut message);
+            self.observed.lock().unwrap().push(message.0.clone());
             if message.0.contains(&format!("{}/{} headers cached", BACKFILL_CHUNK, BACKFILL_CHUNK * 2))
                 && !self.once.swap(true, std::sync::atomic::Ordering::SeqCst) {
                 self.reached.send(()).unwrap();
@@ -2629,8 +2631,9 @@ mod tests {
         let engine = Arc::new(engine_for(&dir));
         let (hit_tx, hit_rx) = std::sync::mpsc::sync_channel(1);
         let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+        let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
         let subscriber = tracing_subscriber::registry().with(NativeChunkPause {
-            reached: hit_tx, release: std::sync::Mutex::new(release_rx), once: std::sync::atomic::AtomicBool::new(false),
+            reached: hit_tx, release: std::sync::Mutex::new(release_rx), once: std::sync::atomic::AtomicBool::new(false), observed: observed.clone(),
         });
         let running = engine.clone();
         let job = tokio::spawn(async move { running.run_backfill(&account_a, "INBOX").await }.with_subscriber(subscriber));
@@ -2638,13 +2641,13 @@ mod tests {
         if let Err(error) = paused {
             let _ = release_tx.send(());
             let result = job.await.unwrap();
-            panic!("the actual first chunk must finish before replacing ownership: pause={error:?}, producer={result:?}");
+            panic!("the actual first chunk must finish before replacing ownership: pause={error:?}, producer={result:?}, rows={}, observed={:?}", cached_count(&engine, "INBOX"), observed.lock().unwrap());
         }
         let io = engine.cache_ctx("acc1", "INBOX");
         let seed_b = io.native_seed(&account_b.imap_config).unwrap();
         io.write_bound_headers(&[test_header(3)], &seed_b, Some(1)).unwrap();
         release_tx.send(()).unwrap();
-        assert!(job.await.unwrap().is_err(), "the losing original operation must refuse its later chunk");
+        assert_eq!(job.await.unwrap().unwrap_err(), "errors.bulkIdentityChanged", "the losing original operation must refuse its later chunk");
         assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([3]), "later A chunks cannot adopt B as a new replacement expectation");
         assert!(io.native_seed(&account_b.imap_config).unwrap().matches(&imap::NativeHeaderIdentity::new(&account_b.imap_config, "acc1", "INBOX", Some(1))));
         let _ = fs::remove_dir_all(&dir);
@@ -3658,9 +3661,8 @@ mod tests {
         let warm = engine.sync_account(&account_for(&healthy), "INBOX").await;
         assert!(warm.success, "precondition: a warm cache to lose: {:?}", warm.error);
         assert_eq!(cached_count(&engine, "INBOX"), 5);
-        drop(healthy);
-
-        let dead = MockImap::start(
+        let dead = &healthy;
+        dead.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 5))
                 .fault(Trigger::on("SELECT"), Action::DropConnection),
@@ -3668,6 +3670,7 @@ mod tests {
         let result = engine.sync_account(&account_for(&dead), "INBOX").await;
 
         assert!(!result.success, "EOF on SELECT is not an empty mailbox");
+        assert!(dead.count_commands("SELECT") > 0, "the negative control must actually exercise SELECT EOF");
         assert_eq!(cached_count(&engine, "INBOX"), 5, "a dead socket must not prune the cache");
 
         let _ = fs::remove_dir_all(&dir);

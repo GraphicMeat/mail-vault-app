@@ -125,7 +125,7 @@ impl MockImap {
     }
 
     /// Change provider state/faults without changing the account endpoint.
-    /// Sessions stay connected; command logs and fault ordinals start fresh.
+    /// Sessions stay connected; command logs and command-fault ordinals start fresh.
     pub fn reset_scenario(&self, scenario: Scenario) {
         *self.state.lock().unwrap() = scenario.state;
         *self.faults.lock().unwrap() = scenario.faults;
