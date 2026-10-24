@@ -247,6 +247,14 @@ pub(crate) fn checkpoint(
 /// None, legacy and read-error states still observe the old facade's writes.
 /// Versioned validated records have one owner and need no disk reconciliation.
 pub(crate) fn reconcile_pending(state: &Arc<DaemonState>) -> Result<Value, String> {
+    if let Some(status) = state
+        .bulk
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .owned_status()
+    {
+        return status;
+    }
     let retired = state
         .bulk
         .lock()
