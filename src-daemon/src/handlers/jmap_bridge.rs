@@ -1946,7 +1946,10 @@ second body";
         let in_work = ok(call(&state, "imap_search_emails", json!({"account": a, "mailbox": "Work", "query": "two"})).await);
         assert_eq!(in_work["total"], json!(0), "the search stays in its mailbox");
         let nothing = ok(call(&state, "imap_search_emails", json!({"account": a, "mailbox": "INBOX"})).await);
-        assert_eq!(nothing, json!({"success": true, "emails": [], "total": 0}));
+        let config = serde_json::from_value(a).unwrap();
+        assert_eq!(nothing, json!({"success": true, "emails": [], "total": 0, "uidValidity": 1,
+            "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(&config, "acct-1", "INBOX", Some(1)),
+            "nativeExpectedIdentity": null}));
     }
 
     #[tokio::test]

@@ -2633,15 +2633,18 @@ mod tests {
             reached: hit_tx, release: std::sync::Mutex::new(release_rx), once: std::sync::atomic::AtomicBool::new(false),
         });
         let running = engine.clone();
-        let job = tokio::spawn(async move { running.backfill_mailbox(&account_a, "INBOX").await }.with_subscriber(subscriber));
+        let job = tokio::spawn(async move { running.run_backfill(&account_a, "INBOX").await }.with_subscriber(subscriber));
         let paused = tokio::task::spawn_blocking(move || hit_rx.recv_timeout(std::time::Duration::from_secs(10))).await.unwrap();
-        if paused.is_err() { let _ = release_tx.send(()); }
-        assert!(paused.is_ok(), "the actual first chunk must finish before replacing ownership");
+        if let Err(error) = paused {
+            let _ = release_tx.send(());
+            let result = job.await.unwrap();
+            panic!("the actual first chunk must finish before replacing ownership: pause={error:?}, producer={result:?}");
+        }
         let io = engine.cache_ctx("acc1", "INBOX");
         let seed_b = io.native_seed(&account_b.imap_config).unwrap();
         io.write_bound_headers(&[test_header(3)], &seed_b, Some(1)).unwrap();
         release_tx.send(()).unwrap();
-        job.await.unwrap();
+        assert!(job.await.unwrap().is_err(), "the losing original operation must refuse its later chunk");
         assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([3]), "later A chunks cannot adopt B as a new replacement expectation");
         assert!(io.native_seed(&account_b.imap_config).unwrap().matches(&imap::NativeHeaderIdentity::new(&account_b.imap_config, "acc1", "INBOX", Some(1))));
         let _ = fs::remove_dir_all(&dir);
@@ -2668,6 +2671,36 @@ mod tests {
         assert!(!poisoned, "an ownership race is not a process-lifetime provider failure");
         assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([1, 2, 3]), "fresh current-owner backfill must still run");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    async fn generation_changed_native_backfill(keep_partial: bool) {
+        let dir = scratch_dir("native_backfill_generation");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
+        let account = account_for(&server);
+        let engine = engine_for(&dir);
+        assert!(engine.sync_account(&account, "INBOX").await.success);
+        if keep_partial { drop_cached(&engine, "INBOX", &(41..=50).collect::<Vec<_>>()); }
+        server.mutate(|state| {
+            state.mailboxes[0] = synthetic_mailbox("INBOX", 50).with_uid_validity(2);
+            state.mailboxes[0].messages[49].raw = b"From: replacement@example.test\r\nSubject: replacement generation\r\n\r\nbody".to_vec();
+        });
+        engine.backfill_mailbox(&account, "INBOX").await;
+        assert_eq!(cached_count(&engine, "INBOX"), 50, "every required UID in the actual new generation must be fetched");
+        let identity = imap::NativeHeaderIdentity::new(&account.imap_config, "acc1", "INBOX", Some(2));
+        assert!(engine.cache_ctx("acc1", "INBOX").native_seed(&account.imap_config).unwrap().matches(&identity), "even entirely reused UIDs must acquire their actual fetched generation");
+        let rows = with_store(&engine, |c| mailvault_core::custody::cache::load_by_uids(c, "acc1", "INBOX", &[50]).unwrap());
+        assert_eq!(rows[0]["subject"], "replacement generation", "a retained old numeric UID is not a new-generation header");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn reviewed_native_backfill_generation_partial_reused_uids() {
+        generation_changed_native_backfill(true).await;
+    }
+
+    #[tokio::test]
+    async fn reviewed_native_backfill_generation_all_reused_uids() {
+        generation_changed_native_backfill(false).await;
     }
 
     #[test]
@@ -3412,7 +3445,7 @@ mod tests {
 
         assert_eq!(cached_count(&engine, "INBOX"), 50, "backfill should complete the mailbox");
         assert!(!engine.is_backfilling("acc1").await, "in-flight flag must clear");
-        let fetches: Vec<_> = server.commands().into_iter().filter(|line| line.contains("UID FETCH")).collect();
+        let fetches: Vec<_> = server.commands().into_iter().filter(|line| line.contains("UID FETCH") && line.contains("BODY.PEEK[HEADER.FIELDS")).collect();
         assert_eq!(fetches.len(), 1, "only the missing native headers are fetched: {fetches:?}");
         assert!(fetches[0].contains("UID FETCH 1:40 "), "retained proved UIDs must not be fetched again: {fetches:?}");
 
