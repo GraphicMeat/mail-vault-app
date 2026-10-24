@@ -44,6 +44,12 @@ fn forward_flow(
         .ok_or("errors.bulkMissingId")?
         .to_owned();
     set_root(&mut params, None);
+    // Bind the status sample to the hold present before the round trip.
+    // Another caller may drain A and finish a same-id Resume B during it.
+    let observed = held
+        .map()
+        .get(&id)
+        .map(|hold| (hold.attempt.clone(), hold.revision, hold.pending));
     // Learn an already-active execution before acquiring a replacement scope.
     let status = ports.call("bulk.status", json!({}), BUDGET)?;
     let active =
@@ -70,13 +76,7 @@ fn forward_flow(
         return ports.call(method, params, BUDGET);
     }
     let new_execution = resume && active.is_none();
-    let previous = if new_execution {
-        held.map()
-            .get(&id)
-            .map(|hold| (hold.attempt.clone(), hold.revision, hold.pending))
-    } else {
-        None
-    };
+    let previous = new_execution.then(|| observed.clone()).flatten();
     if let Some((old_attempt, _, pending)) = &previous {
         if *pending {
             return Err("errors.operationRunning".into());
@@ -102,11 +102,16 @@ fn forward_flow(
     let revision = NEXT_HOLD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let (attempt, existing, old) = {
         let mut map = held.map();
+        let current = map.get(&id).map(|hold| (&hold.attempt, hold.revision));
+        let expected = observed
+            .as_ref()
+            .map(|(attempt, revision, _)| (attempt, *revision));
+        if current != expected {
+            return Err("errors.bulkStale".into());
+        }
         if let Some(hold) = map.get_mut(&id) {
-            if previous.as_ref().is_some_and(|(attempt, revision, _)| {
-                hold.attempt != *attempt || hold.revision != *revision
-            }) {
-                return Err("errors.operationRunning".into());
+            if active_attempt.is_some_and(|attempt| attempt != hold.attempt) {
+                return Err("errors.bulkStale".into());
             }
             if hold.pending {
                 return Err("errors.operationRunning".into());
