@@ -1235,3 +1235,24 @@ async fn set_token_needs_an_account_a_token_and_an_expiry() {
     rpc(&s, "abd.set_token", json!({"accountId": ACCT, "accessToken": "t", "expiresAtMs": 5.0e12})).await.unwrap();
     assert!(s.abd.tokens.get(ACCT).is_some(), "arrives before any job or listing exists");
 }
+
+#[tokio::test]
+async fn unsafe_mirror_names_cannot_verify_or_copy_before_delete() {
+    for (email, folder) in [(EMAIL, "../../outside"), ("../outside", "INBOX")] {
+        let temp = tempfile::tempdir().unwrap();
+        let mirror = temp.path().join("mirror");
+        std::fs::create_dir_all(mirror.join(EMAIL)).unwrap();
+        let outside_cur = mirror.join(email).join(folder).join("cur");
+        std::fs::create_dir_all(&outside_cur).unwrap();
+        let name = vault_files::build_maildir_filename(1, &["archived".to_string()]);
+        let sentinel = outside_cur.join(&name);
+        let bytes = raw("sentinel");
+        std::fs::write(&sentinel, &bytes).unwrap();
+        let state = DaemonState::for_test(temp.path().to_path_buf(), temp.path().join("app"), true);
+        let local = DaemonLocal::new(state, ACCT, email).with_mirror(Some(mirror));
+        let expected = std::collections::HashMap::from([(1, "<sentinel@t.test>".to_string())]);
+        assert!(local.mirror_verify_paths(folder, &[(1, name)], &expected).await.is_err());
+        assert!(local.mirror_copy_verify(folder, &std::collections::HashMap::new(), &[1]).await.is_err());
+        assert_eq!(std::fs::read(sentinel).unwrap(), bytes.as_bytes());
+    }
+}

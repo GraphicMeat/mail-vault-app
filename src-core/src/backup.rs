@@ -3047,6 +3047,76 @@ mod tests {
         assert!(!mirror.path().join("Contacts").exists());
     }
 
+    fn unsafe_mirror_fixture(email: &str, mailbox: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("mirror");
+        std::fs::create_dir_all(root.join(MAIL)).unwrap();
+        let cur = root.join(email).join(mailbox).join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        let sentinel = cur.join(crate::maildir::mirror_filename(42, &[]));
+        std::fs::write(&sentinel, b"outside mail must survive").unwrap();
+        (temp, root, sentinel)
+    }
+
+    #[test]
+    fn purge_uids_rejects_unsafe_mirror_names() {
+        for (email, mailbox) in [(MAIL, "../../outside"), ("../outside", BOX)] {
+            let (temp, root, sentinel) = unsafe_mirror_fixture(email, mailbox);
+            let data = temp.path().join("data");
+            assert!(purge_uids(&data, Some(&root), Some("available"), email, mailbox, &[42]).is_err());
+            assert_eq!(std::fs::read(&sentinel).unwrap(), b"outside mail must survive");
+            assert!(purge_uids(&data, None, Some("unavailable"), email, mailbox, &[42]).is_err());
+            assert!(read_purge_queue(&data).is_empty());
+        }
+    }
+
+    #[test]
+    fn mirror_copy_rejects_unsafe_mirror_names_before_creating_dirs() {
+        for (email, mailbox) in [(MAIL, "../../outside"), ("../outside", BOX)] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().join("mirror");
+            std::fs::create_dir_all(&root).unwrap();
+            let outcome = copy_uids_to_mirror(temp.path(), &root, ACCT, email, mailbox, &[42]);
+            assert!(outcome.is_err(), "unsafe destination must fail before copy");
+            assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+            assert!(!temp.path().join("outside").exists());
+        }
+    }
+
+    #[test]
+    fn scan_uids_does_not_read_unsafe_mirror_names_outside_mirror() {
+        for (email, mailbox) in [(MAIL, "../../outside"), ("../outside", BOX)] {
+            let (_temp, root, sentinel) = unsafe_mirror_fixture(email, mailbox);
+            assert_eq!(scan_uids(Some(&root), email, mailbox), None);
+            assert_eq!(std::fs::read(sentinel).unwrap(), b"outside mail must survive");
+        }
+    }
+
+    #[test]
+    fn drain_purge_queue_does_not_touch_unsafe_mirror_names_escaped_mail() {
+        for (email, mailbox) in [(MAIL, "../../outside"), ("../outside", BOX)] {
+            let (temp, root, sentinel) = unsafe_mirror_fixture(email, mailbox);
+            let data = temp.path().join("data");
+            let valid_cur = root.join(MAIL).join(BOX).join("cur");
+            std::fs::create_dir_all(&valid_cur).unwrap();
+            let valid = valid_cur.join(crate::maildir::mirror_filename(7, &[]));
+            std::fs::write(&valid, b"valid queued mail").unwrap();
+            let bad_key = format!("{email}|{mailbox}");
+            let queue = std::collections::BTreeMap::from([(bad_key.clone(), vec![42]), (format!("{MAIL}|{BOX}"), vec![7])]);
+            write_purge_queue(&data, &queue).unwrap();
+            assert_eq!(drain_purge_queue(&data, &root), 1);
+            assert_eq!(std::fs::read(sentinel).unwrap(), b"outside mail must survive");
+            assert!(!valid.exists());
+            assert_eq!(read_purge_queue(&data), std::collections::BTreeMap::from([(bad_key, vec![42])]));
+        }
+    }
+
+    #[test]
+    fn scan_uids_does_not_confirm_a_missing_mirror_is_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        assert_eq!(scan_uids(Some(&temp.path().join("unplugged")), MAIL, BOX), None);
+    }
+
     // ── purge queue ──────────────────────────────────────────────────────────
 
     #[test]

@@ -595,6 +595,21 @@ mod tests {
         }
     }
 
+    #[test]
+    fn unsafe_mirror_is_skipped_while_vault_flags_still_apply() {
+        let f = fixture();
+        let dirs = dirs_for(&f.dirs.root, "acct", "INBOX", Some("../outside"), Some("mirror"));
+        assert!(dirs.mirror_cur.is_none());
+        let name = crate::vault_files::build_maildir_filename(7, &s(&["archived"]));
+        fs::write(dirs.cur.join(name), b"vault mail").unwrap();
+        let applied = apply_files(&f.reg, &dirs, &[change(7, &["archived", "seen"])]);
+        assert_eq!(applied.renamed, 1);
+        assert_eq!(applied.mirrored, 0);
+        assert_eq!(fs::read(dirs.cur.join(crate::vault_files::build_maildir_filename(7, &s(&["archived", "seen"])))).unwrap(), b"vault mail");
+        let invalid_folder = dirs_for(&f.dirs.root, "acct", "../outside", Some("me@x.test"), Some("mirror"));
+        assert!(invalid_folder.mirror_cur.is_none());
+    }
+
     fn names(dir: &Path) -> Vec<String> {
         let mut v: Vec<String> = fs::read_dir(dir)
             .unwrap()
