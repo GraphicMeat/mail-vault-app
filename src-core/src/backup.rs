@@ -294,7 +294,7 @@ pub async fn run_imap_account(ctx: BackupRunContext) -> Result<BackupResult, Str
         info!("backup: using external path: {:?}", root);
         // Drain BEFORE any mirroring work — a run that copies first would put
         // back the very files the queue is about to delete.
-        drain_purge_queue(&ctx.app_dir, Path::new(root));
+        drain_purge_queue_blocking(&ctx).await?;
     }
     mirror_local_folders_blocking(&ctx).await;
     mirror_contacts_blocking(&ctx).await;
@@ -595,7 +595,8 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
         let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, &ctx.account_id, &mailbox));
         let mirror = ctx.mirror_root.as_ref().map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox)).transpose()?;
         let (registry, account_id, mbox) = (Arc::clone(&ctx.archive_ctx.registry), ctx.account_id.clone(), mailbox.clone());
-        tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account_id, &mbox, &cur, mirror.as_deref()))
+        let mirror_root = ctx.mirror_root.clone();
+        tokio::task::spawn_blocking(move || vault_uids_after_presync_at(&registry, &account_id, &mbox, &cur, mirror_root.as_deref().map(Path::new), mirror.as_deref()))
             .await.map_err(|e| format!("pre-sync panicked: {e}"))??
     };
     let missing = server_uids.iter().filter(|uid| !local_uids.contains(uid)).copied().collect::<Vec<_>>();
@@ -663,7 +664,7 @@ pub async fn run_graph_account(ctx: BackupRunContext) -> Result<BackupResult, St
         info!("backup(graph): using external path: {:?}", root);
         // Same ordering rule as the IMAP runner: drain BEFORE any mirroring
         // work touches the files the queue is about to delete.
-        drain_purge_queue(&ctx.app_dir, Path::new(root));
+        drain_purge_queue_blocking(&ctx).await?;
     }
     mirror_local_folders_blocking(&ctx).await;
     mirror_contacts_blocking(&ctx).await;
@@ -759,7 +760,8 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
             let vault_cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, account_id, &mailbox_path));
             let mirror_dir = mirror_dir.clone();
             let (registry, account, mailbox) = (Arc::clone(&ctx.archive_ctx.registry), account_id.clone(), mailbox_path.clone());
-            tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account, &mailbox, &vault_cur_dir, mirror_dir.as_deref()))
+            let mirror_root = ctx.mirror_root.clone();
+            tokio::task::spawn_blocking(move || vault_uids_after_presync_at(&registry, &account, &mailbox, &vault_cur_dir, mirror_root.as_deref().map(Path::new), mirror_dir.as_deref()))
                 .await
                 .map_err(|e| format!("pre-sync panicked: {}", e))??
         };
@@ -851,6 +853,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                                 let gate = Arc::clone(&ctx.archive_ctx.gate);
                                 let registry = Arc::clone(&ctx.archive_ctx.registry);
                                 let (account, mailbox) = (account_id.clone(), mailbox_path.clone());
+                                let mirror_root = ctx.mirror_root.clone();
                                 let mirror_write: Option<Result<(), String>> = tokio::task::spawn_blocking(
                                     move || -> Result<Option<Result<(), String>>, String> {
                                         // Mailbox lock, then the gate (lock order);
@@ -868,22 +871,10 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
                                             registry.upsert(&account, &mailbox, uid, &written);
                                             Ok(())
                                         }))?;
-                                        // The mirror under a gate of its own, outside
-                                        // the mailbox lock: a slow external drive must
-                                        // not hold up the folder's other writers. A
-                                        // refusal is a failed mirror write, counted.
+                                        // Local scopes have returned. Only the mirror
+                                        // root guard spans this external mutation.
                                         Ok(mirror_to.as_ref().map(|dir| {
-                                            let mut written: Result<(), String> = Ok(());
-                                            let gated = gate(&mut || {
-                                                written = std::fs::create_dir_all(dir)
-                                                    .map_err(|e| format!("external mkdir failed: {}", e))
-                                                    .and_then(|()| {
-                                                        std::fs::write(dir.join(&filename), &raw_bytes)
-                                                            .map_err(|e| format!("external write failed: {}", e))
-                                                    });
-                                                Ok(())
-                                            });
-                                            gated.and(written)
+                                            write_direct_mirror(mirror_root.as_deref(), dir, &filename, &raw_bytes)
                                         }))
                                     },
                                 )
@@ -1119,7 +1110,8 @@ async fn backup_graph_folder(
         let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, &ctx.account_id, &mailbox));
         let mirror = mirror_dir.clone();
         let (registry, account_id, mbox) = (Arc::clone(&ctx.archive_ctx.registry), ctx.account_id.clone(), mailbox.clone());
-        tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account_id, &mbox, &cur, mirror.as_deref()))
+        let mirror_root = ctx.mirror_root.clone();
+        tokio::task::spawn_blocking(move || vault_uids_after_presync_at(&registry, &account_id, &mbox, &cur, mirror_root.as_deref().map(Path::new), mirror.as_deref()))
             .await.map_err(|e| format!("pre-sync panicked: {e}"))??
     };
     let (mut in_vault, mut in_mirror) = {
@@ -1162,7 +1154,8 @@ async fn backup_graph_folder(
                         let gate = Arc::clone(&ctx.archive_ctx.gate);
                         let registry = Arc::clone(&ctx.archive_ctx.registry);
                         let (account, mbox) = (ctx.account_id.clone(), mailbox.clone());
-                        let mirror_write = tokio::task::spawn_blocking(move || -> Result<Option<Result<(), String>>, String> {
+                        let mirror_root = ctx.mirror_root.clone();
+                                let mirror_write = tokio::task::spawn_blocking(move || -> Result<Option<Result<(), String>>, String> {
                             // Mailbox lock, then the gate (lock order); the row
                             // lands right after the vault write.
                             registry.serialized(&account, &mbox, || gate(&mut || {
@@ -1178,17 +1171,9 @@ async fn backup_graph_folder(
                                 registry.upsert(&account, &mbox, uid, &written);
                                 Ok(())
                             }))?;
-                            // The mirror under a gate of its own, outside the
-                            // mailbox lock; a refusal is a failed mirror write.
+                            // No local lock spans the mirror unit.
                             Ok(mirror_to.as_ref().map(|dir| {
-                                let mut written: Result<(), String> = Ok(());
-                                let gated = gate(&mut || {
-                                    written = std::fs::create_dir_all(dir)
-                                        .map_err(|e| format!("external mkdir failed: {e}"))
-                                        .and_then(|()| std::fs::write(dir.join(&filename), &raw).map_err(|e| format!("external write failed: {e}")));
-                                    Ok(())
-                                });
-                                gated.and(written)
+                                            write_direct_mirror(mirror_root.as_deref(), dir, &filename, &raw)
                             }))
                         }).await.map_err(|e| format!("message write panicked: {e}"))??;
                         in_vault.insert(uid);
@@ -1249,7 +1234,7 @@ pub async fn run_jmap_account(ctx: BackupRunContext) -> Result<BackupResult, Str
         info!("backup(jmap): using external path: {:?}", root);
         // Same ordering rule as the other runners: drain BEFORE any mirroring
         // work touches the files the queue is about to delete.
-        drain_purge_queue(&ctx.app_dir, Path::new(root));
+        drain_purge_queue_blocking(&ctx).await?;
     }
     mirror_local_folders_blocking(&ctx).await;
 
@@ -1295,6 +1280,14 @@ fn jmap_file_flags(email: &serde_json::Value) -> Vec<String> {
 /// mirror's outcome comes back for the caller to count. Runs off the runtime
 /// workers. In a JMAP-format vault the record keeps `ids`, the server's ids
 /// of the message (Plan A Task 14), set before its registry row is filed.
+fn write_direct_mirror(root: Option<&str>, dir: &Path, filename: &str, raw: &[u8]) -> Result<(), String> {
+    let root = root.ok_or("Backup folder unavailable")?;
+    crate::mirror_mutation::mutate_at(Path::new(root), dir, |dir| {
+        std::fs::create_dir_all(dir).map_err(|e| format!("external mkdir failed: {e}"))?;
+        std::fs::write(dir.join(filename), raw).map_err(|e| format!("external write failed: {e}"))
+    })
+}
+
 async fn write_backup_copy(
     ctx: &BackupRunContext,
     mailbox: &str,
@@ -1309,6 +1302,7 @@ async fn write_backup_copy(
     let gate = Arc::clone(&ctx.archive_ctx.gate);
     let registry = Arc::clone(&ctx.archive_ctx.registry);
     let (account, mailbox) = (ctx.account_id.clone(), mailbox.to_string());
+    let mirror_root = ctx.mirror_root.clone();
     tokio::task::spawn_blocking(move || -> Result<Option<Result<(), String>>, String> {
         registry.serialized(&account, &mailbox, || {
             gate(&mut || {
@@ -1331,14 +1325,7 @@ async fn write_backup_copy(
             })
         })?;
         Ok(mirror_to.as_ref().map(|dir| {
-            let mut written: Result<(), String> = Ok(());
-            let gated = gate(&mut || {
-                written = std::fs::create_dir_all(dir)
-                    .map_err(|e| format!("external mkdir failed: {e}"))
-                    .and_then(|()| std::fs::write(dir.join(&filename), &raw).map_err(|e| format!("external write failed: {e}")));
-                Ok(())
-            });
-            gated.and(written)
+            write_direct_mirror(mirror_root.as_deref(), dir, &filename, &raw)
         }))
     })
     .await
@@ -1401,7 +1388,8 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
             let vault_cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, account_id, &mailbox_path));
             let mirror_dir = mirror_dir.clone();
             let (registry, account, mailbox) = (Arc::clone(&ctx.archive_ctx.registry), account_id.clone(), mailbox_path.clone());
-            tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account, &mailbox, &vault_cur_dir, mirror_dir.as_deref()))
+            let mirror_root = ctx.mirror_root.clone();
+            tokio::task::spawn_blocking(move || vault_uids_after_presync_at(&registry, &account, &mailbox, &vault_cur_dir, mirror_root.as_deref().map(Path::new), mirror_dir.as_deref()))
                 .await
                 .map_err(|e| format!("pre-sync panicked: {}", e))??
         };
@@ -1986,22 +1974,23 @@ pub async fn get_backup_status(
 /// copy off a slow external drive must not block the folder's reads), so a
 /// restore into the vault is not recorded row by row: the folder is
 /// invalidated once, which needs no lock, and its next read lists it again.
-fn vault_uids_after_presync(
+fn vault_uids_after_presync_at(
     reg: &VaultRegistry,
     account_id: &str,
     mailbox: &str,
     vault_cur_dir: &Path,
+    mirror_root: Option<&Path>,
     mirror_dir: Option<&Path>,
 ) -> Result<HashSet<u32>, String> {
-    if let Some(mirror_dir) = mirror_dir {
+    if let (Some(root), Some(mirror_dir)) = (mirror_root, mirror_dir) {
         // An old import the vault moved out of the server's uid range is
         // still at U in the backup folder, and the copy by uid below would
         // bring it straight back: the vault's ledger goes to both sides first.
         let replayed = match (vault_cur_dir.parent(), mirror_dir.parent()) {
-            (Some(vault), Some(mirror)) => crate::import_rehome::replay(vault, mirror),
+            (Some(vault), Some(mirror)) => crate::import_rehome::replay_at(vault, root, mirror),
             _ => false,
         };
-        let (synced, vault_touched) = sync_locations(vault_cur_dir, mirror_dir);
+        let (synced, vault_touched) = sync_locations_at(root, vault_cur_dir, mirror_dir);
         if replayed || vault_touched {
             reg.invalidate(account_id, mailbox);
         }
@@ -2059,17 +2048,17 @@ pub fn scan_uids(mirror_root: Option<&Path>, email: &str, mailbox: &str) -> Opti
 ///   re-imports a message the generation repair already set aside.
 /// Returns total files synced, and whether any copy INTO the vault was
 /// attempted (the caller's vault registry then lists the folder again).
-fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
+fn sync_locations_at(root: &Path, vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
     use std::fs;
     let mut vault_touched = false;
 
     // Ensure both dirs exist; if backup dir can't be created (disconnected drive), skip
     let _ = fs::create_dir_all(vault_cur_dir);
-    if fs::create_dir_all(backup_dir).is_err() {
+    if crate::mirror_mutation::mutate_at(root, backup_dir, |dir| fs::create_dir_all(dir).map_err(|e| e.to_string())).is_err() {
         return (0, false); // Backup location not available — skip sync, backup to the vault only
     }
 
-    let mut synced = copy_to_backup(vault_cur_dir, backup_dir, &mut |_| true);
+    let mut synced = copy_to_backup_at(root, vault_cur_dir, backup_dir, &mut |_| true);
 
     // Backup → Vault: copy backup .eml files that don't exist in the vault,
     // restoring flags from the backup filename (legacy `<uid>.eml` has none).
@@ -2111,38 +2100,40 @@ fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
     (synced, vault_touched)
 }
 
+#[cfg(test)]
+fn sync_locations(vault_cur_dir: &Path, backup_dir: &Path) -> (usize, bool) {
+    // Test fixtures explicitly create their own mirror root.
+    std::fs::create_dir_all(backup_dir).unwrap();
+    sync_locations_at(backup_dir, vault_cur_dir, backup_dir)
+}
+
 /// Vault → backup, the first half of `sync_locations`: copies every vault file
 /// whose uid the backup does not hold, keeping the Maildir name so the flag
 /// suffix travels with the message. `keep_going` is asked before each copy,
 /// with the count so far. Returns how many files were copied.
-fn copy_to_backup(vault_cur_dir: &Path, backup_dir: &Path, keep_going: &mut dyn FnMut(usize) -> bool) -> usize {
-    use crate::maildir::mirror_file_map;
-    use std::fs;
+fn copy_to_backup_at(root: &Path, vault_cur_dir: &Path, backup_dir: &Path, keep_going: &mut dyn FnMut(usize) -> bool) -> usize {
+    let Ok(handle) = crate::mirror_mutation::MirrorRoot::resolve(root) else { return 0 };
+    let Ok(backup_dir) = handle.rebase(root, backup_dir) else { return 0 };
     let mut copied = 0;
-
-    // One listing per side instead of rescanning the other side per file,
-    // which on the external drive was n²/2 directory entries every backup. A
-    // copy counts in the set, as the rescan used to find the file it had just
-    // written. Each side keeps its own uid rule.
-    // ponytail: a writer landing the same uid mid-sync can leave it twice under
-    // two flag names; the rescan had that race too, only narrower.
-    let mut in_backup: HashSet<u32> = mirror_file_map(backup_dir).into_keys().collect();
-
+    let mut listing = MirrorListing::new();
     for (uid, name, path) in crate::message_store::mirror_sources_in(vault_cur_dir) {
-        if in_backup.contains(&uid) {
-            continue;
-        }
-        if !keep_going(copied) {
-            break;
-        }
-        let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
-        if fs::copy(&path, backup_dir.join(&dst_name)).is_ok() {
-            copied += 1;
-            in_backup.insert(uid);
-        }
+        if !keep_going(copied) { break; }
+        // Recheck current UID presence inside exclusion, including flag renames.
+        let wrote = handle.mutate_versioned(|_, revision| {
+            listing.ensure_current(&handle, &backup_dir, revision);
+            if listing.contains(uid) { return false; }
+            if std::fs::create_dir_all(&backup_dir).is_err() { return false; }
+            let name = if name.ends_with(".eml") { name } else { format!("{name}.eml") };
+            let dst = backup_dir.join(name);
+            if std::fs::copy(&path, &dst).is_ok() {
+                listing.files.insert(uid, dst); true
+            } else { false }
+        });
+        copied += usize::from(wrote.unwrap_or(false));
     }
     copied
 }
+
 
 /// The mirror folder of a vault-only folder (`local_folder`): its directory
 /// plus the marker's creation stamp. A folder deleted and then imported again
@@ -2221,11 +2212,7 @@ fn mirror_local_folders(ctx: &BackupRunContext) {
                 continue;
             }
         };
-        if let Err(e) = std::fs::create_dir_all(&backup_dir) {
-            warn!("backup: local folder {} not mirrored, {:?} cannot be made: {}", dir, backup_dir, e);
-            continue;
-        }
-        let copied = copy_to_backup(&cur, &backup_dir, &mut |done| {
+        let copied = copy_to_backup_at(Path::new(mirror_root), &cur, &backup_dir, &mut |done| {
             if done > 0 && done % PROGRESS_EVERY == 0 {
                 (ctx.on_progress)(frame());
             }
@@ -2264,6 +2251,7 @@ async fn mirror_contacts_blocking(ctx: &BackupRunContext) {
 /// vault only when the vault has no copy at all (a restored or fresh vault);
 /// that write runs under the vault gate like every other vault write.
 fn mirror_contacts(vault_root: &Path, mirror_root: &Path, gate: &crate::archive::ArchiveGate) -> Result<(), String> {
+    if !mirror_root.is_dir() { return Err("Backup folder unavailable".into()); }
     let rel = Path::new("Contacts").join("contacts.vcf");
     let (vault, mirror) = (vault_root.join(&rel), mirror_root.join(&rel));
     let put = |dst: &Path, bytes: &[u8]| -> Result<(), String> {
@@ -2402,19 +2390,21 @@ fn write_purge_queue(data_dir: &Path, q: &std::collections::BTreeMap<String, Vec
 /// Delete every mirror file under `<root>/<email>/<mailbox>/cur/` whose uid is
 /// in `uids`. Returns how many files were removed.
 fn purge_backup_files(root: &Path, email: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<usize, String> {
-    let cur = crate::maildir::mirror_cur(root, email, mailbox)?;
-    if !cur.exists() {
-        return Ok(0);
-    }
-    let mut removed = 0usize;
-    for (uid, _, path) in crate::maildir::mirror_files(&cur) {
-        if !uids.contains(&uid) {
-            continue;
-        }
-        match std::fs::remove_file(&path) {
-            Ok(()) => removed += 1,
-            Err(e) => warn!("backup purge: failed to remove {:?}: {}", path, e),
-        }
+    let handle = crate::mirror_mutation::MirrorRoot::resolve(root)?;
+    let cur = crate::maildir::mirror_cur(handle.path(), email, mailbox)?;
+    let wanted = uids.iter().copied().collect::<Vec<_>>();
+    let mut removed = 0;
+    for chunk in wanted.chunks(100) {
+        handle.mutate(|_| {
+            for (uid, _, path) in crate::maildir::mirror_files(&cur) {
+                if !chunk.contains(&uid) { continue; }
+                match std::fs::remove_file(&path) {
+                    Ok(()) => removed += 1,
+                    Err(e) => warn!("backup purge: failed to remove {:?}: {}", path, e),
+                }
+            }
+            Ok(())
+        })?;
     }
     Ok(removed)
 }
@@ -2479,6 +2469,17 @@ pub fn purge_uids(
     let removed = purge_backup_files(root, email, mailbox, &uid_set)?;
     info!("backup purge: removed {} mirror files for {}/{}", removed, email, mailbox);
     Ok(PurgeOutcome { removed, queued: 0 })
+}
+
+/// Keep queue IO, canonicalization and root-guard waits off runtime workers.
+/// The caller awaits completion before any account mirroring begins.
+async fn drain_purge_queue_blocking(ctx: &BackupRunContext) -> Result<(), String> {
+    let Some(root) = ctx.mirror_root.as_ref().map(PathBuf::from) else { return Ok(()) };
+    let data_dir = ctx.app_dir.clone();
+    tokio::task::spawn_blocking(move || drain_purge_queue(&data_dir, &root))
+        .await
+        .map_err(|e| format!("backup purge panicked: {e}"))?;
+    Ok(())
 }
 
 /// Apply every queued purge against a now-reachable backup root.
@@ -2556,6 +2557,8 @@ pub struct MirrorListing {
     dir: Option<PathBuf>,
     files: std::collections::HashMap<u32, PathBuf>,
     loads: usize,
+    root: Option<crate::mirror_mutation::MirrorRoot>,
+    revision: Option<u64>,
 }
 
 impl MirrorListing {
@@ -2577,14 +2580,20 @@ impl MirrorListing {
     pub fn invalidate(&mut self) {
         self.dir = None;
         self.files.clear();
+        self.root = None;
+        self.revision = None;
     }
 
-    fn ensure(&mut self, cur_dir: &Path) {
-        if self.dir.as_deref() != Some(cur_dir) {
+    pub(crate) fn ensure_current(&mut self, root: &crate::mirror_mutation::MirrorRoot, cur_dir: &Path, revision: u64) {
+        if self.dir.as_deref() != Some(cur_dir)
+            || !self.root.as_ref().is_some_and(|old| old.same_guard(root))
+            || self.revision != Some(revision) {
             self.files = crate::maildir::mirror_file_map(cur_dir);
             self.dir = Some(cur_dir.to_path_buf());
             self.loads += 1;
+            self.root = Some(root.clone());
         }
+        self.revision = Some(revision.wrapping_add(1));
     }
 }
 
@@ -2716,16 +2725,11 @@ fn copy_uids_to_mirror_checked(
     sources: &std::collections::HashMap<u32, PathBuf>,
     expected: Option<&std::collections::HashMap<u32, String>>,
 ) -> Result<MirrorCopyOutcome, String> {
-    let mirror_cur = crate::maildir::mirror_cur(mirror_root, email, mailbox)?;
+    crate::maildir::mirror_cur(mirror_root, email, mailbox)?;
+    if uids.is_empty() { return Ok(MirrorCopyOutcome::default()); }
+    let handle = crate::mirror_mutation::MirrorRoot::resolve(mirror_root)?;
+    let mirror_cur = crate::maildir::mirror_cur(handle.path(), email, mailbox)?;
     let mut out = MirrorCopyOutcome::default();
-    if uids.is_empty() {
-        return Ok(out);
-    }
-    if !mirror_root.is_dir() {
-        return Err("Backup folder unavailable".to_string());
-    }
-    std::fs::create_dir_all(&mirror_cur).map_err(|e| format!("Backup folder unavailable: {e}"))?;
-    listing.ensure(&mirror_cur);
 
     let mut seen: HashSet<u32> = HashSet::new();
     let wanted: Vec<u32> = uids.iter().copied().filter(|u| seen.insert(*u)).collect();
@@ -2735,7 +2739,10 @@ fn copy_uids_to_mirror_checked(
             out.missing.push(uid);
             continue;
         };
-        match copy_one_to_mirror(
+        let result = handle.mutate_versioned(|_, revision| {
+            if std::fs::create_dir_all(&mirror_cur).is_err() { return CopyOne::Failed; }
+            listing.ensure_current(&handle, &mirror_cur, revision);
+            copy_one_to_mirror(
             vault_root,
             account_id,
             mailbox,
@@ -2744,7 +2751,9 @@ fn copy_uids_to_mirror_checked(
             &mirror_cur,
             listing,
             expected.and_then(|expected| expected.get(&uid).map(String::as_str)),
-        ) {
+        )
+        }).unwrap_or(CopyOne::Failed);
+        match result {
             CopyOne::Copied => {
                 out.copied.push(uid);
                 out.verified.push(uid);
@@ -2877,10 +2886,8 @@ fn copy_one_to_mirror(
             return CopyOne::Failed;
         }
     };
-    // ponytail: the exists() check above and the rename below are not one atomic
-    // step; a second writer landing this exact name in between is replaced. The
-    // only other writers are this app's own archive and backup runs, which write
-    // the same bytes under the same name.
+    // The caller's root guard spans the current-name check, durable write,
+    // readback and any failed-copy unlink.
     // Durable, not just atomic: the server copy is deleted on the strength of
     // this file, so it must be on the drive, not in the page cache.
     if let Err(e) = write_durable(&dst, &bytes) {
@@ -3046,6 +3053,163 @@ mod tests {
         assert_eq!(paths, vec!["INBOX", "Archive", "Archive/2024"]);
     }
 
+    #[test]
+    fn mirror_exclusion_legacy_drain_does_not_block_runtime() {
+        use crate::mirror_mutation::MirrorRoot;
+        use std::sync::mpsc;
+        let vault = tempfile::tempdir().unwrap();
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = crate::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join("7.eml"), b"legacy queued copy").unwrap();
+        queue_purge(app.path(), "me@test", "INBOX", &[7]).unwrap();
+        let account = serde_json::json!({"email":"me@test", "imapHost":"127.0.0.1", "imapPort":1, "password":"pw"});
+        let ctx = BackupRunContext {
+            account_id: "acct".into(), account_json: account.to_string(),
+            account: serde_json::from_value(account).unwrap(), app_dir: app.path().into(),
+            mirror_root: Some(mirror.path().to_str().unwrap().into()), cancel: Arc::default(),
+            skip_folders: 0, mailbox_concurrency: 1, limit: None,
+            on_progress: Arc::new(|_| {}), apply_flags: Arc::new(|_, _| Ok(Applied::default())),
+            archive_ctx: Arc::new(ArchiveCtx {
+                root: vault.path().into(), pool: Arc::new(crate::imap::ImapPool::new()),
+                gate: Arc::new(|work| work()), registry: Arc::new(VaultRegistry::open(app.path(), vault.path())),
+                sinks: crate::archive::ArchiveSinks { emit: Arc::new(|_, _| {}), custody_append: Arc::new(|_, _, _| Ok(0)) },
+            }),
+        };
+        let root = MirrorRoot::resolve(mirror.path()).unwrap();
+        let (responsive_tx, responsive_rx) = mpsc::channel();
+        std::thread::scope(|threads| {
+            root.mutate(|_| {
+                threads.spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+                    runtime.block_on(async {
+                        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+                        let backup = tokio::spawn(async move {
+                            entered_tx.send(()).unwrap();
+                            // This task must yield its only runtime thread while
+                            // the actual queued purge waits for root exclusion.
+                            run_imap_account(ctx).await
+                        });
+                        entered_rx.await.unwrap();
+                        let _ = responsive_tx.send(());
+                        backup.abort();
+                        let _ = backup.await;
+                    });
+                    // Runtime drop joins the already-started blocking drain.
+                });
+                responsive_rx.recv_timeout(std::time::Duration::from_secs(2))
+                    .expect("actual backup drain blocked the current-thread runtime on the mirror guard");
+                Ok(())
+            }).unwrap();
+        });
+        assert!(!cur.join("7.eml").exists());
+        assert!(read_purge_queue(app.path()).is_empty());
+    }
+
+    #[test]
+    fn mirror_exclusion_direct_writer_cannot_replace_checked_bytes() {
+        use crate::mirror_mutation::MirrorRoot;
+        use std::sync::mpsc;
+        let vault = tempfile::tempdir().unwrap();
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let root = MirrorRoot::resolve(mirror.path()).unwrap();
+        let cur = crate::maildir::mirror_cur(mirror.path(), "me@test", "Projects/Sub").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        let checked = cur.join(crate::maildir::mirror_filename(7, &["archived".into()]));
+        std::fs::write(&checked, b"checked A").unwrap();
+        let account = serde_json::json!({"email":"me@test", "imapHost":"mock", "password":"pw"});
+        let ctx = BackupRunContext {
+            account_id: "acct".into(), account_json: account.to_string(),
+            account: serde_json::from_value(account).unwrap(), app_dir: app.path().into(),
+            mirror_root: Some(mirror.path().to_str().unwrap().into()), cancel: Arc::default(),
+            skip_folders: 0, mailbox_concurrency: 1, limit: None,
+            on_progress: Arc::new(|_| {}), apply_flags: Arc::new(|_, _| Ok(Applied::default())),
+            archive_ctx: Arc::new(ArchiveCtx {
+                root: vault.path().into(), pool: Arc::new(crate::imap::ImapPool::new()),
+                gate: Arc::new(|work| work()), registry: Arc::new(VaultRegistry::open(app.path(), vault.path())),
+                sinks: crate::archive::ArchiveSinks { emit: Arc::new(|_, _| {}), custody_append: Arc::new(|_, _, _| Ok(0)) },
+            }),
+        };
+        let (attempt_tx, attempt_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::scope(|scope| {
+            root.mutate(|_| {
+                assert_eq!(std::fs::read(&checked).unwrap(), b"checked A");
+                scope.spawn(move || {
+                    attempt_tx.send(()).unwrap();
+                    let result = tokio::runtime::Runtime::new().unwrap().block_on(write_backup_copy(
+                        &ctx, "Projects/Sub", 7, vec!["archived".into()], b"replacement B".to_vec(),
+                        crate::jmap_store::record::ServerIds { email_id: "e7".into(), blob_id: "b7".into(), thread_id: None }, Some(cur),
+                    ));
+                    done_tx.send(result).unwrap();
+                });
+                attempt_rx.recv().unwrap();
+                assert!(done_rx.recv_timeout(std::time::Duration::from_millis(200)).is_err(),
+                    "actual direct writer replaced bytes between check and unlink");
+                std::fs::remove_file(&checked).unwrap();
+                Ok(())
+            }).unwrap();
+            assert!(done_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap().unwrap().unwrap().is_ok());
+        });
+        assert_eq!(std::fs::read(checked).unwrap(), b"replacement B");
+    }
+
+    #[test]
+    fn mirror_exclusion_presync_refuses_root_removed_between_units() {
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = mirror.path().join("me@test/Projects/Sub/cur");
+        for uid in [1, 2] { std::fs::write(vault.path().join(format!("{uid}.eml")), b"message").unwrap(); }
+        let copied = copy_to_backup_at(mirror.path(), vault.path(), &cur, &mut |done| {
+            if done == 1 { std::fs::remove_dir_all(mirror.path()).unwrap(); }
+            true
+        });
+        assert_eq!(copied, 1, "a removed root must refuse the next bounded unit");
+        assert!(!mirror.path().exists(), "a later unit must not recreate the drive root");
+    }
+
+    #[test]
+    fn mirror_exclusion_presync_writer_waits_for_checked_unlink() {
+        use crate::mirror_mutation::MirrorRoot;
+        use std::sync::mpsc;
+        let vault = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let root = MirrorRoot::resolve(mirror.path()).unwrap();
+        let cur = mirror.path().join("me@test/Projects/Sub/cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        let source = vault.path().join("cur");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join("7.eml"), b"replacement B").unwrap();
+        let checked = cur.join("7.eml");
+        std::fs::write(&checked, b"checked A").unwrap();
+        let (attempt_tx, attempt_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::scope(|scope| {
+            root.mutate(|_| {
+                assert_eq!(std::fs::read(&checked).unwrap(), b"checked A");
+                // Model the checked path becoming the absent destination of a
+                // real native writer; its fresh check must wait for this unit.
+                std::fs::remove_file(&checked).unwrap();
+                let cur = &cur;
+                let source = &source;
+                let mirror_root = mirror.path();
+                scope.spawn(move || {
+                    attempt_tx.send(()).unwrap();
+                    let copied = copy_to_backup_at(mirror_root, source, cur, &mut |_| true);
+                    done_tx.send(copied).unwrap();
+                });
+                attempt_rx.recv().unwrap();
+                assert!(done_rx.recv_timeout(std::time::Duration::from_millis(200)).is_err(),
+                    "actual presync writer entered a checked-unlink unit");
+                Ok(())
+            }).unwrap();
+            assert_eq!(done_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap(), 1);
+        });
+        assert_eq!(std::fs::read(checked).unwrap(), b"replacement B");
+    }
+
     // ── vault_uids_after_presync / scan_cur_uids ────────────────────────────
 
     fn write_vault_file(dir: &Path, uid: u32, flags: &[&str]) {
@@ -3077,7 +3241,7 @@ mod tests {
         write_vault_file(mirror.path(), 42, &[]);
 
         let (_app, reg) = test_registry(vault.path());
-        let uids = vault_uids_after_presync(&reg, "acct", "INBOX", vault.path(), Some(mirror.path())).unwrap();
+        let uids = vault_uids_after_presync_at(&reg, "acct", "INBOX", vault.path(), Some(mirror.path()), Some(mirror.path())).unwrap();
 
         assert!(uids.contains(&42), "the pre-sync must restore the mirror-only uid into the vault before scanning");
     }
@@ -3098,7 +3262,7 @@ mod tests {
         crate::import_rehome::apply(vault_cur.parent().unwrap(), &plan).unwrap();
 
         let (_app, reg) = test_registry(vault.path());
-        let uids = vault_uids_after_presync(&reg, "acct", "INBOX", &vault_cur, Some(&mirror_cur)).unwrap();
+        let uids = vault_uids_after_presync_at(&reg, "acct", "INBOX", &vault_cur, Some(mirror.path()), Some(&mirror_cur)).unwrap();
 
         let b = crate::maildir::IMPORT_UID_BASE;
         assert_eq!(uids, HashSet::from([b]), "U stays free for the server's own message");
@@ -3127,7 +3291,7 @@ mod tests {
         assert_eq!(crate::import_rehome::apply(vault_cur.parent().unwrap(), &plan).unwrap().set_aside, vec![b]);
 
         let (_app, reg) = test_registry(vault.path());
-        let uids = vault_uids_after_presync(&reg, "acct", "INBOX", &vault_cur, Some(&mirror_cur)).unwrap();
+        let uids = vault_uids_after_presync_at(&reg, "acct", "INBOX", &vault_cur, Some(mirror.path()), Some(&mirror_cur)).unwrap();
 
         assert_eq!(uids, HashSet::from([5]), "the import copy stays out of the vault");
         assert_eq!(crate::maildir::mirror_file_map(&mirror_cur).into_keys().collect::<HashSet<_>>(), HashSet::from([5]));
@@ -3166,6 +3330,18 @@ mod tests {
         std::fs::write(contacts_file(fresh.path()), b"BEGIN:VCARD\nFN:Cy\nEND:VCARD\n").unwrap();
         mirror_contacts(fresh.path(), mirror.path(), &open_gate()).unwrap();
         assert_eq!(std::fs::read(contacts_file(mirror.path())).unwrap(), b"BEGIN:VCARD\nFN:Cy\nEND:VCARD\n");
+    }
+
+    #[test]
+    fn mirror_exclusion_contacts_cannot_recreate_an_absent_drive() {
+        let vault = tempfile::tempdir().unwrap();
+        let parent = tempfile::tempdir().unwrap();
+        let missing = parent.path().join("absent-drive");
+        std::fs::create_dir_all(vault.path().join("Contacts")).unwrap();
+        std::fs::write(vault.path().join("Contacts/contacts.vcf"), b"contacts").unwrap();
+        let gate: crate::archive::ArchiveGate = std::sync::Arc::new(|work| work());
+        assert!(mirror_contacts(vault.path(), &missing, &gate).is_err());
+        assert!(!missing.exists(), "contacts must not make an internal replacement for an absent drive");
     }
 
     #[test]
@@ -3797,11 +3973,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let app = tmp.path().join("INBOX").join("cur");
         let (_app, reg) = test_registry(tmp.path());
-        assert!(vault_uids_after_presync(&reg, "acct", "INBOX", &app, None).unwrap().is_empty());
+        assert!(vault_uids_after_presync_at(&reg, "acct", "INBOX", &app, None, None).unwrap().is_empty());
 
         std::fs::create_dir_all(&app).unwrap();
         std::fs::write(app.join(format!("5{}S.eml", crate::maildir::INFO_PREFIX)), eml("in-the-vault@mock.test")).unwrap();
-        assert_eq!(vault_uids_after_presync(&reg, "acct", "INBOX", &app, None).unwrap(), HashSet::from([5]));
+        assert_eq!(vault_uids_after_presync_at(&reg, "acct", "INBOX", &app, None, None).unwrap(), HashSet::from([5]));
     }
 
     /// A registry for the vault at `root`, its file in a tempdir of its own.
@@ -3826,12 +4002,12 @@ mod tests {
         write_vault_file(&mirror, 42, &[]);
         assert_eq!(reg.uid_sets(root, "acct", "INBOX"), Some((vec![], vec![])));
 
-        vault_uids_after_presync(&reg, "acct", "INBOX", &cur, Some(&mirror)).unwrap();
+        vault_uids_after_presync_at(&reg, "acct", "INBOX", &cur, Some(&root.join("mirror")), Some(&mirror)).unwrap();
         assert_eq!(reg.uid_sets(root, "acct", "INBOX"), Some((vec![42], vec![42])), "restored copies carry `A`");
         assert_eq!(reg.listing_count(), 2);
 
         crate::vault_files::store(&reg, root, "acct", "INBOX", 7, b"seven", &[], true).unwrap();
-        vault_uids_after_presync(&reg, "acct", "INBOX", &cur, Some(&mirror)).unwrap();
+        vault_uids_after_presync_at(&reg, "acct", "INBOX", &cur, Some(&root.join("mirror")), Some(&mirror)).unwrap();
         assert!(mirror.join(format!("7{}.eml", crate::maildir::INFO_PREFIX)).exists(), "the vault-only uid went to the mirror");
         assert_eq!(reg.uid_sets(root, "acct", "INBOX"), Some((vec![7, 42], vec![42])));
         assert_eq!(reg.listing_count(), 2, "a mirror-only copy leaves the folder verified");
@@ -4178,6 +4354,21 @@ mod tests {
     }
 
     #[test]
+    fn mirror_exclusion_native_writer_invalidates_a_cached_listing() {
+        let fx = CopyFx::new();
+        fx.vault_msg(1, "first@test", "first");
+        fx.vault_msg(2, "mine@test", "mine");
+        let mut listing = MirrorListing::new();
+        copy_uids_to_mirror_listed(fx.vault.path(), fx.mirror.path(), ACCT, MAIL, BOX, &[1], &mut listing).unwrap();
+        write_direct_mirror(Some(fx.mirror.path().to_str().unwrap()), &fx.mirror_cur(), "2.eml", &mail_bytes("other@test", "replacement")).unwrap();
+        let out = copy_uids_to_mirror_listed(fx.vault.path(), fx.mirror.path(), ACCT, MAIL, BOX, &[2], &mut listing).unwrap();
+        assert_eq!(out.mismatched, vec![2]);
+        assert!(out.copied.is_empty());
+        assert_eq!(listing.loads(), 2);
+        assert_eq!(std::fs::read(fx.mirror_cur().join("2.eml")).unwrap(), mail_bytes("other@test", "replacement"));
+    }
+
+    #[test]
     fn a_listing_for_another_folder_is_read_again() {
         let fx = CopyFx::new();
         fx.vault_msg(1, "a@x", "first");
@@ -4305,7 +4496,7 @@ mod tests {
         write_vault_file(&mirror, 42, &[]);
         crate::vault_files::store(&reg, root, "acct", "INBOX", 7, b"Subject: seven\r\n\r\nbody", &["seen".to_string()], true).unwrap();
 
-        let uids = vault_uids_after_presync(&reg, "acct", "INBOX", &cur, Some(&mirror)).unwrap();
+        let uids = vault_uids_after_presync_at(&reg, "acct", "INBOX", &cur, Some(&root.join("mirror")), Some(&mirror)).unwrap();
         assert_eq!(uids, HashSet::from([7, 42]));
         assert_eq!(std::fs::read(mirror.join(format!("7{}S.eml", crate::maildir::INFO_PREFIX))).unwrap(), b"Subject: seven\r\n\r\nbody");
         let restored = crate::message_store::find(root, "acct", "INBOX", 42).unwrap();

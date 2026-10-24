@@ -25,6 +25,11 @@ use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+#[cfg(test)]
+thread_local! {
+    static AFTER_LOCAL: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = Default::default();
+}
+
 macro_rules! req {
     ($result:expr) => {
         match $result {
@@ -34,12 +39,8 @@ macro_rules! req {
     };
 }
 
-/// One or more messages whose read state changed. The whole call — root
-/// resolution, `dirs_for`, `apply_everywhere` (which holds `WRITER` across
-/// both the rename and the custody patch) — runs inside one
-/// `with_vault_write`: `changes` is bounded by the caller (a page of
-/// messages, never a vault-wide walk), so a single gate check for the whole
-/// call is the same granularity `maildir_set_flags` (Task 2.8) uses.
+/// Serialize intent before local locks. Complete local files and custody,
+/// release every local scope, then finish mirror work before replying.
 pub(crate) fn apply_flags(
     state: &Arc<DaemonState>,
     account_id: &str,
@@ -49,9 +50,10 @@ pub(crate) fn apply_flags(
     changes: &[FlagChange],
     sidecars: bool,
 ) -> Result<Applied, String> {
-    with_mailbox_write(state, account_id, mailbox, |root| {
+    vault_flags::serialized(|writer| {
+      let (dirs, mut applied) = with_mailbox_write(state, account_id, mailbox, |root| {
         let dirs = vault_flags::dirs_for(root, account_id, mailbox, account_email, mirror_root);
-        Ok(vault_flags::apply_everywhere(&state.vault_registry, &dirs, changes, |patch| {
+        let applied = vault_flags::apply_local(writer, &state.vault_registry, &dirs, changes, |patch| {
             match daemon_custody::with_conn(state, |c| {
                 let rows = entries::patch_flags_many(c, account_id, mailbox, patch)?;
                 // `sidecars`: the header cache is what the next repaint reads,
@@ -66,7 +68,13 @@ pub(crate) fn apply_flags(
                     Ok((0, 0))
                 }
             }
-        }))
+        });
+        Ok((dirs, applied))
+      })?;
+      #[cfg(test)]
+      AFTER_LOCAL.with(|hook| { if let Some(hook) = hook.borrow_mut().take() { hook(); } });
+      applied.mirrored = vault_flags::apply_mirror(writer, &dirs, changes);
+      Ok(applied)
     })
 }
 
@@ -86,14 +94,17 @@ pub(crate) fn rename_mailbox(
 ) -> (usize, Result<(), String>) {
     pairs.sort_by_key(|p| p.from.len());
     let mut moved = 0usize;
-    let result = with_vault_write(state, |root| -> Result<(), String> {
+    let result = (|| {
+      let mut mirror_work = Vec::new();
+      let mut failed = with_vault_write(state, |root| {
         let mut failed: Vec<String> = Vec::new();
         for p in &pairs {
             let from = vault_flags::dirs_for(root, account_id, &p.from, account_email, mirror_root);
             let to = vault_flags::dirs_for(root, account_id, &p.to, account_email, mirror_root);
-            let (n, mut bad) = vault_flags::rename_dirs(&state.vault_registry, &from, &to);
+            let (n, mut bad) = vault_flags::rename_local_dirs(&state.vault_registry, &from, &to);
             moved += n;
             failed.append(&mut bad);
+            mirror_work.push((from, to));
             match daemon_custody::with_conn(state, |c| entries::rename_mailbox(c, account_id, &p.from, &p.to)) {
                 Ok(rows) => moved += usize::from(rows > 0),
                 Err(e) => failed.push(format!("custody {} -> {} ({})", p.from, p.to, e)),
@@ -102,12 +113,15 @@ pub(crate) fn rename_mailbox(
                 failed.push(format!("header cache {} -> {} ({})", p.from, p.to, e));
             }
         }
-        if failed.is_empty() {
-            Ok(())
-        } else {
-            Err(format!("vault rename incomplete: {}", failed.join("; ")))
-        }
-    });
+        Ok(failed)
+      })?;
+      for (from, to) in mirror_work {
+          let (n, bad) = vault_flags::rename_mirror_dirs(&from, &to);
+          moved += n; failed.extend(bad);
+      }
+      if failed.is_empty() { Ok(()) }
+      else { Err(format!("vault rename incomplete: {}", failed.join("; "))) }
+    })();
     (moved, result)
 }
 
@@ -125,32 +139,38 @@ pub(crate) fn adopt_mailbox_dirs(
 ) -> (bool, Result<AdoptReport, String>) {
     pairs.sort_by_key(|p| p.from.len());
     let mut any_moved = false;
-    let result = with_vault_write(state, |root| -> Result<AdoptReport, String> {
-        let mut report = AdoptReport::default();
+    let result = (|| {
+      let work = with_vault_write(state, |root| {
+        let mut work = Vec::new();
         for p in &pairs {
             let from = vault_flags::dirs_for(root, account_id, &p.from, account_email, mirror_root);
             let to = vault_flags::dirs_for(root, account_id, &p.to, account_email, mirror_root);
-            let out = vault_flags::adopt_dirs(&state.vault_registry, &from, &to);
+            let out = vault_flags::adopt_local_dirs(&state.vault_registry, &from, &to);
             any_moved |= out.moved > 0;
-            let label = format!("{} -> {}", p.from, p.to);
+            let mut failures = Vec::new();
             if out.app_moved > 0 {
                 if let Err(e) = daemon_custody::with_conn(state, |c| entries::rename_mailbox(c, account_id, &p.from, &p.to)) {
-                    report.failed.push(format!("custody {} -> {} ({})", p.from, p.to, e));
+                    failures.push(format!("custody {} -> {} ({})", p.from, p.to, e));
                 }
                 if let Err(e) = daemon_custody::with_conn(state, |c| cache::rename_mailbox(c, account_id, &p.from, &p.to)) {
-                    report.failed.push(format!("header cache {} -> {} ({})", p.from, p.to, e));
+                    failures.push(format!("header cache {} -> {} ({})", p.from, p.to, e));
                 }
             }
-            if !out.failed.is_empty() {
-                report.failed.push(format!("{}: {}", label, out.failed.join("; ")));
-            } else if out.moved > 0 {
-                report.adopted.push(label);
-            } else if out.blocked > 0 {
-                report.skipped_both_exist.push(format!("{} (exists: {})", label, out.blocked_by.join(", ")));
-            }
+            work.push((format!("{} -> {}", p.from, p.to), from, to, out, failures));
         }
-        Ok(report)
-    });
+        Ok(work)
+      })?;
+      let mut report = AdoptReport::default();
+      for (label, from, to, mut out, failures) in work {
+          vault_flags::adopt_mirror_dirs(&from, &to, &mut out);
+          any_moved |= out.moved > 0;
+          report.failed.extend(failures);
+          if !out.failed.is_empty() { report.failed.push(format!("{}: {}", label, out.failed.join("; "))); }
+          else if out.moved > 0 { report.adopted.push(label); }
+          else if out.blocked > 0 { report.skipped_both_exist.push(format!("{} (exists: {})", label, out.blocked_by.join(", "))); }
+      }
+      Ok(report)
+    })();
     (any_moved, result)
 }
 
@@ -269,6 +289,68 @@ mod tests {
         let mut v: Vec<String> = fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         v.sort();
         v
+    }
+
+    #[test]
+    fn mirror_exclusion_paused_flags_leave_local_and_bulk_controls_responsive() {
+        use mailvault_core::mirror_mutation::MirrorRoot;
+        use std::sync::mpsc;
+        use std::time::Duration;
+        let (vault, state) = st();
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = mailvault_core::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("7.eml"), b"body").unwrap();
+        seed_file(vault.path(), "acc", "INBOX", 7, &[]);
+        daemon_custody::with_conn(&state, |c| entries::upsert(c, "acc", "INBOX", &[serde_json::json!({"uid":7,"flags":[]})])).unwrap();
+        let scope = serde_json::from_value(serde_json::json!({"keys":[]})).unwrap();
+        let intent = mailvault_core::bulk::FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[]);
+        state.bulk.lock().unwrap().claim(&state.app_dir, "mirror-control", intent).unwrap();
+        let root = MirrorRoot::resolve(mirror.path()).unwrap();
+        let (local_tx, local_rx) = mpsc::channel();
+        let (first_tx, first_rx) = mpsc::channel();
+        let (second_tx, second_rx) = mpsc::channel();
+        let (attempt_tx, attempt_rx) = mpsc::channel();
+        std::thread::scope(|threads| {
+            root.mutate(|_| {
+                let state = &state;
+                let mirror = mirror.path();
+                threads.spawn(move || {
+                    AFTER_LOCAL.with(|hook| *hook.borrow_mut() = Some(Box::new(move || local_tx.send(()).unwrap())));
+                    first_tx.send(apply_flags(state, "acc", "INBOX", Some("me@test"), Some(mirror.to_str().unwrap()), &[change(7, &["\\Seen"])], false)).unwrap();
+                });
+                local_rx.recv_timeout(Duration::from_secs(10)).expect("first flag never completed local phase");
+                threads.spawn(move || {
+                    attempt_tx.send(()).unwrap();
+                    second_tx.send(apply_flags(state, "acc", "INBOX", Some("me@test"), Some(mirror.to_str().unwrap()), &[change(7, &["\\Flagged"])], false)).unwrap();
+                });
+                attempt_rx.recv().unwrap();
+                let (control_tx, control_rx) = mpsc::channel();
+                threads.spawn(move || {
+                    with_mailbox_write(state, "acc", "INBOX", |_| {
+                        daemon_custody::with_conn(state, |c| entries::read(c, "acc", "INBOX"))?;
+                        Ok(())
+                    }).unwrap();
+                    let runtime = tokio::runtime::Runtime::new().unwrap();
+                    runtime.block_on(async {
+                        let status = crate::handlers::bulk::route(state, "bulk.status", &serde_json::json!({}), serde_json::json!(1)).await.unwrap();
+                        assert!(status.error.is_none());
+                        let cancel = crate::handlers::bulk::route(state, "bulk.cancel", &serde_json::json!({"operationId":"mirror-control"}), serde_json::json!(2)).await.unwrap();
+                        assert!(cancel.error.is_none());
+                    });
+                    control_tx.send(()).unwrap();
+                });
+                control_rx.recv_timeout(Duration::from_secs(10)).expect("mirror wait or WRITER waiter retained local/bulk locks");
+                assert!(first_rx.try_recv().is_err(), "reply released before mirror phase");
+                assert!(second_rx.try_recv().is_err(), "second flag bypassed WRITER");
+                Ok(())
+            }).unwrap();
+            assert_eq!(first_rx.recv_timeout(Duration::from_secs(10)).unwrap().unwrap().mirrored, 1);
+            assert_eq!(second_rx.recv_timeout(Duration::from_secs(10)).unwrap().unwrap().mirrored, 1);
+        });
+        assert_eq!(file_names(&cur), vec![mailvault_core::maildir::mirror_filename(7, &["flagged".into()])]);
+        let stored = daemon_custody::with_conn(&state, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&stored).unwrap()[0]["flags"], serde_json::json!(["\\Flagged"]));
     }
 
     #[test]

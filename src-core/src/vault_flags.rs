@@ -121,6 +121,8 @@ pub struct Dirs {
     /// `<backup root>/<email>/<mailbox>/cur/`, when an external location is
     /// configured and reachable.
     pub mirror_cur: Option<PathBuf>,
+    /// Explicit authorized root; never inferred from a nested mailbox path.
+    mirror_root: Option<PathBuf>,
     /// `email_cache/<account>_<mailbox>/` — the directory a mailbox rename
     /// still has to carry, because the Outlook uid ledger lives in it.
     pub sidecar_dir: PathBuf,
@@ -148,6 +150,7 @@ pub fn dirs_for(
     Dirs {
         cur,
         mirror_cur,
+        mirror_root: mirror_root.map(PathBuf::from),
         sidecar_dir: header_cache::sidecar_dir(root, account_id, mailbox),
         root: root.to_path_buf(),
         account_id: account_id.to_string(),
@@ -168,12 +171,19 @@ pub fn dirs_for(
 /// transaction over the uids in hand.
 static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// A flag intent owns this before taking any local lock. Mirror work follows
+/// the completed local phase while the same intent remains serialized.
+pub struct FlagWriter(());
+pub fn serialized<T>(work: impl FnOnce(&FlagWriter) -> T) -> T {
+    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
+    work(&FlagWriter(()))
+}
+
 /// The test seam for the locked file half: `apply_files` under `WRITER`, which
 /// is what `apply_everywhere` does before it also patches custody.
 #[cfg(test)]
 pub fn apply_in(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Applied {
-    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
-    apply_files(reg, dirs, changes)
+    serialized(|_| apply_files(reg, dirs, changes))
 }
 
 /// Land `changes` on every copy under `dirs`. Silent about a message the vault
@@ -183,7 +193,7 @@ pub fn apply_in(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> App
 /// Every app-side rename renames the registry row too, never an invalidate:
 /// every star and read toggle comes through here, and an invalidate would
 /// relist the folder on the next read.
-fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Applied {
+fn apply_local_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Applied {
     let mut out = Applied::default();
     if changes.is_empty() {
         return out;
@@ -194,7 +204,6 @@ fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Appl
     // Every shape the vault and the mirror have written starts with the uid:
     // `<uid>:2,<flags>[.eml]`, `<uid>.eml`, `<uid>_<flags>.eml`.
     let app_files = crate::message_store::flag_paths(&dirs.root, &dirs.account_id, &dirs.mailbox);
-    let mirror_files = dirs.mirror_cur.as_deref().map(mirror_file_map);
 
     for change in changes {
         if let Some(path) = app_files.get(&change.uid) {
@@ -211,16 +220,6 @@ fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Appl
                 }
                 Ok(None) => {}
                 Err(e) => warn!("vault_flags: rename uid {} failed: {}", change.uid, e),
-            }
-        }
-
-        if let Some(files) = &mirror_files {
-            if let Some(path) = files.get(&change.uid) {
-                match rename_for(path, change) {
-                    Ok(Some(_)) => out.mirrored += 1,
-                    Ok(None) => {}
-                    Err(e) => warn!("vault_flags: mirror rename uid {} failed: {}", change.uid, e),
-                }
             }
         }
 
@@ -255,15 +254,58 @@ pub fn apply_everywhere(
     if changes.is_empty() {
         return Applied::default();
     }
-    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
-    let mut applied = apply_files(reg, dirs, changes);
+    serialized(|writer| {
+        let mut applied = apply_local(writer, reg, dirs, changes, patch_custody);
+        applied.mirrored = apply_mirror(writer, dirs, changes);
+        applied
+    })
+}
+
+/// Caller holds its existing mailbox/gate scope, after acquiring FlagWriter.
+pub fn apply_local(
+    _writer: &FlagWriter, reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange],
+    patch_custody: impl FnOnce(&[FlagChange]) -> Result<(usize, usize), String>,
+) -> Applied {
+    let mut applied = apply_local_files(reg, dirs, changes);
     match patch_custody(changes) {
-        Ok((entries, headers)) => {
-            applied.index_patched = entries;
-            applied.sidecars_patched = headers;
-        }
+        Ok((entries, headers)) => { applied.index_patched = entries; applied.sidecars_patched = headers; }
         Err(e) => warn!("vault_flags: custody patch failed: {}", e),
     }
+    applied
+}
+
+/// Call only after all local lock scopes returned. No callback into local work.
+pub fn apply_mirror(_writer: &FlagWriter, dirs: &Dirs, changes: &[FlagChange]) -> usize {
+    if changes.is_empty() { return 0; }
+    let (Some(root), Some(cur)) = (&dirs.mirror_root, &dirs.mirror_cur) else { return 0 };
+    let Ok(handle) = crate::mirror_mutation::MirrorRoot::resolve(root) else { return 0 };
+    let Ok(cur) = handle.rebase(root, cur) else { return 0 };
+    let mut mirrored = 0;
+    let mut files = std::collections::HashMap::new();
+    let mut next = None;
+    // Reuse one listing unless a different native unit changed the root.
+    for change in changes {
+        let result: Result<usize, String> = handle.mutate_versioned(|_, revision| {
+            if next != Some(revision) { files = mirror_file_map(&cur); }
+            next = Some(revision.wrapping_add(1));
+            let Some(path) = files.get(&change.uid).cloned() else { return Ok(0) };
+            match rename_for(&path, change)? {
+                Some(name) => { files.insert(change.uid, path.with_file_name(name)); Ok(1) }
+                None => Ok(0),
+            }
+        }).and_then(|result| result);
+        match result {
+            Ok(n) => mirrored += n,
+            Err(e) => warn!("vault_flags: mirror rename uid {} failed: {}", change.uid, e),
+        }
+    }
+    mirrored
+}
+
+#[cfg(test)]
+fn apply_files(reg: &VaultRegistry, dirs: &Dirs, changes: &[FlagChange]) -> Applied {
+    let mut applied = apply_local_files(reg, dirs, changes);
+    applied.mirrored = apply_mirror(&FlagWriter(()), dirs, changes);
     applied
 }
 
@@ -311,7 +353,7 @@ pub struct RenamePair {
 /// `Projects/Alpha` along with it. That is harmless as long as the parent pair
 /// runs first, which is why `vault_rename_mailbox` sorts shallowest-first: the
 /// descendant's pair then finds its source already gone and skips.
-pub fn rename_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
+pub fn rename_local_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
@@ -381,14 +423,21 @@ pub fn rename_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> (usize, Vec<S
         None => do_move(&from.sidecar_dir, &to.sidecar_dir, &mut moved, &mut failed),
     }
 
-    if let (Some(a), Some(b)) = (
-        from.mirror_cur.as_deref().and_then(up),
-        to.mirror_cur.as_deref().and_then(up),
-    ) {
-        do_move(&a, &b, &mut moved, &mut failed);
-    }
 
     (moved, failed)
+}
+
+pub fn rename_mirror_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
+    let mut out = Adopted::default();
+    move_mirror_dirs(from, to, &mut out, false);
+    (out.moved, out.failed)
+}
+
+#[cfg(test)]
+pub fn rename_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
+    let (mut n, mut bad) = rename_local_dirs(reg, from, to);
+    let (m, errors) = rename_mirror_dirs(from, to);
+    n += m; bad.extend(errors); (n, bad)
 }
 
 /// What one `adopt_dirs` call did. `moved` and `blocked` count locations,
@@ -419,7 +468,7 @@ pub struct Adopted {
 /// The mirror moves on its own, when its source exists and its destination does
 /// not. `fs::rename` only; nothing is deleted, an existing destination is left
 /// alone and counted as blocked.
-pub fn adopt_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> Adopted {
+pub fn adopt_local_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> Adopted {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
@@ -502,20 +551,51 @@ pub fn adopt_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> Adopted {
     // The mirror has not run yet, so everything counted so far is app-side.
     out.app_moved = out.moved;
 
-    if let (Some(src), Some(dst)) = (
-        from.mirror_cur.as_deref().and_then(up),
-        to.mirror_cur.as_deref().and_then(up),
-    ) {
+
+    out
+}
+
+/// Mirror-only directory phase. No tree, ledger, custody or vault locks.
+pub fn adopt_mirror_dirs(from: &Dirs, to: &Dirs, out: &mut Adopted) {
+    move_mirror_dirs(from, to, out, true);
+}
+
+fn move_mirror_dirs(from: &Dirs, to: &Dirs, out: &mut Adopted, report_blocked: bool) {
+    let (Some(root), Some(a), Some(b)) = (&from.mirror_root, &from.mirror_cur, &to.mirror_cur) else { return };
+    if from.mirror_root != to.mirror_root { out.failed.push("mirror roots differ".into()); return; }
+    // An absent drive was always a skipped mirror location for folder moves.
+    // Do not create it or turn that absence into a local-move failure.
+    match root.try_exists() {
+        Ok(false) => return,
+        Err(e) => { out.failed.push(format!("{} ({})", root.display(), e)); return; }
+        Ok(true) => {}
+    }
+    let result = (|| {
+        let handle = crate::mirror_mutation::MirrorRoot::resolve(root)?;
+        let reported_dst = b.parent().map(|p| p.display().to_string()).unwrap_or_default();
+        let a = handle.rebase(root, a)?;
+        let b = handle.rebase(root, b)?;
+        handle.mutate(|_| {
+        let (Some(src), Some(dst)) = (a.parent(), b.parent()) else { return Ok(()) };
         if src.exists() {
             if dst.exists() {
-                out.blocked += 1;
-                out.blocked_by.push(dst.display().to_string());
+                if report_blocked { out.blocked += 1; out.blocked_by.push(reported_dst.clone()); }
             } else {
-                mv(&src, &dst, &mut out.moved, &mut out.failed);
+                if let Some(parent) = dst.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+                fs::rename(src, dst).map_err(|e| format!("{} ({})", src.display(), e))?;
+                out.moved += 1;
             }
         }
-    }
-    out
+        Ok(())
+        })
+    })();
+    if let Err(e) = result { out.failed.push(e); }
+}
+
+#[cfg(test)]
+pub fn adopt_dirs(reg: &VaultRegistry, from: &Dirs, to: &Dirs) -> Adopted {
+    let mut out = adopt_local_dirs(reg, from, to);
+    adopt_mirror_dirs(from, to, &mut out); out
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -532,6 +612,58 @@ mod tests {
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn mirror_exclusion_flags_and_nested_directory_moves_wait() {
+        use crate::mirror_mutation::MirrorRoot;
+        use std::sync::mpsc;
+        let f = fixture();
+        let base = &f.dirs.root;
+        let from = dirs_for(base, "acct", "Projects/Sub", Some("me@mock.test"), Some(base.join("mirror").to_str().unwrap()));
+        let to = dirs_for(base, "acct", "Work/Sub", Some("me@mock.test"), Some(base.join("mirror").to_str().unwrap()));
+        fs::create_dir_all(from.mirror_cur.as_ref().unwrap()).unwrap();
+        fs::write(from.mirror_cur.as_ref().unwrap().join("7.eml"), b"legacy").unwrap();
+        let root = MirrorRoot::resolve(&base.join("mirror")).unwrap();
+        let (attempt_tx, attempt_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::scope(|scope| {
+            root.mutate(|_| {
+                let from = &from;
+                let reg = &f.reg;
+                scope.spawn(move || {
+                    attempt_tx.send(()).unwrap();
+                    let out = apply_in(reg, from, &[change(7, &["\\Seen"])]);
+                    done_tx.send(out).unwrap();
+                });
+                attempt_rx.recv().unwrap();
+                assert!(done_rx.recv_timeout(std::time::Duration::from_millis(200)).is_err(), "flag rename bypassed root exclusion");
+                Ok(())
+            }).unwrap();
+            assert_eq!(done_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap().mirrored, 1);
+        });
+        for adopt in [false, true] {
+            let (a, b) = if adopt { (&to, &from) } else { (&from, &to) };
+            let (attempt_tx, attempt_rx) = mpsc::channel();
+            let (done_tx, done_rx) = mpsc::channel();
+            std::thread::scope(|scope| {
+                root.mutate(|_| {
+                    scope.spawn(move || {
+                        attempt_tx.send(()).unwrap();
+                        let moved = if adopt {
+                            let mut out = Adopted::default();
+                            adopt_mirror_dirs(a, b, &mut out); out.moved
+                        } else { rename_mirror_dirs(a, b).0 };
+                        done_tx.send(moved).unwrap();
+                    });
+                    attempt_rx.recv().unwrap();
+                    assert!(done_rx.recv_timeout(std::time::Duration::from_millis(200)).is_err(), "directory move bypassed root exclusion");
+                    Ok(())
+                }).unwrap();
+                assert_eq!(done_rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap(), 1);
+            });
+        }
+        assert!(from.mirror_cur.unwrap().join(crate::maildir::mirror_filename(7, &s(&["seen"]))).exists());
     }
 
     #[test]
@@ -585,6 +717,7 @@ mod tests {
             dirs: Dirs {
                 cur,
                 mirror_cur: Some(mirror),
+                mirror_root: Some(base.join("mirror")),
                 sidecar_dir,
                 root: base.to_path_buf(),
                 account_id: "acct".into(),
@@ -896,6 +1029,7 @@ mod tests {
         Dirs {
             cur: base.join("Maildir").join("a").join(mailbox).join("cur"),
             mirror_cur: Some(base.join("mirror").join("me@x").join(mailbox).join("cur")),
+            mirror_root: Some(base.join("mirror")),
             sidecar_dir: base.join("email_cache").join(sidecar),
             root: base.to_path_buf(),
             account_id: "a".into(),

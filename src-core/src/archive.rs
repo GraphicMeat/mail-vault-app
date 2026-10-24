@@ -602,6 +602,7 @@ async fn fetch_and_store(
     jmap: Option<(Result<Arc<crate::jmap::JmapClient>, String>, Result<String, String>)>,
     identity:Option<&crate::bulk_worker::Identity>,
 ) -> Result<serde_json::Value, String> {
+    let mirror_root = backup_path.map(std::path::PathBuf::from);
     let mirror = backup_path.zip(account_email).map(|(bp, addr)| {
         crate::maildir::mirror_cur(std::path::Path::new(bp), addr, mailbox)
     }).transpose()?;
@@ -719,29 +720,14 @@ async fn fetch_and_store(
                 Ok(())
             }))?;
 
-            // Also write to backup location if configured. Under the gate of
-            // its own but outside the mailbox lock: a slow external drive must
-            // not hold up the folder's other writers. The vault copy has
-            // landed, so a refusal here is a failed external copy, not a
-            // failed message.
-            if let Some(backup_dir) = &mirror {
-                let mirrored = gate(&mut || {
-                    match fs::create_dir_all(backup_dir) {
-                        Ok(()) => {
-                            // Same Maildir name as the app copy so flags survive a
-                            // restore from the external location back into the app store.
-                            let dst = backup_dir.join(&filename);
-                            if !in_mirror {
-                                if let Err(e) = crate::fsx::write_atomic(&dst, &raw_bytes) {
-                                    warn!("archive_emails: external copy failed for UID {}: {}", uid, e);
-                                    external_copy_failed = true;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!("archive_emails: external mkdir failed for UID {}: {}", uid, e);
-                            external_copy_failed = true;
-                        }
+            // The local write completed and every local lock has returned.
+            // Hold only root exclusion across the bounded external write.
+            if let (Some(mirror_root), Some(backup_dir)) = (&mirror_root, &mirror) {
+                let mirrored = crate::mirror_mutation::mutate_at(mirror_root, backup_dir, |backup_dir| {
+                    fs::create_dir_all(backup_dir).map_err(|e| format!("external mkdir failed: {e}"))?;
+                    if !in_mirror {
+                        crate::fsx::write_atomic(&backup_dir.join(&filename), &raw_bytes)
+                            .map_err(|e| format!("external copy failed: {e}"))?;
                     }
                     Ok(())
                 });

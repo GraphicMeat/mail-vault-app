@@ -552,7 +552,7 @@ fn move_decrypted(mailbox_dir: &Path, from: u32, to: Option<u32>) {
 ///
 /// Costs a missing-file open when the folder has no ledger, and one header
 /// read per entry whose `from` a side still holds.
-pub fn replay(vault_mailbox_dir: &Path, mirror_mailbox_dir: &Path) -> bool {
+pub fn replay_at(vault_mailbox_dir: &Path, mirror_root: &Path, mirror_mailbox_dir: &Path) -> bool {
     let ledger = match read_ledger(vault_mailbox_dir) {
         Ok(ledger) if !ledger.is_empty() => ledger,
         Ok(_) => return false,
@@ -562,15 +562,35 @@ pub fn replay(vault_mailbox_dir: &Path, mirror_mailbox_dir: &Path) -> bool {
         }
     };
     let vault_cur = message_store::maildir_messages_dir(vault_mailbox_dir);
-    let vault_touched = replay_into(vault_mailbox_dir, &vault_cur, message_store::maildir_paths_at(vault_mailbox_dir), &ledger);
-    let mirror_cur = maildir::mirror_cur_in(mirror_mailbox_dir);
-    replay_into(mirror_mailbox_dir, &mirror_cur, maildir::mirror_file_map(&mirror_cur), &ledger);
+    let vault_touched = replay_into(vault_mailbox_dir, &vault_cur, &mut message_store::maildir_paths_at(vault_mailbox_dir), &ledger);
+    // The local replay has completed. Each mirror ledger entry is a bounded
+    // external unit with no local registry/custody/gate scope held.
+    if let Ok(handle) = crate::mirror_mutation::MirrorRoot::resolve(mirror_root) {
+      if let Ok(dir) = handle.rebase(mirror_root, mirror_mailbox_dir) {
+        let cur = maildir::mirror_cur_in(&dir);
+        let mut files = HashMap::new();
+        let mut next = None;
+        for entry in &ledger {
+            if let Err(e) = handle.mutate_versioned(|_, revision| {
+                if next != Some(revision) { files = maildir::mirror_file_map(&cur); }
+                next = Some(revision.wrapping_add(1));
+                replay_into(&dir, &cur, &mut files, std::slice::from_ref(entry));
+
+            }) { warn!("import_rehome: mirror replay skipped: {}", e); }
+        }
+      }
+    }
     vault_touched
+}
+
+#[cfg(test)]
+fn replay(vault_mailbox_dir: &Path, mirror_mailbox_dir: &Path) -> bool {
+    replay_at(vault_mailbox_dir, mirror_mailbox_dir, mirror_mailbox_dir)
 }
 
 /// `replay` onto one side: `files` lists `cur`, the message directory inside
 /// `mailbox_dir`.
-fn replay_into(mailbox_dir: &Path, cur: &Path, mut files: HashMap<u32, PathBuf>, ledger: &[LedgerEntry]) -> bool {
+fn replay_into(mailbox_dir: &Path, cur: &Path, files: &mut HashMap<u32, PathBuf>, ledger: &[LedgerEntry]) -> bool {
     let mut changed = false;
     for entry in ledger {
         let Some(path) = files.get(&entry.from).cloned() else { continue };
