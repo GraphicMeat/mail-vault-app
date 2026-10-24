@@ -2377,12 +2377,14 @@ fn flatten_mailboxes(mailboxes: &[imap::MailboxInfo]) -> Vec<&imap::MailboxInfo>
 // and `purge_uids` (the full `backup_purge_uids` decision: purge now vs queue
 // for later vs no-op when nothing is configured) below `purge_backup_files`.
 
+#[cfg(test)]
 fn read_purge_queue(data_dir: &Path) -> std::collections::BTreeMap<String, Vec<u32>> {
     // A store that will not open must not brick delete-everywhere; start over
     // rather than error, the same thing the JSON reader did with a corrupt file.
     crate::app_db::with(data_dir, |conn| Ok(crate::app_db::ops::purge_read(conn))).unwrap_or_default()
 }
 
+#[cfg(test)]
 fn write_purge_queue(data_dir: &Path, q: &std::collections::BTreeMap<String, Vec<u32>>) -> Result<(), String> {
     crate::app_db::with(data_dir, |conn| crate::app_db::ops::purge_write(conn, q))
 }
