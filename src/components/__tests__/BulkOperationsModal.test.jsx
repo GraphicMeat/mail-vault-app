@@ -47,6 +47,8 @@ const WINDOW = [
 const CACHED_UIDS = [1, 2, 3, 4, 5];
 const CACHED_ROWS = CACHED_UIDS.map(uid => ({
   uid,
+  _nativeIdentity: { accountId: 'acct-1', mailbox: 'INBOX', uidValidity: 1, originHash: 'original-origin', jmapMailboxId: 'original-label' },
+  _jmapId: `provider-${uid}`,
   messageId: `<m${uid}>`,
   date: `2026-0${uid}-01T10:00:00Z`,
   flags: uid === 3 ? ['\\Seen', '\\Deleted'] : ['\\Seen'],
@@ -78,7 +80,7 @@ const useMessageListStoreMock = create((set) => ({
   setBulkSession: (patch) => set(state => ({
     bulkSession: { ...(state.bulkSession || { active: true, step: 1, range: null, action: null }), ...patch },
   })),
-  setSelection: (keys) => set({ selectedEmailIds: new Set(keys) }),
+  setSelection: (keys, rows) => set({ selectedEmailIds: new Set(keys), selectionRows: rows }),
   // Mirrors selectionSlice's real toggleEmailSelection (non-unified path) —
   // stands in for a row checkbox click while the modal is minimized.
   toggleEmailSelection: (uid) => set(state => {
@@ -170,6 +172,7 @@ describe('BulkOperationsModal', () => {
 
     fireEvent.click(screen.getByText('All'));
     expect(screen.getByText('3 emails selected')).toBeTruthy();
+    expect(useMessageListStoreMock.getState().selectionRows.find(row => row.uid === 1)).toMatchObject({ _nativeIdentity: { jmapMailboxId: 'original-label', originHash: 'original-origin' }, _jmapId: 'provider-1', messageId: '<m1>' });
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Archive'));

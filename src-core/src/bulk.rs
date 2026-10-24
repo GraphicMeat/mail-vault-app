@@ -209,6 +209,9 @@ impl FrozenIntent {
         }
         intent
     }
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
     pub fn target_hints(&self) -> &[TargetHint] {
         &self.scope.target_hints
     }
@@ -472,6 +475,81 @@ impl PreparedResume {
     }
 }
 
+/// The same immutable owner fence used by Resume, for measured large starts.
+pub struct ClaimSeed {
+    base: Option<Arc<Pending>>,
+    id: String,
+    attempt: String,
+}
+pub struct PreparedClaim {
+    base: Option<Arc<Pending>>,
+    pending: Arc<Pending>,
+    id: String,
+    attempt: String,
+    encoded: String,
+    snapshot: Value,
+}
+impl ClaimSeed {
+    pub fn prepare(self, intent: FrozenIntent) -> Result<PreparedClaim, String> {
+        let raw = json!({
+            "schemaVersion":1, "id":self.id,"attemptId":self.attempt,"type":intent.operation,
+            "accountId":intent.scope.account_id,"mailbox":intent.scope.mailbox,
+            "intent":intent,"totalUids":intent.target_keys(),"completedUids":[],
+            "currentPhase":intent.operation.initial_phase(),"status":"starting",
+            "skipped":intent.skipped(),"skippedLocal":intent.skipped_local(),
+            "createdAt":chrono::Utc::now().to_rfc3339()
+        });
+        let encoded = raw.to_string();
+        let pending = Arc::new(Pending::parse(raw)?);
+        let snapshot = pending.snapshot("starting");
+        Ok(PreparedClaim { base:self.base, pending, id:self.id, attempt:self.attempt, encoded, snapshot })
+    }
+}
+impl PreparedClaim {
+    pub fn persist(&self, data_dir: &Path) -> Result<(), String> {
+        op_journal::pending_operation_save_encoded(data_dir, &self.encoded)
+            .map_err(|_| "errors.bulkPendingWrite".into())
+    }
+    pub fn intent(&self) -> &FrozenIntent { self.pending.intent.as_deref().unwrap() }
+}
+struct ActiveOwner {
+    id: String,
+    attempt: String,
+    intent: Arc<FrozenIntent>,
+}
+pub struct DuplicateSeed {
+    active: Option<ActiveOwner>,
+    pending: Option<Arc<Pending>>,
+    id: String,
+    attempt: String,
+}
+pub struct PreparedDuplicate {
+    seed: DuplicateSeed,
+    terminal_snapshot: Option<Value>,
+}
+impl DuplicateSeed {
+    /// Exact request comparison and any terminal summary expansion is off-lock.
+    pub fn prepare(self, action: Action, scope: &Scope) -> Result<Option<PreparedDuplicate>, String> {
+        if let Some(active) = &self.active {
+            if active.id != self.id || active.intent.operation != action || active.intent.scope != *scope {
+                return Err("errors.operationRunning".into());
+            }
+            return Ok(Some(PreparedDuplicate { seed:self, terminal_snapshot:None }));
+        }
+        if let Some(pending) = self.pending.as_ref().filter(|p| p.terminal && p.id == self.id) {
+            let intent = pending.intent.as_deref().ok_or("errors.bulkStale")?;
+            if intent.operation != action || intent.scope != *scope { return Err("errors.bulkStale".into()); }
+            let terminal_snapshot = Some(pending.snapshot(pending.raw["status"].as_str().unwrap_or("complete")));
+            return Ok(Some(PreparedDuplicate { seed:self, terminal_snapshot }));
+        }
+        Ok(None)
+    }
+}
+
+fn same_pending(left: &Option<Arc<Pending>>, right: &Option<Arc<Pending>>) -> bool {
+    match (left, right) { (None, None) => true, (Some(a), Some(b)) => Arc::ptr_eq(a, b), _ => false }
+}
+
 pub struct Coordinator {
     active: Option<Active>,
     admissions: HashMap<String, Admission>,
@@ -556,6 +634,59 @@ impl Coordinator {
     }
     pub fn invalidate_pending(&mut self) {
         self.pending_current = false;
+    }
+    /// A narrowly admitted start may expose only its last committed compact view
+    /// while its first encoded write owns journal/SQLite. No speculative Active.
+    pub fn admission_status(&self) -> Option<Result<Value, String>> {
+        self.owned_status().or_else(|| self.admissions.values().any(|a| a.state == AdmissionState::Freezing).then(|| self.cached_status()))
+    }
+    pub fn duplicate_seed(&self, id: &str, attempt: &str) -> Result<DuplicateSeed, String> {
+        self.require_unfenced(id, attempt)?;
+        let pending = self.pending.as_ref().map_err(Clone::clone)?.clone();
+        Ok(DuplicateSeed {
+            active:self.active.as_ref().map(|a| ActiveOwner { id:a.id.clone(), attempt:a.attempt_id.clone(), intent:a.intent.clone() }),
+            pending, id:id.into(), attempt:attempt.into(),
+        })
+    }
+    pub fn publish_duplicate(&mut self, prepared: &PreparedDuplicate) -> Result<Value, String> {
+        let seed = &prepared.seed;
+        self.require_unfenced(&seed.id, &seed.attempt)?;
+        if let Some(owner) = &seed.active {
+            let active = self.active.as_ref().filter(|a| a.id == owner.id && a.attempt_id == owner.attempt && Arc::ptr_eq(&a.intent, &owner.intent)).ok_or("errors.bulkStale")?;
+            let snapshot = active.snapshot.clone();
+            self.running_admission(&seed.id, &seed.attempt, &owner.attempt);
+            return Ok(snapshot);
+        }
+        if self.active.is_some() || !self.pending_current || !same_pending(self.pending.as_ref().map_err(Clone::clone)?, &seed.pending) { return Err("errors.bulkStale".into()); }
+        Ok(prepared.terminal_snapshot.as_ref().ok_or("errors.bulkStale")?.clone())
+    }
+    pub fn claim_seed(&self, id: &str, attempt: &str) -> Result<ClaimSeed, String> {
+        self.require_unfenced(id, attempt)?;
+        if self.active.is_some() { return Err("errors.operationRunning".into()); }
+        if !self.pending_current { return Err("errors.bulkPendingRead".into()); }
+        let base = self.pending.as_ref().map_err(Clone::clone)?;
+        if base.as_ref().is_some_and(|p| !p.terminal) { return Err("errors.bulkPendingChoice".into()); }
+        if id.is_empty() { return Err("errors.bulkMissingId".into()); }
+        Ok(ClaimSeed { base:base.clone(), id:id.into(), attempt:attempt.into() })
+    }
+    fn matching_claim_base(&self, prepared: &PreparedClaim) -> Result<(), String> {
+        if self.active.is_some() || !self.pending_current || !same_pending(self.pending.as_ref().map_err(Clone::clone)?, &prepared.base) { return Err("errors.bulkStale".into()); }
+        Ok(())
+    }
+    pub fn validate_claim(&self, prepared: &PreparedClaim) -> Result<(), String> {
+        self.matching_claim_base(prepared)?;
+        self.require_unfenced(&prepared.id, &prepared.attempt)
+    }
+    /// A successful durable write always becomes Pending, including when a
+    /// status fence won during IO. Only an unfenced attempt receives Active.
+    pub fn publish_claim(&mut self, prepared: &PreparedClaim) -> Result<Value, String> {
+        self.matching_claim_base(prepared)?;
+        self.pending = Ok(Some(prepared.pending.clone()));
+        self.pending_current = true;
+        self.require_unfenced(&prepared.id, &prepared.attempt)?;
+        self.active = Some(Active { id:prepared.id.clone(), attempt_id:prepared.attempt.clone(), intent:prepared.pending.intent.as_ref().unwrap().clone(), snapshot:prepared.snapshot.clone(), cancel:Arc::new(std::sync::atomic::AtomicBool::new(false)) });
+        self.running_admission(&prepared.id, &prepared.attempt, &prepared.attempt);
+        Ok(prepared.snapshot.clone())
     }
     pub fn resume_seed(&self, id: &str, attempt: &str) -> Result<ResumeSeed, String> {
         self.require_unfenced(id, attempt)?;

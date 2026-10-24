@@ -1436,17 +1436,20 @@ mod tests {
             assert_eq!(serde_json::to_value(&intent).unwrap()["scope"]["targetHints"].as_array().map(Vec::len), Some(20000));
             let mut work = Workflow::new(intent.clone());
             let ids: std::collections::HashMap<_, _> = (1..=20000)
-                .map(|uid| (uid, format!("{uid}@selected.test")))
+                .map(|uid| (uid, format!("original-provider-email-identity-{uid}")))
                 .collect();
-            work.groups[0].identity = Some(Identity::Imap {
-                validity: 1,
-                message_ids: ids.clone(),
+            work.groups[0].identity = Some(Identity::Jmap {
+                mailbox_id: "original-provider-mailbox-1731".into(),
+                ids: ids.clone(),
             });
-            work.groups[0].origin = Some("native-origin".into());
+            work.groups[0].origin = Some("a".repeat(64));
             work.groups[0].selected = Some(Selected {
                 validity: Some(1),
                 cached_uids: (1..=20000).collect(),
-                message_ids: ids,
+                message_ids: (1..=20000).map(|uid| (uid, format!("original-message-{uid}@selection.test"))).collect(),
+                jmap_ids: ids,
+                origin_hash: Some("a".repeat(64)),
+                jmap_mailbox_id: Some("original-provider-mailbox-1731".into()),
                 ..Default::default()
             });
             if action == Action::ArchiveBackupDelete {
@@ -1469,11 +1472,9 @@ mod tests {
                 let operation = std::thread::spawn(move || {
                     let started = Instant::now();
                     if stage == "claim" {
-                        let _journal = writer.journal.lock().unwrap();
-                        let mut bulk = writer.bulk.lock().unwrap();
+                        writer.bulk.lock().unwrap().begin_admission("admission", "initial").unwrap();
                         tx.send(()).unwrap();
-                        bulk.claim_attempt(&writer.app_dir, "admission", "initial", original)
-                            .unwrap();
+                        crate::bulk_worker::prepare_claim(&writer, "admission", "initial", original).unwrap();
                         return started.elapsed();
                     }
                     tx.send(()).unwrap();

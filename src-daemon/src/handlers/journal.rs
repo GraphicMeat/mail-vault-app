@@ -105,11 +105,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-                    let bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+                    let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
                     bulk.allow_legacy_write(&state.app_dir)?;
                     if operation.get("schemaVersion").is_some() {
                         return Err("errors.bulkOwned".into());
                     }
+                    bulk.invalidate_pending();
+                    drop(bulk);
                     op_journal::pending_operation_save(&state.app_dir, &operation).map(|_| Value::Null)
                 })
                 .await
@@ -122,8 +124,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-                    let bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+                    let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
                     bulk.allow_legacy_write(&state.app_dir)?;
+                    bulk.invalidate_pending();
+                    drop(bulk);
                     op_journal::pending_operation_clear(&state.app_dir).map(|_| Value::Null)
                 })
                     .await

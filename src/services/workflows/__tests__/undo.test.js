@@ -607,7 +607,7 @@ describe('undo puts the row back first, then the server follows', () => {
   const uids = () => useMailStore.getState().sortedEmails.map(e => e.uid).sort((a, b) => a - b);
 
   it('the row is back before the move answers, and then carries its new uid', async () => {
-    primeStore({ emails: [row(7), row(8)] });
+    primeStore({ emails: [row(7, { _nativeIdentity: { accountId: 'a1', mailbox: 'INBOX', uidValidity: 1, originHash: 'original' } }), row(8)] });
     await useMailStore.getState().deleteEmailFromServer(7);
     expect(useMailStore.getState().totalEmails).toBe(1);
     useMailStore.getState().loadEmails.mockClear();
@@ -621,10 +621,15 @@ describe('undo puts the row back first, then the server follows', () => {
     expect(uids()).toEqual([7, 8]);
     expect(useMailStore.getState().totalEmails).toBe(2);
 
+    useMailStore.getState().setEmailsSelected([useMailStore.getState().emails.find(e => e.uid === 7)], true);
+    expect(useMailStore.getState().selectedEmailSnapshots.get(7).nativeIdentity.uidValidity).toBe(1);
     move.resolve({ success: true, moved: 1, newUids: [41] });
     await expect(undone).resolves.toBe(true);
 
     expect(uids()).toEqual([8, 41]);
+    expect(useMailStore.getState().emails.find(e => e.uid === 41)._nativeIdentity).toBeUndefined();
+    expect(useMailStore.getState().selectedEmailSnapshots.has(7)).toBe(false);
+    expect(useMailStore.getState().selectedEmailSnapshots.get(41)).toBeNull();
     // Filed under the new uid, the retired one pruned: a reload paints it.
     expect(mockSaveEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX',
       [expect.objectContaining({ uid: 41, subject: 'm7' })], null, { removedUids: [7] });

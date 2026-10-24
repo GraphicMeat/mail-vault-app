@@ -175,6 +175,23 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('RowQuickActions', () => {
+  it('captures the clicked row before an awaited confirmation or refresh', async () => {
+    setActions(action('deleteServer'));
+    const original = { accountId: ACCOUNT_A.id, mailbox: 'INBOX', uidValidity: 4, originHash: 'original-origin' };
+    const target = email({ uid: 7, _nativeIdentity: { ...original }, messageId: '<original@test>', _graphId: 'provider-original', _nativeExpectedIdentity: null });
+    const { actions, onRequestDelete } = renderActions({ emails: [target] });
+    fireEvent.click(screen.getByTestId('quick-action-deleteServer'));
+    target._nativeIdentity.uidValidity = 5;
+    target.messageId = '<new@test>';
+    await onRequestDelete.mock.calls[0][0]();
+    const snapshot = actions.deleteEmailFromServer.mock.calls[0][1].originalSnapshot;
+    expect(snapshot.nativeIdentity).toEqual(original);
+    expect(snapshot.messageId).toBe('<original@test>');
+    expect(snapshot.graphId).toBe('provider-original');
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toContain('ExpectedIdentity');
+  });
+
   it.each(['delete', 'deleteServer'])('%s waits for the parent confirmation, then uses explicit row location', async actionName => {
     setActions(action(actionName));
     const target = email({ uid: 7, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
@@ -188,7 +205,7 @@ describe('RowQuickActions', () => {
     await confirm();
 
     expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(7, {
-      accountId: ACCOUNT_B.id, mailboxOverride: 'Sent',
+      accountId: ACCOUNT_B.id, mailboxOverride: 'Sent', originalSnapshot: expect.objectContaining({ accountId: ACCOUNT_B.id, mailbox: 'Sent', uid: 7 }),
     });
   });
 
@@ -205,7 +222,7 @@ describe('RowQuickActions', () => {
     const [confirm] = onRequestDelete.mock.calls[0];
     await confirm();
 
-    expect(useMailStore.getState().setSelection).toHaveBeenCalledWith([7]);
+    expect(useMailStore.getState().setSelection).toHaveBeenCalledWith([7], [target]);
     expect(useMailStore.getState().purgeSelectedEverywhere).toHaveBeenCalledTimes(1);
   });
 
@@ -402,10 +419,10 @@ describe('RowQuickActions', () => {
     await onRequestDelete.mock.calls[0][0]();
 
     expect(actions.deleteEmailFromServer).toHaveBeenNthCalledWith(1, 20, {
-      skipRefresh: true, accountId: ACCOUNT_A.id, mailboxOverride: 'INBOX',
+      skipRefresh: true, accountId: ACCOUNT_A.id, mailboxOverride: 'INBOX', originalSnapshot: expect.objectContaining({ accountId: ACCOUNT_A.id, mailbox: 'INBOX', uid: 20 }),
     });
     expect(actions.deleteEmailFromServer).toHaveBeenNthCalledWith(2, 20, {
-      skipRefresh: true, accountId: ACCOUNT_B.id, mailboxOverride: 'Sent',
+      skipRefresh: true, accountId: ACCOUNT_B.id, mailboxOverride: 'Sent', originalSnapshot: expect.objectContaining({ accountId: ACCOUNT_B.id, mailbox: 'Sent', uid: 20 }),
     });
   });
 
@@ -657,7 +674,7 @@ describe('RowQuickActions — a row in a folder kept on this computer', () => {
     const [confirm, copy] = onRequestDelete.mock.calls[0];
     expect(copy).toMatchObject({ title: 'viewer.deleteEmail', description: 'viewer.localFolderDeleteToBin', confirmLabel: 'common.delete' });
     await confirm();
-    expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(9, { accountId: ACCOUNT_A.id, mailboxOverride: LOCAL });
+    expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(9, { accountId: ACCOUNT_A.id, mailboxOverride: LOCAL, originalSnapshot: expect.objectContaining({ accountId: ACCOUNT_A.id, mailbox: LOCAL, uid: 9 }) });
     expect(actions.removeLocalEmails).not.toHaveBeenCalled();
   });
 });

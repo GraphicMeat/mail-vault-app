@@ -67,30 +67,11 @@ pub(crate) async fn route(
                 }
                 let scope: Scope = serde_json::from_value(params["scope"].clone())
                     .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
-                if let Some(snapshot) = state
-                    .bulk
-                    .lock()
-                    .unwrap_or_else(|poison| poison.into_inner())
-                    .duplicate_start(operation_id, action, &scope)?
-                {
+                if let Some(snapshot) = crate::bulk_worker::duplicate_start(&state, operation_id, &attempt, action, &scope)? {
                     return Ok(snapshot);
                 }
                 let work = crate::bulk_worker::freeze(&state, action, scope)?;
-                let (snapshot, duplicate) = {
-                    let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-                    let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
-                    let duplicate = bulk.active_id() == Some(operation_id);
-                    let snapshot = bulk.claim_attempt(
-                        &state.app_dir,
-                        operation_id,
-                        &attempt,
-                        work.intent.clone(),
-                    )?;
-                    (
-                        snapshot,
-                        duplicate || bulk.active_id() != Some(operation_id),
-                    )
-                };
+                let (snapshot, duplicate) = crate::bulk_worker::prepare_claim(&state, operation_id, &attempt, work.intent.clone())?;
                 if !duplicate {
                     if let Err(error) =
                         crate::bulk_worker::checkpoint(&state, operation_id, &attempt, &work)
@@ -184,7 +165,7 @@ pub(crate) async fn route(
                         }
                     }
                     let status = bulk
-                        .owned_status()
+                        .admission_status()
                         .or_else(|| receipt.map(|_| bulk.cached_status()));
                     if let Some(status) = status {
                         let mut status = status?;

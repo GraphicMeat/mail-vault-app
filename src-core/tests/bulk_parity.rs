@@ -531,3 +531,45 @@ fn original_selection_hints_persist_without_publication_expectations() {
     let raw = op_journal::pending_operation_read(dir.path()).unwrap().unwrap();
     assert_eq!(raw["intent"]["scope"]["targetHints"], value["scope"]["targetHints"]);
 }
+
+
+#[test]
+fn prepared_original_claim_fences_before_and_during_durable_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    owner.begin_admission("new", "A").unwrap();
+    let prepared = owner.claim_seed("new", "A").unwrap().prepare(intent(json!([7]))).unwrap();
+    assert!(owner.cancel_token("new").is_err());
+    owner.fence_admission("new", "A").unwrap();
+    assert!(owner.validate_claim(&prepared).is_err());
+    assert!(op_journal::pending_operation_read(dir.path()).unwrap().is_none());
+
+    owner.begin_admission("new", "B").unwrap();
+    let prepared = owner.claim_seed("new", "B").unwrap().prepare(intent(json!([7]))).unwrap();
+    owner.validate_claim(&prepared).unwrap();
+    prepared.persist(dir.path()).unwrap();
+    owner.fence_admission("new", "B").unwrap();
+    assert!(owner.publish_claim(&prepared).is_err());
+    assert!(owner.active_id().is_none());
+    assert_eq!(owner.cached_status().unwrap()["pending"]["id"], "new");
+    assert!(Coordinator::load(dir.path()).active_id().is_none());
+}
+
+#[test]
+fn original_duplicate_comparison_uses_immutable_owner_across_checkpoint() {
+    use mailvault_core::bulk_worker::Workflow;
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    let original = intent(json!([7]));
+    owner.claim_attempt(dir.path(), "same", "owner", original.clone()).unwrap();
+    let duplicate = owner.duplicate_seed("same", "retry").unwrap().prepare(Action::Delete, original.scope()).unwrap().unwrap();
+    let work = Workflow::new(original.clone());
+    owner.checkpoint(dir.path(), "same", &work).unwrap();
+    assert!(owner.publish_duplicate(&duplicate).is_ok());
+    assert_eq!(owner.admission_receipt("same", "retry")["ownerAttemptId"], "owner");
+    assert!(owner.duplicate_seed("same", "changed").unwrap().prepare(Action::Archive, original.scope()).is_err());
+    let mut changed = serde_json::to_value(original.scope()).unwrap();
+    changed["targetHints"] = json!([{"accountId":"acc1","mailbox":"INBOX","uid":7,"nativeIdentity":null,"messageIdPresent":false}]);
+    let changed: Scope = serde_json::from_value(changed).unwrap();
+    assert!(owner.duplicate_seed("same", "changed-hint").unwrap().prepare(Action::Delete, &changed).is_err());
+}

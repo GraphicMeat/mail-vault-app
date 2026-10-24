@@ -290,6 +290,54 @@ pub(crate) fn reconcile_pending(state: &Arc<DaemonState>) -> Result<Value, Strin
     result
 }
 
+pub(crate) fn duplicate_start(
+    state: &Arc<DaemonState>, id: &str, attempt: &str,
+    action: mailvault_core::bulk::Action, scope: &mailvault_core::bulk::Scope,
+) -> Result<Option<Value>, String> {
+    let seed = state.bulk.lock().unwrap_or_else(|p| p.into_inner()).duplicate_seed(id, attempt)?;
+    let Some(prepared) = seed.prepare(action, scope)? else { return Ok(None) };
+    let result = state.bulk.lock().unwrap_or_else(|p| p.into_inner()).publish_duplicate(&prepared);
+    result.map(Some)
+}
+
+pub(crate) fn prepare_claim(
+    state: &Arc<DaemonState>, id: &str, attempt: &str, intent: FrozenIntent,
+) -> Result<(Value, bool), String> {
+    reconcile_pending(state)?;
+    if let Some(snapshot) = duplicate_start(state, id, attempt, intent.action(), intent.scope())? {
+        return Ok((snapshot, true));
+    }
+    let seed = state.bulk.lock().unwrap_or_else(|p| p.into_inner()).claim_seed(id, attempt)?;
+    let prepared = seed.prepare(intent)?;
+    let result = {
+        let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+        let validate = state.bulk.lock().unwrap_or_else(|p| p.into_inner()).validate_claim(&prepared);
+        match validate {
+            Err(error) => Err(error),
+            Ok(()) => {
+                match prepared.persist(&state.app_dir) {
+                    Err(error) => {
+                        state.bulk.lock().unwrap_or_else(|p| p.into_inner()).invalidate_pending();
+                        Err(error)
+                    }
+                    Ok(()) => state.bulk.lock().unwrap_or_else(|p| p.into_inner()).publish_claim(&prepared),
+                }
+            }
+        }
+    };
+    match result {
+        Ok(snapshot) => Ok((snapshot, false)),
+        Err(error) => {
+            // Another identical claim can win between the off-lock seeds.
+            // Compare its immutable actual owner off-lock; never launch twice.
+            match duplicate_start(state, id, attempt, prepared.intent().action(), prepared.intent().scope()) {
+                Ok(Some(snapshot)) => Ok((snapshot, true)),
+                _ => Err(error),
+            }
+        }
+    }
+}
+
 pub(crate) fn prepare_resume(
     state: &Arc<DaemonState>,
     id: &str,
@@ -358,7 +406,7 @@ impl Ports for MailPorts {
                 .await
                 .map_err(|e| service_error(&e.to_string()))?;
             let boxes = acct
-                .current()
+                .refresh()
                 .await
                 .map_err(|e| service_error(&e.to_string()))?;
             let mailbox_id = boxes
@@ -366,6 +414,9 @@ impl Ports for MailPorts {
                 .get(&g.mailbox)
                 .cloned()
                 .ok_or("errors.bulkIdentityUncertain")?;
+            let selected = self.selected.get(&(g.account_id.clone(), g.mailbox.clone())).ok_or("errors.bulkIdentityUncertain")?;
+            let original_mailbox = selected.jmap_mailbox_id.as_ref().filter(|id| !id.is_empty()).ok_or("errors.bulkIdentityUncertain")?;
+            if original_mailbox != &mailbox_id { return Err("errors.bulkIdentityChanged".into()); }
             let pairs = acct
                 .uid_to_id(&self.state, &g.account_id, &g.mailbox, &g.uids, false)
                 .await?;
@@ -389,6 +440,12 @@ impl Ports for MailPorts {
                 .selected
                 .get(&(g.account_id.clone(), g.mailbox.clone()))
                 .ok_or("errors.bulkIdentityUncertain")?;
+            let root = common::vault_root(&self.state)?;
+            let sidecar = mailvault_core::header_cache::sidecar_dir(&root, &g.account_id, &g.mailbox);
+            let current = mailvault_core::graph_ledger::load(&mailvault_core::graph_ledger::ledger_path(&sidecar, false))?;
+            if g.uids.iter().any(|uid| selected.graph_ids.get(uid).is_none() || selected.graph_ids.get(uid) != current.get(uid)) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
             return Ok((
                 Identity::Graph {
                     ids: selected.graph_ids.clone(),
@@ -1730,6 +1787,79 @@ mod tests {
         assert!(trap.accept().is_err());
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_original_claim_blocked_prepare_and_save_keep_controls_live() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        state.bulk.lock().unwrap().begin_admission("claim", "A").unwrap();
+        let seed = state.bulk.lock().unwrap().claim_seed("claim", "A").unwrap();
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let intent = FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[]);
+        let (release, paused) = std::sync::mpsc::channel();
+        let original = intent.clone();
+        let prepare = std::thread::spawn(move || { paused.recv().unwrap(); seed.prepare(original).unwrap() });
+        let controls = tokio::time::timeout(Duration::from_millis(200), async {
+            let status = handle_request_for_test(&state, "bulk.status", json!({})).await;
+            let cancel = handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"claim"})).await;
+            (status, cancel)
+        }).await;
+        release.send(()).unwrap();
+        let prepared = prepare.join().unwrap();
+        let (status, cancel) = controls.expect("off-lock original preparation cannot block controls");
+        assert!(status.error.is_none());
+        assert_eq!(cancel.error.unwrap().message, "errors.bulkStale");
+        drop(prepared);
+
+        let writer = mailvault_core::app_db::db::open(dir.path()).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let worker_state = state.clone();
+        let claim = std::thread::spawn(move || prepare_claim(&worker_state, "claim", "A", intent));
+        for _ in 0..200 {
+            if state.journal.try_lock().is_err() { break; }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        assert!(state.journal.try_lock().is_err(), "encoded claim save must actually be blocked");
+        let controls = tokio::time::timeout(Duration::from_millis(200), async {
+            let status = handle_request_for_test(&state, "bulk.status", json!({})).await;
+            let cancel = handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"claim"})).await;
+            let fence = handle_request_for_test(&state, "bulk.status", json!({"operationId":"claim","attemptId":"A","fenceUnstarted":true})).await;
+            (status, cancel, fence)
+        }).await;
+        writer.execute_batch("ROLLBACK").unwrap();
+        assert!(claim.join().unwrap().is_err());
+        let (status, cancel, fence) = controls.expect("initial encoded save must leave controls live");
+        assert!(status.error.is_none());
+        assert!(status.result.unwrap()["active"].is_null());
+        assert_eq!(cancel.error.unwrap().message, "errors.bulkStale");
+        assert!(fence.error.is_none());
+        assert!(state.bulk.lock().unwrap().active_id().is_none());
+        let raw = mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap();
+        assert_eq!(raw["id"], "claim");
+        assert_eq!(state.bulk.lock().unwrap().cached_status().unwrap()["pending"]["id"], "claim");
+    }
+
+    #[tokio::test]
+    async fn bulk_original_empty_claim_seed_cannot_overwrite_a_legacy_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        state.bulk.lock().unwrap().begin_admission("new", "A").unwrap();
+        let seed = state.bulk.lock().unwrap().claim_seed("new", "A").unwrap();
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let prepared = seed.prepare(FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[])).unwrap();
+        let legacy = json!({"id":"legacy","type":"delete","totalUids":[7],"completedUids":[],"status":"deleting"});
+        let reply = handle_request_for_test(&state, "save_pending_operation", json!({"operation":legacy})).await;
+        assert!(reply.error.is_none(), "{:?}", reply.error);
+        assert!(state.bulk.lock().unwrap().validate_claim(&prepared).is_err());
+        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap(), legacy);
+        reconcile_pending(&state).unwrap();
+        assert!(state.bulk.lock().unwrap().claim_seed("new", "A").is_err());
+        let clear = handle_request_for_test(&state, "clear_pending_operation", json!({})).await;
+        assert!(clear.error.is_none());
+        assert!(state.bulk.lock().unwrap().validate_claim(&prepared).is_err());
+        reconcile_pending(&state).unwrap();
+        assert!(state.bulk.lock().unwrap().claim_seed("new", "A").is_ok());
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn bulk_resume_io_never_blocks_status_or_inactive_cancel() {
         let dir = tempfile::tempdir().unwrap();
