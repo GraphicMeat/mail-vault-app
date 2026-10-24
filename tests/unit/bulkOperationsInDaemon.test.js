@@ -1,4 +1,4 @@
-// Ordinary worker ownership; frontend manager cutover remains a later slice.
+// The native worker owns every bulk action and its controls.
 import { it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
@@ -26,7 +26,8 @@ it('registers implemented bulk controls in daemon transport and router', () => {
   expect(readFileSync('src/demo/backend.js', 'utf8')).toContain('fenceUnstarted');
 
   const oldManager = readFileSync('src/services/BulkOperationManager.js', 'utf8');
-  expect(oldManager).toContain("send('archive_emails'");
+  expect(oldManager).toContain("'bulk.start'");
+  for (const command of ['archive_emails', 'bulkDeleteEmails', 'verifyArchivedEmails', 'backupCopyUids', 'savePendingOperation', 'clearPendingOperation']) expect(oldManager).not.toContain(command);
   expect(server).toContain('crate::handlers::bulk::route(');
   expect(modules).toContain('pub(crate) mod bulk;');
 });

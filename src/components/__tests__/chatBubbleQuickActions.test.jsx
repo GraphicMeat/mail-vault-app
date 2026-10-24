@@ -201,7 +201,7 @@ describe('chat bubble configurable actions', () => {
     let releasePurge;
     mocks.purgeEverywhere.mockImplementationOnce(() => new Promise(resolve => { releasePurge = resolve; }));
     await confirm();
-    await waitFor(() => expect(mocks.purgeEverywhere).toHaveBeenCalledWith([key]));
+    await waitFor(() => expect(mocks.purgeEverywhere).toHaveBeenCalledWith([key], { scope: expect.objectContaining({ keys: [key], targetHints: [expect.objectContaining({ uid: 76, accountId: ACCOUNT_B.id, mailbox: 'Sent' })] }) }));
     mailStore.setState({ selectedEmailIds: new Set(['new-selection']) });
     releasePurge({ deleted: 1, failed: 0 });
     await waitFor(() => expect(mailStore.getState().selectedEmailIds).toEqual(new Set(['new-selection'])));

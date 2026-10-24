@@ -63,6 +63,7 @@ import { boundedThreadText } from '../../utils/quickReplies';
 import { describeReaderPurge, describeReaderDelete } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../../services/workflows/messageMutations';
+import { captureBulkScope } from '../../services/bulkSelection.js';
 import { startThreadReadTimer, stopThreadReadTimer, forgetThreadReadTimer } from '../../services/workflows/threadReadTimer';
 import { ConnectedStateIcon, isBackedUp } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
@@ -776,8 +777,9 @@ export function ThreadView({ thread, onComposeReply, readOnly = false, emailThem
     const copy = describeReaderPurge({ server: !localOnly, vault: archived, backup }, 1);
     if (!copy) return;
     const key = selectionKey(email, state);
+    const purgeScope = captureBulkScope([key], state, [email]);
     setPendingDelete({
-      executor: () => purgeEverywhereReporting([key]),
+      executor: () => purgeEverywhereReporting([key], { scope: purgeScope }),
       copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
     });
   }, []);

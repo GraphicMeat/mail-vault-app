@@ -103,6 +103,7 @@ const mockRemoveSearchResults = vi.fn();
 vi.mock('../../../stores/searchStore', () => ({
   useSearchStore: {
     getState: () => ({ ...mockSearch, removeSearchResults: (...a) => mockRemoveSearchResults(...a) }),
+    setState: patch => Object.assign(mockSearch, typeof patch === 'function' ? patch(mockSearch) : patch),
   },
 }));
 
@@ -167,6 +168,10 @@ function resetPurgeMocks() {
   mockGetVaultUidSets.mockReset().mockResolvedValue({ saved: new Set(), archived: new Set() });
   mockGetLocalEmails.mockReset().mockResolvedValue([]);
   mockSearch.searchResults = [];
+  mockSearch.indexedSearchRows = {};
+  mockSearch.searchRowsOutsideIndex = [];
+  mockSearch.excludedSearchCopies = new Set();
+  mockSearch.searchGeneration = 0;
   mockSearch.performSearch.mockReset();
 }
 beforeEach(resetPurgeMocks);

@@ -24,7 +24,10 @@ import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
 import { formatPurgeEverywhereOutcome } from '../../utils/purgeOutcome';
-import { retainSelectionSnapshots } from '../headerIdentity.js';
+import { retainSelectionSnapshots, captureSelectionSnapshot } from '../headerIdentity.js';
+import { captureBulkScope } from '../bulkSelection.js';
+import { bulkOperationManager, originalTargetId, groupBulkTargets } from '../BulkOperationManager.js';
+import { useMailStore as nativePurgeStore } from '../../stores/mailStore';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
 import { t as tr, tErr } from '../../i18n/index.js';
@@ -2570,273 +2573,155 @@ export async function deleteSelectedFromServer() {
 // the server is data loss the user never asked for; leaving a stale local copy
 // is merely untidy, and the next reconcile fixes it.
 
-export async function purgeEverywhere(keys, { onProgress } = {}) {
-  const { useMailStore } = await import('../../stores/mailStore');
-  const get = () => useMailStore.getState();
+// Capture before even the store import/Undo wait can yield. Callers holding a
+// reader row pass its captured Scope; a selection uses its retained companion.
+export function purgeEverywhere(keys, opts = {}) {
+  const state = nativePurgeStore.getState();
+  const scope = opts.scope || captureBulkScope(keys, state, opts.rows);
+  return _nativePurge(scope, opts);
+}
 
-  if (_restoreInFlight || _restoredUids.size) keys = await _keysAfterUndo(get, keys);
-  const state = get();
-  const isUnified = spansMailboxes(state);
-  if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
-
-  // A purge destroys every copy — nothing here can be undone, and a stale
-  // "Moved 3 to Trash" left in the slot would offer to restore messages this
-  // call is about to erase.
+async function _nativePurge(originalScope, { onProgress } = {}) {
+  const store = nativePurgeStore;
+  const get = () => store.getState();
+  if (!originalScope.keys.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
+  let scope = originalScope;
+  if (_restoreInFlight || _restoredUids.size) {
+    await _restoreInFlight;
+    const keys = originalScope.keys.map(key => keyAfterUndo(get, key, originalScope.accountId, originalScope.mailbox));
+    // A new UID needs its own proven Undo companion. Never transplant the old
+    // generation/provider evidence or repair it from today's visible rows.
+    const unchanged = new Set(keys.filter((key, i) => key === originalScope.keys[i]));
+    const hints = originalScope.targetHints.filter(hint => unchanged.has(hint.uid)
+      || unchanged.has(`${hint.accountId}:${hint.mailbox}:${hint.uid}`));
+    for (let i = 0; i < keys.length; i++) if (keys[i] !== originalScope.keys[i]) {
+      const hint = get().selectedEmailSnapshots?.get(keys[i]);
+      if (hint) hints.push(hint);
+    }
+    scope = { ...originalScope, keys, targetHints: hints };
+  }
+  const { useSearchStore } = await import('../../stores/searchStore');
+  const searchBefore = useSearchStore.getState();
+  const searchRowsBefore = [...(searchBefore.searchResults || [])];
   get().clearUndo();
-
-  // Includes localEmails (unlike deleteSelectedFromServer's emailMap) because
-  // that's where a genuinely local-only row actually lives. localEmails goes
-  // FIRST: `new Map(...)` keeps the last entry on a uid collision, and a
-  // still-server-side archived row is a normal case in both `emails` and
-  // `localEmails` at once (the local archive read can land before the server
-  // window fills in). Provenance below already settles which *source* a uid
-  // has — it's looked up by (accountId, mailbox, uid), not read off whichever
-  // object wins this collision — but `_localStaged` is still read straight off
-  // the winning object. Emails/sentEmails must win the collision so a stale
-  // `_localStaged` duplicate sitting in `localEmails` can never masquerade as
-  // the server-backed row's verdict.
-  const allEmails = [...(await _searchRows()), ...state.localEmails, ...state.emails, ...state.sentEmails];
-  const emailMap = new Map(allEmails.map(e => [selectionKey(e, state), e]));
-
-  const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap));
-
-  // Local-only is a claim about provenance, so prove it from provenance.
-  // `source` on a store object is derived from `serverUids`, which is
-  // window-derived on three load paths and empty during a restore paint — so
-  // "absent from it" means "not seen yet", never "not on the server". Getting
-  // this wrong in the local-only direction skips the server delete and destroys
-  // both local copies of a message the server still has.
-  // `'local'` in the index means archived FROM a server. Only `local_sent` /
-  // `local_draft` were created here. Anything unproven gets a server delete
-  // attempt, which is harmless when the UID is already gone: the permanent path
-  // is STORE \Deleted + UID EXPUNGE and no-ops.
-  const LOCALLY_CREATED = new Set(['local_sent', 'local_draft']);
-
-  // Read provenance once per distinct (accountId, mailbox) pair in the target
-  // set — this runs over bulk selections of thousands of uids, not once each.
-  const groupKey = (accountId, mailbox) => JSON.stringify([accountId, mailbox]);
-  const distinctGroups = new Map();
-  for (const c of contexts) distinctGroups.set(groupKey(c.accountId, c.mailbox), { accountId: c.accountId, mailbox: c.mailbox });
-  const provenanceByGroup = new Map(
-    await Promise.all([...distinctGroups.entries()].map(async ([gk, { accountId, mailbox }]) =>
-      [gk, await db.getLocalIndexProvenance(accountId, mailbox)]
-    ))
-  );
-
-  const targets = contexts.map(({ uid, accountId, mailbox, account, emailObj, tombstone }) => {
-    // `_localStaged` is sufficient proof on its own — the compose optimistic
-    // entry has no index row yet.
-    const provenance = provenanceByGroup.get(groupKey(accountId, mailbox))?.get(uid);
-    const localOnly = emailObj?._localStaged === true || LOCALLY_CREATED.has(provenance);
-    // `row` rides along for Graph: it carries `_graphId`, the only id stamped
-    // from the same listing that assigned this uid its position.
-    return { uid, accountId, mailbox, account, localOnly, tombstone, row: emailObj };
-  // A vault-only folder's message is refused: its vault copy is the only one,
-  // and a purge removes it with no deleted-bin copy kept. Delete is its way out.
-  }).filter(t => (t.account || t.localOnly) && !isLocalMailbox(state.localFolders, t.accountId, t.mailbox));
-
-  // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
-  // below take seconds (now including a STATUS round trip) and the list must
-  // not sit there looking untouched. Must run before the UIDVALIDITY guard,
-  // not after: the guard is a network call and `state` here is a snapshot —
-  // running the guard first would widen the window in which a row the store
-  // gains mid-purge gets clobbered by the `emails: state.emails.filter(...)`
-  // write below.
-  // Live, not `state` — the provenance reads above are awaited, and a tick or
-  // a reader opened across them is not this purge's to drop.
-  _hideDeleted(useMailStore, targets, { keys });
+  const sameHint = (row, hint, state) => {
+    const at = resolveEmailLocation(row, state);
+    const actual = at && captureSelectionSnapshot(row, at.accountId, at.mailbox);
+    return actual && originalTargetId({ ...actual, localIdentity: null }) === originalTargetId({ ...hint, localIdentity: null });
+  };
+  const live = get();
+  const pool = resolvePool(live);
+  const rowsById = new Map();
+  for (const row of pool) {
+    const id = _rowId(row, live);
+    if (!rowsById.has(id)) rowsById.set(id, []);
+    rowsById.get(id).push(row);
+  }
+  const hintsById = new Map(scope.targetHints.map(hint => [_targetId(hint), hint]));
+  // A replacement under the same numeric key must not be optimistically hidden.
+  const targets = scope.targetHints.filter(hint => !(rowsById.get(_targetId(hint)) || []).some(row => !sameHint(row, hint, live))).map(hint => ({ ...hint, tombstone: _targetId(hint) }));
+  const originalHints = new Set(scope.targetHints.map(originalTargetId));
+  const consumedKeys = scope.keys.filter(key => {
+    const snapshot = live.selectedEmailSnapshots?.get(key);
+    return snapshot && originalHints.has(originalTargetId(snapshot));
+  });
+  const hidden = _hideDeleted(store, targets, { keys: consumedKeys });
   await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
-
-  // ── UIDVALIDITY guard ──
-  // Neither the vault nor the custody store carries a UIDVALIDITY stamp. After
-  // a server-side UID reissue (the change-server flow, or one the server
-  // initiates on its own), a uid this mailbox holds for a SERVER delete can
-  // now name an unrelated message: `t.uid` at the server-delete call below
-  // would be spent against whatever the server put there instead.
-  // headerMemo.js:131 and syncProbe.js:83 already refuse to trust a UID set
-  // across a reissue; this is the same refusal before a uid gets spent there.
-  //
-  // Only targets headed for a server delete are gated. A proven local-only
-  // target's purge touches local files under the uid it was archived/staged
-  // under — no server round trip, so no server UID space to have been
-  // reissued out from under it; gating it too would make deleting an
-  // offline-composed message a permanent failure for an operation that
-  // touches no server at all. Graph accounts are exempt outright: Graph
-  // deletes address messages by Graph id (resolveGraphMessageId), never by IMAP
-  // uid, so there is no UID space here to poison in the first place.
-  //
-  // One STATUS round trip per (accountId, mailbox) group, not per message.
-  const uvGroups = new Map();
-  for (const t of targets) {
-    if (t.localOnly) continue;
-    const gk = groupKey(t.accountId, t.mailbox);
-    if (!uvGroups.has(gk)) uvGroups.set(gk, { accountId: t.accountId, mailbox: t.mailbox, account: t.account, items: [] });
-    const g = uvGroups.get(gk);
-    g.items.push(t);
-    if (!g.account) g.account = t.account;
+  let operation;
+  let failure;
+  try {
+    operation = await bulkOperationManager.start({ type: 'delete_everywhere', scope,
+      onProgress: op => onProgress?.({ ...op, phase: op.currentPhase }) });
+  } catch (error) { failure = error; }
+  const outcomes = new Map((operation?.outcomes || []).map(outcome => [originalTargetId(outcome.hint), outcome.target]));
+  const restore = new Set();
+  const replaced = new Set();
+  for (const target of targets) {
+    const outcome = outcomes.get(originalTargetId(hintsById.get(_targetId(target))));
+    // A count, finished frame or empty Active is never row-level evidence.
+    if (!outcome || outcome.refused || outcome.skipped || !outcome.proof
+        || (outcome.proof.kind === 'server' && outcome.server !== 'complete')
+        || (outcome.proof.kind === 'local' && outcome.local !== 'complete')) restore.add(_targetId(target));
   }
-
-  const untrustedTargets = new Set();
-  let needsResync = 0;
-  await Promise.all([...uvGroups.values()].map(async (g) => {
-    if (isGraphAccount(g.account)) return; // no UID space to poison — trusted without a STATUS call
-    let trusted = false;
-    try {
-      const account = g.account || null;
-      const [meta, status] = await Promise.all([
-        db.getEmailHeadersMeta(g.accountId, g.mailbox),
-        account ? api.checkMailboxStatus(account, g.mailbox) : Promise.resolve(null),
-      ]);
-      const cachedUV = meta?.uidValidity;
-      const liveUV = status?.uidValidity;
-      trusted = cachedUV != null && liveUV != null && cachedUV === liveUV;
-    } catch (e) {
-      console.warn(`[purgeEverywhere] UIDVALIDITY check failed for ${g.accountId}/${g.mailbox}:`, e);
-    }
-    if (!trusted) {
-      needsResync += g.items.length;
-      for (const t of g.items) untrustedTargets.add(t);
-    }
-  }));
-
-  // ── Phase 1: server ──
-  onProgress?.({ phase: 'delete', total: targets.length, completed: 0 });
-  const purgeable = [];
-  let failed = 0;
-
-  for (const t of targets) {
-    if (untrustedTargets.has(t)) {
-      // UIDVALIDITY guard tripped for this uid's group: skip the server
-      // delete AND the vault/backup purge below — never spend an untrusted
-      // uid on any of the three. Lift the tombstone so the reconcile
-      // restores the row, same contract as an ordinary failed server delete.
-      failed++;
-      const ts = new Set(get().deleteTombstones);
-      ts.delete(t.tombstone);
-      useMailStore.setState({ deleteTombstones: ts });
-    } else if (t.localOnly) {
-      purgeable.push(t);
-    } else {
-      try {
-        const account = t.account;
-        if (isGraphAccount(account)) {
-          const graphId = await resolveGraphMessageId(t.accountId, t.mailbox, t.uid, {
-            row: t.row, account,
-          });
-          if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: t.uid }));
-          await api.graphDeleteMessage(account, graphId);
-        } else {
-          // Every copy, by request: none kept in the deleted-mail bin either.
-          // `permanent: true` — the default (null) moves an INBOX message to
-          // Trash, which leaves a server copy this purge claims to remove.
-          await api.deleteEmail(account, t.uid, t.mailbox, true, { bin: false });
-        }
-        purgeable.push(t);
-      } catch (e) {
-        console.error(`[purgeEverywhere] Server delete failed for ${t.uid}:`, e);
-        failed++;
-        // Lift the tombstone so the trailing reconcile restores this row, and
-        // leave its local copies alone — they are now the only copies but one.
-        const ts = new Set(get().deleteTombstones);
-        ts.delete(t.tombstone);
-        useMailStore.setState({ deleteTombstones: ts });
-      }
-    }
-    onProgress?.({ phase: 'delete', total: targets.length, completed: purgeable.length });
+  const hintsByGroup = new Map();
+  for (const hint of scope.targetHints) {
+    const key = JSON.stringify([hint.accountId, hint.mailbox]);
+    if (!hintsByGroup.has(key)) hintsByGroup.set(key, []);
+    hintsByGroup.get(key).push(hint);
   }
-
-  // ── Phases 2 and 3: vault, then backup — batched per (account, mailbox) ──
   const groups = new Map();
-  for (const t of purgeable) {
-    const gk = `${t.accountId}|${t.mailbox}`;
-    if (!groups.has(gk)) groups.set(gk, { accountId: t.accountId, mailbox: t.mailbox, account: t.account, uids: [] });
-    groups.get(gk).uids.push(t.uid);
-  }
-
-  let queuedBackup = 0;
-  for (const g of groups.values()) {
-    onProgress?.({ phase: 'vault', total: g.uids.length, completed: 0 });
-    try {
-      await api.maildirDeleteMany(g.accountId, g.mailbox, g.uids);
-    } catch (e) {
-      console.error('[purgeEverywhere] Vault purge failed:', e);
-    }
-
-    onProgress?.({ phase: 'backup', total: g.uids.length, completed: 0 });
-    try {
-      const email = g.account?.email || state.accounts.find(a => a.id === g.accountId)?.email;
-      if (email) {
-        const res = await api.backupPurgeUids(email, g.mailbox, g.uids);
-        queuedBackup += res?.queued || 0;
-      }
-    } catch (e) {
-      console.error('[purgeEverywhere] Backup purge failed:', e);
-    }
-  }
-
-  // savedEmailIds/archivedEmailIds/localEmails are single-mailbox-scoped store
-  // fields — refreshing more than one group would just have the last write
-  // clobber the rest, not "cover" every group. Refresh only the group that
-  // matches the currently active (account, mailbox); skip entirely if the
-  // active view wasn't touched by this purge.
-  const activeMailboxKey = state.activeMailbox === 'UNIFIED' ? 'INBOX' : state.activeMailbox;
-  const activeGroup = groups.get(`${state.activeAccountId}|${activeMailboxKey}`);
-  if (activeGroup) {
-    const [vault, localEmails] = await Promise.all([
-      db.getVaultUidSets(activeGroup.accountId, activeGroup.mailbox),
-      db.getLocalEmails(activeGroup.accountId, activeGroup.mailbox),
+  for (const group of groupBulkTargets(scope.keys, scope).groups) groups.set(JSON.stringify([group.accountId, group.mailbox]), group);
+  for (const hint of groups.values()) {
+    const [vault, localEmails, meta] = await Promise.all([
+      db.getVaultUidSets(hint.accountId, hint.mailbox).catch(() => null),
+      db.getLocalEmails(hint.accountId, hint.mailbox).catch(() => null),
+      db.getEmailHeadersMeta(hint.accountId, hint.mailbox).catch(() => null),
     ]);
-    // I-5: keep the store's current value on a failed read instead of
-    // adopting "nothing is in the vault".
-    setArchivedGroup(activeGroup.accountId, activeGroup.mailbox, vault?.archived ?? null);
-    // The purge and these reads yielded: publish only onto the view it began in.
-    const live = get();
-    if (live.activeAccountId === state.activeAccountId && live.activeMailbox === state.activeMailbox) {
-      useMailStore.setState({
-        savedEmailIds: vaultKeys(activeGroup.accountId, activeGroup.mailbox, vault?.saved) ?? live.savedEmailIds,
-        archivedEmailIds: vaultKeys(activeGroup.accountId, activeGroup.mailbox, vault?.archived) ?? live.archivedEmailIds,
-        localEmails: localEmails ?? live.localEmails,
-      });
+    const current = get();
+    setArchivedGroup(hint.accountId, hint.mailbox, vault?.archived ?? null);
+    if (current.activeAccountId === hint.accountId && current.activeMailbox === hint.mailbox) {
+      store.setState({ savedEmailIds: vaultKeys(hint.accountId, hint.mailbox, vault?.saved) ?? current.savedEmailIds,
+        archivedEmailIds: vaultKeys(hint.accountId, hint.mailbox, vault?.archived) ?? current.archivedEmailIds,
+        localEmails: localEmails ?? current.localEmails });
+    }
+    const native = meta?.nativeIdentity;
+    if (native) for (const original of hintsByGroup.get(JSON.stringify([hint.accountId, hint.mailbox])) || []) {
+      if (original.nativeIdentity && originalTargetId(native) !== originalTargetId(original.nativeIdentity)) {
+        restore.delete(_targetId(original));
+        replaced.add(_targetId(original));
+      }
+    }
+  }
+  const now = get();
+  const currentRows = new Map();
+  for (const row of resolvePool(now)) {
+    const id = _rowId(row, now);
+    if (!currentRows.has(id)) currentRows.set(id, []);
+    currentRows.get(id).push(row);
+  }
+  for (const hint of scope.targetHints) {
+    if ((currentRows.get(_targetId(hint)) || []).some(row => !sameHint(row, hint, now))) replaced.add(_targetId(hint));
+  }
+  const safe = hidden.removed.filter(item => {
+    const hint = hintsById.get(_targetId(item));
+    return hint && restore.has(_targetId(item)) && sameHint(item.row, hint, hidden.before)
+      && !(currentRows.get(_targetId(hint)) || []).some(row => !sameHint(row, hint, now));
+  });
+  _reinsertRestored(store, safe);
+  // Lift only this run's tombstones for unproved/refused outcomes, including
+  // offscreen rows. Restoring the row itself also checks its original identity.
+  const tombstones = new Set(get().deleteTombstones);
+  for (const target of targets) {
+    const outcome = outcomes.get(originalTargetId(hintsById.get(_targetId(target))));
+    if (!outcome || restore.has(_targetId(target)) || replaced.has(_targetId(target)) || outcome.refused || outcome.skipped || outcome.local === 'conflict') tombstones.delete(_targetId(target));
+  }
+  store.setState({ deleteTombstones: tombstones });
+  const search = useSearchStore.getState();
+  if (search.searchActive && search.searchGeneration === searchBefore.searchGeneration
+      && search.searchQuery === searchBefore.searchQuery && search.searchFilters === searchBefore.searchFilters) {
+    const back = searchRowsBefore.filter(row => {
+      const hint = hintsById.get(_rowId(row, hidden.before));
+      return hint && restore.has(_targetId(hint)) && !replaced.has(_targetId(hint))
+        && sameHint(row, hint, hidden.before);
+    });
+    if (back.length) {
+      const { addFrameRows } = await import('../../stores/searchRows');
+      const current = useSearchStore.getState();
+      // The helper import yielded too: do not resurrect an earlier search.
+      if (current.searchGeneration === searchBefore.searchGeneration
+          && current.searchQuery === searchBefore.searchQuery && current.searchFilters === searchBefore.searchFilters) {
+        const excludedSearchCopies = new Set(current.excludedSearchCopies);
+        for (const row of back) excludedSearchCopies.delete(emailKey(row));
+        const keys = new Set(current.searchResults.map(emailKey));
+        useSearchStore.setState({ ...addFrameRows({ ...current, excludedSearchCopies }, back.filter(row => !keys.has(emailKey(row)))), excludedSearchCopies });
+      }
     }
   }
   get().updateSortedEmails();
-
-  // Prune the header sidecar for the rows just purged — same reason as in
-  // deleteSelectedFromServer: the optimistic update already stripped these uids
-  // from `state.emails`, so loadEmails()'s prior-vs-server diff never sees them
-  // as newly-gone and leaves the sidecar entry behind. The session tombstone
-  // then hides the row only until a reload, after which a message purged from
-  // the server, the vault and the backup mirror reappears from cache.
-  //
-  // Only the active mailbox's group, and rows are never written: the cache
-  // holds them already, and the list would serialise the whole mailbox for a
-  // prune. The count written is the view's, which is the active mailbox's alone.
-  // Pin the identity: `activeGroup.uids` belongs to the mailbox this purge ran
-  // against, while `s.emails` is whatever is on screen NOW — the purge spans
-  // seconds of server, vault and backup awaits, and the user can switch account
-  // or folder inside that window. Writing one with the other hands a different
-  // account's cache a foreign uid list, and a row vanishes from a mailbox
-  // nobody deleted from (uids collide freely across accounts — they are only
-  // unique per mailbox).
-  //
-  // When the view HAS moved, drop the count but still prune: a null total
-  // leaves the stored one alone, so nothing foreign lands in this mailbox's
-  // cache — while the uids that were genuinely purged still go away. "Skip and let it reconcile later" was
-  // the first fix and it does not hold: per the paragraph above, loadEmails()
-  // never sees these uids as newly-gone, so the sidecar keeps them forever.
-  if (!isUnified && activeGroup?.uids.length) {
-    const s = get();
-    const viewUnmoved = s.activeAccountId === activeGroup.accountId && s.activeMailbox === activeGroup.mailbox;
-    await db.saveEmailHeaders(
-      activeGroup.accountId, activeGroup.mailbox, [],
-      viewUnmoved ? s.totalEmails : null,
-      { removedUids: [...activeGroup.uids] },
-    );
-  }
-
-  if (!isUnified) get().loadEmails();
-
-  return { deleted: purgeable.length, failed, queuedBackup, needsResync };
+  // Refresh the view only if it still belongs to the frozen affected scopes.
+  if (groups.has(JSON.stringify([get().activeAccountId, get().activeMailbox]))) await get().loadEmails();
+  if (failure) throw failure;
+  return operation?.result || { deleted: 0, failed: scope.keys.length, queuedBackup: 0, needsResync: scope.keys.length };
 }
 
 

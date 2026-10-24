@@ -2168,10 +2168,29 @@ mod tests {
         let mut mailbox=mock_imap::state::Mailbox::new("INBOX").with_uid_validity(1);mailbox.add(mock_imap::Message::new(7,std::str::from_utf8(raw).unwrap()));
         let server=MockImap::start(Scenario::new().mailbox(mailbox));let cfg=purge_credentials(&state,&server);
         let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),raw).unwrap();
-        let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"no-mid","type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",None),"mirrorRoot":drive.path()})).await;
+        let capture_wire = std::env::var_os("MAILVAULT_BULK_WIRE_FIXTURE").is_some();
+        let mut wire_events = state.events.subscribe();
+        let request = json!({"operationId":"no-mid","type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",None),"mirrorRoot":drive.path()});
+        let reply=handle_request_for_test(&state,"bulk.start",request.clone()).await;
         assert!(reply.error.is_none());let pending=wait_drained(&state).await;
         assert_eq!(pending["result"],json!({"deleted":1,"failed":0,"queuedBackup":0,"needsResync":0}),"{pending}");
         assert!(!cur.join("7.eml").exists());assert!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().is_none());
+        if capture_wire {
+            let mut frames = Vec::new();
+            loop {
+                let line = tokio::time::timeout(Duration::from_secs(2), wire_events.recv()).await.unwrap().unwrap();
+                let frame: Value = serde_json::from_str(&line).unwrap();
+                if frame["params"]["name"] != "bulk-progress" { continue; }
+                let payload = frame["params"]["payload"].clone();
+                let finished = payload["finished"].as_bool() == Some(true);
+                frames.push(payload);
+                if finished { break; }
+            }
+            // Synthetic mock-provider identities/hashes only. No raw body,
+            // credential or native mirror path is part of the wire artifact.
+            let request = json!({"type":request["type"],"scope":request["scope"]});
+            println!("F_NATIVE_WIRE_JSON={}", json!({"request":request,"accepted":reply.result,"pending":pending,"events":frames}));
+        }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
     #[tokio::test(flavor="multi_thread")]

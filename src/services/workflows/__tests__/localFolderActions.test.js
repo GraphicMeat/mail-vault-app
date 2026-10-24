@@ -31,6 +31,7 @@ const m = vi.hoisted(() => ({
   deleteLocalEmail: vi.fn(),
   saveEmailHeaders: vi.fn(),
 }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 vi.mock('../../transport', async (importOriginal) => ({
   ...await importOriginal(),
   send: (...a) => m.send(...a),
@@ -157,7 +158,10 @@ const sends = (cmd) => m.send.mock.calls.filter(([c]) => c === cmd).map(([, args
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.send.mockResolvedValue(null);
+  m.send.mockImplementation(async (command, params) => command === 'bulk.start'
+    ? { id: params.operationId, attemptId: params.attemptId, type: params.type, status: 'complete',
+      result: { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 }, skippedLocal: params.scope.keys.length }
+    : null);
   m.queueOp.mockResolvedValue(undefined);
   m.clearOps.mockResolvedValue(undefined);
   m.deleteLocalEmail.mockResolvedValue(undefined);

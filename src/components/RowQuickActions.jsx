@@ -20,6 +20,7 @@ import { describeQuickAction } from '../utils/quickActionCatalog';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
 import { useT } from '../i18n/index.js';
+import { captureBulkScope } from '../services/bulkSelection.js';
 import { captureSelectionSnapshot } from '../services/headerIdentity.js';
 
 const EMPTY_ARRAY = Object.freeze([]);
@@ -123,9 +124,12 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       confirmLabel: t('rowMenu.unarchive'),
     });
   };
-  const requestEverywhereDelete = () => onRequestDelete?.(() => runScoped(purgeSelected, { destructive: true }), {
-    title: purge.title, description: purge.description, confirmLabel: purge.label,
-  });
+  const requestEverywhereDelete = () => {
+    const scope = captureBulkScope(keys, useMailStore.getState(), emails);
+    onRequestDelete?.(() => purgeSelected({ scope }), {
+      title: purge.title, description: purge.description, confirmLabel: purge.label,
+    });
+  };
   // Reply/replyAll open on the header alone right away — the wheel closes and
   // compose appears instantly — then hand in the resolved body once it lands.
   // `_fillFrom: newest` makes that second call fill-only (App.jsx's

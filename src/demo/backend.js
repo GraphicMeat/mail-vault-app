@@ -1063,11 +1063,11 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           // A browser has no durable native provider identity receipt.
           throw new Error('errors.bulkIdentityUncertain');
         }
-        if (!['archive', 'delete', 'archive_and_delete', 'archive_backup_delete'].includes(args.type)) throw new Error('errors.bulkUnsupported');
+        if (!['archive', 'delete', 'archive_and_delete', 'archive_backup_delete', 'delete_everywhere'].includes(args.type)) throw new Error('errors.bulkUnsupported');
         if (bulkPendingSnapshot()) throw new Error('errors.bulkPendingChoice');
         if (!args.scope || !Array.isArray(args.scope.keys)) throw new Error('errors.bulkPendingInvalid');
         const total = args.scope.keys.length;
-        activeBulk = { id: args.operationId, attemptId, type: args.type, status: 'starting', currentPhase: args.type === 'delete' ? 'delete' : 'archive', total, completed: 0, remaining: total, errors: 0, skipped: 0, skippedLocal: 0, simulated: true };
+        activeBulk = { id: args.operationId, attemptId, type: args.type, status: 'starting', currentPhase: ['delete', 'delete_everywhere'].includes(args.type) ? 'delete' : 'archive', total, completed: 0, remaining: total, errors: 0, skipped: 0, skippedLocal: 0, simulated: true };
         bulkAdmissions.set(attemptId, { operationId: args.operationId, attemptId, state: 'running', ownerAttemptId: attemptId });
         const reply = clone(activeBulk);
         // A lifecycle stub, with no real provider/filesystem authority. Report
@@ -1075,7 +1075,9 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         setTimeout(() => {
           if (!activeBulk || activeBulk.id !== args.operationId || activeBulk.attemptId !== attemptId) return;
           activeBulk.status = activeBulk.status === 'cancelling' ? 'cancelled' : 'complete';
-          activeBulk.result = { removed: 0, keptNotArchived: total, keptBackupUnreachable: 0, keptCopyMismatch: 0, keptDeleteFailed: 0 };
+          activeBulk.result = args.type === 'delete_everywhere'
+            ? { deleted: 0, failed: total, queuedBackup: 0, needsResync: total }
+            : { removed: 0, keptNotArchived: total, keptBackupUnreachable: 0, keptCopyMismatch: 0, keptDeleteFailed: 0 };
           const operation = clone(activeBulk); activeBulk = null;
           bulkAdmissions.set(attemptId, { operationId: args.operationId, attemptId, state: 'done', ownerAttemptId: attemptId });
           emit('bulk-progress', { operationId: args.operationId, attemptId, finished: true, operation });

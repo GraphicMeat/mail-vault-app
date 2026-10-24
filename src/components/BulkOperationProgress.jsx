@@ -45,7 +45,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   const isComplete = status === 'complete';
   const isCancelled = status === 'cancelled';
   const isError = status === 'error';
-  const isActive = ['archiving', 'verifying', 'backingUp', 'deleting'].includes(status);
+  const isActive = ['starting', 'archiving', 'verifying', 'backingUp', 'deleting', 'cancelling'].includes(status);
   const isDone = isComplete || isCancelled || isError;
 
   // Auto-dismiss after 4s on success
@@ -174,6 +174,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
                     <Minimize2 size={14} className="text-mail-text-muted" />
                   </Button>
                   <Button variant="ghost" size="xs" className="hover:bg-mail-border hover:text-mail-danger"
+                    disabled={status === 'starting' || status === 'cancelling'}
                     onClick={() => setShowCancelConfirm(true)}
                   >
                     {t('common.cancel')}

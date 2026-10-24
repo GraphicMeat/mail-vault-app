@@ -222,7 +222,7 @@ describe('RowQuickActions', () => {
     const [confirm] = onRequestDelete.mock.calls[0];
     await confirm();
 
-    expect(useMailStore.getState().setSelection).toHaveBeenCalledWith([7], [target]);
+    expect(useMailStore.getState().purgeSelectedEverywhere).toHaveBeenCalledWith({ scope: expect.objectContaining({ keys: [7], targetHints: [expect.objectContaining({ uid: 7, accountId: ACCOUNT_A.id, mailbox: 'INBOX' })] }) });
     expect(useMailStore.getState().purgeSelectedEverywhere).toHaveBeenCalledTimes(1);
   });
 

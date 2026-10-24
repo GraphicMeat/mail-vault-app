@@ -88,7 +88,6 @@ import { currentQuickActionScopeSnapshot, watchQuickActionScope } from './hooks/
 import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
-import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
 import { resolveErrorToastProps } from './utils/errorToast';
 import { resolveEscapeAction, resolveContactsEscape } from './utils/escapeAction';
@@ -1264,13 +1263,11 @@ function App() {
 
           // Check for pending bulk operations
           try {
-            const pending = await bulkApi.readPendingOperation();
-            if (pending && pending.status !== 'complete') {
-              const remainingCount = (pending.totalUids || []).length - (pending.completedUids || []).length;
-              if (remainingCount > 0) {
-                setPendingOperation(pending);
-              }
-            }
+            const status = await bulkOperationManager.status();
+            if (status.active) void bulkOperationManager.attach(status.active, () => {}).catch(error => {
+              useMailStore.setState({ error: tErr(error) });
+            });
+            if (status.pending) setPendingOperation(status.pending);
           } catch (e) {
             console.warn('[QuickLoad] Failed to check pending operations:', e);
           }
@@ -1813,16 +1810,16 @@ function App() {
       {pendingOperation && (
         <div className="fixed top-4 right-4 z-50 bg-mail-surface border border-mail-strong rounded-xl p-4 max-w-sm">
           <p className="text-sm text-mail-text mb-3">
-            {t('app.unfinishedOperationRemaining', { type: pendingOperation.type.replace(/_/g, ' '), count: formatCount((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length), mailbox: decodeImapUtf7(pendingOperation.mailbox) })}
+            {t('app.unfinishedOperationRemaining', { type: pendingOperation.type.replace(/_/g, ' '), count: formatCount(pendingOperation.remaining || 0), mailbox: decodeImapUtf7(pendingOperation.mailbox || '') })}
           </p>
           <div className="flex gap-2">
             <button
               onClick={async () => {
-                setPendingOperation(null);
-                const accounts = useMailStore.getState().accounts;
-                const account = accounts.find(a => a.id === pendingOperation.accountId);
-                if (!account) return;
-                await bulkOperationManager.resume(pendingOperation, account, () => {}, { accounts, localFolders: useMailStore.getState().localFolders });
+                try {
+                  await bulkOperationManager.resume(pendingOperation, null, () => {});
+                  const status = await bulkOperationManager.status();
+                  setPendingOperation(status.pending || null);
+                } catch (error) { useMailStore.setState({ error: tErr(error) }); }
               }}
               className="px-3 py-1.5 text-sm font-medium bg-mail-accent-fill text-white rounded-lg
                         hover:bg-mail-accent/90 transition-colors"
@@ -1831,8 +1828,10 @@ function App() {
             </button>
             <button
               onClick={async () => {
-                setPendingOperation(null);
-                await bulkApi.clearPendingOperation();
+                try {
+                  await bulkOperationManager.discard(pendingOperation.id);
+                  setPendingOperation(null);
+                } catch (error) { useMailStore.setState({ error: tErr(error) }); }
               }}
               className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
             >

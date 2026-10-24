@@ -44,6 +44,7 @@ import { activateEmailLink, openExternalUrl } from '../../utils/emailLinkActivat
 import { isOutgoingMailboxName } from '../../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../../services/workflows/messageMutations';
+import { captureBulkScope } from '../../services/bulkSelection.js';
 
 // Full-screen modal for viewing complete email with HTML rendering
 export function FullViewEmailModal({ email: initialEmail, onClose }) {
@@ -370,7 +371,8 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
               const purge = describeReaderPurge({ server: !isLocalOnly, vault: isRowArchived(target, useMailStore.getState(), archivedEmailIds) || isLocalOnly, backup: isBackedUp }, 1);
               if (!purge) return;
               const key = selectionKey(target, useMailStore.getState());
-              setPendingDelete({ executor: () => purgeEverywhereReporting([key]), copy: { title: purge.title, description: purge.description, confirmLabel: purge.label } });
+              const purgeScope = captureBulkScope([key], useMailStore.getState(), [target]);
+              setPendingDelete({ executor: () => purgeEverywhereReporting([key], { scope: purgeScope }), copy: { title: purge.title, description: purge.description, confirmLabel: purge.label } });
             } : null}
             onExport={target => useExportStore.getState().openExport({ messages: [target] })}
             onToggleEmailTheme={() => setThemeOverride(isDark ? 'light' : 'dark')}

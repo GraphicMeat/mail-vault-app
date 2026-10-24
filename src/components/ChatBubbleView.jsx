@@ -57,6 +57,7 @@ import { describeReaderPurge, describeReaderDelete } from '../utils/custodyCopy'
 import { isOutgoingMailboxName } from '../utils/sentFolder';
 import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhereReporting } from '../services/workflows/messageMutations';
+import { captureBulkScope } from '../services/bulkSelection.js';
 import { startThreadReadTimer, cancelThreadReadTimers } from '../services/workflows/threadReadTimer';
 
 // The bubble's own document: transparent, tinted per side, no Dark Reader.
@@ -481,8 +482,9 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     }, 1);
     if (!copy) return;
     const key = selectionKey(scopedTarget, state);
+    const purgeScope = captureBulkScope([key], state, [scopedTarget]);
     setPendingConfirmation({
-      executor: () => purgeEverywhereReporting([key]),
+      executor: () => purgeEverywhereReporting([key], { scope: purgeScope }),
       copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
     });
   };

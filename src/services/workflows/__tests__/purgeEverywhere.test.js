@@ -1,594 +1,320 @@
-// Delete Everywhere spans three storage locations — server, vault Maildir and
-// external backup mirror — and the interesting behaviour is which of them a
-// given message actually lives in, plus what happens when the server delete
-// fails. Deleting a local copy of a message still sitting on the server is
-// data loss the user did not ask for; that case is the reason this file exists.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { serverUids } from '../../../stores/slices/serverUids';
+// Presentation replacement for decisions now covered by the native42-case oracle.
+import { it, expect, vi, beforeEach } from 'vitest';
+vi.mock('../../rowVerdicts', async (original) => ({
+  ...(await original()),
+  annotateRowAlerts: (rows) => rows,
+}));
+const native = vi.hoisted(() => ({ start: vi.fn() }));
+vi.mock('../../BulkOperationManager.js', async (original) => ({
+  ...(await original()),
+  bulkOperationManager: { start: (...a) => native.start(...a) },
+}));
 import {
-  ACCOUNT, prime, serverMsg, useMailStore, purgeEverywhere, purgeEverywhereReporting,
-  mockDeleteEmail, mockMaildirDeleteMany, mockBackupPurgeUids, mockCheckMailboxStatus,
-  mockGraphDeleteMessage, mockGetLocalIndexEntry, mockAppendLocalIndex,
-  mockGetLocalIndexProvenance, mockGetEmailHeadersMeta, mockSaveEmailHeaders,
-  mockIsGraphAccount, mockGetGraphMessageId, mockRemoveSearchResults,
+  ACCOUNT,
+  prime,
+  serverMsg,
+  useMailStore,
+  purgeEverywhere,
+  purgeEverywhereReporting,
+  mockDeleteEmail,
+  mockMaildirDeleteMany,
+  mockBackupPurgeUids,
+  mockSaveEmailHeaders,
+  mockRemoveSearchResults,
+  mockGetEmailHeadersMeta,
+  setDeleteUndo,
+  mockMoveEmails,
+  mockSearch,
 } from './purgeEverywhereHarness';
-
-describe('purgeEverywhere — storage matrix', () => {
-  it('server only: deletes from server, still sweeps local (idempotent no-op)', async () => {
-    prime({ emails: [serverMsg(1)] });
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(mockDeleteEmail.mock.calls[0][1]).toBe(1);
-    expect(mockDeleteEmail.mock.calls[0][2]).toBe('INBOX.Spam');
-    // Every copy, by request: the deleted-mail bin keeps none either.
-    expect(mockDeleteEmail.mock.calls[0][4]).toEqual({ bin: false });
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
-    expect(res.deleted).toBe(1);
-    expect(res.failed).toBe(0);
-  });
-
-  // api.deleteEmail's `permanent` default is "everything but INBOX": an INBOX
-  // delete is a move to Trash. A purge left it null, so Delete everywhere on an
-  // inbox message only filed the server copy in Trash while the vault and
-  // backup copies went — "does not delete the email".
-  it('inbox message: the server delete is permanent, never a move to Trash', async () => {
-    prime({ emails: [serverMsg(1)] });
-    useMailStore.setState({ activeMailbox: 'INBOX' });
-    useMailStore.getState().updateSortedEmails();
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(mockDeleteEmail.mock.calls[0][2]).toBe('INBOX');
-    expect(mockDeleteEmail.mock.calls[0][3]).toBe(true);
-    expect(res.deleted).toBe(1);
-  });
-
-  // The tombstone hiding a purged row is store state, so a reload wipes it. If
-  // the header sidecar still lists the uid, a message purged from the server,
-  // the vault AND the backup mirror repaints from cache as though nothing
-  // happened. loadEmails() cannot prune it — it diffs the emails it had against
-  // the server's, and the optimistic update already removed this uid from both.
-  // This is the mechanism behind the e2e "does not bring the rows back on
-  // reload" failure.
-  it('prunes purged uids from the header sidecar so a reload cannot resurrect them', async () => {
-    prime({ emails: [serverMsg(1), serverMsg(2)], archived: [1, 2] });
-
-    await purgeEverywhere([1, 2]);
-
-    const prune = mockSaveEmailHeaders.mock.calls.find(c => c[4]?.removedUids?.length);
-    expect(prune).toBeTruthy();
-    expect(prune[0]).toBe(ACCOUNT.id);
-    expect(prune[1]).toBe('INBOX.Spam');
-    expect([...prune[4].removedUids].sort()).toEqual([1, 2]);
-    // The prune and the view's count, never the rows.
-    expect(prune[2]).toEqual([]);
-    expect(prune[3]).toBe(useMailStore.getState().totalEmails);
-  });
-
-  it('does not prune a uid whose server delete failed', async () => {
-    mockDeleteEmail.mockRejectedValue(new Error('boom'));
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    await purgeEverywhere([1]);
-
-    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(1))).toBe(false);
-  });
-
-  // The server-only delete stamps the vault entry `serverDeleted: true` — the
-  // durable proof behind custody's gold claim. A purge must not: it destroys
-  // the vault copy in the same breath, so the stamp would leave an index entry
-  // claiming custody of bytes that are gone, and a row on screen with nothing
-  // behind it after the next reload.
-  it('writes no custody stamp — the vault copy is going too', async () => {
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    await purgeEverywhere([1]);
-
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
-    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
-  });
-
-  it('server + vault: purges the archived local copy', async () => {
-    prime({ emails: [serverMsg(1)], archived: [1] });
-    await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
-    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [1]);
-  });
-
-  it('all three: reports the queued backup count when the volume is away', async () => {
-    mockBackupPurgeUids.mockResolvedValue({ removed: 0, queued: 2 });
-    prime({ emails: [serverMsg(1), serverMsg(2)], archived: [1, 2] });
-
-    const res = await purgeEverywhere([1, 2]);
-
-    expect(res.queuedBackup).toBe(2);
-    expect(res.deleted).toBe(2);
-  });
-
-  it('local-only message: never calls the server', async () => {
-    // uid 9 is local-only because it was composed here, not because it's
-    // merely absent from `emails` — the index provenance entry is what
-    // proves that, and is what makes this local-only rather than unproven.
-    prime({
-      emails: [],
-      archived: [9],
-      localOnly: [serverMsg(9)],
-      provenance: new Map([[9, 'local_sent']]),
-    });
-    await purgeEverywhere([9]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [9]);
-    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [9]);
-  });
-
-  it('collision: a still-server-side row with a stale local-only duplicate still gets deleted from the server', async () => {
-    // Reproduces the cold-load race: an archived row that's still on the
-    // server can exist in BOTH `emails` and `localEmails` at once (the local
-    // archive read lands before the server window fills in). updateSortedEmails()
-    // only revisits a localEmails entry when its uid is absent from `emails`,
-    // so a localEmails duplicate stamped 'local-only' before the server uid
-    // arrived stays stamped that way for the rest of the session. On a uid
-    // collision the real, server-backed `emails` copy must win the lookup —
-    // not the stale `localEmails` duplicate.
-    prime({
-      emails: [serverMsg(1)],
-      archived: [1],
-      localOnly: [{ ...serverMsg(1), source: 'local-only' }],
-    });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(res.deleted).toBe(1);
-    expect(res.failed).toBe(0);
-  });
-
-  it('regression: an archived row still in `emails` is never misread as local-only just because the server uid set lags', async () => {
-    // Simulates the restore-descriptor paint (activateAccount.js:459) and the
-    // offline window: the server uid set can be empty or stale while archivedEmailIds
-    // is already populated. The row is still server-backed — it's in `emails`,
-    // which updateSortedEmails() always stamps `source: 'server'` — so it must
-    // go through the normal server-delete path. Treating an incomplete
-    // an unproven uid set as proof of absence would classify it as local-only instead:
-    // the server delete gets skipped while the vault/backup copies are
-    // destroyed anyway, the inverse of the rule this workflow exists to enforce.
-    prime({ emails: [serverMsg(1)], archived: [1] });
-    useMailStore.setState({ serverUids: serverUids(new Set(), { complete: false }) });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(res.deleted).toBe(1);
-    expect(res.failed).toBe(0);
-  });
-
-  it('a _localStaged duplicate sitting in localEmails never shadows a server-backed row in emails', async () => {
-    // Provenance already settles which SOURCE wins a uid, looked up by
-    // (accountId, mailbox, uid) rather than from whichever object survives
-    // the emailMap collision. What the localEmails-first ordering still
-    // guards is `_localStaged`, which is read straight off the winning
-    // object: if a stale duplicate carrying `_localStaged: true` ever sat in
-    // `localEmails` under the same uid as a genuine server-backed row in
-    // `emails`, the wrong ordering would let that duplicate's flag decide
-    // the verdict and skip the server delete outright.
-    prime({
-      emails: [serverMsg(1)],
-      archived: [1],
-      localOnly: [{ ...serverMsg(1), _localStaged: true }],
-    });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(res.deleted).toBe(1);
-  });
-
-  it('server delete fails: local and backup copies are left alone', async () => {
-    mockDeleteEmail.mockRejectedValue(new Error('NO [CANNOT] EXPUNGE failed'));
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
-    expect(mockBackupPurgeUids).not.toHaveBeenCalled();
-    expect(res.failed).toBe(1);
-    expect(res.deleted).toBe(0);
-  });
-
-  // A purge spans seconds of server, vault and backup awaits, and the user can
-  // switch account or folder inside that window. The uids belong to the mailbox
-  // the purge ran against; `state.emails` after the awaits belongs to whatever
-  // is on screen now. Writing one with the other hands another account's cache a
-  // foreign uid list — and uids are unique per mailbox, not globally, so a row
-  // vanishes from a mailbox nobody deleted from. Seen on the mac mini: a purge
-  // on one account made an unrelated row disappear from another account's
-  // Archive while the server still had it.
-  it('prunes the mailbox it purged, not the one on screen, when the user switched account mid-purge', async () => {
-    prime({ emails: [serverMsg(1)], archived: [1] });
-    const OTHER = '99999999-9999-4999-8999-999999999999';
-    const purgedAccount = useMailStore.getState().activeAccountId;
-    const purgedMailbox = useMailStore.getState().activeMailbox;
-    mockDeleteEmail.mockImplementation(async () => {
-      // The view moves while the server delete is in flight.
-      useMailStore.setState({ activeAccountId: OTHER, activeMailbox: 'Archive' });
-    });
-
-    await purgeEverywhere([1]);
-
-    const prune = mockSaveEmailHeaders.mock.calls.find(c => c[4]?.removedUids?.length);
-    // It must still happen: loadEmails() cannot reconcile this later, because
-    // the optimistic update already removed the uid from `emails`, so it never
-    // registers as newly-gone. Skipping here left the header cached forever and
-    // a reload brought a purged message back.
-    expect(prune).toBeTruthy();
-    expect(prune[0]).toBe(purgedAccount);
-    expect(prune[1]).toBe(purgedMailbox);
-    expect(prune[4].removedUids).toEqual([1]);
-    // …but with no payload from the view that moved: an empty emails array
-    // writes no headers into this mailbox, and a null total leaves the stored
-    // one untouched.
-    expect(prune[2]).toEqual([]);
-    expect(prune[3]).toBeNull();
-  });
-
-  it('mixed batch: only the uids whose server delete succeeded are purged locally', async () => {
-    mockDeleteEmail.mockImplementation((_a, uid) =>
-      uid === 3 ? Promise.reject(new Error('boom')) : Promise.resolve());
-    prime({ emails: [1, 2, 3, 4].map(serverMsg), archived: [1, 2, 3, 4] });
-
-    const res = await purgeEverywhere([1, 2, 3, 4]);
-
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1, 2, 4]);
-    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [1, 2, 4]);
-    expect(res.deleted).toBe(3);
-    expect(res.failed).toBe(1);
-  });
-
-  it('failed uid keeps no tombstone, so the reconcile can restore its row', async () => {
-    mockDeleteEmail.mockRejectedValue(new Error('boom'));
-    prime({ emails: [serverMsg(1)] });
-
-    await purgeEverywhere([1]);
-
-    const ts = useMailStore.getState().deleteTombstones;
-    expect([...ts].some(k => k.endsWith('|1'))).toBe(false);
-  });
-
-  // A purge destroys every copy. Leaving the last delete's "Moved 1 to Trash"
-  // in the undo slot would offer to restore messages this call just erased.
-  it('clears the undo slot — nothing a purge touched can come back', async () => {
-    prime({ emails: [serverMsg(1)] });
-    useMailStore.getState().setUndo({ labelKey: 'undo.deleted', labelParams: { count: 1 }, run: vi.fn() });
-
-    await purgeEverywhere([1]);
-
-    expect(useMailStore.getState().undo).toBeNull();
+import { captureBulkScope } from '../../bulkSelection.js';
+import { captureSelectionSnapshot } from '../../headerIdentity.js';
+const row = (uid) => ({
+  ...serverMsg(uid),
+  _nativeIdentity: {
+    accountId: ACCOUNT.id,
+    mailbox: 'INBOX.Spam',
+    uidValidity: 1,
+    originHash: 'A',
+  },
+});
+const refused = (hint) => ({
+  accountId: hint.accountId,
+  mailbox: hint.mailbox,
+  uid: hint.uid,
+  proof: null,
+  refused: true,
+  skipped: false,
+  server: 'pending',
+  local: 'pending',
+  mirror: 'pending',
+});
+function outcome(scope, fail = false) {
+  return {
+    status: 'complete',
+    result: {
+      deleted: fail ? 0 : scope.keys.length,
+      failed: fail ? scope.keys.length : 0,
+      queuedBackup: 0,
+      needsResync: 0,
+    },
+    outcomes: scope.targetHints.map((hint) => ({
+      hint,
+      target: fail
+        ? refused(hint)
+        : {
+            ...refused(hint),
+            refused: false,
+            proof: { kind: 'server' },
+            server: 'complete',
+            local: 'complete',
+          },
+    })),
+  };
+}
+beforeEach(() => {
+  native.start
+    .mockReset()
+    .mockImplementation(async ({ scope }) => outcome(scope));
+  prime({ emails: [row(1), row(2)] });
+  useMailStore.setState({
+    selectedEmailSnapshots: new Map(),
+    selectedEmailIds: new Set(),
+    error: null,
+    undo: null,
+    mailboxScope: null,
+    localFolders: {},
   });
 });
-
-describe('purgeEverywhere — positive local-only proof', () => {
-  it('archived row absent from the server uid set still gets a server delete attempt', async () => {
-    // The exact shape of the third data-loss route: a locally archived message
-    // that IS on the server, sitting outside the loaded window, so nothing in
-    // the store knows the server has it. Index provenance says 'local' —
-    // archived FROM the server — so the server delete must be attempted.
-    prime({
-      emails: [],
-      archived: [1],
-      localOnly: [{ ...serverMsg(1), source: 'local-only' }],
-      serverUidList: [],
-      provenance: new Map([[1, 'local']]),
-    });
-
-    await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
+it('starts once with original hints and leaves all mail decisions native', async () => {
+  const result = await purgeEverywhere([1]);
+  expect(result.deleted).toBe(1);
+  expect(native.start).toHaveBeenCalledTimes(1);
+  expect(native.start.mock.calls[0][0].scope.targetHints[0]).toMatchObject({
+    uid: 1,
+    messageId: 'm1@mock',
+    nativeIdentity: { originHash: 'A' },
   });
-
-  it('a composed-here message is proven local-only and never hits the server', async () => {
-    prime({
-      emails: [],
-      archived: [9],
-      localOnly: [{ ...serverMsg(9), source: 'local-only' }],
-      serverUidList: [],
-      provenance: new Map([[9, 'local_sent']]),
-    });
-
-    await purgeEverywhere([9]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [9]);
-  });
-
-  it('a staged draft is proven local-only', async () => {
-    prime({
-      emails: [],
-      archived: [7],
-      localOnly: [{ ...serverMsg(7), source: 'local-only' }],
-      serverUidList: [],
-      provenance: new Map([[7, 'local_draft']]),
-    });
-
-    await purgeEverywhere([7]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-  });
-
-  it('no index entry at all means unproven, so the server is tried first', async () => {
-    prime({
-      emails: [],
-      archived: [3],
-      localOnly: [{ ...serverMsg(3), source: 'local-only' }],
-      serverUidList: [],
-      provenance: new Map(),
-    });
-
-    await purgeEverywhere([3]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-  });
-
-  it('_localStaged still proves local-only without an index entry', async () => {
-    // The compose optimistic entry lives in sentEmails with a pseudo-uid and
-    // has no index row yet.
-    prime({
-      emails: [],
-      sent: [{ ...serverMsg(1700000000), _localStaged: true }],
-      provenance: new Map(),
-    });
-
-    await purgeEverywhere([1700000000]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-  });
+  expect(mockDeleteEmail).not.toHaveBeenCalled();
+  expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
+  expect(mockBackupPurgeUids).not.toHaveBeenCalled();
+  expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
 });
-
-describe('purgeEverywhere — UIDVALIDITY guard', () => {
-  it('matching uidValidity behaves as today', async () => {
-    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 42 });
-    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 42 });
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
-    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [1]);
-    expect(res.deleted).toBe(1);
-    expect(res.failed).toBe(0);
-    expect(res.needsResync).toBe(0);
-  });
-
-  it('mismatched uidValidity skips the server, vault and backup deletes and reports the uids', async () => {
-    // A server-side UID reissue (change-server flow, or the server's own) means
-    // the vault uid for this mailbox may now name an unrelated message. Neither
-    // the vault nor local-index.json carries a UIDVALIDITY stamp, so this is
-    // the only place that can catch it before a uid gets spent on a delete.
-    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1 });
-    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 2 });
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
-    expect(mockBackupPurgeUids).not.toHaveBeenCalled();
-    expect(res.deleted).toBe(0);
-    expect(res.failed).toBe(1);
-    expect(res.needsResync).toBe(1);
-
-    // Reconcile must be able to restore the row — same contract as an
-    // ordinary failed server delete.
-    const ts = useMailStore.getState().deleteTombstones;
-    expect([...ts].some(k => k.endsWith('|1'))).toBe(false);
-  });
-
-  it('unknown/null uidValidity on either side is treated as a mismatch', async () => {
-    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: null });
-    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 5 });
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(res.failed).toBe(1);
-    expect(res.needsResync).toBe(1);
-  });
-
-  it('a proven local-only message purges regardless of the mailbox UIDVALIDITY verdict', async () => {
-    // The guard only gates uids headed for a SERVER delete. A proven
-    // local-only message's purge touches local files under the uid it was
-    // archived/staged under, with no server round trip — a server-side UID
-    // reissue renumbers nothing on disk. Gating this too would turn deleting
-    // an offline-composed message into a permanent failure for an operation
-    // that never touches the server. No target here is headed for a server
-    // delete, so the group is never even formed — no STATUS call happens.
-    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1 });
-    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 2 });
-    prime({
-      emails: [],
-      archived: [9],
-      localOnly: [{ ...serverMsg(9), source: 'local-only' }],
-      serverUidList: [],
-      provenance: new Map([[9, 'local_sent']]),
-    });
-
-    const res = await purgeEverywhere([9]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockCheckMailboxStatus).not.toHaveBeenCalled();
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [9]);
-    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [9]);
-    expect(res.deleted).toBe(1);
-    expect(res.failed).toBe(0);
-    expect(res.needsResync).toBe(0);
-  });
-
-  it('checkMailboxStatus rejecting (offline, unsupported) is treated as a mismatch, not thrown', async () => {
-    // Pins the fail-closed contract against a future refactor that moves the
-    // uidValidity comparison out of the try — a rejected STATUS call must
-    // hold the uid back exactly like an explicit mismatch, never propagate.
-    mockCheckMailboxStatus.mockRejectedValue(new Error('offline'));
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(res.failed).toBe(1);
-    expect(res.needsResync).toBe(1);
-  });
-
-  it('Graph account: purges normally, no STATUS call — Graph ids carry no UID space to poison', async () => {
-    mockIsGraphAccount.mockReturnValue(true);
-    mockGetGraphMessageId.mockReturnValue('graph-msg-1');
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(1);
-    expect(mockCheckMailboxStatus).not.toHaveBeenCalled();
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
-    expect(res.deleted).toBe(1);
-    expect(res.failed).toBe(0);
-    expect(res.needsResync).toBe(0);
-  });
-
-  // A Graph uid is the message's position in the folder listing, so the
-  // persisted uid → Graph id map names the right message only while the folder
-  // has not changed since it was written. The row carries `_graphId` stamped
-  // from the same listing that gave it its position, so it cannot disagree
-  // with its own header — Delete Everywhere must spend that one.
-  it('Graph account: targets the id on the row over the one in the stale map', async () => {
-    mockIsGraphAccount.mockReturnValue(true);
-    mockGetGraphMessageId.mockReturnValue('id-from-stale-map');
-    prime({ emails: [{ ...serverMsg(1), _graphId: 'id-on-the-row' }] });
-
-    await purgeEverywhere([1]);
-
-    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(1);
-    expect(mockGraphDeleteMessage.mock.calls[0][1]).toBe('id-on-the-row');
-  });
-
-  it('Graph account: an unresolvable id fails the purge instead of purging the local copies', async () => {
-    mockIsGraphAccount.mockReturnValue(true);
-    mockGetGraphMessageId.mockReturnValue(null);
-    prime({ emails: [serverMsg(1)], archived: [1] });
-
-    const res = await purgeEverywhere([1]);
-
-    expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
-    // Server copy survived, so the vault and backup copies must survive too.
-    expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
-    expect(mockBackupPurgeUids).not.toHaveBeenCalled();
-    expect(res.deleted).toBe(0);
-    expect(res.failed).toBe(1);
-  });
+it('restores the exact refused optimistic row and lifts its tombstone', async () => {
+  native.start.mockImplementation(async ({ scope }) => outcome(scope, true));
+  await purgeEverywhere([1]);
+  expect(
+    useMailStore
+      .getState()
+      .emails.map((e) => e.uid)
+      .sort()
+  ).toEqual([1, 2]);
+  expect(useMailStore.getState().deleteTombstones.size).toBe(0);
 });
-
-describe('purgeEverywhere and the rest of the app', () => {
-  it('takes the purged rows out of the open search results', async () => {
-    prime({ emails: [serverMsg(1), serverMsg(2)] });
-
-    await purgeEverywhere([1]);
-
-    expect(mockRemoveSearchResults.mock.calls.flat(2)).toEqual([`${ACCOUNT.id}|INBOX.Spam|1`]);
+it('refreshes and restores conservatively when A outcomes were replaced by B', async () => {
+  native.start.mockResolvedValue({
+    status: 'complete',
+    result: { deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 },
+    outcomes: [],
   });
-
-  it('keeps a tick the user made while the purge ran', async () => {
-    prime({ emails: [serverMsg(1), serverMsg(2)] });
-    useMailStore.setState({ selectedEmailIds: new Set([1]) });
-    // The provenance read is the purge's own await before the optimistic paint.
-    mockGetLocalIndexProvenance.mockImplementationOnce(async () => {
-      useMailStore.setState(s => ({ selectedEmailIds: new Set([...s.selectedEmailIds, 2]) }));
-      return new Map();
-    });
-
-    await purgeEverywhere([1]);
-
-    expect([...useMailStore.getState().selectedEmailIds]).toEqual([2]);
-  });
+  await purgeEverywhere([1]);
+  expect(useMailStore.getState().emails.some((e) => e.uid === 1)).toBe(true);
+  expect(useMailStore.getState().loadEmails).toHaveBeenCalled();
 });
-
-// The purge paints through the same helper as every delete: the message it
-// takes off the list leaves the reader too, and the count drops by the rows
-// it actually took.
-describe('purgeEverywhere — the view on screen', () => {
-  it('closes the reader showing a purged message and counts only the rows it removed', async () => {
-    prime({ emails: [serverMsg(1), serverMsg(2)] });
+it('does not restore original A over a new original identity under the same key', async () => {
+  native.start.mockImplementation(async ({ scope }) => {
     useMailStore.setState({
-      selectedEmailId: 1, selectedEmail: serverMsg(1), selectedEmailSource: 'server',
-      selectedThread: { threadId: 'm1@mock', emails: [serverMsg(1)], lastEmail: serverMsg(1), messageCount: 1 },
+      emails: [
+        {
+          ...row(1),
+          messageId: 'B',
+          _nativeIdentity: { ...row(1)._nativeIdentity, originHash: 'B' },
+        },
+      ],
     });
-
-    // 9 names no row on screen.
-    await purgeEverywhere([1, 9]);
-
-    const s = useMailStore.getState();
-    expect(s.selectedEmailId).toBeNull();
-    expect(s.selectedThread).toBeNull();
-    expect(s.totalEmails).toBe(1);
+    return outcome(scope, true);
   });
+  await purgeEverywhere([1]);
+  expect(useMailStore.getState().emails.map((e) => e.messageId)).toEqual(['B']);
+  expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+});
+it('keeps a fresh tick made during the awaited operation', async () => {
+  native.start.mockImplementation(async ({ scope }) => {
+    useMailStore.getState().toggleEmailSelection(2);
+    return outcome(scope);
+  });
+  await purgeEverywhere([1]);
+  expect([...useMailStore.getState().selectedEmailIds]).toEqual([2]);
+});
+it('preserves offscreen original companions without borrowing a later cache row', async () => {
+  const hint = captureSelectionSnapshot(row(1), ACCOUNT.id, 'INBOX.Spam');
+  useMailStore.setState({
+    emails: [],
+    selectedEmailIds: new Set([1]),
+    selectedEmailSnapshots: new Map([[1, hint]]),
+  });
+  await purgeEverywhere([1]);
+  expect(native.start.mock.calls[0][0].scope.targetHints).toEqual([hint]);
+});
+it('freezes clicked proof before any Undo or async preparation', async () => {
+  const scope = captureBulkScope([1], useMailStore.getState(), [row(1)]);
+  useMailStore.setState({ emails: [{ ...row(1), messageId: 'B' }] });
+  await purgeEverywhere([1], { scope });
+  expect(native.start.mock.calls[0][0].scope.targetHints[0].messageId).toBe(
+    'm1@mock'
+  );
+  expect(useMailStore.getState().emails[0].messageId).toBe('B');
+});
+it('does not overwrite another view or cache after a switched account', async () => {
+  native.start.mockImplementation(async ({ scope }) => {
+    useMailStore.setState({
+      activeAccountId: 'B',
+      activeMailbox: 'Sent',
+      emails: [{ uid: 1, messageId: 'B' }],
+      savedEmailIds: new Set([9]),
+      totalEmails: 1,
+    });
+    return outcome(scope, true);
+  });
+  await purgeEverywhere([1]);
+  expect(useMailStore.getState().emails).toMatchObject([
+    { uid: 1, messageId: 'B' },
+  ]);
+  expect([...useMailStore.getState().savedEmailIds]).toEqual([9]);
+  expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
+});
+it('closes the matching reader and prunes exact search scopes', async () => {
+  useMailStore.setState({
+    selectedEmail: row(1),
+    selectedEmailId: 1,
+    selectedThread: null,
+  });
+  await purgeEverywhere([1]);
+  expect(useMailStore.getState().selectedEmailId).not.toBe(1);
+  expect(mockRemoveSearchResults).toHaveBeenCalledWith([
+    `${ACCOUNT.id}|INBOX.Spam|1`,
+  ]);
+});
+it('clears Undo and reports four partial counters as warning, clean success silently', async () => {
+  useMailStore.setState({ undo: { canUndo: true } });
+  await purgeEverywhereReporting([1]);
+  expect(useMailStore.getState().undo).toBeNull();
+  expect(useMailStore.getState().error).toBeNull();
+  native.start.mockImplementation(async ({ scope }) => ({
+    ...outcome(scope, true),
+    result: { deleted: 1, failed: 1, queuedBackup: 2, needsResync: 3 },
+  }));
+  const result = await purgeEverywhereReporting([2]);
+  expect(result).toEqual({
+    deleted: 1,
+    failed: 1,
+    queuedBackup: 2,
+    needsResync: 3,
+  });
+  expect(useMailStore.getState().errorType).toBe('warning');
+  expect(useMailStore.getState().errorTypeFor).toBe(
+    useMailStore.getState().error
+  );
+});
+it('retains Sent and unified same-UID original identities separately', async () => {
+  const inbox = {
+    ...row(1),
+    _accountId: ACCOUNT.id,
+    _mailbox: 'INBOX',
+    _nativeIdentity: { ...row(1)._nativeIdentity, mailbox: 'INBOX' },
+  };
+  const sent = {
+    ...row(1),
+    _accountId: ACCOUNT.id,
+    _mailbox: 'Sent',
+    _fromSentFolder: true,
+    _nativeIdentity: { ...row(1)._nativeIdentity, mailbox: 'Sent' },
+  };
+  useMailStore.setState({
+    activeMailbox: 'UNIFIED',
+    emails: [inbox],
+    sentEmails: [sent],
+  });
+  await purgeEverywhere([`${ACCOUNT.id}:INBOX:1`, `${ACCOUNT.id}:Sent:1`], {
+    rows: [inbox, sent],
+  });
+  expect(
+    native.start.mock.calls[0][0].scope.targetHints.map((h) => h.mailbox)
+  ).toEqual(['INBOX', 'Sent']);
+  expect(native.start).toHaveBeenCalledTimes(1);
+});
+it('keeps an unproved selected target unresolved instead of sampling a visible replacement', async () => {
+  useMailStore.setState({
+    selectedEmailIds: new Set([1]),
+    selectedEmailSnapshots: new Map([[1, null]]),
+  });
+  await purgeEverywhere([1]);
+  expect(native.start.mock.calls[0][0].scope.targetHints).toEqual([]);
+  expect(useMailStore.getState().emails.some((e) => e.uid === 1)).toBe(true);
 });
 
-
-// The reader, the row menu and the selection bar have no list toast of their own:
-// a purge that deleted nothing there used to look like a click that did nothing.
-describe('purgeEverywhereReporting — outcome reaches the user', () => {
-  beforeEach(() => useMailStore.setState({ error: null, errorType: undefined, errorTypeFor: undefined }));
-
-  it('a UIDVALIDITY hold-back raises a warning toast naming it', async () => {
-    prime({ emails: [serverMsg(1)] });
-    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 2 });
-    const res = await purgeEverywhereReporting([1]);
-
-    expect(res.needsResync).toBe(1);
-    const { error, errorType, errorTypeFor } = useMailStore.getState();
-    expect(error).toBeTruthy();
-    expect(errorType).toBe('warning');
-    expect(errorTypeFor).toBe(error);
+it('waits for Undo rekey and refuses to transplant original proof to the new UID', async () => {
+  prime({ emails: [] });
+  await setDeleteUndo([
+    {
+      account: ACCOUNT,
+      accountId: ACCOUNT.id,
+      mailbox: 'INBOX.Spam',
+      uid: 1,
+      trash: 'Trash',
+      trashUid: 71,
+      messageId: 'm1@mock',
+      row: row(1),
+      view: `${ACCOUNT.id}|INBOX.Spam||INBOX`,
+    },
+  ]);
+  let release;
+  mockMoveEmails.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      })
+  );
+  const undo = useMailStore.getState().runUndo();
+  for (let i = 0; i < 30; i++) await Promise.resolve();
+  const purge = purgeEverywhere([1], {
+    scope: captureBulkScope([1], useMailStore.getState(), [row(1)]),
   });
-
-  it('a server refusal raises a warning toast', async () => {
-    prime({ emails: [serverMsg(1)] });
-    mockDeleteEmail.mockRejectedValue(new Error('NO [UNAVAILABLE]'));
-    const res = await purgeEverywhereReporting([1]);
-
-    expect(res.failed).toBe(1);
-    expect(useMailStore.getState().error).toBeTruthy();
+  expect(native.start).not.toHaveBeenCalled();
+  release({ newUids: [171] });
+  await undo;
+  await purge;
+  expect(native.start.mock.calls[0][0].scope.keys).toEqual([171]);
+  expect(native.start.mock.calls[0][0].scope.targetHints).toEqual([]);
+});
+it('does not let a successful A tombstone hide a later B under the same tuple', async () => {
+  native.start.mockImplementation(async ({ scope }) => {
+    useMailStore.setState({
+      emails: [
+        {
+          ...row(1),
+          messageId: 'B',
+          _nativeIdentity: { ...row(1)._nativeIdentity, originHash: 'B' },
+        },
+      ],
+    });
+    return outcome(scope);
   });
-
-  it('a clean purge stays silent', async () => {
-    prime({ emails: [serverMsg(1)] });
-    const res = await purgeEverywhereReporting([1]);
-
-    expect(res.deleted).toBe(1);
-    expect(useMailStore.getState().error).toBeNull();
-  });
+  await purgeEverywhere([1]);
+  expect(useMailStore.getState().emails[0].messageId).toBe('B');
+  expect(useMailStore.getState().deleteTombstones.size).toBe(0);
 });
 
-// Characterization: these counters describe the legacy workflow even when local
-// IO fails. The native port must keep them after its stricter identity checks.
-describe('purgeEverywhere oracle contracts', () => {
-  it('attempts the mirror after a partial vault failure without changing counters', async () => {
-    prime({ emails: [serverMsg(1), serverMsg(2)] });
-    mockMaildirDeleteMany.mockRejectedValue(new Error('partial local IO'));
-    mockBackupPurgeUids.mockResolvedValue({ removed: 0, queued: 2 });
-    expect(await purgeEverywhere([1, 2])).toEqual({ deleted: 2, failed: 0, queuedBackup: 2, needsResync: 0 });
-    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [1, 2]);
-    expect(mockMaildirDeleteMany.mock.invocationCallOrder[0]).toBeLessThan(mockBackupPurgeUids.mock.invocationCallOrder[0]);
+it('restores a refused exact search row without reviving another search run', async () => {
+  const hit = { ...row(1), _accountId: ACCOUNT.id, _mailbox: 'INBOX.Spam' };
+  mockSearch.searchResults = [hit];
+  mockSearch.searchRowsOutsideIndex = [hit];
+  mockRemoveSearchResults.mockImplementation(() => {
+    mockSearch.searchResults = [];
+    mockSearch.searchRowsOutsideIndex = [];
+    mockSearch.excludedSearchCopies = new Set([`${ACCOUNT.id}|INBOX.Spam|1`]);
   });
-
-  it('characterizes unsafe UI staged trust for later native correction', async () => {
-    prime({ emails: [{ ...serverMsg(1), _localStaged: true }] });
-    expect(await purgeEverywhere([1])).toEqual({ deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 });
-    expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockCheckMailboxStatus).not.toHaveBeenCalled();
-    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
-  });
+  native.start.mockImplementation(async ({ scope }) => outcome(scope, true));
+  await purgeEverywhere([1]);
+  expect(mockSearch.searchResults.map((row) => row.uid)).toEqual([1]);
+  expect(mockSearch.excludedSearchCopies.size).toBe(0);
 });

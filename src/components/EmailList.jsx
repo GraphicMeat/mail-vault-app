@@ -60,6 +60,8 @@ import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
 import { bulkOperationManager } from '../services/BulkOperationManager';
+import { captureBulkScope } from '../services/bulkSelection.js';
+import { purgeEverywhere } from '../services/workflows/messageMutations';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow, listRowHeight } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
@@ -362,6 +364,7 @@ function EmailListComponent({ stacked = false }) {
   const bulkSession = useMailStore(s => s.bulkSession);
   const endBulkSession = useMailStore(s => s.endBulkSession);
   const [bulkOpProgress, setBulkOpProgress] = useState(null);
+  useEffect(() => bulkOperationManager.subscribe(setBulkOpProgress), []);
 
   // A bulk session is bound to the (account, mailbox, viewMode) it was opened
   // against. The modal never unmounts on minimize, so a session for Spam
@@ -1186,7 +1189,9 @@ function EmailListComponent({ stacked = false }) {
   }, [pullDistance]);
 
   const handleBulkConfirm = async ({ action, uids }) => {
-    const { activeAccountId, accounts, activeMailbox } = useMailStore.getState();
+    const selectionState = useMailStore.getState();
+    const scope = captureBulkScope(uids, selectionState);
+    const { activeAccountId, accounts, activeMailbox } = selectionState;
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
 
@@ -1211,17 +1216,9 @@ function EmailListComponent({ stacked = false }) {
     try {
       // The selection's keys can name any account and folder; a bare uid
       // names the open folder's message only where the view is one folder.
-      await bulkOperationManager.start({
-        type: action,
-        accountId: activeAccountId,
-        account,
-        accounts,
-        localFolders: useMailStore.getState().localFolders,
-        mailbox: activeMailbox,
-        spans: spansMailboxes(useMailStore.getState()),
-        uids,
-        onProgress: (op) => setBulkOpProgress({ ...op }),
-      });
+      const onProgress = op => setBulkOpProgress({ ...op });
+      if (action === 'delete_everywhere') await purgeEverywhere(uids, { scope, onProgress });
+      else await bulkOperationManager.start({ type: action, scope, onProgress });
 
       if (bulkOperationManager.operation?.status === 'complete') {
         await useMailStore.getState().loadEmails();
@@ -1258,8 +1255,8 @@ function EmailListComponent({ stacked = false }) {
   };
 
   const handleBulkCancel = async () => {
-    await bulkOperationManager.cancel();
-    setBulkOpProgress(null);
+    try { await bulkOperationManager.cancel(); }
+    catch (error) { useMailStore.setState({ error: error.message || String(error) }); }
   };
 
   const mailboxTitle = activeView ? viewLabel(activeView, t)

@@ -265,7 +265,7 @@ describe('FullViewEmailModal actions', () => {
 
     fireEvent.click(view.getByTestId('reader-action-deleteEverywhere'));
     await confirmDelete();
-    await waitFor(() => expect(actionMutations.purgeEverywhere).toHaveBeenCalledWith(['acct-a:INBOX:83']));
+    await waitFor(() => expect(actionMutations.purgeEverywhere).toHaveBeenCalledWith(['acct-a:INBOX:83'], { scope: expect.objectContaining({ keys: ['acct-a:INBOX:83'], targetHints: [expect.objectContaining({ uid: 83, accountId: ACCOUNT_A.id, mailbox: 'INBOX' })] }) }));
     useMailStore.setState({ selectedEmailIds: new Set(['new-selection']) });
     releasePurge({ deleted: 1, failed: 0 });
 
@@ -300,7 +300,7 @@ describe('FullViewEmailModal actions', () => {
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getAllByRole('button').at(-1).textContent.trim()).toBe('Delete from server');
     await confirmDelete();
-    await waitFor(() => expect(actionMutations.purgeEverywhere).toHaveBeenCalledWith([key]));
+    await waitFor(() => expect(actionMutations.purgeEverywhere).toHaveBeenCalledWith([key], { scope: expect.objectContaining({ keys: [key], targetHints: [expect.objectContaining({ accountId: ACCOUNT_B.id, mailbox: 'Sent' })] }) }));
   });
 
   it('offers backup-backed purge and waits for its portal confirmation', async () => {
@@ -315,7 +315,7 @@ describe('FullViewEmailModal actions', () => {
     fireEvent.click(view.getByTestId('reader-action-deleteEverywhere'));
     expect(actionMutations.purgeEverywhere).not.toHaveBeenCalled();
     await confirmDelete();
-    await waitFor(() => expect(actionMutations.purgeEverywhere).toHaveBeenCalledWith([key]));
+    await waitFor(() => expect(actionMutations.purgeEverywhere).toHaveBeenCalledWith([key], { scope: expect.objectContaining({ keys: [key], targetHints: [expect.objectContaining({ accountId: ACCOUNT_B.id, mailbox: 'Sent' })] }) }));
     expect(useMailStore.getState().selectedEmailIds).toEqual(new Set(['unrelated']));
   });
 

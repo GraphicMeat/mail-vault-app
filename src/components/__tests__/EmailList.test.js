@@ -72,7 +72,7 @@ vi.mock('../BulkOperationProgress', () => ({ BulkOperationProgress: () => null }
 vi.mock('../BulkSelectionBubble', () => ({ BulkSelectionBubble: () => null }));
 vi.mock('../LinkAlertIcon', () => ({ LinkAlertIcon: () => null }));
 vi.mock('../SenderAlertIcon', () => ({ SenderAlertIcon: () => null, getSenderAlertLevel: () => null }));
-const bulkManager = vi.hoisted(() => ({ cancel: vi.fn(), start: vi.fn(), operation: null }));
+const bulkManager = vi.hoisted(() => ({ cancel: vi.fn(), start: vi.fn(), subscribe: vi.fn(() => () => {}), operation: null }));
 vi.mock('../../services/BulkOperationManager', () => ({
   bulkOperationManager: bulkManager,
 }));
@@ -724,7 +724,7 @@ describe('bulk Unarchive', () => {
 // each key runs where it lives and a bare uid is never aimed at the wrong
 // folder; what the manager refused is said, not dropped in silence.
 describe('bulk run across folders', () => {
-  it('hands the manager every account and the view\'s span, and says how many it skipped', async () => {
+  it('hands native ownership the original Scope and reports its skipped count', async () => {
     const { useMailStore } = await import('../../stores/mailStore');
     const prev = useMailStore.getState();
     const accounts = [{ id: 'acc1', email: 'one@test.com' }, { id: 'acc2', email: 'two@test.com' }];
@@ -736,7 +736,7 @@ describe('bulk run across folders', () => {
       await act(() => bulkModal.props.onConfirm({ action: 'archive', uids: [3, 'acc2:INBOX:9'] }));
 
       expect(bulkManager.start).toHaveBeenCalledWith(expect.objectContaining({
-        type: 'archive', accounts, spans: true, uids: [3, 'acc2:INBOX:9'],
+        type: 'archive', scope: expect.objectContaining({ accountId: 'acc1', mailbox: 'UNIFIED', spans: true, keys: [3, 'acc2:INBOX:9'] }),
       }));
       expect(useMailStore.getState().error).toBe('2 emails were skipped because their folder could not be determined.');
     } finally {
@@ -746,7 +746,7 @@ describe('bulk run across folders', () => {
     }
   });
 
-  it('hands the manager the vault-only folders and says how many it kept off the server', async () => {
+  it('reports the native vault-only count without making UI eligibility authority', async () => {
     const { useMailStore } = await import('../../stores/mailStore');
     const prev = useMailStore.getState();
     const accounts = [{ id: 'acc1', email: 'one@test.com' }];
@@ -758,7 +758,7 @@ describe('bulk run across folders', () => {
       render(React.createElement(EmailList));
       await act(() => bulkModal.props.onConfirm({ action: 'delete', uids: [3, 'acc1:Imported:9'] }));
 
-      expect(bulkManager.start).toHaveBeenCalledWith(expect.objectContaining({ type: 'delete', localFolders }));
+      expect(bulkManager.start).toHaveBeenCalledWith(expect.objectContaining({ type: 'delete', scope: expect.objectContaining({ keys: [3, 'acc1:Imported:9'] }) }));
       expect(useMailStore.getState().error).toBe('1 email was skipped because it is in a folder kept only on this computer, which no server holds.');
     } finally {
       bulkManager.start.mockReset();

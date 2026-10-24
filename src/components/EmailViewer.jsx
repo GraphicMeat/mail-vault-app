@@ -1,3 +1,4 @@
+import { captureBulkScope } from '../services/bulkSelection.js';
 import { captureSelectionSnapshot } from '../services/headerIdentity.js';
 import React, { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
@@ -382,6 +383,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     const backup = isBackedUp({ ...target, _accountId: location.accountId, _mailbox: location.mailbox }, state) === true;
     const copy = describeReaderPurge({ server: !localOnly, vault: archived, backup }, 1);
     if (!copy) return;
+    const purgeKey = selectionKey(target, state);
+    const purgeScope = captureBulkScope([purgeKey], state, [target]);
     setPendingPurge({
       copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
       executor: async () => {
@@ -390,7 +393,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
         const previousSnapshots = current.selectedEmailSnapshots;
         const key = selectionKey(target, current);
         current.setSelection([key], [], new Map([[key, originalSnapshot]]));
-        try { await current.purgeSelectedEverywhere(); }
+        try { await current.purgeSelectedEverywhere({ scope: purgeScope }); }
         finally {
           const selected = useMailStore.getState().selectedEmailIds;
           if (selected.size === 0) useMailStore.getState().setSelection(previous.filter(item => item !== key), [], previousSnapshots);
