@@ -764,7 +764,21 @@ impl Coordinator {
         Ok(())
     }
     pub fn admission_receipt(&self, id: &str, attempt: &str) -> Value {
-        self.admissions.get(attempt).filter(|admission|admission.operation_id==id).map(|admission|json!({"operationId":id,"attemptId":attempt,"state":match admission.state{AdmissionState::Freezing=>"freezing",AdmissionState::Running=>"running",AdmissionState::Done=>"done",AdmissionState::Fenced=>"fenced",AdmissionState::Rejected=>"rejected"},"ownerAttemptId":admission.owner_attempt})).unwrap_or(Value::Null)
+        let Some(admission) = self
+            .admissions
+            .get(attempt)
+            .filter(|admission| admission.operation_id == id)
+        else {
+            return Value::Null;
+        };
+        let state = match admission.state {
+            AdmissionState::Freezing => "freezing",
+            AdmissionState::Running => "running",
+            AdmissionState::Done => "done",
+            AdmissionState::Fenced => "fenced",
+            AdmissionState::Rejected => "rejected",
+        };
+        json!({"operationId":id,"attemptId":attempt,"state":state,"ownerAttemptId":admission.owner_attempt})
     }
     pub fn resume_plan(&mut self, data_dir: &Path, id: &str) -> Result<ResumePlan, String> {
         self.refresh(data_dir)?;

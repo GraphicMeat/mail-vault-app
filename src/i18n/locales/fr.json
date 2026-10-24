@@ -3987,5 +3987,5 @@
   "errors.bulkWorkerUnavailable": "Le traitement groupé n’a pas pu démarrer.",
   "errors.bulkAccountUnavailable": "Le compte sélectionné est indisponible.",
   "errors.bulkLocalFoldersRead": "Les informations des dossiers locaux n’ont pas pu être vérifiées.",
-  "errors.bulkOperationFailed": "L’opération groupée n’a pas pu se terminer. Les messages restants sur le serveur ont été conservés."
+  "errors.bulkOperationFailed": "L’opération groupée n’a pas pu se terminer. Vérifiez sa progression avant de réessayer."
 }

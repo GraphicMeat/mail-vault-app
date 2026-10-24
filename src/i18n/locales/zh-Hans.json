@@ -3987,5 +3987,5 @@
   "errors.bulkWorkerUnavailable": "无法启动批量处理。",
   "errors.bulkAccountUnavailable": "所选账户不可用。",
   "errors.bulkLocalFoldersRead": "无法验证本地文件夹信息。",
-  "errors.bulkOperationFailed": "无法完成批量操作。服务器上的剩余邮件已保留。"
+  "errors.bulkOperationFailed": "无法完成批量操作。请先查看进度，再重试。"
 }

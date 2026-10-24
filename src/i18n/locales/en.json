@@ -3987,5 +3987,5 @@
   "errors.bulkWorkerUnavailable": "The bulk worker could not start.",
   "errors.bulkAccountUnavailable": "The selected account is unavailable.",
   "errors.bulkLocalFoldersRead": "Local folder information could not be verified.",
-  "errors.bulkOperationFailed": "The bulk operation could not finish. The remaining server messages were kept."
+  "errors.bulkOperationFailed": "The bulk operation could not finish. Review its progress before trying again."
 }

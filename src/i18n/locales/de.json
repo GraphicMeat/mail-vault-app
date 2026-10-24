@@ -3987,5 +3987,5 @@
   "errors.bulkWorkerUnavailable": "Die Sammelverarbeitung konnte nicht gestartet werden.",
   "errors.bulkAccountUnavailable": "Das ausgewählte Konto ist nicht verfügbar.",
   "errors.bulkLocalFoldersRead": "Die Informationen zu lokalen Ordnern konnten nicht geprüft werden.",
-  "errors.bulkOperationFailed": "Der Sammelvorgang konnte nicht abgeschlossen werden. Die übrigen Nachrichten auf dem Server wurden behalten."
+  "errors.bulkOperationFailed": "Der Sammelvorgang konnte nicht abgeschlossen werden. Prüfe den Fortschritt, bevor du es erneut versuchst."
 }

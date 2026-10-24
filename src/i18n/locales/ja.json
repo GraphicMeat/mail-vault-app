@@ -3987,5 +3987,5 @@
   "errors.bulkWorkerUnavailable": "一括処理を開始できませんでした。",
   "errors.bulkAccountUnavailable": "選択したアカウントは利用できません。",
   "errors.bulkLocalFoldersRead": "ローカルフォルダーの情報を検証できませんでした。",
-  "errors.bulkOperationFailed": "一括操作を完了できませんでした。残りのサーバーメッセージは保持されました。"
+  "errors.bulkOperationFailed": "一括操作を完了できませんでした。再試行する前に進行状況を確認してください。"
 }

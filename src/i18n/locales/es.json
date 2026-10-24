@@ -3987,5 +3987,5 @@
   "errors.bulkWorkerUnavailable": "No se pudo iniciar el proceso masivo.",
   "errors.bulkAccountUnavailable": "La cuenta seleccionada no está disponible.",
   "errors.bulkLocalFoldersRead": "No se pudo verificar la información de las carpetas locales.",
-  "errors.bulkOperationFailed": "No se pudo completar la operación por lotes. Se conservaron los mensajes restantes del servidor."
+  "errors.bulkOperationFailed": "No se pudo completar la operación por lotes. Revisa su progreso antes de volver a intentarlo."
 }

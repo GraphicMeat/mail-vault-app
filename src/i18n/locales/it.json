@@ -3987,5 +3987,5 @@
   "errors.bulkWorkerUnavailable": "Impossibile avviare l’elaborazione collettiva.",
   "errors.bulkAccountUnavailable": "L’account selezionato non è disponibile.",
   "errors.bulkLocalFoldersRead": "Impossibile verificare le informazioni sulle cartelle locali.",
-  "errors.bulkOperationFailed": "Impossibile completare l’operazione in blocco. I messaggi rimanenti sul server sono stati conservati."
+  "errors.bulkOperationFailed": "Impossibile completare l’operazione in blocco. Controlla l’avanzamento prima di riprovare."
 }
