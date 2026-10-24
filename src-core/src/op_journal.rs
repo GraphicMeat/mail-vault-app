@@ -120,12 +120,10 @@ pub fn clear(
 /// error, same as an unparseable file was — swallowing it would silently drop
 /// the one piece of state that lets the UI resume.
 pub fn pending_operation_read(data_dir: &Path) -> Result<Option<serde_json::Value>, String> {
-    crate::app_db::with(data_dir, |conn| {
-        let Some(raw) = crate::app_db::db::meta_get(conn, crate::app_db::ops::PENDING_OPERATION_KEY) else {
-            return Ok(None);
-        };
-        serde_json::from_str(&raw).map(Some).map_err(|e| format!("parse pending operation: {}", e))
-    })
+    let raw = crate::app_db::with(data_dir, |conn| {
+        Ok(crate::app_db::db::meta_get(conn, crate::app_db::ops::PENDING_OPERATION_KEY))
+    })?;
+    raw.map(|raw| serde_json::from_str(&raw).map_err(|error| format!("parse pending operation: {error}"))).transpose()
 }
 
 pub fn pending_operation_save(data_dir: &Path, operation: &serde_json::Value) -> Result<(), String> {

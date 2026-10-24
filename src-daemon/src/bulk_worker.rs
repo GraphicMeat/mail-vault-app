@@ -244,6 +244,84 @@ pub(crate) fn checkpoint(
     drop(prepared);
     Ok(snapshot)
 }
+/// None, legacy and read-error states still observe the old facade's writes.
+/// Versioned validated records have one owner and need no disk reconciliation.
+pub(crate) fn reconcile_pending(state: &Arc<DaemonState>) -> Result<Value, String> {
+    let retired = state
+        .bulk
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .pending_view();
+    let mut incoming = None;
+    let result = {
+        let _journal = state
+            .journal
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let owned = state
+            .bulk
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .owned_status();
+        if let Some(status) = owned {
+            status
+        } else {
+            incoming = Some(mailvault_core::bulk::Coordinator::read_pending(
+                &state.app_dir,
+            ));
+            let mut bulk = state
+                .bulk
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            bulk.install_pending(incoming.as_ref().unwrap())
+                .and_then(|()| bulk.cached_status())
+        }
+    };
+    drop(retired);
+    drop(incoming);
+    result
+}
+
+pub(crate) fn prepare_resume(
+    state: &Arc<DaemonState>,
+    id: &str,
+    attempt: &str,
+) -> Result<(Workflow, Value), String> {
+    reconcile_pending(state)?;
+    let seed = state
+        .bulk
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .resume_seed(id, attempt)?;
+    let prepared = seed.prepare()?;
+    let snapshot = {
+        let _journal = state
+            .journal
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        state
+            .bulk
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .validate_resume(&prepared)?;
+        if let Err(error) = prepared.persist(&state.app_dir) {
+            // An IO error need not mean SQLite committed nothing. Resolve disk
+            // under the journal before another mutation uses this old revision.
+            state
+                .bulk
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .invalidate_pending();
+            return Err(error);
+        }
+        state
+            .bulk
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .publish_resume(&prepared)?
+    };
+    Ok((prepared.into_work(), snapshot))
+}
 impl Ports for MailPorts {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
         let (state, id, attempt, mut w) = (

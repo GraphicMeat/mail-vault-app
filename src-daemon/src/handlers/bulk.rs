@@ -129,19 +129,19 @@ pub(crate) async fn route(
                 Ok(snapshot)
             }
             "bulk.resume" => {
-                let (work, snapshot) = {
-                    let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-                    let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
-                    if bulk.active_id() == Some(operation_id) {
-                        return bulk
-                            .status(&state.app_dir)
-                            .map(|status| status["active"].clone());
+                if let Some(snapshot) = state
+                    .bulk
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner())
+                    .active_status()
+                {
+                    if snapshot["active"]["id"].as_str() == Some(operation_id) {
+                        return Ok(snapshot["active"].clone());
                     }
-                    let work =
-                        bulk.resume_worker_attempt(&state.app_dir, operation_id, &attempt)?;
-                    let snapshot = bulk.status(&state.app_dir)?["active"].clone();
-                    (work, snapshot)
-                };
+                    return Err("errors.operationRunning".into());
+                }
+                let (work, snapshot) =
+                    crate::bulk_worker::prepare_resume(&state, operation_id, &attempt)?;
                 if let Err(error) = crate::bulk_worker::launch(
                     state.clone(),
                     operation_id.into(),
@@ -183,33 +183,35 @@ pub(crate) async fn route(
                             bulk.fence_admission(operation, attempt)?;
                         }
                     }
-                    if let Some(mut status) = bulk.active_status() {
+                    let status = bulk
+                        .owned_status()
+                        .or_else(|| receipt.map(|_| bulk.cached_status()));
+                    if let Some(status) = status {
+                        let mut status = status?;
                         if let Some((operation, attempt)) = receipt {
                             status["admission"] = bulk.admission_receipt(operation, attempt);
                         }
                         return Ok(status);
                     }
                 }
+                if method == "bulk.status" {
+                    let mut status = crate::bulk_worker::reconcile_pending(&state)?;
+                    if let Some((operation, attempt)) = params["operationId"]
+                        .as_str()
+                        .zip(params["attemptId"].as_str())
+                    {
+                        status["admission"] = state
+                            .bulk
+                            .lock()
+                            .unwrap_or_else(|poison| poison.into_inner())
+                            .admission_receipt(operation, attempt);
+                    }
+                    return Ok(status);
+                }
                 let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
                 let mut bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
-                if method == "bulk.discard" {
-                    bulk.discard(&state.app_dir, operation_id)
-                        .map(|_| Value::Null)
-                } else {
-                    let receipt = params["operationId"]
-                        .as_str()
-                        .zip(params["attemptId"].as_str());
-                    if let Some((operation, attempt)) = receipt {
-                        if params["fenceUnstarted"].as_bool() == Some(true) {
-                            bulk.fence_admission(operation, attempt)?;
-                        }
-                    }
-                    let mut status = bulk.status(&state.app_dir)?;
-                    if let Some((operation, attempt)) = receipt {
-                        status["admission"] = bulk.admission_receipt(operation, attempt);
-                    }
-                    Ok(status)
-                }
+                bulk.discard(&state.app_dir, operation_id)
+                    .map(|_| Value::Null)
             }
         }
     })

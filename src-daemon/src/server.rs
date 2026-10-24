@@ -1322,20 +1322,22 @@ mod tests {
                 let writer = state.clone();
                 let original = intent.clone();
                 let operation = std::thread::spawn(move || {
-                    let _journal = writer.journal.lock().unwrap();
-                    let mut bulk = writer.bulk.lock().unwrap();
                     let started = Instant::now();
+                    if stage == "claim" {
+                        let _journal = writer.journal.lock().unwrap();
+                        let mut bulk = writer.bulk.lock().unwrap();
+                        tx.send(()).unwrap();
+                        bulk.claim_attempt(&writer.app_dir, "admission", "initial", original)
+                            .unwrap();
+                        return started.elapsed();
+                    }
                     tx.send(()).unwrap();
                     match stage {
-                        "claim" => {
-                            bulk.claim_attempt(&writer.app_dir, "admission", "initial", original)
-                                .unwrap();
-                        }
                         "inactive-status" => {
-                            bulk.status(&writer.app_dir).unwrap();
+                            crate::bulk_worker::reconcile_pending(&writer).unwrap();
                         }
                         _ => {
-                            bulk.resume_worker_attempt(&writer.app_dir, "admission", "restored")
+                            crate::bulk_worker::prepare_resume(&writer, "admission", "restored")
                                 .unwrap();
                         }
                     }
@@ -1361,7 +1363,39 @@ mod tests {
                 let elapsed = operation.join().unwrap();
                 println!("BULK_20K_ADMISSION_MODE={action:?} STAGE={stage} OP_MS={} STATUS_MS={} CANCEL_MS={}",elapsed.as_millis(),status.1.as_millis(),cancel.1.as_millis());
                 assert!(status.0.error.is_none());
-                assert_eq!(cancel.0.error.is_some(), stage == "inactive-status");
+                assert!(
+                    status.1 < std::time::Duration::from_millis(200),
+                    "{action:?} {stage} status {:?}",
+                    status.1
+                );
+                assert!(
+                    cancel.1 < std::time::Duration::from_millis(200),
+                    "{action:?} {stage} cancel {:?}",
+                    cancel.1
+                );
+                if stage == "inactive-status" {
+                    assert!(cancel.0.error.is_some());
+                    for _ in 0..3 {
+                        let reply = handle_request_for_test(&state, "bulk.status", json!({}))
+                            .await
+                            .result
+                            .unwrap();
+                        assert_eq!(reply["pending"]["remaining"], 20000);
+                        assert_eq!(reply["pending"]["status"], "awaitingResume");
+                    }
+                }
+                if stage == "resume" {
+                    let reply = handle_request_for_test(
+                        &state,
+                        "bulk.cancel",
+                        json!({"operationId":"admission"}),
+                    )
+                    .await;
+                    assert!(
+                        reply.error.is_none(),
+                        "cancellation succeeds only after Active is published"
+                    );
+                }
                 if stage == "claim" {
                     crate::bulk_worker::checkpoint(&state, "admission", "initial", &work).unwrap();
                     let _journal = state.journal.lock().unwrap();

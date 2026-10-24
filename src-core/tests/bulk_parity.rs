@@ -339,3 +339,57 @@ fn exact_duplicate_start_attaches_without_resampling_removed_rows() {
     assert!(owner.duplicate_start("owned", Action::Delete, &scope(json!([8]))).is_err());
     assert!(owner.active_id().is_none());
 }
+
+#[test]
+fn prepared_resume_fences_before_and_during_write_without_reusing_old_base() {
+    let dir=tempfile::tempdir().unwrap();
+    let mut owner=Coordinator::load(dir.path());
+    let intent=intent(json!([]));
+    owner.claim_attempt(dir.path(),"restore","A",intent.clone()).unwrap();
+    owner.checkpoint(dir.path(),"restore",&mailvault_core::bulk_worker::Workflow::new(intent)).unwrap();
+    owner.drained_attempt("restore","A").unwrap();
+    owner.begin_admission("restore","before").unwrap();
+    let before=owner.resume_seed("restore","before").unwrap().prepare().unwrap();
+    owner.fence_admission("restore","before").unwrap();
+    assert!(owner.validate_resume(&before).is_err());
+    assert_eq!(op_journal::pending_operation_read(dir.path()).unwrap().unwrap()["attemptId"],"A");
+    owner.begin_admission("restore","during").unwrap();
+    let during=owner.resume_seed("restore","during").unwrap().prepare().unwrap();
+    owner.validate_resume(&during).unwrap();
+    during.persist(dir.path()).unwrap();
+    owner.fence_admission("restore","during").unwrap();
+    assert!(owner.publish_resume(&during).is_err());
+    let status=owner.owned_status().unwrap().unwrap();
+    assert!(status["active"].is_null());
+    assert_eq!(status["pending"]["attemptId"],"during");
+    assert_eq!(owner.admission_receipt("restore","during")["state"],"fenced");
+    assert!(owner.validate_resume(&before).is_err());
+    let mut reopened=Coordinator::load(dir.path());
+    assert_eq!(reopened.status(dir.path()).unwrap()["pending"]["attemptId"],"during");
+    owner.begin_admission("restore","fresh").unwrap();
+    let fresh=owner.resume_seed("restore","fresh").unwrap().prepare().unwrap();
+    owner.validate_resume(&fresh).unwrap();
+    fresh.persist(dir.path()).unwrap();
+    assert_eq!(owner.publish_resume(&fresh).unwrap()["attemptId"],"fresh");
+    assert!(owner.validate_resume(&during).is_err());
+}
+
+#[test]
+fn failed_resume_save_requires_fresh_disk_evidence_before_another_seed() {
+    let dir=tempfile::tempdir().unwrap();
+    let mut owner=Coordinator::load(dir.path());
+    let intent=intent(json!([]));
+    owner.claim_attempt(dir.path(),"restore","A",intent.clone()).unwrap();
+    owner.checkpoint(dir.path(),"restore",&mailvault_core::bulk_worker::Workflow::new(intent)).unwrap();
+    owner.drained_attempt("restore","A").unwrap();
+    let prepared=owner.resume_seed("restore","B").unwrap().prepare().unwrap();
+    let blocked=dir.path().join("not-dir"); std::fs::write(&blocked,"blocked").unwrap();
+    assert!(prepared.persist(&blocked).is_err());
+    owner.invalidate_pending();
+    assert!(owner.owned_status().is_none());
+    assert!(owner.resume_seed("restore","C").is_err());
+    let read=Coordinator::read_pending(dir.path());
+    owner.install_pending(&read).unwrap();
+    assert_eq!(owner.owned_status().unwrap().unwrap()["pending"]["attemptId"],"A");
+    assert!(owner.resume_seed("restore","C").is_ok());
+}
