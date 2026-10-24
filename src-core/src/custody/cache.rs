@@ -1007,7 +1007,8 @@ pub fn restore_missing_headers_bound(conn: &Connection, account: &str, mailbox: 
 
 fn restore_missing_headers_for(conn: &Connection, account: &str, mailbox: &str, rows: &[Value], identity: Option<&crate::imap::NativeHeaderIdentity>) -> Result<Vec<u32>, String> {
     let tx = conn.unchecked_transaction().map_err(err)?;
-    let meta = load_meta(&tx, account, mailbox)?.map(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string())).transpose()?;
+    let raw_meta: Option<String> = tx.query_row("SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0)).optional().map_err(err)?;
+    let meta = raw_meta.map(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string())).transpose()?;
     let current = meta.as_ref().and_then(|v| v.get("nativeIdentity")).filter(|v| !v.is_null())
         .map(|v| serde_json::from_value::<crate::imap::NativeHeaderIdentity>(v.clone()).map_err(|e| e.to_string())).transpose()?;
     if identity.is_some() && current.is_some() && current.as_ref() != identity { return Err("errors.bulkIdentityChanged".into()); }
@@ -1027,8 +1028,8 @@ fn restore_missing_headers_for(conn: &Connection, account: &str, mailbox: &str, 
             }
         }
     }
-    if !restored.is_empty() && !preserve {
-        let mut meta: Value = load_meta(&tx, account, mailbox)?.map(|s| serde_json::from_str(&s).map_err(|e| e.to_string())).transpose()?.unwrap_or_else(|| json!({}));
+    if !restored.is_empty() && !preserve && current.is_some() {
+        let mut meta = meta.ok_or("errors.bulkIdentityUncertain")?;
         meta.as_object_mut().ok_or("stored cache metadata is not an object")?.remove("nativeIdentity");
         tx.execute("UPDATE header_cache_meta SET meta_json=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox, meta.to_string()]).map_err(err)?;
     }
