@@ -393,3 +393,16 @@ fn failed_resume_save_requires_fresh_disk_evidence_before_another_seed() {
     assert_eq!(owner.owned_status().unwrap().unwrap()["pending"]["attemptId"],"A");
     assert!(owner.resume_seed("restore","C").is_ok());
 }
+
+#[test]
+fn legacy_native_looking_hints_cannot_enter_compatibility_resume() {
+    let dir=tempfile::tempdir().unwrap();
+    let intent=intent(json!([]));
+    let work=mailvault_core::bulk_worker::Workflow::new(intent.clone());
+    let raw=json!({"id":"legacy","type":"delete","totalUids":[],"completedUids":[],"status":"starting","intent":intent,"worker":work});
+    op_journal::pending_operation_save(dir.path(),&raw).unwrap();
+    let mut owner=Coordinator::load(dir.path());
+    assert!(owner.resume_worker_attempt(dir.path(),"legacy","B").is_err(),"unversioned raw hints must never become native proof");
+    assert!(owner.active_id().is_none());
+    assert_eq!(op_journal::pending_operation_read(dir.path()).unwrap(),Some(raw));
+}

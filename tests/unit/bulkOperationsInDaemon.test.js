@@ -136,3 +136,14 @@ it('demo status fences an unseen attempt before a late kickoff', async () => {
   await expect(demo.invoke('bulk.start',{operationId:'late',attemptId:'unseen',type:'archive',scope:{keys:[]}})).rejects.toThrow('errors.bulkStale');
   expect((await demo.invoke('bulk.status')).active).toBeNull();
 });
+
+it('demo legacy saves cannot create native versioned authority', async () => {
+  for (const previous of [null, { id: 'legacy', type: 'delete', totalUids: [7], completedUids: [], status: 'deleting' }]) {
+    const demo = createDemoBackend();
+    if (previous) await demo.invoke('save_pending_operation', { operation: previous });
+    for (const schemaVersion of [1, 99, null, 'malformed']) {
+      await expect(demo.invoke('save_pending_operation', { operation: { schemaVersion, id: 'supplied', intent: {}, worker: {} } })).rejects.toThrow('errors.bulkOwned');
+      expect(await demo.invoke('read_pending_operation')).toEqual(previous);
+    }
+  }
+});

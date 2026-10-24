@@ -268,6 +268,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn bulk_legacy_save_cannot_supply_native_versioned_authority() {
+        for previous in [None, Some(json!({"id":"legacy","type":"delete","totalUids":[7],"completedUids":[],"status":"deleting"}))] {
+            let (_dir,state)=st();
+            if let Some(previous)=&previous {
+                assert!(call(&state,"save_pending_operation",json!({"operation":previous})).await.error.is_none());
+            }
+            let before=mailvault_core::app_db::with(&state.app_dir,|connection|Ok(mailvault_core::app_db::db::meta_get(connection,mailvault_core::app_db::ops::PENDING_OPERATION_KEY))).unwrap();
+            for version in [json!(1),json!(99),Value::Null,json!("malformed")] {
+                let incoming=json!({"schemaVersion":version,"id":"supplied","type":"delete","intent":{},"worker":{},"totalUids":[],"completedUids":[],"status":"starting"});
+                let reply=call(&state,"save_pending_operation",json!({"operation":incoming})).await;
+                assert_eq!(reply.error.map(|error|error.message),Some("errors.bulkOwned".into()),"a legacy writer cannot create native authority");
+                let after=mailvault_core::app_db::with(&state.app_dir,|connection|Ok(mailvault_core::app_db::db::meta_get(connection,mailvault_core::app_db::ops::PENDING_OPERATION_KEY))).unwrap();
+                assert_eq!(after,before,"previous bytes must remain exact");
+            }
+        }
+    }
+    #[tokio::test]
+    async fn bulk_resume_refuses_unversioned_native_looking_hints() {
+        let (_dir,state)=st();
+        let scope=serde_json::from_value(json!({"keys":[]})).unwrap();
+        let intent=mailvault_core::bulk::FrozenIntent::freeze(mailvault_core::bulk::Action::Delete,scope,&[],&[]);
+        let work=mailvault_core::bulk_worker::Workflow::new(intent.clone());
+        let legacy=json!({"id":"legacy-hints","type":"delete","totalUids":[],"completedUids":[],"status":"starting","intent":intent,"worker":work});
+        assert!(call(&state,"save_pending_operation",json!({"operation":legacy})).await.error.is_none());
+        let reply=crate::server::handle_request_for_test(&state,"bulk.resume",json!({"operationId":"legacy-hints","attemptId":"attempt"})).await;
+        assert_eq!(reply.error.unwrap().message,"errors.bulkIdentityUncertain");
+        assert!(state.bulk.lock().unwrap().active_id().is_none());
+        assert_eq!(op_journal::pending_operation_read(&state.app_dir).unwrap(),Some(legacy));
+    }
+    #[tokio::test]
     async fn another_domains_method_is_not_routed_here() {
         let (_t, s) = st();
         assert!(route(&s, "sync.now", &json!({}), json!(1)).await.is_none());
