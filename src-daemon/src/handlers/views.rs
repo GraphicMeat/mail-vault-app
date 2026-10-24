@@ -154,6 +154,19 @@ fn run(state: &Arc<DaemonState>, method: &str, params: &Value) -> Result<Value, 
             })?;
             evaluate(state, &def, &accounts, &keys, limit)
         }
+        // Who sends what the view's words find, for the builder's "keep these
+        // out" suggestions: `{ available, senders: [{ address, name, count,
+        // own }] }`. The view's own sender rules are left off, so a sender it
+        // blocks stays on the list to be allowed again.
+        "views.senders" => {
+            let accounts = accounts_of(params)?;
+            let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(30).min(100) as usize;
+            let (def, keys) = app_db::with(app_dir, |conn| {
+                let def = definition(conn, params)?;
+                Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
+            })?;
+            senders(state, &def, &accounts, &keys, limit)
+        }
         "views.counts" => {
             let accounts = accounts_of(params)?;
             let (all, keys) = app_db::with(app_dir, |conn| {
@@ -619,6 +632,9 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
         answered: def.answered,
         to_any: if def.to_me { own.clone() } else { Vec::new() },
         from_none: if def.not_from_me { own } else { Vec::new() },
+        from_any: def.senders.clone(),
+        from_not: def.exclude_senders.clone(),
+        exclude_keys: def.exclude_messages.clone(),
         exclude_terms: Vec::new(),
         // A tag or field filter with no identities behind it matches nothing,
         // which is the correct answer for a tag nobody has used.
@@ -888,6 +904,56 @@ fn evaluate(
     });
     rows.truncate(limit);
     Ok(serde_json::json!({ "available": true, "rows": rows, "total": total }))
+}
+
+/// `views.senders`: the senders of what the view finds with its sender rules
+/// off, merged across accounts. `own` is an address any account in scope owns.
+fn senders(
+    state: &DaemonState,
+    def: &ViewDef,
+    accounts: &[Account],
+    keys: &HashMap<String, Vec<String>>,
+    limit: usize,
+) -> Result<Value, String> {
+    let now = now_secs();
+    let open = ViewDef { senders: Vec::new(), exclude_senders: Vec::new(), ..def.clone() };
+    let mut batches: Vec<(SearchRequest, Vec<&Account>)> = Vec::new();
+    for account in accounts.iter().filter(|account| def.accounts.is_empty() || def.accounts.contains(&account.account_id)) {
+        let mut request = request_for(&open, account, keys, now);
+        request.account_id.clear();
+        match batches.iter_mut().find(|(alike, _)| *alike == request) {
+            Some((_, group)) => group.push(account),
+            None => batches.push((request, vec![account])),
+        }
+    }
+    let mut merged: std::collections::BTreeMap<String, (String, u64)> = std::collections::BTreeMap::new();
+    let mut own: Vec<String> = Vec::new();
+    for (mut request, group) in batches {
+        request.account_ids = group.iter().map(|account| account.account_id.clone()).collect();
+        own.extend(group.iter().flat_map(|account| own_addresses(account)));
+        let counted = match crate::search_index::sender_counts(&state.search_index, &request, limit)? {
+            Err(reason) => return Ok(serde_json::json!({ "available": false, "reason": reason, "senders": [] })),
+            Ok(counted) => counted,
+        };
+        for sender in counted {
+            let entry = merged.entry(sender.address).or_default();
+            if entry.0.is_empty() {
+                entry.0 = sender.name;
+            }
+            entry.1 += sender.count;
+        }
+    }
+    let mut ranked: Vec<(String, String, u64)> = merged.into_iter().map(|(address, (name, count))| (address, name, count)).collect();
+    ranked.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+    ranked.truncate(limit);
+    let senders: Vec<Value> = ranked
+        .into_iter()
+        .map(|(address, name, count)| {
+            let mine = own.contains(&address);
+            serde_json::json!({ "address": address, "name": name, "count": count, "own": mine })
+        })
+        .collect();
+    Ok(serde_json::json!({ "available": true, "senders": senders }))
 }
 
 #[cfg(test)]
@@ -1172,6 +1238,89 @@ mod tests {
 
     async fn evaluate(s: &Arc<DaemonState>, def: Value) -> Value {
         call(s, "views.evaluate", json!({ "def": def, "accounts": accounts() })).await
+    }
+
+    /// One indexed message from `from`, in the mailbox `a`/INBOX.
+    fn seed_from(conn: &rusqlite::Connection, uid: u32, from: &str, name: &str, subject: &str, message_id: &str) {
+        let row = json!({ "uid": uid, "subject": subject, "messageId": message_id, "from": {"address": from, "name": name} });
+        conn.execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
+               from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags)
+             VALUES ('a','INBOX',?1,?2,0,0,?3,1788825600,?4,?5,?6,?4,0,1,?7,'')",
+            rusqlite::params![
+                uid,
+                format!("{uid}{}.eml", mailvault_core::maildir::INFO_PREFIX),
+                message_id,
+                from,
+                name.to_lowercase(),
+                subject.to_lowercase(),
+                row.to_string(),
+            ],
+        )
+        .unwrap();
+    }
+
+    /// The landlord's inbox: the utility's bills, the same word in a mail the
+    /// landlord sent a tenant, and a newsletter that only mentions it.
+    fn bills_index(s: &Arc<DaemonState>) {
+        let conn = index_db::open(&s.data_dir).unwrap();
+        seed_from(&conn, 1, "bills@servico.lt", "Servico, UAB", "Saskaita Nr 1 komunaliniai", "<bill1@servico.lt>");
+        seed_from(&conn, 2, "bills@servico.lt", "Servico, UAB", "Saskaita Nr 2 komunaliniai", "<bill2@servico.lt>");
+        seed_from(&conn, 3, "me@x.test", "Me", "Komunaliniai", "<mine@x.test>");
+        seed_from(&conn, 4, "news@shop.test", "Shop", "Komunaliniai discounts", "<news@shop.test>");
+        index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
+        *lock(&s.search_index.db) = Some(conn);
+    }
+
+    fn uids_of(out: &Value) -> Vec<u64> {
+        let mut uids: Vec<u64> = out["rows"].as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
+        uids.sort();
+        uids
+    }
+
+    #[tokio::test]
+    async fn a_view_that_names_its_senders_shows_nothing_else() {
+        let s = st();
+        bills_index(&s);
+        let all = evaluate(&s, json!({})).await;
+        assert_eq!(uids_of(&all), vec![1, 2, 3, 4], "no sender rule finds the mail sent to a tenant too");
+        let only = evaluate(&s, json!({ "senders": ["servico.lt"] })).await;
+        assert_eq!(uids_of(&only), vec![1, 2]);
+        let none = evaluate(&s, json!({ "senders": ["ervico.lt"] })).await;
+        assert_eq!(uids_of(&none), Vec::<u64>::new(), "a piece of a domain names nobody");
+    }
+
+    #[tokio::test]
+    async fn a_blocked_sender_and_a_blocked_message_leave_the_view() {
+        let s = st();
+        bills_index(&s);
+        let blocked = evaluate(&s, json!({ "excludeSenders": ["shop.test", "me@x.test"] })).await;
+        assert_eq!(uids_of(&blocked), vec![1, 2]);
+        let one = evaluate(&s, json!({ "senders": ["servico.lt"], "excludeMessages": ["bill2@servico.lt"] })).await;
+        assert_eq!(uids_of(&one), vec![1], "one bill is kept out, its sender stays");
+    }
+
+    #[tokio::test]
+    async fn a_views_senders_are_who_would_fill_it_most_first_and_mine_are_marked() {
+        let s = st();
+        bills_index(&s);
+        let out = call(&s, "views.senders", json!({ "def": {}, "accounts": accounts() })).await;
+        assert_eq!(out["available"], true);
+        let senders = out["senders"].as_array().unwrap();
+        assert_eq!(senders[0], json!({ "address": "bills@servico.lt", "name": "Servico, UAB", "count": 2, "own": false }));
+        let mine = senders.iter().find(|s| s["address"] == "me@x.test").unwrap();
+        assert_eq!(mine["own"], true, "the account's own address is flagged");
+        // The sender rules themselves are what is being chosen: they do not
+        // hide the senders they would block.
+        let ruled = call(&s, "views.senders", json!({ "def": { "senders": ["servico.lt"] }, "accounts": accounts() })).await;
+        assert_eq!(ruled["senders"].as_array().unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn the_senders_say_unavailable_while_the_index_is_closed() {
+        let s = st();
+        let out = call(&s, "views.senders", json!({ "def": {}, "accounts": accounts() })).await;
+        assert_eq!(out["available"], false);
     }
 
     #[tokio::test]

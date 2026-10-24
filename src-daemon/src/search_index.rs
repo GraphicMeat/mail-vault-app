@@ -497,6 +497,17 @@ pub(crate) fn search_page(
     with_index(st, request, |conn| core::query::search(conn, request))
 }
 
+/// Who sent what a request finds, most mail first, over every account
+/// `request.account_ids` names; the inner `Err` says why the index cannot
+/// answer, as for `search_page`.
+pub(crate) fn sender_counts(
+    st: &SearchIndexState,
+    request: &core::query::SearchRequest,
+    limit: usize,
+) -> Result<Result<Vec<core::query::SenderSuggestion>, &'static str>, String> {
+    with_index(st, request, |conn| core::query::sender_counts(conn, request, limit))
+}
+
 /// Every `(account_id, vault_dir, uid)` a request matches, uncapped and
 /// without row JSON, under one index lock hold; the inner `Err` says why the
 /// index cannot answer (`off`, `unavailable`, `building`).

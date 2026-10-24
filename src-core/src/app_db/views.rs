@@ -31,6 +31,17 @@ pub struct ViewDef {
     pub exclude_special: Vec<String>,
     pub query: String,
     pub sender: Option<String>,
+    /// Only mail from these: a whole address (`billing@servico.lt`) or a
+    /// domain (`servico.lt`, with its subdomains). Exact, so a view of the
+    /// utility bills never picks up a word that happens to sit in a name. Empty
+    /// is every sender.
+    pub senders: Vec<String>,
+    /// Never mail from these, matched like `senders`. How a person says "not
+    /// this kind of mail" without naming every message.
+    pub exclude_senders: Vec<String>,
+    /// Messages kept out one by one (`app_db::identity::msg_key`): the single
+    /// mail a view found that does not belong, from a sender that otherwise does.
+    pub exclude_messages: Vec<String>,
     pub date_from: Option<i64>,
     pub date_to: Option<i64>,
     /// "The last N days", resolved when the view runs rather than when it was

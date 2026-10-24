@@ -60,6 +60,14 @@ pub struct SearchRequest {
     /// Drop a message sent by any of these. "Needs reply" excludes your own
     /// sent mail this way.
     pub from_none: Vec<String>,
+    /// Keep a message only if its sender is one of these: a whole address
+    /// (`billing@acme.test`) or a domain (`acme.test`, taking its subdomains).
+    /// Exact, never a substring: `n@x.test` is not `ann@x.test`.
+    pub from_any: Vec<String>,
+    /// Drop a message from any of these senders, matched like `from_any`.
+    pub from_not: Vec<String>,
+    /// Drop these messages, by `msg_key`: the ones a person said do not belong.
+    pub exclude_keys: Vec<String>,
     /// Drop a message that holds any of these words or phrases anywhere the
     /// query itself would look: the search box's `-term`.
     /// ponytail: a message whose body is not indexed yet can only be excluded
@@ -307,6 +315,35 @@ fn word_clause(word: &str, args: &mut Vec<Value>) -> String {
     format!("({headers} OR m.id IN (SELECT rowid FROM msg_fts WHERE msg_fts MATCH ?) OR {FILENAME_SQL})")
 }
 
+/// `%`, `_` and `\` in a LIKE operand, taken literally.
+fn like_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
+/// "The sender is one of these", exact. A name with an `@` is a whole address;
+/// one without is a domain and takes its subdomains (`billing.acme.test` is
+/// `acme.test`, `cme.test` is not). A substring of either never matches, which
+/// is what keeps `n@x.test` from finding `ann@x.test`. None when no name is
+/// left once blanks and a leading `@` are gone.
+fn sender_clause(names: &[String], args: &mut Vec<Value>) -> Option<String> {
+    let mut branches: Vec<&str> = Vec::new();
+    for name in names {
+        let name = name.trim().trim_start_matches('@').to_lowercase();
+        if name.is_empty() {
+            continue;
+        }
+        if name.contains('@') {
+            branches.push("m.from_addr_lc = ?");
+            args.push(Value::Text(name));
+        } else {
+            branches.push("(m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_addr_lc LIKE ? ESCAPE '\\')");
+            args.push(Value::Text(format!("%@{}", like_escape(&name))));
+            args.push(Value::Text(format!("%.{}", like_escape(&name))));
+        }
+    }
+    (!branches.is_empty()).then(|| format!("({})", branches.join(" OR ")))
+}
+
 fn like_pattern(s: &str) -> String {
     format!("%{}%", s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"))
 }
@@ -484,6 +521,25 @@ fn where_clause(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<(Str
         clauses.push("m.from_addr_lc NOT LIKE ? ESCAPE '\\'".into());
         args.push(Value::Text(like_pattern(&address.trim().to_lowercase())));
     }
+    if let Some(clause) = sender_clause(&req.from_any, &mut args) {
+        clauses.push(clause);
+    }
+    if let Some(clause) = sender_clause(&req.from_not, &mut args) {
+        clauses.push(format!("NOT {clause}"));
+    }
+    let excluded: Vec<&String> = req.exclude_keys.iter().filter(|key| !key.trim().is_empty()).collect();
+    if !excluded.is_empty() {
+        // A temp table for the same reason as `view_keys`: a view may keep
+        // out more messages than a statement has parameters.
+        conn.execute_batch("CREATE TEMP TABLE IF NOT EXISTS view_excluded (k TEXT PRIMARY KEY); DELETE FROM view_excluded;")
+            .map_err(|e| e.to_string())?;
+        let mut insert =
+            conn.prepare_cached("INSERT OR IGNORE INTO temp.view_excluded(k) VALUES (?1)").map_err(|e| e.to_string())?;
+        for key in excluded {
+            insert.execute([key]).map_err(|e| e.to_string())?;
+        }
+        clauses.push(format!("{MSG_KEY_SQL} NOT IN (SELECT k FROM temp.view_excluded)"));
+    }
     for term in &req.exclude_terms {
         // Normalized the way the query words are: the LIKE branch compares
         // against the `*_lc` columns.
@@ -571,6 +627,33 @@ pub fn member_keys(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<V
         .query_map(rusqlite::params_from_iter(args.iter()), |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
         .map_err(|e| e.to_string())?
         // Same as `search`: a row whose uid does not decode is skipped.
+        .filter_map(Result::ok)
+        .collect();
+    Ok(rows)
+}
+
+/// Who sent what a request finds, most mail first: the senders to offer a
+/// person who wants to keep some of them out of a view. Same filters as
+/// `search`, no page cap. `limit` is clamped to `MAX_LIMIT`.
+pub fn sender_counts(conn: &rusqlite::Connection, req: &SearchRequest, limit: usize) -> Result<Vec<SenderSuggestion>, String> {
+    let (where_sql, args, _) = where_clause(conn, req)?;
+    let limit = limit.clamp(1, MAX_LIMIT);
+    // The display name lives only in `row_json`; one row that is not JSON must
+    // not fail the lot.
+    let mut st = conn
+        .prepare(&format!(
+            "SELECT m.from_addr_lc,
+                    MAX(CASE WHEN json_valid(m.row_json) THEN COALESCE(json_extract(m.row_json, '$.from.name'), '') ELSE '' END),
+                    COUNT(*)
+             FROM messages m WHERE {where_sql} AND m.from_addr_lc != ''
+             GROUP BY m.from_addr_lc ORDER BY COUNT(*) DESC, m.from_addr_lc LIMIT {limit}"
+        ))
+        .map_err(|e| e.to_string())?;
+    let rows = st
+        .query_map(rusqlite::params_from_iter(args.iter()), |r| {
+            Ok(SenderSuggestion { address: r.get(0)?, name: r.get(1)?, count: u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0) })
+        })
+        .map_err(|e| e.to_string())?
         .filter_map(Result::ok)
         .collect();
     Ok(rows)
@@ -894,7 +977,27 @@ mod tests {
         })
     }
 
+    /// The production parser's sender: the bare address in `from_addr`, the
+    /// display name in `from_name` and in the row JSON.
+    fn addressed_parse(raw: &[u8], uid: u32, name: &str) -> Option<IndexDoc> {
+        let mut doc = parse(raw, uid, name)?;
+        let from = mailparse::addrparse(&doc.from_addr).ok()?.extract_single_info()?;
+        doc.row_json = serde_json::json!({ "from": { "name": from.display_name.clone().unwrap_or_default(), "address": from.addr } }).to_string();
+        doc.from_name = from.display_name.unwrap_or_default();
+        doc.from_addr = from.addr;
+        Some(doc)
+    }
+
     fn fixture() -> (tempfile::TempDir, SharedConn) {
+        fixture_with(&parse)
+    }
+
+    /// `fixture` indexed the way production indexes a sender.
+    fn addressed_fixture() -> (tempfile::TempDir, SharedConn) {
+        fixture_with(&addressed_parse)
+    }
+
+    fn fixture_with(parse: ParseFn) -> (tempfile::TempDir, SharedConn) {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
         let db = Mutex::new(Some(db::open(&root).unwrap()));
@@ -911,7 +1014,7 @@ mod tests {
             std::fs::write(cur.join(format!("{uid}{INFO_PREFIX}.eml")), format!("Message-ID: <{acct}.{dir}.{uid}@x.test>\r\n{content}")).unwrap();
         }
         for (a, d) in list_vault_dirs(&root.join("Maildir")).unwrap() {
-            reconcile_mailbox(&db, &root.join("Maildir"), &a, &d, IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
+            reconcile_mailbox(&db, &root.join("Maildir"), &a, &d, IndexConfig { bodies: true, attachments: false, image_text: false }, parse, &|| true, &mut |_| {}).unwrap();
         }
         (tmp, db)
     }
@@ -988,6 +1091,61 @@ mod tests {
         let hits = uids(&db, SearchRequest { from_none: vec!["billing@acme.test".into()], ..req("luke", "") });
         assert!(!hits.contains(&("INBOX".to_string(), 2)));
         assert_eq!(hits.len(), 3);
+    }
+
+    #[test]
+    fn from_any_is_the_whole_address_never_a_piece_of_it() {
+        let (_tmp, db) = addressed_fixture();
+        let only = |names: &[&str]| uids(&db, SearchRequest { from_any: names.iter().map(|n| n.to_string()).collect(), ..req("luke", "") });
+        assert_eq!(only(&["ann@x.test"]), vec![("INBOX".to_string(), 1)]);
+        assert!(only(&["n@x.test"]).is_empty(), "a tail of ann@x.test is not ann");
+        assert!(only(&["ann"]).is_empty(), "a bare word is a domain, and ann is not one");
+        assert_eq!(only(&["ann@x.test", "billing@acme.test"]).len(), 2, "any one of the named");
+        assert_eq!(only(&["ANN@X.TEST "]).len(), 1, "case and padding do not matter");
+    }
+
+    #[test]
+    fn from_any_a_domain_takes_its_senders_not_look_alikes() {
+        let (_tmp, db) = addressed_fixture();
+        let only = |name: &str| uids(&db, SearchRequest { from_any: vec![name.into()], ..req("luke", "") });
+        assert_eq!(only("acme.test"), vec![("INBOX".to_string(), 2)]);
+        assert_eq!(only("@acme.test"), vec![("INBOX".to_string(), 2)], "a leading @ is the same domain");
+        assert!(only("cme.test").is_empty(), "a tail of a domain is not that domain");
+        assert_eq!(only("x.test").len(), 3, "ann, ken and zoe");
+    }
+
+    #[test]
+    fn from_not_drops_an_address_or_a_whole_domain() {
+        let (_tmp, db) = addressed_fixture();
+        let kept = |names: &[&str]| uids(&db, SearchRequest { from_not: names.iter().map(|n| n.to_string()).collect(), ..req("luke", "") });
+        assert_eq!(kept(&["ann@x.test"]).len(), 3);
+        assert_eq!(kept(&["n@x.test"]).len(), 4, "a tail of an address drops nobody");
+        let no_x = kept(&["x.test"]);
+        assert_eq!(no_x, vec![("INBOX".to_string(), 2)], "only acme is left");
+    }
+
+    #[test]
+    fn exclude_keys_drop_exactly_the_messages_named() {
+        let (_tmp, db) = addressed_fixture();
+        let kept = uids(&db, SearchRequest { exclude_keys: vec!["luke.INBOX.2@x.test".into()], ..req("luke", "") });
+        assert_eq!(kept.len(), 3);
+        assert!(!kept.contains(&("INBOX".to_string(), 2)));
+        let none = uids(&db, SearchRequest { exclude_keys: vec!["nobody@x.test".into()], ..req("luke", "") });
+        assert_eq!(none.len(), 4, "a key nobody holds drops nothing");
+    }
+
+    #[test]
+    fn sender_counts_read_the_senders_of_what_the_request_finds() {
+        let (_tmp, db) = addressed_fixture();
+        let g = crate::search_index::lock(&db);
+        let conn = g.as_ref().unwrap();
+        let all = sender_counts(conn, &req("luke", ""), 10).unwrap();
+        assert_eq!(all.len(), 4);
+        assert!(all.iter().all(|s| s.count == 1));
+        let billing = sender_counts(conn, &req("luke", "invoice"), 10).unwrap();
+        assert_eq!(billing, vec![SenderSuggestion { address: "billing@acme.test".into(), name: "Billing".into(), count: 1 }]);
+        let capped = sender_counts(conn, &req("luke", ""), 2).unwrap();
+        assert_eq!(capped.len(), 2);
     }
 
     #[test]
