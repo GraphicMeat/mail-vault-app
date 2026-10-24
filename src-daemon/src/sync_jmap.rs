@@ -774,6 +774,8 @@ mod tests {
         assert_eq!(r.mailbox, "INBOX");
         let inbox = rows(&state, "INBOX");
         assert_eq!(inbox.len(), 2);
+        let identity = crate::custody::with_conn(&state, |c| cache::native_identity(c, "acct-1", "INBOX")).unwrap().unwrap();
+        assert_eq!(identity.jmap_mailbox_id.as_deref(), Some("mb-inbox"));
         assert_eq!(inbox[&uid_of(&state, "INBOX", "e1")]["messageId"], json!("<e1@x>"));
         let (work_rows, work_meta, stored) = crate::custody::with_conn(&state, |c| {
             Ok((

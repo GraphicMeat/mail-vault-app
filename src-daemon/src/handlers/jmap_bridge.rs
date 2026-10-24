@@ -1719,6 +1719,7 @@ second body";
         let a = jmap_account(&m);
         let p1 = ok(call(&state, "imap_get_emails", json!({"account": a, "mailbox": "INBOX", "page": 1, "limit": 1})).await);
         assert_eq!(p1["success"], json!(true));
+        assert_eq!(p1["nativeIdentity"]["jmapMailboxId"], "mb-inbox");
         assert_eq!(p1["total"], json!(2));
         assert_eq!(p1["page"], json!(1));
         assert_eq!(p1["limit"], json!(1));
