@@ -7,11 +7,21 @@ vi.mock('../daemonClient.js', () => ({
 }));
 
 const { send, DAEMON_OWNED } = await import('../transport.js');
+const declaredDaemonOwned = new Set(DAEMON_OWNED);
 const { DaemonError } = await import('../daemonClient.js');
 const { t } = await import('../../i18n/index.js');
 
 describe('daemon-owned commands', () => {
   beforeEach(() => { daemonCall.mockReset(); DAEMON_OWNED.clear(); });
+
+  it('routes account receipt cleanup directly to the daemon and propagates failure', async () => {
+    const name = 'compose.receipts.remove_account';
+    expect(declaredDaemonOwned.has(name)).toBe(true);
+    DAEMON_OWNED.add(name);
+    daemonCall.mockRejectedValue(new DaemonError('offline', -1));
+    await expect(send(name, { accountId: 'a' })).rejects.toThrow();
+    expect(daemonCall).toHaveBeenCalledExactlyOnceWith(name, { accountId: 'a' });
+  });
 
   // The name regex in the next test only sees flat names; dotted ones are
   // checked by text. Track H: H5's settings call this after a mode change.

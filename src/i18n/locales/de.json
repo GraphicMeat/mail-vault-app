@@ -3978,6 +3978,7 @@
   "errors.bulkStale": "Dieser Sammelvorgang hat sich geändert. Aktualisiere die Ansicht und versuche es erneut.",
   "errors.bulkOwned": "Dieser ausstehende Sammelvorgang wird vom Hintergrunddienst verwaltet.",
   "errors.bulkPendingRead": "Der ausstehende Sammelvorgang konnte nicht gelesen werden. Er wurde aufbewahrt.",
+  "errors.composeReceiptCleanup": "Das Konto konnte nicht entfernt werden. Versuche es erneut.",
   "errors.bulkPendingWrite": "Der ausstehende Sammelvorgang konnte nicht aktualisiert werden. Versuche es erneut.",
   "errors.bulkUnsupported": "Diese Sammelaktion ist nicht verfügbar.",
   "errors.bulkIdentityUncertain": "Die Nachrichtenidentität ist unklar. Aktualisieren Sie den Ordner und versuchen Sie es erneut.",

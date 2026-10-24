@@ -3978,6 +3978,7 @@
   "errors.bulkStale": "Esta operación por lotes ha cambiado. Actualiza antes de volver a intentarlo.",
   "errors.bulkOwned": "El servicio en segundo plano gestiona esta operación por lotes pendiente.",
   "errors.bulkPendingRead": "No se pudo leer la operación por lotes pendiente. Se ha conservado.",
+  "errors.composeReceiptCleanup": "No se pudo eliminar la cuenta. Vuelve a intentarlo.",
   "errors.bulkPendingWrite": "No se pudo actualizar la operación por lotes pendiente. Vuelve a intentarlo.",
   "errors.bulkUnsupported": "Esta acción masiva no está disponible.",
   "errors.bulkIdentityUncertain": "La identidad del mensaje es incierta. Actualiza la carpeta antes de volver a intentarlo.",

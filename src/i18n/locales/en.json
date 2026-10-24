@@ -3978,6 +3978,7 @@
   "errors.bulkStale": "This bulk operation has changed. Refresh before trying again.",
   "errors.bulkOwned": "This pending bulk operation is managed by the background helper.",
   "errors.bulkPendingRead": "The pending bulk operation could not be read. It has been kept.",
+  "errors.composeReceiptCleanup": "The account could not be removed. Try again.",
   "errors.bulkPendingWrite": "The pending bulk operation could not be updated. Try again.",
   "errors.bulkUnsupported": "This bulk action is not available.",
   "errors.bulkIdentityUncertain": "Message identity is uncertain. Refresh the folder before trying again.",

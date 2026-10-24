@@ -138,6 +138,12 @@ describe('demo mailbox backend', () => {
     expect(new Date(sent.date).getTime()).toBeGreaterThan(Date.now() - 60_000);
   });
 
+  it('supports native receipt cleanup during demo account removal', async () => {
+    const backend = createDemoBackend();
+    await expect(backend.invoke('daemon_rpc', { method: 'compose.receipts.remove_account', params: { accountId: 'demo' } }))
+      .resolves.toMatchObject({ removed: 0, simulated: true });
+  });
+
   // Compose sends through the daemon's two RPCs (handlers/compose.rs): the
   // demo answers them the way the daemon does, so Send works on the website.
   it('stages a copy, sends it, and drops the copy once Sent holds the message', async () => {

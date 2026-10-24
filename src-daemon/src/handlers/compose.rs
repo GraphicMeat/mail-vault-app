@@ -28,6 +28,7 @@ use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::compose::{self, RowHints};
 use mailvault_core::custody::entries;
+use mailvault_core::app_db::{self, compose_receipts::{self, Identity, Receipt, Scope, State}};
 use mailvault_core::imap::ImapConfig;
 use mailvault_core::smtp::{self, OutgoingEmail};
 use mailvault_core::vault_files;
@@ -56,6 +57,22 @@ fn hints_arg(params: &Value) -> RowHints {
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
+        "compose.receipts.remove_account" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            if account_id.trim().is_empty() {
+                return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"));
+            }
+            let app_dir = state.app_dir.clone();
+            let removed = blocking(move || app_db::with(&app_dir, |c| compose_receipts::remove_account(c, &account_id))).await.and_then(|r| r);
+            match removed {
+                Ok(n) => RpcResponse::success(id, json!({"removed": n})),
+                Err(e) => {
+                    warn!("[send:receipt_account_cleanup_fail] error={}", e);
+                    RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.composeReceiptCleanup")
+                }
+            }
+        }
+
         "compose.stage" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let account = req!(account_arg(&id, params));
@@ -81,7 +98,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 account_id,
                 mailbox,
                 uid,
-                own_copy: false,
+                own_copy: None,
                 message_id: message_id.clone(),
                 sent_mailbox: opt_str_arg(params, "sentMailbox"),
                 remind_days: params.get("remindDays").and_then(Value::as_i64).unwrap_or(0),
@@ -93,11 +110,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // every reply to it, then matches the local one.
             email.message_id = Some(message_id.clone());
             let (st, id_for_read, mb) = (Arc::clone(state), after.account_id.clone(), after.mailbox.clone());
-            let staged = match blocking(move || staged_copy(&st, &id_for_read, &mb, uid, &message_id)).await {
-                Ok(StagedCopy::Own(raw)) => Some(raw),
-                _ => None,
+            let (staged, own_copy) = match blocking(move || staged_copy(&st, &id_for_read, &mb, uid, &message_id)).await {
+                Ok(StagedCopy::Own(raw, identity)) => (Some(raw), Some(identity)),
+                _ => (None, None),
             };
-            after.own_copy = staged.is_some();
+            after.own_copy = own_copy;
             let sent = match send_logged(&account, &email, staged).await {
                 Ok(sent) => sent,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
@@ -115,36 +132,100 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 enum StagedCopy {
     /// The copy staged under this Message-ID: sent as it is, and the uid is
     /// this message's to mark sent and to remove.
-    Own(Vec<u8>),
+    Own(Vec<u8>, Identity),
     /// Another message: it is never sent, rewritten, re-flagged or removed.
     Foreign,
     /// Nothing the vault can give back. The uid is left alone too.
     Unreadable,
 }
 
-/// The staged copy's bytes, for `compose.send` to send as they are: every
-/// attempt is then the copy the user keeps, byte for byte. Anything else
-/// (the send rebuilds under the staged id) when the vault cannot give the
-/// copy back, or the file at `uid` is not the message staged under
-/// `message_id`.
+/// Execute one exact local message operation on a blocking thread while the
+/// mailbox lock and vault gate still protect its bytes/custody. The callback
+/// must not do network, mirror or batch work. E retains the complete proof in
+/// the existing native pending record before exact retirement. Cleaned only
+/// accounts for old local absence, never authority to prune a current row.
+pub(crate) fn with_local_ownership<T>(
+    state: &Arc<DaemonState>, scope: &Scope, expected_sha256: Option<&str>,
+    use_proof: impl FnOnce(&std::path::Path, Receipt, Option<Vec<u8>>) -> Result<T, String>,
+) -> Result<Option<T>, String> {
+    with_mailbox_write(state, &scope.account_id, &scope.mailbox, |root| {
+        let raw = local_bytes(root, scope)?;
+        match local_ownership_under_lock(state, scope, expected_sha256, raw.as_deref())? {
+            Some(proof) => use_proof(root, proof, raw).map(Some),
+            None => Ok(None),
+        }
+    })
+}
+
+/// None is absent/unavailable custody; Some(false) is a known conflicting row.
+fn local_custody(state: &Arc<DaemonState>, scope: &Scope) -> Option<bool> {
+    daemon_custody::with_conn(state, |c| entries::get(c, &scope.account_id, &scope.mailbox, scope.uid)).ok().flatten().map(|r| {
+        matches!(r["source"].as_str(), Some("local_draft" | "local_sent"))
+            && r["message_id"].as_str().and_then(compose::normalize_message_id).as_deref() == Some(scope.message_id.as_str())
+    })
+}
+
+fn local_ownership_under_lock(state: &Arc<DaemonState>, scope: &Scope, expected_sha256: Option<&str>, raw: Option<&[u8]>) -> Result<Option<Receipt>, String> {
+    let custody = local_custody(state, scope);
+    if custody == Some(false) { return Ok(None); }
+    let mut candidates = match app_db::with(&state.app_dir, |c| compose_receipts::load(c, scope)) {
+        Ok(receipts) => receipts,
+        Err(e) if custody == Some(true) && raw.is_some() => { warn!("[send:receipt_read_fail] error={}", e); Vec::new() }
+        Err(e) => return Err(e),
+    };
+    if let Some(digest) = expected_sha256 { candidates.retain(|r| r.identity.sha256 == digest); }
+    if candidates.len() > 1 { return Ok(None); }
+    Ok(match (candidates.pop(), raw) {
+        (Some(receipt), Some(bytes)) if receipt.state == State::Present && receipt.identity.matches_bytes(bytes) => Some(receipt),
+        (Some(receipt), None) if receipt.state == State::Cleaned => Some(receipt),
+        (None, Some(bytes)) if custody == Some(true) => Identity::from_bytes(scope.clone(), bytes)
+            .filter(|i| expected_sha256.is_none_or(|h| h == i.sha256)).map(Receipt::present),
+        _ => None,
+    })
+}
+
+/// Revalidate proof retained by a supported native pending record after exact
+/// receipt retirement. Never accepts proof from a compose/UI RPC.
+pub(crate) fn with_retained_local_ownership<T>(
+    state: &Arc<DaemonState>, proof: &Receipt,
+    use_proof: impl FnOnce(&std::path::Path, Receipt, Option<Vec<u8>>) -> Result<T, String>,
+) -> Result<Option<T>, String> {
+    if !proof.is_valid() { return Err("invalid retained compose proof".into()); }
+    let scope = &proof.identity.scope;
+    with_mailbox_write(state, &scope.account_id, &scope.mailbox, |root| {
+        let raw = local_bytes(root, scope)?;
+        if local_custody(state, scope) == Some(false) { return Ok(None); }
+        let matches = match (proof.state, raw.as_deref()) {
+            (State::Present, Some(raw)) => proof.identity.matches_bytes(raw),
+            (State::Cleaned, None) => true,
+            _ => false,
+        };
+        if !matches { return Ok(None); }
+        use_proof(root, proof.clone(), raw).map(Some)
+    })
+}
+
+/// Disk-only read under the mailbox lock. A failed directory listing is never
+/// absence (read_raw's legacy Maildir lookup is deliberately lenient).
+fn local_bytes(root: &std::path::Path, scope: &Scope) -> Result<Option<Vec<u8>>, String> {
+    let raw = mailvault_core::message_store::read_raw(root, &scope.account_id, &scope.mailbox, scope.uid).map_err(|e| e.to_string())?;
+    if raw.is_none() {
+        for format in [mailvault_core::message_store::Format::Maildir, mailvault_core::message_store::Format::Jmap] {
+            let uids = mailvault_core::message_store::uids_in_format(root, &scope.account_id, &scope.mailbox, format).map_err(|e| e.to_string())?;
+            if uids.contains(&scope.uid) { return Err("local compose copy could not be read".into()); }
+        }
+    }
+    Ok(raw)
+}
+
 fn staged_copy(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, message_id: &str) -> StagedCopy {
-    let read = crate::handlers::common::vault_root(state)
-        .and_then(|root| vault_files::read_eml(&state.vault_registry, &root, account_id, mailbox, uid).map_err(|e| e.to_string()));
-    match read {
-        Ok(raw) if bracketed_message_id(&raw).as_deref() == Some(message_id) => StagedCopy::Own(raw),
-        Ok(raw) => {
-            warn!(
-                "[send:staged_copy_other_message] mailbox={} uid={} found={:?} : rebuilding",
-                mailbox,
-                uid,
-                bracketed_message_id(&raw)
-            );
-            StagedCopy::Foreign
-        }
-        Err(e) => {
-            warn!("[send:staged_copy_unreadable] mailbox={} uid={} error={} : rebuilding", mailbox, uid, e);
-            StagedCopy::Unreadable
-        }
+    let Some(scope) = Scope::new(account_id, mailbox, uid, message_id) else { return StagedCopy::Foreign };
+    match with_local_ownership(state, &scope, None, |_, proof, raw| {
+        Ok(if proof.state == State::Present { raw.map(|raw| StagedCopy::Own(raw, proof.identity)).unwrap_or(StagedCopy::Unreadable) } else { StagedCopy::Unreadable })
+    }) {
+        Ok(Some(copy)) => copy,
+        Ok(None) => StagedCopy::Foreign,
+        Err(e) => { warn!("[send:staged_copy_unreadable] mailbox={} uid={} error={} : rebuilding", mailbox, uid, e); StagedCopy::Unreadable }
     }
 }
 
@@ -164,22 +245,28 @@ fn stage(
     info!("[send:build_mime] account={} bytes={} messageId={:?}", account.email, raw.len(), message_id);
 
     let flags = compose::STAGED_FLAGS.map(String::from);
-    let uid = with_mailbox_write(state, account_id, mailbox, |root| {
+    with_mailbox_write(state, account_id, mailbox, |root| {
         let uid = vault_files::free_local_uid(root, account_id, mailbox);
         vault_files::store(&state.vault_registry, root, account_id, mailbox, uid, &raw, &flags, true)?;
-        Ok(uid)
-    })
-    .map_err(|e| format!("E_COMPOSE_STAGE: {e}"))?;
-    info!("[send:stage_local] account={} mailbox={} uid={}", account.email, mailbox, uid);
+        info!("[send:stage_local] account={} mailbox={} uid={}", account.email, mailbox, uid);
+        let row = compose::staged_row(account, email, uid, message_id.as_deref(), hints, &compose::now_iso());
+        let entry = compose::with_flags(&row, false);
+        let _ = persist_present(state, account_id, mailbox, uid, &raw);
+        if let Err(e) = daemon_custody::with_conn(state, |c| entries::upsert(c, account_id, mailbox, std::slice::from_ref(&entry))) {
+            warn!("[send:stage_index_fail] mailbox={} uid={} error={}", mailbox, uid, e);
+        }
+        Ok(json!({"uid": uid, "mailbox": mailbox, "messageId": message_id, "rawSize": raw.len(), "entry": entry}))
+    }).map_err(|e| format!("E_COMPOSE_STAGE: {e}"))
+}
 
-    let row = compose::staged_row(account, email, uid, message_id.as_deref(), hints, &compose::now_iso());
-    let entry = compose::with_flags(&row, false);
-    // The copy is on disk: a row that did not land costs the list a line,
-    // never the message.
-    if let Err(e) = daemon_custody::with_conn(state, |c| entries::upsert(c, account_id, mailbox, std::slice::from_ref(&entry))) {
-        warn!("[send:stage_index_fail] account={} mailbox={} uid={} error={}", account.email, mailbox, uid, e);
+fn persist_present(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, raw: &[u8]) -> Option<Identity> {
+    let identity = bracketed_message_id(raw).and_then(|mid| Scope::new(account_id, mailbox, uid, &mid)).and_then(|scope| Identity::from_bytes(scope, raw));
+    if let Some(identity) = &identity {
+        if let Err(e) = app_db::with(&state.app_dir, |c| compose_receipts::save(c, &Receipt::present(identity.clone()))) {
+            warn!("[send:receipt_write_fail] mailbox={} uid={} error={}", mailbox, uid, e);
+        }
     }
-    Ok(json!({"uid": uid, "mailbox": mailbox, "messageId": message_id, "rawSize": raw.len(), "entry": entry}))
+    identity
 }
 
 /// What `compose.send` does once the transport took the message.
@@ -189,7 +276,7 @@ struct AfterSend {
     uid: u32,
     /// The vault held this message's own copy at `uid`. Otherwise `uid` is
     /// never written or removed, and the sent copy gets a uid of its own.
-    own_copy: bool,
+    own_copy: Option<Identity>,
     message_id: String,
     sent_mailbox: Option<String>,
     remind_days: i64,
@@ -233,65 +320,95 @@ async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &Outg
         }
     }
 
-    // The staged copy becomes the sent one: the staged bytes, which are what
-    // went out. When the staged uid did not hold this message's own copy,
+    // The staged copy becomes the sent one, retaining its original local bytes
+    // (Graph can add Bcc to transport bytes). Without exact local ownership,
     // the bytes sent go under a uid of their own and the staged uid is left
     // as it is: it may hold another message.
     let row = compose::staged_row(account, email, staged_uid, Some(&message_id), &hints, &compose::now_iso());
     let mut entry = compose::with_flags(&row, true);
     let (st, id, mb, sent_raw) = (Arc::clone(state), account_id.clone(), mailbox.clone(), sent.result.raw_rfc2822.clone());
     let row_template = entry.clone();
-    let archived = blocking(move || -> Result<(u32, Value), String> {
+    let local_message_id = message_id.clone();
+    let archive_identity = own_copy.clone();
+    let archived = blocking(move || -> Result<(Identity, Value), String> {
         let flags = compose::SENT_FLAGS.map(String::from);
-        let uid = with_mailbox_write(&st, &id, &mb, |root| {
-            if own_copy {
-                let raw = vault_files::read_eml(&st.vault_registry, root, &id, &mb, staged_uid).unwrap_or_else(|e| {
-                    warn!("[send:staged_copy_missing] mailbox={} uid={} error={} : keeping the bytes sent", mb, staged_uid, e);
-                    sent_raw.clone()
-                });
-                vault_files::store(&st.vault_registry, root, &id, &mb, staged_uid, &raw, &flags, true)?;
-                return Ok(staged_uid);
+        with_mailbox_write(&st, &id, &mb, |root| {
+            let scope = Scope::new(&id, &mb, staged_uid, &local_message_id).ok_or("invalid compose scope")?;
+            let current = local_bytes(root, &scope)?;
+            // Pin the exact local copy read before transport. Graph can add a
+            // Bcc header to transport bytes; its local copy retains staged bytes.
+            let can_reuse = match archive_identity.as_ref() {
+                Some(original) => local_ownership_under_lock(&st, &scope, Some(&original.sha256), current.as_deref())?
+                    .is_some_and(|proof| proof.state == State::Present && proof.identity == *original),
+                None => false,
+            };
+            let (uid, kept_raw) = if can_reuse {
+                (staged_uid, current.expect("present proof has bytes"))
+            } else {
+                if current.is_none() {
+                    if let Ok(receipts) = app_db::with(&st.app_dir, |c| compose_receipts::load(c, &scope)) {
+                        for mut receipt in receipts {
+                            receipt.state = State::Cleaned;
+                            if let Err(e) = app_db::with(&st.app_dir, |c| compose_receipts::save(c, &receipt)) {
+                                warn!("[send:receipt_clean_fail] uid={} error={}", staged_uid, e);
+                            }
+                        }
+                    }
+                }
+                let mut uid = vault_files::free_local_uid(root, &id, &mb);
+                while uid == staged_uid || vault_files::exists(root, &id, &mb, uid) { uid += 1; }
+                (uid, sent_raw)
+            };
+            vault_files::store(&st.vault_registry, root, &id, &mb, uid, &kept_raw, &flags, true)?;
+            let mut sent_entry = row_template;
+            sent_entry["uid"] = json!(uid);
+            let identity = persist_present(&st, &id, &mb, uid, &kept_raw).ok_or("invalid local compose identity")?;
+            if let Err(e) = daemon_custody::with_conn(&st, |c| entries::upsert(c, &id, &mb, std::slice::from_ref(&sent_entry))) {
+                warn!("[send:sent_index_fail] uid={} error={}", uid, e);
             }
-            let mut uid = vault_files::free_local_uid(root, &id, &mb);
-            while uid == staged_uid || vault_files::exists(root, &id, &mb, uid) {
-                uid += 1;
-            }
-            vault_files::store(&st.vault_registry, root, &id, &mb, uid, &sent_raw, &flags, true)?;
-            Ok(uid)
-        })?;
-        let mut sent_entry = row_template;
-        sent_entry["uid"] = json!(uid);
-        daemon_custody::with_conn(&st, |c| entries::upsert(c, &id, &mb, std::slice::from_ref(&sent_entry)))?;
-        Ok((uid, sent_entry))
+            Ok((identity, sent_entry))
+        })
     })
     .await
     .and_then(|r| r);
     // Where this message's local copy is: the uid the server's copy removes.
     // With no copy written, the staged uid only when it was this message's.
-    let local_uid = match archived {
-        Ok((uid, sent_entry)) => {
+    let local_copy = match archived {
+        Ok((identity, sent_entry)) => {
+            let uid = identity.scope.uid;
             info!("[send:mark_sent_local] account={} mailbox={} uid={} staged_uid={}", account.email, mailbox, uid, staged_uid);
             entry = sent_entry;
-            Some(uid)
+            Some(identity)
         }
         Err(e) => {
             warn!("[send:mark_sent_local_fail] account={} mailbox={} uid={} error={}", account.email, mailbox, staged_uid, e);
-            own_copy.then_some(staged_uid)
+            own_copy
         }
     };
 
     // The server's Sent copy. Once it holds one, the staged copy goes: the
     // two are one message, and the list would show both.
+    let local_uid = local_copy.as_ref().map(|identity| identity.scope.uid);
     let extra = json!({"vaultAccountId": account_id, "stagedUid": local_uid, "localMailbox": mailbox});
     let st = Arc::clone(state);
     report_sent_copy(state, account, sent_mailbox, sent, extra, move |landed| async move {
-        let Some(uid) = local_uid.filter(|_| landed) else {
+        let Some(identity) = local_copy.filter(|_| landed) else {
             return;
         };
+        let uid = identity.scope.uid;
         let (id, mb) = (account_id, mailbox);
         let removed = blocking(move || -> Result<(), String> {
-            with_mailbox_write(&st, &id, &mb, |root| vault_files::delete(&st.vault_registry, root, &id, &mb, uid))?;
-            daemon_custody::with_conn(&st, |c| entries::remove(c, &id, &mb, &[uid]))?;
+            with_local_ownership(&st, &identity.scope, Some(&identity.sha256), |root, mut proof, raw| {
+                if raw.is_some() {
+                    proof.state = State::Cleaned;
+                    // Failure keeps the local copy and custody. Transport already
+                    // succeeded, so this can only be a logged cleanup failure.
+                    app_db::with(&st.app_dir, |c| compose_receipts::save(c, &proof))?;
+                    vault_files::delete(&st.vault_registry, root, &id, &mb, uid)?;
+                    daemon_custody::with_conn(&st, |c| entries::remove(c, &id, &mb, &[uid]))?;
+                }
+                Ok(())
+            })?.ok_or("local compose identity changed before cleanup")?;
             Ok(())
         })
         .await
@@ -421,6 +538,306 @@ mod tests {
                 return payload;
             }
         }
+    }
+
+    fn proof_of(s: &Arc<DaemonState>, staged: &Value, digest: Option<&str>) -> Option<Receipt> {
+        let scope = Scope::new("acct-1", staged["mailbox"].as_str().unwrap(), staged["uid"].as_u64().unwrap() as u32, staged["messageId"].as_str().unwrap()).unwrap();
+        with_local_ownership(s, &scope, digest, |_, proof, _| Ok(proof)).unwrap()
+    }
+
+    #[tokio::test]
+    async fn receipt_reader_uses_normal_custody_offline_but_never_a_server_collision() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        app_db::with(&s.app_dir, |c| compose_receipts::remove_account(c, "acct-1")).unwrap();
+        let proof = proof_of(&s, &staged, None).expect("normal native local custody is sufficient offline");
+        assert_eq!(proof.state, State::Present);
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        let mut server_row = row_of(&s, uid).unwrap(); server_row["source"] = json!("imap");
+        daemon_custody::with_conn(&s, |c| entries::upsert(c, "acct-1", "Sent", &[server_row])).unwrap();
+        assert!(proof_of(&s, &staged, None).is_none(), "same UID and MID with server custody is not local ownership");
+        assert!(server.commands().is_empty(), "pseudo UID is never sent to a server");
+    }
+
+    #[tokio::test]
+    async fn receipt_known_server_custody_collision_overrules_an_old_local_receipt() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        let mut row = row_of(&s, uid).unwrap(); row["source"] = json!("imap");
+        daemon_custody::with_conn(&s, |c| entries::upsert(c, "acct-1", "Sent", &[row])).unwrap();
+        assert!(proof_of(&s, &staged, None).is_none(), "a known server copy cannot inherit an old local receipt even with the same bytes");
+        assert!(server.commands().is_empty());
+    }
+
+    #[tokio::test]
+    async fn receipt_graph_bcc_cleanup_binds_the_actual_local_staged_bytes() {
+        plaintext(); let server = MockImap::start(Scenario::new());
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(202, String::new())]);
+        let s = st(true);
+        let mut params = stage_params(graph_account_json(&server));
+        params["email"]["bcc"] = json!("hidden@example.test");
+        let staged = ok(&s, "compose.stage", params.clone()).await;
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        let original = proof_of(&s, &staged, None).unwrap();
+        let sent = ok(&s, "compose.send", send_params(graph_account_json(&server), &staged, json!({"email": params["email"]}))).await;
+        assert_eq!(sent["success"], true);
+        assert_eq!(sent["entry"]["uid"], staged["uid"], "Graph Bcc injection must preserve ordinary staged-copy identity");
+        assert!(flags_of(&s, uid).is_none(), "Graph's local stage is cleaned after transport accepts it");
+        let cleaned = proof_of(&s, &staged, None).unwrap();
+        assert_eq!(cleaned.state, State::Cleaned); assert_eq!(cleaned.identity, original.identity);
+        assert!(server.commands().is_empty());
+    }
+
+    #[tokio::test]
+    async fn receipt_reader_binds_tuple_mid_digest_and_refuses_ambiguous_digest_history() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let proof = proof_of(&s, &staged, None).unwrap();
+        for changed in [json!({"mailbox": "Drafts"}), json!({"uid": 1}), json!({"messageId": "<other@example.test>"})] {
+            let mut wrong = staged.clone(); wrong.as_object_mut().unwrap().extend(changed.as_object().unwrap().clone());
+            assert!(proof_of(&s, &wrong, None).is_none());
+        }
+        let wrong_account = Scope::new("other", "Sent", proof.identity.scope.uid, &proof.identity.scope.message_id).unwrap();
+        assert!(with_local_ownership(&s, &wrong_account, None, |_, p, _| Ok(p)).unwrap().is_none());
+        assert!(proof_of(&s, &staged, Some(&"0".repeat(64))).is_none());
+        let mut other = raw_of(&s, proof.identity.scope.uid); other.extend_from_slice(b"different");
+        let duplicate = Receipt::present(Identity::from_bytes(proof.identity.scope.clone(), &other).unwrap());
+        app_db::with(&s.app_dir, |c| compose_receipts::save(c, &duplicate)).unwrap();
+        assert!(proof_of(&s, &staged, None).is_none(), "current bytes cannot select an original from ambiguous tuple history");
+        assert_eq!(proof_of(&s, &staged, Some(&proof.identity.sha256)), Some(proof));
+    }
+
+    #[tokio::test]
+    async fn receipt_persistence_failure_keeps_transmitted_send_successful_and_local_proof() {
+        plaintext(); let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent"))); let s = st(true);
+        let mut rx = s.events.subscribe();
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        app_db::with(&s.app_dir, |c| c.execute_batch("CREATE TRIGGER reject_receipt BEFORE INSERT ON meta WHEN NEW.key LIKE 'compose_receipt:%' BEGIN SELECT RAISE(FAIL, 'receipt unavailable'); END;").map_err(|e| e.to_string())).unwrap();
+        let sent = ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({"sentMailbox": "Sent"}))).await;
+        assert_eq!(next_event(&mut rx, "send-server-append-complete").await["ok"], true);
+        assert_eq!(sent["success"], true); assert_eq!(server.sent_messages().len(), 1);
+        assert!(flags_of(&s, staged["uid"].as_u64().unwrap() as u32).is_some(), "failed cleaned persistence preserves local copy and custody");
+        assert_eq!(proof_of(&s, &staged, None).unwrap().state, State::Present);
+    }
+
+    #[tokio::test]
+    async fn receipt_stage_persistence_failure_uses_custody_and_otherwise_refuses() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        app_db::with(&s.app_dir, |c| c.execute_batch("CREATE TRIGGER reject_receipt BEFORE INSERT ON meta WHEN NEW.key LIKE 'compose_receipt:%' BEGIN SELECT RAISE(FAIL, 'receipt unavailable'); END;").map_err(|e| e.to_string())).unwrap();
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        assert!(persisted_receipts(&s).is_empty());
+        assert!(proof_of(&s, &staged, None).is_some());
+        daemon_custody::close(&s);
+        assert!(proof_of(&s, &staged, None).is_none(), "missing receipt and custody never infer ownership from MID alone");
+    }
+
+    #[tokio::test]
+    async fn receipt_cleaned_proof_cannot_authorize_a_replacement_mirror_or_queue() {
+        plaintext(); let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent"))); let s = st(true);
+        let mut rx = s.events.subscribe();
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let original = proof_of(&s, &staged, None).unwrap();
+        ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({"sentMailbox": "Sent"}))).await;
+        assert_eq!(next_event(&mut rx, "send-server-append-complete").await["ok"], true);
+        let cleaned = proof_of(&s, &staged, None).unwrap(); assert_eq!(cleaned.state, State::Cleaned);
+        assert_eq!(cleaned.identity, original.identity);
+        let uid = cleaned.identity.scope.uid;
+        let replacement = b"Message-ID: <foreign@example.test>\r\n\r\nkeep";
+        with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, replacement, &["seen".into()], true)).unwrap();
+        assert!(proof_of(&s, &staged, Some(&original.identity.sha256)).is_none());
+        let queue = Scope::new("acct-1", "Scheduled", uid, &original.identity.scope.message_id).unwrap();
+        assert!(with_local_ownership(&s, &queue, None, |_, p, _| Ok(p)).unwrap().is_none());
+        assert_eq!(raw_of(&s, uid), replacement);
+    }
+
+    #[tokio::test]
+    async fn receipt_cleaned_never_authorizes_identical_bytes_reappearing_at_the_uid() {
+        plaintext(); let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent"))); let s = st(true);
+        let mut rx = s.events.subscribe();
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        let old_raw = raw_of(&s, uid);
+        ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({"sentMailbox": "Sent"}))).await;
+        assert_eq!(next_event(&mut rx, "send-server-append-complete").await["ok"], true);
+        assert_eq!(proof_of(&s, &staged, None).unwrap().state, State::Cleaned);
+        with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &old_raw, &["seen".into()], true)).unwrap();
+        assert!(proof_of(&s, &staged, None).is_none(), "cleaned evidence never grants authority over a current colliding copy, even identical bytes");
+        assert_eq!(raw_of(&s, uid), old_raw);
+    }
+
+    #[tokio::test]
+    async fn receipt_after_send_rechecks_bytes_changed_while_transport_was_in_flight() {
+        plaintext(); let server = MockImap::start(Scenario::new()); let s = st(true);
+        let params = stage_params(account_json(&server));
+        let staged = ok(&s, "compose.stage", params.clone()).await;
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        let account = account_arg(&json!(1), &params).unwrap();
+        let mut email = email_arg(&json!(1), &params).unwrap();
+        email.message_id = Some(staged["messageId"].as_str().unwrap().into());
+        let original = raw_of(&s, uid);
+        let original_identity = proof_of(&s, &staged, None).unwrap().identity;
+        let sent = send_logged(&account, &email, Some(original.clone())).await.unwrap();
+        let mut foreign = original.clone(); foreign.extend_from_slice(b"SAME MID REPLACEMENT");
+        with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &foreign, &["seen".into()], true)).unwrap();
+        let entry = after_send(&s, &account, &email, &sent, AfterSend {
+            account_id: "acct-1".into(), mailbox: "Sent".into(), uid, own_copy: Some(original_identity),
+            message_id: staged["messageId"].as_str().unwrap().into(), sent_mailbox: None,
+            remind_days: 0, own_addresses: vec![], cancel_scheduled_id: None, hints: RowHints::default(),
+        }).await;
+        assert_eq!(raw_of(&s, uid), foreign, "the pre-transport read is not mutation authority");
+        assert_ne!(entry["uid"], staged["uid"]);
+        assert_eq!(raw_of(&s, entry["uid"].as_u64().unwrap() as u32), original);
+    }
+
+    #[tokio::test]
+    async fn receipt_retained_present_proof_rechecks_exact_bytes_after_retirement() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let proof = proof_of(&s, &staged, None).unwrap();
+        let uid = proof.identity.scope.uid; let original = raw_of(&s, uid);
+        app_db::with(&s.app_dir, |c| compose_receipts::retire(c, &proof)).unwrap();
+        let resumed = with_retained_local_ownership(&s, &proof, |_, p, raw| { assert_eq!(raw, Some(original.clone())); Ok(p) }).unwrap();
+        assert_eq!(resumed, Some(proof.clone()));
+        let mut changed = original; changed.extend_from_slice(b"SAME MID DIFFERENT BYTES");
+        with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &changed, &["seen".into()], true)).unwrap();
+        assert!(with_retained_local_ownership(&s, &proof, |_, p, _| Ok(p)).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn receipt_retained_native_pending_proof_survives_exact_retirement_and_reopen() {
+        plaintext(); let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent"))); let s = st(true);
+        let mut rx = s.events.subscribe();
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({"sentMailbox": "Sent"}))).await;
+        assert_eq!(next_event(&mut rx, "send-server-append-complete").await["ok"], true);
+        let proof = proof_of(&s, &staged, None).unwrap();
+        assert_eq!(proof.state, State::Cleaned);
+        app_db::with(&s.app_dir, |c| {
+            // This stands for E's existing pending journal, not a second proof registry.
+            mailvault_core::app_db::db::meta_set(c, "pending_operation", &serde_json::to_string(&proof).unwrap())?;
+            assert!(compose_receipts::retire(c, &proof)?);
+            Ok(())
+        }).unwrap();
+        let reopened = DaemonState::for_test(s.app_dir.clone(), s.data_dir.clone(), true);
+        let retained: Receipt = app_db::with(&reopened.app_dir, |c| Ok(serde_json::from_str(&mailvault_core::app_db::db::meta_get(c, "pending_operation").unwrap()).unwrap())).unwrap();
+        assert!(proof_of(&reopened, &staged, None).is_none());
+        let resumed = with_retained_local_ownership(&reopened, &retained, |_, p, raw| { assert!(raw.is_none()); Ok(p) }).unwrap();
+        assert_eq!(resumed, Some(proof), "pending native proof remains usable after receipt retirement");
+        let mut unsupported = retained; unsupported.version = 999;
+        assert!(with_retained_local_ownership(&reopened, &unsupported, |_, p, _| Ok(p)).is_err());
+    }
+
+    #[tokio::test]
+    async fn receipt_cleanup_rechecks_a_copy_replaced_while_server_append_was_in_flight() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent"))
+            .fault(mock_imap::Trigger::on("APPEND"), mock_imap::Action::Delay(std::time::Duration::from_millis(500))));
+        let s = st(true); let mut rx = s.events.subscribe();
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({"sentMailbox": "Sent"}))).await;
+        let mut foreign = raw_of(&s, uid); foreign.extend_from_slice(b"DIFFERENT SAME MID");
+        with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &foreign, &["seen".into()], true)).unwrap();
+        assert_eq!(next_event(&mut rx, "send-server-append-complete").await["ok"], true);
+        assert_eq!(raw_of(&s, uid), foreign, "cleanup must re-read after provider IO");
+        assert!(proof_of(&s, &staged, None).is_none());
+        assert_eq!(persisted_receipts(&s)[0]["state"], "present", "a collision is not cleaned evidence");
+    }
+
+    #[tokio::test]
+    async fn receipt_account_cleanup_storage_failure_is_reported_without_vault_access() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        app_db::with(&s.app_dir, |c| c.execute_batch("CREATE TRIGGER reject_receipt_delete BEFORE DELETE ON meta WHEN OLD.key LIKE 'compose_receipt:%' BEGIN SELECT RAISE(FAIL, 'receipt unavailable'); END;").map_err(|e| e.to_string())).unwrap();
+        s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+        let failed = rpc(&s, "compose.receipts.remove_account", json!({"accountId": "acct-1"})).await;
+        assert_eq!(failed.error.unwrap().message, "errors.composeReceiptCleanup");
+        assert_eq!(persisted_receipts(&s).len(), 1);
+        assert!(server.commands().is_empty());
+    }
+
+    #[tokio::test]
+    async fn receipt_account_cleanup_is_explicit_isolated_idempotent_and_ungated() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let mut other = stage_params(account_json(&server)); other["accountId"] = json!("acct-1-other");
+        ok(&s, "compose.stage", other).await;
+        ok(&s, "clear_email_cache", json!({"accountId": "acct-1"})).await;
+        ok(&s, "delete_mailbox_cache", json!({"accountId": "acct-1"})).await;
+        assert_eq!(persisted_receipts(&s).len(), 2, "generic cache maintenance does not retire evidence");
+        s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(ok(&s, "compose.receipts.remove_account", json!({"accountId": "acct-1"})).await["removed"], 1);
+        assert_eq!(ok(&s, "compose.receipts.remove_account", json!({"accountId": "acct-1"})).await["removed"], 0);
+        assert_eq!(persisted_receipts(&s).len(), 1);
+        assert_eq!(persisted_receipts(&s)[0]["identity"]["accountId"], "acct-1-other");
+        assert!(rpc(&s, "compose.receipts.remove_account", json!({})).await.error.is_some());
+        assert!(rpc(&s, "compose.receipts.remove_account", json!({"accountId": " "})).await.error.is_some());
+        assert!(server.commands().is_empty());
+        assert!(staged["uid"].as_u64().is_some());
+    }
+
+    fn persisted_receipts(s: &Arc<DaemonState>) -> Vec<Value> {
+        mailvault_core::app_db::with(&s.app_dir, |c| {
+            let mut q = c.prepare("SELECT value FROM meta WHERE key LIKE 'compose_receipt:%'").map_err(|e| e.to_string())?;
+            let rows = q.query_map([], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+            rows.into_iter().map(|v| serde_json::from_str(&v).map_err(|e| e.to_string())).collect()
+        }).unwrap()
+    }
+
+    // Missing custody must not erase native creation proof before the optimistic row arrives.
+    #[tokio::test]
+    async fn receipt_survives_stage_custody_failure_and_reopen() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        daemon_custody::close(&s);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let rows = persisted_receipts(&s);
+        assert_eq!(rows.len(), 1, "stage must durably record exact native ownership even without custody");
+        assert_eq!(rows[0]["state"], "present");
+        assert_eq!(rows[0]["identity"]["uid"], staged["uid"]);
+        assert_eq!(rows[0]["identity"]["messageId"], staged["messageId"]);
+        let original = raw_of(&s, staged["uid"].as_u64().unwrap() as u32);
+        let sent = ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({}))).await;
+        assert_eq!(sent["success"], true);
+        assert_eq!(server.sent_messages(), vec![original], "receipt proof sends the exact staged bytes while custody is closed");
+        let reopened = DaemonState::for_test(s.app_dir.clone(), s.data_dir.clone(), true);
+        assert_eq!(persisted_receipts(&reopened), rows);
+        assert_eq!(proof_of(&reopened, &staged, None).unwrap().state, State::Present);
+    }
+
+    #[tokio::test]
+    async fn receipt_survives_cleanup_before_the_optimistic_row() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        let mut rx = s.events.subscribe();
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({"sentMailbox": "Sent"}))).await;
+        assert_eq!(next_event(&mut rx, "send-server-append-complete").await["ok"], true);
+        let rows = persisted_receipts(&s);
+        assert_eq!(rows.len(), 1, "cleanup retains original exact proof");
+        assert_eq!(rows[0]["state"], "cleaned");
+        assert_eq!(rows[0]["identity"]["uid"], staged["uid"]);
+        assert!(flags_of(&s, staged["uid"].as_u64().unwrap() as u32).is_none());
+    }
+
+    #[tokio::test]
+    async fn receipt_refuses_same_mid_different_bytes_at_staged_uid() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let uid = staged["uid"].as_u64().unwrap() as u32;
+        let mut foreign = raw_of(&s, uid);
+        foreign.extend_from_slice(b"\r\nFOREIGN SAME MID");
+        with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &foreign, &["seen".into()], true)).unwrap();
+        let sent = ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({}))).await;
+        assert_ne!(server.sent_messages()[0], foreign, "duplicate MID does not prove staged byte ownership");
+        assert_eq!(raw_of(&s, uid), foreign, "replacement is preserved");
+        assert_ne!(sent["entry"]["uid"], staged["uid"]);
     }
 
     // ── compose.stage ───────────────────────────────────────────────
@@ -707,6 +1124,9 @@ mod tests {
         assert_eq!(elsewhere.len(), 1, "the sent copy is kept under a uid of its own");
         assert_eq!(raw_of(&s, elsewhere[0]), smtp[0]);
         assert_eq!(sent["entry"]["uid"], json!(elsewhere[0]));
+        assert_eq!(proof_of(&s, &a, None).unwrap().state, State::Cleaned);
+        let mut replacement = a.clone(); replacement["uid"] = json!(elsewhere[0]);
+        assert_eq!(proof_of(&s, &replacement, None).unwrap().state, State::Present);
     }
 
     /// No Sent folder to APPEND to: the copy that went out stays, as sent.

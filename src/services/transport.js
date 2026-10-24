@@ -249,7 +249,7 @@ export const DAEMON_OWNED = new Set([
   // sent, records the reminder, cancels an edited scheduled row and drops
   // the copy once the server holds its own (`handlers/compose.rs`). Dotted,
   // no Tauri twin; `api.stageOutgoing`/`api.sendStaged` are the callers.
-  'compose.stage', 'compose.send',
+  'compose.stage', 'compose.send', 'compose.receipts.remove_account',
   // Task 5.6: Graph (list/get/cache messages, read/flag/delete, move, folder
   // management). Their Tauri twins are deleted in this same task — flat
   // names, no rename layer, no Tauri fallback, same reasoning as 5.4a/5.4b/

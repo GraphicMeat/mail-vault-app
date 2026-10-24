@@ -3978,6 +3978,7 @@
   "errors.bulkStale": "Esta operação em lote mudou. Atualize antes de tentar novamente.",
   "errors.bulkOwned": "Esta operação em lote pendente é gerenciada pelo serviço em segundo plano.",
   "errors.bulkPendingRead": "Não foi possível ler a operação em lote pendente. Ela foi mantida.",
+  "errors.composeReceiptCleanup": "Não foi possível remover a conta. Tente novamente.",
   "errors.bulkPendingWrite": "Não foi possível atualizar a operação em lote pendente. Tente novamente.",
   "errors.bulkUnsupported": "Esta ação em massa não está disponível.",
   "errors.bulkIdentityUncertain": "A identidade da mensagem é incerta. Atualize a pasta antes de tentar novamente.",

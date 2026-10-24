@@ -3978,6 +3978,7 @@
   "errors.bulkStale": "Questa operazione in blocco è cambiata. Aggiorna prima di riprovare.",
   "errors.bulkOwned": "Questa operazione in blocco in sospeso è gestita dal servizio in background.",
   "errors.bulkPendingRead": "Impossibile leggere l’operazione in blocco in sospeso. È stata conservata.",
+  "errors.composeReceiptCleanup": "Impossibile rimuovere l’account. Riprova.",
   "errors.bulkPendingWrite": "Impossibile aggiornare l’operazione in blocco in sospeso. Riprova.",
   "errors.bulkUnsupported": "Questa azione collettiva non è disponibile.",
   "errors.bulkIdentityUncertain": "L’identità del messaggio è incerta. Aggiorna la cartella prima di riprovare.",

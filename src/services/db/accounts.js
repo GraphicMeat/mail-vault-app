@@ -431,6 +431,8 @@ export async function updateOAuth2Tokens(accountId, tokens) {
 
 export async function deleteAccount(id) {
   await initDB();
+  // Retire native local-compose evidence before removing account persistence.
+  await invoke('compose.receipts.remove_account', { accountId: id });
 
   // Remove from keychain
   if (invoke) {

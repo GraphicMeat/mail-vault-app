@@ -3978,6 +3978,7 @@
   "errors.bulkStale": "此批量操作已更改。请刷新后重试。",
   "errors.bulkOwned": "此待处理的批量操作由后台服务管理。",
   "errors.bulkPendingRead": "未能读取待处理的批量操作。该操作已保留。",
+  "errors.composeReceiptCleanup": "无法移除账户。请重试。",
   "errors.bulkPendingWrite": "未能更新待处理的批量操作。请重试。",
   "errors.bulkUnsupported": "此批量操作不可用。",
   "errors.bulkIdentityUncertain": "邮件身份不确定。请刷新文件夹后重试。",

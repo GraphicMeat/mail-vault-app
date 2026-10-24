@@ -11,6 +11,7 @@
 
 pub mod auto_tags;
 pub mod classify;
+pub mod compose_receipts;
 pub mod db;
 pub mod deleted;
 pub mod identity;
