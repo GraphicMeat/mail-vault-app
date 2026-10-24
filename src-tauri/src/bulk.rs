@@ -463,4 +463,74 @@ mod tests {
         release_frame(&h, &p, &json!({"operationId":"op","finished":true}));
         assert!(!h.contains("op"));
     }
+    #[test]
+    fn reviewed_old_attempt_terminal_cannot_release_resumed_hold() {
+        let h = HeldBulkPaths::default();
+        let p = Fake {
+            held: &h,
+            calls: Mutex::new(vec![]),
+            released: Mutex::new(vec![]),
+            fail: false,
+            live: true,
+            terminal: false,
+        };
+        forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","attemptId":"first","type":"archive_backup_delete"}),
+        )
+        .unwrap();
+        let old = p.calls.lock().unwrap().last().unwrap().1["attemptId"].clone();
+        release_frame(
+            &h,
+            &p,
+            &json!({"operationId":"op","attemptId":old,"finished":true}),
+        );
+        forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","attemptId":"second","type":"archive_backup_delete"}),
+        )
+        .unwrap();
+        release_frame(
+            &h,
+            &p,
+            &json!({"operationId":"op","attemptId":old,"finished":true}),
+        );
+        release_frame(
+            &h,
+            &p,
+            &json!({"operationId":"op","attemptId":old,"finished":true}),
+        );
+        assert!(
+            h.contains("op"),
+            "earlier drain must not release a resumed execution"
+        );
+    }
+    #[test]
+    fn reviewed_timeout_before_visible_owner_keeps_authority() {
+        let h = HeldBulkPaths::default();
+        let p = Fake {
+            held: &h,
+            calls: Mutex::new(vec![]),
+            released: Mutex::new(vec![]),
+            fail: true,
+            live: false,
+            terminal: false,
+        };
+        assert!(forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","type":"archive_backup_delete"})
+        )
+        .is_err());
+        assert!(
+            h.contains("op"),
+            "empty active status does not prove a timed-out admission cannot start later"
+        );
+        assert!(p.released.lock().unwrap().is_empty());
+    }
 }

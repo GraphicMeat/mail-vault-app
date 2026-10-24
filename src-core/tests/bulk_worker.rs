@@ -27,6 +27,7 @@ struct Fake {
     copy_missing: Vec<u32>,
     copy_failed: Vec<u32>,
     delete_failed: usize,
+    archive_errors: usize,
 }
 impl Ports for Fake {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
@@ -63,7 +64,10 @@ impl Ports for Fake {
         if self.fail_stage == Some("archive") {
             return Err("archive failed".into());
         }
-        Ok(ArchiveOutcome::default())
+        Ok(ArchiveOutcome {
+            errors: self.archive_errors,
+            ..Default::default()
+        })
     }
     async fn verify(&mut self, g: &Group, _identity: &Identity) -> Result<Vec<u32>, String> {
         self.trace.push(
@@ -534,4 +538,38 @@ async fn stricter_proof_intentionally_refuses_the_oracles_stray_verified_uid() {
         .all(|effect| effect["uids"] == json!([1])));
     assert_eq!(w.result.removed, 1);
     assert_eq!(w.result.kept_not_archived, 0);
+}
+
+#[test]
+fn reviewed_provider_identity_survives_persisted_checkpoint_roundtrip() {
+    let identity = Identity::Imap {
+        validity: 1,
+        message_ids: HashMap::from([(7, "selected@test".into())]),
+    };
+    let result = serde_json::from_value::<Identity>(serde_json::to_value(&identity).unwrap());
+    assert!(result.is_ok(), "identity must roundtrip: {result:?}");
+    assert_eq!(result.unwrap(), identity);
+}
+#[test]
+fn reviewed_jmap_query_edit_changes_provider_origin() {
+    let mut config:mailvault_core::imap::ImapConfig=serde_json::from_value(json!({"email":"me@example.test","imapHost":"host","jmapSessionUrl":"https://host/session?tenant=a","jmapAuth":"basic","password":"pw"})).unwrap();
+    let origin = bulk_worker::origin_hash(&config);
+    config.jmap_session_url = Some("https://host/session?tenant=b".into());
+    assert_ne!(bulk_worker::origin_hash(&config), origin);
+}
+#[tokio::test]
+async fn reviewed_failed_archive_cannot_turn_stale_uid_presence_into_delete_proof() {
+    for action in [Action::ArchiveAndDelete, Action::ArchiveBackupDelete] {
+        let mut w = work(action, vec![json!(7)]);
+        let mut f = Fake {
+            archive_errors: 1,
+            ..Default::default()
+        };
+        run(&mut w, &mut f).await.unwrap();
+        assert!(!f
+            .trace
+            .iter()
+            .any(|effect| effect["effect"] == "delete" || effect["effect"] == "copy"));
+        assert_eq!(w.result.removed, 0);
+    }
 }

@@ -916,4 +916,39 @@ mod tests {
         assert!(listed.as_array().unwrap().is_empty());
         assert!(!server.commands().iter().any(|c| c.contains("UID STORE")));
     }
+    #[tokio::test]
+    async fn reviewed_valid_selected_message_cannot_overwrite_different_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let server = MockImap::start(Scenario::new().mailbox(inbox(1)));
+        let config = config(&server);
+        let identity = read_imap_identity(&state, &group(), &config, &selected())
+            .await
+            .unwrap();
+        let cur = mailvault_core::vault_files::cur_path(dir.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        let file = cur.join(mailvault_core::vault_files::build_maildir_filename(
+            7,
+            &["archived".into()],
+        ));
+        let original = b"Message-ID: <older-only-copy@test>\r\n\r\noriginal archived A\r\n";
+        std::fs::write(&file, original).unwrap();
+        let _ = mailvault_core::archive::run_config(
+            archive::archive_ctx(&state, dir.path().into()),
+            "acc".into(),
+            config,
+            "INBOX".into(),
+            vec![7],
+            Arc::new(AtomicBool::new(false)),
+            true,
+            identity,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            std::fs::read(&file).unwrap(),
+            original,
+            "valid current B is not permission to remove archived A"
+        );
+    }
 }
