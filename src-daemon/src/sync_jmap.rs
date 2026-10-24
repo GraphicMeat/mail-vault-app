@@ -359,8 +359,7 @@ async fn apply_delta(
     let mut seeds = HashMap::new();
     for path in cached {
         let io = engine.cache_ctx(account_id, path);
-        let config = cfg.clone();
-        seeds.insert(path.clone(), cache_io(&io, move |io| io.native_seed(&config)).await?);
+        seeds.insert(path.clone(), engine.prepare_native_seed(&io, cfg).await?);
     }
     let wanted: Vec<String> = changes.created.iter().chain(&changes.updated).cloned().collect();
     let got: EmailsGot = if wanted.is_empty() {
@@ -545,8 +544,7 @@ async fn rebuild(
     touched: &mut BTreeMap<String, Touch>,
 ) -> Result<(), String> {
     let io = engine.cache_ctx(account_id, path).for_source(cfg, Some(1));
-    let config = cfg.clone();
-    let seed = cache_io(&io, move |io| io.native_seed(&config)).await?;
+    let seed = engine.prepare_native_seed(&io, cfg).await?;
     let mailbox_id = boxes.ids.get(path).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {path}"))?;
     let (ids, _) = acct.client.query_mailbox(&mailbox_id, 0, COLD_PAGE).await.map_err(|e| e.to_string())?;
     // A page lists newest first; the ledger takes it oldest first, so the

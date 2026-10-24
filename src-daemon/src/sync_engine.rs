@@ -250,6 +250,22 @@ impl SyncEngine {
         }
     }
 
+    /// Observe the cache before admitting an initial cross-origin transition.
+    /// Ordinary same-origin chunks keep their captured config and never read credentials here.
+    pub(crate) async fn prepare_native_seed(&self, io: &CacheCtx, config: &ImapConfig) -> Result<NativeBatchSeed, String> {
+        let captured = config.clone();
+        let seed = cache_io(io, move |io| io.native_seed(&captured)).await?;
+        if seed.expected.get("originHash").and_then(serde_json::Value::as_str)
+            .is_some_and(|origin| origin != seed.identity.origin_hash) {
+            let current = crate::credentials::resolve_account_credentials_quiet(&seed.identity.account_id)
+                .await.map_err(|_| "errors.bulkIdentityUncertain")?;
+            if mailvault_core::bulk_worker::origin_hash(&current) != seed.identity.origin_hash {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+        }
+        Ok(seed)
+    }
+
     /// The vault root this engine writes into — Task 2.7 (2.3 review F1)
     /// tests this is the identical `PathBuf` `handlers::common::vault_root`
     /// resolves, so the header-cache lock registry (which keys on the raw
@@ -688,8 +704,7 @@ impl SyncEngine {
     ) -> Result<SyncDelta, String> {
         let account_id = &account.id;
         let io = self.cache_ctx(account_id, mailbox);
-        let config = account.imap_config.clone();
-        let seed = cache_io(&io, move |io| io.native_seed(&config)).await?;
+        let seed = self.prepare_native_seed(&io, &account.imap_config).await?;
 
         let (total, uid_validity, server_uid_next, highest_modseq) =
             imap::check_mailbox_status(session, mailbox, has_condstore).await?;
@@ -1208,8 +1223,9 @@ impl SyncEngine {
                 // an unfetchable mailbox: leave it out of `backfill_gave_up` so
                 // the next sync tick's backfill retries it. Every other error
                 // (dead socket, server refusal, ...) still gives up, since that
-                // set is never cleared except by a process restart.
-                if !e.contains("unparseable") {
+                // set is never cleared except by a process restart. A refused
+                // ownership response says nothing about a future current-owner run.
+                if !e.contains("unparseable") && !matches!(e.as_str(), "errors.bulkIdentityChanged" | "errors.bulkIdentityUncertain") {
                     self.backfill_gave_up.lock().await.insert(key);
                 }
             }
@@ -1260,6 +1276,7 @@ impl SyncEngine {
         mailbox: &str,
     ) -> Result<usize, String> {
         let io = self.cache_ctx(account.id.as_str(), mailbox);
+        let seed = self.prepare_native_seed(&io, &account.imap_config).await?;
         let server_uids = imap::search_all_uids(session, mailbox, false).await?;
         if server_uids.is_empty() {
             return Ok(0);
@@ -1283,8 +1300,7 @@ impl SyncEngine {
 
         let mut written = 0usize;
         for chunk in missing.chunks(BACKFILL_CHUNK) {
-            let config = account.imap_config.clone();
-            let seed = cache_io(&io, move |io| io.native_seed(&config)).await?;
+            let seed = seed.clone();
             let ((headers, _total), validity) =
                 imap::fetch_headers_by_uids_bound(session, mailbox, chunk).await?;
             if headers.is_empty() {
