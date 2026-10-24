@@ -1097,9 +1097,8 @@ async fn run_server_lane(
                     crate::handlers::jmap_bridge::server_search(&state, &job.account, &account_id, &job.mailbox, &search)
                         .await
                         .map_err(|error| format!("Failed to search emails: {error}"))
-                        .and_then(|(emails, exists)| {
+                        .and_then(|(emails, exists, identity)| {
                             let mut rows = server_rows(emails, &account_id, &job.mailbox, has_attachments)?;
-                            let identity = mailvault_core::imap::NativeHeaderIdentity::new(&job.account, &account_id, &job.mailbox, Some(1));
                             for row in &mut rows { row["_nativeIdentity"] = json!(identity); }
                             Ok((rows, u64::from(exists)))
                         })

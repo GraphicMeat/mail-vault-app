@@ -66,7 +66,7 @@ struct Touch {
 struct Run {
     touched: BTreeMap<String, Touch>,
     /// The requested mailbox's path and server count, when one was asked for.
-    requested: Option<(String, u32)>,
+    requested: Option<(String, u32, String)>,
 }
 
 /// Sync a JMAP account, reported for `mailbox` (a path, or a role name such
@@ -111,12 +111,12 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
         Ok(run) => run,
         Err(e) => return failed(e),
     };
-    let Some((path, total)) = run.requested.clone() else {
+    let Some((path, total, mailbox_id)) = run.requested.clone() else {
         return failed(format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"));
     };
     publish(engine, &account.id, &run);
     wake_workers(&state, &run);
-    if let Err(e) = write_meta(&state, engine, config, &account.id, &path, total).await {
+    if let Err(e) = write_meta(&state, engine, config, &account.id, &path, &mailbox_id, total).await {
         return failed(e);
     }
     let mine = run.touched.get(&path);
@@ -208,10 +208,11 @@ async fn run_once(
     let cached = cached_mailboxes(state, account_id).await?;
     let mut bound = true;
     for path in &cached {
-        let io = engine.cache_ctx(account_id, path);
+        let Some(mailbox_id) = boxes.ids.get(path) else { bound = false; continue };
+        let io = engine.cache_ctx(account_id, path).for_jmap_source(cfg, mailbox_id);
         let config = cfg.clone();
         let seed = cache_io(&io, move |io| io.native_seed(&config)).await?;
-        let identity = mailvault_core::imap::NativeHeaderIdentity::new(cfg, account_id, path, Some(1));
+        let identity = mailvault_core::imap::NativeHeaderIdentity::new(cfg, account_id, path, Some(1)).with_jmap_mailbox(mailbox_id);
         if !seed.matches(&identity) { bound = false; }
     }
     let stored = {
@@ -235,7 +236,7 @@ async fn run_once(
             apply_delta(state, engine, &acct, cfg, account_id, &boxes, &cached, &changes, &mut touched).await?;
             // A requested mailbox with no header cache yet gets its first
             // fill. The account's state stays the delta's.
-            if let Some((path, _)) = requested.as_ref().filter(|(p, _)| !cached.contains(p)) {
+            if let Some((path, _, _)) = requested.as_ref().filter(|(p, _, _)| !cached.contains(p)) {
                 rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched).await?;
             }
             changes.new_state
@@ -245,7 +246,7 @@ async fn run_once(
             // is replayed by the next delta (and found written), never lost.
             let before = acct.client.email_state().await.map_err(|e| e.to_string())?;
             let mut targets: BTreeSet<String> = cached.iter().filter(|p| boxes.ids.contains_key(*p)).cloned().collect();
-            if let Some((path, _)) = &requested {
+            if let Some((path, _, _)) = &requested {
                 targets.insert(path.clone());
             }
             for path in &targets {
@@ -263,7 +264,7 @@ async fn run_once(
 /// `wanted`'s path in this account and its server count: the path itself,
 /// else the mailbox whose role it names ("Sent" is role sent), as the IMAP
 /// sync resolves a generic name.
-fn resolve(boxes: &Mailboxes, wanted: &str) -> Option<(String, u32)> {
+fn resolve(boxes: &Mailboxes, wanted: &str) -> Option<(String, u32, String)> {
     let path = if boxes.ids.contains_key(wanted) {
         wanted.to_string()
     } else {
@@ -273,7 +274,7 @@ fn resolve(boxes: &Mailboxes, wanted: &str) -> Option<(String, u32)> {
     };
     let id = boxes.ids.get(&path)?;
     let total = boxes.list.iter().find(|m| &m.id == id).map_or(0, |m| m.total_emails);
-    Some((path, total))
+    Some((path, total, id.clone()))
 }
 
 /// `f` on the custody connection, on a blocking thread.
@@ -358,7 +359,8 @@ async fn apply_delta(
 ) -> Result<(), String> {
     let mut seeds = HashMap::new();
     for path in cached {
-        let io = engine.cache_ctx(account_id, path);
+        let Some(mailbox_id) = boxes.ids.get(path) else { continue };
+        let io = engine.cache_ctx(account_id, path).for_jmap_source(cfg, mailbox_id);
         seeds.insert(path.clone(), engine.prepare_native_seed(&io, cfg).await?);
     }
     let wanted: Vec<String> = changes.created.iter().chain(&changes.updated).cloned().collect();
@@ -460,7 +462,7 @@ async fn apply_to_mailbox(
     } else {
         HashMap::new()
     };
-    let io = engine.cache_ctx(account_id, here.path).for_source(cfg, Some(1));
+    let io = engine.cache_ctx(account_id, here.path).for_jmap_source(cfg, here.mailbox_id);
     let mut touch = Touch::default();
 
     // 1. New here.
@@ -543,9 +545,9 @@ async fn rebuild(
     path: &str,
     touched: &mut BTreeMap<String, Touch>,
 ) -> Result<(), String> {
-    let io = engine.cache_ctx(account_id, path).for_source(cfg, Some(1));
-    let seed = engine.prepare_native_seed(&io, cfg).await?;
     let mailbox_id = boxes.ids.get(path).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {path}"))?;
+    let io = engine.cache_ctx(account_id, path).for_jmap_source(cfg, &mailbox_id);
+    let seed = engine.prepare_native_seed(&io, cfg).await?;
     let (ids, _) = acct.client.query_mailbox(&mailbox_id, 0, COLD_PAGE).await.map_err(|e| e.to_string())?;
     // A page lists newest first; the ledger takes it oldest first, so the
     // uids one listing issues follow arrival.
@@ -615,13 +617,13 @@ async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<Str
 /// count, `uidValidity` 1 (ledger uids are never renumbered), the ledger's
 /// `uidNext` and the mailbox's counter, so `syncProbe.js` compares them like
 /// for like with `imap_check_mailbox_status`.
-async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, config: &ImapConfig, account_id: &str, path: &str, total: u32) -> Result<(), String> {
+async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, config: &ImapConfig, account_id: &str, path: &str, mailbox_id: &str, total: u32) -> Result<(), String> {
     let ledger = load_ledger(state, account_id, path).await?;
     let uid_next = ledger.keys().next_back().map_or(1, |uid| uid.saturating_add(1));
     let (aid, mb) = (account_id.to_string(), path.to_string());
     let modseq = custody_read(state, move |c| Ok(JmapMeta::modseq(c, &aid, &mb))).await?;
-    let io = engine.cache_ctx(account_id, path).for_source(config, Some(1));
-    let identity = mailvault_core::imap::NativeHeaderIdentity::new(config, account_id, path, Some(1));
+    let io = engine.cache_ctx(account_id, path).for_jmap_source(config, mailbox_id);
+    let identity = mailvault_core::imap::NativeHeaderIdentity::new(config, account_id, path, Some(1)).with_jmap_mailbox(mailbox_id);
     cache_io(&io, move |io| io.write_meta_for(total, Some(1), Some(uid_next), Some(modseq), None, Some(total), Some(&identity))).await
 }
 

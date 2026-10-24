@@ -1412,6 +1412,12 @@ impl CacheCtx {
         io
     }
 
+    pub(crate) fn for_jmap_source(&self, config: &ImapConfig, mailbox_id: &str) -> Self {
+        let mut io = self.for_source(config, Some(1));
+        io.source_identity.as_mut().unwrap().jmap_mailbox_id = Some(mailbox_id.into());
+        io
+    }
+
     /// Times the custody lock like `custody::with_conn` does: this holds the
     /// same connection directly.
     #[track_caller]
@@ -1435,7 +1441,7 @@ impl CacheCtx {
     /// The publication expectation is observed before FETCH, never repaired after it.
     pub(crate) fn native_seed(&self, config: &ImapConfig) -> Result<NativeBatchSeed, String> {
         let expected = self.native_owner()?;
-        Ok(NativeBatchSeed { identity: imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, None), expected: serde_json::json!(expected) })
+        Ok(NativeBatchSeed { identity: self.source_identity.clone().unwrap_or_else(|| imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, None)), expected: serde_json::json!(expected) })
     }
 
     /// Coverage and its owner are one custody read, including before zero-work exits.

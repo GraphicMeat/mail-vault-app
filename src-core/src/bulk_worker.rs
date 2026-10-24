@@ -153,12 +153,16 @@ pub struct ResultCounts {
     pub kept_copy_mismatch: usize,
     pub kept_delete_failed: usize,
 }
-/// Native cache/ledger snapshot taken when the request freezes its selection,
-/// before a delayed worker can observe a newer cached mailbox generation.
+/// Original native-served row evidence captured at selection time. Current
+/// cache/ledger observations can validate it but never supply missing proof.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Selected {
     pub validity: Option<u32>,
+    #[serde(default)]
+    pub origin_hash: Option<String>,
+    #[serde(default)]
+    pub jmap_mailbox_id: Option<String>,
     pub cached_uids: Vec<u32>,
     pub message_ids: HashMap<u32, String>,
     pub jmap_ids: HashMap<u32, String>,

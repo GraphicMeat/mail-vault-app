@@ -442,7 +442,7 @@ async fn answer(
             let emails: Vec<EmailHeader> =
                 ids.iter().filter_map(|id| Some(to_header(&got.remove(id)?, *uids.get(id)?))).collect();
             Ok(crate::handlers::cache::with_native_expectation(json!({
-                "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)), "uidValidity": 1,
+                "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)).with_jmap_mailbox(&mailbox_id), "uidValidity": 1,
                 "success": true, "emails": emails, "total": total, "page": page,
                 "limit": limit, "hasMore": position + ids.len() < total, "skippedUids": Vec::<Option<u32>>::new(),
             }), expected))
@@ -511,7 +511,7 @@ async fn answer(
                 .into_iter()
                 .filter_map(|(uid, id)| got.remove(&id?).filter(|e| in_mailbox(e, &mb.id)).map(|e| to_header(&e, uid)))
                 .collect();
-            Ok(crate::handlers::cache::with_native_expectation(json!({"emails": emails, "total": mb.total_emails, "uidValidity": 1, "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1))}), expected))
+            Ok(crate::handlers::cache::with_native_expectation(json!({"emails": emails, "total": mb.total_emails, "uidValidity": 1, "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)).with_jmap_mailbox(&mb.id)}), expected))
         }
 
         "imap_fetch_changed_flags" => {
@@ -611,8 +611,8 @@ async fn answer(
                 before: filters.before.as_deref(),
                 ..Default::default()
             };
-            let (emails, total) = search_mailbox(state, acct, &account_id, &mailbox, &search).await?;
-            Ok(crate::handlers::cache::with_native_expectation(json!({"nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)), "uidValidity": 1, "success": true, "emails": emails, "total": total}), expected))
+            let (emails, total, mailbox_id) = search_mailbox(state, acct, &account_id, &mailbox, &search).await?;
+            Ok(crate::handlers::cache::with_native_expectation(json!({"nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)).with_jmap_mailbox(&mailbox_id), "uidValidity": 1, "success": true, "emails": emails, "total": total}), expected))
         }
 
         "imap_find_message_id" => {
@@ -702,12 +702,12 @@ async fn search_mailbox(
     account_id: &str,
     mailbox: &str,
     search: &ServerSearch<'_>,
-) -> Result<(Vec<EmailHeader>, usize), Fail> {
+) -> Result<(Vec<EmailHeader>, usize, String), Fail> {
+    let mailbox_id = acct.mailbox_id(mailbox).await?;
     let mut conditions = search_conditions(search);
     if conditions.is_empty() {
-        return Ok((Vec::new(), 0));
+        return Ok((Vec::new(), 0, mailbox_id));
     }
-    let mailbox_id = acct.mailbox_id(mailbox).await?;
     conditions.insert(0, json!({"inMailbox": mailbox_id}));
     let filter = json!({"operator": "AND", "conditions": conditions});
     let (ids, total) = query_ids(&acct.client, filter, SEARCH_LIMIT).await?;
@@ -721,7 +721,7 @@ async fn search_mailbox(
             Some(header)
         })
         .collect();
-    Ok((emails, total))
+    Ok((emails, total, mailbox_id))
 }
 
 /// The search screen's server lane for a JMAP account
@@ -735,12 +735,13 @@ pub(crate) async fn server_search(
     account_id: &str,
     mailbox: &str,
     search: &ServerSearch<'_>,
-) -> Result<(Vec<EmailHeader>, u32), String> {
+) -> Result<(Vec<EmailHeader>, u32, mailvault_core::imap::NativeHeaderIdentity), String> {
     let once = || async {
         let acct = state.jmap.get(config).await?;
         let exists = mailbox_counts(&acct, mailbox).await?.total_emails;
-        let (emails, _) = search_mailbox(state, &acct, account_id, mailbox, search).await?;
-        Ok::<_, Fail>((emails, exists))
+        let (emails, _, mailbox_id) = search_mailbox(state, &acct, account_id, mailbox, search).await?;
+        let identity = mailvault_core::imap::NativeHeaderIdentity::new(config, account_id, mailbox, Some(1)).with_jmap_mailbox(&mailbox_id);
+        Ok::<_, Fail>((emails, exists, identity))
     };
     let answer = match once().await {
         Err(f) if is_auth_failure(&f) => {
@@ -1950,7 +1951,7 @@ second body";
         let nothing = ok(call(&state, "imap_search_emails", json!({"account": a, "mailbox": "INBOX"})).await);
         let config = serde_json::from_value(a).unwrap();
         assert_eq!(nothing, json!({"success": true, "emails": [], "total": 0, "uidValidity": 1,
-            "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(&config, "acct-1", "INBOX", Some(1)),
+            "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(&config, "acct-1", "INBOX", Some(1)).with_jmap_mailbox("mb-inbox"),
             "nativeExpectedIdentity": null}));
     }
 

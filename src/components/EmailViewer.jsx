@@ -1,3 +1,4 @@
+import { captureSelectionSnapshot } from '../services/headerIdentity.js';
 import React, { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSelectionStore } from '../stores/selectionStore';
@@ -375,6 +376,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
     const state = useMailStore.getState();
     const location = resolveEmailLocation(target, state);
     if (!location) return;
+    const originalSnapshot = captureSelectionSnapshot(target, location.accountId, location.mailbox);
     const localOnly = target.source === 'local-only' || target._origin === 'local-only';
     const archived = isRowArchived(target, state, archivedEmailIds) || localOnly;
     const backup = isBackedUp({ ...target, _accountId: location.accountId, _mailbox: location.mailbox }, state) === true;
@@ -385,25 +387,27 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       executor: async () => {
         const current = useMailStore.getState();
         const previous = [...current.selectedEmailIds];
+        const previousSnapshots = current.selectedEmailSnapshots;
         const key = selectionKey(target, current);
-        current.setSelection([key]);
+        current.setSelection([key], [], new Map([[key, originalSnapshot]]));
         try { await current.purgeSelectedEverywhere(); }
         finally {
           const selected = useMailStore.getState().selectedEmailIds;
-          if (selected.size === 0) useMailStore.getState().setSelection(previous.filter(item => item !== key));
+          if (selected.size === 0) useMailStore.getState().setSelection(previous.filter(item => item !== key), [], previousSnapshots);
         }
       },
     });
   };
 
   const confirmDeleteEmail = async (target = selectedEmail, location = resolveEmailLocation(target, useMailStore.getState())) => {
+    const originalSnapshot = location ? captureSelectionSnapshot(target, location.accountId, location.mailbox) : null;
     setDeleting(true);
     try {
       // A bare uid names a message only inside one folder of one account: in
       // a list that spans mailboxes it matches whichever row carries that
       // number first, which is another account's mail. Same rule as
       // ThreadView.requestDelete and the row menu.
-      await deleteEmailFromServer(target.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox });
+      await deleteEmailFromServer(target.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox, originalSnapshot });
     } catch (err) {
       // Only the paths with nothing journalled still throw: a Graph delete and
       // a local-only row, which the workflow restores (deleteEmailFromServer's

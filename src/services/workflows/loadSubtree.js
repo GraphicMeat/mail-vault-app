@@ -56,7 +56,7 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
     // them into the list. A branch load is server-backed, so they would appear
     // under a heading that has nothing to do with them.
     localEmails: [],
-    selectedEmailIds: new Set(),
+    selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
     selectedEmailId: null,
     selectedEmail: null,
     selectedThread: null,

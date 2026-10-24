@@ -4,7 +4,7 @@
 
 import { buildThreads } from '../../utils/emailParser';
 import { mergesSentIntoThreads } from '../../utils/sentFolder';
-import { selectionKey, refreshSelectedThread } from './unifiedHelpers';
+import { selectionKey, refreshSelectedThread, resolveEmailLocation } from './unifiedHelpers';
 import { useSettingsStore } from '../settingsStore';
 import { useViewHideStore } from '../viewHideStore';
 import {
@@ -22,6 +22,25 @@ import {
   purgeEverywhereReporting as _purgeEverywhere,
 } from '../../services/workflows/messageMutations';
 import { t } from '../../i18n/index.js';
+import { captureSelectionSnapshot } from '../../services/headerIdentity.js';
+
+function replaceSelection(state, keys, rows, priorSnapshots) {
+  const selectedEmailIds = new Set(keys);
+  const available = new Map((rows || [...(state.sortedEmails || []), ...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])]).map(row => [selectionKey(row, state), row]));
+  const selectedEmailSnapshots = new Map();
+  for (const key of selectedEmailIds) {
+    if (state.selectedEmailIds.has(key)) {
+      selectedEmailSnapshots.set(key, state.selectedEmailSnapshots?.get(key) ?? null);
+    } else if (priorSnapshots?.has(key)) {
+      selectedEmailSnapshots.set(key, priorSnapshots.get(key));
+    } else {
+      const row = available.get(key);
+      const location = resolveEmailLocation(row, state);
+      selectedEmailSnapshots.set(key, location ? captureSelectionSnapshot(row, location.accountId, location.mailbox) : null);
+    }
+  }
+  return { selectedEmailIds, selectedEmailSnapshots };
+}
 
 export const createSelectionSlice = (set, get) => ({
   selectedEmailId: null,
@@ -44,6 +63,7 @@ export const createSelectionSlice = (set, get) => ({
 
   // Selection for bulk actions
   selectedEmailIds: new Set(),
+  selectedEmailSnapshots: new Map(),
 
   // Session tombstones for deleted emails: "accountId|mailbox|uid".
   // Deleted emails are filtered out of every list render until the header
@@ -111,7 +131,7 @@ export const createSelectionSlice = (set, get) => ({
 
   // ── Simple inline actions (stay in slice) ──
 
-  toggleEmailSelection: (uid, accountId = null, mailbox = null) => {
+  toggleEmailSelection: (uid, accountId = null, mailbox = null, clickedRow = null) => {
     set(state => {
       // Through the helper, never by hand: the checkbox has to write the key
       // every other control reads.
@@ -122,7 +142,7 @@ export const createSelectionSlice = (set, get) => ({
       } else {
         newSelection.add(key);
       }
-      return { selectedEmailIds: newSelection };
+      return replaceSelection(state, newSelection, clickedRow ? [clickedRow] : undefined);
     });
   },
 
@@ -139,24 +159,24 @@ export const createSelectionSlice = (set, get) => ({
         if (selected) next.add(key);
         else next.delete(key);
       }
-      return { selectedEmailIds: next };
+      return replaceSelection(state, next, emails);
     });
   },
 
   selectAllEmails: () => {
     const state = get();
-    set({ selectedEmailIds: new Set(state.sortedEmails.map(e => selectionKey(e, state))) });
+    set(replaceSelection(state, state.sortedEmails.map(e => selectionKey(e, state)), state.sortedEmails));
   },
 
   clearSelection: () => {
-    set({ selectedEmailIds: new Set() });
+    set({ selectedEmailIds: new Set(), selectedEmailSnapshots: new Map() });
   },
 
   // Replace the selection wholesale. The bulk modal's date range resolves to a
   // uid list; writing it here is what puts checkmarks on the rows and lets the
   // user amend the range by hand before starting.
-  setSelection: (keys) => {
-    set({ selectedEmailIds: new Set(keys) });
+  setSelection: (keys, rows, priorSnapshots) => {
+    set(state => replaceSelection(state, keys, rows, priorSnapshots));
   },
 
   getSelectionSummary: () => {

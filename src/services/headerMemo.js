@@ -60,6 +60,7 @@ const _stampOf = (meta) => ({
   // not left to the other three fields happening to move.
   uidValidity: meta?.uidValidity ?? null,
   originHash: meta?.nativeIdentity?.originHash ?? null,
+  jmapMailboxId: meta?.nativeIdentity?.jmapMailboxId ?? null,
 });
 
 const _sameStamp = (a, b) =>
@@ -68,7 +69,8 @@ const _sameStamp = (a, b) =>
   && a.totalCached === b.totalCached
   && a.highestModseq === b.highestModseq
   && a.uidValidity === b.uidValidity
-  && a.originHash === b.originHash;
+  && a.originHash === b.originHash
+  && a.jmapMailboxId === b.jmapMailboxId;
 
 /**
  * Memoize a header set — the top N UIDs of the mailbox, complete or not.

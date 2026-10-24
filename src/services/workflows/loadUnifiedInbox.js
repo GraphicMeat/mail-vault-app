@@ -85,7 +85,7 @@ export async function setUnifiedInbox(enabled) {
       selectedEmail: null,
       selectedEmailSource: null,
       selectedThread: null,
-      selectedEmailIds: new Set(),
+      selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
       ...paintSeed(unifiedSeed(get(), 'INBOX', preUnifiedSnapshot)),
     });
     settleLoading(get, useMailStore);
@@ -123,7 +123,7 @@ export async function switchUnifiedFolder(mailbox) {
       selectedEmail: null,
       selectedEmailSource: null,
       selectedThread: null,
-      selectedEmailIds: new Set(),
+      selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
       loading: false,
     });
     get().updateSortedEmails();
@@ -137,7 +137,7 @@ export async function switchUnifiedFolder(mailbox) {
     selectedEmail: null,
     selectedEmailSource: null,
     selectedThread: null,
-    selectedEmailIds: new Set(),
+    selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
     ...paintSeed(unifiedSeed(get(), mailbox)),
   });
   settleLoading(get, useMailStore);

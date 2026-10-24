@@ -809,7 +809,7 @@ function App() {
     toggleSelect: () => {
       const email = useMailStore.getState().selectedEmail;
       if (email) {
-        useMailStore.getState().toggleEmailSelection(email.uid, email._accountId, email._mailbox);
+        useMailStore.getState().toggleEmailSelection(email.uid, email._accountId, email._mailbox, email);
       }
     },
     escape: () => {

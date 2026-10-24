@@ -570,7 +570,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       selectedEmail: null,
       selectedEmailSource: null,
       selectedThread: null,
-      selectedEmailIds: new Set(),
+      selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
       loading: false,
       loadingMore: false,
       error: null,

@@ -1,3 +1,4 @@
+import { retainSelectionSnapshots } from '../headerIdentity.js';
 // ── Snooze ──
 //
 // A snooze is the app's own move into the account's Snoozed folder — through
@@ -125,6 +126,7 @@ export async function snoozeEmails(keys, wakeAt) {
       const live = get();
       useMailStore.setState({
         selectedEmailIds: new Set([...(live.selectedEmailIds || [])].filter(k => !held.has(k))),
+        selectedEmailSnapshots: retainSelectionSnapshots(live.selectedEmailSnapshots, [...(live.selectedEmailIds || [])].filter(k => !held.has(k))),
         ...(held.has(live.selectedEmailId) ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null } : {}),
       });
     }

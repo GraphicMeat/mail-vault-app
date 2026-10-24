@@ -237,7 +237,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
         // bulk progress then works down from the most recent message.
         setCachedRows(rows
           .filter(visible)
-          .map(e => ({ uid: e.uid, date: e.date || e.internalDate }))
+          .map(e => ({ ...e, date: e.date || e.internalDate }))
           .sort((a, b) => b.uid - a.uid));
         cachedForRef.current = identity;
       } catch (e) {
@@ -383,7 +383,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm, onUpgrade }) {
     // The list's own keys: a bare uid names one message only in a single
     // folder's list, not in All Inboxes or a subtree, nor for a merged Sent copy.
     const state = useMailStore.getState();
-    setSelection(selectedEmails.map(e => selectionKey(e, state)));
+    setSelection(selectedEmails.map(e => selectionKey(e, state)), selectedEmails);
   }, [selectedRange, bulkSession, activeAccountId, activeMailbox, viewMode, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
 
   // Live count, not the range's own result — hand edits made while the modal

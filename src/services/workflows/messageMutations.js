@@ -24,6 +24,7 @@ import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
 import { mailboxLabel } from '../../utils/imapUtf7';
 import { formatPurgeEverywhereOutcome } from '../../utils/purgeOutcome';
+import { retainSelectionSnapshots } from '../headerIdentity.js';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
 import { t as tr, tErr } from '../../i18n/index.js';
@@ -468,7 +469,7 @@ export async function saveSelectedLocally() {
   const { selectedEmailIds } = state;
   if (selectedEmailIds.size === 0) return;
   const keys = Array.from(selectedEmailIds);
-  useMailStore.setState({ selectedEmailIds: new Set() });
+  useMailStore.setState({ selectedEmailIds: new Set(), selectedEmailSnapshots: new Map() });
   // Each key names its own account and folder (a full key), or the view's (a
   // bare uid) — the same reading every other selection workflow does.
   const emailMap = indexRows(resolvePool(state), e => selectionKey(e, state));
@@ -775,6 +776,7 @@ function _hideDeleted(useMailStore, targets, { keys = [] } = {}) {
     sentEmails: live.sentEmails.filter(e => !gone(e)),
     totalEmails: Math.max(0, (live.totalEmails || 0) - (live.emails.length - emails.length)),
     selectedEmailIds: new Set([...live.selectedEmailIds].filter(k => !dropKeys.has(k))),
+    selectedEmailSnapshots: retainSelectionSnapshots(live.selectedEmailSnapshots, [...live.selectedEmailIds].filter(k => !dropKeys.has(k))),
     ...(threadUpdate ?? (closes ? READER_CLOSED : {})),
   });
   _shiftUnread(removed, -1);
@@ -1355,13 +1357,17 @@ async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pa
   const live = get();
   const moveRow = (e) => {
     const uid = e && newOf.get(_rowId(e, live));
-    return uid == null ? e : { ...e, uid };
+    if (uid == null) return e;
+    // COPYUID gives a new location, not native original-row identity proof.
+    const { _nativeIdentity, _nativeExpectedIdentity, ...unbound } = e;
+    return { ...unbound, uid };
   };
   const rekey = (k) => _restoredKey(k, newOf, live.activeAccountId, live.activeMailbox);
   useMailStore.setState({
     emails: live.emails.map(moveRow),
     sentEmails: live.sentEmails.map(moveRow),
     selectedEmailIds: new Set([...live.selectedEmailIds].map(rekey)),
+    selectedEmailSnapshots: new Map([...live.selectedEmailIds].map(key => [rekey(key), rekey(key) === key ? live.selectedEmailSnapshots?.get(key) ?? null : null])),
     ...(live.selectedEmailId != null
       ? { selectedEmailId: rekey(live.selectedEmailId), selectedEmail: moveRow(live.selectedEmail) }
       : {}),
@@ -1374,7 +1380,10 @@ async function _rekeyRestored(useMailStore, { accountId, mailbox, outcomes }, pa
   try {
     // Under the new uid, the old one pruned: a reload paints this row from the
     // cache, not the retired one.
-    const rows = outcomes.filter(o => o.row).map(o => ({ ...o.row, uid: newOf.get(_targetId(o)) }));
+    const rows = outcomes.filter(o => o.row).map(o => {
+      const { _nativeIdentity, _nativeExpectedIdentity, ...unbound } = o.row;
+      return { ...unbound, uid: newOf.get(_targetId(o)) };
+    });
     await db.saveEmailHeaders(accountId, mailbox, rows, null, { removedUids: pairs.map(([old]) => old) });
   } catch (error) {
     console.warn('[undo] Could not re-key the header cache:', error);
@@ -2139,7 +2148,7 @@ export async function applyFlagToKeys(keys, flag, on, opts) {
   // so the selection is only cleared when these keys ARE the selection.
   const selected = state.selectedEmailIds;
   if (keys.length && new Set(keys).size === selected.size && keys.every(k => selected.has(k))) {
-    useMailStore.setState({ selectedEmailIds: new Set() });
+    useMailStore.setState({ selectedEmailIds: new Set(), selectedEmailSnapshots: new Map() });
   }
 
   return applyFlagToTargets(targets, flag, on, opts);
@@ -2972,6 +2981,7 @@ export async function moveEmails(keys, targetMailbox) {
     // Live, not the snapshot: the per-group network loop above is awaited, and
     // a row ticked across it is the user's, not this move's to drop.
     selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !keySet.has(k))),
+    selectedEmailSnapshots: retainSelectionSnapshots(get().selectedEmailSnapshots, [...get().selectedEmailIds].filter(k => !keySet.has(k))),
   };
 
   if (selectionStillNames(get, { keys: keySet })) {

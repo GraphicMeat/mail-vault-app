@@ -88,7 +88,7 @@ export const createUiSlice = (set, get) => ({
   },
 
   endBulkSession: () => {
-    set({ bulkModalOpen: false, bulkSession: null, selectedEmailIds: new Set() });
+    set({ bulkModalOpen: false, bulkSession: null, selectedEmailIds: new Set(), selectedEmailSnapshots: new Map() });
   },
 
   // Error state — errorType lets a caveated-success message use the

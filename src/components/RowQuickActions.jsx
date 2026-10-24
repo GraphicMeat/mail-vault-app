@@ -20,6 +20,7 @@ import { describeQuickAction } from '../utils/quickActionCatalog';
 import { QuickActions } from './QuickActions';
 import { useExportStore } from '../stores/exportStore';
 import { useT } from '../i18n/index.js';
+import { captureSelectionSnapshot } from '../services/headerIdentity.js';
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -67,30 +68,31 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const hasUnread = facts.has.markRead;
   const hasServerBacked = facts.serverBacked;
   const unsubscribe = facts.unsubscribe && unsubscribeTarget(facts.unsubscribe.email, facts.unsubscribe.accountId);
-  const serverTargets = emails.map((email, index) => ({ email, location: locs[index] }))
+  const serverTargets = emails.map((email, index) => ({ email, location: locs[index], snapshot: locs[index] ? captureSelectionSnapshot(email, locs[index].accountId, locs[index].mailbox) : null }))
     .filter(target => target.email.source !== 'local-only');
   const serverEmails = serverTargets.map(target => target.email);
 
   const runScoped = async (fn, { destructive = false } = {}) => {
     const prior = [...useMailStore.getState().selectedEmailIds];
-    useMailStore.getState().setSelection(keys);
+    const priorSnapshots = useMailStore.getState().selectedEmailSnapshots;
+    useMailStore.getState().setSelection(keys, emails);
     try { await fn(); }
     finally {
       const live = useMailStore.getState().selectedEmailIds;
       const keySet = new Set(keys);
       const matchesScoped = live.size === keys.length && keys.every(key => live.has(key));
-      if (live.size === 0 || matchesScoped) useMailStore.getState().setSelection(destructive ? prior.filter(key => !keySet.has(key)) : prior);
+      if (live.size === 0 || matchesScoped) useMailStore.getState().setSelection(destructive ? prior.filter(key => !keySet.has(key)) : prior, [], priorSnapshots);
     }
   };
   const deleteFromServer = async () => {
     if (serverTargets.length === 1) {
-      const { email, location } = serverTargets[0];
-      return actions.deleteEmailFromServer(email.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox });
+      const { email, location, snapshot } = serverTargets[0];
+      return actions.deleteEmailFromServer(email.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox, originalSnapshot: snapshot });
     }
     const outcomes = [];
-    for (const { email, location } of serverTargets) {
+    for (const { email, location, snapshot } of serverTargets) {
       if (!location) continue;
-      try { outcomes.push(await actions.deleteEmailFromServer(email.uid, { skipRefresh: true, accountId: location.accountId, mailboxOverride: location.mailbox })); }
+      try { outcomes.push(await actions.deleteEmailFromServer(email.uid, { skipRefresh: true, accountId: location.accountId, mailboxOverride: location.mailbox, originalSnapshot: snapshot })); }
       catch (error) { console.error(`[RowQuickActions] Failed to delete email ${email.uid} from ${location.mailbox}:`, error); }
     }
     await reloadListInView();
