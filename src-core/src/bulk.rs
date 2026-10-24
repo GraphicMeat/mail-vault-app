@@ -36,6 +36,34 @@ pub struct Scope {
     #[serde(default)]
     pub spans: bool,
     pub keys: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub target_hints: Vec<TargetHint>,
+}
+
+/// Original row evidence only. Unknown frontend/cache publication fields are
+/// deliberately not part of the durable intent contract.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetHint {
+    pub account_id: String,
+    pub mailbox: String,
+    pub uid: u32,
+    pub native_identity: Option<crate::imap::NativeHeaderIdentity>,
+    #[serde(default)]
+    pub message_id_present: bool,
+    pub message_id: Option<String>,
+    pub graph_id: Option<String>,
+    pub jmap_id: Option<String>,
+    pub local_identity: Option<LocalIdentityHint>,
+}
+
+/// Presentation hints for later local provenance resolution, never authority.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalIdentityHint {
+    pub source: Option<String>,
+    #[serde(default)]
+    pub staged: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -180,6 +208,9 @@ impl FrozenIntent {
             }
         }
         intent
+    }
+    pub fn target_hints(&self) -> &[TargetHint] {
+        &self.scope.target_hints
     }
     pub fn action(&self) -> Action {
         self.operation
@@ -984,6 +1015,7 @@ impl Coordinator {
                 mailbox: pending.raw["mailbox"].as_str().map(str::to_owned),
                 spans: false,
                 keys: Vec::new(),
+                target_hints: Vec::new(),
             }
         };
         scope.keys = keys.clone();

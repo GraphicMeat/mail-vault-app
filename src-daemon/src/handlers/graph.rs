@@ -81,7 +81,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let native_identity = params["_nativeOriginHash"].as_str().and_then(|origin| {
                 Some(mailvault_core::imap::NativeHeaderIdentity {
                     account_id: params["accountId"].as_str()?.into(), mailbox: params["mailbox"].as_str()?.into(),
-                    uid_validity: None, origin_hash: origin.into(),
+                    uid_validity: None, origin_hash: origin.into(), jmap_mailbox_id: None,
                 })
             });
             let expected = if let Some(identity) = &native_identity {

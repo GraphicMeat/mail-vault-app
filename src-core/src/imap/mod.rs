@@ -187,11 +187,18 @@ pub struct NativeHeaderIdentity {
     pub mailbox: String,
     pub uid_validity: Option<u32>,
     pub origin_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jmap_mailbox_id: Option<String>,
 }
 
 impl NativeHeaderIdentity {
     pub fn new(config: &ImapConfig, account_id: &str, mailbox: &str, uid_validity: Option<u32>) -> Self {
-        Self { account_id: account_id.into(), mailbox: mailbox.into(), uid_validity, origin_hash: crate::bulk_worker::origin_hash(config) }
+        Self { account_id: account_id.into(), mailbox: mailbox.into(), uid_validity, origin_hash: crate::bulk_worker::origin_hash(config), jmap_mailbox_id: None }
+    }
+    /// The ID used by the actual query/membership filter, never a later listing.
+    pub fn with_jmap_mailbox(mut self, mailbox_id: &str) -> Self {
+        self.jmap_mailbox_id = Some(mailbox_id.into());
+        self
     }
 }
 

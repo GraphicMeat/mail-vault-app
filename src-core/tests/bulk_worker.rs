@@ -187,6 +187,7 @@ fn work(action: Action, keys: Vec<Value>) -> Workflow {
             mailbox: Some("INBOX".into()),
             spans: false,
             keys,
+            target_hints: Vec::new(),
         },
         &["acc1".into(), "acc2".into()],
         &[],

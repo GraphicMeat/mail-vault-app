@@ -121,7 +121,7 @@ fn legacy_resume_selection_matches_real_manager_answers() {
         op_journal::pending_operation_save(dir.path(), &case["resumeInput"]).unwrap();
         let mut owner = Coordinator::load(dir.path());
         let plan = owner.resume_plan(dir.path(), case["resumeInput"]["id"].as_str().unwrap()).unwrap();
-        let frozen = FrozenIntent::freeze(plan.operation, Scope { account_id: Some("acc1".into()), mailbox: Some("INBOX".into()), spans: false, keys: plan.keys }, &["acc1".into(), "acc2".into()], &[]);
+        let frozen = FrozenIntent::freeze(plan.operation, Scope { account_id: Some("acc1".into()), mailbox: Some("INBOX".into()), spans: false, keys: plan.keys, target_hints: Vec::new() }, &["acc1".into(), "acc2".into()], &[]);
         let expected = case["pending"].as_array().unwrap().first().map(|p| p["totalUids"].clone()).unwrap_or_else(|| json!([]));
         assert_eq!(serde_json::to_value(frozen.target_keys()).unwrap(), expected, "{}", case["name"]);
         assert!(plan.requires_fresh_identity);
