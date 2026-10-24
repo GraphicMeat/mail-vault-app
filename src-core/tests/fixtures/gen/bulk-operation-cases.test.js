@@ -12,15 +12,23 @@ vi.mock('../../../../src/services/api', () => ({
   clearPendingOperation: async () => oracle.trace.push({ effect: 'clear' }),
   verifyArchivedEmails: async (accountId, mailbox, uids) => {
     oracle.trace.push({ effect: 'verify', accountId, mailbox, uids: [...uids] });
-    return { verified: uids.filter(u => u !== oracle.script.missing), missing: uids.filter(u => u === oracle.script.missing) };
+    if (oracle.script.cancel === 'verify') await bulkOperationManager.cancel();
+    if (oracle.script.throwVerify) throw new Error('scripted verify failure');
+    return { verified: [...uids.filter(u => u !== oracle.script.missing), ...(oracle.script.strayVerify ? [9999] : [])], missing: uids.filter(u => u === oracle.script.missing) };
   },
   backupCopyUids: async (accountId, _email, mailbox, uids) => {
     oracle.trace.push({ effect: 'copy', accountId, mailbox, uids: [...uids] });
-    return { verified: [...uids, 9999], mismatched: [], missing: [] };
+    oracle.copyCalls = (oracle.copyCalls || 0) + 1;
+    if (oracle.script.cancel === 'copy') await bulkOperationManager.cancel();
+    if (oracle.script.throwCopy || oracle.copyCalls === oracle.script.driveGoneAt) throw new Error('scripted drive unavailable');
+    const excluded = [oracle.script.mismatch, oracle.script.copyMissing, oracle.script.copyFailed];
+    return { verified: [...uids.filter(u => !excluded.includes(u)), 9999], mismatched: uids.filter(u => u === oracle.script.mismatch), missing: uids.filter(u => u === oracle.script.copyMissing), failed: uids.filter(u => u === oracle.script.copyFailed) };
   },
   bulkDeleteEmails: async (_account, accountId, mailbox, uids, options) => {
     oracle.trace.push({ effect: 'delete', accountId, mailbox, uids: [...uids], bin: options?.bin ?? true });
-    return { completed: uids.length };
+    if (oracle.script.cancel === 'delete') await bulkOperationManager.cancel();
+    if (oracle.script.throwDelete) throw new Error('scripted delete failure');
+    return { completed: Math.max(0, uids.length - (oracle.script.deleteFailed || 0)) };
   },
 }));
 vi.mock('../../../../src/services/authUtils', () => ({ ensureFreshToken: async account => account }));
@@ -29,6 +37,7 @@ vi.mock('../../../../src/services/transport.js', () => ({ send: async (cmd, p) =
   if (cmd === 'archive_emails') {
     oracle.trace.push({ effect: 'archive', accountId: p.accountId, mailbox: p.mailbox, uids: [...p.uids], background: p.background });
     oracle.handlers['archive-progress']?.({ payload: { operation: 'archive', accountId: 'foreign', mailbox: p.mailbox, completed: 99, errors: 99 } });
+    if (oracle.script.cancel === 'archive') await bulkOperationManager.cancel();
     if (oracle.script.throwArchive) throw new Error('scripted archive failure');
     oracle.handlers['archive-progress']?.({ payload: { operation: 'archive', accountId: p.accountId, mailbox: p.mailbox, completed: p.uids.length, errors: 0 } });
   }
@@ -66,6 +75,14 @@ it('captures real source decisions with deterministic dependency replies', async
       ...['archive', 'delete', 'archive_and_delete', 'archive_backup_delete', 'delete_everywhere'].map(type => ({ name: type, type, keys: [1, 'acc1:Sent:2', 'acc2:INBOX:1'] })),
       { name: 'verify-subset', type: 'archive_and_delete', keys: [1, 2], script: { missing: 2 } },
       { name: 'copy-201', type: 'archive_backup_delete', keys: Array.from({ length: 201 }, (_, i) => i + 1) },
+      { name: 'copy-partition', type: 'archive_backup_delete', keys: [1, 2, 3, 4, 5], script: { missing: 1, mismatch: 2, copyMissing: 3, copyFailed: 4 } },
+      { name: 'copy-drive-gone-later', type: 'archive_backup_delete', keys: Array.from({ length: 201 }, (_, i) => i + 1), script: { driveGoneAt: 2 } },
+      { name: 'copy-drive-gone-first', type: 'archive_backup_delete', keys: [1, 'acc2:INBOX:2'], script: { throwCopy: true } },
+      { name: 'partial-delete', type: 'archive_backup_delete', keys: [1, 2, 3], script: { deleteFailed: 1 } },
+      ...['archive', 'verify', 'copy', 'delete'].map(phase => ({ name: `cancel-${phase}`, type: 'archive_backup_delete', keys: [1, 'acc2:INBOX:2'], script: { cancel: phase } })),
+      { name: 'verify-error', type: 'archive_and_delete', keys: [1], script: { throwVerify: true } },
+      { name: 'delete-error', type: 'archive_backup_delete', keys: [1], script: { throwDelete: true } },
+      { name: 'stray-verify', type: 'archive_backup_delete', keys: [1], script: { strayVerify: true } },
       { name: 'skipped', type: 'archive', keys: ['missing:INBOX:1', 'acc1:Local:2', 'bad'] },
       { name: 'empty', type: 'delete', keys: [] },
       { name: 'archive-error', type: 'archive_and_delete', keys: [1], script: { throwArchive: true } },
@@ -75,7 +92,7 @@ it('captures real source decisions with deterministic dependency replies', async
       { name: 'resume-missing-account', type: 'delete', keys: ['missing:INBOX:7'], completed: [], phase: 'delete' },
     ];
     for (const c of cases) {
-      oracle.trace = []; oracle.pending = []; oracle.handlers = {}; oracle.script = c.script || {};
+      oracle.copyCalls = 0; oracle.trace = []; oracle.pending = []; oracle.handlers = {}; oracle.script = c.script || {};
       const snapshots = [];
       const onProgress = op => snapshots.push(clone(op));
       const args = { type: c.type, ...session, account: accounts[0], accounts, localFolders: { acc1: [{ name: 'Local', dir: 'Local' }] }, uids: c.keys, onProgress };
