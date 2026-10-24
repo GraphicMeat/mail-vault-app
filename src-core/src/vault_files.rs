@@ -436,6 +436,18 @@ pub fn read_light_batch(reg: &VaultRegistry, root: &Path, account_id: &str, mail
 /// and so may not take the registry's per-mailbox lock (the lock order puts
 /// it first): `mail_search`'s no-index scan.
 pub fn read_light_batch_on_disk(root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Vec<Option<LightEmail>> {
+    let mut out = Vec::with_capacity(uids.len());
+    for_each_light_on_disk(root, account_id, mailbox, uids, |email| {
+        out.push(email);
+        true
+    });
+    out
+}
+
+/// `read_light_batch_on_disk` one message at a time: `visit` gets each
+/// requested uid's slot in order and returns false to stop, so a caller that
+/// is cancelled mid-folder reads no further and never holds the whole folder.
+pub fn for_each_light_on_disk(root: &Path, account_id: &str, mailbox: &str, uids: &[u32], mut visit: impl FnMut(Option<LightEmail>) -> bool) {
     let cur_dir = cur_path(root, account_id, mailbox);
     let files = maildir::uid_file_map(&cur_dir);
     let records = cur_dir.parent().map(|m| m.join(crate::message_store::JMAP_DIR)).unwrap_or_default();
@@ -445,30 +457,30 @@ pub fn read_light_batch_on_disk(root: &Path, account_id: &str, mailbox: &str, ui
         .flatten()
         .filter_map(|e| crate::message_store::record_uid(&e.file_name().to_string_lossy()))
         .collect();
-    if held.is_empty() {
-        return read_light_listed(&cur_dir, &files, uids);
+    for uid in uids {
+        let email = if held.contains(uid) {
+            // A uid with a JMAP record is read from it (its blob, its flags).
+            crate::message_store::read_at(root, &records.join(format!("{uid}.json")))
+                .ok()
+                .and_then(|(flags_name, raw)| {
+                    let raw = crate::pgp::readable(&cur_dir, *uid, raw);
+                    parse_eml_bytes_light(&raw, *uid, parse_flags_from_filename(&flags_name)).ok()
+                })
+        } else {
+            read_light_listed(&cur_dir, &files, *uid)
+        };
+        if !visit(email) {
+            return;
+        }
     }
-    // A uid with a JMAP record is read from it (its blob, its flags).
-    uids.iter()
-        .map(|uid| {
-            if !held.contains(uid) {
-                return read_light_at(&cur_dir, *uid, Some(files.get(uid)?.as_path()));
-            }
-            let (flags_name, raw) = crate::message_store::read_at(root, &records.join(format!("{uid}.json"))).ok()?;
-            let raw = crate::pgp::readable(&cur_dir, *uid, raw);
-            parse_eml_bytes_light(&raw, *uid, parse_flags_from_filename(&flags_name)).ok()
-        })
-        .collect()
 }
 
-/// `read_light_batch_on_disk` against a listing taken earlier. A uid the listing
-/// lacks must never reach `read_light_at`: passing it a hint of `None` would
-/// make it fall back to `find_file_by_uid`, one full directory rescan per
-/// missing uid — exactly the quadratic cost the listing exists to remove.
-fn read_light_listed(cur_dir: &Path, files: &HashMap<u32, PathBuf>, uids: &[u32]) -> Vec<Option<LightEmail>> {
-    uids.iter()
-        .map(|uid| read_light_at(cur_dir, *uid, Some(files.get(uid)?.as_path())))
-        .collect()
+/// One uid against a listing taken earlier. A uid the listing lacks must never
+/// reach `read_light_at`: passing it a hint of `None` would make it fall back
+/// to `find_file_by_uid`, one full directory rescan per missing uid — exactly
+/// the quadratic cost the listing exists to remove.
+fn read_light_listed(cur_dir: &Path, files: &HashMap<u32, PathBuf>, uid: u32) -> Option<LightEmail> {
+    read_light_at(cur_dir, uid, Some(files.get(&uid)?.as_path()))
 }
 
 pub fn read_attachment(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uid: u32, attachment_index: usize) -> Result<String, String> {
@@ -2368,9 +2380,9 @@ mod tests {
         let files = maildir::uid_file_map(&cur);
         fs::write(cur.join(format!("7{INFO_PREFIX}S.eml")), light_batch_eml("seven")).unwrap();
 
-        let out = read_light_listed(&cur, &files, &[7]);
+        let out = read_light_listed(&cur, &files, 7);
         assert!(
-            out[0].is_none(),
+            out.is_none(),
             "a uid absent from the listing must not be looked up again, even though a file for it exists now"
         );
     }
@@ -2403,6 +2415,31 @@ mod tests {
         assert!(out[1].is_none(), "missing uid");
         assert_eq!(out[2].as_ref().expect("uid 5").text.as_deref().map(str::trim), Some("body of five"));
         assert!(out[3].is_none(), "legacy name without colon stays invisible, as before");
+    }
+
+    #[test]
+    fn visiting_a_folder_stops_reading_when_the_visitor_says_stop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        for uid in 1..=5u32 {
+            fs::write(cur.join(format!("{uid}{INFO_PREFIX}.eml")), light_batch_eml(&format!("m{uid}"))).unwrap();
+        }
+
+        let mut seen = Vec::new();
+        for_each_light_on_disk(root, "acct", "INBOX", &[1, 2, 3, 4, 5], |email| {
+            seen.push(email.map(|e| e.uid));
+            seen.len() < 2
+        });
+        assert_eq!(seen, vec![Some(1), Some(2)], "no message past the one the visitor stopped on is read");
+
+        let mut all = Vec::new();
+        for_each_light_on_disk(root, "acct", "INBOX", &[5, 404, 1], |email| {
+            all.push(email.map(|e| e.uid));
+            true
+        });
+        assert_eq!(all, vec![Some(5), None, Some(1)], "one visit per requested uid, in order");
     }
 
     /// A held file that will not read is that file's empty slot, not the

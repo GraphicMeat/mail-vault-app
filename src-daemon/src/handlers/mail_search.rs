@@ -270,6 +270,21 @@ pub(crate) async fn route(
                     ))
                 }
             };
+            // One search at a time: the box shows only the newest, so an older
+            // run still reading folders is retired here, whether or not the
+            // app's own cancel has reached the daemon yet.
+            let older = state
+                .search_runs
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .values()
+                .filter(|run| !Arc::ptr_eq(run, &guard.run))
+                .cloned()
+                .collect::<Vec<_>>();
+            for run in older {
+                let _publish = run.publish.lock().unwrap_or_else(|p| p.into_inner());
+                run.cancelled.store(true, Ordering::SeqCst);
+            }
             let response =
                 RpcResponse::success(id, json!({"started":true,"searchId":request.search_id}));
             tokio::spawn(run_search(Arc::clone(state), request, guard));
@@ -896,31 +911,51 @@ async fn run_local_lane(
                         .iter()
                         .map(|summary| summary.uid)
                         .collect::<Vec<_>>();
-                    let emails = vault_files::read_light_batch_on_disk(
+                    // One message at a time, so a cancelled search stops within
+                    // a message and a folder is never held in memory whole.
+                    let mut rows = Vec::new();
+                    let mut failed = None;
+                    vault_files::for_each_light_on_disk(
                         &root,
                         &folder_for_blocking.account_id,
                         &folder_for_blocking.mailbox,
                         &uids,
+                        |email| {
+                            if run_for_blocking.is_cancelled() {
+                                failed = Some("cancelled".to_string());
+                                return false;
+                            }
+                            let Some(email) = email else { return true };
+                            if !matches_local_row(&email, &request) {
+                                return true;
+                            }
+                            match serde_json::to_value(email) {
+                                Ok(mut row) => {
+                                    stamp_local_row(
+                                        &mut row,
+                                        &folder_for_blocking.account_id,
+                                        &folder_for_blocking.vault_dir,
+                                        &request
+                                            .targets
+                                            .iter()
+                                            .find(|t| t.account_id == folder_for_blocking.account_id)
+                                            .map(|t| t.known_mailboxes.as_slice())
+                                            .unwrap_or(&[]),
+                                        folder_for_blocking.local_only,
+                                        &folder_for_blocking.custody,
+                                    );
+                                    rows.push(row);
+                                    true
+                                }
+                                Err(error) => {
+                                    failed = Some(error.to_string());
+                                    false
+                                }
+                            }
+                        },
                     );
-                    let mut rows = Vec::new();
-                    for email in emails.into_iter().flatten() {
-                        if matches_local_row(&email, &request) {
-                            let mut row = serde_json::to_value(email).map_err(|e| e.to_string())?;
-                            stamp_local_row(
-                                &mut row,
-                                &folder_for_blocking.account_id,
-                                &folder_for_blocking.vault_dir,
-                                &request
-                                    .targets
-                                    .iter()
-                                    .find(|t| t.account_id == folder_for_blocking.account_id)
-                                    .map(|t| t.known_mailboxes.as_slice())
-                                    .unwrap_or(&[]),
-                                folder_for_blocking.local_only,
-                                &folder_for_blocking.custody,
-                            );
-                            rows.push(row);
-                        }
+                    if let Some(error) = failed {
+                        return Err(error);
                     }
                     Ok((rows, uids.len() as u64))
                 })
@@ -1624,6 +1659,31 @@ mod tests {
         assert!(frames
             .iter()
             .all(|frame| frame["rows"].as_array().unwrap().is_empty()));
+    }
+
+    #[tokio::test]
+    async fn starting_a_search_cancels_the_one_still_running() {
+        let (tmp, state) = state();
+        write_mail(tmp.path(), "acct", "INBOX", 1, "needle", "body");
+        let gate = state.vault_gate.write().unwrap();
+        let mut old_rx = state.events.subscribe();
+        let mut new_rx = state.events.subscribe();
+
+        assert_eq!(call(&state, "mail_search_start", request("old", 3)).await.result.unwrap()["started"], true);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        // No cancel for "old" is sent: the daemon alone must retire it.
+        let mut newer = request("new", 3);
+        newer["query"] = "needle".into();
+        assert_eq!(call(&state, "mail_search_start", newer).await.result.unwrap()["started"], true);
+        drop(gate);
+
+        let old = collect_until_terminal(&mut old_rx, "old").await;
+        assert_eq!(old.last().unwrap()["terminal"], "cancelled", "{old:?}");
+        assert!(old.iter().all(|frame| frame["rows"].as_array().unwrap().is_empty()), "{old:?}");
+        let new = collect_until_terminal(&mut new_rx, "new").await;
+        assert_eq!(new.last().unwrap()["terminal"], "complete", "{new:?}");
+        let rows: usize = new.iter().map(|f| f["rows"].as_array().map_or(0, Vec::len)).sum();
+        assert_eq!(rows, 1, "the newer search still answers: {new:?}");
     }
 
     #[tokio::test]
