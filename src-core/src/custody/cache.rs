@@ -1406,6 +1406,36 @@ mod tests {
         assert!(got.get("nativeIdentity").is_none_or(Value::is_null));
     }
 
+    #[test]
+    fn native_batch_late_origin_or_generation_cannot_replace_newer_proof() {
+        for generation_change in [false, true] {
+            let (_t, c) = store();
+            let a = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "origin-A"});
+            let mut b = a.clone();
+            if generation_change { b["uidValidity"] = json!(8); } else { b["originHash"] = json!("origin-B"); }
+            // A observed no bound cache, then B won publication while A waited.
+            save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": b, "nativeExpectedIdentity": null, "emails": [{"uid": 8}]}).to_string()).unwrap();
+            let before = load_headers(&c, "a", "INBOX", None, HeaderOrder::Arrival).unwrap();
+            let late = save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": a, "nativeExpectedIdentity": null, "emails": [{"uid": 7}]}).to_string());
+            assert!(late.is_err(), "a late old-identity publication must refuse");
+            assert_eq!(load_headers(&c, "a", "INBOX", None, HeaderOrder::Arrival).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn native_batch_same_identity_pages_merge_but_missing_expectation_cannot_bind_legacy() {
+        let (_t, c) = store();
+        let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "origin-A"});
+        save_headers(&c, "a", "INBOX", &json!({"emails": [{"uid": 1}]}).to_string()).unwrap();
+        assert!(save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "emails": [{"uid": 7}]}).to_string()).is_err());
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "nativeExpectedIdentity": null, "emails": [{"uid": 7}]}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "nativeExpectedIdentity": null, "emails": [{"uid": 8}]}).to_string()).unwrap();
+        assert_eq!(uid_set(&c, "a", "INBOX").unwrap(), HashSet::from([7, 8]));
+        patch_flags(&c, "a", "INBOX", &[(7, vec!["\\Seen".into()])]).unwrap();
+        let meta: Value = serde_json::from_str(&load_meta(&c, "a", "INBOX").unwrap().unwrap()).unwrap();
+        assert_eq!(meta["nativeIdentity"], proof);
+    }
+
     /// H3b (a): a folder with no header row at all (never opened, backfill
     /// not there yet, cleared and refilling, an account's cache wiped) is not
     /// "the server holds none of them": the lookup is unknown, so the index
