@@ -119,6 +119,7 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
   const addSendersToView = useViewStore(state => state.addSendersToView);
   const blockSendersInView = useViewStore(state => state.blockSendersInView);
   const removeSendersFromView = useViewStore(state => state.removeSendersFromView);
+  const hideOwnMailInView = useViewStore(state => state.hideOwnMailInView);
   const keepMessageOutOfView = useViewStore(state => state.keepMessageOutOfView);
   const [targetId, setTargetId] = useState(null);
   const [mailboxOnly, setMailboxOnly] = useState(false);
@@ -327,7 +328,7 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
 
   const STATE_KEYS = { loading: 'viewBuilder.loading', unavailable: 'viewBuilder.unavailable', empty: 'viewBuilder.empty', error: 'viewBuilder.error' };
   const nothingPicked = terms.length === 0 && sendersPicked.length === 0;
-  const mine = who.senders.find(sender => sender.own && senderState(targetDef, sender.address) !== 'blocked');
+  const mine = !targetDef?.notFromMe && who.senders.some(sender => sender.own);
 
   return (
     <motion.div
@@ -457,7 +458,7 @@ export function ViewBuilderPanel({ email, accountId, mailbox, onClose }) {
                 ) : <>
                   {mine && (
                     <Button size="xs" variant="accentTint" data-testid="view-builder-hide-mine" disabled={busy} className="self-start"
-                      onClick={() => ruleChange('blocked', () => blockSendersInView(target.id, [mine.address]))}>
+                      onClick={() => ruleChange('blocked', () => hideOwnMailInView(target.id))}>
                       {t('viewBuilder.hideMine')}
                     </Button>
                   )}

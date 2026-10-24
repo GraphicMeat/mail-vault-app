@@ -343,7 +343,7 @@ export const useViewStore = create((set, get) => ({
 
   /// Rewrite a view's sender rules and save it, or save nothing when the rules
   /// come out as they were. `change(def)` returns the new `{ senders,
-  /// excludeSenders, excludeMessages }`. A rule is one or the other: allowing a
+  /// excludeSenders, excludeMessages, notFromMe }`. A rule is one or the other: allowing a
   /// sender lifts its block and blocking it lifts its allowance.
   /// `{ ok: false, reason: 'missing' }` for a view that is gone.
   changeViewRules: async (viewId, change) => {
@@ -352,7 +352,7 @@ export const useViewStore = create((set, get) => ({
     if (!view) return { ok: false, reason: 'missing' };
     const def = view.def || {};
     const next = change(def);
-    const same = ['senders', 'excludeSenders', 'excludeMessages']
+    const same = ['senders', 'excludeSenders', 'excludeMessages', 'notFromMe']
       .every(key => JSON.stringify(next[key] ?? def[key] ?? []) === JSON.stringify(def[key] ?? []));
     if (!same) await get().saveView({ ...view, def: { ...def, ...next } });
     return { ok: true };
@@ -384,6 +384,13 @@ export const useViewStore = create((set, get) => ({
       excludeSenders: normalizedSenders(def.excludeSenders).filter(sender => !drop.includes(sender)),
     }));
   },
+
+  /// None of the mail any of the person's accounts and aliases sent: the
+  /// view's own Not from me setting, which the daemon resolves per account.
+  hideOwnMailInView: viewId => get().changeViewRules(viewId, () => ({ notFromMe: true })),
+
+  /// Forget every message kept out one by one.
+  clearKeptOutMessages: viewId => get().changeViewRules(viewId, () => ({ excludeMessages: [] })),
 
   /// This one message does not belong, whoever sent it.
   /// `{ ok: false, reason: 'unkeyed' }` for a row that cannot be keyed.

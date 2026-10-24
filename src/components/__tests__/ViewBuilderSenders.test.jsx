@@ -40,6 +40,7 @@ const make = (overrides = {}) => {
     addTermsToView: vi.fn(async () => ({ ok: true, wasEmpty: false })),
     addSendersToView: vi.fn(async () => ({ ok: true })),
     blockSendersInView: vi.fn(async () => ({ ok: true })),
+    hideOwnMailInView: vi.fn(async () => ({ ok: true })),
     removeSendersFromView: vi.fn(async () => ({ ok: true })),
     keepMessageOutOfView: vi.fn(async () => ({ ok: true })),
     createViewFromTerms: vi.fn(async () => ({ ok: true, view: { id: 'new' } })),
@@ -151,11 +152,19 @@ describe('who sends what the view finds', () => {
     expect(store.getState().removeSendersFromView).toHaveBeenCalledWith('v-util', ['bills@servico.lt']);
   });
 
-  it('suggests hiding the mail the account sent, from the first row it owns', async () => {
+  it('suggests hiding all the mail the accounts sent, as one setting, not one address', async () => {
     await renderPanel();
     await open();
     await click('view-builder-hide-mine');
-    expect(store.getState().blockSendersInView).toHaveBeenCalledWith('v-util', ['me@x.test']);
+    expect(store.getState().hideOwnMailInView).toHaveBeenCalledWith('v-util');
+    expect(store.getState().blockSendersInView).not.toHaveBeenCalled();
+  });
+
+  it('offers no hiding of own mail once the view already hides it', async () => {
+    make({ views: [{ ...UTILITIES, def: { ...UTILITIES.def, notFromMe: true } }] });
+    await renderPanel();
+    await open();
+    expect(screen.queryByTestId('view-builder-hide-mine')).toBeNull();
   });
 
   it('reads the list again once the view changes under it', async () => {

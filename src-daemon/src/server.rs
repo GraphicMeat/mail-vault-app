@@ -1076,6 +1076,7 @@ mod tests {
     #[test]
     fn opening_a_view_is_foreground_and_counting_the_badges_is_not() {
         assert!(crate::search_index::is_foreground_method("views.evaluate"));
+        assert!(crate::search_index::is_foreground_method("views.senders"), "a click waits on who sends the view");
         assert!(!crate::search_index::is_foreground_method("views.counts"));
     }
 

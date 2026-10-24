@@ -274,6 +274,11 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
   const [dateFrom, setDateFrom] = useState(toDateInput(def.dateFrom));
   const [dateTo, setDateTo] = useState(toDateInput(def.dateTo));
   const [chosenTags, setChosenTags] = useState(def.tags || []);
+  // The sender rules the reader's view builder saves: this form only lets a
+  // person undo them, so a view that never had any keeps none of these keys.
+  const [allowedSenders, setAllowedSenders] = useState(def.senders || []);
+  const [blockedSenders, setBlockedSenders] = useState(def.excludeSenders || []);
+  const [keptOut, setKeptOut] = useState(def.excludeMessages || []);
   const [tagInput, setTagInput] = useState('');
   /// Field id → `{ op, value }`. The operator is part of what was saved: read
   /// back as a bare value, an `isNot` view would silently reopen as `is`.
@@ -336,6 +341,9 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
     hasAttachments: attachments,
     toMe,
     notFromMe,
+    ...(def.senders ? { senders: allowedSenders } : {}),
+    ...(def.excludeSenders ? { excludeSenders: blockedSenders } : {}),
+    ...(def.excludeMessages ? { excludeMessages: keptOut } : {}),
     range: CALENDAR_RANGES.includes(within) ? within : null,
     withinDays: within && !CALENDAR_RANGES.includes(within) ? Number(within) : null,
     dateFrom: within ? null : fromDateInput(dateFrom),
@@ -471,6 +479,28 @@ export function ViewEditor({ view, onClose, onSaved, onDiscard, showPreview = tr
     <QueryGroupsField prefix="view-sender" label={t('views.filter.sender')} placeholder={t('views.sender.placeholder')}
       hint={t('views.sender.hint')} groups={senderGroups} setGroups={setSenderGroups} input={senderInput} setInput={setSenderInput}
       suggest={suggestSenders} people />
+
+    {(allowedSenders.length > 0 || blockedSenders.length > 0 || keptOut.length > 0) && <div className="view-choice-field" data-testid="view-sender-rules">
+      <span>{t('views.senderRules.title')}</span>
+      <div className="view-query-groups">
+        {[['allowed', allowedSenders, setAllowedSenders], ['blocked', blockedSenders, setBlockedSenders]].flatMap(([kind, list, setList]) => list.map((sender, i) =>
+          <span key={`${kind}-${sender}`} className="view-query-key" style={{ cursor: 'default' }}>
+            <span className="view-sender-rule-kind">{t(`views.senderRules.${kind}`)}</span>
+            <Private kind="email">{sender}</Private>
+            <button type="button" className="view-query-key-remove" data-testid={`view-${kind}-sender-${i}-remove`}
+              aria-label={`${t('common.remove')} ${sender}`} onClick={() => setList(current => current.filter(item => item !== sender))}>
+              <X size={12} aria-hidden="true" />
+            </button>
+          </span>))}
+        {keptOut.length > 0 && <span className="view-query-key" style={{ cursor: 'default' }} data-testid="view-kept-out">
+          {t('views.senderRules.keptOut', { count: keptOut.length })}
+          <button type="button" className="view-query-key-remove" data-testid="view-kept-out-clear"
+            aria-label={t('views.senderRules.clearKeptOut')} onClick={() => setKeptOut([])}>
+            <X size={12} aria-hidden="true" />
+          </button>
+        </span>}
+      </div>
+    </div>}
 
     </SettingsSection>
 

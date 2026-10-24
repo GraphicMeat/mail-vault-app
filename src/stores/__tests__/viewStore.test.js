@@ -903,6 +903,27 @@ describe('who a view takes mail from', () => {
     expect(saved()).toEqual([]);
   });
 
+  it('hides every message the accounts sent, once, with one flag', async () => {
+    useViewStore.setState({ views: [BILLS] });
+    daemon([BILLS]);
+    expect(await useViewStore.getState().hideOwnMailInView('bills')).toEqual({ ok: true });
+    expect(saved()[0].def).toEqual({ ...BILLS.def, notFromMe: true });
+    const hidden = { ...BILLS, def: { ...BILLS.def, notFromMe: true } };
+    useViewStore.setState({ views: [hidden] });
+    harness.daemonCall.mockClear();
+    daemon([hidden]);
+    await useViewStore.getState().hideOwnMailInView('bills');
+    expect(saved()).toEqual([]);
+  });
+
+  it('forgets the messages kept out, and only those', async () => {
+    const kept = { ...BILLS, def: { ...BILLS.def, excludeMessages: ['a@x.test', 'b@x.test'] } };
+    useViewStore.setState({ views: [kept] });
+    daemon([kept]);
+    await useViewStore.getState().clearKeptOutMessages('bills');
+    expect(saved()[0].def).toEqual({ ...BILLS.def, excludeMessages: [] });
+  });
+
   it('keeps one message out of a view by its key, once', async () => {
     useViewStore.setState({ views: [BILLS] });
     daemon([BILLS]);

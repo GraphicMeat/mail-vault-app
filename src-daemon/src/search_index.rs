@@ -44,7 +44,7 @@ pub fn is_foreground_method(method: &str) -> bool {
             | "vault_search" | "mail_search_start" | "imap_set_flags" | "imap_delete_email" | "imap_move_emails"
             | "graph_set_read" | "graph_set_flagged" | "graph_delete_message" | "graph_move_emails"
             | "archive_emails" | "bulk_delete_emails" | "search.suggest" | "views.evaluate" | "body.scan"
-            | "views.keywords" | "views.keyword_detail"
+            | "views.keywords" | "views.keyword_detail" | "views.senders"
             | "people.list" | "people.get" | "people.stats" | "people.messages" | "people.suggest" | "people.review.list"
             | "people.contacts.top" | "people.contacts.search"
     )
