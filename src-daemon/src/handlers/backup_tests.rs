@@ -113,6 +113,54 @@ async fn backup_run_account_via_route_returns_the_run_id() {
     assert_eq!(r.result.unwrap(), json!({"runId": "acct1"}));
 }
 
+#[test]
+fn backup_purge_uids_waits_off_runtime_and_finishes_before_reply() {
+    use mailvault_core::mirror_mutation::MirrorRoot;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    let (_vault, state) = st();
+    let mirror = tempfile::tempdir().unwrap();
+    let cur = mailvault_core::maildir::mirror_cur(mirror.path(), "me@test", "Projects/Sub").unwrap();
+    std::fs::create_dir_all(&cur).unwrap();
+    let target = cur.join("7.eml");
+    let untouched = cur.join("8.eml");
+    std::fs::write(&target, b"legacy queued copy").unwrap();
+    std::fs::write(&untouched, b"keep").unwrap();
+    let root = MirrorRoot::resolve(mirror.path()).unwrap();
+    let params = json!({"email":"me@test", "mailbox":"Projects/Sub", "uids":[7], "mirrorRoot":mirror.path(), "externalStatus":"available"});
+    let (control_tx, control_rx) = mpsc::channel();
+    let (reply_tx, reply_rx) = mpsc::channel();
+    std::thread::scope(|threads| {
+        root.mutate(|_| {
+            threads.spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+                runtime.block_on(async move {
+                    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+                    let purge = tokio::spawn(async move {
+                        entered_tx.send(()).unwrap();
+                        handle_request_for_test(&state, "backup_purge_uids", params).await
+                    });
+                    entered_rx.await.unwrap();
+                    // The RPC has begun its first poll. Its only runtime thread
+                    // must be available while the real root guard remains held.
+                    let _ = control_tx.send(());
+                    let _ = reply_tx.send(purge.await.unwrap());
+                });
+            });
+            control_rx.recv_timeout(Duration::from_secs(2))
+                .expect("actual purge RPC blocked the current-thread runtime on the mirror guard");
+            assert!(reply_rx.try_recv().is_err(), "purge replied before guarded IO completed");
+            assert!(target.exists());
+            Ok(())
+        }).unwrap();
+        let reply = reply_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(reply.error.is_none(), "{:?}", reply.error);
+        assert_eq!(reply.result, Some(json!({"removed":1,"queued":0})));
+        assert!(!target.exists(), "response must account for the completed unlink");
+    });
+    assert_eq!(std::fs::read(untouched).unwrap(), b"keep");
+}
+
 // ── backup_cancel (Task 4) ────────────────────────────────────────────────
 
 #[tokio::test]

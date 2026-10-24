@@ -305,8 +305,12 @@ pub(crate) async fn backup_purge_uids(state: &Arc<DaemonState>, params: Value) -
     let mirror_root = params.get("mirrorRoot").and_then(Value::as_str).map(str::to_string);
     let external_status = params.get("externalStatus").and_then(Value::as_str).map(str::to_string);
 
-    let mirror_path = mirror_root.as_deref().map(Path::new);
-    let outcome = backup::purge_uids(&state.app_dir, mirror_path, external_status.as_deref(), &email, &mailbox, &uids)?;
+    let app_dir = state.app_dir.clone();
+    let outcome = common::blocking(move || {
+        let mirror_path = mirror_root.as_deref().map(Path::new);
+        backup::purge_uids(&app_dir, mirror_path, external_status.as_deref(), &email, &mailbox, &uids)
+    })
+    .await??;
 
     serde_json::to_value(outcome).map_err(|e| format!("serialize purge outcome: {}", e))
 }
