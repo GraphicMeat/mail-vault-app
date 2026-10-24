@@ -2545,6 +2545,110 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    fn store_native_test_config(path: &Path, account: &SyncAccount) {
+        let config = &account.imap_config;
+        let record = serde_json::json!({"email": config.email, "imapHost": config.host, "imapPort": config.port, "password": "fixture"});
+        fs::write(path, serde_json::json!({"acc1": record.to_string()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", path);
+    }
+
+    #[tokio::test]
+    async fn reviewed_native_stale_operation_entry_cannot_take_newer_origin() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|p| p.into_inner());
+        let dir = scratch_dir("stale_native_entry");
+        let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let (account_a, account_b) = (account_for(&a), account_for(&b));
+        let engine = engine_for(&dir);
+        store_native_test_config(&dir.join("config.json"), &account_b);
+        let io = engine.cache_ctx("acc1", "INBOX");
+        let seed_b = io.native_seed(&account_b.imap_config).unwrap();
+        io.write_bound_headers(&[test_header(3)], &seed_b, Some(1)).unwrap();
+        let before = with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap());
+        let result = engine.sync_account(&account_a, "INBOX").await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(!result.success, "a stale captured account must not acquire a newer origin");
+        assert_eq!(with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap()), before);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Pause the real producer at its existing between-chunk progress event.
+    /// This test-only subscriber avoids a timing race or production test hook.
+    struct NativeChunkPause {
+        reached: std::sync::mpsc::SyncSender<()>,
+        release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+        once: std::sync::atomic::AtomicBool,
+    }
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for NativeChunkPause {
+        fn on_event(&self, event: &tracing::Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
+            struct Message(String);
+            impl tracing::field::Visit for Message {
+                fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                    if field.name() == "message" { self.0 = format!("{value:?}"); }
+                }
+            }
+            let mut message = Message(String::new());
+            event.record(&mut message);
+            if message.0.contains(&format!("{}/{} headers cached", BACKFILL_CHUNK, BACKFILL_CHUNK * 2))
+                && !self.once.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                self.reached.send(()).unwrap();
+                self.release.lock().unwrap().recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reviewed_native_backfill_pins_origin_between_chunks() {
+        use tracing::instrument::WithSubscriber;
+        use tracing_subscriber::prelude::*;
+        let dir = scratch_dir("native_chunk_owner");
+        let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", (BACKFILL_CHUNK * 2) as u32)));
+        let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let (account_a, account_b) = (account_for(&a), account_for(&b));
+        let engine = Arc::new(engine_for(&dir));
+        let (hit_tx, hit_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+        let subscriber = tracing_subscriber::registry().with(NativeChunkPause {
+            reached: hit_tx, release: std::sync::Mutex::new(release_rx), once: std::sync::atomic::AtomicBool::new(false),
+        });
+        let running = engine.clone();
+        let job = tokio::spawn(async move { running.backfill_mailbox(&account_a, "INBOX").await }.with_subscriber(subscriber));
+        let paused = tokio::task::spawn_blocking(move || hit_rx.recv_timeout(std::time::Duration::from_secs(10))).await.unwrap();
+        if paused.is_err() { let _ = release_tx.send(()); }
+        assert!(paused.is_ok(), "the actual first chunk must finish before replacing ownership");
+        let io = engine.cache_ctx("acc1", "INBOX");
+        let seed_b = io.native_seed(&account_b.imap_config).unwrap();
+        io.write_bound_headers(&[test_header(3)], &seed_b, Some(1)).unwrap();
+        release_tx.send(()).unwrap();
+        job.await.unwrap();
+        assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([3]), "later A chunks cannot adopt B as a new replacement expectation");
+        assert!(io.native_seed(&account_b.imap_config).unwrap().matches(&imap::NativeHeaderIdentity::new(&account_b.imap_config, "acc1", "INBOX", Some(1))));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reviewed_native_backfill_conflict_allows_a_fresh_current_owner() {
+        let dir = scratch_dir("native_retry_owner");
+        let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)).fault(Trigger::nth("FETCH", 1), Action::Delay(Duration::from_millis(400))));
+        let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let (account_a, account_b) = (account_for(&a), account_for(&b));
+        let engine = Arc::new(engine_for(&dir));
+        let running = engine.clone();
+        let job = tokio::spawn(async move { running.backfill_mailbox(&account_a, "INBOX").await });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while a.count_commands("UID FETCH") == 0 { tokio::time::sleep(Duration::from_millis(1)).await; }
+        }).await.expect("the actual A FETCH must be in flight");
+        let io = engine.cache_ctx("acc1", "INBOX");
+        let seed_b = io.native_seed(&account_b.imap_config).unwrap();
+        io.write_bound_headers(&[test_header(3)], &seed_b, Some(1)).unwrap();
+        job.await.unwrap();
+        let poisoned = engine.backfill_gave_up.lock().await.contains("acc1\u{1}INBOX");
+        engine.backfill_mailbox(&account_b, "INBOX").await;
+        assert!(!poisoned, "an ownership race is not a process-lifetime provider failure");
+        assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([1, 2, 3]), "fresh current-owner backfill must still run");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn native_batch_sync_seed_rejects_late_origin_rows_and_mutations() {
         let dir = scratch_dir("native_seed");
