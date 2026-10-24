@@ -674,6 +674,90 @@ mod tests {
         assert!(p.released.lock().unwrap().is_empty());
     }
     #[test]
+    fn stale_initial_status_cannot_rebind_a_newer_resumed_hold() {
+        struct DelayedStatus<'a> {
+            held: &'a HeldBulkPaths,
+            delayed: std::sync::atomic::AtomicBool,
+            current: Mutex<String>,
+            released: Mutex<Vec<String>>,
+        }
+        impl Ports for DelayedStatus<'_> {
+            fn resolve(&self) -> Option<String> {
+                Some("/drive".into())
+            }
+            fn exists(&self, _: &str) -> bool {
+                true
+            }
+            fn release(&self, path: &str) {
+                self.released.lock().unwrap().push(path.into());
+            }
+            fn call(&self, method: &str, params: Value, _: Duration) -> Result<Value, String> {
+                if method == "bulk.status"
+                    && params.get("attemptId").is_none()
+                    && !self.delayed.swap(true, std::sync::atomic::Ordering::SeqCst)
+                {
+                    // X's response was sampled while A was live. Before it
+                    // arrives, A drains and Y successfully resumes as B.
+                    *self.current.lock().unwrap() = String::new();
+                    forward_flow(self.held, self, "bulk.resume", json!({"operationId":"op"}))?;
+                    return Ok(
+                        json!({"active":{"id":"op","type":"archive_backup_delete","attemptId":"A"},"pending":null}),
+                    );
+                }
+                if method == "bulk.status" {
+                    let current = self.current.lock().unwrap().clone();
+                    let asked = params["attemptId"].as_str().unwrap_or("");
+                    return Ok(json!({
+                        "active":if current.is_empty() {Value::Null} else {json!({"id":"op","type":"archive_backup_delete","attemptId":current})},
+                        "pending":{"id":"op","type":"archive_backup_delete"},
+                        "admission":if asked.is_empty() {Value::Null} else {json!({"operationId":"op","attemptId":asked,"state":if asked=="A" {"done"} else {"running"}})}
+                    }));
+                }
+                if method == "bulk.resume" {
+                    let attempt = params["attemptId"].as_str().unwrap().to_owned();
+                    *self.current.lock().unwrap() = attempt.clone();
+                    return Ok(json!({"id":"op","attemptId":attempt,"status":"starting"}));
+                }
+                Err("errors.bulkStale".into())
+            }
+        }
+        let held = HeldBulkPaths::default();
+        held.map().insert(
+            "op".into(),
+            Hold {
+                path: Some("/drive".into()),
+                pending: false,
+                revision: 1,
+                attempt: "A".into(),
+            },
+        );
+        let ports = DelayedStatus {
+            held: &held,
+            delayed: std::sync::atomic::AtomicBool::new(false),
+            current: Mutex::new("A".into()),
+            released: Mutex::new(vec![]),
+        };
+        assert!(forward_flow(
+            &held,
+            &ports,
+            "bulk.start",
+            json!({"operationId":"op","type":"archive_backup_delete"})
+        )
+        .is_err());
+        let current = ports.current.lock().unwrap().clone();
+        assert_ne!(current, "A");
+        assert_eq!(
+            held.map().get("op").map(|hold| hold.attempt.clone()),
+            Some(current),
+            "stale initial status must not rewrite B's hold to A"
+        );
+        assert_eq!(
+            ports.released.lock().unwrap().len(),
+            1,
+            "only drained A may release; live B remains held"
+        );
+    }
+    #[test]
     fn delayed_first_terminal_cannot_release_scope_acquired_by_explicit_resume() {
         let h = HeldBulkPaths::default();
         let mut p = Fake {
