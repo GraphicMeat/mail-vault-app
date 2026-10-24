@@ -1417,6 +1417,59 @@ mod tests {
         assert!(trap.accept().is_err());
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_worker_checkpoint_io_never_blocks_active_status_or_cancel() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let intent = FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[]);
+        state
+            .bulk
+            .lock()
+            .unwrap()
+            .claim(&state.app_dir, "io", intent.clone())
+            .unwrap();
+        let mut ports = MailPorts {
+            state: state.clone(),
+            id: "io".into(),
+            attempt: "io".into(),
+            mirror: None,
+            archive_base: 0,
+            archive_errors: 0,
+            selected: HashMap::new(),
+            origins: HashMap::new(),
+        };
+        let work = Workflow::new(intent);
+        // A real SQLite writer blocks persistence deterministically; WAL
+        // readers and the owned compact snapshot remain independently usable.
+        let writer = mailvault_core::app_db::db::open(dir.path()).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let checkpoint = tokio::spawn(async move { ports.checkpoint(&work).await });
+        for _ in 0..200 {
+            if state.journal.try_lock().is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        assert!(
+            state.journal.try_lock().is_err(),
+            "checkpoint never reached durable write"
+        );
+        let control = tokio::time::timeout(Duration::from_millis(200), async {
+            tokio::join!(
+                handle_request_for_test(&state, "bulk.status", json!({})),
+                handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"io"})),
+            )
+        })
+        .await;
+        writer.execute_batch("ROLLBACK").unwrap();
+        checkpoint.await.unwrap().unwrap();
+        let (status, cancel) = control.expect(
+            "active status and cancellation must answer while checkpoint IO remains blocked",
+        );
+        assert_eq!(status.result.unwrap()["active"]["id"], "io");
+        assert!(cancel.error.is_none());
+    }
     #[tokio::test(flavor = "multi_thread")]
     async fn bulk_worker_auth_and_provider_failures_persist_service_keys() {
         use crate::jmap_test_support as support;
