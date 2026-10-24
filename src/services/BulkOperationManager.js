@@ -317,7 +317,12 @@ export class BulkOperationManager {
     owner.attempt = operation.attemptId;
     this._operation = { ...operation };
     this._emit(owner);
-    for (const event of owner.early.values()) this._event(owner, event);
+    // Updating a Map entry does not change its position: the status entry
+    // may already contain drain. Retain exact target frames before replaying it.
+    for (const event of owner.early.values())
+      if (event.target) this._event(owner, event);
+    for (const event of owner.early.values())
+      if (!event.target) this._event(owner, event);
     owner.early.clear();
     if (inactive && terminal(operation.status)) void this._finish(owner);
     return true;
@@ -386,7 +391,7 @@ export class BulkOperationManager {
         attemptId: owner.requested,
         fenceUnstarted: true,
       });
-      if (this._owner !== owner) return;
+      if (this._owner !== owner || owner.finishing) return;
       if (status?.active?.id === owner.id) {
         this._accept(owner, status.active, false);
         return;
@@ -405,7 +410,7 @@ export class BulkOperationManager {
         // them after drain. Read only the exact owned row, never another job.
         const raw =
           final.state === 'done' ? await send('read_pending_operation') : null;
-        if (this._owner !== owner) return;
+        if (this._owner !== owner || owner.finishing) return;
         if (
           raw?.schemaVersion === 1 &&
           raw.id === owner.id &&

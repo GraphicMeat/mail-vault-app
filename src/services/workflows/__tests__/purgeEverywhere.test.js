@@ -370,3 +370,37 @@ it('never borrows an unrelated non-null B companion after Undo maps A onto its U
     useMailStore.getState().emails.some((row) => row.messageId === 'B')
   ).toBe(true);
 });
+
+it('hides the matching bound original despite its sparse unbound archived duplicate', async () => {
+  prime({
+    emails: [row(1), row(2)],
+    localOnly: [{ uid: 1, flags: ['archived'], source: 'local' }],
+  });
+  native.start.mockImplementation(async ({ scope }) => {
+    expect(useMailStore.getState().emails.some((row) => row.uid === 1)).toBe(
+      false
+    );
+    expect(
+      useMailStore.getState().deleteTombstones.has(`${ACCOUNT.id}|INBOX.Spam|1`)
+    ).toBe(true);
+    return outcome(scope);
+  });
+  await purgeEverywhere([1]);
+  expect(native.start).toHaveBeenCalledTimes(1);
+  expect(
+    native.start.mock.calls[0][0].scope.targetHints[0].nativeIdentity.originHash
+  ).toBe('A');
+});
+
+it('keeps known conflicting message identity visible without borrowing it into the request', async () => {
+  const original = captureBulkScope([1], useMailStore.getState(), [row(1)]);
+  const replacement = { ...row(1), messageId: 'B', _nativeIdentity: undefined };
+  useMailStore.setState({ emails: [replacement] });
+  native.start.mockImplementation(async ({ scope }) => outcome(scope, true));
+  await purgeEverywhere([1], { scope: original });
+  expect(useMailStore.getState().emails[0].messageId).toBe('B');
+  expect(native.start).toHaveBeenCalledTimes(1);
+  expect(native.start.mock.calls[0][0].scope.targetHints[0].messageId).toBe(
+    'm1@mock'
+  );
+});

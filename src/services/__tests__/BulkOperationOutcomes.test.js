@@ -83,7 +83,11 @@ beforeEach(() => {
   m.send.mockReset();
   m.events = {};
 });
-afterEach(() => manager._cleanup());
+afterEach(() => {
+  manager._cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 async function run(rawChange = (raw) => raw, events = []) {
   let raw;
   m.send.mockImplementation(async (cmd, p) => {
@@ -305,3 +309,123 @@ it('keeps terminal status and four counters when an older active poll returns du
   expect(operation.result).toEqual(finalCounts);
   vi.useRealTimers();
 });
+
+it.each(['missing', 'foreign'])(
+  'fences a %s recovery getter once terminal getter reconciliation starts',
+  async (replacement) => {
+    vi.useFakeTimers();
+    let request;
+    let releaseRecovery;
+    let releaseFinish;
+    let getters = 0;
+    const finalCounts = {
+      deleted: 1,
+      failed: 2,
+      queuedBackup: 3,
+      needsResync: 4,
+    };
+    m.send.mockImplementation(async (command, params) => {
+      if (command === 'bulk.start') {
+        request = params;
+        return {
+          id: params.operationId,
+          attemptId: params.attemptId,
+          type: params.type,
+          status: 'deleting',
+        };
+      }
+      if (command === 'bulk.status')
+        return {
+          active: null,
+          pending: null,
+          admission: {
+            operationId: request.operationId,
+            attemptId: request.attemptId,
+            ownerAttemptId: request.attemptId,
+            state: 'done',
+          },
+        };
+      if (command === 'read_pending_operation')
+        return new Promise((resolve) => {
+          if (++getters === 1) releaseRecovery = resolve;
+          else releaseFinish = resolve;
+        });
+    });
+    const run = manager.start({ type: 'delete_everywhere', scope });
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    vi.advanceTimersByTime(501);
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    const terminal = {
+      id: request.operationId,
+      attemptId: request.attemptId,
+      type: request.type,
+      status: 'complete',
+      result: finalCounts,
+    };
+    m.events['bulk-progress']({
+      payload: {
+        operationId: request.operationId,
+        attemptId: request.attemptId,
+        finished: true,
+        operation: terminal,
+      },
+    });
+    releaseRecovery(
+      replacement === 'missing'
+        ? null
+        : { ...rawFor(request), id: 'operation-B' }
+    );
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    releaseFinish(rawFor(request));
+    const operation = await run;
+    expect(operation.status).toBe('complete');
+    expect(operation.result).toEqual(finalCounts);
+    vi.useRealTimers();
+  }
+);
+
+it.each(['missing', 'foreign', 'unavailable'])(
+  'retains actual preacceptance target frames when the final getter is %s',
+  async (replacement) => {
+    const { readFileSync } = await import('node:fs');
+    const wire = JSON.parse(
+      readFileSync(
+        'src/services/__tests__/fixtures/native-purge-wire.json',
+        'utf8'
+      )
+    );
+    vi.stubGlobal('crypto', {
+      randomUUID: vi
+        .fn()
+        .mockReturnValueOnce(wire.accepted.id)
+        .mockReturnValueOnce(wire.accepted.attemptId),
+    });
+    let accept;
+    m.send.mockImplementation(async (command) => {
+      if (command === 'bulk.start')
+        return new Promise((resolve) => {
+          accept = resolve;
+        });
+      if (replacement === 'unavailable') throw new Error('getter unavailable');
+      return replacement === 'missing'
+        ? null
+        : { ...wire.pending, id: 'operation-B' };
+    });
+    const run = manager.start({
+      type: wire.request.type,
+      scope: wire.request.scope,
+    });
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    for (const payload of wire.events) m.events['bulk-progress']({ payload });
+    accept(wire.accepted);
+    const operation = await run;
+    expect(operation.status).toBe('complete');
+    expect(operation.outcomes).toEqual([
+      {
+        hint: wire.pending.intent.scope.targetHints[0],
+        target: wire.pending.worker.purgeTargets[0],
+      },
+    ]);
+    vi.unstubAllGlobals();
+  }
+);

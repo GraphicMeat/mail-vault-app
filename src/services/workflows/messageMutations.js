@@ -2607,6 +2607,16 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
     const actual = at && captureSelectionSnapshot(row, at.accountId, at.mailbox);
     return actual && originalTargetId({ ...actual, localIdentity: null }) === originalTargetId({ ...hint, localIdentity: null });
   };
+  // Missing evidence on an archived duplicate is not evidence of a new
+  // message. Only positive conflicting identity vetoes the bound original.
+  const contradictsHint = (row, hint, state) => {
+    const at = resolveEmailLocation(row, state);
+    const actual = at && captureSelectionSnapshot(row, at.accountId, at.mailbox);
+    return actual && ((actual.nativeIdentity && originalTargetId(actual.nativeIdentity) !== originalTargetId(hint.nativeIdentity))
+      || (actual.messageId && hint.messageId && actual.messageId !== hint.messageId)
+      || (actual.graphId && actual.graphId !== hint.graphId)
+      || (actual.jmapId && actual.jmapId !== hint.jmapId));
+  };
   const live = get();
   const pool = resolvePool(live);
   const rowsById = new Map();
@@ -2617,7 +2627,10 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
   }
   const hintsById = new Map(scope.targetHints.map(hint => [_targetId(hint), hint]));
   // A replacement under the same numeric key must not be optimistically hidden.
-  const targets = scope.targetHints.filter(hint => !(rowsById.get(_targetId(hint)) || []).some(row => !sameHint(row, hint, live))).map(hint => ({ ...hint, tombstone: _targetId(hint) }));
+  const targets = scope.targetHints.filter(hint => {
+    const rows = rowsById.get(_targetId(hint)) || [];
+    return rows.some(row => sameHint(row, hint, live)) && !rows.some(row => contradictsHint(row, hint, live));
+  }).map(hint => ({ ...hint, tombstone: _targetId(hint) }));
   const originalHints = new Set(scope.targetHints.map(originalTargetId));
   const consumedKeys = scope.keys.filter(key => {
     const snapshot = live.selectedEmailSnapshots?.get(key);
@@ -2678,12 +2691,12 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
     currentRows.get(id).push(row);
   }
   for (const hint of scope.targetHints) {
-    if ((currentRows.get(_targetId(hint)) || []).some(row => !sameHint(row, hint, now))) replaced.add(_targetId(hint));
+    if ((currentRows.get(_targetId(hint)) || []).some(row => contradictsHint(row, hint, now))) replaced.add(_targetId(hint));
   }
   const safe = hidden.removed.filter(item => {
     const hint = hintsById.get(_targetId(item));
     return hint && restore.has(_targetId(item)) && sameHint(item.row, hint, hidden.before)
-      && !(currentRows.get(_targetId(hint)) || []).some(row => !sameHint(row, hint, now));
+      && !(currentRows.get(_targetId(hint)) || []).some(row => contradictsHint(row, hint, now));
   });
   _reinsertRestored(store, safe);
   // Lift only this run's tombstones for unproved/refused outcomes, including
