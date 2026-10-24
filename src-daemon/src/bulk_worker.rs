@@ -1823,15 +1823,20 @@ mod tests {
             let status = handle_request_for_test(&state, "bulk.status", json!({})).await;
             let cancel = handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"claim"})).await;
             let fence = handle_request_for_test(&state, "bulk.status", json!({"operationId":"claim","attemptId":"A","fenceUnstarted":true})).await;
-            (status, cancel, fence)
+            let after_fence = handle_request_for_test(&state, "bulk.status", json!({})).await;
+            let after_cancel = handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"claim"})).await;
+            (status, cancel, fence, after_fence, after_cancel)
         }).await;
         writer.execute_batch("ROLLBACK").unwrap();
         assert!(claim.join().unwrap().is_err());
-        let (status, cancel, fence) = controls.expect("initial encoded save must leave controls live");
+        let (status, cancel, fence, after_fence, after_cancel) = controls.expect("initial encoded save must leave controls live after an unstarted fence");
         assert!(status.error.is_none());
         assert!(status.result.unwrap()["active"].is_null());
         assert_eq!(cancel.error.unwrap().message, "errors.bulkStale");
         assert!(fence.error.is_none());
+        assert!(after_fence.error.is_none());
+        assert!(after_fence.result.unwrap()["active"].is_null());
+        assert_eq!(after_cancel.error.unwrap().message, "errors.bulkStale");
         assert!(state.bulk.lock().unwrap().active_id().is_none());
         let raw = mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap();
         assert_eq!(raw["id"], "claim");
