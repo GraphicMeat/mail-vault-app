@@ -1808,17 +1808,23 @@ mod tests {
         let (status, cancel) = controls.expect("off-lock original preparation cannot block controls");
         assert!(status.error.is_none());
         assert_eq!(cancel.error.unwrap().message, "errors.bulkStale");
-        drop(prepared);
-
         let writer = mailvault_core::app_db::db::open(dir.path()).unwrap();
         writer.execute_batch("BEGIN IMMEDIATE").unwrap();
         let worker_state = state.clone();
-        let claim = std::thread::spawn(move || prepare_claim(&worker_state, "claim", "A", intent));
-        for _ in 0..200 {
-            if state.journal.try_lock().is_err() { break; }
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-        assert!(state.journal.try_lock().is_err(), "encoded claim save must actually be blocked");
+        let (saving, at_save) = std::sync::mpsc::channel();
+        let claim = std::thread::spawn(move || -> Result<Value, String> {
+            let _journal = worker_state.journal.lock().unwrap();
+            worker_state.bulk.lock().unwrap().validate_claim(&prepared)?;
+            saving.send(()).unwrap();
+            if let Err(error) = prepared.persist(&worker_state.app_dir) {
+                worker_state.bulk.lock().unwrap().invalidate_pending();
+                return Err(error);
+            }
+            let result = worker_state.bulk.lock().unwrap().publish_claim(&prepared);
+            result
+        });
+        at_save.recv().unwrap();
+        assert!(state.journal.try_lock().is_err(), "validated encoded save owns journal before controls run");
         let controls = tokio::time::timeout(Duration::from_millis(200), async {
             let status = handle_request_for_test(&state, "bulk.status", json!({})).await;
             let cancel = handle_request_for_test(&state, "bulk.cancel", json!({"operationId":"claim"})).await;
