@@ -133,6 +133,19 @@ impl MirrorPurgeProof {
             provenance: MirrorPurgeProvenance::Local { receipt: receipt.clone() }, artifact: artifact.clone(),
         }.checked()
     }
+    /// Shared artifact/provider types intentionally keep their own existing
+    /// serde contracts. Persisted E2 evidence is closed at every boundary:
+    /// reject any field their deserializers would silently discard. JSON
+    /// object ordering/whitespace remain immaterial; retain raw bytes for ack.
+    fn decode(raw: &str) -> Result<Self, String> {
+        // Deserialize directly first so known-field duplicates and the
+        // provider's canonical UID-key validation retain their existing checks.
+        let proof: Self = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+        let original: serde_json::Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+        let supported = serde_json::to_value(&proof).map_err(|e| e.to_string())?;
+        if original != supported { return Err("unsupported mirror purge proof fields".into()); }
+        proof.checked()
+    }
     pub fn target(&self) -> &MirrorPurgeTarget { &self.target }
     pub(crate) fn sha256(&self) -> &str { &self.artifact.sha256 }
     fn checked(self) -> Result<Self, String> {
@@ -168,8 +181,7 @@ pub struct PurgeItem {
 }
 impl PurgeItem {
     pub fn proved(&self) -> Result<MirrorPurgeProof, String> {
-        let proof: MirrorPurgeProof = serde_json::from_str(self.proof_json.as_deref().ok_or("legacy purge item")?).map_err(|e| e.to_string())?;
-        let proof = proof.checked()?;
+        let proof = MirrorPurgeProof::decode(self.proof_json.as_deref().ok_or("legacy purge item")?)?;
         if proof.target.scope() != self.scope || proof.target.uid != self.uid { return Err("mirror purge binding mismatch".into()); }
         Ok(proof)
     }
@@ -201,8 +213,7 @@ pub fn purge_enqueue_proved(conn: &Connection, proof: &MirrorPurgeProof) -> Resu
         let existing: Option<String> = conn.query_row("SELECT proof_json FROM pending_backup_purge WHERE scope=?1 AND uid=?2",
             params![proof.target.scope(),proof.target.uid], |r| r.get(0)).map_err(|e| e.to_string())?;
         // Semantic equality also handles older equivalent JSON field order.
-        let same = existing.as_deref().and_then(|s| serde_json::from_str::<MirrorPurgeProof>(s).ok())
-            .and_then(|p| p.checked().ok()).as_ref() == Some(proof);
+        let same = existing.as_deref().and_then(|raw| MirrorPurgeProof::decode(raw).ok()).as_ref() == Some(proof);
         Ok(if same { PurgeEnqueue::Existing } else { PurgeEnqueue::Conflict })
     })
 }

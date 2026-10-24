@@ -3705,6 +3705,47 @@ mod tests {
         }
     }
 
+    fn protected_nested_unknown_case(nested: &str) {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        let mut value = serde_json::to_value(&proof).unwrap();
+        let boundary = if nested == "artifact" { &mut value["artifact"] } else { &mut value["provenance"]["identity"] };
+        boundary["futureConstraint"] = serde_json::json!("opaque original evidence");
+        let raw = value.to_string();
+        crate::app_db::with(app.path(),|c| c.execute(
+            "INSERT INTO pending_backup_purge(scope,uid,proof_json) VALUES ('me@test|INBOX',7,?1)",[&raw]
+        ).map(|_|()).map_err(|e|e.to_string())).unwrap();
+        let before = protected_items(app.path());
+        let interpreted = before[0].proved();
+        let enqueued = crate::app_db::with(app.path(),|c| crate::app_db::ops::purge_enqueue_proved(c,&proof)).unwrap();
+        let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        let candidate = cur.join("7.eml");
+        std::fs::write(&candidate,b"A").unwrap();
+        // Exercise every real path before asserting, so RED captures the
+        // unsafe interpretation, enqueue match, unlink and lost raw evidence.
+        let removed = drain_purge_queue(app.path(),mirror.path());
+        let remaining = protected_items(app.path());
+        let surviving = std::fs::read(candidate).ok();
+        assert!(interpreted.is_err(), "unknown {nested} accepted: enqueue={enqueued:?}, removed={removed}, remaining={remaining:?}, surviving={surviving:?}");
+        assert_eq!(enqueued,crate::app_db::ops::PurgeEnqueue::Conflict);
+        assert_eq!(removed,0);
+        assert_eq!(surviving.as_deref(),Some(b"A".as_slice()));
+        assert_eq!(remaining,before);
+        assert_eq!(remaining[0].proof_json.as_deref(),Some(raw.as_str()));
+    }
+
+    #[test]
+    fn protected_nested_artifact_unknown_field_preserves_raw_obligation() {
+        protected_nested_unknown_case("artifact");
+    }
+
+    #[test]
+    fn protected_nested_identity_unknown_field_preserves_raw_obligation() {
+        protected_nested_unknown_case("identity");
+    }
+
     #[test]
     fn protected_purge_malformed_future_and_wrong_binding_stay_inspectable() {
         let app = tempfile::tempdir().unwrap();
