@@ -103,7 +103,8 @@ it('the demo accepts consistent versioned grouping and opaque purge selections',
     };
     const operation = {
       schemaVersion: 1, id: 'valid', type, totalUids: keys, completedUids: [], status: 'starting', intent,
-    } });
+    };
+    const demo = createDemoBackend({ initialPendingOperation: operation });
     expect((await demo.invoke('bulk.status')).pending.remaining).toBe(keys.length);
     await expect(demo.invoke('bulk.discard', { operationId: 'valid' })).resolves.toBeNull();
     expect(await demo.invoke('read_pending_operation')).toBeNull();
