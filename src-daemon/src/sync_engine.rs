@@ -1282,7 +1282,12 @@ impl SyncEngine {
             return Ok(0);
         }
 
-        let have = cache_io(&io, |io| Ok(io.cached_uids())).await?;
+        // Only the original native owner can prove that retained UIDs are
+        // already cached. A legacy/other-origin transition must fetch the full
+        // provider set before its first checked publication clears old rows.
+        let same_origin = seed.expected.get("originHash").and_then(serde_json::Value::as_str)
+            == Some(seed.identity.origin_hash.as_str());
+        let have = if same_origin { cache_io(&io, |io| Ok(io.cached_uids())).await? } else { HashSet::new() };
         // Newest first — the user is looking at the top of the list.
         let mut missing: Vec<u32> = server_uids
             .into_iter()
@@ -3421,6 +3426,21 @@ mod tests {
         assert_eq!(cached_count(&engine, "INBOX"), 50, "backfill should complete the mailbox");
         assert!(!engine.is_backfilling("acc1").await, "in-flight flag must clear");
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn native_legacy_backfill_fetches_retained_unproved_uids_before_binding() {
+        let dir = scratch_dir("legacy_backfill_proof");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
+        let account = account_for(&server);
+        let engine = engine_for(&dir);
+        app_wrote_meta(&engine, "INBOX", serde_json::json!({"emails": [{"uid": 50, "subject": "unproved stale row"}], "totalEmails": 50}));
+        engine.backfill_mailbox(&account, "INBOX").await;
+        assert_eq!(cached_count(&engine, "INBOX"), 50);
+        let rows = with_store(&engine, |c| mailvault_core::custody::cache::load_by_uids(c, "acc1", "INBOX", &[50]).unwrap());
+        assert_ne!(rows[0]["subject"], "unproved stale row");
+        assert!(engine.cache_ctx("acc1", "INBOX").native_seed(&account.imap_config).unwrap().matches(&imap::NativeHeaderIdentity::new(&account.imap_config, "acc1", "INBOX", Some(1))));
         let _ = fs::remove_dir_all(&dir);
     }
 
