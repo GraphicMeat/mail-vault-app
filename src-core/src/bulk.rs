@@ -358,6 +358,8 @@ struct Admission {
     operation_id: String,
     state: AdmissionState,
     owner_attempt: Option<String>,
+    // A fence changes the receipt, not the lifetime of its blocking handler.
+    in_flight: bool,
 }
 
 pub struct CheckpointSeed {
@@ -638,7 +640,7 @@ impl Coordinator {
     /// A narrowly admitted start may expose only its last committed compact view
     /// while its first encoded write owns journal/SQLite. No speculative Active.
     pub fn admission_status(&self) -> Option<Result<Value, String>> {
-        self.owned_status().or_else(|| self.admissions.values().any(|a| a.state == AdmissionState::Freezing).then(|| self.cached_status()))
+        self.owned_status().or_else(|| self.admissions.values().any(|a| a.in_flight).then(|| self.cached_status()))
     }
     pub fn duplicate_seed(&self, id: &str, attempt: &str) -> Result<DuplicateSeed, String> {
         self.require_unfenced(id, attempt)?;
@@ -1059,6 +1061,7 @@ impl Coordinator {
                 operation_id: id.into(),
                 state: AdmissionState::Freezing,
                 owner_attempt: None,
+                in_flight: true,
             },
         );
         Ok(None)
@@ -1078,18 +1081,20 @@ impl Coordinator {
                 operation_id: id.into(),
                 state: AdmissionState::Running,
                 owner_attempt: Some(owner.into()),
+                in_flight: false,
             },
         );
     }
     pub fn finish_admission(&mut self, id: &str, attempt: &str, result: &Result<Value, String>) {
-        if let Some(admission) = self.admissions.get_mut(attempt).filter(|admission| {
-            admission.operation_id == id && admission.state == AdmissionState::Freezing
-        }) {
-            admission.state = if result.is_err() {
-                AdmissionState::Rejected
-            } else {
-                AdmissionState::Done
-            };
+        if let Some(admission) = self.admissions.get_mut(attempt).filter(|admission| admission.operation_id == id) {
+            admission.in_flight = false;
+            if admission.state == AdmissionState::Freezing {
+                admission.state = if result.is_err() {
+                    AdmissionState::Rejected
+                } else {
+                    AdmissionState::Done
+                };
+            }
         }
     }
     pub fn fence_admission(&mut self, id: &str, attempt: &str) -> Result<(), String> {
@@ -1106,6 +1111,7 @@ impl Coordinator {
             operation_id: id.into(),
             state: AdmissionState::Fenced,
             owner_attempt: None,
+            in_flight: false,
         });
         if admission.state == AdmissionState::Freezing {
             admission.state = AdmissionState::Fenced;

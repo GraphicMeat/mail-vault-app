@@ -300,14 +300,35 @@ pub(crate) fn duplicate_start(
     result.map(Some)
 }
 
+type ClaimSeeds = (
+    mailvault_core::bulk::DuplicateSeed,
+    Result<mailvault_core::bulk::ClaimSeed, String>,
+);
+
+fn capture_claim_seeds(state: &Arc<DaemonState>, id: &str, attempt: &str) -> Result<ClaimSeeds, String> {
+    let bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+    // An active exact duplicate intentionally has no eligible new-claim seed.
+    // Capture that result alongside its immutable owner under the same lock.
+    Ok((bulk.duplicate_seed(id, attempt)?, bulk.claim_seed(id, attempt)))
+}
+
 pub(crate) fn prepare_claim(
     state: &Arc<DaemonState>, id: &str, attempt: &str, intent: FrozenIntent,
 ) -> Result<(Value, bool), String> {
     reconcile_pending(state)?;
-    if let Some(snapshot) = duplicate_start(state, id, attempt, intent.action(), intent.scope())? {
-        return Ok((snapshot, true));
+    let seeds = capture_claim_seeds(state, id, attempt)?;
+    prepare_seeded_claim(state, id, attempt, intent, seeds)
+}
+
+fn prepare_seeded_claim(
+    state: &Arc<DaemonState>, id: &str, attempt: &str, intent: FrozenIntent,
+    (duplicate, seed): ClaimSeeds,
+) -> Result<(Value, bool), String> {
+    if let Some(prepared) = duplicate.prepare(intent.action(), intent.scope())? {
+        let result = state.bulk.lock().unwrap_or_else(|p| p.into_inner()).publish_duplicate(&prepared);
+        return result.map(|snapshot| (snapshot, true));
     }
-    let seed = state.bulk.lock().unwrap_or_else(|p| p.into_inner()).claim_seed(id, attempt)?;
+    let seed = seed?;
     let prepared = seed.prepare(intent)?;
     let result = {
         let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
@@ -1927,6 +1948,45 @@ mod tests {
         let saved = handle_request_for_test(&state, "save_pending_operation", json!({"operation":legacy})).await;
         assert!(saved.error.is_none());
         assert_eq!(handle_request_for_test(&state, "bulk.status", json!({})).await.result.unwrap()["pending"]["id"], "after-drop");
+    }
+
+    #[test]
+    fn bulk_original_concurrent_identical_starts_attach_to_one_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let intent = FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[]);
+        state.bulk.lock().unwrap().begin_admission("same", "A").unwrap();
+        state.bulk.lock().unwrap().begin_admission("same", "B").unwrap();
+        let first = capture_claim_seeds(&state, "same", "A").unwrap();
+        let (captured, ready) = std::sync::mpsc::channel();
+        let (release, paused) = std::sync::mpsc::channel();
+        let other = state.clone();
+        let original = intent.clone();
+        let duplicate = std::thread::spawn(move || {
+            let second = capture_claim_seeds(&other, "same", "B").unwrap();
+            captured.send(()).unwrap();
+            paused.recv().unwrap();
+            prepare_seeded_claim(&other, "same", "B", original, second).unwrap()
+        });
+        ready.recv().unwrap();
+        let (snapshot, is_duplicate) = prepare_seeded_claim(&state, "same", "A", intent.clone(), first).unwrap();
+        assert!(!is_duplicate);
+        let token = state.bulk.lock().unwrap().cancel_token("same").unwrap();
+        let original_record = mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap();
+        release.send(()).unwrap();
+        let (again, is_duplicate) = duplicate.join().unwrap();
+        assert!(is_duplicate);
+        assert_eq!(again, snapshot);
+        assert!(Arc::ptr_eq(&token, &state.bulk.lock().unwrap().cancel_token("same").unwrap()));
+        assert_eq!(state.bulk.lock().unwrap().admission_receipt("same", "B")["ownerAttemptId"], "A");
+        // A seed captured after the winner has a duplicate owner plus a new-
+        // claim error. The duplicate must win over that expected error.
+        state.bulk.lock().unwrap().begin_admission("same", "C").unwrap();
+        let active = capture_claim_seeds(&state, "same", "C").unwrap();
+        assert!(active.1.is_err());
+        assert!(prepare_seeded_claim(&state, "same", "C", intent, active).unwrap().1);
+        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap(), original_record);
     }
 
     #[test]

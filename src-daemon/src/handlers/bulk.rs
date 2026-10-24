@@ -6,6 +6,29 @@ use mailvault_core::bulk::{Action, Scope};
 use serde_json::{json, Value};
 use std::sync::{atomic::Ordering, Arc};
 
+/// The blocking operation owns admission lifetime even if its RPC waiter drops.
+struct AdmissionCompletion {
+    state: Arc<DaemonState>,
+    context: Option<(String, String)>,
+    finished: bool,
+}
+impl AdmissionCompletion {
+    fn finish(&mut self, result: &Result<Value, String>) {
+        if let Some((operation, attempt)) = &self.context {
+            self.state.bulk.lock().unwrap_or_else(|p| p.into_inner())
+                .finish_admission(operation, attempt, result);
+        }
+        self.finished = true;
+    }
+}
+impl Drop for AdmissionCompletion {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.finish(&Err("errors.bulkWorkerUnavailable".into()));
+        }
+    }
+}
+
 pub(crate) async fn route(
     state: &Arc<DaemonState>,
     method: &str,
@@ -54,9 +77,10 @@ pub(crate) async fn route(
         }
     }
     let receipt_context = kickoff.then(|| (operation_id.clone().unwrap(), attempt.clone()));
-    let receipt_state = state.clone();
     let (state, params, method) = (state.clone(), params.clone(), method.to_owned());
     let result = blocking(move || -> Result<Value, String> {
+        let mut completion = AdmissionCompletion { state: state.clone(), context: receipt_context, finished: false };
+        let result = (|| -> Result<Value, String> {
         let operation_id = operation_id.as_deref().unwrap_or("");
         match method.as_str() {
             "bulk.start" => {
@@ -195,17 +219,13 @@ pub(crate) async fn route(
                     .map(|_| Value::Null)
             }
         }
+        })();
+        completion.finish(&result);
+        result
     })
     .await
     .map_err(|_| "errors.bulkWorkerUnavailable".to_string())
     .and_then(|result| result)
     .map_err(|error| crate::bulk_worker::service_error(&error));
-    if let Some((operation, attempt)) = receipt_context {
-        receipt_state
-            .bulk
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .finish_admission(&operation, &attempt, &result);
-    }
     Some(done(id, result))
 }
