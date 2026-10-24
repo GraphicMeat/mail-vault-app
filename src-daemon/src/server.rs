@@ -1270,6 +1270,58 @@ mod tests {
             .load(std::sync::atomic::Ordering::SeqCst));
         }
     }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_large_admission_and_inactive_status_report_control_latency() {
+        use mailvault_core::bulk::{Action, FrozenIntent, Scope};
+        use mailvault_core::bulk_worker::{Identity, Selected, StoredProof, Workflow};
+        use std::time::Instant;
+        for action in [Action::Delete, Action::ArchiveBackupDelete] {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+            let intent = FrozenIntent::freeze(action, Scope {account_id:Some("a".into()),mailbox:Some("INBOX".into()),spans:false,keys:(1..=20000).map(|uid|json!(uid)).collect()}, &["a".into()], &[]);
+            let mut work = Workflow::new(intent.clone());
+            let ids:std::collections::HashMap<_,_>=(1..=20000).map(|uid|(uid,format!("{uid}@selected.test"))).collect();
+            work.groups[0].identity=Some(Identity::Imap{validity:1,message_ids:ids.clone()});
+            work.groups[0].origin=Some("native-origin".into());
+            work.groups[0].selected=Some(Selected{validity:Some(1),cached_uids:(1..=20000).collect(),message_ids:ids,..Default::default()});
+            if action == Action::ArchiveBackupDelete {
+                work.groups[0].stored=(1..=20000).map(|uid|StoredProof{uid,name:format!("{uid}.eml"),sha256:"a".repeat(64)}).collect();
+                work.groups[0].verified=(1..=20000).collect();
+                work.groups[0].eligible=(1..=20000).collect();
+            }
+            work.phase="delete".into(); work.status="deleting".into();
+            for stage in ["claim", "inactive-status", "resume"] {
+                let (tx,rx)=std::sync::mpsc::channel();
+                let writer=state.clone(); let original=intent.clone();
+                let operation=std::thread::spawn(move || {
+                    let _journal=writer.journal.lock().unwrap();
+                    let mut bulk=writer.bulk.lock().unwrap();
+                    let started=Instant::now(); tx.send(()).unwrap();
+                    match stage {
+                        "claim"=>{bulk.claim_attempt(&writer.app_dir,"admission","initial",original).unwrap();},
+                        "inactive-status"=>{bulk.status(&writer.app_dir).unwrap();},
+                        _=>{bulk.resume_worker_attempt(&writer.app_dir,"admission","restored").unwrap();},
+                    }
+                    started.elapsed()
+                });
+                rx.recv().unwrap();
+                let started=Instant::now();
+                let (status,cancel)=tokio::join!(
+                    async {let reply=handle_request_for_test(&state,"bulk.status",json!({})).await;(reply,started.elapsed())},
+                    async {let reply=handle_request_for_test(&state,"bulk.cancel",json!({"operationId":"admission"})).await;(reply,started.elapsed())},
+                );
+                let elapsed=operation.join().unwrap();
+                println!("BULK_20K_ADMISSION_MODE={action:?} STAGE={stage} OP_MS={} STATUS_MS={} CANCEL_MS={}",elapsed.as_millis(),status.1.as_millis(),cancel.1.as_millis());
+                assert!(status.0.error.is_none());
+                assert_eq!(cancel.0.error.is_some(),stage=="inactive-status");
+                if stage=="claim" {
+                    crate::bulk_worker::checkpoint(&state,"admission","initial",&work).unwrap();
+                    let _journal=state.journal.lock().unwrap();
+                    state.bulk.lock().unwrap().drained_attempt("admission","initial").unwrap();
+                }
+            }
+        }
+    }
     #[tokio::test]
     async fn bulk_duplicate_attempt_still_checks_the_frozen_intent() {
         let dir = tempfile::tempdir().unwrap();
