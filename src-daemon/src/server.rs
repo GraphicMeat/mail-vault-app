@@ -1113,6 +1113,23 @@ mod tests {
         assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap()["id"], "owned");
     }
 
+    #[tokio::test]
+    async fn bulk_worker_start_finishes_empty_frozen_selection() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        let reply = handle_request_for_test(&state, "bulk.start", json!({"operationId":"empty-worker","type":"archive","scope":{"accountId":"a","mailbox":"INBOX","keys":[]}})).await;
+        assert!(reply.error.is_none(), "bulk.start must launch the real worker: {:?}", reply.error);
+        for _ in 0..100 {
+            let status = handle_request_for_test(&state, "bulk.status", json!({})).await.result.unwrap();
+            if status["active"].is_null() {
+                assert!(status["pending"].is_null(), "empty worker must reach terminal drain: {status}");
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        panic!("empty worker never drained");
+    }
+
     fn err_message(resp: RpcResponse) -> String {
         resp.error.map(|e| e.message).unwrap_or_default()
     }

@@ -3978,5 +3978,13 @@
   "errors.bulkStale": "Dieser Sammelvorgang hat sich geändert. Aktualisiere die Ansicht und versuche es erneut.",
   "errors.bulkOwned": "Dieser ausstehende Sammelvorgang wird vom Hintergrunddienst verwaltet.",
   "errors.bulkPendingRead": "Der ausstehende Sammelvorgang konnte nicht gelesen werden. Er wurde aufbewahrt.",
-  "errors.bulkPendingWrite": "Der ausstehende Sammelvorgang konnte nicht aktualisiert werden. Versuche es erneut."
+  "errors.bulkPendingWrite": "Der ausstehende Sammelvorgang konnte nicht aktualisiert werden. Versuche es erneut.",
+  "errors.bulkUnsupported": "Diese Sammelaktion ist nicht verfügbar.",
+  "errors.bulkIdentityUncertain": "Die Nachrichtenidentität ist unklar. Aktualisieren Sie den Ordner und versuchen Sie es erneut.",
+  "errors.bulkIdentityChanged": "Die Identität des gewählten Ordners oder der Nachricht hat sich geändert.",
+  "errors.bulkGraphDeleteUnsupported": "Das Löschen auf dem Server ist für dieses Graph-Konto nicht verfügbar.",
+  "errors.bulkCopyChanged": "Eine geprüfte Archivkopie hat sich geändert. Die Nachricht bleibt auf dem Server.",
+  "errors.bulkWorkerUnavailable": "Die Sammelverarbeitung konnte nicht gestartet werden.",
+  "errors.bulkAccountUnavailable": "Das ausgewählte Konto ist nicht verfügbar.",
+  "errors.bulkLocalFoldersRead": "Die Informationen zu lokalen Ordnern konnten nicht geprüft werden."
 }

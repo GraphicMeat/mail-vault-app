@@ -348,6 +348,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   const listeners = new Map();
   const journal = [];
   let pendingOperation = null;
+  let activeBulk = null;
   const bulkPendingSnapshot = () => {
     const p = pendingOperation;
     if (!p) return null;
@@ -384,7 +385,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       errors: p.errors ?? 0, skipped: p.skipped ?? 0, skippedLocal: p.skippedLocal ?? 0, result: p.result ?? null, lastError: p.lastError ?? null };
   };
   const allowLegacyPendingWrite = () => {
-    if (pendingOperation && typeof pendingOperation === 'object' && 'schemaVersion' in pendingOperation) throw new Error('errors.bulkOwned');
+    if (activeBulk || (pendingOperation && typeof pendingOperation === 'object' && 'schemaVersion' in pendingOperation)) throw new Error('errors.bulkOwned');
   };
   let migrationState = null;
   const timeCapsules = new Map();
@@ -1032,9 +1033,46 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         emit('demo:state', { type: 'journal' });
         return null;
       }
-      case 'bulk.status': return { active: null, pending: bulkPendingSnapshot() };
+      case 'bulk.status': return { active: clone(activeBulk), pending: activeBulk ? null : bulkPendingSnapshot() };
+      case 'bulk.start': case 'bulk.resume': {
+        if (typeof args.operationId !== 'string' || !args.operationId) throw new Error('errors.bulkMissingId');
+        if (activeBulk) {
+          if (activeBulk.id === args.operationId) return clone(activeBulk);
+          throw new Error('errors.operationRunning');
+        }
+        if (command === 'bulk.resume') {
+          const pending = bulkPendingSnapshot();
+          if (!pending || pending.id !== args.operationId) throw new Error('errors.bulkStale');
+          // A browser has no durable native provider identity receipt.
+          throw new Error('errors.bulkIdentityUncertain');
+        }
+        if (!['archive', 'delete', 'archive_and_delete', 'archive_backup_delete'].includes(args.type)) throw new Error('errors.bulkUnsupported');
+        if (bulkPendingSnapshot()) throw new Error('errors.bulkPendingChoice');
+        if (!args.scope || !Array.isArray(args.scope.keys)) throw new Error('errors.bulkPendingInvalid');
+        const total = args.scope.keys.length;
+        activeBulk = { id: args.operationId, type: args.type, status: 'starting', currentPhase: args.type === 'delete' ? 'delete' : 'archive', total, completed: 0, remaining: total, errors: 0, skipped: 0, skippedLocal: 0, simulated: true };
+        const reply = clone(activeBulk);
+        // A lifecycle stub, with no real provider/filesystem authority. Report
+        // held messages honestly rather than pretending a browser deleted mail.
+        setTimeout(() => {
+          if (!activeBulk || activeBulk.id !== args.operationId) return;
+          activeBulk.status = activeBulk.status === 'cancelling' ? 'cancelled' : 'complete';
+          activeBulk.result = { removed: 0, keptNotArchived: total, keptBackupUnreachable: 0, keptCopyMismatch: 0, keptDeleteFailed: 0 };
+          const operation = clone(activeBulk); activeBulk = null;
+          emit('bulk-progress', { operationId: args.operationId, finished: true, operation });
+        }, 0);
+        emit('bulk-progress', { operationId: args.operationId, finished: false, operation: reply });
+        return reply;
+      }
+      case 'bulk.cancel': {
+        if (!args.operationId) throw new Error('errors.bulkMissingId');
+        if (!activeBulk || activeBulk.id !== args.operationId) throw new Error('errors.bulkStale');
+        activeBulk.status = 'cancelling';
+        return { id: args.operationId, status: 'cancelling', simulated: true };
+      }
       case 'bulk.discard': {
         if (typeof args.operationId !== 'string' || !args.operationId) throw new Error('errors.bulkMissingId');
+        if (activeBulk) throw new Error('errors.operationRunning');
         const pending = bulkPendingSnapshot();
         if (!pending || pending.id !== args.operationId) throw new Error('errors.bulkStale');
         pendingOperation = null;

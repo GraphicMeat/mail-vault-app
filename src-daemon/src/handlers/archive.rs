@@ -192,6 +192,13 @@ async fn bulk_delete_jmap(
     uids: Vec<u32>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
+    bulk_delete_jmap_bound(state,account_id,config,mailbox,uids,cancel,None).await
+}
+
+async fn bulk_delete_jmap_bound(
+    state:&Arc<DaemonState>,account_id:String,config:&crate::imap::ImapConfig,mailbox:String,uids:Vec<u32>,
+    cancel:Arc<std::sync::atomic::AtomicBool>,identity:Option<&mailvault_core::bulk_worker::Identity>,
+)->Result<(archive::ArchiveProgress,Vec<u32>),String> {
     use futures::StreamExt;
     use mailvault_core::jmap::{remove_from, RemoveOutcome};
     use std::sync::atomic::Ordering;
@@ -216,6 +223,11 @@ async fn bulk_delete_jmap(
             let mailbox_id = boxes.ids.get(&mailbox).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"))?;
             let trash_id = crate::handlers::jmap_bridge::role_mailbox(&boxes, "trash").map(|(_, id)| id);
             let pairs = acct.uid_to_id(state, &account_id, &mailbox, &pending, false).await?;
+            if let Some(mailvault_core::bulk_worker::Identity::Jmap {mailbox_id: expected, ids}) = identity {
+                if expected != &mailbox_id || pairs.iter().any(|(uid,id)| ids.get(uid).is_none() || ids.get(uid) != id.as_ref()) {
+                    return Err("errors.bulkIdentityChanged".into());
+                }
+            }
             Ok::<_, String>((acct, mailbox_id, trash_id, pairs))
         }
         .await;
@@ -342,6 +354,35 @@ fn progress_reply(id: Value, result: Result<mailvault_core::archive::ArchiveProg
     }
 }
 
+/// Shared provider delete plus bin/cache/custody/reminder/classification work.
+/// Only the exact successful UID set is returned as completion evidence.
+pub(crate) async fn delete_with_outcomes(
+    state:&Arc<DaemonState>,account_id:String,account_json:String,mailbox:String,uids:Vec<u32>,bin:bool,
+    cancel:Arc<std::sync::atomic::AtomicBool>,identity:Option<&mailvault_core::bulk_worker::Identity>,
+)->Result<(archive::ArchiveProgress,Vec<u32>),String> {
+    let config:crate::imap::ImapConfig=serde_json::from_str(&account_json).map_err(|e|e.to_string())?;
+    // JMAP dispatch takes precedence, as in the archive runner. A Graph UID
+    // is never sent down an IMAP lane or to Graph's different Trash operation.
+    if !config.uses_jmap() && config.uses_graph(){return Err("errors.bulkGraphDeleteUnsupported".into())}
+    let (uids,refused)=if bin {capture_all(state,&account_id,&account_json,&mailbox,uids,&cancel).await}else{(uids,0)};
+    let (acct,mb)=(account_id.clone(),mailbox.clone());
+    let result=if config.uses_jmap(){
+        bulk_delete_jmap_bound(state,account_id,&config,mailbox,uids,cancel,identity).await
+    }else{
+        let validity=match identity {
+            Some(mailvault_core::bulk_worker::Identity::Imap{validity,..})=>Some(*validity),
+            None=>None,
+            _=>return Err("errors.bulkIdentityChanged".into()),
+        };
+        archive::bulk_delete_bound(archive_ctx(state,std::path::PathBuf::new()),account_id,account_json,mailbox,uids,cancel,validity).await
+    };
+    let (mut p,deleted)=result?;
+    end_follow_ups_at(state,&acct,&mb,&deleted).await;
+    forget_classifications_at(state,&acct,&mb,&deleted).await;
+    record_server_deleted(state,&acct,&mb,deleted.clone()).await;
+    p.total+=refused;p.errors+=refused;Ok((p,deleted))
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -379,36 +420,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
             let state = Arc::clone(state);
-            let ctx = archive_ctx(&state, std::path::PathBuf::new());
             let guard = RunGuard::register(&state, "bulk_delete");
-            let cancel = guard.cancel();
-            // The delete is permanent, so every message goes into the
-            // deleted-mail bin first, the same rule as `imap_delete_email`:
-            // one that cannot be kept is not deleted (an error in the tally).
-            // `bin: false` opts out: archive-and-delete, whose vault copies
-            // were verified first.
-            let (uids, refused) = if params.get("bin").and_then(Value::as_bool).unwrap_or(true) {
-                capture_all(&state, &account_id, &account_json, &mailbox, uids, &cancel).await
-            } else {
-                (uids, 0)
-            };
-            let (acct, mb) = (account_id.clone(), mailbox.clone());
-            let result = match serde_json::from_str::<crate::imap::ImapConfig>(&account_json) {
-                Ok(config) if config.uses_jmap() => bulk_delete_jmap(&state, account_id, &config, mailbox, uids, cancel).await,
-                _ => archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await,
-            };
+            let result = delete_with_outcomes(&state,account_id,account_json,mailbox,uids,params.get("bin").and_then(Value::as_bool).unwrap_or(true),guard.cancel(),None).await.map(|(p,_)|p);
             drop(guard);
-            let result = match result {
-                Ok((mut p, deleted)) => {
-                    end_follow_ups_at(&state, &acct, &mb, &deleted).await;
-                    forget_classifications_at(&state, &acct, &mb, &deleted).await;
-                    record_server_deleted(&state, &acct, &mb, deleted).await;
-                    p.total += refused;
-                    p.errors += refused;
-                    Ok(p)
-                }
-                Err(e) => Err(e),
-            };
             progress_reply(id, result)
         }
         "verify_archived_emails" => {

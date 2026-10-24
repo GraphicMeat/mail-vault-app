@@ -153,6 +153,8 @@ impl FrozenIntent {
         }
         intent
     }
+    pub fn action(&self) -> Action { self.operation }
+    pub fn groups(&self) -> &[Group] { &self.groups }
     pub fn target_keys(&self) -> Vec<Value> {
         if self.operation == Action::DeleteEverywhere {
             self.scope.keys.clone()
@@ -224,6 +226,7 @@ struct Active {
     id: String,
     intent: FrozenIntent,
     snapshot: Value,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 pub struct Coordinator {
@@ -264,6 +267,10 @@ impl Coordinator {
                 Ok(active.snapshot.clone())
             } else { Err("errors.operationRunning".into()) };
         }
+        if let Some(pending)=self.pending().filter(|p|p.terminal && p.id==id) {
+            let previous:FrozenIntent=serde_json::from_value(pending.raw["intent"].clone()).map_err(|_|"errors.bulkStale".to_string())?;
+            return if previous==intent {Ok(pending.snapshot(pending.raw["status"].as_str().unwrap_or("complete")))}else{Err("errors.bulkStale".into())}
+        }
         if self.pending().is_some_and(|p| !p.terminal) {
             return Err("errors.bulkPendingChoice".into());
         }
@@ -280,8 +287,48 @@ impl Coordinator {
         op_journal::pending_operation_save(data_dir, &raw).map_err(|_| "errors.bulkPendingWrite".to_string())?;
         let snapshot = record.snapshot("starting");
         self.pending = Ok(Some(record));
-        self.active = Some(Active { id:id.into(), intent, snapshot:snapshot.clone() });
+        self.active = Some(Active { id:id.into(), intent, snapshot:snapshot.clone(), cancel:std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)) });
         Ok(snapshot)
+    }
+    /// Live provider counts are presentation only, never completion proof.
+    pub fn progress(&mut self,id:&str,completed:usize,errors:usize)->Option<Value> {
+        let active=self.active.as_mut().filter(|a|a.id==id)?;
+        active.snapshot["completed"]=json!(completed);active.snapshot["errors"]=json!(errors);Some(active.snapshot.clone())
+    }
+    pub fn active_id(&self) -> Option<&str> { self.active.as_ref().map(|a| a.id.as_str()) }
+    pub fn cancel_token(&self, id: &str) -> Result<std::sync::Arc<std::sync::atomic::AtomicBool>, String> {
+        self.active.as_ref().filter(|a| a.id == id).map(|a| a.cancel.clone()).ok_or_else(|| "errors.bulkStale".into())
+    }
+    pub fn resume_worker(&mut self, data_dir:&Path, id:&str) -> Result<crate::bulk_worker::Workflow,String> {
+        self.refresh(data_dir)?;
+        if self.active.is_some() {return Err("errors.operationRunning".into())}
+        let pending=self.matching(id)?;
+        let work:crate::bulk_worker::Workflow=serde_json::from_value(pending.raw["worker"].clone()).map_err(|_|"errors.bulkIdentityUncertain".to_string())?;
+        let intent:FrozenIntent=serde_json::from_value(pending.raw["intent"].clone()).map_err(|_|"errors.bulkPendingInvalid".to_string())?;
+        let valid=work.intent==intent && work.groups.iter().map(|g|&g.group).eq(intent.groups.iter()) && work.groups.iter().all(|g| {
+            [&g.verified,&g.eligible,&g.attempted,&g.deleted].iter().all(|v|v.iter().all(|u|g.group.uids.contains(u)) && v.iter().collect::<HashSet<_>>().len()==v.len()) && g.deleted.iter().all(|u|g.attempted.contains(u))
+        });
+        if !valid {return Err("errors.bulkPendingInvalid".into())}
+        let snapshot=pending.snapshot("starting");
+        self.active=Some(Active{id:id.into(),intent,snapshot,cancel:std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))});
+        Ok(work)
+    }
+    pub fn checkpoint(&mut self,data_dir:&Path,id:&str,work:&crate::bulk_worker::Workflow)->Result<Value,String> {
+        self.refresh(data_dir)?;
+        if !self.active.as_ref().is_some_and(|a|a.id==id && a.intent==work.intent){return Err("errors.bulkStale".into())}
+        let mut raw=self.pending().ok_or("errors.bulkStale")?.raw.clone();
+        raw["worker"]=serde_json::to_value(work).map_err(|_|"errors.bulkPendingWrite".to_string())?;
+        raw["completedUids"]=json!(work.completed_keys());raw["currentPhase"]=json!(work.phase);raw["status"]=json!(work.status);
+        raw["result"]=json!(work.result);raw["lastError"]=json!(work.last_error);raw["errors"]=json!(work.result.kept_delete_failed);
+        let pending=Pending::parse(raw.clone())?;
+        op_journal::pending_operation_save(data_dir,&raw).map_err(|_|"errors.bulkPendingWrite".to_string())?;
+        let snapshot=pending.snapshot(&work.status);self.pending=Ok(Some(pending));
+        self.active.as_mut().unwrap().snapshot=snapshot.clone();Ok(snapshot)
+    }
+    /// Called only after all provider and blocking work has returned.
+    pub fn drained(&mut self,id:&str)->Result<Value,String> {
+        if self.active_id()!=Some(id){return Err("errors.bulkStale".into())}
+        Ok(self.active.take().unwrap().snapshot)
     }
     pub fn resume_plan(&mut self, data_dir: &Path, id: &str) -> Result<ResumePlan, String> {
         self.refresh(data_dir)?;

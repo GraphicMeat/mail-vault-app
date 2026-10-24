@@ -962,6 +962,15 @@ pub async fn bulk_delete(
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
 ) -> Result<(ArchiveProgress, Vec<u32>), String> {
+    bulk_delete_bound(ctx, account_id, account_json, mailbox, uids, cancel, None).await
+}
+
+/// The user bulk worker binds UIDVALIDITY on every deletion connection,
+/// including a fresh session after the pool retries a dead socket.
+pub async fn bulk_delete_bound(
+    ctx: Arc<ArchiveCtx>, account_id:String, account_json:String, mailbox:String,
+    uids:Vec<u32>, cancel:Arc<AtomicBool>, expected_validity:Option<u32>,
+) -> Result<(ArchiveProgress,Vec<u32>),String> {
     let total = uids.len();
     info!("bulk_delete: starting {} UIDs for account {}", total, account_id);
 
@@ -1005,7 +1014,7 @@ pub async fn bulk_delete(
                 return;
             }
 
-            let result = delete_single_email(&ctx.pool, &account, &mailbox, uid).await;
+            let result = delete_single_email(&ctx.pool, &account, &mailbox, uid, expected_validity).await;
 
             if result.is_ok() {
                 deleted.lock().unwrap_or_else(|p| p.into_inner()).push(uid);
@@ -1059,6 +1068,7 @@ async fn delete_single_email(
     account: &ImapConfig,
     mailbox: &str,
     uid: u32,
+    expected_validity: Option<u32>,
 ) -> Result<(), String> {
     // Retries once on a fresh connection when the pooled socket turns out to
     // have died while idle — the same one-line failure that made a single
@@ -1070,7 +1080,11 @@ async fn delete_single_email(
     pool.run_uid_delete(account, false, |mut session| async move {
         // Cached at session creation — read after checkout, like the move path.
         let has_uidplus = pool.has_capability(account, "UIDPLUS").await;
-        imap::delete_email(&mut session, mailbox, uid, true, has_uidplus).await?;
+        if let Some(validity) = expected_validity {
+            imap::abd_cmds::expunge_exact(&mut session, mailbox, &[uid], has_uidplus, Some(validity)).await?;
+        } else {
+            imap::delete_email(&mut session, mailbox, uid, true, has_uidplus).await?;
+        }
         Ok(((), session, Some(mailbox.to_string())))
     }).await
 }

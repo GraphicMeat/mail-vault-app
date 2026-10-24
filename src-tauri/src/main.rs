@@ -185,6 +185,7 @@ use tracing_subscriber::prelude::*;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
 mod abd;
+mod bulk;
 mod app_icon;
 mod autostart;
 mod backup;
@@ -3001,6 +3002,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
     }
     use std::time::Duration;
     match method {
+        "bulk.start" | "bulk.resume" | "bulk.status" | "bulk.cancel" | "bulk.discard" => Some(Duration::from_secs(30)),
         "search_index_destroy" => Some(Duration::from_secs(150)),
 
         // The helper card's own probe (`isDaemonAvailable` -> `ping`).
@@ -3344,6 +3346,10 @@ async fn daemon_rpc(
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    // Native authorization must run before both fast and slow RPC paths.
+    if matches!(method.as_str(), "bulk.start" | "bulk.resume") {
+        return tauri::async_runtime::spawn_blocking(move || bulk::forward(&app_handle,&method,params)).await.map_err(|e|e.to_string())?;
+    }
     let (socket_path, token_path) = daemon_ipc_paths().map_err(|e| {
         warn!("daemon_rpc {method}: {e}");
         DAEMON_UNAVAILABLE.to_string()
@@ -3635,6 +3641,7 @@ fn main() {
     let builder = builder
         .manage(backup::HeldBackupPaths::default())
         .manage(abd::HeldAbdPaths::default())
+        .manage(bulk::HeldBulkPaths::default())
         .manage(cleanup::HeldCleanupPath::default())
         .manage(export_folder::HeldExportPaths::default())
         .manage(dropped_files::DroppedPaths::default())

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add daemon workers for the four ordinary bulk mail actions, with exact identity checkpoints, verified backup copies, operation cancellation, and native backup-access lifetime. The existing bulk UI remains active during migration.
+
 ### Added
 - **Free trial: "Are you having issues with MailVault?"** On the Billing tab, someone in their free trial is asked this above Manage Subscription. No closes the question. Yes shows Report a bug or suggest a feature, a note that we answer reports and requests very quickly, and a link to the GitHub discussion where we say how.
 - **Safer bulk recovery foundation.** The background helper can read pending selections and discard only the matching operation, without automatically replaying work after a restart. Bulk actions and the Resume/Discard prompt keep their current behavior while the worker migration continues.

@@ -98,6 +98,7 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 // Same for a backup-drive hold of an archive/delete job: the
                 // app re-attaches through `abd_attach` once it is connected.
                 crate::abd::release_all(&app, "the daemon channel reconnected");
+                crate::bulk::reconcile_after_channel_change(&app);
                 // And the drive held for a cleanup run (Run All Now).
                 crate::cleanup::release_all(&app, "the daemon channel reconnected");
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
@@ -246,6 +247,7 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         // An archive/delete job holds the backup drive the same way
                         // (`abd.rs`): its terminal frame, or one saying it paused
                         // for the drive, lets go.
+                        let bulk_frame = (name == "bulk-progress").then(|| payload.clone());
                         let abd_frame = (name == crate::abd::ABD_PROGRESS).then(|| payload.clone());
                         // And a cleanup run's: its done event lets go.
                         let cleanup_event = (name == crate::cleanup::CLEANUP_RUN).then(|| payload.clone());
@@ -262,6 +264,7 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         if let Some(frame) = export_frame {
                             crate::export_folder::release_after_final_frame(app, &frame);
                         }
+                        if let Some(frame) = bulk_frame {crate::bulk::release_after_frame(app,&frame);}
                         if let Some(frame) = abd_frame {
                             crate::abd::release_after_frame(app, &frame);
                         }
@@ -269,6 +272,7 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                             crate::cleanup::release_after_event(app, &event);
                         }
                         if lagged {
+                            crate::bulk::reconcile_after_channel_change(app);
                             crate::export_folder::release_all(app, "the daemon event stream lagged");
                             crate::abd::release_all(app, "the daemon event stream lagged");
                             crate::cleanup::release_all(app, "the daemon event stream lagged");

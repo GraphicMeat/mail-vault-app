@@ -3978,5 +3978,13 @@
   "errors.bulkStale": "Esta operación por lotes ha cambiado. Actualiza antes de volver a intentarlo.",
   "errors.bulkOwned": "El servicio en segundo plano gestiona esta operación por lotes pendiente.",
   "errors.bulkPendingRead": "No se pudo leer la operación por lotes pendiente. Se ha conservado.",
-  "errors.bulkPendingWrite": "No se pudo actualizar la operación por lotes pendiente. Vuelve a intentarlo."
+  "errors.bulkPendingWrite": "No se pudo actualizar la operación por lotes pendiente. Vuelve a intentarlo.",
+  "errors.bulkUnsupported": "Esta acción masiva no está disponible.",
+  "errors.bulkIdentityUncertain": "La identidad del mensaje es incierta. Actualiza la carpeta antes de volver a intentarlo.",
+  "errors.bulkIdentityChanged": "La identidad de la carpeta o del mensaje seleccionado ha cambiado.",
+  "errors.bulkGraphDeleteUnsupported": "La eliminación en el servidor no está disponible para esta cuenta de Graph.",
+  "errors.bulkCopyChanged": "Una copia de archivo verificada ha cambiado. El mensaje se conserva en el servidor.",
+  "errors.bulkWorkerUnavailable": "No se pudo iniciar el proceso masivo.",
+  "errors.bulkAccountUnavailable": "La cuenta seleccionada no está disponible.",
+  "errors.bulkLocalFoldersRead": "No se pudo verificar la información de las carpetas locales."
 }

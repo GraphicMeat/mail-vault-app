@@ -1,21 +1,27 @@
-// Slice 7.1 owns pending state only. Worker/manager cutover belongs to 7.2/7.3.
+// Ordinary worker ownership; frontend manager cutover remains a later slice.
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { DAEMON_OWNED } from '../../src/services/transport.js';
 import { createDemoBackend } from '../../src/demo/backend.js';
 
-it('registers only implemented bulk controls in daemon transport and router', () => {
+it('registers implemented bulk controls in daemon transport and router', () => {
   const router = readFileSync('src-daemon/src/handlers/bulk.rs', 'utf8');
   const server = readFileSync('src-daemon/src/server.rs', 'utf8');
   const modules = readFileSync('src-daemon/src/handlers/mod.rs', 'utf8');
-  for (const command of ['bulk.status', 'bulk.discard']) {
+  for (const command of ['bulk.start', 'bulk.resume', 'bulk.status', 'bulk.cancel', 'bulk.discard']) {
     expect(DAEMON_OWNED.has(command), command).toBe(true);
     expect(router).toContain(`"${command}"`);
   }
-  for (const command of ['bulk.start', 'bulk.resume', 'bulk.cancel']) {
-    expect(DAEMON_OWNED.has(command), command).toBe(false);
-    expect(router).not.toContain(`"${command}"`);
-  }
+  const shell = readFileSync('src-tauri/src/main.rs', 'utf8');
+  const forwarding = shell.indexOf('bulk::forward(');
+  const fastPath = shell.indexOf('let fast_token', shell.indexOf('async fn daemon_rpc('));
+  expect(forwarding).toBeGreaterThan(shell.indexOf('async fn daemon_rpc('));
+  expect(forwarding).toBeLessThan(fastPath);
+  const native = readFileSync('src-tauri/src/bulk.rs', 'utf8');
+  expect(native).toContain('set_root(&mut params,None)');
+  expect(native).toContain('reconcile_after_channel_change');
+  const oldManager = readFileSync('src/services/BulkOperationManager.js', 'utf8');
+  expect(oldManager).toContain("send('archive_emails'");
   expect(server).toContain('crate::handlers::bulk::route(');
   expect(modules).toContain('pub(crate) mod bulk;');
 });

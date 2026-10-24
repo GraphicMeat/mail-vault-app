@@ -3978,5 +3978,13 @@
   "errors.bulkStale": "Esta operação em lote mudou. Atualize antes de tentar novamente.",
   "errors.bulkOwned": "Esta operação em lote pendente é gerenciada pelo serviço em segundo plano.",
   "errors.bulkPendingRead": "Não foi possível ler a operação em lote pendente. Ela foi mantida.",
-  "errors.bulkPendingWrite": "Não foi possível atualizar a operação em lote pendente. Tente novamente."
+  "errors.bulkPendingWrite": "Não foi possível atualizar a operação em lote pendente. Tente novamente.",
+  "errors.bulkUnsupported": "Esta ação em massa não está disponível.",
+  "errors.bulkIdentityUncertain": "A identidade da mensagem é incerta. Atualize a pasta antes de tentar novamente.",
+  "errors.bulkIdentityChanged": "A identidade da pasta ou da mensagem selecionada foi alterada.",
+  "errors.bulkGraphDeleteUnsupported": "A exclusão no servidor não está disponível para esta conta Graph.",
+  "errors.bulkCopyChanged": "Uma cópia de arquivo verificada foi alterada. A mensagem foi mantida no servidor.",
+  "errors.bulkWorkerUnavailable": "Não foi possível iniciar o processamento em massa.",
+  "errors.bulkAccountUnavailable": "A conta selecionada não está disponível.",
+  "errors.bulkLocalFoldersRead": "Não foi possível verificar as informações das pastas locais."
 }

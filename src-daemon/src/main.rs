@@ -5,6 +5,7 @@
 
 mod abd_local;
 mod abd_worker;
+mod bulk_worker;
 mod cleanup_worker;
 mod ai_gate;
 mod attachment_extract;

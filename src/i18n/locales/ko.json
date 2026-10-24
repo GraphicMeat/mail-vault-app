@@ -3978,5 +3978,13 @@
   "errors.bulkStale": "이 일괄 작업이 변경되었습니다. 새로고침한 후 다시 시도하세요.",
   "errors.bulkOwned": "이 대기 중인 일괄 작업은 백그라운드 서비스에서 관리합니다.",
   "errors.bulkPendingRead": "대기 중인 일괄 작업을 읽지 못했습니다. 작업은 보관되었습니다.",
-  "errors.bulkPendingWrite": "대기 중인 일괄 작업을 업데이트하지 못했습니다. 다시 시도하세요."
+  "errors.bulkPendingWrite": "대기 중인 일괄 작업을 업데이트하지 못했습니다. 다시 시도하세요.",
+  "errors.bulkUnsupported": "이 일괄 작업은 사용할 수 없습니다.",
+  "errors.bulkIdentityUncertain": "메시지 식별 정보가 불확실합니다. 폴더를 새로 고친 후 다시 시도하세요.",
+  "errors.bulkIdentityChanged": "선택한 폴더 또는 메시지의 식별 정보가 변경되었습니다.",
+  "errors.bulkGraphDeleteUnsupported": "이 Graph 계정에서는 서버 삭제를 사용할 수 없습니다.",
+  "errors.bulkCopyChanged": "확인된 보관 사본이 변경되었습니다. 서버 메시지는 유지되었습니다.",
+  "errors.bulkWorkerUnavailable": "일괄 작업을 시작할 수 없습니다.",
+  "errors.bulkAccountUnavailable": "선택한 계정을 사용할 수 없습니다.",
+  "errors.bulkLocalFoldersRead": "로컬 폴더 정보를 확인할 수 없습니다."
 }

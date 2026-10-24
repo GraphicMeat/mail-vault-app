@@ -35,6 +35,7 @@ pub mod vault_ops;
 pub mod vault_registry;
 pub mod op_journal;
 pub mod bulk;
+pub mod bulk_worker;
 pub mod pgp;
 pub mod custody;
 pub mod people;

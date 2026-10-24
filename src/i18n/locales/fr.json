@@ -3978,5 +3978,13 @@
   "errors.bulkStale": "Cette tâche groupée a changé. Actualisez avant de réessayer.",
   "errors.bulkOwned": "Cette tâche groupée en attente est gérée par le service en arrière-plan.",
   "errors.bulkPendingRead": "La tâche groupée en attente n’a pas pu être lue. Elle a été conservée.",
-  "errors.bulkPendingWrite": "La tâche groupée en attente n’a pas pu être mise à jour. Réessayez."
+  "errors.bulkPendingWrite": "La tâche groupée en attente n’a pas pu être mise à jour. Réessayez.",
+  "errors.bulkUnsupported": "Cette action groupée est indisponible.",
+  "errors.bulkIdentityUncertain": "L’identité du message est incertaine. Actualisez le dossier avant de réessayer.",
+  "errors.bulkIdentityChanged": "L’identité du dossier ou du message sélectionné a changé.",
+  "errors.bulkGraphDeleteUnsupported": "La suppression sur le serveur est indisponible pour ce compte Graph.",
+  "errors.bulkCopyChanged": "Une copie d’archive vérifiée a changé. Le message reste sur le serveur.",
+  "errors.bulkWorkerUnavailable": "Le traitement groupé n’a pas pu démarrer.",
+  "errors.bulkAccountUnavailable": "Le compte sélectionné est indisponible.",
+  "errors.bulkLocalFoldersRead": "Les informations des dossiers locaux n’ont pas pu être vérifiées."
 }

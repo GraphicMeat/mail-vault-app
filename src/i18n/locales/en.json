@@ -3978,5 +3978,13 @@
   "errors.bulkStale": "This bulk operation has changed. Refresh before trying again.",
   "errors.bulkOwned": "This pending bulk operation is managed by the background helper.",
   "errors.bulkPendingRead": "The pending bulk operation could not be read. It has been kept.",
-  "errors.bulkPendingWrite": "The pending bulk operation could not be updated. Try again."
+  "errors.bulkPendingWrite": "The pending bulk operation could not be updated. Try again.",
+  "errors.bulkUnsupported": "This bulk action is not available.",
+  "errors.bulkIdentityUncertain": "Message identity is uncertain. Refresh the folder before trying again.",
+  "errors.bulkIdentityChanged": "The selected folder or message identity changed.",
+  "errors.bulkGraphDeleteUnsupported": "Server deletion is unavailable for this Graph account.",
+  "errors.bulkCopyChanged": "A verified archive copy changed. The server message was kept.",
+  "errors.bulkWorkerUnavailable": "The bulk worker could not start.",
+  "errors.bulkAccountUnavailable": "The selected account is unavailable.",
+  "errors.bulkLocalFoldersRead": "Local folder information could not be verified."
 }

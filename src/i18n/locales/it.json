@@ -3978,5 +3978,13 @@
   "errors.bulkStale": "Questa operazione in blocco è cambiata. Aggiorna prima di riprovare.",
   "errors.bulkOwned": "Questa operazione in blocco in sospeso è gestita dal servizio in background.",
   "errors.bulkPendingRead": "Impossibile leggere l’operazione in blocco in sospeso. È stata conservata.",
-  "errors.bulkPendingWrite": "Impossibile aggiornare l’operazione in blocco in sospeso. Riprova."
+  "errors.bulkPendingWrite": "Impossibile aggiornare l’operazione in blocco in sospeso. Riprova.",
+  "errors.bulkUnsupported": "Questa azione collettiva non è disponibile.",
+  "errors.bulkIdentityUncertain": "L’identità del messaggio è incerta. Aggiorna la cartella prima di riprovare.",
+  "errors.bulkIdentityChanged": "L’identità della cartella o del messaggio selezionato è cambiata.",
+  "errors.bulkGraphDeleteUnsupported": "L’eliminazione sul server non è disponibile per questo account Graph.",
+  "errors.bulkCopyChanged": "Una copia di archivio verificata è cambiata. Il messaggio è stato conservato sul server.",
+  "errors.bulkWorkerUnavailable": "Impossibile avviare l’elaborazione collettiva.",
+  "errors.bulkAccountUnavailable": "L’account selezionato non è disponibile.",
+  "errors.bulkLocalFoldersRead": "Impossibile verificare le informazioni sulle cartelle locali."
 }
