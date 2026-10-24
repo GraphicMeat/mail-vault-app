@@ -1256,3 +1256,23 @@ async fn unsafe_mirror_names_cannot_verify_or_copy_before_delete() {
         assert_eq!(std::fs::read(sentinel).unwrap(), bytes.as_bytes());
     }
 }
+
+#[tokio::test]
+async fn unsafe_mirror_summary_is_an_error_without_cached_on_drive_proof() {
+    let rig = Rig::ready(scenario(1));
+    rig.preview().await;
+    let original = rig.state.abd.preview(ACCT, "p1").unwrap();
+    let mirror = rig.dir.join("mirror");
+    std::fs::create_dir_all(&mirror).unwrap();
+    for (email, folder) in [(EMAIL, "../outside"), ("../outside", "INBOX")] {
+        let mut listing = (*original.listing).clone();
+        listing.folders[0].0.path = folder.to_string();
+        let entry = PreviewEntry {
+            preview_id: "unsafe".to_string(), listing: Arc::new(listing), email: email.to_string(),
+            host: original.host.clone(), made: Instant::now(), counts: std::sync::Mutex::new(None),
+        };
+        let result = local_counts(&rig.state, ACCT, &entry, Some(mirror.to_str().unwrap()), true);
+        assert_eq!(result.err().as_deref(), Some("errors.backupUnsafePath"));
+        assert!(lock(&entry.counts).is_none());
+    }
+}

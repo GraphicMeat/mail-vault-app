@@ -714,6 +714,7 @@
   "emailActionBar.source": "ソース",
   "emailActionBar.star": "スターを付ける",
   "emailActionBar.unstar": "スターを外す",
+  "errors.backupUnsafePath": "アカウント名またはフォルダー名をバックアップ先で安全に使用できません。バックアップファイルにはアクセスしていません。",
   "errors.E_CONN_LOST": "メールサーバーとの接続が切断されました",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "このアカウントのサインイン用にキーチェーンを読み取れませんでした。ロックを解除してから、もう一度お試しください。",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "「設定」の「アカウント」でこのアカウントに再度サインインしてください。",

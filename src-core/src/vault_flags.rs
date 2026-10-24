@@ -142,7 +142,7 @@ pub fn dirs_for(
 ) -> Dirs {
     let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(root, account_id, mailbox));
     let mirror_cur = match (mirror_root, account_email) {
-        (Some(mirror_root), Some(email)) => Some(crate::maildir::mirror_cur(Path::new(mirror_root), email, mailbox)),
+        (Some(mirror_root), Some(email)) => crate::maildir::mirror_cur(Path::new(mirror_root), email, mailbox).ok(),
         _ => None,
     };
     Dirs {
@@ -602,7 +602,7 @@ mod tests {
         assert!(dirs.mirror_cur.is_none());
         let name = crate::vault_files::build_maildir_filename(7, &s(&["archived"]));
         fs::write(dirs.cur.join(name), b"vault mail").unwrap();
-        let applied = apply_files(&f.reg, &dirs, &[change(7, &["archived", "seen"])]);
+        let applied = apply_files(&f.reg, &dirs, &[change(7, &["archived", "\\Seen"])]);
         assert_eq!(applied.renamed, 1);
         assert_eq!(applied.mirrored, 0);
         assert_eq!(fs::read(dirs.cur.join(crate::vault_files::build_maildir_filename(7, &s(&["archived", "seen"])))).unwrap(), b"vault mail");

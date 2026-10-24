@@ -145,7 +145,7 @@ fn local_counts(
     for path in paths {
         counts.archived.insert(path.to_string(), message_store::archived_paths(&root, account, path).into_keys().collect());
         if let (Some(map), Some(m)) = (on_drive.as_mut(), mirror_root) {
-            let dir = maildir::mirror_cur(Path::new(m), &entry.email, path);
+            let dir = maildir::mirror_cur(Path::new(m), &entry.email, path)?;
             map.insert(path.to_string(), maildir::mirror_file_map(&dir).into_keys().collect());
         }
     }

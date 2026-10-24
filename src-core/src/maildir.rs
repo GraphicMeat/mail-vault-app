@@ -138,8 +138,54 @@ pub fn find_listed_by_uid(cur_dir: &Path, uid: u32, listed: &Path) -> Option<Pat
 /// message directory for one mailbox, the one builder for mirror paths. The
 /// mirror keys a folder by the account's email and the mailbox's own name
 /// (no `vault_dir_name`), and stays Maildir `.eml` whatever the vault's format.
-pub fn mirror_cur(mirror_root: &Path, email: &str, mailbox: &str) -> PathBuf {
-    mirror_cur_in(&mirror_root.join(email).join(mailbox))
+pub fn mirror_cur(mirror_root: &Path, email: &str, mailbox: &str) -> Result<PathBuf, String> {
+    if !mirror_component_safe(email)
+        || !mirror_safe(mailbox)
+        || !mailbox.split(['/', '\\']).all(mirror_component_safe)
+    {
+        return Err("errors.backupUnsafePath".to_string());
+    }
+    Ok(mirror_cur_in(&mirror_root.join(email).join(mailbox)))
+}
+
+/// Whether a mailbox avoids traversal on either separator. Kept compatible
+/// with folder operations; mirror_cur also validates each target component.
+pub fn mirror_safe(mailbox: &str) -> bool {
+    let b = mailbox.as_bytes();
+    if b.is_empty() || mailbox.contains('\0') || b[0] == b'/' || b[0] == b'\\' {
+        return false;
+    }
+    if b.len() >= 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+        return false;
+    }
+    mailbox.split(['/', '\\']).all(|step| !step.is_empty() && step != "." && step != "..")
+}
+
+fn mirror_component_safe(component: &str) -> bool {
+    let b = component.as_bytes();
+    if component.is_empty()
+        || component == "."
+        || component == ".."
+        || component.contains(['/', '\\', '\0'])
+        || (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':')
+    {
+        return false;
+    }
+    // On Unix these are literal names with no path-redirection semantics.
+    // Win32 aliases and alternate streams must be refused before Windows IO.
+    if !cfg!(windows) {
+        return true;
+    }
+    if component.ends_with(['.', ' '])
+        || component.chars().any(|c| c < ' ' || matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*'))
+    {
+        return false;
+    }
+    let stem = component.split('.').next().unwrap_or("").trim_end_matches(' ').to_ascii_uppercase();
+    !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+        && !["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix).is_some_and(|digit| matches!(digit, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"))
+        })
 }
 
 /// The message directory of the mirror's mailbox directory
@@ -1027,6 +1073,55 @@ pub fn purge_orphans(mailbox_dir: &Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mirror_builder_preserves_safe_layouts() {
+        let root = Path::new("mirror-root");
+        for mailbox in ["INBOX", "Work/Clients", "Darbas/客户", "a..b", ".Archive", "Reports (2025)", "a\\b"] {
+            assert!(mirror_safe(mailbox));
+            assert_eq!(mirror_cur(root, "me+tag@exämple.test", mailbox).unwrap(), root.join("me+tag@exämple.test").join(mailbox).join("cur"));
+        }
+    }
+
+    #[test]
+    fn mirror_safe_keeps_folder_operation_compatibility() {
+        for name in ["INBOX", "Projects/Alpha", "Kunden &ANw-", "a..b", "...", "R&D", "Work: 2024", "a\\b"] {
+            assert!(mirror_safe(name));
+        }
+    }
+
+    #[test]
+    fn mirror_builder_rejects_unsafe_names_on_every_platform() {
+        let root = Path::new("mirror-root");
+        for name in [
+            "", ".", "..", "../outside", "..\\outside", "x/../outside", "/outside", "\\outside",
+            "C:\\outside", "C:outside", "x/C:outside", "x/C:/outside", "x\\C:outside", "//host/share", "\\\\host\\share",
+            "a//b", "a/", "a/./b", "x\\..\\outside", "nul\0byte",
+        ] {
+            assert_eq!(mirror_cur(root, "me@x.test", name), Err("errors.backupUnsafePath".to_string()));
+            assert_eq!(mirror_cur(root, name, "INBOX"), Err("errors.backupUnsafePath".to_string()));
+        }
+        for email in ["a/b", "a\\b", "Work/Clients"] {
+            assert!(mirror_cur(root, email, "INBOX").is_err(), "email is exactly one component");
+        }
+    }
+
+    #[test]
+    fn mirror_builder_respects_platform_alias_rules_without_normalizing() {
+        let root = Path::new("mirror-root");
+        for name in [
+            "...", "Work: 2024", "name.", "name ", ".. ", "x/.. /outside", "x/CON", "con.txt", "CON .txt",
+            "AUX", "prn.eml", "NUL", "COM1", "lpt9.txt", "COM¹", "LPT².eml", "CONIN$", "CONOUT$",
+            "stream:name", "x/one:stream", "ab?b", "ab*b", "ab|b", "ab<b", "ab>b", "ab\"b", "ab\nb",
+        ] {
+            let result = mirror_cur(root, "me@x.test", name);
+            if cfg!(windows) {
+                assert_eq!(result, Err("errors.backupUnsafePath".to_string()), "{name:?}");
+            } else {
+                assert_eq!(result.unwrap(), root.join("me@x.test").join(name).join("cur"));
+            }
+        }
+    }
 
     /// `dateparse` answers `Ok(0)` for text with no year: that is unknown, not 1970.
     #[test]

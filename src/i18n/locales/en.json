@@ -714,6 +714,7 @@
   "emailActionBar.source": "Source",
   "emailActionBar.star": "Star",
   "emailActionBar.unstar": "Remove star",
+  "errors.backupUnsafePath": "The account or folder name is unsafe for the backup location. No backup files were accessed.",
   "errors.E_CONN_LOST": "The connection to the mail server dropped",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "The keychain could not be read for this account's sign-in. Unlock it, then try again.",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "Sign in to this account again under Settings, Accounts.",

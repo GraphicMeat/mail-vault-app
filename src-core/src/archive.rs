@@ -189,6 +189,9 @@ pub async fn run_with_backup(
     // `None` (a manual archive) never stops for it.
     limit: Option<BackgroundLimit>,
 ) -> Result<ArchiveProgress, String> {
+    let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
+        crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox)
+    }).transpose()?;
     let total = uids.len();
     info!("archive_emails: starting {} UIDs for account {}", total, account_id);
 
@@ -254,9 +257,7 @@ pub async fn run_with_backup(
         let uses_graph = graph.is_some();
         let uses_jmap = jmap.is_some();
         let (acct, mbox) = (account_id.clone(), mailbox.clone());
-        let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
-            crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox)
-        });
+        let mirror = mirror.clone();
         tokio::task::spawn_blocking(move || {
             let vault_listing: HashMap<u32, std::path::PathBuf> = if remove_existing {
                 crate::message_store::raw_paths_at(&crate::message_store::mailbox_dir(&root, &acct, &mbox))
@@ -536,6 +537,9 @@ async fn fetch_and_store(
     // email id (or why it has none).
     jmap: Option<(Result<Arc<crate::jmap::JmapClient>, String>, Result<String, String>)>,
 ) -> Result<serde_json::Value, String> {
+    let mirror = backup_path.zip(account_email).map(|(bp, addr)| {
+        crate::maildir::mirror_cur(std::path::Path::new(bp), addr, mailbox)
+    }).transpose()?;
     // The body and the server's flags, with the custody entry built from them
     // (`_external_copy_failed` is set once the copies are written).
     let (raw_bytes, server_flags, mut index_entry) = match (graph, jmap) {
@@ -566,9 +570,6 @@ async fn fetch_and_store(
     // is how the provider comes to drop them mid-run. Do the disk work on the
     // blocking pool instead.
     let mailbox_owned = mailbox.to_string();
-    let mirror = backup_path.zip(account_email).map(|(bp, addr)| {
-        crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox_owned)
-    });
     let gate = Arc::clone(&ctx.gate);
     let registry = Arc::clone(&ctx.registry);
     let account_key = account_id.to_string();

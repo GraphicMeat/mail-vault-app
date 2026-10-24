@@ -593,7 +593,7 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
     let server_uids = server_flags.iter().map(|(uid, _)| *uid).collect::<Vec<_>>();
     let local_uids = {
         let cur = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&ctx.archive_ctx.root, &ctx.account_id, &mailbox));
-        let mirror = ctx.mirror_root.as_ref().map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox));
+        let mirror = ctx.mirror_root.as_ref().map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox)).transpose()?;
         let (registry, account_id, mbox) = (Arc::clone(&ctx.archive_ctx.registry), ctx.account_id.clone(), mailbox.clone());
         tokio::task::spawn_blocking(move || vault_uids_after_presync(&registry, &account_id, &mbox, &cur, mirror.as_deref()))
             .await.map_err(|e| format!("pre-sync panicked: {e}"))??
@@ -731,7 +731,7 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         let mirror_dir = ctx
             .mirror_root
             .as_ref()
-            .map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox_path));
+            .map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox_path)).transpose()?;
 
         // List the whole folder before numbering any of it — see
         // `graph_ledger`'s own doc comment for why filing by listing position
@@ -1104,7 +1104,7 @@ async fn backup_graph_folder(
     let token = ctx.account.access_token.as_deref().ok_or("Missing OAuth2 access token for Graph account")?;
     let client = crate::graph::GraphClient::for_purpose(token, "backup").for_account(&ctx.account.email);
     let mailbox = folder.storage_key;
-    let mirror_dir = ctx.mirror_root.as_ref().map(|root| crate::maildir::mirror_cur(Path::new(root), &ctx.account.email, &mailbox));
+    let mirror_dir = ctx.mirror_root.as_ref().map(|root| crate::maildir::mirror_cur(Path::new(root), &ctx.account.email, &mailbox)).transpose()?;
     let mut listed = Vec::new();
     let mut offset = 0;
     loop {
@@ -1389,7 +1389,7 @@ async fn run_jmap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         let mirror_dir = ctx
             .mirror_root
             .as_ref()
-            .map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox_path));
+            .map(|root| crate::maildir::mirror_cur(Path::new(root), &account.email, &mailbox_path)).transpose()?;
 
         // Oldest first: the order the ledger takes a listing in.
         let mut listed = client.all_email_ids(&mailbox_id).await.map_err(|e| e.to_string())?;
@@ -1640,7 +1640,7 @@ async fn build_folder_status(
     mirror_root: Option<&Path>,
     email: &str,
     children: Vec<FolderBackupStatus>,
-) -> FolderBackupStatus {
+) -> Result<FolderBackupStatus, String> {
     let (app_count, external_count) = {
         let vault_cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(vault_root, account_id, path));
         let mirror_root = mirror_root.map(|p| p.to_path_buf());
@@ -1649,18 +1649,15 @@ async fn build_folder_status(
         tokio::task::spawn_blocking(move || {
             let app_count = scan_cur_uids(&vault_cur_dir).unwrap_or_default().len();
             let external_count = match mirror_root {
-                Some(root) => scan_external_uids(&root, &email, &path_owned).len(),
+                Some(root) => scan_external_uids(&root, &email, &path_owned)?.len(),
                 None => 0,
             };
-            (app_count, external_count)
+            Ok::<_, String>((app_count, external_count))
         })
         .await
-        .unwrap_or_else(|e| {
-            warn!("build_folder_status: folder scan panicked: {}", e);
-            (0, 0)
-        })
+        .map_err(|e| format!("folder scan panicked: {e}"))??
     };
-    FolderBackupStatus {
+    Ok(FolderBackupStatus {
         path: path.to_string(),
         name: name.to_string(),
         server_count,
@@ -1669,7 +1666,7 @@ async fn build_folder_status(
         children,
         folder_alias: path.to_string(),
         local_count_alias: app_count,
-    }
+    })
 }
 
 /// IMAP backup status with folder hierarchy. Ported from `backup.rs:366-470`.
@@ -1768,7 +1765,7 @@ async fn get_imap_backup_status(
                 &mbox.path, &mbox.name, sc,
                 vault_root, account_id, mirror_root, &account.email,
                 children,
-            ).await;
+            ).await?;
 
             *total_server += sc;
             *total_app += status.app_count;
@@ -1841,7 +1838,7 @@ async fn get_graph_backup_status(
                 let cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&vault_root, &account_id, &mailbox_path));
                 let app_count = scan_cur_uids(&cur_dir).unwrap_or_default().len();
                 let ext_count = match mirror_root.as_deref() {
-                    Some(root) => scan_external_uids(root, &email, &mailbox_path).len(),
+                    Some(root) => scan_external_uids(root, &email, &mailbox_path)?.len(),
                     None => 0,
                 };
 
@@ -1862,10 +1859,10 @@ async fn get_graph_backup_status(
                     });
                 }
             }
-            (folders, total_server, total_app, total_external)
+            Ok::<_, String>((folders, total_server, total_app, total_external))
         })
         .await
-        .map_err(|e| format!("graph folder scan panicked: {}", e))?
+        .map_err(|e| format!("graph folder scan panicked: {}", e))??
     };
 
     let external_available = mirror_root.is_some();
@@ -1909,7 +1906,7 @@ async fn get_jmap_backup_status(
                 let cur_dir = crate::message_store::maildir_messages_dir(&crate::message_store::mailbox_dir(&vault_root, &account_id, &info.path));
                 let app_count = scan_cur_uids(&cur_dir).unwrap_or_default().len();
                 let ext_count = match mirror_root.as_deref() {
-                    Some(root) => scan_external_uids(root, &email, &info.path).len(),
+                    Some(root) => scan_external_uids(root, &email, &info.path)?.len(),
                     None => 0,
                 };
                 total_server += sc;
@@ -1928,10 +1925,10 @@ async fn get_jmap_backup_status(
                     });
                 }
             }
-            (folders, total_server, total_app, total_external)
+            Ok::<_, String>((folders, total_server, total_app, total_external))
         })
         .await
-        .map_err(|e| format!("jmap folder scan panicked: {}", e))?
+        .map_err(|e| format!("jmap folder scan panicked: {}", e))??
     };
 
     Ok(AccountBackupStatus {
@@ -2023,9 +2020,19 @@ fn scan_cur_uids(cur_dir: &Path) -> Result<HashSet<u32>, String> {
 
 /// Which uids of `<email>/<mailbox>` are present in an external backup
 /// directory. Ported from `backup.rs:143-153`.
-fn scan_external_uids(backup_path: &Path, email: &str, mailbox: &str) -> HashSet<u32> {
-    let cur_dir = crate::maildir::mirror_cur(backup_path, email, mailbox);
-    crate::maildir::mirror_file_map(&cur_dir).into_keys().collect()
+fn scan_external_uids(backup_path: &Path, email: &str, mailbox: &str) -> Result<HashSet<u32>, String> {
+    let cur_dir = crate::maildir::mirror_cur(backup_path, email, mailbox)?;
+    if !backup_path.is_dir() {
+        return Err("errors.E_ABD_NO_BACKUP_DRIVE".to_string());
+    }
+    match std::fs::read_dir(&cur_dir) {
+        Ok(entries) => entries.map(|entry| {
+            entry.map(|entry| crate::maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()))
+                .map_err(|_| "errors.E_ABD_NO_BACKUP_DRIVE".to_string())
+        }).filter_map(|entry| entry.transpose()).collect(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && backup_path.is_dir() => Ok(HashSet::new()),
+        Err(_) => Err("errors.E_ABD_NO_BACKUP_DRIVE".to_string()),
+    }
 }
 
 /// Which uids of `<email>/<mailbox>` are present in the external mirror.
@@ -2042,7 +2049,7 @@ fn scan_external_uids(backup_path: &Path, email: &str, mailbox: &str) -> HashSet
 /// the module doc's Global Constraint note.
 pub fn scan_uids(mirror_root: Option<&Path>, email: &str, mailbox: &str) -> Option<Vec<u32>> {
     let root = mirror_root?;
-    Some(scan_external_uids(root, email, mailbox).into_iter().collect())
+    Some(scan_external_uids(root, email, mailbox).ok()?.into_iter().collect())
 }
 
 /// Sync files between the vault Maildir and the backup location (bidirectional).
@@ -2210,7 +2217,13 @@ fn mirror_local_folders(ctx: &BackupRunContext) {
             resume_after_ms: None,
         };
         (ctx.on_progress)(frame());
-        let backup_dir = crate::maildir::mirror_cur(Path::new(mirror_root), &ctx.account.email, &local_mirror_name(&dir, &marker));
+        let backup_dir = match crate::maildir::mirror_cur(Path::new(mirror_root), &ctx.account.email, &local_mirror_name(&dir, &marker)) {
+            Ok(dir) => dir,
+            Err(e) => {
+                warn!("backup: local mirror refused: {}", e);
+                continue;
+            }
+        };
         if let Err(e) = std::fs::create_dir_all(&backup_dir) {
             warn!("backup: local folder {} not mirrored, {:?} cannot be made: {}", dir, backup_dir, e);
             continue;
@@ -2391,10 +2404,10 @@ fn write_purge_queue(data_dir: &Path, q: &std::collections::BTreeMap<String, Vec
 
 /// Delete every mirror file under `<root>/<email>/<mailbox>/cur/` whose uid is
 /// in `uids`. Returns how many files were removed.
-fn purge_backup_files(root: &Path, email: &str, mailbox: &str, uids: &HashSet<u32>) -> usize {
-    let cur = crate::maildir::mirror_cur(root, email, mailbox);
+fn purge_backup_files(root: &Path, email: &str, mailbox: &str, uids: &HashSet<u32>) -> Result<usize, String> {
+    let cur = crate::maildir::mirror_cur(root, email, mailbox)?;
     if !cur.exists() {
-        return 0;
+        return Ok(0);
     }
     let mut removed = 0usize;
     for (uid, _, path) in crate::maildir::mirror_files(&cur) {
@@ -2406,12 +2419,13 @@ fn purge_backup_files(root: &Path, email: &str, mailbox: &str, uids: &HashSet<u3
             Err(e) => warn!("backup purge: failed to remove {:?}: {}", path, e),
         }
     }
-    removed
+    Ok(removed)
 }
 
 /// Queue `uids` of `<email>/<mailbox>` for purge next time the mirror is
 /// reachable. Ported from `backup.rs:214-226`.
 fn queue_purge(data_dir: &Path, email: &str, mailbox: &str, uids: &[u32]) -> Result<(), String> {
+    crate::maildir::mirror_cur(Path::new("."), email, mailbox)?;
     let mut q = read_purge_queue(data_dir);
     let entry = q.entry(format!("{}|{}", email, mailbox)).or_default();
     entry.extend_from_slice(uids);
@@ -2448,6 +2462,9 @@ pub fn purge_uids(
     mailbox: &str,
     uids: &[u32],
 ) -> Result<PurgeOutcome, String> {
+    if mirror_root.is_some() || external_status.unwrap_or("not_configured") != "not_configured" {
+        crate::maildir::mirror_cur(mirror_root.unwrap_or_else(|| Path::new(".")), email, mailbox)?;
+    }
     if uids.is_empty() {
         return Ok(PurgeOutcome { removed: 0, queued: 0 });
     }
@@ -2462,7 +2479,7 @@ pub fn purge_uids(
     };
 
     let uid_set: HashSet<u32> = uids.iter().copied().collect();
-    let removed = purge_backup_files(root, email, mailbox, &uid_set);
+    let removed = purge_backup_files(root, email, mailbox, &uid_set)?;
     info!("backup purge: removed {} mirror files for {}/{}", removed, email, mailbox);
     Ok(PurgeOutcome { removed, queued: 0 })
 }
@@ -2480,16 +2497,27 @@ fn drain_purge_queue(data_dir: &Path, root: &Path) -> usize {
 
     for (key, uids) in q {
         let Some((email, mailbox)) = key.split_once('|') else {
-            continue; // malformed key — drop it, nothing can act on it
+            leftover.insert(key, uids);
+            continue; // Keep unresolved legacy entries for inspection.
         };
         let uid_set: HashSet<u32> = uids.iter().copied().collect();
-        let mirror = crate::maildir::mirror_cur(root, email, mailbox);
+        let mirror = match crate::maildir::mirror_cur(root, email, mailbox) {
+            Ok(mirror) => mirror,
+            Err(e) => {
+                warn!("backup purge: queued mirror refused: {}", e);
+                leftover.insert(key, uids);
+                continue;
+            }
+        };
         if !mirror.exists() {
             // Folder not mirrored (yet). Keep the entry rather than declare success.
             leftover.insert(key.clone(), uids);
             continue;
         }
-        removed_total += purge_backup_files(root, email, mailbox, &uid_set);
+        match purge_backup_files(root, email, mailbox, &uid_set) {
+            Ok(removed) => removed_total += removed,
+            Err(_) => { leftover.insert(key, uids); }
+        }
     }
 
     if let Err(e) = write_purge_queue(data_dir, &leftover) {
@@ -2611,7 +2639,7 @@ pub fn copy_uids_to_mirror(
 ///   back and compared the same way; a copy that fails the check is removed and
 ///   reported `failed`.
 ///
-/// `Err` only when the mirror root is not there or its folder cannot be made:
+/// `Err` when the names are unsafe, the mirror root is not there, or its folder cannot be made:
 /// the caller treats that as "backup unreachable" for the whole batch. The root
 /// itself is never created, so an unplugged drive cannot be replaced by a folder
 /// on the internal disk.
@@ -2624,6 +2652,7 @@ pub fn copy_uids_to_mirror_listed(
     uids: &[u32],
     listing: &mut MirrorListing,
 ) -> Result<MirrorCopyOutcome, String> {
+    crate::maildir::mirror_cur(mirror_root, email, mailbox)?;
     if uids.is_empty() {
         return Ok(MirrorCopyOutcome::default());
     }
@@ -2651,6 +2680,7 @@ pub fn copy_uids_to_mirror_from(
     listing: &mut MirrorListing,
     sources: &std::collections::HashMap<u32, PathBuf>,
 ) -> Result<MirrorCopyOutcome, String> {
+    let mirror_cur = crate::maildir::mirror_cur(mirror_root, email, mailbox)?;
     let mut out = MirrorCopyOutcome::default();
     if uids.is_empty() {
         return Ok(out);
@@ -2658,7 +2688,6 @@ pub fn copy_uids_to_mirror_from(
     if !mirror_root.is_dir() {
         return Err("Backup folder unavailable".to_string());
     }
-    let mirror_cur = crate::maildir::mirror_cur(mirror_root, email, mailbox);
     std::fs::create_dir_all(&mirror_cur).map_err(|e| format!("Backup folder unavailable: {e}"))?;
     listing.ensure(&mirror_cur);
 
@@ -3117,6 +3146,16 @@ mod tests {
         assert_eq!(scan_uids(Some(&temp.path().join("unplugged")), MAIL, BOX), None);
     }
 
+    #[tokio::test]
+    async fn mirror_status_rejects_unsafe_names_instead_of_reporting_zero() {
+        let temp = tempfile::tempdir().unwrap();
+        for (email, mailbox) in [(MAIL, "../outside"), ("../outside", BOX)] {
+            assert_eq!(build_folder_status(mailbox, "outside", 1, temp.path(), ACCT, Some(temp.path()), email, vec![]).await.err().as_deref(), Some("errors.backupUnsafePath"));
+        }
+        let safe = build_folder_status(BOX, BOX, 1, temp.path(), ACCT, Some(temp.path()), MAIL, vec![]).await.unwrap();
+        assert_eq!(safe.external_count, 0);
+    }
+
     // ── purge queue ──────────────────────────────────────────────────────────
 
     #[test]
@@ -3455,14 +3494,14 @@ mod tests {
         std::fs::write(cur.join("13_S.eml"), b"c").unwrap();
         std::fs::write(cur.join("not-a-uid.eml"), b"d").unwrap();
 
-        let uids = scan_external_uids(tmp.path(), "luke@mock.test", "INBOX");
+        let uids = scan_external_uids(tmp.path(), "luke@mock.test", "INBOX").unwrap();
         assert_eq!(uids.len(), 3);
         for uid in [11u32, 12, 13] {
             assert!(uids.contains(&uid), "missing uid {}", uid);
         }
 
         // A mailbox with no mirror directory is empty, not an error.
-        assert!(scan_external_uids(tmp.path(), "luke@mock.test", "Sent").is_empty());
+        assert!(scan_external_uids(tmp.path(), "luke@mock.test", "Sent").unwrap().is_empty());
     }
 
     /// `sync_locations` before its one-pass listings, verbatim but for paths:
@@ -3716,7 +3755,7 @@ mod tests {
         ]);
 
         let uids: HashSet<u32> = [101u32, 102, 103].into_iter().collect();
-        let removed = purge_backup_files(root, "me@x.test", "INBOX.Spam", &uids);
+        let removed = purge_backup_files(root, "me@x.test", "INBOX.Spam", &uids).unwrap();
 
         let cur = root.join("me@x.test").join("INBOX.Spam").join("cur");
         assert_eq!(removed, 3);
@@ -3731,7 +3770,7 @@ mod tests {
     fn purge_backup_files_on_a_missing_mirror_dir_removes_nothing() {
         let tmp = tempfile::tempdir().unwrap();
         let uids: HashSet<u32> = [1u32].into_iter().collect();
-        assert_eq!(purge_backup_files(tmp.path(), "me@x.test", "INBOX", &uids), 0);
+        assert_eq!(purge_backup_files(tmp.path(), "me@x.test", "INBOX", &uids).unwrap(), 0);
     }
 
     #[test]

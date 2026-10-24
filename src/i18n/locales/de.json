@@ -714,6 +714,7 @@
   "emailActionBar.source": "Quelltext",
   "emailActionBar.star": "Markieren",
   "emailActionBar.unstar": "Markierung entfernen",
+  "errors.backupUnsafePath": "Der Konto- oder Ordnername ist für den Sicherungsort unsicher. Auf Sicherungsdateien wurde nicht zugegriffen.",
   "errors.E_CONN_LOST": "Die Verbindung zum Mailserver wurde unterbrochen",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "Der Schlüsselbund konnte für die Anmeldung dieses Kontos nicht gelesen werden. Entsperre ihn und versuche es erneut.",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "Melde dich bei diesem Konto unter Einstellungen, Konten erneut an.",

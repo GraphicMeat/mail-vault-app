@@ -714,6 +714,7 @@
   "emailActionBar.source": "源代码",
   "emailActionBar.star": "加星标",
   "emailActionBar.unstar": "取消星标",
+  "errors.backupUnsafePath": "账户或文件夹名称无法安全地用于备份位置。未访问任何备份文件。",
   "errors.E_CONN_LOST": "与邮件服务器的连接已断开",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "无法读取此账户登录所需的钥匙串。请解锁后重试。",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "请在“设置”的“账户”中重新登录此账户。",

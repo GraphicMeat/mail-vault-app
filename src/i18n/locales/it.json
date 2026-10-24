@@ -714,6 +714,7 @@
   "emailActionBar.source": "Sorgente",
   "emailActionBar.star": "Aggiungi a speciali",
   "emailActionBar.unstar": "Togli da speciali",
+  "errors.backupUnsafePath": "Il nome dell’account o della cartella non è sicuro per la posizione di backup. Nessun file di backup è stato aperto.",
   "errors.E_CONN_LOST": "La connessione al server di posta è caduta",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "Non è stato possibile leggere il portachiavi per l'accesso a questo account. Sbloccalo e riprova.",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "Accedi di nuovo a questo account in Impostazioni, Account.",

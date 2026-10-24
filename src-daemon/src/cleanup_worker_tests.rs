@@ -282,7 +282,7 @@ async fn the_drive_is_read_never_written() {
     rig.archived("INBOX", 1);
     rig.archived("INBOX", 2);
     let drive = rig.dir.join("drive");
-    let mirror_cur = mailvault_core::maildir::mirror_cur(&drive, EMAIL, "INBOX");
+    let mirror_cur = mailvault_core::maildir::mirror_cur(&drive, EMAIL, "INBOX").unwrap();
     std::fs::create_dir_all(&mirror_cur).unwrap();
     let name = vault_files::build_maildir_filename(1, &["archived".to_string()]);
     std::fs::write(mirror_cur.join(&name), raw("INBOX-m1")).unwrap();

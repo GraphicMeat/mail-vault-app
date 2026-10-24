@@ -2993,7 +2993,7 @@ mod tests {
     fn mirror_cur_joins_the_raw_mailbox_name() {
         let mirror = Path::new("mirror-root");
         assert_eq!(
-            maildir::mirror_cur(mirror, "me@x.test", "Work/Clients"),
+            maildir::mirror_cur(mirror, "me@x.test", "Work/Clients").unwrap(),
             mirror.join("me@x.test").join("Work/Clients").join("cur")
         );
     }

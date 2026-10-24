@@ -26,6 +26,10 @@ Migration note: many Tauri commands still do real work from before this split. T
 
 ## Architectural Boundaries
 
+### External mirror path invariant
+
+Every raw account email and mailbox name reaches the external mirror through fallible `maildir::mirror_cur`. The email must be one safe component; mailbox hierarchy is validated on both separators while retaining the raw name and the platform's existing join behavior. Validation rejects traversal, NUL and drive-prefixed components on every OS. On Windows it also rejects stream syntax, device names, trailing-dot or trailing-space aliases and invalid Windows characters. On Unix these literal characters retain their existing safe layouts. The `mirror_safe` boolean helper retains the folder-operation traversal contract; the builder applies the additional component rules. Safe names retain their exact layout and Unicode; nothing is sanitized into a colliding name. Callers propagate refusal before mirror IO or deletion authorization. A scan that cannot validate or reach its mirror is unknown, never confirmed empty. Legacy invalid purge entries stay unresolved while valid entries drain, and disconnected drives cannot accept new invalid entries. Optional flag updates may omit an unsafe mirror while updating the vault. `mirror_cur_in` only appends `cur` to an already trusted directory; import rehome receives it from the validated presync builder. Lexical validation does not provide symlink or reparse-point containment, and external bookmark ownership stays with the shell.
+
 ### Frontend
 
 #### Atomic UI design and reuse

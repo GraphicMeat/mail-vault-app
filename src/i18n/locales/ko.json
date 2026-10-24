@@ -714,6 +714,7 @@
   "emailActionBar.source": "소스",
   "emailActionBar.star": "별표 표시",
   "emailActionBar.unstar": "별표 해제",
+  "errors.backupUnsafePath": "계정 또는 폴더 이름을 백업 위치에서 안전하게 사용할 수 없습니다. 백업 파일에 접근하지 않았습니다.",
   "errors.E_CONN_LOST": "메일 서버와의 연결이 끊어졌습니다",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "이 계정의 로그인 정보를 키체인에서 읽을 수 없습니다. 잠금을 해제한 다음 다시 시도하세요.",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "설정의 계정에서 이 계정에 다시 로그인하세요.",

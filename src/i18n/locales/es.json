@@ -714,6 +714,7 @@
   "emailActionBar.source": "Código fuente",
   "emailActionBar.star": "Destacar",
   "emailActionBar.unstar": "Quitar destacado",
+  "errors.backupUnsafePath": "El nombre de la cuenta o carpeta no es seguro para la ubicación de copia de seguridad. No se accedió a ningún archivo de copia de seguridad.",
   "errors.E_CONN_LOST": "Se perdió la conexión con el servidor de correo",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "No se pudo leer el llavero para el inicio de sesión de esta cuenta. Desbloquéalo y vuelve a intentarlo.",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "Vuelve a iniciar sesión en esta cuenta en Ajustes, Cuentas.",

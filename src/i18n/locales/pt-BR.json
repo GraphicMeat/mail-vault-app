@@ -714,6 +714,7 @@
   "emailActionBar.source": "Código-fonte",
   "emailActionBar.star": "Marcar com estrela",
   "emailActionBar.unstar": "Remover estrela",
+  "errors.backupUnsafePath": "O nome da conta ou pasta não é seguro para o local de backup. Nenhum arquivo de backup foi acessado.",
   "errors.E_CONN_LOST": "A conexão com o servidor de e-mail caiu",
   "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE": "Não foi possível ler as chaves para o login desta conta. Desbloqueie e tente de novo.",
   "errors.E_OAUTH_SIGN_IN_NEEDED": "Entre novamente nesta conta em Ajustes, Contas.",

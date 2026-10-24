@@ -109,8 +109,8 @@ impl DaemonLocal {
         Ok(path)
     }
 
-    fn mirror_cur(&self, root: &Path, folder: &str) -> PathBuf {
-        maildir::mirror_cur(root, &self.email, folder)
+    fn mirror_cur(&self, root: &Path, folder: &str) -> Result<PathBuf, LocalError> {
+        maildir::mirror_cur(root, &self.email, folder).map_err(LocalError::DriveUnavailable)
     }
 }
 
@@ -185,6 +185,7 @@ impl LocalStore for DaemonLocal {
         vault_listing: &HashMap<u32, PathBuf>,
         uids: &[u32],
     ) -> Result<Verify, LocalError> {
+        self.mirror_cur(Path::new("."), folder)?;
         let vault = self.vault()?;
         let mirror = self.mirror_root()?;
         // Files land on the drive now: a fallback map read before is stale.
@@ -228,9 +229,10 @@ impl LocalStore for DaemonLocal {
         files: &[(u32, String)],
         expected: &HashMap<u32, String>,
     ) -> Result<Verify, LocalError> {
+        self.mirror_cur(Path::new("."), folder)?;
         let vault = self.vault()?;
         let mirror = self.mirror_root()?;
-        let cur = self.mirror_cur(&mirror, folder);
+        let cur = self.mirror_cur(&mirror, folder)?;
         let (account, mailbox) = (self.account_id.clone(), folder.to_string());
         let cached = lock(&self.mirror_maps).remove(folder);
         let (files, expected) = (files.to_vec(), expected.clone());
