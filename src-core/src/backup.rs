@@ -2025,11 +2025,8 @@ fn scan_external_uids(backup_path: &Path, email: &str, mailbox: &str) -> Result<
     if !backup_path.is_dir() {
         return Err("errors.E_ABD_NO_BACKUP_DRIVE".to_string());
     }
-    match std::fs::read_dir(&cur_dir) {
-        Ok(entries) => entries.map(|entry| {
-            entry.map(|entry| crate::maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()))
-                .map_err(|_| "errors.E_ABD_NO_BACKUP_DRIVE".to_string())
-        }).filter_map(|entry| entry.transpose()).collect(),
+    match crate::message_store::mirror_uids_in(&cur_dir) {
+        Ok(uids) => Ok(uids),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound && backup_path.is_dir() => Ok(HashSet::new()),
         Err(_) => Err("errors.E_ABD_NO_BACKUP_DRIVE".to_string()),
     }
@@ -3801,7 +3798,7 @@ mod tests {
     }
 
     #[test]
-    fn drain_drops_malformed_key_but_still_drains_valid_entries() {
+    fn drain_retains_malformed_key_but_still_drains_valid_entries() {
         let tmp = tempfile::tempdir().unwrap();
         let dd = tmp.path().join("data");
         let root = tmp.path().join("mirror");
@@ -3817,9 +3814,10 @@ mod tests {
 
         assert_eq!(removed, 1, "the well-formed entry must still drain");
         assert!(!root.join("me@x.test").join("INBOX").join("cur").join(format!("4{}S.eml", crate::maildir::INFO_PREFIX)).exists());
-        assert!(
-            !read_purge_queue(&dd).contains_key("malformed-no-pipe"),
-            "a key with no '|' separator must be dropped, not left queued forever"
+        assert_eq!(
+            read_purge_queue(&dd),
+            std::collections::BTreeMap::from([("malformed-no-pipe".to_string(), vec![1, 2])]),
+            "unresolved evidence stays exact while the valid queue entry is removed"
         );
     }
 

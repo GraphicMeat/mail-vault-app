@@ -2522,6 +2522,21 @@ pub(crate) fn loose_uids_in(dir: &Path) -> Result<HashSet<u32>, String> {
     Ok(uids)
 }
 
+/// Uids named in one external mirror message directory, using its legacy
+/// filename rule. Lists only this directory, never sibling JMAP records.
+/// An open error retains its kind; an entry error is always Other, so a
+/// caller cannot mistake a truncated listing for a missing, empty mailbox.
+pub(crate) fn mirror_uids_in(dir: &Path) -> io::Result<HashSet<u32>> {
+    let mut uids = HashSet::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry.map_err(io::Error::other)?;
+        if let Some(uid) = maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()) {
+            uids.insert(uid);
+        }
+    }
+    Ok(uids)
+}
+
 /// `loose_uids_in` of the Maildir message directory alone.
 fn loose_file_uids_in(dir: &Path) -> Result<HashSet<u32>, String> {
     if !dir.exists() {
@@ -3154,6 +3169,31 @@ mod tests {
         // An undone delete re-filed under its new uid keeps its flags.
         assert_eq!(rebind_uids(root, ACCT, MBOX, &[(3, 12), (8, 13)]).len(), 1);
         assert!(find(root, ACCT, MBOX, 12).is_some());
+    }
+
+    #[test]
+    fn mirror_uid_listing_keeps_legacy_names_without_jmap_siblings() {
+        let temp = tempfile::tempdir().unwrap();
+        let cur = temp.path().join("cur");
+        fs::create_dir(&cur).unwrap();
+        for name in [format!("1{INFO_PREFIX}S.eml"), "2.eml".to_string(), "3_S.eml".to_string(), "3.eml".to_string(), "notes.txt".to_string()] {
+            fs::write(cur.join(name), b"mail").unwrap();
+        }
+        fs::create_dir(cur.join("4.eml")).unwrap();
+        let records = temp.path().join("jmap");
+        fs::create_dir(&records).unwrap();
+        fs::write(records.join("99.json"), b"{}").unwrap();
+
+        assert_eq!(mirror_uids_in(&cur).unwrap(), HashSet::from([1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn mirror_uid_listing_reports_missing_or_unlistable_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let cur = temp.path().join("cur");
+        assert_eq!(mirror_uids_in(&cur).unwrap_err().kind(), io::ErrorKind::NotFound);
+        fs::write(&cur, b"not a directory").unwrap();
+        assert!(mirror_uids_in(&cur).is_err());
     }
 
     #[test]
