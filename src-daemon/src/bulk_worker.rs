@@ -1536,10 +1536,98 @@ mod tests {
         .await;
         writer.execute_batch("ROLLBACK").unwrap();
         assert!(resume.await.unwrap().error.is_none());
+        let _ = wait_drained(&state).await;
         let (status, cancel) = control
             .expect("resume IO must not block pending status or inactive cancellation refusal");
         assert!(status.error.is_none());
         assert!(cancel.error.is_some());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_resume_fence_during_save_retains_durable_pending_without_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let scope = serde_json::from_value(json!({"keys":[]})).unwrap();
+        let intent = FrozenIntent::freeze(mailvault_core::bulk::Action::Delete, scope, &[], &[]);
+        state
+            .bulk
+            .lock()
+            .unwrap()
+            .claim(&state.app_dir, "fenced", intent.clone())
+            .unwrap();
+        let work = Workflow::new(intent);
+        checkpoint(&state, "fenced", "fenced", &work).unwrap();
+        state
+            .bulk
+            .lock()
+            .unwrap()
+            .drained_attempt("fenced", "fenced")
+            .unwrap();
+        let writer = mailvault_core::app_db::db::open(dir.path()).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let worker_state = state.clone();
+        let resume = tokio::spawn(async move {
+            handle_request_for_test(
+                &worker_state,
+                "bulk.resume",
+                json!({"operationId":"fenced","attemptId":"late"}),
+            )
+            .await
+        });
+        for _ in 0..200 {
+            if state.journal.try_lock().is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let fenced = tokio::time::timeout(
+            Duration::from_millis(200),
+            handle_request_for_test(
+                &state,
+                "bulk.status",
+                json!({"operationId":"fenced","attemptId":"late","fenceUnstarted":true}),
+            ),
+        )
+        .await;
+        writer.execute_batch("ROLLBACK").unwrap();
+        let reply = resume.await.unwrap();
+        let fenced = fenced
+            .expect("the exact attempt fence must remain responsive during resume save")
+            .result
+            .unwrap();
+        assert_eq!(fenced["admission"]["state"], "fenced");
+        assert!(
+            reply.error.is_some(),
+            "a fenced attempt must never publish Active or launch"
+        );
+        let status = handle_request_for_test(
+            &state,
+            "bulk.status",
+            json!({"operationId":"fenced","attemptId":"late"}),
+        )
+        .await
+        .result
+        .unwrap();
+        assert!(status["active"].is_null());
+        assert_eq!(status["pending"]["attemptId"], "late");
+        assert_eq!(status["pending"]["status"], "awaitingResume");
+        assert_eq!(status["admission"]["state"], "fenced");
+        let raw = mailvault_core::op_journal::pending_operation_read(dir.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(raw["attemptId"], "late");
+        let mut reopened = mailvault_core::bulk::Coordinator::load(dir.path());
+        assert_eq!(
+            reopened.status(dir.path()).unwrap()["pending"]["attemptId"],
+            "late"
+        );
+        let fresh = handle_request_for_test(
+            &state,
+            "bulk.resume",
+            json!({"operationId":"fenced","attemptId":"fresh"}),
+        )
+        .await;
+        assert!(fresh.error.is_none());
+        assert_eq!(wait_drained(&state).await["status"], "complete");
     }
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn bulk_worker_checkpoint_io_never_blocks_active_status_or_cancel() {
