@@ -2675,6 +2675,42 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    async fn owner_changes_during_native_listing(empty: bool) {
+        let dir = scratch_dir("native_listing_owner");
+        let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
+        let (account_a, account_b) = (account_for(&a), account_for(&b));
+        let engine = Arc::new(engine_for(&dir));
+        assert!(engine.sync_account(&account_a, "INBOX").await.success);
+        a.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", if empty { 0 } else { 3 }))
+            .fault(Trigger::nth("SELECT", 1), Action::Delay(Duration::from_millis(400))));
+        let running = engine.clone();
+        let job = tokio::spawn(async move { running.backfill_mailbox(&account_a, "INBOX").await });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while a.count_commands("SELECT") == 0 { tokio::time::sleep(Duration::from_millis(1)).await; }
+        }).await.expect("the actual old-owner listing must be in flight after its seed");
+        app_fetched_headers(&engine, &account_b, "INBOX", &[1, 2, 3], serde_json::json!({"totalEmails": 10, "uidNext": 11})).await;
+        let before = with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap());
+        job.await.unwrap();
+        assert!(!engine.is_backfilling("acc1").await, "the refused listing must clear in-flight state");
+        assert_eq!(with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap()), before, "old listing cannot change any B row or proof");
+        assert!(!engine.backfill_gave_up.lock().await.contains("acc1\u{1}INBOX"), "coverage from another owner is not a successful zero-work result");
+        engine.backfill_mailbox(&account_b, "INBOX").await;
+        assert_eq!(cached_uid_set(&engine, "INBOX"), (1..=10).collect(), "fresh B must fill its remaining native headers");
+        assert!(!engine.is_backfilling("acc1").await);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reviewed_native_listing_owner_changes_with_overlapping_coverage() {
+        owner_changes_during_native_listing(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reviewed_native_listing_owner_changes_before_empty_result() {
+        owner_changes_during_native_listing(true).await;
+    }
+
     async fn generation_changed_native_backfill(keep_partial: bool) {
         let dir = scratch_dir("native_backfill_generation");
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
