@@ -1865,6 +1865,35 @@ mod tests {
         assert!(state.bulk.lock().unwrap().claim_seed("new", "A").is_ok());
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_original_fenced_handler_cleanup_restores_disk_reconciliation() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let journal = state.journal.lock().unwrap();
+        let starting = state.clone();
+        let start = tokio::spawn(async move {
+            handle_request_for_test(&starting, "bulk.start", json!({"operationId":"fenced","attemptId":"A","type":"delete","scope":{"keys":[]}})).await
+        });
+        for _ in 0..200 {
+            if state.bulk.lock().unwrap().admission_receipt("fenced", "A")["state"] == "freezing" { break; }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let fence = tokio::time::timeout(Duration::from_millis(200), handle_request_for_test(&state, "bulk.status", json!({"operationId":"fenced","attemptId":"A","fenceUnstarted":true}))).await.unwrap();
+        assert!(fence.error.is_none());
+        drop(journal);
+        assert!(start.await.unwrap().error.is_some());
+        assert!(state.bulk.lock().unwrap().admission_status().is_none(), "a completed rejected handler cannot retain an initial-status shortcut");
+        assert!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().is_none());
+        // A fence registered before any handler never creates an in-flight claim.
+        state.bulk.lock().unwrap().fence_admission("unseen", "never-started").unwrap();
+        assert!(state.bulk.lock().unwrap().admission_status().is_none());
+        let legacy = json!({"id":"later-legacy","type":"delete","totalUids":[7],"completedUids":[],"status":"deleting"});
+        let saved = handle_request_for_test(&state, "save_pending_operation", json!({"operation":legacy})).await;
+        assert!(saved.error.is_none());
+        let status = handle_request_for_test(&state, "bulk.status", json!({})).await.result.unwrap();
+        assert_eq!(status["pending"]["id"], "later-legacy");
+    }
+
     #[test]
     fn bulk_original_claim_failed_save_invalidates_empty_authority() {
         let dir = tempfile::tempdir().unwrap();
