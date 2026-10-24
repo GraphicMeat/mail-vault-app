@@ -168,11 +168,8 @@ fn local_custody(state: &Arc<DaemonState>, scope: &Scope) -> Option<bool> {
 fn local_ownership_under_lock(state: &Arc<DaemonState>, scope: &Scope, expected_sha256: Option<&str>, raw: Option<&[u8]>) -> Result<Option<Receipt>, String> {
     let custody = local_custody(state, scope);
     if custody == Some(false) { return Ok(None); }
-    let mut candidates = match app_db::with(&state.app_dir, |c| compose_receipts::load(c, scope)) {
-        Ok(receipts) => receipts,
-        Err(e) if custody == Some(true) && raw.is_some() => { warn!("[send:receipt_read_fail] error={}", e); Vec::new() }
-        Err(e) => return Err(e),
-    };
+    // Unreadable native history is unknown, never a successfully empty lookup.
+    let mut candidates = app_db::with(&state.app_dir, |c| compose_receipts::load(c, scope))?;
     if let Some(digest) = expected_sha256 { candidates.retain(|r| r.identity.sha256 == digest); }
     if candidates.len() > 1 { return Ok(None); }
     Ok(match (candidates.pop(), raw) {
@@ -587,6 +584,71 @@ mod tests {
         let cleaned = proof_of(&s, &staged, None).unwrap();
         assert_eq!(cleaned.state, State::Cleaned); assert_eq!(cleaned.identity, original.identity);
         assert!(server.commands().is_empty());
+    }
+
+    fn replace_receipt_record(s: &Arc<DaemonState>, proof: &Receipt, text: &str) {
+        app_db::with(&s.app_dir, |c| {
+            let n = c.execute("UPDATE meta SET value = ?1 WHERE value = ?2", rusqlite::params![text, serde_json::to_string(proof).unwrap()]).map_err(|e| e.to_string())?;
+            assert_eq!(n, 1, "the actual native receipt was changed");
+            Ok(())
+        }).unwrap();
+    }
+
+    #[tokio::test]
+    async fn receipt_unreadable_malformed_history_is_never_an_empty_lookup() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let original = proof_of(&s, &staged, None).unwrap();
+        replace_receipt_record(&s, &original, "{broken");
+        let read = with_local_ownership(&s, &original.identity.scope, None, |_, p, _| Ok(p));
+        assert!(matches!(read, Err(_) | Ok(None)), "normal custody must not convert unreadable native history into empty history");
+    }
+
+    #[tokio::test]
+    async fn receipt_unreadable_future_history_is_never_an_empty_lookup() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let original = proof_of(&s, &staged, None).unwrap();
+        let mut future = original.clone(); future.version = 999;
+        replace_receipt_record(&s, &original, &serde_json::to_string(&future).unwrap());
+        let read = with_local_ownership(&s, &original.identity.scope, None, |_, p, _| Ok(p));
+        assert!(matches!(read, Err(_) | Ok(None)), "a future native record is unresolved despite readable custody and current bytes");
+    }
+
+    #[tokio::test]
+    async fn receipt_unreadable_two_digest_history_cannot_choose_todays_bytes() {
+        let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let original = proof_of(&s, &staged, None).unwrap();
+        let uid = original.identity.scope.uid;
+        let mut later = raw_of(&s, uid); later.extend_from_slice(b"NATIVE SECOND DIGEST");
+        with_mailbox_write(&s, "acct-1", "Sent", |root| {
+            vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &later, &["draft".into(), "seen".into()], true)?;
+            persist_present(&s, "acct-1", "Sent", uid, &later).ok_or("native replacement has no identity")?;
+            Ok(())
+        }).unwrap();
+        assert_eq!(persisted_receipts(&s).len(), 2, "native digests are distinguishable before corruption");
+        assert!(proof_of(&s, &staged, None).is_none(), "readable digest history already refuses ambiguous originals");
+        replace_receipt_record(&s, &original, "{broken");
+        let read = with_local_ownership(&s, &original.identity.scope, None, |_, p, _| Ok(p));
+        assert!(matches!(read, Err(_) | Ok(None)), "an unreadable sibling digest must not let today's bytes choose the original");
+    }
+
+    #[tokio::test]
+    async fn receipt_unreadable_history_never_sends_same_mid_replacement_bytes() {
+        plaintext(); let server = MockImap::start(Scenario::new()); let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let original = proof_of(&s, &staged, None).unwrap();
+        let uid = original.identity.scope.uid;
+        let mut foreign = raw_of(&s, uid); foreign.extend_from_slice(b"FOREIGN SAME MID");
+        with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &foreign, &["seen".into()], true)).unwrap();
+        assert!(proof_of(&s, &staged, None).is_none(), "the valid original receipt already refuses replacement bytes");
+        replace_receipt_record(&s, &original, "{broken");
+        let sent = ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({}))).await;
+        assert_eq!(sent["success"], true, "unresolved local proof does not fail transport that succeeded");
+        assert_ne!(server.sent_messages()[0], foreign, "same MID plus custody cannot send an unproved replacement");
+        assert_eq!(raw_of(&s, uid), foreign, "the unproved replacement is preserved");
+        assert_ne!(sent["entry"]["uid"], staged["uid"]);
     }
 
     #[tokio::test]
