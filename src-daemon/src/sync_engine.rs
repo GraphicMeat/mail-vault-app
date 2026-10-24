@@ -246,6 +246,7 @@ impl SyncEngine {
             contacts: Arc::clone(&self.contacts),
             db: self.custody_db.lock().unwrap_or_else(|p| p.into_inner()).clone(),
             app_dir: self.app_dir.clone(),
+            source_identity: None,
         }
     }
 
@@ -686,11 +687,16 @@ impl SyncEngine {
         announce: bool,
     ) -> Result<SyncDelta, String> {
         let account_id = &account.id;
+        let io = self.cache_ctx(account_id, mailbox);
+        let config = account.imap_config.clone();
+        let seed = cache_io(&io, move |io| io.native_seed(&config)).await?;
 
         let (total, uid_validity, server_uid_next, highest_modseq) =
             imap::check_mailbox_status(session, mailbox, has_condstore).await?;
 
-        let io = self.cache_ctx(account_id, mailbox);
+        let io = io.for_source(&account.imap_config, uid_validity);
+        let selected_identity = imap::NativeHeaderIdentity::new(&account.imap_config, account_id, mailbox, uid_validity);
+        let native_owner_ok = seed.expected == serde_json::json!(selected_identity);
         let (cached, sidecar_count) = cache_io(&io, |io| Ok(io.meta_and_count())).await?;
 
         let uid_validity_ok = match (cached.as_ref().and_then(|c| c.uid_validity), uid_validity) {
@@ -702,7 +708,7 @@ impl SyncEngine {
         // the cold-path gate and the delta arithmetic below cannot disagree
         // about which UIDNEXT a legacy cache has.
         let cached_uid_next = cached.as_ref().and_then(|c| c.sync_uid_next.or(c.uid_next));
-        let can_delta = sidecar_count > 0 && uid_validity_ok && cached_uid_next.is_some();
+        let can_delta = sidecar_count > 0 && uid_validity_ok && native_owner_ok && cached_uid_next.is_some();
 
         // ── Cold path: no usable cache — fetch the first page ──
         if !can_delta {
@@ -718,15 +724,17 @@ impl SyncEngine {
                     "[sync] UIDVALIDITY changed for {} ({}) — clearing {} cached sidecars",
                     account.email, mailbox, sidecar_count
                 );
-                cache_io(&io, |io| io.wipe()).await?;
+                // Replacement is committed with the fetched batch and its prefetch seed.
                 None
             };
-            let (headers, _total, _has_more, _skipped) =
-                imap::fetch_emails_page(session, mailbox, 1, 500).await?;
+            let ((headers, _total, _has_more, _skipped), fetched_validity) =
+                imap::fetch_emails_page_bound(session, mailbox, 1, 500).await?;
+            if fetched_validity != uid_validity { return Err("errors.bulkIdentityChanged".into()); }
             let new_emails = headers.len();
             cache_io(&io, move |io| {
-                io.write_meta(total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile, Some(total))?;
-                io.write_headers(&headers)
+                io.write_bound_headers(&headers, &seed, fetched_validity)?;
+                let identity = imap::NativeHeaderIdentity { uid_validity: fetched_validity, ..seed.identity };
+                io.write_meta_for(total, fetched_validity, server_uid_next, highest_modseq, preserved_reconcile, Some(total), Some(&identity))
             })
             .await?;
             info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
@@ -754,20 +762,25 @@ impl SyncEngine {
 
         // 1. New arrivals — UIDs at or above the last known UIDNEXT.
         let mut new_headers = Vec::new();
+        let mut fetched_validity = uid_validity;
         if server_next > cached_uid_next {
             let gap = server_next - cached_uid_next;
             if gap > MAX_DELTA_UID_GAP {
                 // Too far behind for a range fetch to be cheaper than a page.
-                let (headers, _t, _h, _s) =
-                    imap::fetch_emails_page(session, mailbox, 1, 500).await?;
+                let ((headers, _t, _h, _s), validity) =
+                    imap::fetch_emails_page_bound(session, mailbox, 1, 500).await?;
+                fetched_validity = validity;
                 new_headers = headers;
             } else {
                 let uids: Vec<u32> = (cached_uid_next..server_next).collect();
-                let (headers, _t) =
-                    imap::fetch_headers_by_uids(session, mailbox, &uids).await?;
+                let ((headers, _t), validity) =
+                    imap::fetch_headers_by_uids_bound(session, mailbox, &uids).await?;
+                fetched_validity = validity;
                 new_headers = headers;
             }
         }
+
+        if fetched_validity != uid_validity { return Err("errors.bulkIdentityChanged".into()); }
 
         // Of those, the ones that are really a DELIVERY. Two things disqualify
         // a fetched header: it sits below the baseline (the page fetched for a
@@ -795,7 +808,8 @@ impl SyncEngine {
         let announced = announce && arrivals > 0;
         if announced {
             let headers = new_headers.clone();
-            cache_io(&io, move |io| io.write_headers(&headers)).await?;
+            let seed = seed.clone();
+            cache_io(&io, move |io| io.write_bound_headers(&headers, &seed, fetched_validity)).await?;
             self.note_change(account_id, mailbox, arrivals, 0);
         }
 
@@ -931,11 +945,11 @@ impl SyncEngine {
 
         let new_count = new_headers.len();
         cache_io(&io, move |io| {
-            io.write_meta(total, uid_validity, server_uid_next, highest_modseq, reconciled_at, sync_total)?;
-            if new_headers.is_empty() || announced {
-                return Ok(());
+            if !new_headers.is_empty() && !announced {
+                io.write_bound_headers(&new_headers, &seed, fetched_validity)?;
             }
-            io.write_headers(&new_headers)
+            let identity = imap::NativeHeaderIdentity { uid_validity: fetched_validity, ..seed.identity };
+            io.write_meta_for(total, fetched_validity, server_uid_next, highest_modseq, reconciled_at, sync_total, Some(&identity))
         })
         .await?;
 
@@ -1070,14 +1084,15 @@ impl SyncEngine {
             return Ok(0);
         }
 
-        let (headers, _total) = imap::fetch_headers_by_uids(session, mailbox, &holes).await?;
+        let ((headers, _total), validity) = imap::fetch_headers_by_uids_bound(session, mailbox, &holes).await?;
+        let identity = imap::NativeHeaderIdentity::new(&account.imap_config, &account.id, mailbox, validity);
         let owed = self.owed_uids(&account.id, mailbox).await?;
         let wanted: HashSet<u32> = holes.iter().copied().filter(|uid| !owed.contains(uid)).collect();
         let headers: Vec<ImapEmailHeader> = headers.into_iter().filter(|h| wanted.contains(&h.uid)).collect();
         if headers.is_empty() {
             return Ok(0);
         }
-        let restored = cache_io(io, move |io| io.restore(&headers)).await?;
+        let restored = cache_io(io, move |io| io.restore_bound(&headers, &identity)).await?;
         if !restored.is_empty() {
             info!(
                 "[sync] Restored {} header rows the server still lists for {} ({}): {:?}",
@@ -1268,14 +1283,16 @@ impl SyncEngine {
 
         let mut written = 0usize;
         for chunk in missing.chunks(BACKFILL_CHUNK) {
-            let (headers, _total) =
-                imap::fetch_headers_by_uids(session, mailbox, chunk).await?;
+            let config = account.imap_config.clone();
+            let seed = cache_io(&io, move |io| io.native_seed(&config)).await?;
+            let ((headers, _total), validity) =
+                imap::fetch_headers_by_uids_bound(session, mailbox, chunk).await?;
             if headers.is_empty() {
                 warn!("[backfill] Empty response for a {}-UID chunk — stopping", chunk.len());
                 break;
             }
             let chunk_len = headers.len();
-            cache_io(&io, move |io| io.write_headers(&headers)).await?;
+            cache_io(&io, move |io| io.write_bound_headers(&headers, &seed, validity)).await?;
             written += chunk_len;
             info!(
                 "[backfill] {} ({}): {}/{} headers cached",
@@ -1300,6 +1317,18 @@ impl SyncEngine {
 // the classification walk off the worker threads).
 
 #[derive(Clone)]
+pub(crate) struct NativeBatchSeed {
+    identity: imap::NativeHeaderIdentity,
+    expected: serde_json::Value,
+}
+
+impl NativeBatchSeed {
+    pub(crate) fn matches(&self, identity: &imap::NativeHeaderIdentity) -> bool {
+        self.expected == serde_json::json!(identity)
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct CacheCtx {
     vault_closed: Arc<AtomicBool>,
     vault_gate: Arc<std::sync::RwLock<()>>,
@@ -1309,9 +1338,16 @@ pub(crate) struct CacheCtx {
     db: Option<Arc<mailvault_core::custody::SharedConn>>,
     /// Where the classifications live: mail the server lost leaves Cleanup.
     app_dir: PathBuf,
+    source_identity: Option<imap::NativeHeaderIdentity>,
 }
 
 impl CacheCtx {
+    pub(crate) fn for_source(&self, config: &ImapConfig, validity: Option<u32>) -> Self {
+        let mut io = self.clone();
+        io.source_identity = Some(imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, validity));
+        io
+    }
+
     /// Times the custody lock like `custody::with_conn` does: this holds the
     /// same connection directly.
     #[track_caller]
@@ -1325,6 +1361,30 @@ impl CacheCtx {
         drop(guard);
         crate::custody::note_lock_timing(caller, asked, acquired);
         result
+    }
+
+    /// The publication expectation is observed before FETCH, never repaired after it.
+    pub(crate) fn native_seed(&self, config: &ImapConfig) -> Result<NativeBatchSeed, String> {
+        let expected = self.with_db(|conn| {
+            let meta = mailvault_core::custody::cache::load_meta(conn, &self.account, &self.mailbox)?;
+            let meta = meta.map(|s| serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string())).transpose()?;
+            let expected = meta.as_ref().and_then(|v| v.get("nativeIdentity")).cloned().unwrap_or(serde_json::Value::Null);
+            if !expected.is_null() { serde_json::from_value::<imap::NativeHeaderIdentity>(expected.clone()).map_err(|e| e.to_string())?; }
+            Ok(expected)
+        })?.ok_or("errors.bulkIdentityUncertain")?;
+        Ok(NativeBatchSeed { identity: imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, None), expected })
+    }
+
+    pub(crate) fn write_bound_headers(&self, headers: &[ImapEmailHeader], seed: &NativeBatchSeed, validity: Option<u32>) -> Result<(), String> {
+        self.vault_open()?;
+        let mut identity = seed.identity.clone();
+        identity.uid_validity = validity;
+        let value = serde_json::json!({"emails": headers, "nativeIdentity": identity, "nativeExpectedIdentity": seed.expected});
+        let now = mailvault_core::people::model::now_ms();
+        let added = self.with_db(|conn| mailvault_core::custody::cache::save_headers_reporting_new(conn, &self.account, &self.mailbox, &value.to_string(), now))?.ok_or("errors.bulkIdentityUncertain")?;
+        let written: Vec<_> = headers.iter().filter(|h| added.contains(&h.uid)).cloned().collect();
+        self.contacts.observe_headers(&self.account, &self.mailbox, &written);
+        Ok(())
     }
 
     /// Everything a sync step needs to know about what is already cached.
@@ -1360,7 +1420,17 @@ impl CacheCtx {
         &self,
         f: impl FnOnce(&mailvault_core::custody::Connection) -> Result<T, String>,
     ) -> Result<T, String> {
-        self.with_db(f)?
+        self.with_db(|conn| {
+            if let Some(source) = &self.source_identity {
+                let meta = mailvault_core::custody::cache::load_meta(conn, &self.account, &self.mailbox)?;
+                let meta = meta.map(|s| serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string())).transpose()?;
+                if let Some(current) = meta.as_ref().and_then(|v| v.get("nativeIdentity")).filter(|v| !v.is_null()) {
+                    let current: imap::NativeHeaderIdentity = serde_json::from_value(current.clone()).map_err(|e| e.to_string())?;
+                    if &current != source { return Err("errors.bulkIdentityChanged".into()); }
+                }
+            }
+            f(conn)
+        })?
             .ok_or_else(|| "custody store is not open — nothing to cache into".to_string())
     }
 
@@ -1373,11 +1443,15 @@ impl CacheCtx {
         last_reconcile: Option<u64>,
         sync_total: Option<u32>,
     ) -> Result<(), String> {
+        self.write_meta_for(total, uid_validity, uid_next, highest_modseq, last_reconcile, sync_total, None)
+    }
+
+    pub(crate) fn write_meta_for(&self, total: u32, uid_validity: Option<u32>, uid_next: Option<u32>, highest_modseq: Option<u64>, last_reconcile: Option<u64>, sync_total: Option<u32>, identity: Option<&imap::NativeHeaderIdentity>) -> Result<(), String> {
         self.vault_open()?;
         // `syncTotalEmails` is the daemon's own copy of EXISTS. `None` writes a
         // JSON null, which the meta merge skips — the stored baseline survives
         // a sync that could not account for the count it just saw.
-        let value = serde_json::json!({
+        let mut value = serde_json::json!({
             "totalEmails": total, "uidValidity": uid_validity, "uidNext": uid_next,
             "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
             "syncTotalEmails": sync_total, "syncUidNext": uid_next,
@@ -1387,6 +1461,7 @@ impl CacheCtx {
             // trigger, never by the expunge gate's arithmetic) restarts.
             mailvault_core::custody::cache::APP_REMOVED_SINCE_SYNC: sync_total.map(|_| 0),
         });
+        if let Some(identity) = identity { value["nativeIdentity"] = serde_json::json!(identity); }
         self.require_db(|conn| {
             mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())
         })
@@ -1412,15 +1487,15 @@ impl CacheCtx {
     /// The hole heal's write: only uids with no row are written (a row written
     /// since the fetch is newer), and the meta is left alone. Returns the uids
     /// written.
-    fn restore(&self, headers: &[ImapEmailHeader]) -> Result<Vec<u32>, String> {
+    fn restore_bound(&self, headers: &[ImapEmailHeader], identity: &imap::NativeHeaderIdentity) -> Result<Vec<u32>, String> {
         self.vault_open()?;
         let rows = match serde_json::to_value(headers).map_err(|e| e.to_string())? {
             serde_json::Value::Array(rows) => rows,
             _ => return Ok(Vec::new()),
         };
-        let restored = self.require_db(|conn| {
-            mailvault_core::custody::cache::restore_missing_headers(conn, &self.account, &self.mailbox, &rows)
-        })?;
+        let restored = self.with_db(|conn| {
+            mailvault_core::custody::cache::restore_missing_headers_bound(conn, &self.account, &self.mailbox, &rows, identity)
+        })?.ok_or("errors.bulkIdentityUncertain")?;
         if !restored.is_empty() {
             let written: Vec<ImapEmailHeader> =
                 headers.iter().filter(|h| restored.contains(&h.uid)).cloned().collect();
@@ -1674,6 +1749,7 @@ mod tests {
             contacts: ContactsState::new(dir.to_path_buf()),
             db: Some(Arc::new(std::sync::Mutex::new(Some(conn)))),
             app_dir: dir.to_path_buf(),
+            source_identity: None,
         }
     }
 
@@ -2469,6 +2545,28 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn native_batch_sync_seed_rejects_late_origin_rows_and_mutations() {
+        let dir = scratch_dir("native_seed");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let engine = engine_for(&dir);
+        let account = account_for(&server);
+        let io = engine.cache_ctx("acc1", "INBOX");
+        let a = io.native_seed(&account.imap_config).unwrap();
+        let mut config_b = account.imap_config.clone();
+        config_b.port = Some(server.port() + 1);
+        let b = io.native_seed(&config_b).unwrap();
+        io.write_bound_headers(&[test_header(8)], &b, Some(1)).unwrap();
+        assert!(io.write_bound_headers(&[test_header(7)], &a, Some(1)).is_err());
+        let old = io.for_source(&account.imap_config, Some(1));
+        assert!(old.patch_flags(&[(8, vec!["\\Seen".into()])]).is_err());
+        assert!(old.remove(&[8]).is_err());
+        assert!(io.cached_uids().contains(&8));
+        assert!(!io.cached_uids().contains(&7));
+        assert!(io.native_seed(&config_b).unwrap().matches(&imap::NativeHeaderIdentity::new(&config_b, "acc1", "INBOX", Some(1))));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn a_cold_sync_caches_every_header_and_its_meta() {
         let dir = scratch_dir("cold_cache");
@@ -2480,6 +2578,8 @@ mod tests {
         assert_eq!(result.new_emails, 30);
 
         assert_eq!(cached_count(&engine, "INBOX"), 30);
+        let proof = engine.cache_ctx("acc1", "INBOX").native_seed(&account_for(&server).imap_config).unwrap();
+        assert!(proof.matches(&imap::NativeHeaderIdentity::new(&account_for(&server).imap_config, "acc1", "INBOX", Some(1))));
         let meta = cached_meta(&engine, "INBOX");
         assert_eq!(meta.total_emails, Some(30));
         assert_eq!(meta.uid_next, Some(31));

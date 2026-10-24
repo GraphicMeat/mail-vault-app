@@ -219,7 +219,7 @@ export async function listGraphMessages(accountId, mailbox, account, folderId, {
   const headers = await _allocateGraphUids(
     accountId, mailbox, result.headers || [], result.graphMessageIds || []
   );
-  return { ...result, headers: bindNativeRows(headers, result.nativeIdentity, accountId, mailbox) };
+  return { ...result, headers: bindNativeRows(headers, result.nativeIdentity, accountId, mailbox, result.nativeExpectedIdentity) };
 }
 
 /**

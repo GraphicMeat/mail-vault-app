@@ -5,20 +5,25 @@ export function nativeIdentityOf(value, accountId, mailbox) {
   return Object.freeze({ accountId, mailbox, uidValidity: value.uidValidity ?? null, originHash: value.originHash });
 }
 
-export function bindNativeRows(rows, identity, accountId, mailbox) {
+export function bindNativeRows(rows, identity, accountId, mailbox, expected) {
   const proof = nativeIdentityOf(identity, accountId, mailbox);
   return (rows || []).map(row => {
     // A retained row already has its own association. A fresh batch cannot adopt it.
     const original = row._nativeIdentity
       ? nativeIdentityOf(row._nativeIdentity, accountId, mailbox) : proof;
-    return original ? { ...row, _nativeIdentity: original } : row;
+    if (!original) return row;
+    const bound = { ...row, _nativeIdentity: original };
+    if (!row._nativeIdentity && expected !== undefined) {
+      bound._nativeExpectedIdentity = expected === null ? null : nativeIdentityOf(expected, accountId, mailbox);
+    }
+    return bound;
   });
 }
 
 export function bindNativeBatch(batch, accountId, mailbox) {
   if (!batch) return batch;
   const nativeIdentity = nativeIdentityOf(batch.nativeIdentity, accountId, mailbox);
-  return { ...batch, nativeIdentity, emails: bindNativeRows(batch.emails, nativeIdentity, accountId, mailbox) };
+  return { ...batch, nativeIdentity, emails: bindNativeRows(batch.emails, nativeIdentity, accountId, mailbox, batch.nativeExpectedIdentity) };
 }
 
 export function coherentNativeIdentity(rows, accountId, mailbox) {

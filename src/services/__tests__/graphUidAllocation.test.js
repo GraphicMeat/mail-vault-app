@@ -84,6 +84,17 @@ describe('Graph uid allocation (JS side)', () => {
     clearGraphIdMap(ACCT);
   });
 
+  it('keeps actual provider ID and native origin after UID allocation', async () => {
+    serve(['actual-provider-id']);
+    const proof = { accountId: ACCT, mailbox: 'INBOX', uidValidity: null, originHash: 'native-graph-origin' };
+    h.listing.nativeIdentity = proof;
+    h.listing.nativeExpectedIdentity = null;
+    const { headers } = await listGraphMessages(ACCT, 'INBOX', { id: ACCT }, 'folder-id');
+    expect(headers[0]._graphId).toBe('actual-provider-id');
+    expect(headers[0]._nativeIdentity).toEqual(proof);
+    expect(headers[0]._nativeExpectedIdentity).toBeNull();
+  });
+
   it('stamps uid, seq and the Graph id from the allocator, in listing order', async () => {
     serve(['a', 'b', 'c']);
     const { headers } = await listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');

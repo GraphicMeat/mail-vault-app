@@ -34,3 +34,31 @@ describe('original native cache batches', () => {
     expect(rows).toEqual([{ uid: 7, _nativeIdentity: proof }]);
   });
 });
+
+it('saves a coherent row generation instead of a separate STATUS sample', async () => {
+  send.mockResolvedValue(null);
+  await db.saveEmailHeaders('a', 'INBOX', [{ uid: 7, _nativeIdentity: proof, _nativeExpectedIdentity: null }], 1, { uidValidity: 99 });
+  const payload = JSON.parse(send.mock.calls.find(([cmd]) => cmd === 'save_email_cache')[1].data);
+  expect(payload.uidValidity).toBe(7);
+  expect(payload.nativeIdentity).toEqual(proof);
+  expect(payload.nativeExpectedIdentity).toBeNull();
+});
+
+it('does not give a mixed retained row set one current batch proof', async () => {
+  send.mockResolvedValue(null);
+  await db.saveEmailHeaders('a', 'INBOX', [{ uid: 6, _nativeIdentity: { ...proof, uidValidity: 6 } }, { uid: 7, _nativeIdentity: proof }], 2);
+  const payload = JSON.parse(send.mock.calls.find(([cmd]) => cmd === 'save_email_cache')[1].data);
+  expect(payload.nativeIdentity).toBeNull();
+});
+
+it('keeps original proof and prefetch expectation on the ingested row', async () => {
+  send.mockResolvedValue({ emails: [{ uid: 7 }], nativeIdentity: proof, nativeExpectedIdentity: null });
+  const batch = await db.getEmailHeaders('a', 'INBOX');
+  expect(batch.emails[0]._nativeExpectedIdentity).toBeNull();
+  const { UidMap } = await import('../UidMap.js');
+  const map = new UidMap();
+  map.merge(batch.emails);
+  map.merge([{ uid: 8, source: 'server', _nativeIdentity: { ...proof, uidValidity: 8 } }]);
+  expect(map.get(7)._nativeIdentity).toEqual(proof);
+  expect(map.get(8)._nativeIdentity.uidValidity).toBe(8);
+});

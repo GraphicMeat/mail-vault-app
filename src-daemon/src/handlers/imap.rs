@@ -383,6 +383,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let page = opt_u32_arg(params, "page").unwrap_or(1);
             let limit = opt_u32_arg(params, "limit").unwrap_or(200);
             let origin = imap::NativeHeaderIdentity::new(&account, params["account"]["id"].as_str().unwrap_or(""), &mailbox, None);
+            let expected = crate::handlers::cache::native_header_seed(state, &origin.account_id, &mailbox).await;
             let result = with_background(&state.imap_pool, &account, |mut session| async move {
                 let result = imap::fetch_emails_page_bound(&mut session, &mailbox, page, limit)
                     .await
@@ -393,11 +394,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             match result {
                 Ok(((emails, total, has_more, skipped_uids), validity)) => RpcResponse::success(
                     id,
-                    json!({
+                    crate::handlers::cache::with_native_expectation(json!({
                         "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }, "uidValidity": validity,
                         "success": true, "emails": emails, "total": total, "page": page,
                         "limit": limit, "hasMore": has_more, "skippedUids": skipped_uids,
-                    }),
+                    }), expected),
                 ),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
@@ -463,13 +464,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
             let origin = imap::NativeHeaderIdentity::new(&account, params["account"]["id"].as_str().unwrap_or(""), &mailbox, None);
+            let expected = crate::handlers::cache::native_header_seed(state, &origin.account_id, &mailbox).await;
             let result = with_background(&state.imap_pool, &account, |mut session| async move {
                 let result = imap::fetch_headers_by_uids_bound(&mut session, &mailbox, &uids).await?;
                 Ok((result, session, Some(mailbox)))
             })
             .await;
             match result {
-                Ok(((emails, total), validity)) => RpcResponse::success(id, json!({"emails": emails, "total": total, "uidValidity": validity, "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }})),
+                Ok(((emails, total), validity)) => RpcResponse::success(id, crate::handlers::cache::with_native_expectation(json!({"emails": emails, "total": total, "uidValidity": validity, "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }}), expected)),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
@@ -654,6 +656,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let filters: SearchFilters =
                 params.get("filters").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
             let origin = imap::NativeHeaderIdentity::new(&account, params["account"]["id"].as_str().unwrap_or(""), &mailbox, None);
+            let expected = crate::handlers::cache::native_header_seed(state, &origin.account_id, &mailbox).await;
             let result = with_background(&state.imap_pool, &account, |mut session| async move {
                 let search = imap::ServerSearch { query: query.as_deref(), from: filters.from.as_deref(), subject: filters.subject.as_deref(), since: filters.since.as_deref(), before: filters.before.as_deref(), ..Default::default() };
                 let result = imap::search_emails_bound(&mut session, &mailbox, &search).await?;
@@ -661,7 +664,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             })
             .await;
             match result {
-                Ok(((emails, total, _), validity)) => RpcResponse::success(id, json!({"uidValidity": validity, "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }, "success": true, "emails": emails, "total": total})),
+                Ok(((emails, total, _), validity)) => RpcResponse::success(id, crate::handlers::cache::with_native_expectation(json!({"uidValidity": validity, "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }, "success": true, "emails": emails, "total": total}), expected)),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
@@ -999,6 +1002,20 @@ mod tests {
         assert_eq!(result["uidValidity"], json!(1));
         assert_eq!(result["nativeIdentity"]["mailbox"], json!("INBOX"));
         assert_eq!(result["nativeIdentity"]["originHash"].as_str().map(str::len), Some(64));
+    }
+
+    #[tokio::test]
+    async fn native_batch_uses_its_own_select_not_an_earlier_status() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let s = st(true);
+        let account = account_json(&server);
+        let status = call(&s, "imap_check_mailbox_status", json!({"account": account, "mailbox": "INBOX"})).await.result.unwrap();
+        assert_eq!(status["uidValidity"], 1);
+        server.mutate(|state| state.mailboxes[0].uid_validity = 42);
+        let batch = call(&s, "imap_get_emails", json!({"account": account, "mailbox": "INBOX"})).await.result.unwrap();
+        assert_eq!(batch["nativeIdentity"]["uidValidity"], 42);
+        assert_eq!(batch["uidValidity"], 42);
     }
 
     #[tokio::test]

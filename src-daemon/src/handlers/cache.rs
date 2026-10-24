@@ -117,12 +117,49 @@ pub(crate) fn load_mailbox_listing(state: &Arc<DaemonState>, account_id: &str) -
     Ok(Some(data))
 }
 
+/// Snapshot the existing batch identity before network IO. `None` means the
+/// expectation could not be read; `Some(Null)` is an observed legacy/empty cache.
+pub(crate) async fn native_header_seed(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Option<Value> {
+    if account_id.is_empty() { return None; }
+    let (state, account_id, mailbox) = (state.clone(), account_id.to_owned(), mailbox.to_owned());
+    blocking(move || daemon_custody::with_conn(&state, |c| {
+        let meta = sql_cache::load_meta(c, &account_id, &mailbox)?;
+        let Some(meta) = meta else { return Ok(Value::Null) };
+        let meta: Value = serde_json::from_str(&meta).map_err(|e| e.to_string())?;
+        match meta.get("nativeIdentity").filter(|p| !p.is_null()) {
+            Some(identity) => {
+                let identity: mailvault_core::imap::NativeHeaderIdentity = serde_json::from_value(identity.clone()).map_err(|e| e.to_string())?;
+                serde_json::to_value(identity).map_err(|e| e.to_string())
+            }
+            None => Ok(Value::Null),
+        }
+    })).await.ok()?.ok()
+}
+
+pub(crate) fn with_native_expectation(mut batch: Value, expected: Option<Value>) -> Value {
+    if let Some(expected) = expected { batch["nativeExpectedIdentity"] = expected; }
+    batch
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "save_email_cache" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let data = req!(str_arg(&id, params, "data"));
+            if let Ok(batch) = serde_json::from_str::<Value>(&data) {
+                if let Some(proof) = batch.get("nativeIdentity").filter(|p| !p.is_null()) {
+                    if batch.get("emails").and_then(Value::as_array).is_some_and(|rows| rows.iter().any(|row| row.get("_nativeIdentity") != Some(proof))) {
+                        return Some(RpcResponse::error(id, crate::ipc::INVALID_PARAMS, "errors.bulkIdentityUncertain"));
+                    }
+                    let current = crate::credentials::resolve_account_credentials_quiet(&account_id).await;
+                    match current {
+                        Ok(config) if proof["originHash"].as_str() == Some(mailvault_core::bulk_worker::origin_hash(&config).as_str()) => {},
+                        Ok(_) => return Some(RpcResponse::error(id, crate::ipc::INTERNAL_ERROR, "errors.bulkIdentityChanged")),
+                        Err(_) => return Some(RpcResponse::error(id, crate::ipc::INTERNAL_ERROR, "errors.bulkIdentityUncertain")),
+                    }
+                }
+            }
             let state = Arc::clone(state);
             done(
                 id,
@@ -451,12 +488,39 @@ mod tests {
     async fn native_batch_by_uid_envelope_is_coherent_and_additive() {
         let (_t, s) = st(true);
         let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "original"});
-        crate::custody::with_conn(&s, |c| sql_cache::save_headers(c, "a", "INBOX", &json!({"nativeIdentity": proof, "emails": [{"uid": 7}]}).to_string())).unwrap();
+        crate::custody::with_conn(&s, |c| sql_cache::save_headers(c, "a", "INBOX", &json!({"nativeIdentity": proof, "nativeExpectedIdentity": null, "emails": [{"uid": 7}]}).to_string())).unwrap();
         let envelope = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7], "envelope": true})).await.result.unwrap();
         assert_eq!(envelope["nativeIdentity"], proof);
         assert_eq!(envelope["emails"][0]["uid"], 7);
         let old = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7]})).await.result.unwrap();
         assert!(old.is_array());
+    }
+
+    #[tokio::test]
+    async fn native_batch_rpc_rejects_endpoint_edits_but_allows_secret_refresh() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let (_t, s) = st(true);
+        let path = s.app_dir.join("native-batch-credentials.json");
+        let mut record = json!({"id": "a", "email": "me@example.test", "imapHost": "host.example.test", "imapPort": 993, "password": "first"});
+        let store = |record: &Value| std::fs::write(&path, json!({"a": record.to_string()}).to_string()).unwrap();
+        store(&record);
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let config = serde_json::from_value(record.clone()).unwrap();
+        let proof = json!(mailvault_core::imap::NativeHeaderIdentity::new(&config, "a", "INBOX", Some(7)));
+        let payload = |uid| json!({"nativeIdentity": proof, "nativeExpectedIdentity": null, "emails": [{"uid": uid, "_nativeIdentity": proof}]}).to_string();
+        let first = call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": payload(7)})).await;
+        record["password"] = json!("refreshed");
+        store(&record);
+        let secret = call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": payload(8)})).await;
+        record["imapPort"] = json!(1993);
+        store(&record);
+        let edited = call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": payload(9)})).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(first.error.is_none(), "{first:?}");
+        assert!(secret.error.is_none(), "{secret:?}");
+        assert!(edited.error.is_some());
+        let rows = crate::custody::with_conn(&s, |c| sql_cache::uid_set(c, "a", "INBOX")).unwrap();
+        assert_eq!(rows, std::collections::HashSet::from([7, 8]));
     }
 
     /// The list's preview line rides on the rows the list reads, from the

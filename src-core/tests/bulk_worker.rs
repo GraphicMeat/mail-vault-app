@@ -695,3 +695,26 @@ fn reviewed_mirror_proof_uses_raw_bytes_in_both_storage_formats() {
         assert_eq!(std::fs::read(saved.path()).unwrap(), raw);
     }
 }
+
+#[test]
+fn native_header_origin_covers_supported_endpoint_edits() {
+    let base: mailvault_core::imap::ImapConfig = serde_json::from_value(json!({"email":"me@example.test", "imapHost":"host.example.test", "imapPort":993, "imapSecurity":"tls", "password":"first"})).unwrap();
+    let original = bulk_worker::origin_hash(&base);
+    let mut changed = base.clone();
+    changed.port = Some(1993);
+    assert_ne!(bulk_worker::origin_hash(&changed), original);
+    changed = base.clone();
+    changed.security = Some("starttls".into());
+    assert_ne!(bulk_worker::origin_hash(&changed), original);
+    changed = base.clone();
+    changed.password = Some("refresh".into());
+    changed.access_token = Some("refreshed-access".into());
+    assert_eq!(bulk_worker::origin_hash(&changed), original);
+    let mut jmap = base;
+    jmap.jmap_session_url = Some("https://jmap.example.test/session".into());
+    jmap.jmap_auth = Some("basic".into());
+    jmap.jmap_username = Some("original-login".into());
+    let original = bulk_worker::origin_hash(&jmap);
+    jmap.jmap_username = Some("edited-login".into());
+    assert_ne!(bulk_worker::origin_hash(&jmap), original);
+}

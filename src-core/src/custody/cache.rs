@@ -2,7 +2,7 @@
 
 use crate::vault_flags::FlagChange;
 use chrono::DateTime;
-use rusqlite::{params, params_from_iter, Connection};
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
@@ -38,28 +38,51 @@ pub fn save_headers_reporting_new(conn: &Connection, account: &str, mailbox: &st
     let existing: Option<String> = tx.query_row(
         "SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
         params![account, mailbox], |r| r.get(0),
-    ).ok();
-    let mut meta = existing.and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or_else(|| json!({}));
+    ).optional().map_err(err)?;
+    let mut meta = match existing {
+        Some(text) => serde_json::from_str::<Value>(&text).map_err(|e| format!("stored cache metadata: {e}"))?,
+        None => json!({}),
+    };
     let rows = object.get("emails").and_then(Value::as_array);
-    let identity = object.get("nativeIdentity").filter(|v| !v.is_null());
-    if let Some(identity) = identity.filter(|_| rows.is_some()) {
-        // Only the newly fetched coherent batch owns this proof. Never adopt
-        // retained legacy rows or another endpoint/generation's uid space.
-        if meta.get("nativeIdentity") != Some(identity) {
-            clear_headers(&tx, Some(account), Some(mailbox))?;
-            meta = json!({});
+    let decode = |value: Option<&Value>| -> Result<Option<crate::imap::NativeHeaderIdentity>, String> {
+        value.filter(|v| !v.is_null()).map(|v| {
+            let identity: crate::imap::NativeHeaderIdentity = serde_json::from_value(v.clone()).map_err(|_| "errors.bulkIdentityUncertain")?;
+            if identity.account_id != account || identity.mailbox != mailbox || identity.origin_hash.is_empty()
+                || identity.uid_validity == Some(0) { return Err("errors.bulkIdentityUncertain".into()); }
+            Ok(identity)
+        }).transpose()
+    };
+    let current = decode(meta.get("nativeIdentity"))?;
+    let identity = decode(object.get("nativeIdentity"))?;
+    if rows.is_none() && identity.is_some() && current.is_some() && current != identity {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    if rows.is_some() && identity.is_some() && current != identity {
+        // A late response must not reinterpret a cache another origin or SELECT
+        // generation already owns. Missing expectation is different from observed absence.
+        if !object.contains_key("nativeExpectedIdentity") || decode(object.get("nativeExpectedIdentity"))? != current {
+            return Err("errors.bulkIdentityChanged".into());
         }
-    } else if rows.is_some_and(|rows| !rows.is_empty())
+        clear_headers(&tx, Some(account), Some(mailbox))?;
+        meta = json!({});
+    } else if rows.is_some() && identity.is_none() && object.contains_key("nativeExpectedIdentity")
+        && decode(object.get("nativeExpectedIdentity"))? != current {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    if identity.is_none() && rows.is_some_and(|rows| !rows.is_empty())
         || object.get("nativeIdentity").is_some_and(Value::is_null)
-        || object.get("uidValidity").filter(|v| !v.is_null()).is_some_and(|v| meta.get("nativeIdentity").and_then(|p| p.get("uidValidity")).is_some_and(|old| old != v)) {
+        || object.get("uidValidity").filter(|v| !v.is_null()).is_some_and(|v| current.as_ref().is_some_and(|old| v.as_u64() != old.uid_validity.map(u64::from))) {
         meta.as_object_mut().ok_or("stored cache metadata is not an object")?.remove("nativeIdentity");
     }
     let map = meta.as_object_mut().ok_or("stored cache metadata is not an object")?;
     for (key, val) in object {
-        if !matches!(key.as_str(), "emails" | "removedUids" | "accountId" | "mailbox") && !val.is_null()
+        if !matches!(key.as_str(), "emails" | "removedUids" | "accountId" | "mailbox" | "nativeExpectedIdentity") && !val.is_null()
             && (key != "nativeIdentity" || rows.is_some()) {
             map.insert(key.clone(), val.clone());
         }
+    }
+    if rows.is_some() {
+        if let Some(identity) = &identity { map.insert("uidValidity".into(), json!(identity.uid_validity)); }
     }
     let removed = object.get("removedUids").and_then(Value::as_array).filter(|uids| !uids.is_empty());
     // The app's own delete, move or Empty Trash takes rows off the list; the
@@ -87,7 +110,7 @@ pub fn save_headers_reporting_new(conn: &Connection, account: &str, mailbox: &st
         for row in rows {
             let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
             let mut stored_row = row.clone();
-            if let Some(row) = stored_row.as_object_mut() { row.remove("_nativeIdentity"); }
+            if let Some(row) = stored_row.as_object_mut() { row.remove("_nativeIdentity"); row.remove("_nativeExpectedIdentity"); }
             let json = serde_json::to_string(&stored_row).map_err(|e| e.to_string())?;
             // An unchanged header costs one primary-key read and no index work.
             let stored: Option<String> = tx.query_row(
@@ -164,7 +187,7 @@ pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Opti
     let meta: Option<String> = conn.query_row(
         "SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
         params![account, mailbox], |r| r.get(0),
-    ).ok();
+    ).optional().map_err(err)?;
     let count: i64 = conn.query_row(
         "SELECT count(*) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0)
     ).map_err(err)?;
@@ -177,7 +200,7 @@ pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Opti
     let rows = stmt.query_map(params![account, mailbox, take], |r| r.get::<_, String>(0)).map_err(err)?
         .collect::<Result<Vec<_>, _>>().map_err(err)?;
     let emails = rows.into_iter().filter_map(|s| serde_json::from_str::<Value>(&s).ok()).collect::<Vec<_>>();
-    let mut out = meta.and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or_else(|| json!({}));
+    let mut out = match meta { Some(text) => serde_json::from_str::<Value>(&text).map_err(|e| format!("stored cache metadata: {e}"))?, None => json!({}) };
     let map = out.as_object_mut().ok_or("stored cache metadata is not an object")?;
     map.insert("emails".into(), Value::Array(emails));
     map.insert("totalCached".into(), json!(count));
@@ -975,7 +998,20 @@ pub fn remove_headers(conn: &Connection, account: &str, mailbox: &str, uids: &[u
 /// app's `appRemovedSinceSync` tally and every count stay as they are. Returns
 /// the uids actually written.
 pub fn restore_missing_headers(conn: &Connection, account: &str, mailbox: &str, rows: &[Value]) -> Result<Vec<u32>, String> {
+    restore_missing_headers_for(conn, account, mailbox, rows, None)
+}
+
+pub fn restore_missing_headers_bound(conn: &Connection, account: &str, mailbox: &str, rows: &[Value], identity: &crate::imap::NativeHeaderIdentity) -> Result<Vec<u32>, String> {
+    restore_missing_headers_for(conn, account, mailbox, rows, Some(identity))
+}
+
+fn restore_missing_headers_for(conn: &Connection, account: &str, mailbox: &str, rows: &[Value], identity: Option<&crate::imap::NativeHeaderIdentity>) -> Result<Vec<u32>, String> {
     let tx = conn.unchecked_transaction().map_err(err)?;
+    let meta = load_meta(&tx, account, mailbox)?.map(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string())).transpose()?;
+    let current = meta.as_ref().and_then(|v| v.get("nativeIdentity")).filter(|v| !v.is_null())
+        .map(|v| serde_json::from_value::<crate::imap::NativeHeaderIdentity>(v.clone()).map_err(|e| e.to_string())).transpose()?;
+    if identity.is_some() && current.is_some() && current.as_ref() != identity { return Err("errors.bulkIdentityChanged".into()); }
+    let preserve = identity.is_some() && current.as_ref() == identity;
     let mut restored = Vec::new();
     {
         let mut stmt = tx.prepare_cached(
@@ -990,6 +1026,11 @@ pub fn restore_missing_headers(conn: &Connection, account: &str, mailbox: &str, 
                 restored.push(uid);
             }
         }
+    }
+    if !restored.is_empty() && !preserve {
+        let mut meta: Value = load_meta(&tx, account, mailbox)?.map(|s| serde_json::from_str(&s).map_err(|e| e.to_string())).transpose()?.unwrap_or_else(|| json!({}));
+        meta.as_object_mut().ok_or("stored cache metadata is not an object")?.remove("nativeIdentity");
+        tx.execute("UPDATE header_cache_meta SET meta_json=?3 WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox, meta.to_string()]).map_err(err)?;
     }
     tx.commit().map_err(err)?;
     Ok(restored)
@@ -1386,13 +1427,13 @@ mod tests {
         let (_t, c) = store();
         save_headers(&c, "a", "INBOX", &json!({"emails": [{"uid": 1}]}).to_string()).unwrap();
         let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "origin-A"});
-        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "emails": [{"uid": 7}]}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "nativeExpectedIdentity": null, "emails": [{"uid": 7}]}).to_string()).unwrap();
         let got: Value = serde_json::from_str(&load_headers(&c, "a", "INBOX", None, HeaderOrder::Arrival).unwrap().unwrap()).unwrap();
         assert_eq!(got["totalCached"], 1, "unbound retained rows cannot acquire a fresh batch origin");
         assert_eq!(got["nativeIdentity"], proof);
         let mut other = proof.clone();
         other["originHash"] = json!("origin-B");
-        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": other, "emails": [{"uid": 8}]}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": other, "nativeExpectedIdentity": proof, "emails": [{"uid": 8}]}).to_string()).unwrap();
         assert_eq!(uid_set(&c, "a", "INBOX").unwrap(), HashSet::from([8]));
     }
 
@@ -1400,7 +1441,7 @@ mod tests {
     fn native_batch_does_not_bless_unbound_partial_upserts() {
         let (_t, c) = store();
         let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "origin-A"});
-        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "emails": [{"uid": 7}]}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "nativeExpectedIdentity": null, "emails": [{"uid": 7}]}).to_string()).unwrap();
         save_headers(&c, "a", "INBOX", &json!({"uidValidity": 8, "emails": [{"uid": 8}]}).to_string()).unwrap();
         let got: Value = serde_json::from_str(&load_meta(&c, "a", "INBOX").unwrap().unwrap()).unwrap();
         assert!(got.get("nativeIdentity").is_none_or(Value::is_null));
@@ -1434,6 +1475,26 @@ mod tests {
         patch_flags(&c, "a", "INBOX", &[(7, vec!["\\Seen".into()])]).unwrap();
         let meta: Value = serde_json::from_str(&load_meta(&c, "a", "INBOX").unwrap().unwrap()).unwrap();
         assert_eq!(meta["nativeIdentity"], proof);
+    }
+
+    #[test]
+    fn native_batch_empty_count_and_repair_paths_preserve_only_proved_rows() {
+        let (_t, c) = store();
+        let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "origin-A"});
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "nativeExpectedIdentity": null, "emails": []}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"totalEmails": 2}).to_string()).unwrap();
+        let identity = serde_json::from_value(proof.clone()).unwrap();
+        assert_eq!(restore_missing_headers_bound(&c, "a", "INBOX", &[json!({"uid": 7, "subject": "original"})], &identity).unwrap(), [7]);
+        assert!(restore_missing_headers_bound(&c, "a", "INBOX", &[json!({"uid": 7, "subject": "replacement"})], &identity).unwrap().is_empty());
+        let got: Value = serde_json::from_str(&load_headers(&c, "a", "INBOX", None, HeaderOrder::Arrival).unwrap().unwrap()).unwrap();
+        assert_eq!(got["nativeIdentity"], proof);
+        assert_eq!(got["emails"][0]["subject"], "original");
+        restore_missing_headers(&c, "a", "INBOX", &[json!({"uid": 8})]).unwrap();
+        let got: Value = serde_json::from_str(&load_meta(&c, "a", "INBOX").unwrap().unwrap()).unwrap();
+        assert!(got.get("nativeIdentity").is_none());
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "totalEmails": 2}).to_string()).unwrap();
+        let got: Value = serde_json::from_str(&load_meta(&c, "a", "INBOX").unwrap().unwrap()).unwrap();
+        assert!(got.get("nativeIdentity").is_none(), "metadata-only observation cannot bind retained rows");
     }
 
     /// H3b (a): a folder with no header row at all (never opened, backfill

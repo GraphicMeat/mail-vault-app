@@ -335,3 +335,12 @@ describe('loadEmails on a branch listing', () => {
     expect(loadSubtree).not.toHaveBeenCalled();
   });
 });
+
+it('retains the fetch row identity when a later STATUS reports another generation', async () => {
+  primeCold();
+  const proof = Object.freeze({ accountId: ACCOUNT.id, mailbox: 'INBOX', uidValidity: 7, originHash: 'original-native-origin' });
+  mockFetchEmails.mockResolvedValue({ emails: [{ ...mkHeader(7), _nativeIdentity: proof }], total: 1 });
+  mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 99, uidNext: 8 });
+  await useMailStore.getState().loadEmails();
+  expect(useMailStore.getState().emails[0]._nativeIdentity).toBe(proof);
+});

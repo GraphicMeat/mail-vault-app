@@ -87,6 +87,7 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
   const nativeIdentity = coherentNativeIdentity(emails, accountId, mailbox);
   const cacheEntry = {
     nativeIdentity,
+    nativeExpectedIdentity: nativeIdentity ? emails[0]?._nativeExpectedIdentity : undefined,
     accountId,
     mailbox,
     emails,

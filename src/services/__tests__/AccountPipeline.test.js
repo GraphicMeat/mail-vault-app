@@ -166,6 +166,14 @@ describe('AccountPipeline daemon headers', () => {
     syncNow.mockResolvedValue({ started: true, accountId: 'acc-1', mailbox: 'INBOX', ticket: 42 });
   });
 
+  it('keeps the coherent cache envelope rather than combining rows with earlier metadata', async () => {
+    const proof = { accountId: account.id, mailbox: 'INBOX', uidValidity: 7, originHash: 'native-origin' };
+    const batch = { emails: [{ uid: 7, _nativeIdentity: proof }], nativeIdentity: proof, uidValidity: 7, totalEmails: 1 };
+    db.getEmailHeadersMeta.mockResolvedValue({ totalCached: 1, totalEmails: 99, uidValidity: 99 });
+    db.getEmailHeadersPartial.mockResolvedValue(batch);
+    expect(await new AccountPipeline(account)._readDaemonCache('INBOX')).toBe(batch);
+  });
+
   it('a warm cache paints now and reloads when its sync lands', async () => {
     let landSync;
     waitForSync.mockReturnValue(new Promise(r => { landSync = r; }));

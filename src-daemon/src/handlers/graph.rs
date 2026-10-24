@@ -84,6 +84,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     uid_validity: None, origin_hash: origin.into(),
                 })
             });
+            let expected = if let Some(identity) = &native_identity {
+                crate::handlers::cache::native_header_seed(state, &identity.account_id, &identity.mailbox).await
+            } else { None };
             let client = GraphClient::new(&access_token);
             match client.list_messages(&folder_id, top, skip).await {
                 Ok((messages, next_link)) => {
@@ -104,11 +107,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let graph_ids: Vec<String> = messages.iter().map(|m| m.id.clone()).collect();
                     RpcResponse::success(
                         id,
-                        json!({
+                        crate::handlers::cache::with_native_expectation(json!({
                             "headers": headers, "nativeIdentity": native_identity,
                             "nextLink": next_link,
                             "graphMessageIds": graph_ids,
-                        }),
+                        }), expected),
                     )
                 }
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),

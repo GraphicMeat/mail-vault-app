@@ -430,6 +430,7 @@ async fn answer(
         "imap_get_emails" => {
             let account_id = ledger_account(params)?;
             let mailbox = mailbox_param(params);
+            let expected = crate::handlers::cache::native_header_seed(state, &account_id, &mailbox).await;
             let page: u32 = opt_param(params, "page").unwrap_or(1);
             let limit: u32 = opt_param(params, "limit").unwrap_or(200);
             let mailbox_id = acct.mailbox_id(&mailbox).await?;
@@ -440,11 +441,11 @@ async fn answer(
             let mut got = by_id(acct.client.get_emails(&ids, HEADER_PROPS).await?.list);
             let emails: Vec<EmailHeader> =
                 ids.iter().filter_map(|id| Some(to_header(&got.remove(id)?, *uids.get(id)?))).collect();
-            Ok(json!({
+            Ok(crate::handlers::cache::with_native_expectation(json!({
                 "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)), "uidValidity": 1,
                 "success": true, "emails": emails, "total": total, "page": page,
                 "limit": limit, "hasMore": position + ids.len() < total, "skippedUids": Vec::<Option<u32>>::new(),
-            }))
+            }), expected))
         }
 
         "imap_check_mailbox_status" => {
@@ -498,6 +499,7 @@ async fn answer(
         "imap_fetch_headers_by_uids" => {
             let account_id = ledger_account(params)?;
             let mailbox = mailbox_param(params);
+            let expected = crate::handlers::cache::native_header_seed(state, &account_id, &mailbox).await;
             let uids: Vec<u32> = param(params, "uids")?;
             let mb = mailbox_counts(acct, &mailbox).await?;
             let pairs = acct.uid_to_id(state, &account_id, &mailbox, &uids, false).await?;
@@ -509,7 +511,7 @@ async fn answer(
                 .into_iter()
                 .filter_map(|(uid, id)| got.remove(&id?).filter(|e| in_mailbox(e, &mb.id)).map(|e| to_header(&e, uid)))
                 .collect();
-            Ok(json!({"emails": emails, "total": mb.total_emails, "uidValidity": 1, "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1))}))
+            Ok(crate::handlers::cache::with_native_expectation(json!({"emails": emails, "total": mb.total_emails, "uidValidity": 1, "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1))}), expected))
         }
 
         "imap_fetch_changed_flags" => {
@@ -598,6 +600,7 @@ async fn answer(
         "imap_search_emails" => {
             let account_id = ledger_account(params)?;
             let mailbox = mailbox_param(params);
+            let expected = crate::handlers::cache::native_header_seed(state, &account_id, &mailbox).await;
             let query: Option<String> = opt_param(params, "query");
             let filters: SearchFilters = opt_param(params, "filters").unwrap_or_default();
             let search = ServerSearch {
@@ -609,7 +612,7 @@ async fn answer(
                 ..Default::default()
             };
             let (emails, total) = search_mailbox(state, acct, &account_id, &mailbox, &search).await?;
-            Ok(json!({"nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)), "uidValidity": 1, "success": true, "emails": emails, "total": total}))
+            Ok(crate::handlers::cache::with_native_expectation(json!({"nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)), "uidValidity": 1, "success": true, "emails": emails, "total": total}), expected))
         }
 
         "imap_find_message_id" => {
