@@ -1364,6 +1364,31 @@ mod tests {
         assert!(listed_message_ids(&c, "a", "Projects_2026", &[]).unwrap().is_empty());
     }
 
+    #[test]
+    fn native_batch_replaces_unbound_or_other_origin_headers() {
+        let (_t, c) = store();
+        save_headers(&c, "a", "INBOX", &json!({"emails": [{"uid": 1}]}).to_string()).unwrap();
+        let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "origin-A"});
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "emails": [{"uid": 7}]}).to_string()).unwrap();
+        let got: Value = serde_json::from_str(&load_headers(&c, "a", "INBOX", None, HeaderOrder::Arrival).unwrap().unwrap()).unwrap();
+        assert_eq!(got["totalCached"], 1, "unbound retained rows cannot acquire a fresh batch origin");
+        assert_eq!(got["nativeIdentity"], proof);
+        let mut other = proof.clone();
+        other["originHash"] = json!("origin-B");
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": other, "emails": [{"uid": 8}]}).to_string()).unwrap();
+        assert_eq!(uid_set(&c, "a", "INBOX").unwrap(), HashSet::from([8]));
+    }
+
+    #[test]
+    fn native_batch_does_not_bless_unbound_partial_upserts() {
+        let (_t, c) = store();
+        let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "origin-A"});
+        save_headers(&c, "a", "INBOX", &json!({"nativeIdentity": proof, "emails": [{"uid": 7}]}).to_string()).unwrap();
+        save_headers(&c, "a", "INBOX", &json!({"uidValidity": 8, "emails": [{"uid": 8}]}).to_string()).unwrap();
+        let got: Value = serde_json::from_str(&load_meta(&c, "a", "INBOX").unwrap().unwrap()).unwrap();
+        assert!(got.get("nativeIdentity").is_none_or(Value::is_null));
+    }
+
     /// H3b (a): a folder with no header row at all (never opened, backfill
     /// not there yet, cleared and refilling, an account's cache wiped) is not
     /// "the server holds none of them": the lookup is unknown, so the index

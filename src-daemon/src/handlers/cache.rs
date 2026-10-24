@@ -439,6 +439,18 @@ mod tests {
         assert_eq!(r[0]["subject"], "hi");
     }
 
+    #[tokio::test]
+    async fn native_batch_by_uid_envelope_is_coherent_and_additive() {
+        let (_t, s) = st(true);
+        let proof = json!({"accountId": "a", "mailbox": "INBOX", "uidValidity": 7, "originHash": "original"});
+        crate::custody::with_conn(&s, |c| sql_cache::save_headers(c, "a", "INBOX", &json!({"nativeIdentity": proof, "emails": [{"uid": 7}]}).to_string())).unwrap();
+        let envelope = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7], "envelope": true})).await.result.unwrap();
+        assert_eq!(envelope["nativeIdentity"], proof);
+        assert_eq!(envelope["emails"][0]["uid"], 7);
+        let old = call(&s, "load_email_cache_by_uids", json!({"accountId": "a", "mailbox": "INBOX", "uids": [7]})).await.result.unwrap();
+        assert!(old.is_array());
+    }
+
     /// The list's preview line rides on the rows the list reads, from the
     /// search index and not from the header cache, so a header rewrite (a
     /// flag delta, a reconcile) cannot lose it.
