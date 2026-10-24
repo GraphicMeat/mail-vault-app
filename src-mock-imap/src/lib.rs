@@ -42,6 +42,8 @@ pub struct MockImap {
     /// Every command line the server received, in order. Test assertions read this
     /// to prove *what the client sent*, which is often the actual thing under test.
     log: Arc<Mutex<Vec<String>>>,
+    faults: Arc<Mutex<Vec<Fault>>>,
+    counts: Arc<Mutex<HashMap<String, usize>>>,
     /// Accepted TCP connections. Proves whether a session was reused or replaced.
     connections: Arc<AtomicUsize>,
     /// Most connections open at once, for a client's connection budget.
@@ -77,6 +79,7 @@ impl MockImap {
         let live = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));
         let counts: Arc<Mutex<HashMap<String, usize>>> = Arc::new(Mutex::new(HashMap::new()));
+        let faults = Arc::new(Mutex::new(scenario.faults.clone()));
         let smtp_recorder = Arc::new(smtp::SmtpRecorder::new());
         let smtp_addr = smtp::start(scenario.smtp.clone(), stop.clone(), smtp_recorder.clone(), check.clone());
 
@@ -86,7 +89,8 @@ impl MockImap {
             let log = log.clone();
             let connections = connections.clone();
             let (live, peak) = (live.clone(), peak.clone());
-            let faults = scenario.faults.clone();
+            let faults = faults.clone();
+            let counts = counts.clone();
             let check = check.clone();
             let greeting = scenario
                 .greeting
@@ -117,7 +121,16 @@ impl MockImap {
             });
         }
 
-        MockImap { addr, smtp_addr, state, stop, log, connections, peak, smtp: smtp_recorder }
+        MockImap { addr, smtp_addr, state, stop, log, faults, counts, connections, peak, smtp: smtp_recorder }
+    }
+
+    /// Change provider state/faults without changing the account endpoint.
+    /// Sessions stay connected; command logs and fault ordinals start fresh.
+    pub fn reset_scenario(&self, scenario: Scenario) {
+        *self.state.lock().unwrap() = scenario.state;
+        *self.faults.lock().unwrap() = scenario.faults;
+        self.counts.lock().unwrap().clear();
+        self.log.lock().unwrap().clear();
     }
 
     pub fn host(&self) -> String {
@@ -220,7 +233,7 @@ fn handle_conn(
     conn: TcpStream,
     state: Arc<Mutex<ServerState>>,
     log: Arc<Mutex<Vec<String>>>,
-    faults: Vec<Fault>,
+    faults: Arc<Mutex<Vec<Fault>>>,
     counts: Arc<Mutex<HashMap<String, usize>>>,
     greeting: String,
     open: Open,
@@ -237,7 +250,7 @@ fn handle_conn(
     let mut responses_sent = 0usize;
 
     // OnConnect/OnNthConnect faults fire before the greeting.
-    let connect_actions: Vec<Action> = faults
+    let connect_actions: Vec<Action> = faults.lock().unwrap()
         .iter()
         .filter(|f| match &f.trigger {
             Trigger::OnConnect => true,
@@ -322,7 +335,7 @@ fn handle_conn(
             continue;
         }
 
-        let actions = match_faults(&faults, &cmd.name, &fault_haystack(&cmd.args, &cmd.literal), &counts);
+        let actions = match_faults(&faults.lock().unwrap(), &cmd.name, &fault_haystack(&cmd.args, &cmd.literal), &counts);
 
         if actions.contains(&Action::DropConnection) {
             return Ok(());

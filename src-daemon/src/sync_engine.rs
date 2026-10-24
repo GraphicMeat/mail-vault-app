@@ -2504,21 +2504,21 @@ mod tests {
             engine.mailbox_aliases.lock().await.contains_key(&alias_key),
             "precondition: the alias is remembered"
         );
-        drop(first);
 
         // Same account, and now the folder the alias points at is gone.
-        let second = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let second = &first;
+        second.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
         let result = engine.sync_account(&account_for(&second), "Sent").await;
         assert!(!result.success, "there is no Sent folder to sync");
         assert!(
             !engine.mailbox_aliases.lock().await.contains_key(&alias_key),
             "an alias that no longer resolves must be dropped, not kept forever"
         );
-        drop(second);
 
         // The user makes a plain "Sent" — no \Sent attribute, so only the
         // requested name itself can find it.
-        let third = MockImap::start(
+        let third = &first;
+        third.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 2))
                 .mailbox(synthetic_mailbox("Sent", 2)),
@@ -2550,10 +2550,10 @@ mod tests {
         );
         let result = engine.sync_account(&account_for(&first), "Sent").await;
         assert_eq!(result.mailbox, "[Google Mail]/Sent Mail", "precondition: aliased");
-        drop(first);
 
         // Provider folder gone, plain "Sent" (no \Sent attribute) in its place.
-        let second = MockImap::start(
+        let second = &first;
+        second.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 2))
                 .mailbox(synthetic_mailbox("Sent", 3)),
@@ -2794,7 +2794,6 @@ mod tests {
 
         let before = cached_count(&engine, "INBOX");
         assert_eq!(before, 40, "precondition: a warm cache to lose");
-        drop(account_server);
 
         // Same mailbox, SAME SIZE, with the keepalive splice armed on FETCH.
         //
@@ -2805,7 +2804,8 @@ mod tests {
         // only FETCH issued is the reconcile's `UID FETCH 1:*`, which is the
         // command under test. The reconcile still fires because a cold sync
         // leaves `lastReconcile` unset, so the timed reconcile is due.
-        let poisoned = MockImap::start(
+        let poisoned = &account_server;
+        poisoned.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 40))
                 .fault(
@@ -2841,12 +2841,12 @@ mod tests {
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 40);
-        drop(warm);
 
         // Server returns a quarter of the UIDs but still reports EXISTS=40.
         // Equal size for the same reason as the poisoned-reconcile test above:
         // the reconcile must be the only FETCH, or the assertion is timing-dependent.
-        let truncating = MockImap::start(
+        let truncating = &warm;
+        truncating.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 40))
                 .fault(Trigger::on("FETCH"), Action::PartialSearchResult(0.25)),
@@ -2877,12 +2877,12 @@ mod tests {
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 20);
-        drop(warm);
 
         // Three messages really are gone — EXISTS agrees with the UID list.
         let mut smaller = synthetic_mailbox("INBOX", 20);
         smaller.messages.retain(|m| ![5u32, 6, 7].contains(&m.uid));
-        let shrunk = MockImap::start(Scenario::new().mailbox(smaller));
+        let shrunk = &warm;
+        shrunk.reset_scenario(Scenario::new().mailbox(smaller));
         let result = engine.sync_account(&account_for(&shrunk), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
@@ -3074,6 +3074,19 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// A frontend-native cache write in tests comes from actual same-SELECT headers.
+    async fn app_fetched_headers(engine: &SyncEngine, account: &SyncAccount, mailbox: &str, uids: &[u32], mut meta: serde_json::Value) {
+        let io = engine.cache_ctx(&account.id, mailbox);
+        let seed = io.native_seed(&account.imap_config).unwrap();
+        let PooledSessionGuard { mut session, _permit, .. } = engine.pool.get_background(&account.imap_config).await.unwrap();
+        let ((headers, _), validity) = imap::fetch_headers_by_uids_bound(&mut session, mailbox, uids).await.unwrap();
+        engine.pool.return_background(&account.imap_config, PooledSessionGuard { session, last_selected: Some(mailbox.to_owned()), _permit }).await;
+        meta["emails"] = serde_json::json!(headers);
+        meta["nativeIdentity"] = serde_json::json!(imap::NativeHeaderIdentity::new(&account.imap_config, &account.id, mailbox, validity));
+        meta["nativeExpectedIdentity"] = seed.expected;
+        app_wrote_meta(engine, mailbox, meta);
+    }
+
     /// What the app writes into the shared header-cache metadata. It owns
     /// `totalEmails` too, which is the whole point of these tests.
     fn app_wrote_meta(engine: &SyncEngine, mailbox: &str, meta: serde_json::Value) {
@@ -3095,7 +3108,6 @@ mod tests {
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 20, "precondition: a warm cache");
-        drop(warm);
 
         // The app's own sync lands first: the fresh count, and a reconcile stamp
         // so the timed reconcile is NOT what rescues this test.
@@ -3107,7 +3119,8 @@ mod tests {
 
         let mut smaller = synthetic_mailbox("INBOX", 20);
         smaller.messages.retain(|m| m.uid != 6);
-        let shrunk = MockImap::start(Scenario::new().mailbox(smaller));
+        let shrunk = &warm;
+        shrunk.reset_scenario(Scenario::new().mailbox(smaller));
         let result = engine.sync_account(&account_for(&shrunk), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
@@ -3132,7 +3145,6 @@ mod tests {
         let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
-        drop(warm);
 
         let keep: Vec<u32> = (10..=20).collect();
         drop_cached(&engine, "INBOX", &keep);
@@ -3147,7 +3159,8 @@ mod tests {
         // uid 15 is gone from the server and IS one of the rows still cached.
         let mut smaller = synthetic_mailbox("INBOX", 20);
         smaller.messages.retain(|m| m.uid != 15);
-        let shrunk = MockImap::start(Scenario::new().mailbox(smaller));
+        let shrunk = &warm;
+        shrunk.reset_scenario(Scenario::new().mailbox(smaller));
         let result = engine.sync_account(&account_for(&shrunk), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
@@ -3171,7 +3184,6 @@ mod tests {
         let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
-        drop(warm);
 
         let keep: Vec<u32> = (10..=20).collect();
         drop_cached(&engine, "INBOX", &keep);
@@ -3187,7 +3199,8 @@ mod tests {
         // this test silently stops testing anything.
         let mut smaller = synthetic_mailbox("INBOX", 20);
         smaller.messages.retain(|m| m.uid != 15);
-        let poisoned = MockImap::start(
+        let poisoned = &warm;
+        poisoned.reset_scenario(
             Scenario::new()
                 .mailbox(smaller.clone())
                 .fault(Trigger::on("FETCH"), Action::InjectMidLine("* OK Still here\r\n".into())),
@@ -3203,11 +3216,11 @@ mod tests {
             cached_uid_set(&engine, "INBOX").contains(&15),
             "precondition: the failed listing pruned nothing"
         );
-        drop(poisoned);
 
         // Next sync, healthy server, nothing else changed: the divergence is
         // still unaccounted for, so it must be retried now rather than in 6h.
-        let healthy = MockImap::start(Scenario::new().mailbox(smaller));
+        let healthy = &warm;
+        healthy.reset_scenario(Scenario::new().mailbox(smaller));
         let result = engine.sync_account(&account_for(&healthy), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
         assert!(
@@ -3231,23 +3244,13 @@ mod tests {
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
         let engine = engine_for(&dir);
 
-        // 10 of 50, written the way the app writes it: no daemon baseline at
-        // all, which is also the state of every cache upgraded into this build.
-        // `highestModseq` matches the server's, so CONDSTORE reports no flag
-        // changes and the reconcile's `UID FETCH 1:*` would be the only one.
-        let emails: Vec<_> = (41..=50u32)
-            .map(|uid| serde_json::json!({"uid":uid,"flags":[],"subject":format!("Message {uid}")}))
-            .collect();
-        app_wrote_meta(
-            &engine,
-            "INBOX",
-            serde_json::json!({
-                "emails": emails, "totalEmails": 50, "uidValidity": 1, "uidNext": 51,
-                "highestModseq": 1, "lastReconcile": now_ms(),
-            }),
-        );
-
+        // Ten actual native headers, with the app's metadata and no daemon baseline.
         let account = account_for(&server);
+        app_fetched_headers(&engine, &account, "INBOX", &(41..=50).collect::<Vec<_>>(), serde_json::json!({
+            "totalEmails": 50, "uidValidity": 1, "uidNext": 51, "highestModseq": 1, "lastReconcile": now_ms(),
+        })).await;
+        server.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
+
         for pass in 1..=2 {
             let result = engine.sync_account(&account, "INBOX").await;
             assert!(result.success, "sync {} failed: {:?}", pass, result.error);
@@ -3284,22 +3287,14 @@ mod tests {
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 20, "precondition: a warm cache");
-        drop(warm);
 
-        // Five arrived. The app refreshed first, cached the newest two, and
-        // wrote the server's UIDNEXT, its count and a fresh reconcile stamp.
-        let rows: Vec<_> = (24..=25u32)
-            .map(|uid| serde_json::json!({"uid":uid,"flags":[],"subject":format!("Message {uid}")}))
-            .collect();
-        app_wrote_meta(
-            &engine,
-            "INBOX",
-            serde_json::json!({
-                "emails": rows, "totalEmails": 25, "uidNext": 26, "lastReconcile": now_ms(),
-            }),
-        );
-
-        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 25)));
+        // Five arrived; the app fetched the newest two from that same endpoint.
+        let server = &warm;
+        server.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 25)));
+        app_fetched_headers(&engine, &account_for(server), "INBOX", &[24, 25], serde_json::json!({
+            "totalEmails": 25, "uidNext": 26, "lastReconcile": now_ms(),
+        })).await;
+        server.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 25)));
         let result = engine.sync_account(&account_for(&server), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
@@ -3337,7 +3332,6 @@ mod tests {
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
         engine.sync_account(&account_for(&first), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 10);
-        drop(first);
 
         app_wrote_meta(
             &engine,
@@ -3353,7 +3347,8 @@ mod tests {
             msg.modseq = 50;
         }
         changed.highest_modseq = 50;
-        let second = MockImap::start(Scenario::new().mailbox(changed));
+        let second = &first;
+        second.reset_scenario(Scenario::new().mailbox(changed));
 
         let result = engine.sync_account(&account_for(&second), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
@@ -3380,9 +3375,9 @@ mod tests {
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&first), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 15);
-        drop(first);
 
-        let reissued = MockImap::start(
+        let reissued = &first;
+        reissued.reset_scenario(
             Scenario::new().mailbox(synthetic_mailbox("INBOX", 4).with_uid_validity(99)),
         );
         let result = engine.sync_account(&account_for(&reissued), "INBOX").await;
@@ -3407,24 +3402,19 @@ mod tests {
         let account = account_for(&server);
         let engine = engine_for(&dir);
 
-        // A cache holding 10 of 50 — the partly-cached state after an aborted load.
-        with_store(&engine, |c| {
-            let emails: Vec<_> = (41..=50u32)
-                .map(|uid| serde_json::json!({"uid":uid,"flags":[],"subject":format!("Message {uid}")}))
-                .collect();
-            mailvault_core::custody::cache::save_headers(
-                c,
-                "acc1",
-                "INBOX",
-                &serde_json::json!({"emails":emails,"totalEmails":50,"uidValidity":1,"uidNext":51}).to_string(),
-            )
-            .unwrap();
-        });
+        // Ten actual native headers, the state after an aborted native load.
+        app_fetched_headers(&engine, &account, "INBOX", &(41..=50).collect::<Vec<_>>(), serde_json::json!({
+            "totalEmails": 50, "uidValidity": 1, "uidNext": 51,
+        })).await;
+        server.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
 
         engine.backfill_mailbox(&account, "INBOX").await;
 
         assert_eq!(cached_count(&engine, "INBOX"), 50, "backfill should complete the mailbox");
         assert!(!engine.is_backfilling("acc1").await, "in-flight flag must clear");
+        let fetches: Vec<_> = server.commands().into_iter().filter(|line| line.contains("UID FETCH")).collect();
+        assert_eq!(fetches.len(), 1, "only the missing native headers are fetched: {fetches:?}");
+        assert!(fetches[0].contains("UID FETCH 1:40 "), "retained proved UIDs must not be fetched again: {fetches:?}");
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -3483,12 +3473,12 @@ mod tests {
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 3, "precondition: a fully cached mailbox");
-        drop(warm);
         drop_cached(&engine, "INBOX", &[1]);
 
         // Same mailbox on a server whose header line for UID 2 is unreadable,
         // every time.
-        let poisoned = MockImap::start(
+        let poisoned = &warm;
+        poisoned.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 3))
                 .fault(Trigger::with("FETCH", "BODYSTRUCTURE"), Action::PoisonFetchUid(2)),
@@ -3725,9 +3715,9 @@ mod tests {
         let t1 = engine.begin("acc1", "INBOX");
         engine.run_ticket(t1, &account_for(&first), "INBOX").await;
         assert!(engine.wait_for_ticket(t1, 1000).await.is_ok(), "precondition: one completed sync");
-        drop(first);
 
-        let second = MockImap::start(
+        let second = &first;
+        second.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 6))
                 .fault(
@@ -3766,9 +3756,9 @@ mod tests {
         let settled = engine.get_state("acc1").await.expect("a completed sync records a state");
         let t1 = settled.last_sync.expect("a completed sync stamps last_sync");
         assert_eq!(settled.total_emails, 30);
-        drop(first);
 
-        let second = MockImap::start(
+        let second = &first;
+        second.reset_scenario(
             Scenario::new()
                 .mailbox(synthetic_mailbox("INBOX", 30))
                 .fault(
@@ -3868,7 +3858,6 @@ mod tests {
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
         engine.sync_account(&account_for(&first), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 10);
-        drop(first);
 
         // Same ten messages; uid 5 was read and starred since.
         let mut changed = synthetic_mailbox("INBOX", 10);
@@ -3878,7 +3867,8 @@ mod tests {
             msg.modseq = 50;
         }
         changed.highest_modseq = 50;
-        let second = MockImap::start(Scenario::new().mailbox(changed));
+        let second = &first;
+        second.reset_scenario(Scenario::new().mailbox(changed));
 
         let result = engine.sync_account(&account_for(&second), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
@@ -3911,11 +3901,11 @@ mod tests {
         );
         engine.sync_account(&account_for(&first), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 10);
-        drop(first);
 
         let mut changed = synthetic_mailbox("INBOX", 10);
         changed.by_uid_mut(5).expect("uid 5").flags = vec!["\\Seen".to_string()];
-        let second = MockImap::start(Scenario::new().mailbox(changed).without_cap("CONDSTORE"));
+        let second = &first;
+        second.reset_scenario(Scenario::new().mailbox(changed).without_cap("CONDSTORE"));
 
         let result = engine.sync_account(&account_for(&second), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
@@ -3952,9 +3942,9 @@ mod tests {
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 12)));
         engine.sync_account(&account_for(&first), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 12);
-        drop(first);
 
-        let emptied = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
+        let emptied = &first;
+        emptied.reset_scenario(Scenario::new().mailbox(Mailbox::new("INBOX")));
         let result = engine.sync_account(&account_for(&emptied), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
@@ -3975,9 +3965,9 @@ mod tests {
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
         engine.sync_account(&account_for(&first), "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 5);
-        drop(first);
 
-        let second = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 700)));
+        let second = &first;
+        second.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 700)));
         let account = account_for(&second);
         let result = engine.sync_account(&account, "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
@@ -4012,8 +4002,8 @@ mod tests {
 
         // …and the next sync, now that there is a cache to compare against,
         // counts what really landed.
-        drop(server);
-        let grown = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 43)));
+        let grown = &server;
+        grown.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 43)));
         let result = engine.sync_account(&account_for(&grown), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
         assert_eq!(result.arrivals, 3);
