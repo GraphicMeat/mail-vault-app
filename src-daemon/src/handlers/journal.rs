@@ -104,6 +104,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+                    let bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+                    bulk.allow_legacy_write(&state.app_dir)?;
                     op_journal::pending_operation_save(&state.app_dir, &operation).map(|_| Value::Null)
                 })
                 .await
@@ -114,7 +117,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let state = Arc::clone(state);
             done(
                 id,
-                blocking(move || -> Result<Value, String> { op_journal::pending_operation_clear(&state.app_dir).map(|_| Value::Null) })
+                blocking(move || -> Result<Value, String> {
+                    let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+                    let bulk = state.bulk.lock().unwrap_or_else(|p| p.into_inner());
+                    bulk.allow_legacy_write(&state.app_dir)?;
+                    op_journal::pending_operation_clear(&state.app_dir).map(|_| Value::Null)
+                })
                     .await
                     .and_then(|r| r),
             )

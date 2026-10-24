@@ -3970,5 +3970,13 @@
   "blitz.failed.dismiss": "Dismiss",
   "blitz.linksInMessage": "Links in this message",
   "blitz.settings.title": "Rust renderer (experimental)",
-  "blitz.settings.description": "Draws messages with Blitz, a Rust HTML engine, instead of the system web view. Mail can never run code in it. Turn it off to go back to the standard renderer."
+  "blitz.settings.description": "Draws messages with Blitz, a Rust HTML engine, instead of the system web view. Mail can never run code in it. Turn it off to go back to the standard renderer.",
+  "errors.bulkPendingInvalid": "The pending bulk operation is unreadable. It has been kept for recovery.",
+  "errors.bulkPendingVersion": "This pending bulk operation needs a newer version of MailVault.",
+  "errors.bulkPendingChoice": "Resume or discard the pending bulk operation before starting another.",
+  "errors.bulkMissingId": "The bulk operation could not be identified. Refresh and try again.",
+  "errors.bulkStale": "This bulk operation has changed. Refresh before trying again.",
+  "errors.bulkOwned": "This pending bulk operation is managed by the background helper.",
+  "errors.bulkPendingRead": "The pending bulk operation could not be read. It has been kept.",
+  "errors.bulkPendingWrite": "The pending bulk operation could not be updated. Try again."
 }

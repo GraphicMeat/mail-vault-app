@@ -3970,5 +3970,13 @@
   "blitz.failed.dismiss": "Schließen",
   "blitz.linksInMessage": "Links in dieser Nachricht",
   "blitz.settings.title": "Rust-Renderer (experimentell)",
-  "blitz.settings.description": "Zeichnet Nachrichten mit Blitz, einer HTML-Engine in Rust, statt mit der Web-Ansicht des Systems. E-Mails können darin nie Code ausführen. Schalte ihn aus, um zum Standard-Renderer zurückzukehren."
+  "blitz.settings.description": "Zeichnet Nachrichten mit Blitz, einer HTML-Engine in Rust, statt mit der Web-Ansicht des Systems. E-Mails können darin nie Code ausführen. Schalte ihn aus, um zum Standard-Renderer zurückzukehren.",
+  "errors.bulkPendingInvalid": "Der ausstehende Sammelvorgang ist nicht lesbar. Er wurde zur Wiederherstellung aufbewahrt.",
+  "errors.bulkPendingVersion": "Dieser ausstehende Sammelvorgang benötigt eine neuere Version von MailVault.",
+  "errors.bulkPendingChoice": "Setze den ausstehenden Sammelvorgang fort oder verwerfe ihn, bevor du einen weiteren startest.",
+  "errors.bulkMissingId": "Der Sammelvorgang konnte nicht identifiziert werden. Aktualisiere die Ansicht und versuche es erneut.",
+  "errors.bulkStale": "Dieser Sammelvorgang hat sich geändert. Aktualisiere die Ansicht und versuche es erneut.",
+  "errors.bulkOwned": "Dieser ausstehende Sammelvorgang wird vom Hintergrunddienst verwaltet.",
+  "errors.bulkPendingRead": "Der ausstehende Sammelvorgang konnte nicht gelesen werden. Er wurde aufbewahrt.",
+  "errors.bulkPendingWrite": "Der ausstehende Sammelvorgang konnte nicht aktualisiert werden. Versuche es erneut."
 }

@@ -144,6 +144,8 @@ pub struct DaemonState {
     /// write already goes through `fsx::write_atomic`, so a concurrent reader
     /// only ever sees a complete journal, old or new, never a torn one.
     pub journal: std::sync::Mutex<()>,
+    /// One user bulk owner; pending state stays in the existing app.db meta.
+    pub(crate) bulk: std::sync::Mutex<mailvault_core::bulk::Coordinator>,
     /// Task 3.4, generalized by Task 4.7 (decision 7): per-operation-kind run
     /// tokens ("archive", "bulk_delete", "migration", "restore"). Replaces
     /// the app's single global `ArchiveCancelToken`/`MigrationCancelToken`/
@@ -620,6 +622,10 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::bulk::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     if let Some(resp) = crate::handlers::journal::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -961,6 +967,7 @@ impl DaemonState {
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
+            bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(&app_dir_for_index)),
             custody,
             run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
@@ -1037,6 +1044,73 @@ mod tests {
         assert_eq!(jmap_refusal_log_line("imap_list_folders", &other), None);
         let ok = RpcResponse::success(json!(1), json!({}));
         assert_eq!(jmap_refusal_log_line("imap_list_folders", &ok), None);
+    }
+
+    #[tokio::test]
+    async fn bulk_status_preserves_pending_without_replaying() {
+        let dir = tempfile::tempdir().unwrap();
+        let pending = json!({"id":"old", "type":"delete", "accountId":"a", "mailbox":"INBOX", "totalUids":["a:Sent:7", "a:INBOX:8"], "completedUids":["a:Sent:7"], "status":"deleting", "currentPhase":"delete"});
+        mailvault_core::op_journal::pending_operation_save(dir.path(), &pending).unwrap();
+        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
+        let status = handle_request_for_test(&state, "bulk.status", json!({})).await;
+        assert!(status.error.is_none(), "bulk.status must expose awaiting-resume ownership: {:?}", status.error);
+        let status = status.result.unwrap();
+        assert_eq!(status["active"], Value::Null);
+        assert_eq!(status["pending"]["id"], "old");
+        assert_eq!(status["pending"]["status"], "awaitingResume");
+        assert_eq!(status["pending"]["remaining"], 1);
+        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(), Some(pending));
+    }
+
+    #[tokio::test]
+    async fn bulk_discard_refuses_stale_and_corrupt_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let raw = json!({"id":"current", "type":"archive", "accountId":"a", "mailbox":"Sent", "totalUids":[7], "completedUids":[], "status":"archiving", "currentPhase":"archive"});
+        mailvault_core::op_journal::pending_operation_save(dir.path(), &raw).unwrap();
+        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
+        let stale = handle_request_for_test(&state, "bulk.discard", json!({"operationId":"old"})).await;
+        assert!(stale.error.is_some());
+        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(), Some(raw));
+        let discarded = handle_request_for_test(&state, "bulk.discard", json!({"operationId":"current"})).await;
+        assert!(discarded.error.is_none(), "{:?}", discarded.error);
+        assert_eq!(discarded.result, Some(Value::Null));
+        mailvault_core::app_db::with(dir.path(), |conn| mailvault_core::app_db::db::meta_set(conn, mailvault_core::app_db::ops::PENDING_OPERATION_KEY, "{ invalid")).unwrap();
+        for method in ["bulk.status", "bulk.discard"] {
+            let response = handle_request_for_test(&state, method, json!({"operationId":"current"})).await;
+            assert!(response.error.is_some(), "{method} must retain unreadable evidence");
+        }
+        assert!(mailvault_core::op_journal::pending_operation_read(dir.path()).is_err());
+        // This slice deliberately exposes no kickoff until a real worker exists.
+        for method in ["bulk.start", "bulk.resume"] {
+            let response = handle_request_for_test(&state, method, json!({"operationId":"current"})).await;
+            assert_eq!(response.error.unwrap().code, ipc::METHOD_NOT_FOUND);
+        }
+    }
+
+    #[tokio::test]
+    async fn bulk_legacy_writes_cannot_replace_owned_or_future_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), false);
+        // A future version must remain readable to its eventual owner.
+        for record in [json!({"schemaVersion":99,"id":"future"}), json!({"schemaVersion":1,"id":"broken"})] {
+            mailvault_core::op_journal::pending_operation_save(dir.path(), &record).unwrap();
+            for (method, params) in [("save_pending_operation", json!({"operation":{"id":"legacy"}})), ("clear_pending_operation", json!({}))] {
+                let response = handle_request_for_test(&state, method, params).await;
+                assert!(response.error.is_some(), "{method} must retain existing evidence");
+                assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(), Some(record.clone()));
+            }
+        }
+        mailvault_core::op_journal::pending_operation_clear(dir.path()).unwrap();
+        {
+            let _journal = state.journal.lock().unwrap();
+            let scope = serde_json::from_value(json!({"accountId":"a", "mailbox":"INBOX", "keys":[7]})).unwrap();
+            let frozen = mailvault_core::bulk::FrozenIntent::freeze(mailvault_core::bulk::Action::Archive, scope, &["a".into()], &[]);
+            state.bulk.lock().unwrap().claim(dir.path(), "owned", frozen).unwrap();
+        }
+        for (method, params) in [("save_pending_operation", json!({"operation":{"id":"legacy"}})), ("clear_pending_operation", json!({}))] {
+            assert!(handle_request_for_test(&state, method, params).await.error.is_some());
+        }
+        assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap()["id"], "owned");
     }
 
     fn err_message(resp: RpcResponse) -> String {

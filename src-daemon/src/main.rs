@@ -540,6 +540,7 @@ async fn daemon_main() {
         prefetch_lock: std::sync::Mutex::new(()),
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         journal: std::sync::Mutex::new(()),
+        bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(&data_dir)),
         custody,
         run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
         backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),

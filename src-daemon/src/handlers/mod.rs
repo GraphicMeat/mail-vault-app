@@ -43,6 +43,7 @@ pub(crate) mod learning;
 pub(crate) mod insights;
 pub(crate) mod insights_aggregate;
 pub(crate) mod journal;
+pub(crate) mod bulk;
 pub(crate) mod mail_search;
 pub(crate) mod mbox;
 pub(crate) mod message;

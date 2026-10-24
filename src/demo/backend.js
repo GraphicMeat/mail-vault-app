@@ -348,6 +348,24 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
   const listeners = new Map();
   const journal = [];
   let pendingOperation = null;
+  const bulkPendingSnapshot = () => {
+    const p = pendingOperation;
+    if (!p) return null;
+    if (typeof p !== 'object' || Array.isArray(p)) throw new Error('errors.bulkPendingInvalid');
+    if ('schemaVersion' in p && p.schemaVersion !== 1) throw new Error('errors.bulkPendingVersion');
+    if (!p.id || !['archive', 'delete', 'archive_and_delete', 'archive_backup_delete', 'delete_everywhere'].includes(p.type)
+      || !Array.isArray(p.totalUids) || !Array.isArray(p.completedUids) || typeof p.status !== 'string'
+      || (p.schemaVersion === 1 && !p.intent)) throw new Error('errors.bulkPendingInvalid');
+    if (['complete', 'cancelled'].includes(p.status)) return null;
+    const completed = new Set(p.completedUids);
+    const remaining = p.totalUids.filter(key => !completed.has(key)).length;
+    return { id: p.id, type: p.type, status: 'awaitingResume', currentPhase: p.currentPhase || (['delete', 'delete_everywhere'].includes(p.type) ? 'delete' : 'archive'),
+      total: p.totalUids.length, completed: p.totalUids.length - remaining, remaining,
+      errors: p.errors ?? 0, skipped: p.skipped ?? 0, skippedLocal: p.skippedLocal ?? 0, result: p.result ?? null, lastError: p.lastError ?? null };
+  };
+  const allowLegacyPendingWrite = () => {
+    if (pendingOperation && typeof pendingOperation === 'object' && 'schemaVersion' in pendingOperation) throw new Error('errors.bulkOwned');
+  };
   let migrationState = null;
   const timeCapsules = new Map();
   const capsuleInitialized = new Set();
@@ -994,9 +1012,17 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         emit('demo:state', { type: 'journal' });
         return null;
       }
+      case 'bulk.status': return { active: null, pending: bulkPendingSnapshot() };
+      case 'bulk.discard': {
+        if (typeof args.operationId !== 'string' || !args.operationId) throw new Error('errors.bulkMissingId');
+        const pending = bulkPendingSnapshot();
+        if (!pending || pending.id !== args.operationId) throw new Error('errors.bulkStale');
+        pendingOperation = null;
+        return null;
+      }
       case 'read_pending_operation': return pendingOperation;
-      case 'save_pending_operation': pendingOperation = args.operation || null; return null;
-      case 'clear_pending_operation': pendingOperation = null; return null;
+      case 'save_pending_operation': allowLegacyPendingWrite(); pendingOperation = args.operation || null; return null;
+      case 'clear_pending_operation': allowLegacyPendingWrite(); pendingOperation = null; return null;
       case 'get_migration_state': return migrationState;
       case 'clear_migration_state_cmd': migrationState = null; return null;
       case 'maildir_migrate_json_to_eml': case 'maildir_migrate_email_dirs': return { migrated: 0, skipped: 0, simulated: true };

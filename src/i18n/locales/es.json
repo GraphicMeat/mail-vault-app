@@ -3970,5 +3970,13 @@
   "blitz.failed.dismiss": "Descartar",
   "blitz.linksInMessage": "Enlaces de este mensaje",
   "blitz.settings.title": "Renderizador Rust (experimental)",
-  "blitz.settings.description": "Dibuja los mensajes con Blitz, un motor HTML en Rust, en lugar de la vista web del sistema. El correo nunca puede ejecutar código en él. Desactívalo para volver al renderizador estándar."
+  "blitz.settings.description": "Dibuja los mensajes con Blitz, un motor HTML en Rust, en lugar de la vista web del sistema. El correo nunca puede ejecutar código en él. Desactívalo para volver al renderizador estándar.",
+  "errors.bulkPendingInvalid": "La operación por lotes pendiente no se puede leer. Se ha conservado para recuperarla.",
+  "errors.bulkPendingVersion": "Esta operación por lotes pendiente necesita una versión más reciente de MailVault.",
+  "errors.bulkPendingChoice": "Reanuda o descarta la operación por lotes pendiente antes de iniciar otra.",
+  "errors.bulkMissingId": "No se pudo identificar la operación por lotes. Actualiza y vuelve a intentarlo.",
+  "errors.bulkStale": "Esta operación por lotes ha cambiado. Actualiza antes de volver a intentarlo.",
+  "errors.bulkOwned": "El servicio en segundo plano gestiona esta operación por lotes pendiente.",
+  "errors.bulkPendingRead": "No se pudo leer la operación por lotes pendiente. Se ha conservado.",
+  "errors.bulkPendingWrite": "No se pudo actualizar la operación por lotes pendiente. Vuelve a intentarlo."
 }

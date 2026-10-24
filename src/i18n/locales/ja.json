@@ -3970,5 +3970,13 @@
   "blitz.failed.dismiss": "閉じる",
   "blitz.linksInMessage": "このメッセージ内のリンク",
   "blitz.settings.title": "Rust レンダラー（試験的）",
-  "blitz.settings.description": "システムの Web ビューの代わりに、Rust 製の HTML エンジン Blitz でメッセージを描画します。メールがその中でコードを実行することはありません。オフにすると標準のレンダラーに戻ります。"
+  "blitz.settings.description": "システムの Web ビューの代わりに、Rust 製の HTML エンジン Blitz でメッセージを描画します。メールがその中でコードを実行することはありません。オフにすると標準のレンダラーに戻ります。",
+  "errors.bulkPendingInvalid": "保留中の一括操作を読み取れません。復旧のために保持されています。",
+  "errors.bulkPendingVersion": "この保留中の一括操作には、新しいバージョンの MailVault が必要です。",
+  "errors.bulkPendingChoice": "別の操作を開始する前に、保留中の一括操作を再開するか破棄してください。",
+  "errors.bulkMissingId": "一括操作を特定できませんでした。更新してからもう一度お試しください。",
+  "errors.bulkStale": "この一括操作は変更されました。更新してからもう一度お試しください。",
+  "errors.bulkOwned": "この保留中の一括操作はバックグラウンドサービスが管理しています。",
+  "errors.bulkPendingRead": "保留中の一括操作を読み取れませんでした。操作は保持されています。",
+  "errors.bulkPendingWrite": "保留中の一括操作を更新できませんでした。もう一度お試しください。"
 }

@@ -3970,5 +3970,13 @@
   "blitz.failed.dismiss": "Ignorer",
   "blitz.linksInMessage": "Liens de ce message",
   "blitz.settings.title": "Moteur de rendu Rust (expérimental)",
-  "blitz.settings.description": "Affiche les messages avec Blitz, un moteur HTML en Rust, au lieu de la vue web du système. Un e-mail ne peut jamais y exécuter de code. Désactivez-le pour revenir au moteur de rendu standard."
+  "blitz.settings.description": "Affiche les messages avec Blitz, un moteur HTML en Rust, au lieu de la vue web du système. Un e-mail ne peut jamais y exécuter de code. Désactivez-le pour revenir au moteur de rendu standard.",
+  "errors.bulkPendingInvalid": "La tâche groupée en attente est illisible. Elle a été conservée pour être récupérée.",
+  "errors.bulkPendingVersion": "Cette tâche groupée en attente nécessite une version plus récente de MailVault.",
+  "errors.bulkPendingChoice": "Reprenez ou abandonnez la tâche groupée en attente avant d’en lancer une autre.",
+  "errors.bulkMissingId": "La tâche groupée n’a pas pu être identifiée. Actualisez et réessayez.",
+  "errors.bulkStale": "Cette tâche groupée a changé. Actualisez avant de réessayer.",
+  "errors.bulkOwned": "Cette tâche groupée en attente est gérée par le service en arrière-plan.",
+  "errors.bulkPendingRead": "La tâche groupée en attente n’a pas pu être lue. Elle a été conservée.",
+  "errors.bulkPendingWrite": "La tâche groupée en attente n’a pas pu être mise à jour. Réessayez."
 }

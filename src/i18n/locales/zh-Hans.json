@@ -3970,5 +3970,13 @@
   "blitz.failed.dismiss": "关闭",
   "blitz.linksInMessage": "此邮件中的链接",
   "blitz.settings.title": "Rust 渲染器（实验性）",
-  "blitz.settings.description": "使用 Rust 编写的 HTML 引擎 Blitz 绘制邮件，而不是系统网页视图。邮件无法在其中运行任何代码。关闭后即可回到标准渲染器。"
+  "blitz.settings.description": "使用 Rust 编写的 HTML 引擎 Blitz 绘制邮件，而不是系统网页视图。邮件无法在其中运行任何代码。关闭后即可回到标准渲染器。",
+  "errors.bulkPendingInvalid": "无法读取待处理的批量操作。已保留该操作以便恢复。",
+  "errors.bulkPendingVersion": "此待处理的批量操作需要更新版本的 MailVault。",
+  "errors.bulkPendingChoice": "开始其他操作前，请先恢复或丢弃待处理的批量操作。",
+  "errors.bulkMissingId": "无法识别批量操作。请刷新后重试。",
+  "errors.bulkStale": "此批量操作已更改。请刷新后重试。",
+  "errors.bulkOwned": "此待处理的批量操作由后台服务管理。",
+  "errors.bulkPendingRead": "未能读取待处理的批量操作。该操作已保留。",
+  "errors.bulkPendingWrite": "未能更新待处理的批量操作。请重试。"
 }

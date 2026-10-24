@@ -3970,5 +3970,13 @@
   "blitz.failed.dismiss": "Ignora",
   "blitz.linksInMessage": "Link in questo messaggio",
   "blitz.settings.title": "Renderer Rust (sperimentale)",
-  "blitz.settings.description": "Disegna i messaggi con Blitz, un motore HTML in Rust, invece della vista web del sistema. La posta non può mai eseguire codice al suo interno. Disattivalo per tornare al renderer standard."
+  "blitz.settings.description": "Disegna i messaggi con Blitz, un motore HTML in Rust, invece della vista web del sistema. La posta non può mai eseguire codice al suo interno. Disattivalo per tornare al renderer standard.",
+  "errors.bulkPendingInvalid": "L’operazione in blocco in sospeso è illeggibile. È stata conservata per il recupero.",
+  "errors.bulkPendingVersion": "Questa operazione in blocco in sospeso richiede una versione più recente di MailVault.",
+  "errors.bulkPendingChoice": "Riprendi o scarta l’operazione in blocco in sospeso prima di avviarne un’altra.",
+  "errors.bulkMissingId": "Impossibile identificare l’operazione in blocco. Aggiorna e riprova.",
+  "errors.bulkStale": "Questa operazione in blocco è cambiata. Aggiorna prima di riprovare.",
+  "errors.bulkOwned": "Questa operazione in blocco in sospeso è gestita dal servizio in background.",
+  "errors.bulkPendingRead": "Impossibile leggere l’operazione in blocco in sospeso. È stata conservata.",
+  "errors.bulkPendingWrite": "Impossibile aggiornare l’operazione in blocco in sospeso. Riprova."
 }
