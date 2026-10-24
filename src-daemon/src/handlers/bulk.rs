@@ -171,7 +171,8 @@ pub(crate) async fn route(
     })
     .await
     .map_err(|_| "errors.bulkWorkerUnavailable".to_string())
-    .and_then(|result| result);
+    .and_then(|result| result)
+    .map_err(|error| crate::bulk_worker::service_error(&error));
     if let Some((operation, attempt)) = receipt_context {
         receipt_state
             .bulk

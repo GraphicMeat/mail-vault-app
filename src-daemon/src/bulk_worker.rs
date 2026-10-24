@@ -144,6 +144,33 @@ fn selected_target(
     Ok(Some(selected))
 }
 
+/// New bulk snapshots persist service keys. Legacy helper diagnostics stay
+/// outside this operation record, and their API behavior is unchanged.
+pub(crate) fn service_error(error: &str) -> String {
+    if error.starts_with("errors.")
+        && error
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_'))
+    {
+        return error.into();
+    }
+    let code = error.split(':').next().unwrap_or("").trim();
+    match code {
+        "E_JMAP_AUTH" => "errors.jmapAuthFailed",
+        "E_JMAP_TRANSPORT" => "errors.jmapConnect",
+        "E_JMAP_FOREIGN_HOST" => "errors.jmapForeignHost",
+        "E_JMAP_NO_TRASH" => "errors.jmapNoTrash",
+        "E_JMAP_UNSUPPORTED" | "E_JMAP_NOT_IMAP" => "errors.jmapUnsupported",
+        "E_JMAP_RATE" => "errors.conn.problem.providerThrottling",
+        "E_JMAP_PROTOCOL" | "E_JMAP_CHANGES" | "E_JMAP_METHOD" => "errors.jmapServerFault",
+        "E_OAUTH_SIGN_IN_NEEDED" => "errors.E_OAUTH_SIGN_IN_NEEDED",
+        "E_OAUTH_KEYCHAIN_UNAVAILABLE" => "errors.E_OAUTH_KEYCHAIN_UNAVAILABLE",
+        "E_ABD_CANNOT_DELETE" => "errors.E_ABD_CANNOT_DELETE",
+        _ => "errors.bulkOperationFailed",
+    }
+    .into()
+}
+
 struct MailPorts {
     state: Arc<DaemonState>,
     id: String,
@@ -184,7 +211,8 @@ impl MailPorts {
 }
 impl Ports for MailPorts {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
-        let (state, id, w) = (self.state.clone(), self.id.clone(), w.clone());
+        let (state, id, mut w) = (self.state.clone(), self.id.clone(), w.clone());
+        w.last_error = w.last_error.as_deref().map(service_error);
         let snapshot = common::blocking(move || {
             let _journal = state.journal.lock().unwrap_or_else(|p| p.into_inner());
             state
@@ -210,8 +238,11 @@ impl Ports for MailPorts {
                 .jmap
                 .get(&config)
                 .await
-                .map_err(|e| e.to_string())?;
-            let boxes = acct.current().await.map_err(|e| e.to_string())?;
+                .map_err(|e| service_error(&e.to_string()))?;
+            let boxes = acct
+                .current()
+                .await
+                .map_err(|e| service_error(&e.to_string()))?;
             let mailbox_id = boxes
                 .ids
                 .get(&g.mailbox)
@@ -269,7 +300,10 @@ impl Ports for MailPorts {
         let attempt = self.attempt.clone();
         let base = self.archive_base;
         let errors_base = self.archive_errors;
-        let emit = Arc::new(move |name: &str, payload: Value| {
+        let emit = Arc::new(move |name: &str, mut payload: Value| {
+            if let Some(error) = payload["lastError"].as_str() {
+                payload["lastError"] = json!(service_error(error));
+            }
             // Only this runner's injected sink updates its operation. Global
             // archive/delete events from other jobs are never subscribed to.
             state.events.emit(name, payload.clone());
@@ -318,7 +352,7 @@ impl Ports for MailPorts {
             ArchiveOutcome {
                 stored,
                 errors: progress.errors,
-                last_error: progress.last_error,
+                last_error: progress.last_error.as_deref().map(service_error),
             }
         })
     }
@@ -537,6 +571,7 @@ pub(crate) fn launch(
                         if let Err(e) =
                             bulk_worker::run(&mut ports, &mut work, cancel, resume).await
                         {
+                            let e = service_error(&e);
                             tracing::warn!("bulk worker {op}: {e}");
                             work.status = "error".into();
                             work.last_error = Some(e);

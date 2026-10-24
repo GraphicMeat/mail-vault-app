@@ -3986,5 +3986,6 @@
   "errors.bulkCopyChanged": "Uma cópia de arquivo verificada foi alterada. A mensagem foi mantida no servidor.",
   "errors.bulkWorkerUnavailable": "Não foi possível iniciar o processamento em massa.",
   "errors.bulkAccountUnavailable": "A conta selecionada não está disponível.",
-  "errors.bulkLocalFoldersRead": "Não foi possível verificar as informações das pastas locais."
+  "errors.bulkLocalFoldersRead": "Não foi possível verificar as informações das pastas locais.",
+  "errors.bulkOperationFailed": "Não foi possível concluir a operação em lote. As mensagens restantes no servidor foram mantidas."
 }

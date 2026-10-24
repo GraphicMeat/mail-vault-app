@@ -3986,5 +3986,6 @@
   "errors.bulkCopyChanged": "확인된 보관 사본이 변경되었습니다. 서버 메시지는 유지되었습니다.",
   "errors.bulkWorkerUnavailable": "일괄 작업을 시작할 수 없습니다.",
   "errors.bulkAccountUnavailable": "선택한 계정을 사용할 수 없습니다.",
-  "errors.bulkLocalFoldersRead": "로컬 폴더 정보를 확인할 수 없습니다."
+  "errors.bulkLocalFoldersRead": "로컬 폴더 정보를 확인할 수 없습니다.",
+  "errors.bulkOperationFailed": "일괄 작업을 완료하지 못했습니다. 나머지 서버 메시지는 유지되었습니다."
 }

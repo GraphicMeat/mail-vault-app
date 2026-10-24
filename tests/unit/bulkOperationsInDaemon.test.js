@@ -57,8 +57,8 @@ it('the demo preserves unknown-version and malformed evidence', async () => {
 });
 
 it('every bulk service error is translated in all nine locales', () => {
-  const source = readFileSync('src-core/src/bulk.rs', 'utf8') + readFileSync('src-daemon/src/handlers/bulk.rs', 'utf8');
-  const keys = [...new Set([...source.matchAll(/"(errors\.[A-Za-z]+)"/g)].map(match => match[1]))];
+  const source = ['src-core/src/bulk.rs', 'src-core/src/bulk_worker.rs', 'src-daemon/src/bulk_worker.rs', 'src-daemon/src/handlers/bulk.rs', 'src-tauri/src/bulk.rs'].map(path => readFileSync(path, 'utf8')).join('\n');
+  const keys = [...new Set([...source.matchAll(/"(errors\.[A-Za-z_.]+)"/g)].map(match => match[1]))];
   expect(keys.length).toBeGreaterThan(5);
   for (const locale of ['en', 'de', 'es', 'fr', 'it', 'ja', 'ko', 'pt-BR', 'zh-Hans']) {
     const catalog = JSON.parse(readFileSync(`src/i18n/locales/${locale}.json`, 'utf8'));

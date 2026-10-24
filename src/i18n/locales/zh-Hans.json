@@ -3986,5 +3986,6 @@
   "errors.bulkCopyChanged": "已验证的归档副本已更改。服务器邮件已保留。",
   "errors.bulkWorkerUnavailable": "无法启动批量处理。",
   "errors.bulkAccountUnavailable": "所选账户不可用。",
-  "errors.bulkLocalFoldersRead": "无法验证本地文件夹信息。"
+  "errors.bulkLocalFoldersRead": "无法验证本地文件夹信息。",
+  "errors.bulkOperationFailed": "无法完成批量操作。服务器上的剩余邮件已保留。"
 }
