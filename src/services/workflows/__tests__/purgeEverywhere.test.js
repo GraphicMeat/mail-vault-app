@@ -318,3 +318,55 @@ it('restores a refused exact search row without reviving another search run', as
   expect(mockSearch.searchResults.map((row) => row.uid)).toEqual([1]);
   expect(mockSearch.excludedSearchCopies.size).toBe(0);
 });
+
+it('never borrows an unrelated non-null B companion after Undo maps A onto its UID', async () => {
+  prime({ emails: [] });
+  await setDeleteUndo([
+    {
+      account: ACCOUNT,
+      accountId: ACCOUNT.id,
+      mailbox: 'INBOX.Spam',
+      uid: 1,
+      trash: 'Trash',
+      trashUid: 71,
+      messageId: 'm1@mock',
+      row: row(1),
+      view: `${ACCOUNT.id}|INBOX.Spam||INBOX`,
+    },
+  ]);
+  let release;
+  mockMoveEmails.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      })
+  );
+  const undo = useMailStore.getState().runUndo();
+  for (let i = 0; i < 30; i++) await Promise.resolve();
+  const original = captureBulkScope([1], useMailStore.getState(), [row(1)]);
+  const purge = purgeEverywhere([1], { scope: original });
+  const replacement = {
+    ...row(171),
+    messageId: 'B',
+    _nativeIdentity: {
+      ...row(171)._nativeIdentity,
+      uidValidity: 2,
+      originHash: 'B',
+    },
+  };
+  useMailStore.setState({
+    emails: [replacement],
+    selectedEmailIds: new Set([171]),
+    selectedEmailSnapshots: new Map([
+      [171, captureSelectionSnapshot(replacement, ACCOUNT.id, 'INBOX.Spam')],
+    ]),
+  });
+  release({ newUids: [171] });
+  await undo;
+  await purge;
+  expect(native.start.mock.calls[0][0].scope.keys).toEqual([171]);
+  expect(native.start.mock.calls[0][0].scope.targetHints).toEqual([]);
+  expect(
+    useMailStore.getState().emails.some((row) => row.messageId === 'B')
+  ).toBe(true);
+});

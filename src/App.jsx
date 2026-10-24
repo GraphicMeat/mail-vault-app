@@ -89,6 +89,7 @@ import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
 import { bulkOperationManager } from './services/BulkOperationManager';
+import { BulkPendingOperationBanner } from './components/BulkPendingOperationBanner';
 import { resolveErrorToastProps } from './utils/errorToast';
 import { resolveEscapeAction, resolveContactsEscape } from './utils/escapeAction';
 import { shouldStartFullInit } from './utils/shouldStartFullInit';
@@ -109,7 +110,6 @@ import { sameReply, applyReplyFill } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
-import { decodeImapUtf7 } from './utils/imapUtf7';
 import { tErr, t as tr, useT, setLocale } from './i18n/index.js';
 import { invoke } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
@@ -118,7 +118,6 @@ import { createComposeWindowOwner } from './services/composeWindow';
 import { startPrivacySync } from './utils/privacy/privacySync';
 import { createComposeSend, scheduleCompose } from './services/composeSend';
 import { getAccountCacheMailboxes } from './services/cacheManager';
-import { formatCount } from './utils/formatCount';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
@@ -1806,40 +1805,7 @@ function App() {
       <FocusLock />
       <PrivacyDictionaryHost />
 
-      {/* Pending bulk operation resume banner */}
-      {pendingOperation && (
-        <div className="fixed top-4 right-4 z-50 bg-mail-surface border border-mail-strong rounded-xl p-4 max-w-sm">
-          <p className="text-sm text-mail-text mb-3">
-            {t('app.unfinishedOperationRemaining', { type: pendingOperation.type.replace(/_/g, ' '), count: formatCount(pendingOperation.remaining || 0), mailbox: decodeImapUtf7(pendingOperation.mailbox || '') })}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={async () => {
-                try {
-                  await bulkOperationManager.resume(pendingOperation, null, () => {});
-                  const status = await bulkOperationManager.status();
-                  setPendingOperation(status.pending || null);
-                } catch (error) { useMailStore.setState({ error: tErr(error) }); }
-              }}
-              className="px-3 py-1.5 text-sm font-medium bg-mail-accent-fill text-white rounded-lg
-                        hover:bg-mail-accent/90 transition-colors"
-            >
-              {t('common.resume')}
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await bulkOperationManager.discard(pendingOperation.id);
-                  setPendingOperation(null);
-                } catch (error) { useMailStore.setState({ error: tErr(error) }); }
-              }}
-              className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
-            >
-              {t('common.discard')}
-            </button>
-          </div>
-        </div>
-      )}
+      <BulkPendingOperationBanner pending={pendingOperation} onPendingChange={setPendingOperation} />
       </div>
     </div>
     {mailArrival}

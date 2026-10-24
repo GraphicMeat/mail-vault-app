@@ -2594,10 +2594,8 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
     const unchanged = new Set(keys.filter((key, i) => key === originalScope.keys[i]));
     const hints = originalScope.targetHints.filter(hint => unchanged.has(hint.uid)
       || unchanged.has(`${hint.accountId}:${hint.mailbox}:${hint.uid}`));
-    for (let i = 0; i < keys.length; i++) if (keys[i] !== originalScope.keys[i]) {
-      const hint = get().selectedEmailSnapshots?.get(keys[i]);
-      if (hint) hints.push(hint);
-    }
+    // COPYUID alone never proves a new original, and a current companion
+    // under that UID may belong to an unrelated selected replacement.
     scope = { ...originalScope, keys, targetHints: hints };
   }
   const { useSearchStore } = await import('../../stores/searchStore');

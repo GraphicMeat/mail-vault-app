@@ -176,7 +176,8 @@ export class BulkOperationManager {
   }
   subscribe(listener) {
     this._subscribers.add(listener);
-    if (this._operation) listener({ ...this._operation });
+    if (this._operation)
+      listener({ ...this._operation }, { settled: !this._owner });
     return () => this._subscribers.delete(listener);
   }
   status() {
@@ -268,7 +269,12 @@ export class BulkOperationManager {
         } catch (error) {
           // A lost reply says nothing about whether admission or work started.
           owner.error = error;
-          await this._recover(owner);
+          try {
+            await this._recover(owner);
+          } catch {
+            // Dispatch is still ambiguous when status or fencing is offline.
+            // Keep this owner, listener and cancel path for the next poll.
+          }
         }
       }
       if (this._owner === owner && !owner.finishing) this._poll(owner);
@@ -280,26 +286,34 @@ export class BulkOperationManager {
           status: 'error',
           lastError: error.message || String(error),
         };
-        this._emit(owner);
+        this._emit(owner, true);
         this._cleanup();
       }
       throw error;
     }
   }
-  _emit(owner) {
+  _emit(owner, settled = false) {
     if (this._owner !== owner) return;
     owner.onProgress?.({ ...this._operation });
-    for (const listener of this._subscribers) listener({ ...this._operation });
+    for (const listener of this._subscribers)
+      listener({ ...this._operation }, { settled });
   }
   _accept(owner, operation, inactive = true) {
     if (
       this._owner !== owner ||
+      owner.finishing ||
       !operation ||
       operation.id !== owner.id ||
       !operation.attemptId
     )
       return false;
     if (owner.attempt && operation.attemptId !== owner.attempt) return false;
+    if (
+      owner.attempt &&
+      terminal(this._operation.status) &&
+      !terminal(operation.status)
+    )
+      return false;
     owner.attempt = operation.attemptId;
     this._operation = { ...operation };
     this._emit(owner);
@@ -317,6 +331,7 @@ export class BulkOperationManager {
   _event(owner, event) {
     if (
       this._owner !== owner ||
+      owner.finishing ||
       event?.operationId !== owner.id ||
       !event.attemptId
     )
@@ -345,7 +360,7 @@ export class BulkOperationManager {
       operationId: owner.id,
       attemptId: owner.requested,
     });
-    if (this._owner !== owner) return;
+    if (this._owner !== owner || owner.finishing) return;
     if (status?.active?.id === owner.id) {
       this._accept(owner, status.active, false);
       return;
@@ -453,7 +468,7 @@ export class BulkOperationManager {
       outcomes: [...owner.outcomes.values()],
     };
     const result = this._operation;
-    this._emit(owner);
+    this._emit(owner, true);
     this._cleanup();
     owner.resolve(result);
   }

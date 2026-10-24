@@ -116,3 +116,25 @@ describe('BulkOperationProgress — Archive, Back up & Delete steps', () => {
     }
   });
 });
+
+describe('native failure explanations', () => {
+  afterEach(async () => {
+    cleanup();
+    const { setLocale } = await import('../../i18n/index.js');
+    await setLocale('en');
+  });
+
+  it('translates a native service key in a non-English locale', async () => {
+    const { setLocale, tErr } = await import('../../i18n/index.js');
+    await setLocale('de');
+    paint({ status: 'error', errors: 1, lastError: 'errors.bulkIdentityChanged' });
+    expect(screen.getByText(tErr('errors.bulkIdentityChanged'))).toBeTruthy();
+    expect(screen.queryByText('errors.bulkIdentityChanged')).toBeNull();
+  });
+
+  it('shows a terminal failure reason when identification failed before per-row errors', async () => {
+    const { tErr } = await import('../../i18n/index.js');
+    paint({ status: 'error', errors: 0, lastError: 'errors.bulkOperationFailed' });
+    expect(screen.getByText(tErr('errors.bulkOperationFailed'))).toBeTruthy();
+  });
+});

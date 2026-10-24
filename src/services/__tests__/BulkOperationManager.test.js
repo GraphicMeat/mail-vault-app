@@ -339,3 +339,105 @@ it('does not mistake an Active complete label for an actual drain', async () => 
   await run;
   expect(manager.isRunning).toBe(false);
 });
+
+it.each(['start', 'resume'])(
+  'retains %s ownership after kickoff and first status both fail',
+  async (mode) => {
+    vi.useFakeTimers();
+    let requested;
+    let statusReads = 0;
+    let rejected;
+    m.send.mockImplementation(async (command, params) => {
+      if (command === 'bulk.start' || command === 'bulk.resume') {
+        requested = params;
+        throw new Error('reply timed out');
+      }
+      if (command === 'bulk.status') {
+        if (++statusReads === 1) throw new Error('status unavailable');
+        return {
+          active: {
+            id: requested.operationId,
+            attemptId: requested.attemptId,
+            type: 'delete',
+            status: 'deleting',
+          },
+          pending: null,
+        };
+      }
+      return { id: requested.operationId, status: 'cancelling' };
+    });
+    const run = (
+      mode === 'start'
+        ? manager.start({ type: 'delete', scope })
+        : manager.resume({ id: 'resume-id', type: 'delete' })
+    ).catch((error) => {
+      rejected = error;
+    });
+    await tick();
+    expect(manager.isRunning).toBe(true);
+    expect(m.unlisten).not.toHaveBeenCalled();
+    await expect(manager.start({ type: 'delete', scope })).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(501);
+    await manager.cancel();
+    m.events['bulk-progress']({
+      payload: {
+        operationId: requested.operationId,
+        attemptId: requested.attemptId,
+        finished: true,
+        operation: {
+          id: requested.operationId,
+          attemptId: requested.attemptId,
+          type: 'delete',
+          status: 'cancelled',
+        },
+      },
+    });
+    await run;
+    expect(rejected).toBeUndefined();
+    expect(
+      m.send.mock.calls.filter(([command]) =>
+        ['bulk.start', 'bulk.resume'].includes(command)
+      )
+    ).toHaveLength(1);
+    expect(manager.isRunning).toBe(false);
+  }
+);
+
+it('retains an ambiguous owner when its first unstarted fence is unavailable', async () => {
+  vi.useFakeTimers();
+  let requested;
+  let reads = 0;
+  let rejected;
+  m.send.mockImplementation(async (command, params) => {
+    if (command === 'bulk.start') {
+      requested = params;
+      throw new Error('reply timed out');
+    }
+    if (command === 'bulk.status') {
+      reads++;
+      if (reads === 1) return { active: null, pending: null, admission: null };
+      if (reads === 2) throw new Error('fence unavailable');
+      return {
+        active: null,
+        pending: null,
+        admission: {
+          operationId: requested.operationId,
+          attemptId: requested.attemptId,
+          state: 'fenced',
+        },
+      };
+    }
+  });
+  const run = manager.start({ type: 'delete', scope }).catch((error) => {
+    rejected = error;
+  });
+  await tick();
+  expect(manager.isRunning).toBe(true);
+  await vi.advanceTimersByTimeAsync(501);
+  await run;
+  expect(rejected).toBeUndefined();
+  expect(manager.isRunning).toBe(false);
+  expect(
+    m.send.mock.calls.filter(([command]) => command === 'bulk.start')
+  ).toHaveLength(1);
+});

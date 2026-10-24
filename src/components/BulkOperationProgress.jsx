@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X, Shield
 } from 'lucide-react';
-import { t as tr, t, useT   } from '../i18n/index.js';
+import { t as tr, t, tErr, useT   } from '../i18n/index.js';
 import { DockSlot } from './ui/ToastDock';
 import { formatCount } from '../utils/formatCount';
 
@@ -232,9 +232,9 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
               />
             </div>
 
-            {errors > 0 && (
+            {(errors > 0 || (isError && operation?.lastError)) && (
               <div className="mt-2 text-xs text-mail-danger">
-                {operation?.lastError || `${errors} email(s) failed`}
+                {operation?.lastError ? tErr(operation.lastError) : `${errors} email(s) failed`}
               </div>
             )}
           </div>

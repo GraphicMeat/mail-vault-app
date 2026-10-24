@@ -86,7 +86,9 @@ export async function getCachedMailboxes(accountId) {
 export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext, highestModseq, serverUids, removedUids } = {}) {
   const nativeIdentity = coherentNativeIdentity(emails, accountId, mailbox);
   const cacheEntry = {
-    nativeIdentity,
+    // Empty metadata/prune writes retain the existing native owner. Only
+    // nonempty unproved rows explicitly invalidate that ownership.
+    nativeIdentity: emails?.length ? nativeIdentity : undefined,
     nativeExpectedIdentity: nativeIdentity ? emails[0]?._nativeExpectedIdentity : undefined,
     accountId,
     mailbox,

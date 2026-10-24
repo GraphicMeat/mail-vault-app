@@ -243,3 +243,65 @@ it('consumes actual native checkpoint/pending shapes including omitted request d
   ]);
   vi.unstubAllGlobals();
 });
+
+it('keeps terminal status and four counters when an older active poll returns during the getter', async () => {
+  vi.useFakeTimers();
+  let request;
+  let releaseStatus;
+  let releaseGetter;
+  const finalCounts = {
+    deleted: 1,
+    failed: 2,
+    queuedBackup: 3,
+    needsResync: 4,
+  };
+  m.send.mockImplementation(async (command, params) => {
+    if (command === 'bulk.start') {
+      request = params;
+      return {
+        id: params.operationId,
+        attemptId: params.attemptId,
+        type: params.type,
+        status: 'deleting',
+        result: { deleted: 0 },
+      };
+    }
+    if (command === 'bulk.status')
+      return new Promise((resolve) => {
+        releaseStatus = resolve;
+      });
+    if (command === 'read_pending_operation')
+      return new Promise((resolve) => {
+        releaseGetter = resolve;
+      });
+  });
+  const run = manager.start({ type: 'delete_everywhere', scope });
+  for (let i = 0; i < 30; i++) await Promise.resolve();
+  vi.advanceTimersByTime(501);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  const terminal = {
+    id: request.operationId,
+    attemptId: request.attemptId,
+    type: request.type,
+    status: 'complete',
+    result: finalCounts,
+  };
+  m.events['bulk-progress']({
+    payload: {
+      operationId: request.operationId,
+      attemptId: request.attemptId,
+      finished: true,
+      operation: terminal,
+    },
+  });
+  releaseStatus({
+    active: { ...terminal, status: 'deleting', result: { deleted: 0 } },
+    pending: null,
+  });
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  releaseGetter(rawFor(request));
+  const operation = await run;
+  expect(operation.status).toBe('complete');
+  expect(operation.result).toEqual(finalCounts);
+  vi.useRealTimers();
+});

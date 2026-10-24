@@ -97,6 +97,39 @@ describe('Bulk delete everywhere', function () {
     }).filter(r => r.subject);
   }, SUBJECT_RE);
 
+  // Bounded native-boundary diagnosis. Synthetic fixture identity only; never
+  // log account configuration, body content, credentials or mirror paths.
+  const nativeDiagnosis = () => browser.executeAsync((done) => {
+    (async () => {
+    const hint = value => value && ({ accountId: value.accountId, mailbox: value.mailbox, uid: value.uid,
+      nativeIdentity: value.nativeIdentity || value._nativeIdentity || null,
+      messageIdPresent: value.messageIdPresent, hasMessageId: !!value.messageId,
+      hasGraphId: !!(value.graphId || value._graphId), hasJmapId: !!(value.jmapId || value._jmapId),
+      localIdentity: value.localIdentity || null });
+    const state = window.__MAIL_STORE__?.getState?.();
+    let status; let pending;
+    try { status = await window.__TAURI__.core.invoke('daemon_rpc', { method: 'bulk.status', params: {} }); }
+    catch (error) { status = { error: String(error) }; }
+    try {
+      const raw = await window.__TAURI__.core.invoke('daemon_rpc', { method: 'read_pending_operation', params: {} });
+      pending = raw && { id: raw.id, attemptId: raw.attemptId, schemaVersion: raw.schemaVersion,
+        type: raw.type, status: raw.status, currentPhase: raw.currentPhase, result: raw.result, lastError: raw.lastError,
+        scope: raw.intent?.scope && { ...raw.intent.scope, targetHints: (raw.intent.scope.targetHints || []).slice(0, 8).map(hint) },
+        targets: (raw.worker?.purgeTargets || []).slice(0, 8).map(target => ({
+          accountId: target.accountId, mailbox: target.mailbox, uid: target.uid,
+          refused: target.refused, skipped: target.skipped, needsResync: target.needsResync, lastError: target.lastError,
+          server: target.server, local: target.local, mirror: target.mirror,
+          proof: target.proof && { kind: target.proof.kind, origin: target.proof.origin,
+            transport: target.proof.identity?.transport, validity: target.proof.identity?.validity,
+            stored: target.proof.stored && { uid: target.proof.stored.uid, sha256: target.proof.stored.sha256 } },
+        })) };
+    } catch (error) { pending = { error: String(error) }; }
+    return { status, pending, selectedKeys: [...(state?.selectedEmailIds || [])].slice(0, 8),
+      selectedSnapshots: [...(state?.selectedEmailSnapshots || [])].slice(0, 8).map(([key, value]) => [key, hint(value)]),
+      rows: [...(state?.emails || []), ...(state?.sentEmails || []), ...(state?.localEmails || [])].slice(0, 12).map(hint) };
+    })().then(done, error => done({ diagnosticError: String(error) }));
+  });
+
   const rowFor = async (subject) => (await rows()).find(r => r.subject === subject);
 
   const bodyIncludes = (needle) => browser.execute((t) => document.body.innerText.includes(t), needle);
@@ -453,8 +486,10 @@ describe('Bulk delete everywhere', function () {
     expect(await bodyIncludes('the server, your vault, and your backup drive')).toBe(true);
     expect(await bodyIncludes('No copy will be left anywhere')).toBe(true);
 
+    console.log('F_PURGE_BEFORE=' + JSON.stringify(await nativeDiagnosis()));
     await waitClick(() => clickTestId('bulk-delete-confirm'), 'Could not confirm Delete Everywhere');
 
+    try {
     await browser.waitUntil(
       async () => {
         const list = await rows();
@@ -466,6 +501,10 @@ describe('Bulk delete everywhere', function () {
         timeoutMsg: `Deleted-everywhere rows (${deletedSubjects.join(', ')}) were still present after Delete Everywhere completed`,
       },
     );
+    } catch (error) {
+      console.log('F_PURGE_AFTER=' + JSON.stringify(await nativeDiagnosis()));
+      throw error;
+    }
     // The message deliberately excluded from this run must be untouched —
     // proof this ran against exactly the selection, not the whole folder.
     expect(await rowFor(localOnlySubject)).toBeTruthy();
@@ -566,5 +605,6 @@ describe('Bulk delete everywhere', function () {
     for (const subject of deletedSubjects) {
       expect(list.some(r => r.subject === subject)).toBe(false);
     }
+    console.log('F_PURGE_FINAL=' + JSON.stringify(await nativeDiagnosis()));
   });
 });

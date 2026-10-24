@@ -146,3 +146,8 @@ it('demo legacy saves cannot create native versioned authority', async () => {
     }
   }
 });
+
+it('App mounts the tested live pending presentation even before pending work exists', () => {
+  const app = readFileSync('src/App.jsx', 'utf8');
+  expect(app).toContain('<BulkPendingOperationBanner pending={pendingOperation} onPendingChange={setPendingOperation} />');
+});

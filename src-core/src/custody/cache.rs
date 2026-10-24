@@ -1513,6 +1513,32 @@ mod tests {
         assert!(got.get("nativeIdentity").is_none(), "metadata-only observation cannot bind retained rows");
     }
 
+    #[test]
+    fn native_batch_empty_prune_retains_only_existing_ownership() {
+        let (_temp, conn) = store();
+        let proof = json!({"accountId":"a","mailbox":"INBOX","uidValidity":1,"originHash":"original-A"});
+        save_headers(&conn, "a", "INBOX", &json!({
+            "nativeIdentity":proof,"nativeExpectedIdentity":null,
+            "emails":[{"uid":1},{"uid":2},{"uid":3}]
+        }).to_string()).unwrap();
+        // Exact empty metadata/prune payload emitted by the frontend adapter;
+        // no row or current observation is promoted into identity authority.
+        save_headers(&conn, "a", "INBOX", &json!({
+            "accountId":"a","mailbox":"INBOX","emails":[],"totalEmails":2,
+            "uidValidity":null,"uidNext":null,"highestModseq":null,"removedUids":[3]
+        }).to_string()).unwrap();
+        let meta: Value = serde_json::from_str(&load_meta(&conn, "a", "INBOX").unwrap().unwrap()).unwrap();
+        assert_eq!(meta["nativeIdentity"], proof);
+        let mut retained = load_by_uids(&conn, "a", "INBOX", &[1, 2, 3]).unwrap()
+            .iter().map(|row| row["uid"].as_u64().unwrap()).collect::<Vec<_>>();
+        retained.sort_unstable();
+        assert_eq!(retained, vec![1, 2]);
+        save_headers(&conn, "a", "Unknown", &json!({"emails":[],"removedUids":[3]}).to_string()).unwrap();
+        assert!(native_identity(&conn, "a", "Unknown").unwrap().is_none());
+        save_headers(&conn, "a", "INBOX", &json!({"nativeIdentity":null,"emails":[{"uid":4}]}).to_string()).unwrap();
+        assert!(native_identity(&conn, "a", "INBOX").unwrap().is_none());
+    }
+
     /// H3b (a): a folder with no header row at all (never opened, backfill
     /// not there yet, cleared and refilling, an account's cache wiped) is not
     /// "the server holds none of them": the lookup is unknown, so the index
