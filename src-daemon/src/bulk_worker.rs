@@ -811,6 +811,29 @@ static INVENTORY_PROBES:std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::
 #[cfg(test)]
 static LOCAL_LEDGER_PROBES:std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::PathBuf,Arc<std::sync::atomic::AtomicUsize>>>>=std::sync::OnceLock::new();
 #[cfg(test)]
+struct LocalEffectProbe {
+    checked:std::sync::mpsc::Sender<()>,
+    release:std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+    publishing:std::sync::mpsc::Sender<()>,
+}
+#[cfg(test)]
+static LOCAL_EFFECT_PROBES:std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::PathBuf,Arc<LocalEffectProbe>>>>=std::sync::OnceLock::new();
+#[cfg(test)]
+fn local_effect_probe(root:&std::path::Path) {
+    let probe=LOCAL_EFFECT_PROBES.get_or_init(Default::default).lock().unwrap().get(root).cloned();
+    if let Some(probe)=probe {let _=probe.checked.send(());let _=probe.release.lock().unwrap().recv_timeout(std::time::Duration::from_secs(5));}
+}
+#[cfg(test)]
+pub(crate) fn cache_publication_probe(root:&std::path::Path) {
+    if let Some(probe)=LOCAL_EFFECT_PROBES.get_or_init(Default::default).lock().unwrap().get(root) {let _=probe.publishing.send(());}
+}
+#[cfg(test)]
+struct LocalEffectWatch(std::path::PathBuf);
+#[cfg(test)]
+impl Drop for LocalEffectWatch {
+    fn drop(&mut self) {LOCAL_EFFECT_PROBES.get_or_init(Default::default).lock().unwrap().remove(&self.0);}
+}
+#[cfg(test)]
 fn local_ledger_probe(root:&std::path::Path) {
     if let Some(count)=LOCAL_LEDGER_PROBES.get_or_init(Default::default).lock().unwrap().get(root) {count.fetch_add(1,Ordering::SeqCst);}
 }
@@ -877,23 +900,26 @@ impl ServerLocalEvidence {
     fn into_stored(self)->Option<StoredProof> {match self {Self::Unresolved=>None,Self::Checked(stored)=>stored}}
 }
 fn server_local_proof(state:&Arc<DaemonState>,root:&std::path::Path,t:&PurgeTarget,identity:&Identity,origin:&str,expected:Option<&StoredProof>,original_mid:Option<&str>,artifacts:&[(String,Vec<u8>)])->Result<ServerLocalEvidence,String> {
-    let owner=crate::custody::with_conn(state,|c|mailvault_core::custody::cache::native_identity(c,&t.account_id,&t.mailbox)).map_err(|_|"errors.bulkIdentityUncertain")?;
+    crate::custody::with_conn(state,|c|server_local_proof_with_conn(c,root,t,identity,origin,expected,original_mid,artifacts))
+}
+// Caller holds custody for every owner/row read. The final effect uses this
+// same connection without releasing custody or recursively acquiring it.
+fn server_local_proof_with_conn(c:&rusqlite::Connection,root:&std::path::Path,t:&PurgeTarget,identity:&Identity,origin:&str,expected:Option<&StoredProof>,original_mid:Option<&str>,artifacts:&[(String,Vec<u8>)])->Result<ServerLocalEvidence,String> {
+    let owner=mailvault_core::custody::cache::native_identity(c,&t.account_id,&t.mailbox).map_err(|_|"errors.bulkIdentityUncertain")?;
     let expected_owner=mailvault_core::imap::NativeHeaderIdentity {
         account_id:t.account_id.clone(),mailbox:t.mailbox.clone(),origin_hash:origin.into(),
         uid_validity:match identity {Identity::Imap{validity,..}=>Some(*validity),Identity::Jmap{..}=>Some(1),Identity::Graph{..}=>None},
         jmap_mailbox_id:match identity {Identity::Jmap{mailbox_id,..}=>Some(mailbox_id.clone()),_=>None},
     };
     if owner.as_ref().is_some_and(|owner|owner!=&expected_owner) {return Err("errors.bulkIdentityChanged".into());}
-    let row=crate::custody::with_conn(state,|c| mailvault_core::custody::entries::get(c,&t.account_id,&t.mailbox,t.uid))?;
+    let row=mailvault_core::custody::entries::get(c,&t.account_id,&t.mailbox,t.uid)?;
     if row.as_ref().is_some_and(|r|matches!(r["source"].as_str(),Some("local_draft"|"local_sent"|"import"))) {return Err("errors.bulkIdentityChanged".into());}
     // The native mailbox generation binds cached bytes, including messages
     // without a Message-ID, to the original IMAP UID space.
     if let Identity::Imap{validity,..}=identity {
         // Read one metadata scalar, without load_meta's whole-row count.
-        let generation=crate::custody::with_conn(state,|c| {
-            use rusqlite::OptionalExtension;
-            c.query_row("SELECT json_extract(meta_json,'$.uidValidity') FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",rusqlite::params![t.account_id,t.mailbox],|r|r.get::<_,Option<u32>>(0)).optional().map(Option::flatten).map_err(|_|"errors.bulkIdentityUncertain".to_string())
-        })?;
+        use rusqlite::OptionalExtension;
+        let generation=c.query_row("SELECT json_extract(meta_json,'$.uidValidity') FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",rusqlite::params![t.account_id,t.mailbox],|r|r.get::<_,Option<u32>>(0)).optional().map(Option::flatten).map_err(|_|"errors.bulkIdentityUncertain".to_string())?;
         if generation!=Some(*validity) {return Err("errors.bulkIdentityChanged".into());}
         if !artifacts.is_empty() && mailvault_core::maildir::read_generation(&mailvault_core::message_store::mailbox_dir(root,&t.account_id,&t.mailbox)) != Some(*validity) {
             return Err("errors.bulkIdentityUncertain".into());
@@ -902,7 +928,7 @@ fn server_local_proof(state:&Arc<DaemonState>,root:&std::path::Path,t:&PurgeTarg
     let expected_mid=original_mid.map(mailvault_core::maildir::normalize_message_id);
     if row.as_ref().and_then(|r|r.get("message_id")).and_then(Value::as_str).map(mailvault_core::maildir::normalize_message_id)
         .is_some_and(|mid|Some(mid)!=expected_mid) {return Err("errors.bulkIdentityChanged".into());}
-    let cached=crate::custody::with_conn(state,|c|mailvault_core::custody::cache::load_by_uids(c,&t.account_id,&t.mailbox,&[t.uid]))?;
+    let cached=mailvault_core::custody::cache::load_by_uids(c,&t.account_id,&t.mailbox,&[t.uid])?;
     if cached.iter().any(|r| {
         let mid=r.get("messageId").or_else(||r.get("message_id")).and_then(Value::as_str).map(mailvault_core::maildir::normalize_message_id).filter(|mid|!mid.is_empty());
         if mid != expected_mid {return true;}
@@ -930,11 +956,12 @@ fn server_local_proof(state:&Arc<DaemonState>,root:&std::path::Path,t:&PurgeTarg
 }
 fn purge_local_target(state:&Arc<DaemonState>,t:&PurgeTarget,original_mid:Option<&str>,inventory:&LocalInventory)->Result<PurgeEffect,String> {
     common::with_mailbox_write(state,&t.account_id,&t.mailbox,|root| {
+      crate::custody::with_conn(state,|c| {
         let artifacts=inventory_artifacts(state,root,t,inventory)?;
         match t.proof.as_ref().ok_or("errors.bulkIdentityUncertain")? {
             PurgeProof::Local{receipt,..}=>{
                 let raw=identical_artifact_bytes(&artifacts)?;
-                let Some(proof)=crate::handlers::compose::retained_local_ownership_resolved(state,receipt,raw)? else {return Ok(PurgeEffect::Conflict);};
+                let Some(proof)=crate::handlers::compose::retained_local_ownership_resolved_with_conn(c,receipt,raw)? else {return Ok(PurgeEffect::Conflict);};
                 let retired=mailvault_core::app_db::with(&state.app_dir,|c| {
                     let current=mailvault_core::app_db::compose_receipts::load(c,&proof.identity.scope)?;
                     if current.iter().any(|r|r!=&proof) {return Ok(false);}
@@ -945,7 +972,7 @@ fn purge_local_target(state:&Arc<DaemonState>,t:&PurgeTarget,original_mid:Option
                 if proof.state==mailvault_core::app_db::compose_receipts::State::Cleaned {return Ok(PurgeEffect::Complete);}
             }
             PurgeProof::Server{identity,origin,stored,..}=>{
-                match server_local_proof(state,root,t,identity,origin,stored.as_ref(),original_mid,&artifacts) {
+                match server_local_proof_with_conn(c,root,t,identity,origin,stored.as_ref(),original_mid,&artifacts) {
                     Err(error) if identity_error(&error)=>return Ok(PurgeEffect::Conflict),
                     Err(error)=>return Err(error),
                     Ok(ServerLocalEvidence::Unresolved)=>return Ok(PurgeEffect::Conflict),
@@ -954,19 +981,19 @@ fn purge_local_target(state:&Arc<DaemonState>,t:&PurgeTarget,original_mid:Option
                 }
             }
         }
+        #[cfg(test)] local_effect_probe(root);
         let candidates=inventory.candidates.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
         let outcome=mailvault_core::vault_files::delete_uid_candidates(&state.vault_registry,root,&t.account_id,&t.mailbox,t.uid,candidates)?;
         if outcome.failed {return Ok(PurgeEffect::Failed);}
-        crate::custody::with_conn(state,|c| {
-            mailvault_core::custody::entries::remove(c,&t.account_id,&t.mailbox,&[t.uid])?;
-            mailvault_core::custody::cache::save_headers(c,&t.account_id,&t.mailbox,&json!({"removedUids":[t.uid]}).to_string())
-        })?;
+        mailvault_core::custody::entries::remove(c,&t.account_id,&t.mailbox,&[t.uid])?;
+        mailvault_core::custody::cache::save_headers(c,&t.account_id,&t.mailbox,&json!({"removedUids":[t.uid]}).to_string())?;
         crate::classification::forget_at(&state.app_dir,&t.account_id,&t.mailbox,&[t.uid]);
         if let Ok(ids)=mailvault_core::app_db::with(&state.app_dir,|c|mailvault_core::app_db::follow_up::dismiss_at(c,&t.account_id,&t.mailbox,&[t.uid])) {
             for id in ids {crate::follow_up_worker::emit(state,&id,"dismissed");}
         }
         tracing::info!("bulk purge: removed {} local artifacts",outcome.removed);
         Ok(PurgeEffect::Complete)
+      })
     })
 }
 
@@ -1827,6 +1854,27 @@ mod tests {
             let expected=mailvault_core::custody::cache::native_identity(c,"acc","INBOX")?;
             mailvault_core::custody::cache::save_headers(c,"acc","INBOX",&json!({"nativeIdentity":owner,"nativeExpectedIdentity":expected,"uidValidity":owner.uid_validity,"emails":rows}).to_string())
         }).unwrap();
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_review_native_cache_publisher_cannot_cross_final_check_use() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+        let provider=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&provider);let owner_a=mailvault_core::imap::NativeHeaderIdentity::new(&cfg,"acc","INBOX",Some(1));publish_purge_owner(&state,&owner_a,json!([{"uid":7,"messageId":"selected@test"}]));
+        let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(original_scope(&cfg,"INBOX",Some("selected@test"))).unwrap()).unwrap();let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);
+        ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
+        let (checked_tx,checked_rx)=std::sync::mpsc::channel();let (release_tx,release_rx)=std::sync::mpsc::channel();let (publishing_tx,publishing_rx)=std::sync::mpsc::channel();
+        LOCAL_EFFECT_PROBES.get_or_init(Default::default).lock().unwrap().insert(dir.path().into(),Arc::new(LocalEffectProbe{checked:checked_tx,release:std::sync::Mutex::new(release_rx),publishing:publishing_tx}));let _watch=LocalEffectWatch(dir.path().into());
+        let local=tokio::spawn(async move{ports.purge_local(&target).await});checked_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        // Admit a real native cache publication after A's final check. Its
+        // credential check uses B; the account returns to A before local use.
+        let mut cfg_b=cfg.clone();cfg_b.host="endpoint-b.example.test".into();let owner_b=mailvault_core::imap::NativeHeaderIdentity::new(&cfg_b,"acc","INBOX",Some(1));
+        let credential_path=dir.path().join("credentials.json");let account_b=json!({"email":cfg_b.email,"password":"pw","imapHost":cfg_b.host,"imapPort":cfg_b.port});std::fs::write(&credential_path,json!({"acc":account_b.to_string()}).to_string()).unwrap();
+        let data=json!({"nativeIdentity":owner_b,"nativeExpectedIdentity":owner_a,"uidValidity":1,"emails":[{"uid":7,"messageId":"selected@test","subject":"native B publication","_nativeIdentity":owner_b}]}).to_string();
+        let publish_state=state.clone();let (done_tx,done_rx)=std::sync::mpsc::channel();let publication=tokio::spawn(async move{let reply=handle_request_for_test(&publish_state,"save_email_cache",json!({"accountId":"acc","mailbox":"INBOX","data":data})).await;let _=done_tx.send(reply.error.is_none());reply});
+        publishing_rx.recv_timeout(Duration::from_secs(5)).unwrap();let custody_protected=state.custody.db.try_lock().is_err();let publication_waited=done_rx.recv_timeout(Duration::from_millis(100)).is_err();purge_credentials(&state,&provider);let _=release_tx.send(());
+        let local_result=local.await.unwrap().unwrap();let published=publication.await.unwrap();assert!(published.error.is_none(),"actual native publisher: {:?}",published.error);
+        let rows=crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc","INBOX",&[7])).unwrap();let owner=crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::native_identity(c,"acc","INBOX")).unwrap();
+        assert!(((custody_protected&&publication_waited)||local_result==PurgeEffect::Conflict)&&rows.len()==1&&rows[0]["subject"]=="native B publication"&&owner==Some(owner_b),"publication must wait or purge refuse: protected={custody_protected}, waited={publication_waited}, local={local_result:?}, rows={rows:?}");
+        assert!(mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap().is_empty());std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
     #[tokio::test(flavor="multi_thread")]
     async fn bulk_purge_review_conflicting_native_owner_never_blesses_current_bytes() {

@@ -167,6 +167,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let data = without_preview_text(data);
                     let now = mailvault_core::people::model::now_ms();
                     let added = with_vault_write(&state, |_root| {
+                        #[cfg(test)] crate::bulk_worker::cache_publication_probe(_root);
                         daemon_custody::with_conn(&state, |c| sql_cache::save_headers_reporting_new(c, &account_id, &mailbox, &data, now))
                     })?;
                     // Mail the app fetched itself reaches the contacts index

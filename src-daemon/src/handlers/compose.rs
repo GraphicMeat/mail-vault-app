@@ -159,7 +159,10 @@ pub(crate) fn with_local_ownership<T>(
 
 /// None is absent/unavailable custody; Some(false) is a known conflicting row.
 fn local_custody(state: &Arc<DaemonState>, scope: &Scope) -> Option<bool> {
-    daemon_custody::with_conn(state, |c| entries::get(c, &scope.account_id, &scope.mailbox, scope.uid)).ok().flatten().map(|r| {
+    daemon_custody::with_conn(state, |c| Ok(local_custody_with_conn(c,scope))).ok().flatten()
+}
+fn local_custody_with_conn(c:&rusqlite::Connection,scope:&Scope)->Option<bool> {
+    entries::get(c,&scope.account_id,&scope.mailbox,scope.uid).ok().flatten().map(|r| {
         matches!(r["source"].as_str(), Some("local_draft" | "local_sent"))
             && r["message_id"].as_str().and_then(compose::normalize_message_id).as_deref() == Some(scope.message_id.as_str())
     })
@@ -188,7 +191,16 @@ pub(crate) fn local_ownership_resolved(state:&Arc<DaemonState>,scope:&Scope,expe
 }
 pub(crate) fn retained_local_ownership_resolved(state:&Arc<DaemonState>,proof:&Receipt,raw:Option<&[u8]>)->Result<Option<Receipt>,String> {
     if !proof.is_valid() {return Err("invalid retained compose proof".into());}
-    if local_custody(state,&proof.identity.scope)==Some(false) {return Ok(None);}
+    retained_local_ownership_checked(proof,raw,local_custody(state,&proof.identity.scope))
+}
+/// Matching mailbox -> vault gate -> custody is already held by the E3 local
+/// unit. Reuse the same policy without recursively acquiring custody.
+pub(crate) fn retained_local_ownership_resolved_with_conn(c:&rusqlite::Connection,proof:&Receipt,raw:Option<&[u8]>)->Result<Option<Receipt>,String> {
+    if !proof.is_valid() {return Err("invalid retained compose proof".into());}
+    retained_local_ownership_checked(proof,raw,local_custody_with_conn(c,&proof.identity.scope))
+}
+fn retained_local_ownership_checked(proof:&Receipt,raw:Option<&[u8]>,custody:Option<bool>)->Result<Option<Receipt>,String> {
+    if custody==Some(false) {return Ok(None);}
     let matches=match (proof.state,raw) {
         (State::Present,Some(raw))=>proof.identity.matches_bytes(raw),
         (State::Cleaned,None)=>true,
