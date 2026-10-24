@@ -1222,6 +1222,8 @@ impl SyncEngine {
         // this is set, so leaving it on a failure strands the mailbox loading
         // forever with nothing actually fetching.
         self.backfilling.lock().await.remove(&key);
+        #[cfg(test)]
+        self.pause_backfill_at(tests::BackfillPausePoint::BeforeCompletion).await;
 
         match fetched {
             Ok(n) if n > 0 => {}
@@ -2642,7 +2644,7 @@ mod tests {
 
     /// Test synchronization is per engine and removed from non-test builds.
     #[derive(Clone, Copy, PartialEq, Eq)]
-    pub(super) enum BackfillPausePoint { BeforeListing, AfterChunk }
+    pub(super) enum BackfillPausePoint { BeforeListing, AfterChunk, BeforeCompletion }
 
     pub(super) struct BackfillPause {
         pub(super) point: BackfillPausePoint,
@@ -2733,6 +2735,74 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn reviewed_native_listing_owner_changes_before_empty_result() {
         owner_changes_during_native_listing(true).await;
+    }
+
+    async fn completion_marker_allows_new_owner(same_origin: bool, delayed: bool, failed: bool, unbound: bool) {
+        let dir = scratch_dir("native_completion_owner");
+        let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
+        let account_a = account_for(&a);
+        let account_b = if same_origin { account_a.clone() } else { account_for(&b) };
+        let engine = Arc::new(engine_for(&dir));
+        if !unbound { assert!(engine.sync_account(&account_a, "INBOX").await.success); }
+        if failed {
+            a.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3))
+                .fault(Trigger::on("SELECT"), Action::RefuseWith("NO".into(), "fixture refusal".into())));
+        }
+        let paused = if delayed {
+            let pause = Arc::new(BackfillPause { point: BackfillPausePoint::BeforeCompletion, reached: tokio::sync::Notify::new(), release: tokio::sync::Notify::new() });
+            *engine.backfill_pause.lock().unwrap() = Some(pause.clone());
+            let (running, source) = (engine.clone(), account_a.clone());
+            let job = tokio::spawn(async move { running.backfill_mailbox(&source, "INBOX").await });
+            tokio::time::timeout(Duration::from_secs(5), pause.reached.notified()).await.expect("A must complete before marker insertion");
+            assert!(!engine.is_backfilling("acc1").await);
+            Some((pause, job))
+        } else {
+            engine.backfill_mailbox(&account_a, "INBOX").await;
+            assert_eq!(engine.backfill_gave_up.lock().await.len(), 1, "same-owner zero or ordinary failure still suppresses repeated work");
+            let before = a.commands();
+            engine.backfill_mailbox(&account_a, "INBOX").await;
+            let mut refreshed = account_a.clone();
+            refreshed.imap_config.password = Some("refreshed secret".into());
+            engine.backfill_mailbox(&refreshed, "INBOX").await;
+            assert_eq!(a.commands(), before, "same-owner and secret-only retries remain suppressed");
+            None
+        };
+        let validity = if same_origin && !unbound { 2 } else { 1 };
+        if same_origin { a.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10).with_uid_validity(validity))); }
+        app_fetched_headers(&engine, &account_b, "INBOX", &[1, 2, 3], serde_json::json!({"totalEmails": 10, "uidNext": 11})).await;
+        let before = with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap());
+        if let Some((pause, job)) = paused {
+            pause.release.notify_one();
+            job.await.unwrap();
+            assert_eq!(with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap()), before, "late A completion cannot change B proof or rows");
+        }
+        engine.backfill_mailbox(&account_b, "INBOX").await;
+        assert_eq!(cached_uid_set(&engine, "INBOX"), (1..=10).collect(), "an A marker cannot suppress a new native owner");
+        assert!(engine.cache_ctx("acc1", "INBOX").native_seed(&account_b.imap_config).unwrap().matches(&imap::NativeHeaderIdentity::new(&account_b.imap_config, "acc1", "INBOX", Some(validity))));
+        assert!(!engine.is_backfilling("acc1").await);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn reviewed_native_completion_marker_changes_origin() {
+        completion_marker_allows_new_owner(false, false, false, false).await;
+    }
+    #[tokio::test]
+    async fn reviewed_native_completion_marker_changes_generation() {
+        completion_marker_allows_new_owner(true, false, false, false).await;
+    }
+    #[tokio::test]
+    async fn reviewed_native_completion_marker_unbound_becomes_bound() {
+        completion_marker_allows_new_owner(true, false, true, true).await;
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reviewed_native_completion_marker_delayed_zero() {
+        completion_marker_allows_new_owner(false, true, false, false).await;
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reviewed_native_completion_marker_delayed_failure() {
+        completion_marker_allows_new_owner(false, true, true, false).await;
     }
 
     async fn generation_changed_native_backfill(keep_partial: bool) {
