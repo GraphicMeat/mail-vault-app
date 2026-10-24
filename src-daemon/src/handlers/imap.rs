@@ -1001,6 +1001,9 @@ mod tests {
         assert_eq!(result["emails"].as_array().unwrap().len(), 3);
         assert_eq!(result["page"], json!(1));
         assert_eq!(result["limit"], json!(200));
+        assert_eq!(result["uidValidity"], json!(1));
+        assert_eq!(result["nativeIdentity"]["mailbox"], json!("INBOX"));
+        assert_eq!(result["nativeIdentity"]["originHash"].as_str().map(str::len), Some(64));
     }
 
     #[tokio::test]
@@ -1061,6 +1064,8 @@ mod tests {
         assert_eq!(result["total"], json!(3));
         let uids: Vec<u32> = result["emails"].as_array().unwrap().iter().map(|e| e["uid"].as_u64().unwrap() as u32).collect();
         assert_eq!(uids.len(), 2);
+        assert_eq!(result["uidValidity"], json!(1));
+        assert_eq!(result["nativeIdentity"]["uidValidity"], json!(1));
         assert!(uids.contains(&1) && uids.contains(&3));
     }
 

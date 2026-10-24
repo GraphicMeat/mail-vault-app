@@ -341,3 +341,13 @@ describe('headerMemo', () => {
     });
   });
 });
+
+it('drops a memo when native origin changes with otherwise equal metadata', async () => {
+  const id = nextId();
+  const proof = { accountId: id, mailbox: 'INBOX', uidValidity: 7, originHash: 'origin-A' };
+  const rows = [{ uid: 7, _nativeIdentity: proof }];
+  remember(id, 'INBOX', rows, { ...META, nativeIdentity: proof });
+  const io = fakeIo({ uids: [7] });
+  expect(await recall(id, 'INBOX', { ...META, nativeIdentity: { ...proof, originHash: 'origin-B' } }, io)).toBeNull();
+  expect(io.listCachedUids).not.toHaveBeenCalled();
+});

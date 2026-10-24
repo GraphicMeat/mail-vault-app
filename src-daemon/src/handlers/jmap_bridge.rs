@@ -1794,6 +1794,9 @@ second body";
         assert_eq!(emails[0]["uid"], json!(e2));
         assert_eq!(emails[0]["messageId"], json!("<e2@x>"));
         assert_eq!(emails[0]["from"]["address"], json!("bob@example.test"));
+        assert_eq!(emails[0]["_jmapId"], json!("e2"));
+        assert_eq!(r["nativeIdentity"]["uidValidity"], json!(1));
+        assert_eq!(r["nativeIdentity"]["originHash"].as_str().map(str::len), Some(64));
     }
 
     #[tokio::test]
