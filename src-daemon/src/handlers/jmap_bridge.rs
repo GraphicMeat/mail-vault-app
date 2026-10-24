@@ -1800,6 +1800,7 @@ second body";
         assert_eq!(emails[0]["from"]["address"], json!("bob@example.test"));
         assert_eq!(emails[0]["_jmapId"], json!("e2"));
         assert_eq!(r["nativeIdentity"]["uidValidity"], json!(1));
+        assert_eq!(r["nativeIdentity"]["jmapMailboxId"], "mb-inbox");
         assert_eq!(r["nativeIdentity"]["originHash"].as_str().map(str::len), Some(64));
     }
 
@@ -1937,6 +1938,7 @@ second body";
         let a = jmap_account(&m);
         let by_text = ok(call(&state, "imap_search_emails", json!({"account": a, "mailbox": "INBOX", "query": "two"})).await);
         assert_eq!(by_text["success"], json!(true));
+        assert_eq!(by_text["nativeIdentity"]["jmapMailboxId"], "mb-inbox");
         assert_eq!(by_text["total"], json!(1));
         assert_eq!(by_text["emails"][0]["messageId"], json!("<e2@x>"));
         assert_eq!(by_text["emails"][0]["source"], json!("server-search"));
