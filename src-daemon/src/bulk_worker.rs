@@ -1894,6 +1894,35 @@ mod tests {
         assert_eq!(status["pending"]["id"], "later-legacy");
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bulk_original_cancelled_rpc_waiter_cannot_retain_claim_shortcut() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let journal = state.journal.lock().unwrap();
+        let starting = state.clone();
+        let waiter = tokio::spawn(async move {
+            handle_request_for_test(&starting, "bulk.start", json!({"operationId":"dropped","attemptId":"A","type":"delete","scope":{"keys":[]}})).await
+        });
+        for _ in 0..200 {
+            if state.bulk.lock().unwrap().admission_receipt("dropped", "A")["state"] == "freezing" { break; }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let fence = handle_request_for_test(&state, "bulk.status", json!({"operationId":"dropped","attemptId":"A","fenceUnstarted":true})).await;
+        assert!(fence.error.is_none());
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        drop(journal);
+        for _ in 0..200 {
+            if state.bulk.lock().unwrap().admission_status().is_none() { break; }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        assert!(state.bulk.lock().unwrap().admission_status().is_none(), "the actual blocking handler must retire its shortcut even when its RPC waiter was dropped");
+        let legacy = json!({"id":"after-drop","type":"delete","totalUids":[7],"completedUids":[],"status":"deleting"});
+        let saved = handle_request_for_test(&state, "save_pending_operation", json!({"operation":legacy})).await;
+        assert!(saved.error.is_none());
+        assert_eq!(handle_request_for_test(&state, "bulk.status", json!({})).await.result.unwrap()["pending"]["id"], "after-drop");
+    }
+
     #[test]
     fn bulk_original_claim_failed_save_invalidates_empty_authority() {
         let dir = tempfile::tempdir().unwrap();
