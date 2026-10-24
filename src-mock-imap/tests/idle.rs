@@ -50,13 +50,9 @@ fn idle_reports_new_mail_and_ends_on_done() {
         mb.add(Message::new(uid, "Subject: new\r\n\r\nhi"));
     });
 
-    // idle_loop polls every 50ms (its own doc comment), so this is normally
-    // near-instant -- widened from 2s after a real Windows run flaked here
-    // running alongside this file's other IDLE tests (three mock servers'
-    // 50ms poll threads contending at once): a plain read timeout, not a
-    // connect timeout, but Windows phrases WSAETIMEDOUT as "a connection
-    // attempt failed" even for an already-established socket's read. Passed
-    // in 0.06s run alone; still 200x the poll interval even at 10s.
+    // The baseline precedes the continuation, so an immediate mutation must
+    // be observed by the 50ms poll loop. The unchanged 10s timeout bounds a
+    // failed socket read.
     r.get_ref().set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     let mut l = String::new();
     r.read_line(&mut l).unwrap();

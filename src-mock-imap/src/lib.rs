@@ -403,6 +403,16 @@ fn handle_conn(
     }
 }
 
+/// Capture the IDLE baseline before the continuation lets clients act.
+fn idle_handshake(
+    out: &mut impl Write,
+    snapshot: impl FnOnce() -> (usize, u64, u64),
+) -> std::io::Result<(usize, u64, u64)> {
+    let baseline = snapshot();
+    write_line(out, b"+ idling")?;
+    Ok(baseline)
+}
+
 /// RFC 2177. Blocks this connection's thread until DONE, polling the shared
 /// state every 50 ms and reporting what changed in the selected mailbox as a
 /// real server would: EXISTS for new mail, FETCH FLAGS for a flag change.
@@ -430,16 +440,15 @@ fn idle_loop(
         log.lock().unwrap().push(raw.to_string());
         return write_line(out, format!("{} BAD No mailbox selected", tag).as_bytes());
     };
-    write_line(out, b"+ idling")?;
     let snapshot =
         |st: &ServerState| st.find(&name).map(|mb| (mb.messages.len(), mb.highest_modseq)).unwrap_or((0, 0));
-    let (mut count, mut modseq, drops) = {
+    let (mut count, mut modseq, drops) = idle_handshake(out, || {
         let st = state.lock().unwrap();
         let (c, m) = snapshot(&st);
         (c, m, st.idle_drops)
-    };
-    // Logged only now, with the baseline already taken: a test that waits for
-    // this line and then mutates the mailbox is guaranteed to be seen.
+    })?;
+    // The continuation and this log entry follow the baseline, so either
+    // observer can mutate the mailbox without losing its change.
     log.lock().unwrap().push(raw.to_string());
     reader.get_ref().set_read_timeout(Some(Duration::from_millis(50)))?;
     // `line` outlives the iteration on purpose. `read_line` APPENDS what it
@@ -737,7 +746,7 @@ fn emit(out: &mut TcpStream, bytes: &[u8], actions: &[Action]) -> std::io::Resul
     out.flush()
 }
 
-fn write_line(out: &mut TcpStream, line: &[u8]) -> std::io::Result<()> {
+fn write_line(out: &mut impl Write, line: &[u8]) -> std::io::Result<()> {
     out.write_all(line)?;
     out.write_all(b"\r\n")?;
     out.flush()
@@ -745,10 +754,63 @@ fn write_line(out: &mut TcpStream, line: &[u8]) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{fault_haystack, match_faults};
+    use super::{fault_haystack, idle_handshake, match_faults, Message, ServerState};
     use crate::scenario::{Action, Fault, Trigger};
     use std::collections::HashMap;
+    use std::io::{self, Write};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn idle_handshake_baseline_precedes_every_publication_change() {
+        struct PublishMutation {
+            bytes: Vec<u8>,
+            state: Arc<Mutex<ServerState>>,
+            flushes: usize,
+        }
+        impl Write for PublishMutation {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.bytes.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                assert_eq!(self.bytes, b"+ idling\r\n");
+                self.flushes += 1;
+                assert_eq!(self.flushes, 1, "publish the continuation once");
+                let mut state = self.state.try_lock().expect("do not hold state while publishing");
+                let mb = state.find_mut("INBOX").unwrap();
+                mb.add(Message::new(mb.uid_next, "Subject: new\r\n\r\nbody"));
+                mb.highest_modseq += 1;
+                let modseq = mb.highest_modseq;
+                let message = mb.by_uid_mut(1).unwrap();
+                message.flags.push("\\Seen".to_string());
+                message.modseq = modseq;
+                state.idle_drops += 1;
+                Ok(())
+            }
+        }
+        let state = Arc::new(Mutex::new(ServerState {
+            mailboxes: vec![crate::state::synthetic_mailbox("INBOX", 2)],
+            ..ServerState::default()
+        }));
+        let snapshot = || {
+            let state = state.lock().unwrap();
+            let mb = state.find("INBOX").unwrap();
+            (mb.messages.len(), mb.highest_modseq, state.idle_drops)
+        };
+        let original = snapshot();
+        assert_eq!(original.0, 2);
+        let mut writer = PublishMutation { bytes: Vec::new(), state: Arc::clone(&state), flushes: 0 };
+
+        let baseline = idle_handshake(&mut writer, snapshot).unwrap();
+
+        assert_eq!(writer.bytes, b"+ idling\r\n");
+        assert_eq!(writer.flushes, 1);
+        let current = snapshot();
+        assert_eq!(current.0, 3);
+        assert!(current.1 > original.1);
+        assert_eq!(current.2, original.2 + 1);
+        assert_eq!(baseline, original, "publication must not absorb new mail, flag changes or an idle drop");
+    }
 
     #[test]
     fn nth_command_with_counts_only_matching_arguments() {
