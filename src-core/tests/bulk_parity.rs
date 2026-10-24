@@ -513,3 +513,21 @@ fn legacy_native_looking_hints_cannot_enter_compatibility_resume() {
         Some(raw)
     );
 }
+
+
+#[test]
+fn original_selection_hints_persist_without_publication_expectations() {
+    let hint = json!({"accountId":"acc1","mailbox":"Work:Clients","uid":7,"nativeIdentity":{"accountId":"acc1","mailbox":"Work:Clients","uidValidity":1,"originHash":"original-origin","jmapMailboxId":"label-L1","nativeExpectedIdentity":{"originHash":"wrong"}},"messageIdPresent":true,"messageId":"<original@test>","jmapId":"email-original","_nativeExpectedIdentity":null,"nativeExpectedIdentity":null});
+    let parsed = serde_json::from_value(json!({"spans":true,"keys":["acc1:Work:Clients:7"],"targetHints":[hint]})).unwrap();
+    let intent = FrozenIntent::freeze(Action::Delete, parsed, &["acc1".into()], &[]);
+    let value = serde_json::to_value(&intent).unwrap();
+    assert_eq!(value["scope"]["targetHints"][0]["nativeIdentity"]["jmapMailboxId"], "label-L1");
+    assert_eq!(value["scope"]["targetHints"][0]["jmapId"], "email-original");
+    assert!(!value.to_string().contains("ExpectedIdentity"));
+    let dir = tempfile::tempdir().unwrap();
+    let mut owner = Coordinator::load(dir.path());
+    owner.claim(dir.path(), "original", intent.clone()).unwrap();
+    assert!(owner.claim(dir.path(), "original", intent).is_ok());
+    let raw = op_journal::pending_operation_read(dir.path()).unwrap().unwrap();
+    assert_eq!(raw["intent"]["scope"]["targetHints"], value["scope"]["targetHints"]);
+}

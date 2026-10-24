@@ -223,3 +223,43 @@ describe('setEmailsSelected', () => {
       .toEqual(['acct-2:INBOX:7', 'acct-2:Sent:7']);
   });
 });
+
+
+describe('original bulk selection snapshots', () => {
+  const proof = { accountId: 'acct-1', mailbox: 'Work:Clients', uidValidity: 4, originHash: 'original-origin', jmapMailboxId: 'label-original' };
+  const row = () => ({ uid: 7, _accountId: 'acct-1', _mailbox: 'Work:Clients', messageId: '<selected@test>', _jmapId: 'email-original', _nativeIdentity: { ...proof }, _nativeExpectedIdentity: null });
+  beforeEach(() => useMailStore.setState({ activeAccountId: 'acct-1', activeMailbox: 'UNIFIED', unifiedInbox: true, selectedEmailIds: new Set(), selectedEmailSnapshots: new Map() }));
+  it('retains the first original across refresh, flags, offscreen and minimize until deselect/reselect', () => {
+    const original = row();
+    useMailStore.getState().setEmailsSelected([original], true);
+    const key = 'acct-1:Work:Clients:7';
+    const captured = useMailStore.getState().selectedEmailSnapshots.get(key);
+    expect(captured?.nativeIdentity).toEqual(proof);
+    original._nativeIdentity.originHash = 'mutated-after-click';
+    const replacement = { ...row(), messageId: '<replacement@test>', _jmapId: 'email-new', _nativeIdentity: { ...proof, uidValidity: 5 } };
+    useMailStore.setState({ sortedEmails: [replacement] });
+    useMailStore.getState().setEmailsSelected([replacement], true);
+    useMailStore.getState().minimizeBulkModal();
+    useMailStore.setState({ sortedEmails: [] });
+    expect(useMailStore.getState().selectedEmailSnapshots.get(key)).toBe(captured);
+    expect(captured.nativeIdentity.originHash).toBe('original-origin');
+    expect(captured.messageId).toBe('<selected@test>');
+    expect(captured.jmapId).toBe('email-original');
+    expect(Object.isFrozen(captured)).toBe(true);
+    expect(Object.isFrozen(captured.nativeIdentity)).toBe(true);
+    expect(JSON.stringify(captured)).not.toContain('ExpectedIdentity');
+    useMailStore.getState().setEmailsSelected([replacement], false);
+    expect(useMailStore.getState().selectedEmailSnapshots.size).toBe(0);
+    useMailStore.getState().setEmailsSelected([replacement], true);
+    expect(useMailStore.getState().selectedEmailSnapshots.get(key).messageId).toBe('<replacement@test>');
+  });
+  it('captures explicit offscreen range rows and never repairs an unresolved key from later cache', () => {
+    useMailStore.getState().setSelection(['acct-1:Work:Clients:7'], [row()]);
+    expect(useMailStore.getState().selectedEmailSnapshots.get('acct-1:Work:Clients:7')?.nativeIdentity).toEqual(proof);
+    useMailStore.getState().setSelection(['acct-1:Work:Clients:8']);
+    useMailStore.getState().setSelection(['acct-1:Work:Clients:8'], [{ ...row(), uid: 8 }]);
+    expect(useMailStore.getState().selectedEmailSnapshots.get('acct-1:Work:Clients:8')).toBeNull();
+    useMailStore.getState().endBulkSession();
+    expect(useMailStore.getState().selectedEmailSnapshots.size).toBe(0);
+  });
+});

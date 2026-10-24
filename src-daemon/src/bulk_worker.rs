@@ -1199,6 +1199,20 @@ mod tests {
             "valid current B is not permission to remove archived A"
         );
     }
+    #[test]
+    fn bulk_original_selection_is_not_resampled_from_kickoff_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        seed_selection(&state, "INBOX");
+        let missing = serde_json::from_value(json!({"accountId":"acc","mailbox":"INBOX","keys":[7]})).unwrap();
+        assert!(freeze(&state, mailvault_core::bulk::Action::Delete, missing).is_err(), "missing original snapshot must refuse instead of sampling kickoff cache");
+        let scope = serde_json::from_value(json!({"accountId":"acc","mailbox":"INBOX","keys":[7],"targetHints":[{"accountId":"acc","mailbox":"INBOX","uid":7,"nativeIdentity":{"accountId":"acc","mailbox":"INBOX","uidValidity":2,"originHash":"original-origin"},"messageIdPresent":true,"messageId":"<original@test>"}]})).unwrap();
+        let work = freeze(&state, mailvault_core::bulk::Action::Delete, scope).unwrap();
+        let selected = work.groups[0].selected.as_ref().unwrap();
+        assert_eq!(selected.validity, Some(2));
+        assert_eq!(selected.message_ids.get(&7).map(String::as_str), Some("original@test"));
+    }
+
     fn seed_selection(state: &Arc<DaemonState>, mailbox: &str) {
         std::fs::write(state.app_dir.join("accounts.json"), "[{\"id\":\"acc\"}]").unwrap();
         crate::custody::with_conn(state, |c| {
