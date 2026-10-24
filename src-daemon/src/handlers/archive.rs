@@ -105,6 +105,7 @@ async fn capture_all(
     mailbox: &str,
     uids: Vec<u32>,
     cancel: &std::sync::atomic::AtomicBool,
+    identity:Option<&mailvault_core::bulk_worker::Identity>,
 ) -> (Vec<u32>, usize) {
     use futures::StreamExt;
     let total = uids.len();
@@ -114,6 +115,9 @@ async fn capture_all(
                 return None;
             }
             let source = || {
+                if let Some(identity)=identity {
+                    return crate::handlers::deleted::Source::Bound{config,identity};
+                }
                 if config.uses_jmap() {
                     crate::handlers::deleted::Source::Jmap { config }
                 } else {
@@ -379,13 +383,25 @@ pub(crate) async fn delete_with_config(
     cancel: Arc<std::sync::atomic::AtomicBool>,
     identity: Option<&mailvault_core::bulk_worker::Identity>,
 ) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
+    if identity.is_some_and(|identity| !identity.matches_transport(&config)) {
+        return Err("errors.bulkIdentityChanged".into());
+    }
     // JMAP dispatch takes precedence, as in the archive runner. A Graph UID
     // is never sent down an IMAP lane or to Graph's different Trash operation.
     if !config.uses_jmap() && config.uses_graph() {
         return Err("errors.bulkGraphDeleteUnsupported".into());
     }
     let (uids, refused) = if bin {
-        capture_all(state, &account_id, &config, &mailbox, uids, &cancel).await
+        capture_all(
+            state,
+            &account_id,
+            &config,
+            &mailbox,
+            uids,
+            &cancel,
+            identity,
+        )
+        .await
     } else {
         (uids, 0)
     };
@@ -1257,7 +1273,7 @@ mod tests {
         assert!(commands
             .iter()
             .all(|c| !c.contains("MOVE") && !c.contains("UID COPY")));
-        assert!(server.state().mailboxes["Sent"]
+        assert!(server.state().mailboxes.iter().find(|mailbox|mailbox.name=="Sent").unwrap()
             .messages
             .iter()
             .any(|m| m.uid == 7));
@@ -1305,10 +1321,10 @@ mod tests {
             vec![7],
             true,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            Some(&mailvault_core::bulk_worker::Identity::Graph),
+            Some(&mailvault_core::bulk_worker::Identity::Graph{ids:std::collections::HashMap::new()}),
         )
         .await;
-        assert_eq!(result.unwrap_err(), "errors.bulkGraphDeleteUnsupported");
+        assert!(matches!(result,Err(ref error) if error=="errors.bulkGraphDeleteUnsupported"));
     }
 
     #[tokio::test]
@@ -1350,7 +1366,7 @@ mod tests {
             config,
             "INBOX".into(),
             uids,
-            false,
+            true,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&proof),
         )
@@ -1389,7 +1405,7 @@ mod tests {
             Some(&proof),
         )
         .await;
-        assert_eq!(result.unwrap_err(), "errors.bulkIdentityChanged");
+        assert!(matches!(result,Err(ref error) if error=="errors.bulkIdentityChanged"));
         assert_eq!(support::emails_in(&m, "mb-inbox").len(), 2);
         assert!(trap.accept().is_err());
     }
@@ -1425,5 +1441,55 @@ mod tests {
             .commands()
             .iter()
             .all(|c| !c.contains("UID STORE") && !c.contains("EXPUNGE")));
+    }
+    #[tokio::test]
+    async fn bulk_bound_graph_archive_retains_existing_provider_support() {
+        let (v, s) = st(true);
+        seed_ledger(v.path(), "acc", "INBOX", json!({"7":"gid-7"}));
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![(200, GRAPH_MIME.into())]);
+        let config = serde_json::from_str(&graph_account_json()).unwrap();
+        let identity = mailvault_core::bulk_worker::Identity::Graph {
+            ids: std::collections::HashMap::from([(7, "gid-7".into())]),
+        };
+        let progress = mailvault_core::archive::run_config(
+            archive_ctx(&s, v.path().into()),
+            "acc".into(),
+            config,
+            "INBOX".into(),
+            vec![7],
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            true,
+            identity,
+        )
+        .await
+        .unwrap();
+        assert_eq!((progress.completed, progress.errors), (1, 0));
+        assert_eq!(vault_names(v.path(), "acc", "INBOX").len(), 1);
+        assert_eq!(crate::handlers::graph::test_graph_requests().len(), 1);
+    }
+    #[tokio::test]
+    async fn bulk_bound_graph_ledger_rebinding_refuses_before_fetch_or_write() {
+        let (v, s) = st(true);
+        seed_ledger(v.path(), "acc", "INBOX", json!({"7":"replacement-id"}));
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![]);
+        let config = serde_json::from_str(&graph_account_json()).unwrap();
+        let identity = mailvault_core::bulk_worker::Identity::Graph {
+            ids: std::collections::HashMap::from([(7, "original-id".into())]),
+        };
+        let progress = mailvault_core::archive::run_config(
+            archive_ctx(&s, v.path().into()),
+            "acc".into(),
+            config,
+            "INBOX".into(),
+            vec![7],
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            true,
+            identity,
+        )
+        .await
+        .unwrap();
+        assert_eq!((progress.completed, progress.errors), (0, 1));
+        assert!(vault_names(v.path(), "acc", "INBOX").is_empty());
+        assert!(crate::handlers::graph::test_graph_requests().is_empty());
     }
 }

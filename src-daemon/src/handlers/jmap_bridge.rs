@@ -353,8 +353,31 @@ async fn fetch_body(state: &Arc<DaemonState>, acct: &AccountJmap, account_id: &s
     let pairs = acct.uid_to_id(state, account_id, mailbox, &[uid], false).await?;
     let Some(email_id) = pairs.into_iter().next().and_then(|(_, id)| id) else { return Ok(None) };
     let mailbox_id = acct.mailbox_id(mailbox).await?;
-    let got = acct.client.get_emails(&[email_id.clone()], &["id", "blobId", "threadId", "mailboxIds", "keywords", "receivedAt"]).await?;
-    let Some(email) = by_id(got.list).remove(&email_id) else { return Ok(None) };
+    fetch_body_id(acct,email_id,mailbox_id).await
+}
+
+async fn fetch_body_id(
+    acct: &AccountJmap,
+    email_id: String,
+    mailbox_id: String,
+) -> Result<Option<Fetched>, Fail> {
+    let got = acct
+        .client
+        .get_emails(
+            &[email_id.clone()],
+            &[
+                "id",
+                "blobId",
+                "threadId",
+                "mailboxIds",
+                "keywords",
+                "receivedAt",
+            ],
+        )
+        .await?;
+    let Some(email) = by_id(got.list).remove(&email_id) else {
+        return Ok(None);
+    };
     if !in_mailbox(&email, &mailbox_id) {
         return Ok(None);
     }
@@ -827,6 +850,31 @@ pub(crate) async fn fetch_for_capture(
     uid: u32,
 ) -> Result<Option<(Vec<u8>, Vec<String>)>, String> {
     Ok(fetch_by_uid(state, config, account_id, mailbox, uid).await?.map(|f| (f.raw, f.flags)))
+}
+
+/// A user bulk capture reads its frozen stable provider id, never a uid
+/// remapped by a later ledger read. Existing capture callers keep their path.
+pub(crate) async fn fetch_for_capture_identified(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    mailbox: &str,
+    mailbox_id: &str,
+    email_id: &str,
+) -> Result<Option<(Vec<u8>, Vec<String>)>, String> {
+    let acct = state.jmap.get(config).await.map_err(|e| e.to_string())?;
+    if acct.mailbox_id(mailbox).await.map_err(|e| e.to_string())? != mailbox_id {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    match tokio::time::timeout(
+        BODY_FETCH_TIMEOUT,
+        fetch_body_id(&acct, email_id.to_owned(), mailbox_id.to_owned()),
+    )
+    .await
+    {
+        Ok(Ok(fetched)) => Ok(fetched.map(|f| (f.raw, f.flags))),
+        Ok(Err(Fail::Params(e) | Fail::Rpc(e))) => Err(e),
+        Err(_) => Err("errors.bulkIdentityUncertain".into()),
+    }
 }
 
 /// A JMAP body's date in epoch ms, read as the download gates read an IMAP

@@ -54,6 +54,9 @@ pub(crate) enum Source<'a> {
     /// when nothing local holds them. `priority`: the user's lane (a click),
     /// else the background lane (a bulk run).
     Imap { config: &'a ImapConfig, permanent: bool, priority: bool },
+    /// Worker-only original identity. Never substitutes an unbound local UID
+    /// copy for the message proved by the selected provider connection.
+    Bound {config:&'a ImapConfig,identity:&'a mailvault_core::bulk_worker::Identity},
     /// Moved to Deleted Items. Only local bytes are kept: the daemon holds no
     /// Graph token to fetch the Deleted Items copy back, so a byte-less row
     /// could never be recovered.
@@ -71,13 +74,31 @@ pub(crate) enum Source<'a> {
 /// created)))`: it is there; `created` is false when an earlier call of the
 /// same delete already put it there. `Ok(None)`: nothing to capture, the
 /// message is already gone. `Err`: it could not be kept.
-pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, source: Source<'_>) -> Result<Option<(String, bool)>, String> {
-    let local = crate::raw_message::local_message(state, account_id, mailbox, uid, false).await.ok().flatten();
+pub(crate) async fn capture(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    source: Source<'_>,
+) -> Result<Option<(String, bool)>, String> {
+    let bound = matches!(&source, Source::Bound { .. });
+    let local = if bound {
+        None
+    } else {
+        crate::raw_message::local_message(state, account_id, mailbox, uid, false)
+            .await
+            .ok()
+            .flatten()
+    };
     let (raw, server_flags) = match local {
         Some(raw) => (Some(raw.to_vec()), None),
         None => match source {
-            Source::Imap { permanent: false, .. } => (None, None),
-            Source::Imap { config, priority, .. } => {
+            Source::Imap {
+                permanent: false, ..
+            } => (None, None),
+            Source::Imap {
+                config, priority, ..
+            } => {
                 let mb = mailbox.to_string();
                 let fetch = state.imap_pool.run_read(config, priority, |mut session| {
                     let mb = mb.clone();
@@ -87,21 +108,71 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
                     }
                 });
                 match tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetch).await {
-                    Ok(Ok(Some(email))) if email.uid == uid => (Some(email.raw_source_bytes), Some(email.flags)),
+                    Ok(Ok(Some(email))) if email.uid == uid => {
+                        (Some(email.raw_source_bytes), Some(email.flags))
+                    }
                     // Gone already: a retry of a delete that landed finds the
                     // copy its first attempt kept.
                     Ok(Ok(_)) => return kept_already(state, account_id, mailbox, uid).await,
                     Ok(Err(e)) => return Err(e),
-                    Err(_) => return Err(format!("timed out after {}s", crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs())),
+                    Err(_) => {
+                        return Err(format!(
+                            "timed out after {}s",
+                            crate::handlers::imap::BODY_FETCH_TIMEOUT.as_secs()
+                        ))
+                    }
                 }
             }
-            Source::Jmap { config } => match crate::handlers::jmap_bridge::fetch_for_capture(state, config, account_id, mailbox, uid).await {
+            Source::Jmap { config } => match crate::handlers::jmap_bridge::fetch_for_capture(
+                state, config, account_id, mailbox, uid,
+            )
+            .await
+            {
                 Ok(Some((raw, flags))) => (Some(raw), Some(flags)),
                 // Gone already: a retry of a delete that landed finds the
                 // copy its first attempt kept.
                 Ok(None) => return kept_already(state, account_id, mailbox, uid).await,
                 Err(e) => return Err(e),
             },
+            Source::Bound { config, identity } => {
+                let fetched = match identity {
+                    mailvault_core::bulk_worker::Identity::Imap {
+                        validity,
+                        message_ids,
+                    } => {
+                        let fetched =
+                            state
+                                .imap_pool
+                                .run_read(config, false, |mut session| async move {
+                                    let raw = imap::abd_cmds::fetch_raw_identified(
+                                        &mut session,
+                                        mailbox,
+                                        uid,
+                                        *validity,
+                                        message_ids.get(&uid).map(String::as_str),
+                                    )
+                                    .await?;
+                                    Ok((raw, session, Some(mailbox.to_string())))
+                                });
+                        tokio::time::timeout(crate::handlers::imap::BODY_FETCH_TIMEOUT, fetched)
+                            .await
+                            .map_err(|_| "errors.bulkIdentityUncertain".to_string())??
+                            .map(|raw| (raw.raw, raw.flags))
+                    }
+                    mailvault_core::bulk_worker::Identity::Jmap { mailbox_id, ids } => {
+                        let email_id = ids.get(&uid).ok_or("errors.bulkIdentityUncertain")?;
+                        crate::handlers::jmap_bridge::fetch_for_capture_identified(
+                            state, config, mailbox, mailbox_id, email_id,
+                        )
+                        .await?
+                    }
+                    _ => return Err("errors.bulkGraphDeleteUnsupported".into()),
+                };
+                match fetched {
+                    Some((raw, flags)) => (Some(raw), Some(flags)),
+                    None => return kept_already(state, account_id, mailbox, uid).await,
+                }
+            }
             Source::Graph | Source::Local => return Ok(None),
         },
     };
@@ -109,22 +180,59 @@ pub(crate) async fn capture(state: &Arc<DaemonState>, account_id: &str, mailbox:
     let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
     blocking(move || {
         // The row the list showed, else one parsed from the message itself.
-        let listed = crate::custody::with_conn(&state, |c| cache::load_by_uids(c, &account_id, &mailbox, &[uid]))
-            .ok()
-            .and_then(|rows| rows.into_iter().next());
+        let listed = crate::custody::with_conn(&state, |c| {
+            cache::load_by_uids(c, &account_id, &mailbox, &[uid])
+        })
+        .ok()
+        .and_then(|rows| rows.into_iter().next());
         let row = listed
-            .or_else(|| raw.as_deref().and_then(|raw| vault_eml::light_row_json(raw, uid)).and_then(|r| serde_json::from_str(&r).ok()))
+            .filter(|_| !bound)
+            .or_else(|| {
+                raw.as_deref()
+                    .and_then(|raw| vault_eml::light_row_json(raw, uid))
+                    .and_then(|r| serde_json::from_str(&r).ok())
+            })
             .unwrap_or_else(|| json!({ "uid": uid }));
         let flags: Vec<String> = server_flags.unwrap_or_else(|| {
-            row.get("flags").and_then(Value::as_array).map(|a| a.iter().filter_map(|f| f.as_str().map(str::to_string)).collect()).unwrap_or_default()
+            row.get("flags")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|f| f.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default()
         });
-        let message_id = row.get("messageId").or_else(|| row.get("message_id")).and_then(Value::as_str).map(str::to_string);
+        let message_id = row
+            .get("messageId")
+            .or_else(|| row.get("message_id"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
         // Byte-less, the Message-ID is the only way back to the Trash copy.
         if raw.is_none() && message_id.is_none() {
             return Ok(None);
         }
-        let c = Capture { account_id: &account_id, mailbox: &mailbox, uid, message_id: message_id.as_deref(), flags: &flags, row: &row, deleted_at: now_ms() };
-        app_db::with(&state.app_dir, |conn| bin::capture(conn, &state.app_dir, &c, raw.as_deref())).map(Some)
+        let c = Capture {
+            account_id: &account_id,
+            mailbox: &mailbox,
+            uid,
+            message_id: message_id.as_deref(),
+            flags: &flags,
+            row: &row,
+            deleted_at: now_ms(),
+        };
+        app_db::with(&state.app_dir, |conn| {
+            let kept = bin::capture(conn, &state.app_dir, &c, raw.as_deref())?;
+            if bound && !kept.1 {
+                if let Some(raw) = raw.as_deref() {
+                    if bin::read_eml(&state.app_dir, &kept.0)?.as_slice() != raw {
+                        return Err("errors.bulkCopyChanged".into());
+                    }
+                }
+            }
+            Ok(kept)
+        })
+        .map(Some)
     })
     .await
     .and_then(|r| r)

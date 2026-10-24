@@ -79,6 +79,7 @@ struct MailPorts {
     archive_base: usize,
     archive_errors: usize,
     selected: HashMap<(String, String), Selected>,
+    origins: HashMap<String, String>,
 }
 impl MailPorts {
     async fn config(&self, g: &Group) -> Result<crate::imap::ImapConfig, String> {
@@ -91,8 +92,21 @@ impl MailPorts {
         if !member {
             return Err("errors.bulkAccountUnavailable".into());
         }
-        crate::oauth_tokens::resolve(&self.state, &g.account_id, crate::oauth_tokens::Read::Quiet)
-            .await
+        let config = crate::oauth_tokens::resolve(
+            &self.state,
+            &g.account_id,
+            crate::oauth_tokens::Read::Quiet,
+        )
+        .await?;
+        let origin = bulk_worker::origin_hash(&config);
+        if self
+            .origins
+            .get(&g.account_id)
+            .is_some_and(|old| old != &origin)
+        {
+            return Err("errors.bulkIdentityChanged".into());
+        }
+        Ok(config)
     }
 }
 impl Ports for MailPorts {
@@ -113,8 +127,10 @@ impl Ports for MailPorts {
         );
         Ok(())
     }
-    async fn identity(&mut self, g: &Group) -> Result<Identity, String> {
+    async fn identity(&mut self, g: &Group) -> Result<(Identity, String), String> {
         let config = self.config(g).await?;
+        let origin = bulk_worker::origin_hash(&config);
+        self.origins.insert(g.account_id.clone(), origin.clone());
         if config.uses_jmap() {
             let acct = self
                 .state
@@ -144,21 +160,33 @@ impl Ports for MailPorts {
             }) {
                 return Err("errors.bulkIdentityChanged".into());
             }
-            return Ok(Identity::Jmap { mailbox_id, ids });
+            return Ok((Identity::Jmap { mailbox_id, ids }, origin));
         }
         if config.uses_graph() {
-            return Ok(Identity::Graph);
+            let selected = self
+                .selected
+                .get(&(g.account_id.clone(), g.mailbox.clone()))
+                .ok_or("errors.bulkIdentityUncertain")?;
+            return Ok((
+                Identity::Graph {
+                    ids: selected.graph_ids.clone(),
+                },
+                origin,
+            ));
         }
         let selected = self
             .selected
             .get(&(g.account_id.clone(), g.mailbox.clone()))
             .ok_or("errors.bulkIdentityUncertain")?;
-        read_imap_identity(&self.state, g, &config, selected).await
+        read_imap_identity(&self.state, g, &config, selected)
+            .await
+            .map(|identity| (identity, origin))
     }
     async fn archive(
         &mut self,
         g: &Group,
         cancel: Arc<AtomicBool>,
+        identity: &Identity,
     ) -> Result<ArchiveOutcome, String> {
         let config = self.config(g).await?;
         let root = common::vault_root(&self.state)?;
@@ -207,6 +235,7 @@ impl Ports for MailPorts {
             g.uids.clone(),
             cancel,
             true,
+            identity.clone(),
         )
         .await;
         self.archive_base += g.uids.len();
@@ -346,6 +375,15 @@ pub(crate) fn launch(
                                 })
                             })
                             .collect();
+                        let origins = work
+                            .groups
+                            .iter()
+                            .filter_map(|g| {
+                                g.origin
+                                    .clone()
+                                    .map(|origin| (g.group.account_id.clone(), origin))
+                            })
+                            .collect();
                         let mut ports = MailPorts {
                             state: st.clone(),
                             id: op.clone(),
@@ -353,6 +391,7 @@ pub(crate) fn launch(
                             archive_base: 0,
                             archive_errors: 0,
                             selected,
+                            origins,
                         };
                         if let Err(e) =
                             bulk_worker::run(&mut ports, &mut work, cancel, resume).await
@@ -403,7 +442,18 @@ pub(crate) fn freeze(
 ) -> Result<Workflow, String> {
     let accounts = crate::handlers::insights::configured_account_ids(&state.app_dir)
         .map_err(|_| "errors.bulkAccountUnavailable".to_string())?;
-    let local = local_mailboxes(state, &accounts)?;
+    let grouped = mailvault_core::bulk::group_targets(&scope);
+    let selected_accounts: Vec<_> = accounts
+        .iter()
+        .filter(|account| {
+            grouped
+                .groups
+                .iter()
+                .any(|group| &group.account_id == *account)
+        })
+        .cloned()
+        .collect();
+    let local = local_mailboxes(state, &selected_accounts)?;
     let mut work = Workflow::new(FrozenIntent::freeze(action, scope, &accounts, &local));
     for group in &mut work.groups {
         let g = &group.group;
@@ -452,6 +502,16 @@ pub(crate) fn freeze(
             &g.mailbox,
         ))?;
         selected.jmap_ids = g
+            .uids
+            .iter()
+            .filter_map(|u| ledger.get(u).cloned().map(|id| (*u, id)))
+            .collect();
+        let sidecar =
+            mailvault_core::header_cache::sidecar_dir(&state.data_dir, &g.account_id, &g.mailbox);
+        let ledger = mailvault_core::graph_ledger::load(
+            &mailvault_core::graph_ledger::ledger_path(&sidecar, false),
+        )?;
+        selected.graph_ids = g
             .uids
             .iter()
             .filter_map(|u| ledger.get(u).cloned().map(|id| (*u, id)))
@@ -673,7 +733,12 @@ mod tests {
             let pending = wait_drained(&state).await;
             assert_eq!(pending["status"], "complete", "{name}: {pending}");
             assert_eq!(
-                !server.state().mailboxes["INBOX"]
+                !server
+                    .state()
+                    .mailboxes
+                    .iter()
+                    .find(|mailbox| mailbox.name == "INBOX")
+                    .unwrap()
                     .messages
                     .iter()
                     .any(|m| m.uid == 7),
@@ -771,5 +836,84 @@ mod tests {
         drop(legacy);
         assert!(!server.commands().iter().any(|c| c.contains("UID STORE")));
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test]
+    async fn bulk_worker_archive_generation_race_preserves_existing_vault_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let server = MockImap::start(Scenario::new().mailbox(inbox(1)));
+        let config = config(&server);
+        let identity = read_imap_identity(&state, &group(), &config, &selected())
+            .await
+            .unwrap();
+        let cur = mailvault_core::vault_files::cur_path(dir.path(), "acc", "INBOX");
+        std::fs::create_dir_all(&cur).unwrap();
+        let filename = mailvault_core::vault_files::build_maildir_filename(7, &["archived".into()]);
+        let file = cur.join(filename);
+        let original = b"Message-ID: <selected@test>\r\nSubject: saved original\r\n\r\nkeep these exact bytes\r\n";
+        std::fs::write(&file, original).unwrap();
+        server.mutate(|state| {
+            let mailbox = state
+                .mailboxes
+                .iter_mut()
+                .find(|m| m.name == "INBOX")
+                .unwrap();
+            mailbox.uid_validity = 2;
+            mailbox.messages[0].raw =
+                b"Message-ID: <replacement@test>\r\n\r\nreplacement\r\n".to_vec();
+        });
+        let progress = mailvault_core::archive::run_config(
+            archive::archive_ctx(&state, dir.path().into()),
+            "acc".into(),
+            config,
+            "INBOX".into(),
+            vec![7],
+            Arc::new(AtomicBool::new(false)),
+            true,
+            identity,
+        )
+        .await
+        .unwrap();
+        assert_eq!((progress.completed, progress.errors), (0, 1));
+        assert_eq!(std::fs::read(&file).unwrap(), original);
+        assert_eq!(std::fs::read_dir(&cur).unwrap().count(), 1);
+    }
+    #[tokio::test]
+    async fn bulk_worker_bin_capture_generation_race_never_saves_replacement() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+        let server = MockImap::start(Scenario::new().mailbox(inbox(1)));
+        let config = config(&server);
+        let identity = read_imap_identity(&state, &group(), &config, &selected())
+            .await
+            .unwrap();
+        server.mutate(|state| {
+            state
+                .mailboxes
+                .iter_mut()
+                .find(|m| m.name == "INBOX")
+                .unwrap()
+                .uid_validity = 2
+        });
+        let (progress, deleted) = archive::delete_with_config(
+            &state,
+            "acc".into(),
+            config,
+            "INBOX".into(),
+            vec![7],
+            true,
+            Arc::new(AtomicBool::new(false)),
+            Some(&identity),
+        )
+        .await
+        .unwrap();
+        assert_eq!((progress.completed, progress.errors), (0, 1));
+        assert!(deleted.is_empty());
+        let listed = handle_request_for_test(&state, "deleted.list", json!({}))
+            .await
+            .result
+            .unwrap();
+        assert!(listed.as_array().unwrap().is_empty());
+        assert!(!server.commands().iter().any(|c| c.contains("UID STORE")));
     }
 }

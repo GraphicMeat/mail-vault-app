@@ -190,7 +190,7 @@ pub async fn run_with_backup(
     limit: Option<BackgroundLimit>,
 ) -> Result<ArchiveProgress, String> {
     let account:ImapConfig=serde_json::from_str(&account_json).map_err(|e|format!("Bad account JSON: {}",e))?;
-    run_with_backup_config(ctx,account_id,account,mailbox,uids,cancel,backup_path,account_email,remove_existing,operation,background,limit).await
+    run_with_backup_config(ctx,account_id,account,mailbox,uids,cancel,backup_path,account_email,remove_existing,operation,background,limit,None).await
 }
 
 /// Typed daemon-worker entry point. Credentials stay in memory and never
@@ -203,10 +203,25 @@ pub async fn run_config(
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
     background: bool,
+    identity: crate::bulk_worker::Identity,
 ) -> Result<ArchiveProgress, String> {
+    if !identity.matches_transport(&account) {
+        return Err("errors.bulkIdentityChanged".into());
+    }
     run_with_backup_config(
-        ctx, account_id, account, mailbox, uids, cancel, None, None, true, "archive", background,
+        ctx,
+        account_id,
+        account,
+        mailbox,
+        uids,
+        cancel,
         None,
+        None,
+        true,
+        "archive",
+        background,
+        None,
+        Some(Arc::new(identity)),
     )
     .await
 }
@@ -224,6 +239,7 @@ async fn run_with_backup_config(
     operation: &'static str,
     background: bool,
     limit: Option<BackgroundLimit>,
+    identity:Option<Arc<crate::bulk_worker::Identity>>,
 ) -> Result<ArchiveProgress, String> {
     let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
         crate::maildir::mirror_cur(std::path::Path::new(bp), addr, &mailbox)
@@ -336,8 +352,14 @@ async fn run_with_backup_config(
         let started = Arc::clone(&started);
         let listed = vault_listing.get(&uid).cloned();
         let in_mirror = mirror_uids.contains(&uid);
+        let expected_identity=identity.clone();
         let ledger_id = |provider: &str| match &id_ledger {
-            Some(Ok(ledger)) => ledger.get(&uid).cloned().ok_or_else(|| {
+            Some(Ok(ledger)) => ledger.get(&uid).cloned().filter(|id| {
+                match expected_identity.as_deref() {
+                    Some(crate::bulk_worker::Identity::Jmap{ids,..}) | Some(crate::bulk_worker::Identity::Graph{ids})=>ids.get(&uid)==Some(id),
+                    _=>expected_identity.is_none(),
+                }
+            }).ok_or_else(|| {
                 format!("Email UID {} is not in the {} listing; reopen the folder and try again", uid, provider)
             }),
             Some(Err(e)) => Err(e.clone()),
@@ -394,7 +416,7 @@ async fn run_with_backup_config(
 
             match fetch_and_store(
                 &ctx, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
-                listed, in_mirror, &pace, background, graph_source, jmap_source,
+                listed, in_mirror, &pace, background, graph_source, jmap_source, expected_identity.as_deref(),
             ).await {
                 Ok(index_entry) => {
                     // Track external copy failures
@@ -568,6 +590,7 @@ async fn fetch_and_store(
     // A JMAP account's session (or why it did not open) and this uid's JMAP
     // email id (or why it has none).
     jmap: Option<(Result<Arc<crate::jmap::JmapClient>, String>, Result<String, String>)>,
+    identity:Option<&crate::bulk_worker::Identity>,
 ) -> Result<serde_json::Value, String> {
     let mirror = backup_path.zip(account_email).map(|(bp, addr)| {
         crate::maildir::mirror_cur(std::path::Path::new(bp), addr, mailbox)
@@ -587,7 +610,18 @@ async fn fetch_and_store(
             let entry = custody_entry_from_raw(uid, &raw, &flags);
             (raw, flags, entry)
         }
-        (None, None) => fetch_imap(ctx, account, mailbox, uid, background).await?,
+        (None, None) => match identity {
+            Some(crate::bulk_worker::Identity::Imap{validity,message_ids})=>{
+                let raw=ctx.pool.run_read(account,false,|mut session| async move {
+                    let raw=imap::abd_cmds::fetch_raw_identified(&mut session,mailbox,uid,*validity,message_ids.get(&uid).map(String::as_str)).await?.ok_or("errors.bulkIdentityUncertain")?;
+                    Ok((raw,session,Some(mailbox.to_string())))
+                }).await?;
+                let entry=custody_entry_from_raw(uid,&raw.raw,&raw.flags);
+                (raw.raw,raw.flags,entry)
+            }
+            Some(_)=>return Err("errors.bulkIdentityChanged".into()),
+            None=>fetch_imap(ctx, account, mailbox, uid, background).await?,
+        },
     };
 
     // The server's own read state, not a hardcoded "seen": this name is what

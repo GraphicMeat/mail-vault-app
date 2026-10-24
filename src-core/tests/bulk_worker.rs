@@ -22,6 +22,11 @@ struct Fake {
     fail_after_delete: bool,
     copy_partition: bool,
     fail_stage: Option<&'static str>,
+    cancel_stage: Option<(&'static str, Arc<AtomicBool>)>,
+    copy_mismatched: Vec<u32>,
+    copy_missing: Vec<u32>,
+    copy_failed: Vec<u32>,
+    delete_failed: usize,
 }
 impl Ports for Fake {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
@@ -34,30 +39,44 @@ impl Ports for Fake {
         self.checkpoints.push(w.clone());
         Ok(())
     }
-    async fn identity(&mut self, g: &Group) -> Result<Identity, String> {
-        Ok(Identity::Imap {
-            validity: 1,
-            message_ids: g.uids.iter().map(|u| (*u, format!("<{u}@test>"))).collect(),
-        })
+    async fn identity(&mut self, g: &Group) -> Result<(Identity, String), String> {
+        Ok((
+            Identity::Imap {
+                validity: 1,
+                message_ids: g.uids.iter().map(|u| (*u, format!("<{u}@test>"))).collect(),
+            },
+            "fake-origin".into(),
+        ))
     }
     async fn archive(
         &mut self,
         g: &Group,
         _cancel: Arc<AtomicBool>,
+        _identity: &Identity,
     ) -> Result<ArchiveOutcome, String> {
+        self.trace.push(json!({"effect":"archive","accountId":g.account_id,"mailbox":g.mailbox,"uids":g.uids,"background":true}));
+        if let Some((phase, cancel)) = &self.cancel_stage {
+            if *phase == "archive" {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
         if self.fail_stage == Some("archive") {
             return Err("archive failed".into());
         }
-        self.trace.push(json!({"effect":"archive","accountId":g.account_id,"mailbox":g.mailbox,"uids":g.uids,"background":true}));
         Ok(ArchiveOutcome::default())
     }
     async fn verify(&mut self, g: &Group, _identity: &Identity) -> Result<Vec<u32>, String> {
-        if self.fail_stage == Some("verify") {
-            return Err("verify failed".into());
-        }
         self.trace.push(
             json!({"effect":"verify","accountId":g.account_id,"mailbox":g.mailbox,"uids":g.uids}),
         );
+        if let Some((phase, cancel)) = &self.cancel_stage {
+            if *phase == "verify" {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
+        if self.fail_stage == Some("verify") {
+            return Err("verify failed".into());
+        }
         let mut v: Vec<_> = g
             .uids
             .iter()
@@ -74,6 +93,11 @@ impl Ports for Fake {
             json!({"effect":"copy","accountId":g.account_id,"mailbox":g.mailbox,"uids":uids}),
         );
         self.copies += 1;
+        if let Some((phase, cancel)) = &self.cancel_stage {
+            if *phase == "copy" {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
         if let Some(c) = &self.cancel_copy {
             c.store(true, Ordering::SeqCst);
         }
@@ -88,8 +112,18 @@ impl Ports for Fake {
             });
         }
         Ok(CopyProof {
-            verified: uids.to_vec(),
-            ..Default::default()
+            verified: uids
+                .iter()
+                .copied()
+                .filter(|u| {
+                    !self.copy_mismatched.contains(u)
+                        && !self.copy_missing.contains(u)
+                        && !self.copy_failed.contains(u)
+                })
+                .chain([9999])
+                .collect(),
+            mismatched: self.copy_mismatched.clone(),
+            missing: self.copy_missing.clone(),
         })
     }
     async fn delete(
@@ -100,11 +134,20 @@ impl Ports for Fake {
         bin: bool,
         _cancel: Arc<AtomicBool>,
     ) -> Result<Vec<u32>, String> {
+        self.trace.push(json!({"effect":"delete","accountId":g.account_id,"mailbox":g.mailbox,"uids":uids,"bin":bin}));
+        if let Some((phase, cancel)) = &self.cancel_stage {
+            if *phase == "delete" {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        }
         if self.fail_stage == Some("delete") {
             return Err("delete failed".into());
         }
-        self.trace.push(json!({"effect":"delete","accountId":g.account_id,"mailbox":g.mailbox,"uids":uids,"bin":bin}));
-        Ok(uids.to_vec())
+        Ok(uids
+            .iter()
+            .copied()
+            .take(uids.len().saturating_sub(self.delete_failed))
+            .collect())
     }
 }
 fn work(action: Action, keys: Vec<Value>) -> Workflow {
@@ -230,6 +273,7 @@ async fn uncertain_delete_is_never_blindly_replayed_on_resume() {
         validity: 1,
         message_ids: HashMap::from([(1, "<1@test>".into()), (2, "<2@test>".into())]),
     });
+    w.groups[0].origin = Some("fake-origin".into());
     w.groups[0].attempted = vec![1];
     let mut f = Fake::default();
     bulk_worker::run(&mut f, &mut w, Arc::new(AtomicBool::new(false)), true)
@@ -240,17 +284,23 @@ async fn uncertain_delete_is_never_blindly_replayed_on_resume() {
     assert_eq!(w.groups[0].deleted, vec![2]);
 }
 #[tokio::test]
-async fn resumed_destructive_work_requires_original_identity_evidence() {
-    let mut w = work(Action::ArchiveAndDelete, vec![json!(1)]);
-    let mut f = Fake::default();
-    assert!(
-        bulk_worker::run(&mut f, &mut w, Arc::new(AtomicBool::new(false)), true)
-            .await
-            .is_err()
-    );
-    assert!(f.trace.is_empty());
+async fn resumed_work_requires_original_identity_even_for_archive() {
+    for action in [
+        Action::Archive,
+        Action::Delete,
+        Action::ArchiveAndDelete,
+        Action::ArchiveBackupDelete,
+    ] {
+        let mut w = work(action, vec![json!(1)]);
+        let mut f = Fake::default();
+        assert!(
+            bulk_worker::run(&mut f, &mut w, Arc::new(AtomicBool::new(false)), true)
+                .await
+                .is_err()
+        );
+        assert!(f.trace.is_empty());
+    }
 }
-
 #[tokio::test]
 async fn copy_outcomes_partition_every_exact_target_once() {
     let mut w = work(
@@ -295,6 +345,193 @@ async fn thrown_phase_failures_stop_later_mail_effects() {
             ..Default::default()
         };
         assert!(run(&mut w, &mut f).await.is_err(), "{stage}");
-        assert!(!f.trace.iter().any(|e| e["effect"] == "delete"));
+        let deletes = f.trace.iter().filter(|e| e["effect"] == "delete").count();
+        assert_eq!(deletes, usize::from(stage == "delete"));
     }
+}
+
+#[test]
+fn provider_origin_keeps_secret_refresh_but_rejects_retargeting() {
+    let config:mailvault_core::imap::ImapConfig=serde_json::from_value(json!({"email":"me@example.test","imapHost":"mail.example.test","password":"old","oauth2AccessToken":"old-token"})).unwrap();
+    let origin = bulk_worker::origin_hash(&config);
+    let mut refreshed = config.clone();
+    refreshed.password = Some("new".into());
+    refreshed.access_token = Some("new-token".into());
+    assert_eq!(bulk_worker::origin_hash(&refreshed), origin);
+    refreshed.host = "other.example.test".into();
+    assert_ne!(bulk_worker::origin_hash(&refreshed), origin);
+    let mut changed = config;
+    changed.email = "someone@example.test".into();
+    assert_ne!(bulk_worker::origin_hash(&changed), origin);
+    assert!(!origin.contains("example.test"));
+    assert_eq!(origin.len(), 64);
+}
+
+#[tokio::test]
+async fn archive_resume_preserves_exact_completed_folder_identities() {
+    let mut w = work(
+        Action::Archive,
+        vec![json!("acc1:INBOX:1"), json!("acc2:Sent:1")],
+    );
+    w.groups[0].verified = vec![1];
+    for group in &mut w.groups {
+        group.identity = Some(Identity::Imap {
+            validity: 1,
+            message_ids: HashMap::from([(1, "<1@test>".into())]),
+        });
+        group.origin = Some("fake-origin".into());
+    }
+    let mut f = Fake::default();
+    bulk_worker::run(&mut f, &mut w, Arc::new(AtomicBool::new(false)), true)
+        .await
+        .unwrap();
+    assert!(f.trace.iter().all(|e| e["accountId"] == "acc2"));
+    assert_eq!(
+        w.completed_keys(),
+        vec![json!("acc1:INBOX:1"), json!("acc2:Sent:1")]
+    );
+}
+
+#[tokio::test]
+async fn fully_attempted_group_cannot_reenter_stale_copy_or_delete_lists() {
+    for action in [Action::ArchiveAndDelete, Action::ArchiveBackupDelete] {
+        let mut w = work(action, vec![json!(1)]);
+        w.groups[0].attempted = vec![1];
+        w.groups[0].verified = vec![1];
+        w.groups[0].eligible = vec![1];
+        let mut f = Fake::default();
+        bulk_worker::run(&mut f, &mut w, Arc::new(AtomicBool::new(false)), true)
+            .await
+            .unwrap();
+        assert!(f.trace.is_empty());
+        assert_eq!(w.result.kept_delete_failed, 1);
+        assert_eq!(w.result.removed, 0);
+    }
+}
+fn normalized_trace(trace: &[Value], action: Action) -> Vec<Value> {
+    let mut normalized: Vec<Value> = vec![];
+    for effect in trace.iter().filter(|effect| {
+        effect["effect"] != "clear" && !(action == Action::Archive && effect["effect"] == "verify")
+    }) {
+        if effect["effect"] == "delete" {
+            if let Some(previous) = normalized.last_mut().filter(|previous| {
+                previous["effect"] == "delete"
+                    && previous["accountId"] == effect["accountId"]
+                    && previous["mailbox"] == effect["mailbox"]
+                    && previous["bin"] == effect["bin"]
+            }) {
+                previous["uids"]
+                    .as_array_mut()
+                    .unwrap()
+                    .extend(effect["uids"].as_array().unwrap().iter().cloned());
+                continue;
+            }
+        }
+        normalized.push(effect.clone());
+    }
+    normalized
+}
+#[tokio::test]
+async fn captured_failure_copy_and_cancel_mail_decisions_match_real_js() {
+    let corpus: Value =
+        serde_json::from_str(include_str!("fixtures/bulk-operation-cases.json")).unwrap();
+    for name in [
+        "verify-subset",
+        "copy-201",
+        "copy-partition",
+        "copy-drive-gone-later",
+        "copy-drive-gone-first",
+        "partial-delete",
+        "cancel-archive",
+        "cancel-verify",
+        "cancel-copy",
+        "cancel-delete",
+        "archive-error",
+        "verify-error",
+        "delete-error",
+    ] {
+        let fixture = corpus["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["name"] == name)
+            .unwrap();
+        let action: Action = serde_json::from_value(fixture["type"].clone()).unwrap();
+        let mut w = work(action, fixture["keys"].as_array().unwrap().clone());
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut f = Fake::default();
+        match name {
+            "verify-subset" => f.missing = Some(2),
+            "copy-partition" => {
+                f.missing = Some(1);
+                f.copy_mismatched = vec![2];
+                f.copy_missing = vec![3];
+                f.copy_failed = vec![4];
+            }
+            "copy-drive-gone-later" => f.drive_gone_at = Some(2),
+            "copy-drive-gone-first" => f.drive_gone_at = Some(1),
+            "partial-delete" => f.delete_failed = 1,
+            "cancel-archive" => f.cancel_stage = Some(("archive", cancel.clone())),
+            "cancel-verify" => f.cancel_stage = Some(("verify", cancel.clone())),
+            "cancel-copy" => f.cancel_stage = Some(("copy", cancel.clone())),
+            "cancel-delete" => f.cancel_stage = Some(("delete", cancel.clone())),
+            "archive-error" => f.fail_stage = Some("archive"),
+            "verify-error" => f.fail_stage = Some("verify"),
+            "delete-error" => f.fail_stage = Some("delete"),
+            _ => {}
+        }
+        let result = bulk_worker::run(&mut f, &mut w, cancel, false).await;
+        assert_eq!(
+            normalized_trace(&f.trace, action),
+            normalized_trace(fixture["trace"].as_array().unwrap(), action),
+            "{name}"
+        );
+        let expected = fixture["snapshots"].as_array().unwrap().last().unwrap();
+        if result.is_err() {
+            assert_eq!(expected["status"], "error", "{name}");
+        } else {
+            assert_eq!(w.status, expected["status"].as_str().unwrap(), "{name}");
+        }
+        if action == Action::ArchiveBackupDelete && expected["result"].is_object() {
+            assert_eq!(
+                serde_json::to_value(&w.result).unwrap(),
+                expected["result"],
+                "{name}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn stricter_proof_intentionally_refuses_the_oracles_stray_verified_uid() {
+    let corpus: Value =
+        serde_json::from_str(include_str!("fixtures/bulk-operation-cases.json")).unwrap();
+    let legacy = corpus["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "stray-verify")
+        .unwrap();
+    assert!(legacy["trace"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|effect| effect["effect"] == "copy"
+            && effect["uids"].as_array().unwrap().contains(&json!(9999))));
+    let mut w = work(
+        Action::ArchiveBackupDelete,
+        legacy["keys"].as_array().unwrap().clone(),
+    );
+    let mut f = Fake {
+        stray: true,
+        ..Default::default()
+    };
+    run(&mut w, &mut f).await.unwrap();
+    assert!(f
+        .trace
+        .iter()
+        .filter(|effect| effect["effect"] == "copy" || effect["effect"] == "delete")
+        .all(|effect| effect["uids"] == json!([1])));
+    assert_eq!(w.result.removed, 1);
+    assert_eq!(w.result.kept_not_archived, 0);
 }

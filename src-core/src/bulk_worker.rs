@@ -10,6 +10,27 @@ use std::{
     },
 };
 
+/// Fingerprint only the provider origin. Refreshing secrets keeps this stable;
+/// changing the address, endpoint, transport or JMAP login invalidates a job.
+pub fn origin_hash(config: &crate::imap::ImapConfig) -> String {
+    use sha2::{Digest, Sha256};
+    let origin = serde_json::json!([
+        config.email,
+        config.host.to_ascii_lowercase(),
+        config.effective_port(),
+        config.secure,
+        config.security,
+        config.oauth2_transport,
+        config
+            .jmap_session_url
+            .as_deref()
+            .and_then(|value| url::Url::parse(value).ok())
+            .map(|value| format!("{}{}", value.origin().ascii_serialization(), value.path())),
+        config.jmap_username
+    ]);
+    format!("{:x}", Sha256::digest(origin.to_string().as_bytes()))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "transport", rename_all = "snake_case")]
 pub enum Identity {
@@ -21,9 +42,20 @@ pub enum Identity {
         mailbox_id: String,
         ids: HashMap<u32, String>,
     },
-    Graph,
+    Graph {
+        ids: HashMap<u32, String>,
+    },
 }
 impl Identity {
+    pub fn matches_transport(&self, config: &crate::imap::ImapConfig) -> bool {
+        if config.uses_jmap() {
+            matches!(self, Self::Jmap { .. })
+        } else if config.uses_graph() {
+            matches!(self, Self::Graph { .. })
+        } else {
+            matches!(self, Self::Imap { .. })
+        }
+    }
     pub fn matches(&self, now: &Self, uids: &[u32]) -> bool {
         match (self, now) {
             (
@@ -56,7 +88,9 @@ impl Identity {
                         .iter()
                         .all(|u| old.get(u).is_some_and(|id| new.get(u) == Some(id)))
             }
-            (Self::Graph, Self::Graph) => true,
+            (Self::Graph { ids: old }, Self::Graph { ids: new }) => uids
+                .iter()
+                .all(|u| old.get(u).is_some_and(|id| new.get(u) == Some(id))),
             _ => false,
         }
     }
@@ -90,6 +124,8 @@ pub struct Selected {
     pub cached_uids: Vec<u32>,
     pub message_ids: HashMap<u32, String>,
     pub jmap_ids: HashMap<u32, String>,
+    #[serde(default)]
+    pub graph_ids: HashMap<u32, String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +134,8 @@ pub struct GroupState {
     #[serde(default)]
     pub selected: Option<Selected>,
     pub identity: Option<Identity>,
+    #[serde(default)]
+    pub origin: Option<String>,
     pub verified: Vec<u32>,
     pub eligible: Vec<u32>,
     /// Recorded BEFORE dispatch. An attempted target lacking a durable outcome
@@ -128,6 +166,7 @@ impl Workflow {
                     group,
                     selected: None,
                     identity: None,
+                    origin: None,
                     verified: vec![],
                     eligible: vec![],
                     attempted: vec![],
@@ -189,9 +228,17 @@ impl Workflow {
                 } else {
                     &g.deleted
                 };
-                uids.iter().map(|u| {
-                    serde_json::json!(format!("{}:{}:{}", g.group.account_id, g.group.mailbox, u))
-                })
+                let done: HashSet<_> = uids.iter().copied().collect();
+                g.group
+                    .uids
+                    .iter()
+                    .filter(move |uid| done.contains(uid))
+                    .map(|u| {
+                        serde_json::json!(format!(
+                            "{}:{}:{}",
+                            g.group.account_id, g.group.mailbox, u
+                        ))
+                    })
             })
             .collect()
     }
@@ -200,11 +247,12 @@ impl Workflow {
 #[allow(async_fn_in_trait)]
 pub trait Ports {
     async fn checkpoint(&mut self, work: &Workflow) -> Result<(), String>;
-    async fn identity(&mut self, group: &Group) -> Result<Identity, String>;
+    async fn identity(&mut self, group: &Group) -> Result<(Identity, String), String>;
     async fn archive(
         &mut self,
         group: &Group,
         cancel: Arc<AtomicBool>,
+        identity: &Identity,
     ) -> Result<ArchiveOutcome, String>;
     async fn verify(&mut self, group: &Group, identity: &Identity) -> Result<Vec<u32>, String>;
     async fn copy(&mut self, group: &Group, uids: &[u32]) -> Result<CopyProof, String>;
@@ -225,8 +273,11 @@ fn exact(asked: &[u32], proof: &[u32]) -> Vec<u32> {
         .filter(|u| proved.contains(u))
         .collect()
 }
-fn remaining(g: &GroupState) -> Group {
-    let done: HashSet<_> = g.attempted.iter().chain(&g.deleted).copied().collect();
+fn remaining(g: &GroupState, action: Action) -> Group {
+    let mut done: HashSet<_> = g.attempted.iter().chain(&g.deleted).copied().collect();
+    if action == Action::Archive {
+        done.extend(g.verified.iter().copied());
+    }
     Group {
         uids: g
             .group
@@ -277,19 +328,33 @@ pub async fn run(
         let deleted: HashSet<_> = g.deleted.iter().copied().collect();
         w.result.kept_delete_failed += g.attempted.iter().filter(|u| !deleted.contains(u)).count();
     }
+    for group in &mut w.groups {
+        group.eligible.clear();
+        if action != Action::Archive {
+            group.verified.clear();
+        }
+    }
     phase(p, w, "identify", "starting").await?;
     for i in 0..w.groups.len() {
         if cancelled(p, w, &cancel).await? {
             return Ok(());
         }
-        let g = remaining(&w.groups[i]);
+        let g = remaining(&w.groups[i], action);
         if g.uids.is_empty() {
             continue;
         }
-        if resume && action != Action::Archive && w.groups[i].identity.is_none() {
+        if resume && (w.groups[i].identity.is_none() || w.groups[i].origin.is_none()) {
             return Err("errors.bulkIdentityUncertain".into());
         }
-        let identity = p.identity(&g).await?;
+        let (identity, origin) = p.identity(&g).await?;
+        if w.groups[i]
+            .origin
+            .as_ref()
+            .is_some_and(|old| old != &origin)
+        {
+            return Err("errors.bulkIdentityChanged".into());
+        }
+        w.groups[i].origin = Some(origin);
         if w.groups[i]
             .identity
             .as_ref()
@@ -302,7 +367,9 @@ pub async fn run(
         if w.groups[i].identity.is_none() {
             w.groups[i].identity = Some(identity)
         }
-        w.groups[i].verified.clear();
+        if action != Action::Archive {
+            w.groups[i].verified.clear();
+        }
         w.groups[i].eligible.clear();
         p.checkpoint(w).await?;
     }
@@ -312,11 +379,20 @@ pub async fn run(
             if cancelled(p, w, &cancel).await? {
                 return Ok(());
             }
-            let g = remaining(&w.groups[i]);
+            let g = remaining(&w.groups[i], action);
             if g.uids.is_empty() {
                 continue;
             }
-            let outcome = p.archive(&g, cancel.clone()).await?;
+            let outcome = p
+                .archive(
+                    &g,
+                    cancel.clone(),
+                    w.groups[i]
+                        .identity
+                        .as_ref()
+                        .ok_or("errors.bulkIdentityUncertain")?,
+                )
+                .await?;
             w.errors += outcome.errors;
             if outcome.last_error.is_some() {
                 w.last_error = outcome.last_error;
@@ -329,7 +405,7 @@ pub async fn run(
         }
         phase(p, w, "verify", "verifying").await?;
         for i in 0..w.groups.len() {
-            let g = remaining(&w.groups[i]);
+            let g = remaining(&w.groups[i], action);
             if g.uids.is_empty() {
                 continue;
             }
@@ -342,8 +418,13 @@ pub async fn run(
                         .ok_or("errors.bulkIdentityUncertain")?,
                 )
                 .await?;
-            w.groups[i].verified = exact(&g.uids, &proved);
-            w.result.kept_not_archived += g.uids.len() - w.groups[i].verified.len();
+            let verified = exact(&g.uids, &proved);
+            w.result.kept_not_archived += g.uids.len() - verified.len();
+            if action == Action::Archive {
+                w.groups[i].verified.extend(verified);
+            } else {
+                w.groups[i].verified = verified;
+            }
             p.checkpoint(w).await?;
             if cancelled(p, w, &cancel).await? {
                 return Ok(());
@@ -399,7 +480,7 @@ pub async fn run(
     } else {
         for g in &mut w.groups {
             g.eligible = if action == Action::Delete {
-                remaining(g).uids
+                remaining(g, action).uids
             } else {
                 g.verified.clone()
             };

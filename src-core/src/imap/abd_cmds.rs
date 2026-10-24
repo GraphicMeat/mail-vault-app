@@ -384,12 +384,52 @@ pub struct RawMessage {
 /// still archived. `Ok(None)` only when the server answered OK and no longer
 /// holds the uid (proved by a tag-checked search); an OK reply with no body for
 /// a uid that is still there is an error.
-pub async fn fetch_raw(session: &mut ImapSession, mailbox: &str, uid: u32) -> Result<Option<RawMessage>, String> {
-    select_mailbox(session, mailbox).await?;
-    let rows = fetch_to_tag(session, format!("UID FETCH {} (UID FLAGS INTERNALDATE BODY.PEEK[])", uid)).await?;
+pub async fn fetch_raw(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid: u32,
+) -> Result<Option<RawMessage>, String> {
+    fetch_raw_checked(session, mailbox, uid, None, None).await
+}
+
+/// Read the original selected message on the SELECT that grants its UID
+/// meaning. Used before a worker replaces a vault file or captures a bin copy.
+pub async fn fetch_raw_identified(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid: u32,
+    validity: u32,
+    message_id: Option<&str>,
+) -> Result<Option<RawMessage>, String> {
+    fetch_raw_checked(session, mailbox, uid, Some(validity), message_id).await
+}
+
+async fn fetch_raw_checked(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid: u32,
+    validity: Option<u32>,
+    message_id: Option<&str>,
+) -> Result<Option<RawMessage>, String> {
+    let selected = select_mailbox(session, mailbox).await?;
+    check_validity(mailbox, selected.uid_validity, validity)?;
+    let rows = fetch_to_tag(
+        session,
+        format!("UID FETCH {} (UID FLAGS INTERNALDATE BODY.PEEK[])", uid),
+    )
+    .await?;
     match rows.into_iter().find(|f| f.uid == Some(uid)) {
         Some(f) => {
-            let raw = f.body.ok_or_else(|| format!("No body in FETCH response for UID {}", uid))?;
+            let raw = f
+                .body
+                .ok_or_else(|| format!("No body in FETCH response for UID {}", uid))?;
+            if let Some(expected) = message_id {
+                if crate::maildir::message_id_in(&raw).as_deref()
+                    != Some(crate::maildir::normalize_message_id(expected).as_str())
+                {
+                    return Err("errors.bulkIdentityChanged".into());
+                }
+            }
             Ok(Some(RawMessage {
                 raw,
                 flags: f.flags,
@@ -399,7 +439,10 @@ pub async fn fetch_raw(session: &mut ImapSession, mailbox: &str, uid: u32) -> Re
         None => {
             let still = patient(uid_search_to_tag(session, &format!("UID {}", uid))).await?;
             if still.contains(&uid) {
-                Err(format!("Server returned no body for UID {}, but the message is still in {}", uid, mailbox))
+                Err(format!(
+                    "Server returned no body for UID {}, but the message is still in {}",
+                    uid, mailbox
+                ))
             } else {
                 Ok(None)
             }

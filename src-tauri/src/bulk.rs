@@ -431,4 +431,36 @@ mod tests {
         assert!(h.contains("op"));
         assert!(p.released.lock().unwrap().is_empty());
     }
+    #[test]
+    fn unavailable_drive_still_forwards_archive_then_keep_mode() {
+        struct Missing(Mutex<Vec<Value>>);
+        impl Ports for Missing {
+            fn resolve(&self) -> Option<String> {
+                None
+            }
+            fn exists(&self, _: &str) -> bool {
+                false
+            }
+            fn release(&self, _: &str) {
+                panic!("no scope was acquired")
+            }
+            fn call(&self, m: &str, p: Value, _: Duration) -> Result<Value, String> {
+                assert_eq!(m, "bulk.start");
+                self.0.lock().unwrap().push(p);
+                Ok(json!({"id":"op","status":"starting"}))
+            }
+        }
+        let h = HeldBulkPaths::default();
+        let p = Missing(Mutex::new(vec![]));
+        forward_flow(
+            &h,
+            &p,
+            "bulk.start",
+            json!({"operationId":"op","type":"archive_backup_delete","mirrorRoot":"/untrusted"}),
+        )
+        .unwrap();
+        assert!(p.0.lock().unwrap()[0].get("mirrorRoot").is_none());
+        release_frame(&h, &p, &json!({"operationId":"op","finished":true}));
+        assert!(!h.contains("op"));
+    }
 }
