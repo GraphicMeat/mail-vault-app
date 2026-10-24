@@ -152,7 +152,11 @@ async function _freshen(accountId, mailbox, hit, meta, io, ceiling = RECONCILE_C
   // A UIDVALIDITY change (or a vanished `_meta.json`) means the UID space itself
   // was reissued: reconciling by UID set would find the sets equal and restamp a
   // previous generation as current. Only a full reload is safe there.
-  const reissued = hit.stamp.uidValidity !== stamp.uidValidity || hit.stamp.originHash !== stamp.originHash;
+  // JMAP's ledger can keep the same UID/email when a new label takes a path.
+  // Those rows still belong to their original label and require a full reload.
+  const reissued = hit.stamp.uidValidity !== stamp.uidValidity
+    || hit.stamp.originHash !== stamp.originHash
+    || hit.stamp.jmapMailboxId !== stamp.jmapMailboxId;
 
   // Timestamped before the listing, not after — a sidecar written while we read
   // must count as changed next time round, not be assumed covered.
