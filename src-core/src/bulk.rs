@@ -99,7 +99,7 @@ fn numeric_uid(raw: &str) -> Option<u32> {
     raw.parse().ok()
 }
 
-fn target(key: &Value, scope: &Scope) -> Option<(String, String, u32)> {
+pub(crate) fn target(key: &Value, scope: &Scope) -> Option<(String, String, u32)> {
     if let Some(raw) = key.as_str() {
         if let Some(first) = raw.find(':').filter(|i| *i > 0) {
             let last = raw.rfind(':')?;
@@ -215,6 +215,15 @@ impl FrozenIntent {
     pub fn target_hints(&self) -> &[TargetHint] {
         &self.scope.target_hints
     }
+    pub fn hint_map(&self) -> Result<HashMap<(&str,&str,u32),&TargetHint>,String> {
+        let mut hints=HashMap::new();
+        for hint in self.target_hints() {
+            if let Some(old)=hints.insert((hint.account_id.as_str(),hint.mailbox.as_str(),hint.uid),hint) {
+                if old!=hint {return Err("errors.bulkIdentityChanged".into());}
+            }
+        }
+        Ok(hints)
+    }
     pub fn action(&self) -> Action {
         self.operation
     }
@@ -285,6 +294,11 @@ impl Pending {
                 let work: crate::bulk_worker::Workflow =
                     serde_json::from_value(worker.clone()).map_err(|_| invalid())?;
                 if !work.valid_for(&intent) {
+                    return Err(invalid());
+                }
+                if operation == Action::DeleteEverywhere && serde_json::to_value(&work).ok().as_ref() != Some(worker) {
+                    // Unsupported nested evidence cannot be dropped and then
+                    // promoted into native purge/Resume authority.
                     return Err(invalid());
                 }
             }
@@ -392,7 +406,7 @@ impl CheckpointSeed {
         raw["completedUids"] = json!(work.completed_keys());
         raw["currentPhase"] = json!(work.phase);
         raw["status"] = json!(work.status);
-        raw["result"] = json!(work.result);
+        raw["result"] = if work.intent.action() == Action::DeleteEverywhere { json!(work.purge_result) } else { json!(work.result) };
         raw["lastError"] = json!(work.last_error);
         raw["errors"] = json!(work.errors);
         let encoded = raw.to_string();
@@ -446,9 +460,6 @@ impl ResumeSeed {
                 .map_err(|_| "errors.bulkIdentityUncertain".to_string())?;
         if !work.valid_for(intent) {
             return Err("errors.bulkPendingInvalid".into());
-        }
-        if intent.operation == Action::DeleteEverywhere {
-            return Err("errors.bulkUnsupported".into());
         }
         let mut raw = self.base.raw.clone();
         raw["attemptId"] = json!(self.attempt);
@@ -917,9 +928,6 @@ impl Coordinator {
         let valid = work.valid_for(&intent);
         if !valid {
             return Err("errors.bulkPendingInvalid".into());
-        }
-        if intent.operation == Action::DeleteEverywhere {
-            return Err("errors.bulkUnsupported".into());
         }
         let mut raw = pending.raw.clone();
         raw["attemptId"] = json!(attempt);

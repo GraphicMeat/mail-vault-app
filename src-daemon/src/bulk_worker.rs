@@ -8,6 +8,7 @@ use mailvault_core::{
     bulk::{FrozenIntent, Group, Mailbox},
     bulk_worker::{
         self, ArchiveOutcome, CopyProof, Identity, Ports, Selected, StoredProof, Workflow,
+        PurgeTarget, PurgeProof, PurgeEffect, PurgeMirror,
     },
 };
 use serde_json::{json, Value};
@@ -30,33 +31,7 @@ fn selected_target(
     let _gate = state.vault_gate.read().unwrap_or_else(|p| p.into_inner());
     let root = common::vault_root(state).ok();
     if let Some(root) = &root {
-        if !root.is_dir() {
-            return Err("errors.bulkLocalFoldersRead".into());
-        }
-        let account = mailvault_core::vault_files::account_dir(
-            &root.join("Maildir"),
-            &common::sanitize_mailbox_name(&group.account_id),
-        );
-        let target = account.join(mailvault_core::search_index::text::vault_dir_name(
-            &group.mailbox,
-        ));
-        for path in [&account, &target] {
-            match std::fs::symlink_metadata(path) {
-                Ok(metadata) if metadata.file_type().is_dir() => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                _ => return Err("errors.bulkLocalFoldersRead".into()),
-            }
-        }
-        let dir = target
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or("errors.bulkLocalFoldersRead")?;
-        if mailvault_core::local_folder::read_marker(&account, dir)
-            .map_err(|_| "errors.bulkLocalFoldersRead".to_string())?
-            .is_some()
-        {
-            return Ok(None);
-        }
+        if local_folder_at(root,group)? { return Ok(None); }
     } else if action != mailvault_core::bulk::Action::Delete {
         return Err("errors.bulkLocalFoldersRead".into());
     }
@@ -144,6 +119,42 @@ fn selected_target(
     Ok(Some(selected))
 }
 
+fn local_folder_at(root:&std::path::Path,group:&Group)->Result<bool,String> {
+        if !root.is_dir() {
+            return Err("errors.bulkLocalFoldersRead".into());
+        }
+        let account = mailvault_core::vault_files::account_dir(
+            &root.join("Maildir"),
+            &common::sanitize_mailbox_name(&group.account_id),
+        );
+        let target = account.join(mailvault_core::search_index::text::vault_dir_name(
+            &group.mailbox,
+        ));
+        for path in [&account, &target] {
+            match std::fs::symlink_metadata(path) {
+                Ok(metadata) if metadata.file_type().is_dir() => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                _ => return Err("errors.bulkLocalFoldersRead".into()),
+            }
+        }
+        let dir = target
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("errors.bulkLocalFoldersRead")?;
+        if mailvault_core::local_folder::read_marker(&account, dir)
+            .map_err(|_| "errors.bulkLocalFoldersRead".to_string())?
+            .is_some()
+        {
+            return Ok(true);
+        }
+    Ok(false)
+}
+fn native_local_folder(state:&Arc<DaemonState>,group:&Group)->Result<bool,String> {
+    let _gate=state.vault_gate.read().unwrap_or_else(|p|p.into_inner());
+    let root=common::vault_root(state).map_err(|_|"errors.bulkLocalFoldersRead".to_string())?;
+    local_folder_at(&root,group)
+}
+
 /// New bulk snapshots persist service keys. Legacy helper diagnostics stay
 /// outside this operation record, and their API behavior is unchanged.
 pub(crate) fn service_error(error: &str) -> String {
@@ -170,18 +181,31 @@ pub(crate) fn service_error(error: &str) -> String {
     }
     .into()
 }
+fn identity_error(error:&str)->bool {
+    matches!(error,"errors.bulkIdentityChanged"|"errors.bulkIdentityUncertain")
+}
 
 struct MailPorts {
     state: Arc<DaemonState>,
     id: String,
     attempt: String,
     mirror: Option<String>,
+    external_status: Option<String>,
     archive_base: usize,
     archive_errors: usize,
     selected: HashMap<(String, String), Selected>,
     origins: HashMap<String, String>,
+    inventories:HashMap<(String,String),Result<Arc<LocalInventory>,String>>,
+}
+struct LocalInventory {
+    root:std::path::PathBuf,
+    fences:HashMap<u32,mailvault_core::vault_registry::TargetFence>,
+    candidates:HashMap<u32,Vec<mailvault_core::message_store::UidArtifact>>,
 }
 impl MailPorts {
+    fn local_inventory(&self,t:&PurgeTarget)->Result<Arc<LocalInventory>,String> {
+        self.inventories.get(&(t.account_id.clone(),t.mailbox.clone())).cloned().unwrap_or_else(||Err("errors.bulkIdentityUncertain".into()))
+    }
     async fn config(&self, g: &Group) -> Result<crate::imap::ImapConfig, String> {
         let (state, account) = (self.state.clone(), g.account_id.clone());
         let member = common::blocking(move || {
@@ -408,10 +432,12 @@ impl Ports for MailPorts {
             w.clone(),
         );
         w.last_error = w.last_error.as_deref().map(service_error);
+        for target in &mut w.purge_targets {target.last_error=target.last_error.as_deref().map(service_error);}
+        let target=w.purge_current.and_then(|index|w.purge_targets.get(index)).map(|target|json!(target));
         let snapshot = common::blocking(move || checkpoint(&state, &id, &attempt, &w)).await??;
         self.state.events.emit(
             "bulk-progress",
-            json!({"operationId":self.id,"attemptId":self.attempt,"finished":false,"operation":snapshot}),
+            json!({"operationId":self.id,"attemptId":self.attempt,"finished":false,"operation":snapshot,"target":target}),
         );
         Ok(())
     }
@@ -469,7 +495,7 @@ impl Ports for MailPorts {
             }
             return Ok((
                 Identity::Graph {
-                    ids: selected.graph_ids.clone(),
+                    ids: g.uids.iter().filter_map(|uid|selected.graph_ids.get(uid).cloned().map(|id|(*uid,id))).collect(),
                 },
                 origin,
             ));
@@ -651,6 +677,264 @@ impl Ports for MailPorts {
         .await
         .map(|(_, deleted)| deleted)
     }
+    async fn purge_begin(&mut self,targets:&[PurgeTarget],cancel:Arc<AtomicBool>)->Result<(),String> {
+        let mut groups:Vec<Group>=vec![];let mut indexes=HashMap::new();
+        for target in targets.iter().filter(|t|!t.skipped&&!t.refused&&t.local==PurgeEffect::Pending&&(t.proof.is_none()||t.local_only()||t.server==PurgeEffect::Complete)) {
+            let index=*indexes.entry((target.account_id.clone(),target.mailbox.clone())).or_insert_with(||{let index=groups.len();groups.push(Group{account_id:target.account_id.clone(),mailbox:target.mailbox.clone(),uids:vec![]});index});
+            groups[index].uids.push(target.uid);
+        }
+        let state=self.state.clone();
+        self.inventories=common::blocking(move||groups.into_iter().map(|group| {
+            let result=capture_local_inventory(&state,&group,&cancel);
+            ((group.account_id,group.mailbox),result)
+        }).collect()).await?;
+        Ok(())
+    }
+    async fn purge_prepare(&mut self,t:&PurgeTarget,hint:&mailvault_core::bulk::TargetHint)->Result<PurgeProof,String> {
+        let inventory=self.local_inventory(t)?;
+        if hint.native_identity.is_none() {
+            let email = crate::credentials::resolve_account_credentials_quiet(&t.account_id).await.ok().map(|config|config.email).filter(|email|!email.is_empty());
+            let scope = mailvault_core::app_db::compose_receipts::Scope::new(&t.account_id,&t.mailbox,t.uid,
+                hint.message_id.as_deref().ok_or("errors.bulkIdentityUncertain")?).ok_or("errors.bulkIdentityUncertain")?;
+            let (state,target) = (self.state.clone(),t.clone());
+            return common::blocking(move || common::with_mailbox_write(&state,&scope.account_id,&scope.mailbox,|root| {
+                    let artifacts=inventory_artifacts(&state,root,&target,&inventory)?;
+                    let raw=identical_artifact_bytes(&artifacts)?;
+                    let receipt=crate::handlers::compose::local_ownership_resolved(&state,&scope,None,raw)?.ok_or("errors.bulkIdentityUncertain")?;
+                    let stored = artifacts.first().map(|(name,raw)| StoredProof{uid:target.uid,name:name.clone(),sha256:bulk_worker::bytes_hash(raw)});
+                    Ok(PurgeProof::Local{email,receipt,stored})
+            })).await?;
+        }
+        let config = self.config(&t.group()).await?;
+        let original = hint.native_identity.as_ref().unwrap();
+        let selected = Selected{validity:original.uid_validity,origin_hash:Some(original.origin_hash.clone()),jmap_mailbox_id:original.jmap_mailbox_id.clone(),
+            cached_uids:vec![t.uid],message_ids:hint.message_id.as_ref().map(|id|(t.uid,mailvault_core::maildir::normalize_message_id(id))).into_iter().collect(),
+            jmap_ids:hint.jmap_id.as_ref().map(|id|(t.uid,id.clone())).into_iter().collect(),graph_ids:hint.graph_id.as_ref().map(|id|(t.uid,id.clone())).into_iter().collect()};
+        if bulk_worker::origin_hash(&config) != original.origin_hash { return Err("errors.bulkIdentityChanged".into()); }
+        let (state,group) = (self.state.clone(),t.group());
+        common::blocking(move || selected_target(&state,&group,mailvault_core::bulk::Action::DeleteEverywhere))
+            .await??.ok_or("errors.bulkLocalFoldersRead")?;
+        let retained=self.selected.entry((t.account_id.clone(),t.mailbox.clone())).or_default();
+        retained.validity=selected.validity; retained.origin_hash=selected.origin_hash; retained.jmap_mailbox_id=selected.jmap_mailbox_id;
+        retained.cached_uids.extend(selected.cached_uids); retained.message_ids.extend(selected.message_ids); retained.jmap_ids.extend(selected.jmap_ids); retained.graph_ids.extend(selected.graph_ids);
+        let identified=self.identity(&t.group()).await;
+        let (identity,origin)=match identified {
+            Err(error) if config.uses_jmap() && (error=="errors.jmapAuthFailed" || crate::handlers::jmap_bridge::is_auth_error(&error))=>{
+                self.state.jmap.forget(&config);
+                self.identity(&t.group()).await?
+            }
+            other=>other?,
+        };
+        let (state,target,identity_copy,mid)=(self.state.clone(),t.clone(),identity.clone(),hint.message_id.clone());
+        let captured = common::blocking(move || common::with_mailbox_write(&state,&target.account_id,&target.mailbox,|root| {
+            let artifacts=inventory_artifacts(&state,root,&target,&inventory)?;
+            server_local_proof(&state,root,&target,&identity_copy,None,mid.as_deref(),&artifacts)
+        })).await?;
+        let stored=match captured {Ok(proof)=>proof,Err(error) if identity_error(&error)=>return Err(error),Err(error)=>{tracing::warn!("bulk purge local evidence: {error}");None}};
+        Ok(PurgeProof::Server{email:config.email,origin,identity,stored})
+    }
+    async fn purge_server(&mut self,t:&PurgeTarget,cancel:Arc<AtomicBool>)->Result<(),String> {
+        let Some(PurgeProof::Server{identity,origin,email,..})=&t.proof else { return Err("errors.bulkIdentityUncertain".into()); };
+        let config=self.config(&t.group()).await?;
+        if bulk_worker::origin_hash(&config) != *origin || config.email!=*email || !identity.matches_transport(&config) { return Err("errors.bulkIdentityChanged".into()); }
+        if cancel.load(Ordering::SeqCst) { return Err("errors.bulkIdentityUncertain".into()); }
+        if let Identity::Graph{ids}=identity {
+            let id=ids.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
+            // Revalidate original ledger binding immediately before Graph IO.
+            let now=self.identity(&t.group()).await?.0;
+            if !identity.matches(&now,&[t.uid]) { return Err("errors.bulkIdentityChanged".into()); }
+            let token=config.access_token.as_deref().ok_or("errors.bulkAccountUnavailable")?;
+            return mailvault_core::graph::GraphClient::new(token).delete_message(id).await;
+        }
+        let (_,deleted)=archive::delete_provider_only(&self.state,t.account_id.clone(),config,t.mailbox.clone(),vec![t.uid],cancel,Some(identity)).await?;
+        if deleted == [t.uid] { Ok(()) } else { Err("errors.bulkOperationFailed".into()) }
+    }
+    async fn purge_local(&mut self,t:&PurgeTarget)->Result<PurgeEffect,String> {
+        if let Some(PurgeProof::Server{origin,email,..})=&t.proof {
+            let config=match self.config(&t.group()).await {
+                Err(error) if identity_error(&error)=>return Ok(PurgeEffect::Conflict),
+                other=>other?,
+            };
+            if bulk_worker::origin_hash(&config) != *origin || config.email!=*email { return Ok(PurgeEffect::Conflict); }
+        }
+        let mid=self.selected.get(&(t.account_id.clone(),t.mailbox.clone())).and_then(|s|s.message_ids.get(&t.uid)).cloned();
+        let inventory=match self.local_inventory(t) {Ok(inventory)=>inventory,Err(_)=>return Ok(PurgeEffect::Conflict)};
+        let (state,target)=(self.state.clone(),t.clone());
+        match common::blocking(move || purge_local_target(&state,&target,mid.as_deref(),&inventory)).await? {
+            Err(error) if identity_error(&error)=>Ok(PurgeEffect::Conflict),
+            other=>other,
+        }
+    }
+    async fn purge_mirror(&mut self,t:&PurgeTarget)->Result<PurgeMirror,String> {
+        let (email,proof) = match t.proof.as_ref().ok_or("errors.bulkIdentityUncertain")? {
+            PurgeProof::Server{email,origin,identity,stored} => (Some(email.clone()),stored.as_ref().map(|stored|
+                mailvault_core::app_db::ops::MirrorPurgeProof::server(email,&t.group(),origin,identity,stored)).transpose()?),
+            PurgeProof::Local{email,receipt,stored} => {
+                if receipt.state == mailvault_core::app_db::compose_receipts::State::Cleaned { return Ok(PurgeMirror{outcome:PurgeEffect::Unresolved,removed:0,issue:Some("CleanedLocal".into())}); }
+                (email.clone(), match (email,stored) { (Some(email),Some(stored))=>Some(mailvault_core::app_db::ops::MirrorPurgeProof::local(email,receipt,stored)?), _=>None })
+            }
+        };
+        let Some(email)=email else { return Ok(PurgeMirror{outcome:PurgeEffect::Unresolved,removed:0,issue:Some("MissingAccountEmail".into())}); };
+        // Re-read native configuration without provider/token refresh. The
+        // retained raw email is an original target, never today's substitute.
+        if self.mirror.is_some() || self.external_status.as_deref().unwrap_or("not_configured")!="not_configured" {
+            let config=match crate::credentials::resolve_account_credentials_quiet(&t.account_id).await {
+                Ok(config)=>config,
+                Err(_)=>return Ok(PurgeMirror{outcome:PurgeEffect::Unresolved,removed:0,issue:Some("MissingNativeConfig".into())}),
+            };
+            if config.email!=email || matches!(&t.proof,Some(PurgeProof::Server{origin,..}) if bulk_worker::origin_hash(&config)!=*origin) {
+                return Ok(PurgeMirror{outcome:PurgeEffect::Unresolved,removed:0,issue:Some("InvalidProof".into())});
+            }
+        }
+        let target=mailvault_core::app_db::ops::MirrorPurgeTarget{email,mailbox:t.mailbox.clone(),uid:t.uid};
+        let (app_dir,mirror,status)=(self.state.app_dir.clone(),self.mirror.clone(),self.external_status.clone());
+        let outcome=common::blocking(move || mailvault_core::backup::purge_proved(&app_dir,mirror.as_deref().map(std::path::Path::new),status.as_deref(),&target,proof.as_ref())).await?;
+        Ok(match outcome {
+            mailvault_core::backup::ProvedPurgeOutcome::Removed{files}=>PurgeMirror{outcome:PurgeEffect::Complete,removed:files,issue:None},
+            mailvault_core::backup::ProvedPurgeOutcome::Queued=>PurgeMirror{outcome:PurgeEffect::Queued,removed:0,issue:None},
+            mailvault_core::backup::ProvedPurgeOutcome::Unconfigured=>PurgeMirror{outcome:PurgeEffect::Unconfigured,removed:0,issue:None},
+            mailvault_core::backup::ProvedPurgeOutcome::Unresolved{removed,reason}=>PurgeMirror{outcome:PurgeEffect::Unresolved,removed,issue:Some(format!("{reason:?}"))},
+        })
+    }
+}
+
+/// Inspect every physical same-UID artifact, including the other format.
+/// A first-entry lookup cannot authorize removal of a colliding sibling.
+#[cfg(test)]
+struct InventoryProbe {
+    walks:std::sync::atomic::AtomicUsize,
+    pause:std::sync::Mutex<Option<(std::sync::mpsc::Sender<()>,std::sync::mpsc::Receiver<()>)>>,
+}
+#[cfg(test)]
+static INVENTORY_PROBES:std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::PathBuf,Arc<InventoryProbe>>>>=std::sync::OnceLock::new();
+#[cfg(test)]
+fn inventory_probe(root:&std::path::Path) {
+    let probe=INVENTORY_PROBES.get_or_init(Default::default).lock().unwrap().get(root).cloned();
+    if let Some(probe)=probe {
+        if probe.walks.fetch_add(1,Ordering::SeqCst)==0 {
+            let pause=probe.pause.lock().unwrap().take();
+            if let Some((entered,release))=pause {let _=entered.send(());let _=release.recv_timeout(std::time::Duration::from_secs(5));}
+        }
+    }
+}
+#[cfg(test)]
+struct InventoryWatch(std::path::PathBuf);
+#[cfg(test)]
+impl Drop for InventoryWatch {
+    fn drop(&mut self) {INVENTORY_PROBES.get_or_init(Default::default).lock().unwrap().remove(&self.0);}
+}
+fn capture_local_inventory(state:&Arc<DaemonState>,group:&Group,cancel:&AtomicBool)->Result<Arc<LocalInventory>,String> {
+    let mut captured_root=None;let mut fences=HashMap::new();
+    for batch in group.uids.chunks(100) {
+        if cancel.load(Ordering::SeqCst) {return Err("errors.bulkIdentityUncertain".into());}
+        let (root,captured)=common::with_mailbox_write(state,&group.account_id,&group.mailbox,|root| {
+            if !root.is_dir() || local_folder_at(root,group)? {return Err("errors.bulkLocalFoldersRead".into());}
+            let captured:Vec<_>=batch.iter().filter_map(|uid|state.vault_registry.target_fence(root,&group.account_id,&group.mailbox,*uid).map(|fence|(*uid,fence))).collect();
+            Ok((root.to_path_buf(),captured))
+        })?;
+        if captured_root.as_ref().is_some_and(|old|old!=&root) {return Err("errors.bulkIdentityChanged".into());}
+        captured_root=Some(root);fences.extend(captured);
+    }
+    let root=captured_root.ok_or("errors.bulkIdentityUncertain")?;
+    #[cfg(test)] inventory_probe(&root);
+    let candidates=mailvault_core::message_store::inventory_uid_artifacts(&root,&group.account_id,&group.mailbox,&group.uids.iter().copied().collect(),cancel)
+        .map_err(|_|"errors.bulkIdentityUncertain".to_string())?;
+    Ok(Arc::new(LocalInventory{root,fences,candidates}))
+}
+fn inventory_artifacts(state:&Arc<DaemonState>,root:&std::path::Path,t:&PurgeTarget,inventory:&LocalInventory)->Result<Vec<(String,Vec<u8>)>,String> {
+    if root!=inventory.root.as_path() || !root.is_dir() {return Err("errors.bulkIdentityUncertain".into());}
+    let before=inventory.fences.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
+    let current=state.vault_registry.target_fence(root,&t.account_id,&t.mailbox,t.uid).ok_or("errors.bulkIdentityUncertain")?;
+    if before!=&current {return Err("errors.bulkIdentityChanged".into());}
+    let candidates=inventory.candidates.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
+    mailvault_core::message_store::read_uid_candidates(root,&t.account_id,&t.mailbox,t.uid,candidates).map_err(|error| {
+        if error.kind()==std::io::ErrorKind::InvalidData {"errors.bulkIdentityChanged".into()}else{error.to_string()}
+    })
+}
+fn identical_artifact_bytes(artifacts:&[(String,Vec<u8>)])->Result<Option<&[u8]>,String> {
+    let raw=artifacts.first().map(|(_,raw)|raw.as_slice());
+    if artifacts.iter().any(|(_,bytes)|Some(bytes.as_slice())!=raw) {return Err("errors.bulkIdentityChanged".into());}
+    Ok(raw)
+}
+fn server_local_proof(state:&Arc<DaemonState>,root:&std::path::Path,t:&PurgeTarget,identity:&Identity,expected:Option<&StoredProof>,original_mid:Option<&str>,artifacts:&[(String,Vec<u8>)])->Result<Option<StoredProof>,String> {
+    let row=crate::custody::with_conn(state,|c| mailvault_core::custody::entries::get(c,&t.account_id,&t.mailbox,t.uid))?;
+    if row.as_ref().is_some_and(|r|matches!(r["source"].as_str(),Some("local_draft"|"local_sent"|"import"))) {return Err("errors.bulkIdentityChanged".into());}
+    // The native mailbox generation binds cached bytes, including messages
+    // without a Message-ID, to the original IMAP UID space.
+    if let Identity::Imap{validity,..}=identity {
+        let meta=crate::custody::with_conn(state,|c|mailvault_core::custody::cache::load_meta(c,&t.account_id,&t.mailbox))?
+            .map(|text|serde_json::from_str::<Value>(&text)).transpose().map_err(|_|"errors.bulkIdentityUncertain")?;
+        if meta.as_ref().and_then(|meta|meta["uidValidity"].as_u64()) != Some(u64::from(*validity)) {return Err("errors.bulkIdentityChanged".into());}
+        if !artifacts.is_empty() && mailvault_core::maildir::read_generation(&mailvault_core::message_store::mailbox_dir(root,&t.account_id,&t.mailbox)) != Some(*validity) {
+            return Err("errors.bulkIdentityUncertain".into());
+        }
+    } else {
+        let sidecar=mailvault_core::header_cache::sidecar_dir(root,&t.account_id,&t.mailbox);
+        let (jmap,ids)=match identity {Identity::Jmap{ids,..}=>(true,ids),Identity::Graph{ids}=>(false,ids),_=>unreachable!()};
+        let ledger=mailvault_core::graph_ledger::load(&mailvault_core::graph_ledger::ledger_path(&sidecar,jmap))?;
+        if ledger.get(&t.uid) != ids.get(&t.uid) {return Err("errors.bulkIdentityChanged".into());}
+    }
+    let expected_mid=original_mid.map(mailvault_core::maildir::normalize_message_id);
+    if row.as_ref().and_then(|r|r.get("message_id")).and_then(Value::as_str).map(mailvault_core::maildir::normalize_message_id)
+        .is_some_and(|mid|Some(mid)!=expected_mid) {return Err("errors.bulkIdentityChanged".into());}
+    let cached=crate::custody::with_conn(state,|c|mailvault_core::custody::cache::load_by_uids(c,&t.account_id,&t.mailbox,&[t.uid]))?;
+    if cached.iter().any(|r| {
+        let mid=r.get("messageId").or_else(||r.get("message_id")).and_then(Value::as_str).map(mailvault_core::maildir::normalize_message_id).filter(|mid|!mid.is_empty());
+        if mid != expected_mid {return true;}
+        match identity {
+            Identity::Graph{ids}=>r.get("_graphId").and_then(Value::as_str).is_some_and(|id|ids.get(&t.uid).map(String::as_str)!=Some(id)),
+            Identity::Jmap{ids,..}=>r.get("_jmapId").and_then(Value::as_str).is_some_and(|id|ids.get(&t.uid).map(String::as_str)!=Some(id)),
+            _=>false,
+        }
+    }) {return Err("errors.bulkIdentityChanged".into());}
+    let mut proof=None;
+    for (name,raw) in artifacts {
+        if mailvault_core::maildir::message_id_in(&raw).map(|id|mailvault_core::maildir::normalize_message_id(&id)).filter(|mid|!mid.is_empty()) != expected_mid {return Err("errors.bulkIdentityChanged".into());}
+        let hash=bulk_worker::bytes_hash(&raw);
+        if expected.is_some_and(|p|p.sha256!=hash) || proof.as_ref().is_some_and(|p:&StoredProof|p.sha256!=hash) {return Err("errors.bulkIdentityChanged".into());}
+        proof=Some(StoredProof{uid:t.uid,name:name.clone(),sha256:hash});
+    }
+    Ok(proof)
+}
+fn purge_local_target(state:&Arc<DaemonState>,t:&PurgeTarget,original_mid:Option<&str>,inventory:&LocalInventory)->Result<PurgeEffect,String> {
+    common::with_mailbox_write(state,&t.account_id,&t.mailbox,|root| {
+        let artifacts=inventory_artifacts(state,root,t,inventory)?;
+        match t.proof.as_ref().ok_or("errors.bulkIdentityUncertain")? {
+            PurgeProof::Local{receipt,..}=>{
+                let raw=identical_artifact_bytes(&artifacts)?;
+                let Some(proof)=crate::handlers::compose::retained_local_ownership_resolved(state,receipt,raw)? else {return Ok(PurgeEffect::Conflict);};
+                let retired=mailvault_core::app_db::with(&state.app_dir,|c| {
+                    let current=mailvault_core::app_db::compose_receipts::load(c,&proof.identity.scope)?;
+                    if current.iter().any(|r|r!=&proof) {return Ok(false);}
+                    if current.is_empty() {return Ok(true);}
+                    mailvault_core::app_db::compose_receipts::retire(c,&proof)
+                })?;
+                if !retired {return Ok(PurgeEffect::Conflict);}
+                if proof.state==mailvault_core::app_db::compose_receipts::State::Cleaned {return Ok(PurgeEffect::Complete);}
+            }
+            PurgeProof::Server{identity,stored,..}=>{
+                match server_local_proof(state,root,t,identity,stored.as_ref(),original_mid,&artifacts) {
+                    Err(error) if identity_error(&error)=>return Ok(PurgeEffect::Conflict),
+                    Err(error)=>return Err(error),
+                    Ok(Some(_)) if stored.is_none()=>return Ok(PurgeEffect::Conflict),
+                    _=>{}
+                }
+            }
+        }
+        let candidates=inventory.candidates.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
+        let outcome=mailvault_core::vault_files::delete_uid_candidates(&state.vault_registry,root,&t.account_id,&t.mailbox,t.uid,candidates)?;
+        if outcome.failed {return Ok(PurgeEffect::Failed);}
+        crate::custody::with_conn(state,|c| {
+            mailvault_core::custody::entries::remove(c,&t.account_id,&t.mailbox,&[t.uid])?;
+            mailvault_core::custody::cache::save_headers(c,&t.account_id,&t.mailbox,&json!({"removedUids":[t.uid]}).to_string())
+        })?;
+        crate::classification::forget_at(&state.app_dir,&t.account_id,&t.mailbox,&[t.uid]);
+        if let Ok(ids)=mailvault_core::app_db::with(&state.app_dir,|c|mailvault_core::app_db::follow_up::dismiss_at(c,&t.account_id,&t.mailbox,&[t.uid])) {
+            for id in ids {crate::follow_up_worker::emit(state,&id,"dismissed");}
+        }
+        tracing::info!("bulk purge: removed {} local artifacts",outcome.removed);
+        Ok(PurgeEffect::Complete)
+    })
 }
 
 /// No mailbox listing: the registry's writer-safe targeted lookup follows
@@ -707,6 +991,7 @@ pub(crate) fn launch(
     attempt: String,
     work: Workflow,
     mirror: Option<String>,
+    external_status: Option<String>,
     resume: bool,
 ) -> Result<(), String> {
     let cancel = state
@@ -733,7 +1018,7 @@ pub(crate) fn launch(
                     let execution = attempt.clone();
                     let task = tokio::spawn(Box::pin(async move {
                         let mut work = work;
-                        let selected = work
+                        let mut selected:HashMap<(String,String),Selected> = work
                             .groups
                             .iter()
                             .filter_map(|g| {
@@ -745,7 +1030,19 @@ pub(crate) fn launch(
                                 })
                             })
                             .collect();
-                        let origins = work
+                        let original_hints=work.intent.hint_map().unwrap_or_default();
+                        for target in &work.purge_targets {
+                            if let Some(hint)=original_hints.get(&(target.account_id.as_str(),target.mailbox.as_str(),target.uid)) {
+                                if let Some(original)=&hint.native_identity {
+                                    let s=selected.entry((target.account_id.clone(),target.mailbox.clone())).or_default();
+                                    s.validity=original.uid_validity;s.origin_hash=Some(original.origin_hash.clone());s.jmap_mailbox_id=original.jmap_mailbox_id.clone();s.cached_uids.push(target.uid);
+                                    if let Some(mid)=&hint.message_id {s.message_ids.insert(target.uid,mailvault_core::maildir::normalize_message_id(mid));}
+                                    if let Some(id)=&hint.graph_id {s.graph_ids.insert(target.uid,id.clone());}
+                                    if let Some(id)=&hint.jmap_id {s.jmap_ids.insert(target.uid,id.clone());}
+                                }
+                            }
+                        }
+                        let mut origins:HashMap<String,String> = work
                             .groups
                             .iter()
                             .filter_map(|g| {
@@ -754,15 +1051,20 @@ pub(crate) fn launch(
                                     .map(|origin| (g.group.account_id.clone(), origin))
                             })
                             .collect();
+                        for target in &work.purge_targets {
+                            if let Some(PurgeProof::Server{origin,..})=&target.proof {origins.insert(target.account_id.clone(),origin.clone());}
+                        }
                         let mut ports = MailPorts {
                             state: st.clone(),
                             id: op.clone(),
                             attempt: execution,
                             mirror,
+                            external_status,
                             archive_base: 0,
                             archive_errors: 0,
                             selected,
                             origins,
+                            inventories:HashMap::new(),
                         };
                         if let Err(e) =
                             bulk_worker::run(&mut ports, &mut work, cancel, resume).await
@@ -817,6 +1119,24 @@ pub(crate) fn freeze(
     action: mailvault_core::bulk::Action,
     scope: mailvault_core::bulk::Scope,
 ) -> Result<Workflow, String> {
+    if action == mailvault_core::bulk::Action::DeleteEverywhere {
+        let grouped=mailvault_core::bulk::group_targets(&scope);
+        if !grouped.refused.is_empty() || grouped.groups.iter().any(|g|g.uids.contains(&0)) {return Err("errors.bulkIdentityUncertain".into());}
+        let mut work=Workflow::new(FrozenIntent::freeze(action,scope,&[],&[]));
+        let accounts=crate::handlers::insights::configured_account_ids(&state.app_dir);
+        for target in &mut work.purge_targets {
+            if accounts.as_ref().is_ok_and(|accounts|!accounts.contains(&target.account_id)) && target.hint(&work.intent).is_some_and(|h|h.native_identity.is_some()) {
+                target.skipped=true;
+                continue;
+            }
+            match native_local_folder(state,&target.group()) {
+                Ok(true)=>target.skipped=true,
+                Ok(false)=>{},
+                Err(error)=>{target.refused=true;target.last_error=Some(error);}
+            }
+        }
+        return Ok(work);
+    }
     let accounts = crate::handlers::insights::configured_account_ids(&state.app_dir)
         .map_err(|_| "errors.bulkAccountUnavailable".to_string())?;
     let grouped = mailvault_core::bulk::group_targets(&scope);
@@ -895,7 +1215,7 @@ async fn read_imap_identity(
     }
     let expected = Identity::Imap {
         validity,
-        message_ids: selected.message_ids.clone(),
+        message_ids: g.uids.iter().filter_map(|uid|selected.message_ids.get(uid).cloned().map(|id|(*uid,id))).collect(),
     };
     let pool = state.imap_pool.clone();
     let mailbox = g.mailbox.clone();
@@ -1383,7 +1703,7 @@ mod tests {
                 std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
                 std::fs::write(ledger, "{\"7\":\"e1\"}").unwrap();
                 let selected: Selected = serde_json::from_value(json!({"validity":1,"cachedUids":[7],"messageIds":{"7":"e1@x"},"jmapIds":{"7":"e1"},"graphIds":{},"originHash":bulk_worker::origin_hash(&cfg),"jmapMailboxId":original_label})).unwrap();
-                let mut ports = MailPorts { state:state.clone(), id:"original".into(), attempt:"A".into(), mirror:None, archive_base:0, archive_errors:0, selected:HashMap::from([(("acc".into(),"INBOX".into()),selected)]), origins:HashMap::from([("acc".into(),bulk_worker::origin_hash(&cfg))]) };
+                let mut ports = MailPorts { state:state.clone(), id:"original".into(), attempt:"A".into(), mirror:None, external_status:None, archive_base:0, archive_errors:0, selected:HashMap::from([(("acc".into(),"INBOX".into()),selected)]), inventories:HashMap::new(), origins:HashMap::from([("acc".into(),bulk_worker::origin_hash(&cfg))]) };
                 let result = ports.identity(&group()).await;
                 assert_eq!(result.is_ok(), original_label == Some("mb-inbox"), "original label {original_label:?}, unrelated label {other_label}: {result:?}");
                 assert_eq!(jmap.count_calls("Email/set"), 0);
@@ -1449,6 +1769,352 @@ mod tests {
             )
         })
         .unwrap();
+    }
+    const PURGE_RAW:&[u8]=b"From: a@example.test\r\nTo: one@example.test\r\nSubject: selected\r\nMessage-ID: <selected@test>\r\n\r\nbody\r\n";
+    fn purge_credentials(state:&Arc<DaemonState>,server:&MockImap)->crate::imap::ImapConfig {
+        let cfg=config(server);
+        let path=state.app_dir.join("credentials.json");
+        let account=json!({"email":cfg.email,"password":"pw","imapHost":server.host(),"imapPort":server.port()});
+        std::fs::write(&path,json!({"acc":account.to_string()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS",&path);
+        cfg
+    }
+    fn seed_purge_file(state:&Arc<DaemonState>,raw:&[u8]) {
+        common::with_mailbox_write(state,"acc","INBOX",|root| {
+            mailvault_core::vault_files::store(&state.vault_registry,root,"acc","INBOX",7,raw,&[],true)?;
+            mailvault_core::maildir::write_generation(&mailvault_core::message_store::mailbox_dir(root,"acc","INBOX"),1)?;
+            crate::custody::with_conn(state,|c|mailvault_core::custody::entries::upsert(c,"acc","INBOX",&[json!({"uid":7,"source":"server","message_id":"<selected@test>"})]).map(|_|()))
+        }).unwrap();
+    }
+    fn purge_ports(state:&Arc<DaemonState>)->MailPorts {
+        MailPorts{state:state.clone(),id:"test".into(),attempt:"A".into(),mirror:None,external_status:Some("unavailable".into()),archive_base:0,archive_errors:0,selected:HashMap::new(),inventories:HashMap::new(), origins:HashMap::new()}
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_inventory_walk_is_once_and_releases_same_mailbox_foreground_lock() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);seed_selection(&state,"INBOX");
+        let mut mailbox=mock_imap::state::Mailbox::new("INBOX").with_uid_validity(1);let mut rows=vec![];
+        for uid in 1..=12 {
+            let mid=format!("{uid}@inventory.test");let raw=format!("Message-ID: <{mid}>\r\n\r\noriginal {uid}");mailbox.add(mock_imap::Message::new(uid,raw.clone()));
+            common::with_mailbox_write(&state,"acc","INBOX",|root|mailvault_core::vault_files::store(&state.vault_registry,root,"acc","INBOX",uid,raw.as_bytes(),&[],true).map(|_|())).unwrap();
+            rows.push(json!({"uid":uid,"messageId":mid}));
+        }
+        let mbox=mailvault_core::message_store::mailbox_dir(dir.path(),"acc","INBOX");mailvault_core::maildir::write_generation(&mbox,1).unwrap();
+        for uid in 1000..3000 {std::fs::write(mbox.join("cur").join(mailvault_core::message_store::entry_name(uid,&[])),b"unselected").unwrap();}
+        crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::save_headers(c,"acc","INBOX",&json!({"uidValidity":1,"emails":rows}).to_string())).unwrap();
+        let server=MockImap::start(Scenario::new().mailbox(mailbox));let cfg=purge_credentials(&state,&server);let original=mailvault_core::imap::NativeHeaderIdentity::new(&cfg,"acc","INBOX",Some(1));
+        let hints:Vec<_>=(1..=12).map(|uid|json!({"accountId":"acc","mailbox":"INBOX","uid":uid,"nativeIdentity":original,"messageIdPresent":true,"messageId":format!("{uid}@inventory.test")})).collect();
+        let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(json!({"accountId":"acc","mailbox":"INBOX","keys":(1..=12).collect::<Vec<_>>(),"targetHints":hints})).unwrap()).unwrap();
+        state.bulk.lock().unwrap().begin_admission("inventory","A").unwrap();prepare_claim(&state,"inventory","A",work.intent.clone()).unwrap();checkpoint(&state,"inventory","A",&work).unwrap();
+        let (entered_tx,entered_rx)=std::sync::mpsc::channel();let (release_tx,release_rx)=std::sync::mpsc::channel();
+        let probe=Arc::new(InventoryProbe{walks:std::sync::atomic::AtomicUsize::new(0),pause:std::sync::Mutex::new(Some((entered_tx,release_rx)))});
+        INVENTORY_PROBES.get_or_init(Default::default).lock().unwrap().insert(dir.path().into(),probe.clone());let _watch=InventoryWatch(dir.path().into());
+        let worker_state=state.clone();let worker=std::thread::spawn(move|| {
+            let mut ports=purge_ports(&worker_state);ports.id="inventory".into();ports.external_status=Some("not_configured".into());let mut work=work;
+            tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(bulk_worker::run(&mut ports,&mut work,Arc::new(AtomicBool::new(false)),false)).map(|_|work)
+        });
+        let entered=entered_rx.recv_timeout(Duration::from_secs(5));
+        let foreground_state=state.clone();let (foreground_tx,foreground_rx)=std::sync::mpsc::channel();let foreground=std::thread::spawn(move||{let result=common::with_mailbox_write(&foreground_state,"acc","INBOX",|_|crate::custody::with_conn(&foreground_state,|c|mailvault_core::custody::entries::get(c,"acc","INBOX",1)).map(|_|()));let _=foreground_tx.send(result);});
+        let observed=foreground_rx.recv_timeout(Duration::from_secs(1));let _=release_tx.send(());foreground.join().unwrap();let work=worker.join().unwrap().unwrap();
+        let walks=probe.walks.load(Ordering::SeqCst);
+        assert!(entered.is_ok() && matches!(observed,Ok(Ok(()))) && walks==1,"actual inventory must be one off-lock walk: entered={entered:?}, foreground={observed:?}, walks={walks}");
+        assert_eq!(work.purge_result.unwrap().deleted,12);
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_inventory_row_tombstone_and_invalidation_fences_prevent_stale_delete() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());let mut observed=vec![];
+        for mutation in ["row","tombstone","mailbox","global"] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let server=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&server);let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(original_scope(&cfg,"INBOX",Some("selected@test"))).unwrap()).unwrap();
+            let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
+            common::with_mailbox_write(&state,"acc","INBOX",|root| {
+                match mutation {
+                    "row"=>{let entry=mailvault_core::message_store::find(root,"acc","INBOX",7).unwrap();state.vault_registry.upsert("acc","INBOX",7,&mailvault_core::message_store::entry_path(root,"acc","INBOX",&entry.name));},
+                    "tombstone"=>state.vault_registry.remove("acc","INBOX",&[7]),
+                    "mailbox"=>state.vault_registry.invalidate("acc","INBOX"),
+                    _=>state.vault_registry.invalidate_all(),
+                }
+                Ok(())
+            }).unwrap();
+            let result=ports.purge_local(&target).await.unwrap();let survives=mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref()==Some(PURGE_RAW);observed.push((mutation,result,survives));
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert!(observed.iter().all(|(_,result,survives)|*result==PurgeEffect::Conflict&&*survives),"stale all-candidate authority must refuse: {observed:?}");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_post_server_origin_provider_row_and_nonfile_conflicts_are_refusals() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let modes=["origin","provider-row"].into_iter().chain(cfg!(unix).then_some("non-file"));
+        for mode in modes {
+            let _graph=(mode=="provider-row").then(||crate::handlers::graph::test_graph_mock_with(vec![(204,String::new())]));
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let server=MockImap::start(Scenario::new().mailbox(inbox(1)));
+            let mut cfg=purge_credentials(&state,&server);
+            let mut account=json!({"email":cfg.email,"password":"pw","imapHost":server.host(),"imapPort":server.port()});
+            if mode=="provider-row" {
+                account=json!({"email":"graph@example.test","imapHost":"outlook.office365.com","authType":"oauth2","oauth2Transport":"graph","oauth2AccessToken":"token"});
+                cfg=serde_json::from_value(account.clone()).unwrap();
+                std::fs::write(dir.path().join("credentials.json"),json!({"acc":account.to_string()}).to_string()).unwrap();
+                let ledger=mailvault_core::graph_ledger::ledger_path(&mailvault_core::header_cache::sidecar_dir(dir.path(),"acc","INBOX"),false);std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();std::fs::write(ledger,"{\"7\":\"graph-A\"}").unwrap();
+            }
+            let mut scope=original_scope(&cfg,"INBOX",Some("selected@test"));
+            if mode=="provider-row" {scope["targetHints"][0]["graphId"]=json!("graph-A");}
+            let work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(scope).unwrap()).unwrap();
+            let mut target=work.purge_targets[0].clone();let hint=target.hint(&work.intent).unwrap().clone();let mut ports=purge_ports(&state);
+            ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();
+            target.proof=Some(ports.purge_prepare(&target,&hint).await.unwrap());
+            let original_path=match target.proof.as_ref().unwrap() {PurgeProof::Server{stored:Some(stored),..}=>mailvault_core::message_store::entry_path(dir.path(),"acc","INBOX",&stored.name),_=>panic!("native file proof")};
+            ports.purge_server(&target,Arc::new(AtomicBool::new(false))).await.unwrap();target.server=PurgeEffect::Complete;
+            if mode=="origin" {account["imapPort"]=json!(server.port()+1);std::fs::write(dir.path().join("credentials.json"),json!({"acc":account.to_string()}).to_string()).unwrap();}
+            if mode=="provider-row" {crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::save_headers(c,"acc","INBOX",&json!({"uidValidity":1,"emails":[{"uid":7,"messageId":"selected@test","_graphId":"graph-B"}]}).to_string())).unwrap();}
+            #[cfg(unix)] if mode=="non-file" {
+                let foreign=dir.path().join("foreign.eml");std::fs::write(&foreign,b"foreign bytes").unwrap();std::os::unix::fs::symlink(&foreign,original_path.parent().unwrap().join("7:2,S.eml")).unwrap();
+                state.vault_registry.invalidate("acc","INBOX");
+                ports.purge_begin(std::slice::from_ref(&target),Arc::new(AtomicBool::new(false))).await.unwrap();
+            }
+            assert_eq!(ports.purge_local(&target).await.unwrap(),PurgeEffect::Conflict,"{mode}");
+            assert_eq!(std::fs::read(original_path).unwrap(),PURGE_RAW,"{mode}");
+            assert!(crate::custody::with_conn(&state,|c|mailvault_core::custody::entries::get(c,"acc","INBOX",7)).unwrap().is_some());
+            assert!(mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap().is_empty());
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_native_imap_and_protected_mirror_preserve_partial_results() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let modes=["online","offline","unconfigured","refused","no_uidplus","missing-proof","offline-missing-proof","jmap-store","mirror-conflict"].into_iter().chain(cfg!(unix).then_some("local-io"));
+        for mode in modes {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");
+            if mode=="jmap-store" {mailvault_core::message_store::set_vault_format(dir.path(),mailvault_core::message_store::Format::Jmap).unwrap();}
+            if !matches!(mode,"missing-proof"|"offline-missing-proof") {seed_purge_file(&state,PURGE_RAW);}
+            if mode=="jmap-store" {mailvault_core::message_store::write(dir.path(),"acc","INBOX",8,PURGE_RAW,&[]).unwrap();}
+            #[cfg(unix)] if mode=="local-io" {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(mailvault_core::message_store::mailbox_dir(dir.path(),"acc","INBOX").join("cur"),std::fs::Permissions::from_mode(0o555)).unwrap();
+            }
+            let mut mailbox=inbox(1);mailbox.add(mock_imap::Message::new(9,"Message-ID: <other@test>\r\n\r\nkeep").with_flags(&["\\Deleted"]));
+            let mut scenario=Scenario::new().mailbox(mailbox);
+            if mode=="no_uidplus" {scenario=scenario.without_cap("UIDPLUS");}
+            if mode=="refused" {scenario=scenario.fault(mock_imap::Trigger::with("STORE","\\Deleted"),mock_imap::Action::Respond("NO".into(),"refused".into()));}
+            let server=MockImap::start(scenario);let cfg=purge_credentials(&state,&server);
+            let drive=tempfile::tempdir().unwrap();
+            let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();
+            std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),PURGE_RAW).unwrap();
+            if mode=="mirror-conflict" {std::fs::write(cur.join("7_copy.eml"),b"replacement mirror bytes").unwrap();}
+            let mut scope=original_scope(&cfg,"INBOX",Some("<selected@test>"));
+            if mode=="online" {scope["targetHints"][0]["localIdentity"]=json!({"source":"local_sent","staged":true});}
+            let mut params=json!({"operationId":"purge","type":"delete_everywhere","scope":scope,"externalStatus":if mode=="unconfigured" {"not_configured"}else{"unavailable"}});
+            if !matches!(mode,"offline"|"unconfigured"|"offline-missing-proof") {params["mirrorRoot"]=json!(drive.path());}
+            let reply=handle_request_for_test(&state,"bulk.start",params).await;
+            assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);
+            let pending=wait_drained(&state).await;
+            #[cfg(unix)] if mode=="local-io" {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(mailvault_core::message_store::mailbox_dir(dir.path(),"acc","INBOX").join("cur"),std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            let failed=matches!(mode,"refused"|"no_uidplus");
+            assert_eq!(pending["result"],json!({"deleted":usize::from(!failed),"failed":usize::from(failed),"queuedBackup":usize::from(mode=="offline"),"needsResync":0}),"{mode}: {pending}");
+            assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().is_some(),failed||mode=="local-io","{mode}");
+            assert_eq!(cur.join("7.eml").exists(),!matches!(mode,"online"|"jmap-store"|"local-io"|"mirror-conflict"),"{mode}");
+            if matches!(mode,"missing-proof"|"offline-missing-proof") {assert_eq!(pending["worker"]["purgeTargets"][0]["mirrorIssue"],"MissingProof");}
+            if mode=="jmap-store" {assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",8).unwrap().as_deref(),Some(PURGE_RAW),"shared blob owner survives");}
+            let queued=mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap();
+            assert_eq!(queued.len(),usize::from(matches!(mode,"offline"|"mirror-conflict")),"{mode}");
+            assert!(queued.iter().all(|item|item.proved().is_ok()));
+            if mode=="mirror-conflict" {assert!(cur.join("7_copy.eml").exists());assert_eq!(pending["worker"]["purgeTargets"][0]["mirrorRemoved"],1);assert_eq!(pending["worker"]["purgeTargets"][0]["mirrorIssue"],"Mismatch");}
+            assert!(server.state().mailboxes[0].messages.iter().any(|message|message.uid==9),"unrelated Deleted UID must survive");
+            if mode=="no_uidplus" {assert!(server.commands().iter().all(|command|!command.contains("UID STORE")&&!command.contains("EXPUNGE")));}
+            assert!(handle_request_for_test(&state,"deleted.list",json!({})).await.result.unwrap().as_array().unwrap().is_empty());
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_provider_completion_leaves_local_state_until_exact_phase() {
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+        let server=MockImap::start(Scenario::new().mailbox(inbox(1)));
+        let cfg=config(&server);let identity=Identity::Imap{validity:1,message_ids:HashMap::from([(7,"selected@test".into())])};
+        let (_,deleted)=archive::delete_provider_only(&state,"acc".into(),cfg,"INBOX".into(),vec![7],Arc::new(AtomicBool::new(false)),Some(&identity)).await.unwrap();
+        assert_eq!(deleted,vec![7]);
+        assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref(),Some(PURGE_RAW));
+        let custody=crate::custody::with_conn(&state,|c|mailvault_core::custody::entries::get(c,"acc","INBOX",7)).unwrap().unwrap();
+        assert!(custody.get("serverDeleted").is_none());
+        assert_eq!(crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc","INBOX",&[7])).unwrap().len(),1);
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_native_closed_vault_and_import_marker_have_zero_effects() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for import in [false,true] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let server=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&server);
+            if import {
+                mailvault_core::local_folder::write_marker(&mailvault_core::message_store::mailbox_dir(dir.path(),"acc","INBOX"),&mailvault_core::local_folder::Marker{kind:"import".into(),name:"INBOX".into(),created:1,source:"native.mbox".into()}).unwrap();
+            } else {state.vault_closed.store(true,Ordering::SeqCst);}
+            let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"excluded","type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",Some("selected@test")),"externalStatus":"unavailable"})).await;
+            assert!(reply.error.is_none());let pending=wait_drained(&state).await;
+            assert_eq!(pending["result"]["deleted"],0);assert_eq!(pending["result"]["failed"],usize::from(!import));
+            assert!(server.commands().is_empty());assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref(),Some(PURGE_RAW));
+            assert!(mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap().is_empty());
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_no_message_id_uses_native_generation_and_exact_bytes() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_selection(&state,"INBOX");let raw=b"Subject: no Message-ID\r\n\r\noriginal native bytes";seed_purge_file(&state,raw);
+        crate::custody::with_conn(&state,|c| {
+            mailvault_core::custody::cache::save_headers(c,"acc","INBOX",&json!({"uidValidity":1,"emails":[{"uid":7,"messageId":null}]}).to_string())?;
+            mailvault_core::custody::entries::upsert(c,"acc","INBOX",&[json!({"uid":7,"source":"local","message_id":null})]).map(|_|())
+        }).unwrap();
+        let mut mailbox=mock_imap::state::Mailbox::new("INBOX").with_uid_validity(1);mailbox.add(mock_imap::Message::new(7,std::str::from_utf8(raw).unwrap()));
+        let server=MockImap::start(Scenario::new().mailbox(mailbox));let cfg=purge_credentials(&state,&server);
+        let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),raw).unwrap();
+        let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"no-mid","type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",None),"mirrorRoot":drive.path()})).await;
+        assert!(reply.error.is_none());let pending=wait_drained(&state).await;
+        assert_eq!(pending["result"],json!({"deleted":1,"failed":0,"queuedBackup":0,"needsResync":0}),"{pending}");
+        assert!(!cur.join("7.eml").exists());assert!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().is_none());
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_local_replacement_after_actual_server_success_is_preserved() {
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+        let server=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=config(&server);
+        let mut work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,serde_json::from_value(original_scope(&cfg,"INBOX",Some("<selected@test>"))).unwrap()).unwrap();
+        let identity=Identity::Imap{validity:1,message_ids:HashMap::from([(7,"selected@test".into())])};
+        let inventory=capture_local_inventory(&state,&group(),&AtomicBool::new(false)).unwrap();
+        let stored=common::with_mailbox_write(&state,"acc","INBOX",|root| {
+            let artifacts=inventory_artifacts(&state,root,&work.purge_targets[0],&inventory)?;
+            server_local_proof(&state,root,&work.purge_targets[0],&identity,None,Some("selected@test"),&artifacts)
+        }).unwrap().unwrap();
+        work.purge_targets[0].proof=Some(PurgeProof::Server{email:cfg.email.clone(),origin:bulk_worker::origin_hash(&cfg),identity:identity.clone(),stored:Some(stored)});
+        archive::delete_provider_only(&state,"acc".into(),cfg,"INBOX".into(),vec![7],Arc::new(AtomicBool::new(false)),Some(&identity)).await.unwrap();
+        let replacement=b"Message-ID: <selected@test>\r\n\r\nreplacement bytes";
+        seed_purge_file(&state,replacement);
+        let fresh=capture_local_inventory(&state,&group(),&AtomicBool::new(false)).unwrap();
+        assert_eq!(purge_local_target(&state,&work.purge_targets[0],Some("selected@test"),&fresh).unwrap(),PurgeEffect::Conflict);
+        assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref(),Some(replacement.as_slice()));
+        assert!(crate::custody::with_conn(&state,|c|mailvault_core::custody::entries::get(c,"acc","INBOX",7)).unwrap().is_some());
+        assert!(mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap().is_empty());
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_supported_workflow_resumes_actual_stage_after_exact_retirement() {
+        let dir=tempfile::tempdir().unwrap();
+        let server=MockImap::start(Scenario::new().mailbox(inbox(1)));
+        let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        let staged=handle_request_for_test(&state,"compose.stage",json!({"accountId":"acc","account":{"email":"one@example.test","password":"pw","imapHost":server.host(),"imapPort":server.port()},"mailbox":"Sent",
+            "email":{"to":"recipient@example.test","subject":"stage","text":"local bytes"}})).await.result.unwrap();
+        let uid=staged["uid"].as_u64().unwrap() as u32;
+        let scope:mailvault_core::bulk::Scope=serde_json::from_value(json!({"accountId":"acc","mailbox":"Sent","keys":[uid],"targetHints":[{
+            "accountId":"acc","mailbox":"Sent","uid":uid,"messageIdPresent":true,"messageId":staged["messageId"],"localIdentity":{"source":"local_sent","staged":true}}]})).unwrap();
+        let mut work=freeze(&state,mailvault_core::bulk::Action::DeleteEverywhere,scope).unwrap();
+        let mut ports=MailPorts{state:state.clone(),id:"retained".into(),attempt:"A".into(),mirror:None,external_status:Some("not_configured".into()),archive_base:0,archive_errors:0,selected:HashMap::new(),inventories:HashMap::new(), origins:HashMap::new()};
+        ports.purge_begin(&work.purge_targets,Arc::new(AtomicBool::new(false))).await.unwrap();
+        let proof=ports.purge_prepare(&work.purge_targets[0],work.purge_targets[0].hint(&work.intent).unwrap()).await.unwrap();
+        let PurgeProof::Local{receipt,..}=&proof else {panic!("stage must have native local proof")};
+        let original=receipt.clone();work.purge_targets[0].proof=Some(proof);
+        state.bulk.lock().unwrap().begin_admission("retained","A").unwrap();
+        prepare_claim(&state,"retained","A",work.intent.clone()).unwrap();
+        checkpoint(&state,"retained","A",&work).unwrap();
+        assert!(mailvault_core::app_db::with(dir.path(),|c|mailvault_core::app_db::compose_receipts::retire(c,&original)).unwrap());
+        drop(ports);drop(state);
+        let restarted=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+        let reply=handle_request_for_test(&restarted,"bulk.resume",json!({"operationId":"retained","attemptId":"B","externalStatus":"not_configured"})).await;
+        assert!(reply.error.is_none(),"{:?}",reply.error);
+        let pending=wait_drained(&restarted).await;
+        assert_eq!(pending["result"]["deleted"],1,"{pending}");
+        assert_eq!(pending["result"]["failed"],0);
+        assert_eq!(pending["worker"]["purgeTargets"][0]["proof"]["receipt"],json!(original));
+        assert!(mailvault_core::message_store::read_raw(dir.path(),"acc","Sent",uid).unwrap().is_none());
+        assert!(mailvault_core::app_db::with(dir.path(),|c|mailvault_core::app_db::compose_receipts::load(c,&original.identity.scope)).unwrap().is_empty());
+        assert!(server.commands().is_empty(),"local-only Resume must not contact provider");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_actual_cleaned_stage_never_authorizes_reoccupied_slot_or_mirror() {
+        let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);let server=MockImap::start(Scenario::new().mailbox(inbox(1)));
+        let staged=handle_request_for_test(&state,"compose.stage",json!({"accountId":"local-only","account":{"email":"one@example.test","password":"pw","imapHost":server.host(),"imapPort":server.port()},"mailbox":"Sent","email":{"to":"recipient@example.test","subject":"stage","text":"local bytes"}})).await.result.unwrap();
+        let uid=staged["uid"].as_u64().unwrap() as u32;
+        let scope=mailvault_core::app_db::compose_receipts::Scope::new("local-only","Sent",uid,staged["messageId"].as_str().unwrap()).unwrap();
+        let mut receipt=crate::handlers::compose::with_local_ownership(&state,&scope,None,|_,proof,_|Ok(proof)).unwrap().unwrap();receipt.state=mailvault_core::app_db::compose_receipts::State::Cleaned;
+        mailvault_core::app_db::with(dir.path(),|c|mailvault_core::app_db::compose_receipts::save(c,&receipt)).unwrap();
+        let raw=mailvault_core::message_store::read_raw(dir.path(),"local-only","Sent",uid).unwrap().unwrap();
+        let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),"one@example.test","Sent").unwrap();std::fs::create_dir_all(&cur).unwrap();let mirror=cur.join(format!("{uid}.eml"));std::fs::write(&mirror,&raw).unwrap();
+        let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"cleaned","type":"delete_everywhere","mirrorRoot":drive.path(),"scope":{"accountId":"local-only","mailbox":"Sent","keys":[uid],"targetHints":[{
+            "accountId":"local-only","mailbox":"Sent","uid":uid,"messageIdPresent":true,"messageId":staged["messageId"],"localIdentity":{"source":"local_sent","staged":true}}]}})).await;
+        assert!(reply.error.is_none());let pending=wait_drained(&state).await;
+        assert_eq!(pending["result"]["deleted"],0);assert_eq!(pending["result"]["failed"],1);
+        assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"local-only","Sent",uid).unwrap(),Some(raw.clone()));assert_eq!(std::fs::read(mirror).unwrap(),raw);
+        assert!(mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap().is_empty());assert!(server.commands().is_empty());
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_graph_uses_original_id_without_bin_and_refuses_uid_collision() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for mode in ["success","collision","refused"] {
+            let _graph=crate::handlers::graph::test_graph_mock_with(if mode=="collision" {vec![]}else if mode=="refused" {vec![(400,"refused".into())]}else{vec![(204,String::new())]});
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let account=json!({"email":"graph@example.test","imapHost":"outlook.office365.com","authType":"oauth2","oauth2Transport":"graph","oauth2AccessToken":"test-token"});
+            let cfg:crate::imap::ImapConfig=serde_json::from_value(account.clone()).unwrap();
+            let credentials=dir.path().join("credentials.json");std::fs::write(&credentials,json!({"acc":account.to_string()}).to_string()).unwrap();std::env::set_var("MAILVAULT_TEST_CREDENTIALS",&credentials);
+            let ledger=mailvault_core::graph_ledger::ledger_path(&mailvault_core::header_cache::sidecar_dir(dir.path(),"acc","INBOX"),false);
+            std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();std::fs::write(&ledger,json!({"7":if mode=="collision" {"graph-B"}else{"graph-A"}}).to_string()).unwrap();
+            let drive=tempfile::tempdir().unwrap();let cur=mailvault_core::maildir::mirror_cur(drive.path(),&cfg.email,"INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),PURGE_RAW).unwrap();
+            let mut scope=original_scope(&cfg,"INBOX",Some("<selected@test>"));scope["targetHints"][0]["graphId"]=json!("graph-A");
+            let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"graph-purge","type":"delete_everywhere","scope":scope,"mirrorRoot":drive.path()})).await;
+            assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);
+            let pending=wait_drained(&state).await;
+            assert_eq!(pending["result"]["deleted"],usize::from(mode=="success"),"{mode}: {pending}");
+            assert_eq!(pending["result"]["failed"],usize::from(mode!="success"),"{mode}: {pending}");
+            assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().is_none(),mode=="success");
+            assert_eq!(cur.join("7.eml").exists(),mode!="success");
+            let requests=crate::handlers::graph::test_graph_requests();
+            assert_eq!(requests.len(),usize::from(mode!="collision"),"{mode}");
+            assert!(requests.iter().all(|request|request.method=="DELETE"&&request.path.ends_with("/messages/graph-A")),"existing Deleted Items API only");
+            assert!(handle_request_for_test(&state,"deleted.list",json!({})).await.result.unwrap().as_array().unwrap().is_empty());
+            assert!(mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap().is_empty());
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_jmap_preserves_original_label_ids_gone_and_auth_retry() {
+        use crate::jmap_test_support as support;
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for mode in ["labels","last","gone","replacement-label","auth-retry"] {
+            let mut scenario=support::scenario();
+            let email_id=if mode=="last" {"e2"}else{"e1"};
+            if mode=="gone" {scenario.accounts[0].mailboxes[0].emails.retain(|email|email.id!="e1");}
+            if mode=="replacement-label" {scenario.accounts[0].mailboxes[0].id="mb-new".into();}
+            if mode=="auth-retry" {scenario.faults.push(mock_jmap::Fault::UnauthorizedOnce);}
+            let provider=mock_jmap::MockJmap::start(scenario);let (trap,port)=support::imap_trap();
+            let cfg=support::config(&provider,port);let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");
+            let mid=format!("{email_id}@x");
+            crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::save_headers(c,"acc","INBOX",&json!({"uidValidity":1,"emails":[{"uid":7,"messageId":mid}]}).to_string())).unwrap();
+            let ledger=crate::jmap_sessions::jmap_ledger_path(dir.path(),"acc","INBOX");std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();let ledger_bytes=json!({"7":email_id}).to_string();std::fs::write(&ledger,&ledger_bytes).unwrap();
+            let credentials=dir.path().join("credentials.json");std::fs::write(&credentials,json!({"acc":support::account_json(&provider,port).to_string()}).to_string()).unwrap();std::env::set_var("MAILVAULT_TEST_CREDENTIALS",&credentials);
+            let original=mailvault_core::imap::NativeHeaderIdentity::new(&cfg,"acc","INBOX",Some(1)).with_jmap_mailbox("mb-inbox");
+            let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"jmap-purge","type":"delete_everywhere","scope":{"accountId":"acc","mailbox":"INBOX","keys":[7],"targetHints":[{
+                "accountId":"acc","mailbox":"INBOX","uid":7,"nativeIdentity":original,"jmapId":email_id,"messageIdPresent":true,"messageId":mid}]}})).await;
+            assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);
+            let pending=wait_drained(&state).await;
+            assert_eq!(pending["result"]["deleted"],usize::from(mode!="replacement-label"),"{mode}: {pending}");
+            assert_eq!(pending["result"]["failed"],usize::from(mode=="replacement-label"),"{mode}: {pending}");
+            assert_eq!(std::fs::read_to_string(&ledger).unwrap(),ledger_bytes,"no UID allocation or ledger retirement");
+            provider.read(|s| {
+                if matches!(mode,"labels"|"auth-retry") {assert_eq!(s.email("acc1","e1").unwrap().mailbox_ids,std::collections::BTreeSet::from(["mb-work".into()]));}
+                if matches!(mode,"last"|"gone") {assert!(s.email("acc1",email_id).is_none());}
+                if mode=="replacement-label" {assert!(s.email("acc1","e1").unwrap().mailbox_ids.contains("mb-new"));}
+            });
+            if mode=="replacement-label" {assert_eq!(provider.count_calls("Email/set"),0);}
+            assert!(trap.accept().is_err(),"JMAP must never fall back to IMAP");
+            assert!(handle_request_for_test(&state,"deleted.list",json!({})).await.result.unwrap().as_array().unwrap().is_empty());
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
     #[test]
     fn reviewed_selected_server_ignores_unselected_corrupt_local_sibling() {
@@ -1604,10 +2270,11 @@ mod tests {
                 id: "mutation".into(),
                 attempt: "mutation-attempt".into(),
                 mirror: Some(mirror.path().to_string_lossy().into_owned()),
+                external_status: None,
                 archive_base: 0,
                 archive_errors: 0,
                 selected: HashMap::new(),
-                origins: HashMap::from([(
+                inventories:HashMap::new(), origins: HashMap::from([(
                     "acc".into(),
                     mailvault_core::bulk_worker::origin_hash(&config),
                 )]),
@@ -1774,10 +2441,11 @@ mod tests {
             id: "record-mutation".into(),
             attempt: "record-attempt".into(),
             mirror: Some(mirror.path().to_string_lossy().into_owned()),
+                external_status: None,
             archive_base: 0,
             archive_errors: 0,
             selected: HashMap::new(),
-            origins: HashMap::from([(
+            inventories:HashMap::new(), origins: HashMap::from([(
                 "acc".into(),
                 mailvault_core::bulk_worker::origin_hash(&config),
             )]),
@@ -2178,10 +2846,11 @@ mod tests {
             id: "io".into(),
             attempt: "io".into(),
             mirror: None,
+            external_status: None,
             archive_base: 0,
             archive_errors: 0,
             selected: HashMap::new(),
-            origins: HashMap::new(),
+            inventories:HashMap::new(), origins: HashMap::new(),
         };
         let work = Workflow::new(intent);
         // A real SQLite writer blocks persistence deterministically; WAL

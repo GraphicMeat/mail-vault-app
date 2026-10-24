@@ -86,9 +86,6 @@ pub(crate) async fn route(
             "bulk.start" => {
                 let action: Action = serde_json::from_value(params["type"].clone())
                     .map_err(|_| "errors.bulkUnsupported".to_string())?;
-                if action == Action::DeleteEverywhere {
-                    return Err("errors.bulkUnsupported".into());
-                }
                 let scope: Scope = serde_json::from_value(params["scope"].clone())
                     .map_err(|_| "errors.bulkPendingInvalid".to_string())?;
                 if let Some(snapshot) = crate::bulk_worker::duplicate_start(&state, operation_id, &attempt, action, &scope)? {
@@ -116,7 +113,11 @@ pub(crate) async fn route(
                         operation_id.into(),
                         attempt.clone(),
                         work,
+                        // The shell intercepts both raw RPC paths, strips
+                        // client values, then injects its attempt-held native
+                        // bookmark path/status pair (src-tauri bulk.rs).
                         params["mirrorRoot"].as_str().map(str::to_owned),
+                        params["externalStatus"].as_str().map(str::to_owned),
                         false,
                     ) {
                         let _journal = state
@@ -153,6 +154,7 @@ pub(crate) async fn route(
                     attempt.clone(),
                     work,
                     params["mirrorRoot"].as_str().map(str::to_owned),
+                    params["externalStatus"].as_str().map(str::to_owned),
                     true,
                 ) {
                     let _journal = state

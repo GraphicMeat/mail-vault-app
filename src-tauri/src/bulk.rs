@@ -10,6 +10,7 @@ const BUDGET: Duration = Duration::from_secs(30);
 pub struct HeldBulkPaths(Mutex<HashMap<String, Hold>>);
 struct Hold {
     path: Option<String>,
+    external_status: Option<String>,
     pending: bool,
     revision: u64,
     attempt: String,
@@ -27,6 +28,7 @@ impl HeldBulkPaths {
 fn set_root(params: &mut Value, root: Option<&str>) {
     if let Some(object) = params.as_object_mut() {
         object.remove("mirrorRoot");
+        object.remove("externalStatus");
         if let Some(root) = root {
             object.insert("mirrorRoot".into(), json!(root));
         }
@@ -65,7 +67,7 @@ fn forward_flow(
     } else {
         &params
     };
-    let backup = operation["type"] == "archive_backup_delete";
+    let backup = matches!(operation["type"].as_str(),Some("archive_backup_delete"|"delete_everywhere"));
     let active_attempt = active
         .and_then(|active| active["attemptId"].as_str())
         .filter(|attempt| !attempt.is_empty());
@@ -131,7 +133,7 @@ fn forward_flow(
             hold.revision = revision;
             (
                 hold.attempt.clone(),
-                (!new_execution).then(|| hold.path.clone()),
+                (!new_execution).then(|| (hold.path.clone(),hold.external_status.clone())),
                 old,
             )
         } else {
@@ -142,6 +144,7 @@ fn forward_flow(
                 id.clone(),
                 Hold {
                     path: None,
+                    external_status: None,
                     pending: true,
                     revision,
                     attempt: attempt.clone(),
@@ -150,9 +153,10 @@ fn forward_flow(
             (attempt, None, None)
         }
     };
-    let root = match existing {
-        Some(root) => root,
+    let (root,external_status) = match existing {
+        Some(pair) => pair,
         None => {
+            let external_status = ports.external_status();
             let root = ports.resolve().filter(|root| {
                 if ports.exists(root) {
                     true
@@ -168,6 +172,7 @@ fn forward_flow(
                     .filter(|hold| hold.revision == revision && hold.attempt == attempt)
                 {
                     hold.path = root.clone();
+                    hold.external_status = external_status.clone();
                     true
                 } else {
                     false
@@ -182,11 +187,12 @@ fn forward_flow(
                 }
                 return Err("errors.bulkStale".into());
             }
-            root
+            (root,external_status)
         }
     };
     params["attemptId"] = json!(attempt);
     set_root(&mut params, root.as_deref());
+    if let Some(status) = external_status { params["externalStatus"] = json!(status); }
     let result = ports.call(method, params, BUDGET);
     let owner = result
         .as_ref()
@@ -323,6 +329,7 @@ mod tests {
         pending: bool,
     }
     impl Ports for Fake<'_> {
+        fn external_status(&self) -> Option<String> { Some("ready".into()) }
         fn resolve(&self) -> Option<String> {
             Some("/drive".into())
         }
@@ -367,7 +374,53 @@ mod tests {
         json!({"operationId":"op","attemptId":held.map().get("op").map(|hold|hold.attempt.clone()),"finished":true})
     }
     #[test]
+    fn purge_native_status_and_pathless_holds_survive_live_duplicates() {
+        use std::sync::atomic::{AtomicUsize,Ordering};
+        struct Native<'a> {
+            held:&'a HeldBulkPaths,status:&'static str,path:Option<&'static str>,exists:bool,
+            resolves:AtomicUsize,calls:Mutex<Vec<Value>>,released:Mutex<Vec<String>>,
+        }
+        impl Ports for Native<'_> {
+            fn external_status(&self)->Option<String>{Some(self.status.into())}
+            fn resolve(&self)->Option<String>{self.resolves.fetch_add(1,Ordering::SeqCst);self.path.map(str::to_owned)}
+            fn exists(&self,_:&str)->bool{self.exists}
+            fn release(&self,path:&str){self.released.lock().unwrap().push(path.into());}
+            fn call(&self,method:&str,params:Value,_:Duration)->Result<Value,String>{
+                if method=="bulk.status" {
+                    let active=self.held.map().get("op").filter(|h|!h.pending).map(|h|json!({"id":"op","type":"delete_everywhere","attemptId":h.attempt}));
+                    return Ok(json!({"active":active,"pending":{"id":"op","type":"delete_everywhere"}}));
+                }
+                self.calls.lock().unwrap().push(params.clone());
+                Ok(json!({"id":"op","attemptId":params["attemptId"],"status":"deleting"}))
+            }
+        }
+        for (status,path,exists) in [("not_configured",None,true),("unavailable",None,true),("ready",Some("/gone"),false),("ready",Some("/drive"),true)] {
+            let held=HeldBulkPaths::default();
+            let mut ports=Native{held:&held,status,path,exists,resolves:AtomicUsize::new(0),calls:Mutex::new(vec![]),released:Mutex::new(vec![])};
+            for _ in 0..2 {
+                forward_flow(&held,&ports,"bulk.start",json!({"operationId":"op","type":"delete_everywhere","mirrorRoot":"/spoofed","externalStatus":"spoofed"})).unwrap();
+                assert!(held.contains("op"));
+            }
+            assert_eq!(ports.resolves.load(Ordering::SeqCst),1,"live duplicate reuses exact attempt pair");
+            let calls=ports.calls.lock().unwrap();
+            assert!(calls.iter().all(|params|params["externalStatus"]==status));
+            assert!(calls.iter().all(|params|params["mirrorRoot"].as_str()==path.filter(|_|exists)));
+            assert_eq!(calls[0]["attemptId"],calls[1]["attemptId"]);let original_attempt=calls[0]["attemptId"].clone();drop(calls);
+            release_frame(&held,&ports,&current_terminal(&held));
+            assert!(!held.contains("op"));
+            assert_eq!(ports.released.lock().unwrap().len(),usize::from(path.is_some()),"each resolved scope released exactly once");
+            ports.status="unavailable";ports.path=None;ports.exists=false;
+            forward_flow(&held,&ports,"bulk.resume",json!({"operationId":"op","mirrorRoot":"/old-root","externalStatus":"ready"})).unwrap();
+            assert_eq!(ports.resolves.load(Ordering::SeqCst),2,"fresh Resume resolves native state again");
+            let calls=ports.calls.lock().unwrap();let resumed=calls.last().unwrap();
+            assert_eq!(resumed["externalStatus"],"unavailable");assert!(resumed.get("mirrorRoot").is_none());
+            assert_ne!(resumed["attemptId"],original_attempt);drop(calls);
+            release_frame(&held,&ports,&current_terminal(&held));
+        }
+    }
+    #[test]
     fn terminal_before_ack_releases_once_and_strips_client_path() {
+        for action in ["archive_backup_delete","delete_everywhere"] {
         let h = HeldBulkPaths::default();
         let p = Fake {
             held: &h,
@@ -383,7 +436,7 @@ mod tests {
             &h,
             &p,
             "bulk.start",
-            json!({"operationId":"op","type":"archive_backup_delete","mirrorRoot":"/client"}),
+            json!({"operationId":"op","type":action,"mirrorRoot":"/client","externalStatus":"spoofed"}),
         )
         .unwrap();
         assert_eq!(*p.released.lock().unwrap(), vec!["/drive"]);
@@ -398,6 +451,8 @@ mod tests {
                 .1["mirrorRoot"],
             "/drive"
         );
+        assert_eq!(p.calls.lock().unwrap().iter().find(|(m,_)|m=="bulk.start").unwrap().1["externalStatus"],"ready");
+        }
     }
     #[test]
     fn ambiguous_timeout_retains_scope_for_live_worker_and_reconnect() {
@@ -731,6 +786,7 @@ mod tests {
             "op".into(),
             Hold {
                 path: Some("/drive".into()),
+                external_status: Some("ready".into()),
                 pending: false,
                 revision: 1,
                 attempt: "A".into(),

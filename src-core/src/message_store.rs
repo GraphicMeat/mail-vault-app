@@ -765,6 +765,75 @@ pub fn read_raw(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> io::R
     Ok(Some(raw))
 }
 
+/// An exact native directory entry. It is never deserialized from a client.
+#[derive(Clone,Debug)]
+pub struct UidArtifact {
+    uid:u32,
+    name:std::ffi::OsString,
+    format:Format,
+}
+impl UidArtifact {
+    pub fn uid(&self)->u32 {self.uid}
+    pub fn name(&self)->io::Result<&str> {
+        let name=self.name.to_str().ok_or_else(||io::Error::new(io::ErrorKind::InvalidData,"non-UTF8 UID artifact"))?;
+        if name.contains(['/', '\\', '\0']) {return Err(io::Error::new(io::ErrorKind::InvalidData,"invalid UID artifact name"));}
+        Ok(name)
+    }
+    pub(crate) fn path(&self,root:&Path,account:&str,mailbox:&str)->io::Result<PathBuf> {
+        let mailbox=mailbox_dir(root,account,mailbox);
+        let dir=match self.format {Format::Maildir=>messages_in(&mailbox),Format::Jmap=>jmap_in(&mailbox)};
+        Ok(dir.join(self.name()?))
+    }
+}
+fn artifact_dirs(root:&Path,account:&str,mailbox:&str)->io::Result<Vec<(PathBuf,Format)>> {
+    if !root.is_dir() {return Err(io::Error::new(io::ErrorKind::NotFound,"vault root unavailable"));}
+    let mailbox=mailbox_dir(root,account,mailbox);
+    let mut out=vec![];
+    for (dir,format) in [(messages_in(&mailbox),Format::Maildir),(jmap_in(&mailbox),Format::Jmap)] {
+        match fs::symlink_metadata(&dir) {
+            Ok(metadata) if metadata.file_type().is_dir() && !metadata.file_type().is_symlink()=>out.push((dir,format)),
+            Err(error) if error.kind()==io::ErrorKind::NotFound=>{},
+            Err(error)=>return Err(error),
+            _=>return Err(io::Error::new(io::ErrorKind::InvalidData,"non-directory UID artifact storage")),
+        }
+    }
+    Ok(out)
+}
+/// One complete, fallible names-only walk of both formats, outside shared
+/// locks. Native callers bind it to registry target fences captured before
+/// entry, then compare those fences in each target's local effect unit.
+pub fn inventory_uid_artifacts(root:&Path,account:&str,mailbox:&str,uids:&HashSet<u32>,cancel:&std::sync::atomic::AtomicBool)->io::Result<HashMap<u32,Vec<UidArtifact>>> {
+    let mut out:HashMap<_,_>=uids.iter().map(|uid|(*uid,vec![])).collect();
+    for (dir,format) in artifact_dirs(root,account,mailbox)? {
+        for entry in fs::read_dir(dir)? {
+            if cancel.load(std::sync::atomic::Ordering::SeqCst) {return Err(io::ErrorKind::Interrupted.into());}
+            let entry=entry?;let name=entry.file_name();let text=name.to_string_lossy();
+            let uid=match format {Format::Maildir=>maildir::vault_filename_uid(&text),Format::Jmap=>record_uid(&text)};
+            if let Some(artifacts)=uid.and_then(|uid|out.get_mut(&uid)) {artifacts.push(UidArtifact{uid:uid.unwrap(),name,format});}
+        }
+    }
+    Ok(out)
+}
+/// Target-only re-open/read after its native inventory fence matches. Every
+/// candidate is checked, including shadowed records and duplicate names.
+pub fn read_uid_candidates(root:&Path,account:&str,mailbox:&str,uid:u32,candidates:&[UidArtifact])->io::Result<Vec<(String,Vec<u8>)>> {
+    artifact_dirs(root,account,mailbox)?;
+    let mut out=Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        if candidate.uid!=uid {return Err(io::Error::new(io::ErrorKind::InvalidData,"wrong UID artifact"));}
+        let path=candidate.path(root,account,mailbox)?;
+        if !fs::symlink_metadata(&path)?.file_type().is_file() {return Err(io::Error::new(io::ErrorKind::InvalidData,"non-file UID artifact"));}
+        out.push((candidate.name()?.into(),read_path(&path)?));
+    }
+    Ok(out)
+}
+/// Standalone compatibility read; do not use this scanning wrapper inside a
+/// foreground-shared unit. The native bulk worker retains one names inventory.
+pub fn read_uid_artifacts(root:&Path,account:&str,mailbox:&str,uid:u32)->io::Result<Vec<(String,Vec<u8>)>> {
+    let inventory=inventory_uid_artifacts(root,account,mailbox,&HashSet::from([uid]),&std::sync::atomic::AtomicBool::new(false))?;
+    read_uid_candidates(root,account,mailbox,uid,&inventory[&uid])
+}
+
 /// The header section of `uid`'s first `max` bytes: everything before the
 /// first blank line, or all `max` bytes when there is none in them.
 pub fn read_header_section(root: &Path, account_id: &str, mailbox: &str, uid: u32, max: usize) -> io::Result<Option<Vec<u8>>> {

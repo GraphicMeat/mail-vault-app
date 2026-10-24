@@ -1,6 +1,7 @@
 use mailvault_core::bulk::{Action, FrozenIntent, Group, Scope};
 use mailvault_core::bulk_worker::{
     self, ArchiveOutcome, CopyProof, Identity, Ports, StoredProof, Workflow,
+    PurgeTarget,PurgeProof,PurgeEffect,PurgeMirror,
 };
 use serde_json::{json, Value};
 use std::{
@@ -10,6 +11,8 @@ use std::{
         Arc,
     },
 };
+#[path="support/purge_oracle.rs"]
+mod purge_oracle;
 
 #[derive(Default)]
 struct Fake {
@@ -30,10 +33,13 @@ struct Fake {
     copy_failed: Vec<u32>,
     delete_failed: usize,
     archive_errors: usize,
+    identity_override: Option<Identity>,
+    origin_override: Option<String>,
+    purge_local_conflict: bool,
 }
 impl Ports for Fake {
     async fn checkpoint(&mut self, w: &Workflow) -> Result<(), String> {
-        if self.fail_after_delete && self.trace.last().is_some_and(|e| e["effect"] == "delete") {
+        if self.fail_after_delete && self.trace.last().is_some_and(|e| e["effect"] == "delete" || e["effect"] == "server-delete") {
             return Err("disk full after remote reply".into());
         }
         if self.fail_checkpoint_at == Some(self.checkpoints.len() + 1) {
@@ -43,6 +49,9 @@ impl Ports for Fake {
         Ok(())
     }
     async fn identity(&mut self, g: &Group) -> Result<(Identity, String), String> {
+        if let Some(identity) = &self.identity_override {
+            return Ok((identity.clone(), self.origin_override.clone().unwrap_or_else(|| "fake-origin".into())));
+        }
         Ok((
             Identity::Imap {
                 validity: 1,
@@ -178,6 +187,26 @@ impl Ports for Fake {
             .take(uids.len().saturating_sub(self.delete_failed))
             .collect())
     }
+    async fn purge_prepare(&mut self,t:&PurgeTarget,_:&mailvault_core::bulk::TargetHint)->Result<PurgeProof,String> {
+        let (mut identity,origin)=self.identity(&t.group()).await?;
+        if let Identity::Imap{message_ids,..}=&mut identity {
+            for id in message_ids.values_mut() {*id=mailvault_core::maildir::normalize_message_id(id);}
+        }
+        Ok(PurgeProof::Server{email:"me@mock.test".into(),origin,identity,stored:Some(StoredProof{uid:t.uid,name:format!("{}.eml",t.uid),sha256:bulk_worker::bytes_hash(t.uid.to_string().as_bytes())})})
+    }
+    async fn purge_server(&mut self,t:&PurgeTarget,_:Arc<AtomicBool>)->Result<(),String> {
+        self.trace.push(json!({"effect":"server-delete","accountId":t.account_id,"uid":t.uid,"mailbox":t.mailbox,"permanent":true,"options":{"bin":false}}));
+        if self.fail_stage==Some("delete") {Err("server refused".into())} else {Ok(())}
+    }
+    async fn purge_local(&mut self,t:&PurgeTarget)->Result<PurgeEffect,String> {
+        if self.purge_local_conflict {return Ok(PurgeEffect::Conflict);}
+        self.trace.push(json!({"effect":"vault-delete","accountId":t.account_id,"mailbox":t.mailbox,"uids":[t.uid]}));
+        if self.fail_stage==Some("local") {Err("local IO".into())} else {Ok(PurgeEffect::Complete)}
+    }
+    async fn purge_mirror(&mut self,t:&PurgeTarget)->Result<PurgeMirror,String> {
+        self.trace.push(json!({"effect":"mirror-purge","email":"me@mock.test","mailbox":t.mailbox,"uids":[t.uid]}));
+        Ok(PurgeMirror{outcome:PurgeEffect::Complete,removed:1,issue:None})
+    }
 }
 fn work(action: Action, keys: Vec<Value>) -> Workflow {
     Workflow::new(FrozenIntent::freeze(
@@ -195,6 +224,156 @@ fn work(action: Action, keys: Vec<Value>) -> Workflow {
 }
 async fn run(w: &mut Workflow, f: &mut Fake) -> Result<(), String> {
     bulk_worker::run(f, w, Arc::new(AtomicBool::new(false)), false).await
+}
+#[tokio::test]
+async fn purge_everywhere_matches_actual_js_imap_oracle() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("fixtures/purge-everywhere-cases.json")).unwrap();
+    let case = fixture["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "imap-equal")
+        .unwrap();
+    let mut scope = case["selected"]["scope"].clone();
+    scope["keys"] = case["selected"]["keys"].clone();
+    let account = scope["accountId"].clone();
+    let mailbox = scope["mailbox"].clone();
+    // Native prerequisites supplement the historical fixture; its effects
+    // and result remain the actual JS answers.
+    scope["targetHints"] = json!([{"accountId":account,"mailbox":mailbox,"uid":1,
+        "messageIdPresent":true,"messageId":"m1@mock",
+        "nativeIdentity":{"accountId":account,"mailbox":mailbox,"uidValidity":1,"originHash":"fake-origin"}}]);
+    let scope: Scope = serde_json::from_value(scope).unwrap();
+    let accounts = vec![scope.account_id.clone().unwrap()];
+    let mut work = Workflow::new(FrozenIntent::freeze(
+        Action::DeleteEverywhere,
+        scope,
+        &accounts,
+        &[],
+    ));
+    let mut ports = Fake {
+        identity_override: Some(Identity::Imap {validity:1,message_ids:HashMap::from([(1,"m1@mock".into())])}),
+        ..Default::default()
+    };
+
+    run(&mut work, &mut ports)
+        .await
+        .expect("native purge must execute the actual JS imap-equal oracle");
+
+    // Compare only native mail effects. Presentation, refreshes and legacy
+    // provenance reads remain in the immutable JS corpus, outside this seam.
+    let expected: Vec<_> = case["effects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|effect| {
+            matches!(
+                effect["effect"].as_str(),
+                Some("server-delete" | "vault-delete" | "mirror-purge")
+            )
+        })
+        .map(|effect| {
+            let mut effect = effect.clone();
+            let object = effect.as_object_mut().unwrap();
+            object.remove("order");
+            object.remove("reply");
+            effect
+        })
+        .collect();
+    assert_eq!(ports.trace, expected);
+    assert_eq!(serde_json::to_value(&work).unwrap()["purgeResult"], case["result"]);
+    assert_eq!(work.status, "complete");
+}
+#[tokio::test]
+async fn purge_original_generation_and_origin_conflicts_have_no_effects() {
+    for (validity, origin) in [(2,"fake-origin"),(1,"different-origin")] {
+        let scope: Scope = serde_json::from_value(json!({"accountId":"acc1","mailbox":"INBOX","keys":[1],
+            "targetHints":[{"accountId":"acc1","mailbox":"INBOX","uid":1,"messageIdPresent":true,"messageId":"1@test",
+                "nativeIdentity":{"accountId":"acc1","mailbox":"INBOX","uidValidity":1,"originHash":"fake-origin"}}]})).unwrap();
+        let mut work = Workflow::new(FrozenIntent::freeze(Action::DeleteEverywhere,scope,&["acc1".into()],&[]));
+        let mut ports = Fake {identity_override:Some(Identity::Imap{validity,message_ids:HashMap::from([(1,"1@test".into())])}),origin_override:Some(origin.into()),..Default::default()};
+        let outcome = run(&mut work,&mut ports).await;
+        assert!(ports.trace.is_empty(), "conflicting original target performed mail effects");
+        if outcome.is_ok() {
+            assert_eq!(serde_json::to_value(&work).unwrap()["purgeResult"]["failed"],1);
+        }
+    }
+}
+fn purge_work() -> Workflow {
+    let scope:Scope=serde_json::from_value(json!({"accountId":"acc1","mailbox":"INBOX","keys":[1],"targetHints":[{
+        "accountId":"acc1","mailbox":"INBOX","uid":1,"messageIdPresent":true,"messageId":"1@test",
+        "nativeIdentity":{"accountId":"acc1","mailbox":"INBOX","uidValidity":1,"originHash":"fake-origin"}}]})).unwrap();
+    Workflow::new(FrozenIntent::freeze(Action::DeleteEverywhere,scope,&["acc1".into()],&[]))
+}
+#[tokio::test]
+async fn purge_server_failure_and_local_conflict_never_reach_mirror() {
+    for conflict in [false,true] {
+        let mut w=purge_work();
+        let mut f=Fake{fail_stage:(!conflict).then_some("delete"),purge_local_conflict:conflict,..Default::default()};
+        run(&mut w,&mut f).await.unwrap();
+        assert_eq!(f.trace.len(),1);
+        assert_eq!(f.trace[0]["effect"],"server-delete");
+        assert_eq!(w.purge_result.as_ref().unwrap().failed,1);
+        assert_eq!(w.purge_result.as_ref().unwrap().deleted,usize::from(conflict));
+    }
+}
+#[tokio::test]
+async fn purge_post_server_checkpoint_failure_and_resume_preserve_uncertainty() {
+    let mut w=purge_work();
+    let mut f=Fake{fail_after_delete:true,..Default::default()};
+    assert!(run(&mut w,&mut f).await.is_err());
+    assert_eq!(f.trace.len(),1);
+    let mut durable=f.checkpoints.last().unwrap().clone();
+    assert_eq!(durable.purge_targets[0].server,PurgeEffect::Attempted);
+    let mut resumed=Fake::default();
+    bulk_worker::run(&mut resumed,&mut durable,Arc::new(AtomicBool::new(false)),true).await.unwrap();
+    assert!(resumed.trace.is_empty());
+    assert_eq!(durable.purge_targets[0].server,PurgeEffect::Attempted);
+    assert_eq!(durable.purge_result.unwrap().failed,1);
+}
+#[tokio::test]
+async fn purge_retained_local_conflict_is_refused_without_server_or_mirror_effects() {
+    let mut scope=purge_work().intent.scope().clone();scope.target_hints[0].native_identity=None;
+    let mut w=Workflow::new(FrozenIntent::freeze(Action::DeleteEverywhere,scope,&[],&[]));
+    let raw=b"Message-ID: <1@test>\r\n\r\noriginal local bytes";
+    let scope=mailvault_core::app_db::compose_receipts::Scope::new("acc1","INBOX",1,"1@test").unwrap();
+    let receipt=mailvault_core::app_db::compose_receipts::Receipt::present(mailvault_core::app_db::compose_receipts::Identity::from_bytes(scope,raw).unwrap());
+    w.purge_targets[0].proof=Some(PurgeProof::Local{email:Some("me@mock.test".into()),receipt,stored:Some(StoredProof{uid:1,name:"1.eml".into(),sha256:bulk_worker::bytes_hash(raw)})});
+    let mut f=Fake{purge_local_conflict:true,..Default::default()};
+    run(&mut w,&mut f).await.unwrap();
+    assert!(f.trace.is_empty());assert!(w.completed_keys().is_empty());
+    assert_eq!(json!(w.purge_result),json!({"deleted":0,"failed":1,"queuedBackup":0,"needsResync":0}));
+}
+#[test]
+fn purge_supported_pending_keeps_unknown_nested_identity_as_unresolved_evidence() {
+    let dir=tempfile::tempdir().unwrap();let mut w=purge_work();
+    w.purge_targets[0].proof=Some(PurgeProof::Server{email:"me@mock.test".into(),origin:"fake-origin".into(),identity:Identity::Imap{validity:1,message_ids:HashMap::from([(1,"1@test".into())])},stored:None});
+    let mut owner=mailvault_core::bulk::Coordinator::load(dir.path());owner.claim(dir.path(),"nested",w.intent.clone()).unwrap();owner.checkpoint(dir.path(),"nested",&w).unwrap();
+    let mut raw=mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap();
+    raw["worker"]["purgeTargets"][0]["proof"]["identity"]["futureConstraint"]=json!("retained unknown evidence");
+    mailvault_core::op_journal::pending_operation_save(dir.path(),&raw).unwrap();
+    let mut reopened=mailvault_core::bulk::Coordinator::load(dir.path());
+    assert!(reopened.status(dir.path()).is_err());assert!(reopened.resume_worker(dir.path(),"nested").is_err());
+    assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(),Some(raw));
+}
+#[test]
+fn purge_nonfile_uid_artifact_is_never_confirmed_absence() {
+    let dir=tempfile::tempdir().unwrap();let mailbox=mailvault_core::message_store::mailbox_dir(dir.path(),"acc","INBOX");
+    let candidate=mailbox.join("cur").join(mailvault_core::message_store::entry_name(7,&[]));
+    std::fs::create_dir_all(&candidate).unwrap();
+    assert_eq!(mailvault_core::message_store::read_uid_artifacts(dir.path(),"acc","INBOX",7).unwrap_err().kind(),std::io::ErrorKind::InvalidData);
+    assert!(candidate.is_dir());
+}
+#[cfg(unix)]
+#[test]
+fn purge_directory_alias_cannot_supply_local_byte_authority() {
+    let dir=tempfile::tempdir().unwrap();let outside=tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("7.eml"),b"outside bytes").unwrap();
+    let mailbox=mailvault_core::message_store::mailbox_dir(dir.path(),"acc","INBOX");std::fs::create_dir_all(&mailbox).unwrap();
+    std::os::unix::fs::symlink(outside.path(),mailbox.join("cur")).unwrap();
+    assert_eq!(mailvault_core::message_store::read_uid_artifacts(dir.path(),"acc","INBOX",7).unwrap_err().kind(),std::io::ErrorKind::InvalidData);
+    assert_eq!(std::fs::read(outside.path().join("7.eml")).unwrap(),b"outside bytes");
 }
 #[tokio::test]
 async fn four_mode_effect_order_matches_actual_manager_fixture() {

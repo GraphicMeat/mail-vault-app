@@ -406,6 +406,24 @@ pub(crate) async fn delete_with_config(
         (uids, 0)
     };
     let (acct, mb) = (account_id.clone(), mailbox.clone());
+    let (mut p, deleted) = delete_provider_only(state,account_id,config,mailbox,uids,cancel,identity).await?;
+    end_follow_ups_at(state, &acct, &mb, &deleted).await;
+    forget_classifications_at(state, &acct, &mb, &deleted).await;
+    record_server_deleted(state, &acct, &mb, deleted.clone()).await;
+    p.total += refused;
+    p.errors += refused;
+    Ok((p, deleted))
+}
+
+/// Provider completion only. The purge worker durably records these exact
+/// successful UIDs before any local bookkeeping or mirror work.
+pub(crate) async fn delete_provider_only(
+    state: &Arc<DaemonState>, account_id:String, config:crate::imap::ImapConfig,
+    mailbox:String,uids:Vec<u32>,cancel:Arc<std::sync::atomic::AtomicBool>,
+    identity:Option<&mailvault_core::bulk_worker::Identity>,
+) -> Result<(archive::ArchiveProgress,Vec<u32>),String> {
+    if identity.is_some_and(|i| !i.matches_transport(&config)) { return Err("errors.bulkIdentityChanged".into()); }
+    if !config.uses_jmap() && config.uses_graph() { return Err("errors.bulkGraphDeleteUnsupported".into()); }
     let result = if config.uses_jmap() {
         bulk_delete_jmap_bound(state, account_id, &config, mailbox, uids, cancel, identity).await
     } else {
@@ -429,13 +447,7 @@ pub(crate) async fn delete_with_config(
         )
         .await
     };
-    let (mut p, deleted) = result?;
-    end_follow_ups_at(state, &acct, &mb, &deleted).await;
-    forget_classifications_at(state, &acct, &mb, &deleted).await;
-    record_server_deleted(state, &acct, &mb, deleted.clone()).await;
-    p.total += refused;
-    p.errors += refused;
-    Ok((p, deleted))
+    result
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────

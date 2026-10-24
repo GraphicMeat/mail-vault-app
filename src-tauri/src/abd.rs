@@ -111,6 +111,7 @@ pub(crate) trait Ports {
     /// Resolve the backup slot and start its scoped access. `Some` means the
     /// access is started and the caller owns one release.
     fn resolve(&self) -> Option<String>;
+    fn external_status(&self) -> Option<String> { None }
     fn exists(&self, path: &str) -> bool;
     fn release(&self, path: &str);
     fn call(&self, method: &str, params: Value, budget: Duration) -> Result<Value, String>;
@@ -119,6 +120,9 @@ pub(crate) trait Ports {
 pub(crate) struct AppPorts<'a>(pub(crate) &'a tauri::AppHandle);
 
 impl Ports for AppPorts<'_> {
+    fn external_status(&self) -> Option<String> {
+        crate::backup::external_location_status()
+    }
     fn resolve(&self) -> Option<String> {
         // `needs_release` is true exactly when a bookmark resolved (no caller
         // path is passed), so `Some` always owes one release.

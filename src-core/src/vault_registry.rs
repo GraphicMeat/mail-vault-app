@@ -87,6 +87,16 @@ pub(crate) struct Listing {
     s0: i64,
     e0: (u64, u64),
 }
+/// Read-only native writer fence for an off-lock candidate inventory. A
+/// missing row and a tombstone are distinct; no listing or verification runs.
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub struct TargetFence {
+    root:PathBuf,
+    key:Key,
+    uid:u32,
+    row:Option<(i64,Option<String>)>,
+    epoch:(u64,u64),
+}
 
 /// The verified mailboxes and the generations that fence them, under one
 /// mutex so an invalidate can never land between a verify's check and its
@@ -355,6 +365,22 @@ impl VaultRegistry {
             return None;
         }
         Some(self.live_rows(&account, &dir, Some(&[uid]))?.pop().map(|r| r.1))
+    }
+    /// Caller holds the existing mailbox -> vault gate unit. SQL/read errors
+    /// and a different root are unknown. This is not candidate completeness;
+    /// capture before an off-lock full names inventory, then compare in the
+    /// target unit before reading/unlinking its exact candidate paths.
+    pub fn target_fence(&self,root:&Path,account:&str,mailbox:&str,uid:u32)->Option<TargetFence> {
+        let key=key(account,mailbox);
+        let epoch=guard(&self.verified).epoch(&key);
+        let row={
+            let held=guard(&self.conn);let conn=held.as_ref()?;
+            let bound:String=conn.query_row("SELECT value FROM meta WHERE key='root'",[],|r|r.get(0)).ok()?;
+            if bound!=root.to_str()? {return None;}
+            conn.query_row("SELECT seq,filename FROM files WHERE account_id=?1 AND vault_dir=?2 AND uid=?3",params![key.0,key.1,uid],|r|Ok((r.get(0)?,r.get(1)?))).optional().ok()?
+        };
+        if guard(&self.verified).epoch(&key)!=epoch {return None;}
+        Some(TargetFence{root:root.into(),key,uid,row,epoch})
     }
 
     /// Resolve `uid` and run `f` on its path. An `f` error of kind `NotFound`

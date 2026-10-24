@@ -327,7 +327,7 @@ pub async fn backup_scan_uids(
 /// `"not_configured"`, ...), or `None` when there is no app data dir to read
 /// it from — which the callers below treat as "not configured", the same
 /// fail-closed reading `mailvault_core::backup::purge_uids` applies.
-fn external_location_status() -> Option<String> {
+pub(crate) fn external_location_status() -> Option<String> {
     let data_dir = mailvault_core::paths::app_data_dir().ok()?;
     Some(external_location::get_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP).status)
 }

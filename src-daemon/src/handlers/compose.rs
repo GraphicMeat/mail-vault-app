@@ -180,6 +180,22 @@ fn local_ownership_under_lock(state: &Arc<DaemonState>, scope: &Scope, expected_
         _ => None,
     })
 }
+/// E3's typed resolved-candidate entry. Caller owns the matching mailbox ->
+/// vault gate and has checked the complete inventory fence and all candidate
+/// bytes. This reuses D's ownership policy without another filesystem lookup.
+pub(crate) fn local_ownership_resolved(state:&Arc<DaemonState>,scope:&Scope,expected_sha256:Option<&str>,raw:Option<&[u8]>)->Result<Option<Receipt>,String> {
+    local_ownership_under_lock(state,scope,expected_sha256,raw)
+}
+pub(crate) fn retained_local_ownership_resolved(state:&Arc<DaemonState>,proof:&Receipt,raw:Option<&[u8]>)->Result<Option<Receipt>,String> {
+    if !proof.is_valid() {return Err("invalid retained compose proof".into());}
+    if local_custody(state,&proof.identity.scope)==Some(false) {return Ok(None);}
+    let matches=match (proof.state,raw) {
+        (State::Present,Some(raw))=>proof.identity.matches_bytes(raw),
+        (State::Cleaned,None)=>true,
+        _=>false,
+    };
+    Ok(matches.then(||proof.clone()))
+}
 
 /// Revalidate proof retained by a supported native pending record after exact
 /// receipt retirement. Never accepts proof from a compose/UI RPC.
@@ -191,14 +207,10 @@ pub(crate) fn with_retained_local_ownership<T>(
     let scope = &proof.identity.scope;
     with_mailbox_write(state, &scope.account_id, &scope.mailbox, |root| {
         let raw = local_bytes(root, scope)?;
-        if local_custody(state, scope) == Some(false) { return Ok(None); }
-        let matches = match (proof.state, raw.as_deref()) {
-            (State::Present, Some(raw)) => proof.identity.matches_bytes(raw),
-            (State::Cleaned, None) => true,
-            _ => false,
-        };
-        if !matches { return Ok(None); }
-        use_proof(root, proof.clone(), raw).map(Some)
+        match retained_local_ownership_resolved(state,proof,raw.as_deref())? {
+            Some(proof)=>use_proof(root,proof,raw).map(Some),
+            None=>Ok(None),
+        }
     })
 }
 

@@ -104,18 +104,33 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
 /// pass over the record directory (never its blob).
 pub fn delete_maildir_files(reg: &VaultRegistry, root: &Path, account_id: &str, mailbox: &str, uids: &HashSet<u32>) -> usize {
     let cur_dir = cur_path(root, account_id, mailbox);
-    let mut removed = 0usize;
-    let mut gone: Vec<u32> = Vec::new();
-    let mut failed = false;
     let records = crate::message_store::mailbox_dir(root, account_id, mailbox).join(crate::message_store::JMAP_DIR);
     let in_cur = fs::read_dir(&cur_dir).into_iter().flatten().flatten().filter_map(|e| Some((vault_filename_uid(&e.file_name().to_string_lossy())?, e.path())));
     let in_records = fs::read_dir(&records).into_iter().flatten().flatten().filter(|e| crate::message_store::is_record_path(&e.path())).filter_map(|e| {
         Some((crate::message_store::record_uid(&e.file_name().to_string_lossy())?, e.path()))
     });
-    for (uid, path) in in_cur.chain(in_records) {
-        if !uids.contains(&uid) {
-            continue;
-        }
+    delete_candidate_paths(reg,root,account_id,mailbox,in_cur.chain(in_records).filter(|(uid,_)|uids.contains(uid)),None).removed
+}
+
+#[derive(Debug,Clone,Copy)]
+pub struct DeleteCandidates {
+    pub removed:usize,
+    pub failed:bool,
+}
+/// Exact candidate body, with no discovery. Caller holds the mailbox/gate,
+/// has compared its native inventory fence and checked every candidate's
+/// original bytes. A record unlink never removes its shared blob.
+pub fn delete_uid_candidates(reg:&VaultRegistry,root:&Path,account:&str,mailbox:&str,uid:u32,candidates:&[crate::message_store::UidArtifact])->Result<DeleteCandidates,String> {
+    let paths=candidates.iter().map(|candidate| {
+        if candidate.uid()!=uid {return Err("wrong UID deletion candidate".into());}
+        candidate.path(root,account,mailbox).map(|path|(uid,path)).map_err(|e|e.to_string())
+    }).collect::<Result<Vec<_>,String>>()?;
+    Ok(delete_candidate_paths(reg,root,account,mailbox,paths.into_iter(),Some(uid)))
+}
+fn delete_candidate_paths(reg:&VaultRegistry,root:&Path,account_id:&str,mailbox:&str,paths:impl Iterator<Item=(u32,PathBuf)>,absent:Option<u32>)->DeleteCandidates {
+    let cur_dir=cur_path(root,account_id,mailbox);
+    let (mut removed,mut gone,mut failed)=(0,Vec::new(),false);
+    for (uid,path) in paths {
         match fs::remove_file(&path) {
             Ok(()) => {
                 crate::pgp::remove_copy(&cur_dir, uid);
@@ -128,13 +143,14 @@ pub fn delete_maildir_files(reg: &VaultRegistry, root: &Path, account_id: &str, 
             }
         }
     }
+    if !failed {if let Some(uid)=absent {gone.push(uid);}}
     gone.sort_unstable();
     gone.dedup();
     reg.remove(account_id, mailbox, &gone);
     if failed {
         reg.invalidate(account_id, mailbox);
     }
-    removed
+    DeleteCandidates{removed,failed}
 }
 
 // ── Store / read / list / delete / set_flags ─────────────────────────────────

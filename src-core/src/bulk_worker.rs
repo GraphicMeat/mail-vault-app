@@ -198,10 +198,123 @@ pub struct Workflow {
     #[serde(default)]
     pub errors: usize,
     pub intent: FrozenIntent,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub purge_targets: Vec<PurgeTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purge_result: Option<PurgeCounts>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purge_current: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PurgeCounts {
+    pub deleted: usize,
+    pub failed: usize,
+    pub queued_backup: usize,
+    pub needs_resync: usize,
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PurgeEffect {
+    #[default]
+    Pending,
+    Attempted,
+    Complete,
+    Failed,
+    Conflict,
+    Queued,
+    Unconfigured,
+    Unresolved,
+}
+#[derive(Debug,Clone)]
+pub struct PurgeMirror {
+    pub outcome:PurgeEffect,
+    pub removed:usize,
+    pub issue:Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum PurgeProof {
+    Server { email: String, origin: String, identity: Identity, stored: Option<StoredProof> },
+    Local { email: Option<String>, receipt: crate::app_db::compose_receipts::Receipt, stored: Option<StoredProof> },
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PurgeTarget {
+    pub account_id: String,
+    pub mailbox: String,
+    pub uid: u32,
+    pub proof: Option<PurgeProof>,
+    pub server: PurgeEffect,
+    pub local: PurgeEffect,
+    pub mirror: PurgeEffect,
+    pub mirror_removed: usize,
+    pub mirror_issue: Option<String>,
+    pub refused: bool,
+    pub skipped: bool,
+    pub needs_resync: bool,
+    pub last_error: Option<String>,
+}
+impl PurgeTarget {
+    pub fn group(&self) -> Group {
+        Group { account_id: self.account_id.clone(), mailbox: self.mailbox.clone(), uids: vec![self.uid] }
+    }
+    pub fn hint<'a>(&self, intent: &'a FrozenIntent) -> Option<&'a crate::bulk::TargetHint> {
+        let mut hints = intent.target_hints().iter().filter(|h| h.account_id == self.account_id && h.mailbox == self.mailbox && h.uid == self.uid);
+        let first = hints.next()?;
+        hints.all(|hint| hint == first).then_some(first)
+    }
+    pub fn local_only(&self) -> bool { matches!(self.proof, Some(PurgeProof::Local { .. })) }
+    fn approved(&self) -> bool {
+        !self.refused && !self.skipped && self.proof.is_some() && (self.local_only() || self.server == PurgeEffect::Complete)
+    }
+    pub fn proof_matches(&self, intent: &FrozenIntent) -> bool {
+        let Some(hint) = self.hint(intent) else { return false; };
+        self.proof_matches_hint(hint)
+    }
+    fn proof_matches_hint(&self,hint:&crate::bulk::TargetHint)->bool {
+        if self.uid == 0 || (!hint.message_id_present && hint.message_id.is_some()) { return false; }
+        let valid_stored = |stored: &Option<StoredProof>| stored.as_ref().is_none_or(|p| p.uid == self.uid && valid_artifact(p));
+        match &self.proof {
+            Some(PurgeProof::Server {origin,identity,stored,..}) => {
+                let Some(original) = &hint.native_identity else { return false; };
+                if original.account_id != self.account_id || original.mailbox != self.mailbox || original.origin_hash.is_empty() || original.uid_validity==Some(0) || &original.origin_hash != origin || !valid_stored(stored) { return false; }
+                match identity {
+                    Identity::Imap {validity,message_ids} => original.uid_validity == Some(*validity) && *validity > 0
+                        && hint.message_id.as_ref().is_none_or(|id| message_ids.get(&self.uid) == Some(&crate::maildir::normalize_message_id(id))),
+                    Identity::Jmap {mailbox_id,ids} => original.jmap_mailbox_id.as_ref() == Some(mailbox_id) && !mailbox_id.is_empty() && hint.jmap_id.as_ref().is_some_and(|id| !id.is_empty() && ids.get(&self.uid) == Some(id)),
+                    Identity::Graph {ids} => hint.graph_id.as_ref().is_some_and(|id| !id.is_empty() && ids.get(&self.uid) == Some(id)),
+                }
+            }
+            Some(PurgeProof::Local {receipt,stored,..}) => {
+                let s = &receipt.identity.scope;
+                hint.native_identity.is_none() && receipt.is_valid() && s.account_id == self.account_id && s.mailbox == self.mailbox && s.uid == self.uid
+                    && hint.message_id.as_deref().and_then(crate::compose::normalize_message_id).as_deref() == Some(s.message_id.as_str())
+                    && valid_stored(stored) && stored.as_ref().is_none_or(|p| p.sha256 == receipt.identity.sha256)
+                    && (receipt.state != crate::app_db::compose_receipts::State::Cleaned || stored.is_none())
+            }
+            None => false,
+        }
+    }
+}
+fn valid_artifact(p: &StoredProof) -> bool {
+    p.sha256.len() == 64 && p.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        && !p.name.is_empty() && !p.name.contains(['/', '\\', '\0'])
 }
 impl Workflow {
     pub fn new(intent: FrozenIntent) -> Self {
+        let purge_targets = if intent.action() == Action::DeleteEverywhere {
+            crate::bulk::group_targets(intent.scope()).groups.into_iter().flat_map(|g| {
+                g.uids.into_iter().map(move |uid| PurgeTarget {account_id:g.account_id.clone(),mailbox:g.mailbox.clone(),uid,
+                    proof:None,server:PurgeEffect::Pending,local:PurgeEffect::Pending,mirror:PurgeEffect::Pending,mirror_removed:0,mirror_issue:None,
+                    refused:false,skipped:false,needs_resync:false,last_error:None})
+            }).collect()
+        } else { vec![] };
         Self {
+            purge_targets,
+            purge_result: (intent.action() == Action::DeleteEverywhere).then(PurgeCounts::default),
+            purge_current:None,
             groups: intent
                 .groups()
                 .iter()
@@ -227,7 +340,9 @@ impl Workflow {
         }
     }
     pub fn valid_for(&self, intent: &FrozenIntent) -> bool {
+        if intent.action() == Action::DeleteEverywhere { return self.valid_purge(intent); }
         self.intent == *intent
+            && self.purge_targets.is_empty() && self.purge_result.is_none() && self.purge_current.is_none()
             && matches!(
                 self.status.as_str(),
                 "starting"
@@ -283,6 +398,13 @@ impl Workflow {
             })
     }
     pub fn completed_keys(&self) -> Vec<serde_json::Value> {
+        if self.intent.action() == Action::DeleteEverywhere {
+            let approved: HashSet<_> = self.purge_targets.iter().filter(|t| t.approved() && !(t.local_only() && t.local==PurgeEffect::Conflict))
+                .map(|t| (t.account_id.as_str(),t.mailbox.as_str(),t.uid)).collect();
+            return self.intent.scope().keys.iter().filter(|key| {
+                crate::bulk::target(key,self.intent.scope()).is_some_and(|(a,m,u)| approved.contains(&(a.as_str(),m.as_str(),u)))
+            }).cloned().collect();
+        }
         self.groups
             .iter()
             .flat_map(|g| {
@@ -304,6 +426,26 @@ impl Workflow {
                     })
             })
             .collect()
+    }
+    fn valid_purge(&self, intent: &FrozenIntent) -> bool {
+        if self.intent != *intent || !self.groups.is_empty() || self.purge_result.is_none()
+            || self.purge_current.is_some_and(|index|index>=self.purge_targets.len())
+            || !matches!(self.phase.as_str(), "identify"|"delete"|"vault"|"backup")
+            || !matches!(self.status.as_str(),"starting"|"deleting"|"complete"|"cancelled"|"error") { return false; }
+        let expected = Workflow::new(intent.clone()).purge_targets;
+        if expected.len() != self.purge_targets.len() { return false; }
+        let Ok(hints)=intent.hint_map() else {return false;};
+        self.purge_targets.iter().zip(expected).all(|(t,e)| {
+            t.account_id == e.account_id && t.mailbox == e.mailbox && t.uid == e.uid
+                && matches!(t.server,PurgeEffect::Pending|PurgeEffect::Attempted|PurgeEffect::Complete|PurgeEffect::Failed)
+                && matches!(t.local,PurgeEffect::Pending|PurgeEffect::Attempted|PurgeEffect::Complete|PurgeEffect::Failed|PurgeEffect::Conflict)
+                && matches!(t.mirror,PurgeEffect::Pending|PurgeEffect::Attempted|PurgeEffect::Complete|PurgeEffect::Queued|PurgeEffect::Unconfigured|PurgeEffect::Unresolved)
+                && (t.proof.is_none() || hints.get(&(t.account_id.as_str(),t.mailbox.as_str(),t.uid)).is_some_and(|h|t.proof_matches_hint(h)))
+                && (t.server == PurgeEffect::Pending || matches!(t.proof,Some(PurgeProof::Server{..})))
+                && (t.local == PurgeEffect::Pending || t.approved())
+                && (t.mirror == PurgeEffect::Pending || (t.approved() && t.local != PurgeEffect::Conflict))
+                && (t.proof.is_some() || (t.server == PurgeEffect::Pending && t.local == PurgeEffect::Pending && t.mirror == PurgeEffect::Pending))
+        })
     }
 }
 /// Narrow mail operations, deliberately specific to these four bulk modes.
@@ -338,6 +480,11 @@ pub trait Ports {
         cancel: Arc<AtomicBool>,
         stored: &[StoredProof],
     ) -> Result<Vec<u32>, String>;
+    async fn purge_begin(&mut self,_targets:&[PurgeTarget],_cancel:Arc<AtomicBool>)->Result<(),String> {Ok(())}
+    async fn purge_prepare(&mut self, _target: &PurgeTarget, _hint: &crate::bulk::TargetHint) -> Result<PurgeProof,String> { Err("errors.bulkUnsupported".into()) }
+    async fn purge_server(&mut self, _target: &PurgeTarget, _cancel: Arc<AtomicBool>) -> Result<(),String> { Err("errors.bulkUnsupported".into()) }
+    async fn purge_local(&mut self, _target: &PurgeTarget) -> Result<PurgeEffect,String> { Err("errors.bulkUnsupported".into()) }
+    async fn purge_mirror(&mut self, _target: &PurgeTarget) -> Result<PurgeMirror,String> { Err("errors.bulkUnsupported".into()) }
 }
 fn exact(asked: &[u32], proof: &[u32]) -> Vec<u32> {
     let proved: HashSet<_> = proof.iter().copied().collect();
@@ -346,6 +493,116 @@ fn exact(asked: &[u32], proof: &[u32]) -> Vec<u32> {
         .copied()
         .filter(|u| proved.contains(u))
         .collect()
+}
+fn purge_counts(w: &mut Workflow) {
+    let mut result = PurgeCounts::default();
+    let mut resync = HashSet::new();
+    for t in &w.purge_targets {
+        if t.approved() && !(t.local_only() && t.local==PurgeEffect::Conflict) { result.deleted += 1; }
+        if t.refused || matches!(t.server,PurgeEffect::Failed|PurgeEffect::Attempted) || t.local == PurgeEffect::Conflict { result.failed += 1; }
+        if t.mirror == PurgeEffect::Queued { result.queued_backup += 1; }
+        if t.needs_resync { resync.insert((&t.account_id,&t.mailbox)); }
+    }
+    result.needs_resync = resync.len();
+    w.errors = result.failed;
+    w.purge_result = Some(result);
+}
+async fn purge_checkpoint(p: &mut impl Ports, w: &mut Workflow) -> Result<(),String> {
+    purge_counts(w);
+    p.checkpoint(w).await
+}
+async fn run_purge(p: &mut impl Ports,w: &mut Workflow,cancel: Arc<AtomicBool>,resume: bool) -> Result<(),String> {
+    if !w.valid_for(&w.intent) { return Err("errors.bulkPendingInvalid".into()); }
+    w.status = "starting".into(); w.phase = "identify".into();
+    w.purge_current=None;
+    let original=w.intent.clone();
+    let hints=original.hint_map()?;
+    purge_checkpoint(p,w).await?;
+    p.purge_begin(&w.purge_targets,cancel.clone()).await?;
+    for i in 0..w.purge_targets.len() {
+        if cancelled(p,w,&cancel).await? { return Ok(()); }
+        if w.purge_targets[i].skipped || w.purge_targets[i].refused || w.purge_targets[i].proof.is_some() { continue; }
+        w.purge_current=Some(i);
+        // An explicit Resume never reconstructs missing native authority.
+        let target=&w.purge_targets[i];
+        let hint = hints.get(&(target.account_id.as_str(),target.mailbox.as_str(),target.uid)).copied();
+        let proof = if resume { Err("errors.bulkIdentityUncertain".into()) }
+            else if let Some(hint) = hint { p.purge_prepare(&w.purge_targets[i],hint).await }
+            else { Err("errors.bulkIdentityUncertain".into()) };
+        match proof {
+            Ok(proof) => {
+                w.purge_targets[i].proof = Some(proof);
+                if !hint.is_some_and(|hint|w.purge_targets[i].proof_matches_hint(hint)) {
+                    w.purge_targets[i].proof = None;
+                    w.purge_targets[i].refused = true;
+                    w.purge_targets[i].needs_resync = true;
+                    w.purge_targets[i].last_error = Some("errors.bulkIdentityChanged".into());
+                }
+            }
+            Err(error) => {
+                w.purge_targets[i].refused = true;
+                w.purge_targets[i].needs_resync = error.contains("Identity") || error.contains("LocalFolders");
+                w.purge_targets[i].last_error = Some(error);
+            }
+        }
+        purge_checkpoint(p,w).await?;
+    }
+    // Finish all server work before reaching any local or mirror effect.
+    w.phase = "delete".into(); w.status = "deleting".into();
+    purge_checkpoint(p,w).await?;
+    for i in 0..w.purge_targets.len() {
+        if cancelled(p,w,&cancel).await? { return Ok(()); }
+        let t = &w.purge_targets[i];
+        if t.refused || t.skipped || t.local_only() || t.server != PurgeEffect::Pending { continue; }
+        w.purge_current=Some(i);
+        w.purge_targets[i].server = PurgeEffect::Attempted;
+        purge_checkpoint(p,w).await?;
+        let result = p.purge_server(&w.purge_targets[i],cancel.clone()).await;
+        match result {
+            Ok(()) => w.purge_targets[i].server = PurgeEffect::Complete,
+            Err(error) => { w.purge_targets[i].server = PurgeEffect::Failed; w.purge_targets[i].needs_resync=error.contains("Identity");w.purge_targets[i].last_error = Some(error); }
+        }
+        // Cancellation cannot bypass recording a completed remote effect.
+        purge_checkpoint(p,w).await?;
+    }
+    w.phase = "vault".into();
+    purge_checkpoint(p,w).await?;
+    for i in 0..w.purge_targets.len() {
+        if cancelled(p,w,&cancel).await? { return Ok(()); }
+        if !w.purge_targets[i].approved() || w.purge_targets[i].local != PurgeEffect::Pending { continue; }
+        w.purge_current=Some(i);
+        w.purge_targets[i].local = PurgeEffect::Attempted;
+        purge_checkpoint(p,w).await?;
+        match p.purge_local(&w.purge_targets[i]).await {
+            Ok(PurgeEffect::Complete) => w.purge_targets[i].local = PurgeEffect::Complete,
+            Ok(PurgeEffect::Conflict) => w.purge_targets[i].local = PurgeEffect::Conflict,
+            Ok(_) | Err(_) => w.purge_targets[i].local = PurgeEffect::Failed,
+        }
+        purge_checkpoint(p,w).await?;
+    }
+    w.phase = "backup".into();
+    purge_checkpoint(p,w).await?;
+    for i in 0..w.purge_targets.len() {
+        if cancelled(p,w,&cancel).await? { return Ok(()); }
+        let t = &w.purge_targets[i];
+        if !t.approved() || matches!(t.local,PurgeEffect::Conflict|PurgeEffect::Attempted|PurgeEffect::Pending) || t.mirror != PurgeEffect::Pending { continue; }
+        w.purge_current=Some(i);
+        w.purge_targets[i].mirror = PurgeEffect::Attempted;
+        purge_checkpoint(p,w).await?;
+        let result=match p.purge_mirror(&w.purge_targets[i]).await {
+            Ok(result) if matches!(result.outcome,PurgeEffect::Complete|PurgeEffect::Queued|PurgeEffect::Unconfigured|PurgeEffect::Unresolved)=>result,
+            _=>PurgeMirror{outcome:PurgeEffect::Unresolved,removed:0,issue:Some("Worker".into())},
+        };
+        w.purge_targets[i].mirror=result.outcome;
+        w.purge_targets[i].mirror_removed=result.removed;
+        w.purge_targets[i].mirror_issue=result.issue;
+        purge_checkpoint(p,w).await?;
+    }
+    if !cancelled(p,w,&cancel).await? {
+        w.status = "complete".into();
+        purge_checkpoint(p,w).await?;
+    }
+    Ok(())
 }
 fn remaining(g: &GroupState, action: Action) -> Group {
     let mut done: HashSet<_> = g.attempted.iter().chain(&g.deleted).copied().collect();
@@ -392,7 +649,7 @@ pub async fn run(
 ) -> Result<(), String> {
     let action = w.intent.action();
     if action == Action::DeleteEverywhere {
-        return Err("errors.bulkUnsupported".into());
+        return run_purge(p,w,cancel,resume).await;
     }
     w.result = ResultCounts::default();
     w.last_error = None;
