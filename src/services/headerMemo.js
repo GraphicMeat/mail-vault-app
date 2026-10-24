@@ -59,6 +59,7 @@ const _stampOf = (meta) => ({
   // names a different message — so the generation has to be part of the stamp,
   // not left to the other three fields happening to move.
   uidValidity: meta?.uidValidity ?? null,
+  originHash: meta?.nativeIdentity?.originHash ?? null,
 });
 
 const _sameStamp = (a, b) =>
@@ -66,7 +67,8 @@ const _sameStamp = (a, b) =>
   && a.totalEmails === b.totalEmails
   && a.totalCached === b.totalCached
   && a.highestModseq === b.highestModseq
-  && a.uidValidity === b.uidValidity;
+  && a.uidValidity === b.uidValidity
+  && a.originHash === b.originHash;
 
 /**
  * Memoize a header set — the top N UIDs of the mailbox, complete or not.
@@ -148,7 +150,7 @@ async function _freshen(accountId, mailbox, hit, meta, io, ceiling = RECONCILE_C
   // A UIDVALIDITY change (or a vanished `_meta.json`) means the UID space itself
   // was reissued: reconciling by UID set would find the sets equal and restamp a
   // previous generation as current. Only a full reload is safe there.
-  const reissued = hit.stamp.uidValidity !== stamp.uidValidity;
+  const reissued = hit.stamp.uidValidity !== stamp.uidValidity || hit.stamp.originHash !== stamp.originHash;
 
   // Timestamped before the listing, not after — a sidecar written while we read
   // must count as changed next time round, not be assumed covered.

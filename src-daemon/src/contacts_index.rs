@@ -480,6 +480,7 @@ mod tests {
 
     fn header(uid: u32, from: EmailAddress, to: Vec<EmailAddress>) -> EmailHeader {
         EmailHeader {
+            jmap_id: None,
             uid,
             seq: uid,
             display_index: None,

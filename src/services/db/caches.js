@@ -1,6 +1,7 @@
 // ── db/caches — mailbox cache, email header cache, Graph ID map persistence ──
 
 import { send as transportSend } from '../transport.js';
+import { bindNativeBatch, coherentNativeIdentity } from '../headerIdentity.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
 const invoke = (cmd, args) => transportSend(cmd, args);
@@ -83,12 +84,14 @@ export async function getCachedMailboxes(accountId) {
  * nothing is deleted unless `removedUids` names it explicitly.
  */
 export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext, highestModseq, serverUids, removedUids } = {}) {
+  const nativeIdentity = coherentNativeIdentity(emails, accountId, mailbox);
   const cacheEntry = {
+    nativeIdentity,
     accountId,
     mailbox,
     emails,
     totalEmails,
-    uidValidity: uidValidity ?? null,
+    uidValidity: nativeIdentity?.uidValidity ?? uidValidity ?? null,
     uidNext: uidNext ?? null,
     highestModseq: highestModseq ?? null,
     serverUids: serverUids ? Array.from(serverUids) : undefined,
@@ -164,7 +167,8 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
         const entry = safeParse(data);
         console.log('[db.js] Partial email headers loaded:', entry.emails?.length, 'of', entry.totalCached, 'emails');
         return {
-          emails: ownRows(entry.emails, accountId, mailbox),
+          nativeIdentity: entry.nativeIdentity ?? null,
+          emails: ownRows(bindNativeBatch(entry, accountId, mailbox).emails, accountId, mailbox),
           totalEmails: entry.totalEmails,
           totalCached: entry.totalCached,
           uidValidity: entry.uidValidity ?? null,
@@ -221,8 +225,9 @@ export async function getMonthHistogram(accountId, mailbox) {
 export async function getEmailHeadersByUids(accountId, mailbox, uids) {
   if (invoke && uids?.length) {
     try {
-      const rows = await invoke('load_email_cache_by_uids', { accountId, mailbox, uids });
-      if (Array.isArray(rows)) return ownRows(rows, accountId, mailbox);
+      const result = safeParse(await invoke('load_email_cache_by_uids', { accountId, mailbox, uids, envelope: true }));
+      if (Array.isArray(result)) return ownRows(result, accountId, mailbox);
+      if (result?.emails) return ownRows(bindNativeBatch(result, accountId, mailbox).emails, accountId, mailbox);
     } catch (error) {
       console.warn('[db.js] Failed to load headers by UID:', error);
     }
@@ -238,6 +243,7 @@ export async function getEmailHeadersMeta(accountId, mailbox) {
         const entry = safeParse(data);
         return {
           totalEmails: entry.totalEmails,
+          nativeIdentity: entry.nativeIdentity ?? null,
           totalCached: entry.totalCached ?? 0,
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,
@@ -262,7 +268,8 @@ export async function getEmailHeaders(accountId, mailbox) {
         const entry = safeParse(data);
         console.log('[db.js] Email headers loaded from file cache:', entry.emails?.length, 'emails');
         return {
-          emails: ownRows(entry.emails, accountId, mailbox),
+          nativeIdentity: entry.nativeIdentity ?? null,
+          emails: ownRows(bindNativeBatch(entry, accountId, mailbox).emails, accountId, mailbox),
           totalEmails: entry.totalEmails,
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,

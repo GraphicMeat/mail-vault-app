@@ -1,3 +1,4 @@
+import { bindNativeBatch } from './headerIdentity.js';
 // API module — routes IMAP/SMTP/OAuth2 calls through the daemon transport layer.
 // In dev mode (no __TAURI__), falls back to the sidecar HTTP server.
 // In Tauri mode, transport.send() tries daemon socket first, then Tauri invoke().
@@ -125,7 +126,7 @@ export async function fetchMailboxes(account) {
 
 export async function fetchEmails(account, mailbox = 'INBOX', page = 1, limit = 200) {
   if (IS_TAURI) {
-    return tauriInvoke('imap_get_emails', { account, mailbox, page, limit });
+    return bindNativeBatch(await tauriInvoke('imap_get_emails', { account, mailbox, page, limit }), account.id, mailbox);
   }
   return httpRequest('/emails', {
     method: 'POST',
@@ -182,7 +183,7 @@ export async function searchAllUids(account, mailbox = 'INBOX') {
 
 export async function fetchHeadersByUids(account, mailbox = 'INBOX', uids = []) {
   if (IS_TAURI) {
-    return tauriInvoke('imap_fetch_headers_by_uids', { account, mailbox, uids });
+    return bindNativeBatch(await tauriInvoke('imap_fetch_headers_by_uids', { account, mailbox, uids }), account.id, mailbox);
   }
   return httpRequest('/fetch-headers-by-uids', {
     method: 'POST',
@@ -422,7 +423,7 @@ export async function moveEmails(account, uids, sourceMailbox, targetMailbox) {
 
 export async function searchEmails(account, mailbox = 'INBOX', query, filters = {}) {
   if (IS_TAURI) {
-    return tauriInvoke('imap_search_emails', { account, mailbox, query, filters });
+    return bindNativeBatch(await tauriInvoke('imap_search_emails', { account, mailbox, query, filters }), account.id, mailbox);
   }
   return httpRequest('/search', {
     method: 'POST',
@@ -596,8 +597,8 @@ export async function graphProbeSignIn(accessToken, accountEmail) {
   return await tauriInvoke('graph_list_folders', { accessToken, accountEmail });
 }
 
-export async function graphListMessages(account, folderId, top, skip) {
-  return await tauriInvoke('graph_list_messages', { ...graphAccount(account), folderId, top, skip: skip || 0 });
+export async function graphListMessages(account, folderId, top, skip, mailbox) {
+  return await tauriInvoke('graph_list_messages', { ...graphAccount(account), folderId, mailbox, top, skip: skip || 0 });
 }
 
 /** One uid per [graphId, internetMessageId] entry, from the ledger the backup shares. */

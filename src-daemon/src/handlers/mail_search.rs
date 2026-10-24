@@ -1098,7 +1098,10 @@ async fn run_server_lane(
                         .await
                         .map_err(|error| format!("Failed to search emails: {error}"))
                         .and_then(|(emails, exists)| {
-                            Ok((server_rows(emails, &account_id, &job.mailbox, has_attachments)?, u64::from(exists)))
+                            let mut rows = server_rows(emails, &account_id, &job.mailbox, has_attachments)?;
+                            let identity = mailvault_core::imap::NativeHeaderIdentity::new(&job.account, &account_id, &job.mailbox, Some(1));
+                            for row in &mut rows { row["_nativeIdentity"] = json!(identity); }
+                            Ok((rows, u64::from(exists)))
                         })
                 } else {
                     state
@@ -1110,6 +1113,7 @@ async fn run_server_lane(
                             let filters = filters.clone();
                             let to = to.clone();
                             let exclude = exclude.clone();
+                            let config = job.account.clone();
                             async move {
                                 let search = mailvault_core::imap::ServerSearch {
                                     query: nonempty(&query),
@@ -1121,10 +1125,12 @@ async fn run_server_lane(
                                     exclude: &exclude,
                                     ..Default::default()
                                 };
-                                let (emails, _, exists) = mailvault_core::imap::search_emails_counted(&mut session, &mailbox, &search)
+                                let ((emails, _, exists), validity) = mailvault_core::imap::search_emails_bound(&mut session, &mailbox, &search)
                                     .await
                                     .map_err(|error| format!("Failed to search emails: {error}"))?;
-                                let rows = server_rows(emails, &account_id, &mailbox, has_attachments)?;
+                                let mut rows = server_rows(emails, &account_id, &mailbox, has_attachments)?;
+                                let identity = mailvault_core::imap::NativeHeaderIdentity::new(&config, &account_id, &mailbox, validity);
+                                for row in &mut rows { row["_nativeIdentity"] = json!(identity); }
                                 Ok(((rows, u64::from(exists)), session, Some(mailbox)))
                             }
                         })

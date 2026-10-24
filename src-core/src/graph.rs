@@ -185,6 +185,7 @@ impl GraphMessage {
         });
 
         EmailHeader {
+            jmap_id: None,
             uid,
             seq: uid,
             display_index: None,

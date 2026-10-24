@@ -585,6 +585,21 @@ async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>
     Ok(token)
 }
 
+/// A list batch binds the configuration and token from one stored record.
+/// Reading a separate configuration after token resolution could name a later account edit.
+async fn daemon_list_token(state: &DaemonState, account_id: &str, email: Option<&str>) -> Result<(String, Option<String>), NoToken> {
+    let (config, record) = read_record(account_id, Read::Guarded).await.map_err(|_| NoToken::Keychain)?;
+    if email.filter(|s| !s.is_empty()).is_some_and(|e| !config.email.eq_ignore_ascii_case(e)) {
+        return Err(NoToken::SignIn);
+    }
+    let token = match for_record(state, account_id, &record).await {
+        Ok(Some(token)) | Err(TokenError { fallback: Some(token), .. }) => token,
+        Err(TokenError { kind: FailKind::Unreadable, .. }) => return Err(NoToken::Keychain),
+        _ => return Err(NoToken::SignIn),
+    };
+    Ok((token, Some(mailvault_core::bulk_worker::origin_hash(&config))))
+}
+
 /// Why the daemon has no token for a request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NoToken {
@@ -671,10 +686,17 @@ pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value
     let mut refusal = None;
     // `graph_allocate_uids` is the vault's uid ledger: no network, no token.
     if method.starts_with("graph_") && method != "graph_allocate_uids" {
+        obj.remove("_nativeOriginHash");
         if let Some(account_id) = request_account {
             let email = obj.get("accountEmail").and_then(Value::as_str).map(str::to_owned);
-            match daemon_token(state, &account_id, email.as_deref()).await {
-                Ok(token) => {
+            let resolved = if method == "graph_list_messages" {
+                daemon_list_token(state, &account_id, email.as_deref()).await
+            } else {
+                daemon_token(state, &account_id, email.as_deref()).await.map(|token| (token, None))
+            };
+            match resolved {
+                Ok((token, origin)) => {
+                    if let Some(origin) = origin { obj.insert("_nativeOriginHash".into(), json!(origin)); }
                     obj.insert("accessToken".to_string(), json!(token));
                     injected.push(Injected { account_id, token });
                 }

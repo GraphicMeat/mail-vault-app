@@ -202,14 +202,22 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
+            let envelope = params["envelope"].as_bool().unwrap_or(false);
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
                     vault_root(&state)?;
-                    let mut rows = daemon_custody::with_conn(&state, |c| sql_cache::load_by_uids(c, &account_id, &mailbox, &uids))?;
+                    let (mut rows, meta) = daemon_custody::with_conn(&state, |c| {
+                        let rows = sql_cache::load_by_uids(c, &account_id, &mailbox, &uids)?;
+                        let meta = if envelope { sql_cache::load_meta(c, &account_id, &mailbox)? } else { None };
+                        Ok((rows, meta))
+                    })?;
                     crate::search_index::attach_snippets(&state.search_index, &account_id, &mailbox, &mut rows);
-                    Ok(Value::Array(rows))
+                    if !envelope { return Ok(Value::Array(rows)); }
+                    let mut batch = meta.and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or_else(|| serde_json::json!({}));
+                    batch["emails"] = Value::Array(rows);
+                    Ok(batch)
                 })
                 .await
                 .and_then(|r| r),

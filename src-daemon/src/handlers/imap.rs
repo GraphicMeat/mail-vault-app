@@ -382,17 +382,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
             let page = opt_u32_arg(params, "page").unwrap_or(1);
             let limit = opt_u32_arg(params, "limit").unwrap_or(200);
+            let origin = imap::NativeHeaderIdentity::new(&account, params["account"]["id"].as_str().unwrap_or(""), &mailbox, None);
             let result = with_background(&state.imap_pool, &account, |mut session| async move {
-                let result = imap::fetch_emails_page(&mut session, &mailbox, page, limit)
+                let result = imap::fetch_emails_page_bound(&mut session, &mailbox, page, limit)
                     .await
                     .map_err(|e| format!("Failed to fetch emails: {}", e))?;
                 Ok((result, session, Some(mailbox)))
             })
             .await;
             match result {
-                Ok((emails, total, has_more, skipped_uids)) => RpcResponse::success(
+                Ok(((emails, total, has_more, skipped_uids), validity)) => RpcResponse::success(
                     id,
                     json!({
+                        "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }, "uidValidity": validity,
                         "success": true, "emails": emails, "total": total, "page": page,
                         "limit": limit, "hasMore": has_more, "skippedUids": skipped_uids,
                     }),
@@ -460,13 +462,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account = req!(account_arg(&id, params));
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
+            let origin = imap::NativeHeaderIdentity::new(&account, params["account"]["id"].as_str().unwrap_or(""), &mailbox, None);
             let result = with_background(&state.imap_pool, &account, |mut session| async move {
-                let result = imap::fetch_headers_by_uids(&mut session, &mailbox, &uids).await?;
+                let result = imap::fetch_headers_by_uids_bound(&mut session, &mailbox, &uids).await?;
                 Ok((result, session, Some(mailbox)))
             })
             .await;
             match result {
-                Ok((emails, total)) => RpcResponse::success(id, json!({"emails": emails, "total": total})),
+                Ok(((emails, total), validity)) => RpcResponse::success(id, json!({"emails": emails, "total": total, "uidValidity": validity, "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }})),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
@@ -650,23 +653,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let query = opt_str_arg(params, "query");
             let filters: SearchFilters =
                 params.get("filters").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
+            let origin = imap::NativeHeaderIdentity::new(&account, params["account"]["id"].as_str().unwrap_or(""), &mailbox, None);
             let result = with_background(&state.imap_pool, &account, |mut session| async move {
-                let result = imap::search_emails(
-                    &mut session,
-                    &mailbox,
-                    query.as_deref(),
-                    filters.from.as_deref(),
-                    filters.subject.as_deref(),
-                    filters.since.as_deref(),
-                    filters.before.as_deref(),
-                )
-                .await
-                .map_err(|e| format!("Failed to search emails: {}", e))?;
+                let search = imap::ServerSearch { query: query.as_deref(), from: filters.from.as_deref(), subject: filters.subject.as_deref(), since: filters.since.as_deref(), before: filters.before.as_deref(), ..Default::default() };
+                let result = imap::search_emails_bound(&mut session, &mailbox, &search).await?;
                 Ok((result, session, Some(mailbox)))
             })
             .await;
             match result {
-                Ok((emails, total)) => RpcResponse::success(id, json!({"success": true, "emails": emails, "total": total})),
+                Ok(((emails, total, _), validity)) => RpcResponse::success(id, json!({"uidValidity": validity, "nativeIdentity": imap::NativeHeaderIdentity { uid_validity: validity, ..origin }, "success": true, "emails": emails, "total": total})),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }

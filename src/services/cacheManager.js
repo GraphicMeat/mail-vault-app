@@ -1,3 +1,4 @@
+import { bindNativeRows } from './headerIdentity.js';
 import { t } from '../i18n/index.js';
 import { registerRows, mapList, locationState } from '../stores/messageRows';
 // ── Lightweight Restore Cache & Graph ID Map ──────────────────────────────
@@ -214,11 +215,11 @@ export async function restoreGraphIdMap(accountId, mailbox) {
  */
 export async function listGraphMessages(accountId, mailbox, account, folderId, { top = 200, skip = 0 } = {}) {
   const api = await import('./api.js');
-  const result = await api.graphListMessages(account, folderId, top, skip);
+  const result = await api.graphListMessages(account, folderId, top, skip, mailbox);
   const headers = await _allocateGraphUids(
     accountId, mailbox, result.headers || [], result.graphMessageIds || []
   );
-  return { ...result, headers };
+  return { ...result, headers: bindNativeRows(headers, result.nativeIdentity, accountId, mailbox) };
 }
 
 /**

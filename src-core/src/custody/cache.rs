@@ -40,9 +40,24 @@ pub fn save_headers_reporting_new(conn: &Connection, account: &str, mailbox: &st
         params![account, mailbox], |r| r.get(0),
     ).ok();
     let mut meta = existing.and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or_else(|| json!({}));
+    let rows = object.get("emails").and_then(Value::as_array);
+    let identity = object.get("nativeIdentity").filter(|v| !v.is_null());
+    if let Some(identity) = identity.filter(|_| rows.is_some()) {
+        // Only the newly fetched coherent batch owns this proof. Never adopt
+        // retained legacy rows or another endpoint/generation's uid space.
+        if meta.get("nativeIdentity") != Some(identity) {
+            clear_headers(&tx, Some(account), Some(mailbox))?;
+            meta = json!({});
+        }
+    } else if rows.is_some_and(|rows| !rows.is_empty())
+        || object.get("nativeIdentity").is_some_and(Value::is_null)
+        || object.get("uidValidity").filter(|v| !v.is_null()).is_some_and(|v| meta.get("nativeIdentity").and_then(|p| p.get("uidValidity")).is_some_and(|old| old != v)) {
+        meta.as_object_mut().ok_or("stored cache metadata is not an object")?.remove("nativeIdentity");
+    }
     let map = meta.as_object_mut().ok_or("stored cache metadata is not an object")?;
     for (key, val) in object {
-        if !matches!(key.as_str(), "emails" | "removedUids" | "accountId" | "mailbox") && !val.is_null() {
+        if !matches!(key.as_str(), "emails" | "removedUids" | "accountId" | "mailbox") && !val.is_null()
+            && (key != "nativeIdentity" || rows.is_some()) {
             map.insert(key.clone(), val.clone());
         }
     }
@@ -71,7 +86,9 @@ pub fn save_headers_reporting_new(conn: &Connection, account: &str, mailbox: &st
         ).map_err(err)?;
         for row in rows {
             let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
-            let json = serde_json::to_string(row).map_err(|e| e.to_string())?;
+            let mut stored_row = row.clone();
+            if let Some(row) = stored_row.as_object_mut() { row.remove("_nativeIdentity"); }
+            let json = serde_json::to_string(&stored_row).map_err(|e| e.to_string())?;
             // An unchanged header costs one primary-key read and no index work.
             let stored: Option<String> = tx.query_row(
                 "SELECT header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid=?3",

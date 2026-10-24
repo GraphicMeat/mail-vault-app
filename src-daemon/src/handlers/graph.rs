@@ -77,6 +77,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let folder_id = req!(str_arg(&id, params, "folderId"));
             let top = req!(u32_arg(&id, params, "top"));
             let skip = req!(u32_arg(&id, params, "skip"));
+            // Only the token injector supplies this fingerprint, from the same record as its token.
+            let native_identity = params["_nativeOriginHash"].as_str().and_then(|origin| {
+                Some(mailvault_core::imap::NativeHeaderIdentity {
+                    account_id: params["accountId"].as_str()?.into(), mailbox: params["mailbox"].as_str()?.into(),
+                    uid_validity: None, origin_hash: origin.into(),
+                })
+            });
             let client = GraphClient::new(&access_token);
             match client.list_messages(&folder_id, top, skip).await {
                 Ok((messages, next_link)) => {
@@ -98,7 +105,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     RpcResponse::success(
                         id,
                         json!({
-                            "headers": headers,
+                            "headers": headers, "nativeIdentity": native_identity,
                             "nextLink": next_link,
                             "graphMessageIds": graph_ids,
                         }),

@@ -145,6 +145,7 @@ pub fn to_header(email: &Value, uid: u32) -> EmailHeader {
     let received_at = text("receivedAt");
     let sent_at = text("sentAt");
     EmailHeader {
+        jmap_id: text("id"),
         uid,
         seq: uid,
         display_index: None,

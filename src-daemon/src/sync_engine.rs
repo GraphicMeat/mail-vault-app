@@ -1859,6 +1859,7 @@ mod tests {
 
     fn test_header(uid: u32) -> ImapEmailHeader {
         ImapEmailHeader {
+            jmap_id: None,
             uid,
             seq: uid,
             display_index: None,

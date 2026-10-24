@@ -197,7 +197,7 @@ export class AccountPipeline {
     if (!meta?.totalCached) return null;
     const cached = await db.getEmailHeadersPartial(this.accountId, mailbox, meta.totalCached);
     if (!cached?.emails?.length) return null;
-    return { emails: cached.emails, totalEmails: meta.totalEmails };
+    return cached;
   }
 
   /**

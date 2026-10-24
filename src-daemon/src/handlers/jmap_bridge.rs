@@ -441,6 +441,7 @@ async fn answer(
             let emails: Vec<EmailHeader> =
                 ids.iter().filter_map(|id| Some(to_header(&got.remove(id)?, *uids.get(id)?))).collect();
             Ok(json!({
+                "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)), "uidValidity": 1,
                 "success": true, "emails": emails, "total": total, "page": page,
                 "limit": limit, "hasMore": position + ids.len() < total, "skippedUids": Vec::<Option<u32>>::new(),
             }))
@@ -508,7 +509,7 @@ async fn answer(
                 .into_iter()
                 .filter_map(|(uid, id)| got.remove(&id?).filter(|e| in_mailbox(e, &mb.id)).map(|e| to_header(&e, uid)))
                 .collect();
-            Ok(json!({"emails": emails, "total": mb.total_emails}))
+            Ok(json!({"emails": emails, "total": mb.total_emails, "uidValidity": 1, "nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1))}))
         }
 
         "imap_fetch_changed_flags" => {
@@ -608,7 +609,7 @@ async fn answer(
                 ..Default::default()
             };
             let (emails, total) = search_mailbox(state, acct, &account_id, &mailbox, &search).await?;
-            Ok(json!({"success": true, "emails": emails, "total": total}))
+            Ok(json!({"nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)), "uidValidity": 1, "success": true, "emails": emails, "total": total}))
         }
 
         "imap_find_message_id" => {

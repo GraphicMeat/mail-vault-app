@@ -179,8 +179,26 @@ pub struct MailboxInfo {
     pub children: Vec<MailboxInfo>,
 }
 
+/// Provenance of one native-served header batch. Never derived from a later STATUS.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeHeaderIdentity {
+    pub account_id: String,
+    pub mailbox: String,
+    pub uid_validity: Option<u32>,
+    pub origin_hash: String,
+}
+
+impl NativeHeaderIdentity {
+    pub fn new(config: &ImapConfig, account_id: &str, mailbox: &str, uid_validity: Option<u32>) -> Self {
+        Self { account_id: account_id.into(), mailbox: mailbox.into(), uid_validity, origin_hash: crate::bulk_worker::origin_hash(config) }
+    }
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct EmailHeader {
+    #[serde(rename = "_jmapId", skip_serializing_if = "Option::is_none")]
+    pub jmap_id: Option<String>,
     pub uid: u32,
     pub seq: u32,
     #[serde(rename = "displayIndex", skip_serializing_if = "Option::is_none")]
@@ -1012,17 +1030,21 @@ async fn fetch_headers_for_range(
 }
 
 /// Fetch email headers by page (newest first).
-pub async fn fetch_emails_page(
+pub async fn fetch_emails_page(session: &mut ImapSession, mailbox: &str, page: u32, limit: u32) -> Result<(Vec<EmailHeader>, u32, bool, Vec<Option<u32>>), String> {
+    fetch_emails_page_bound(session, mailbox, page, limit).await.map(|(batch, _)| batch)
+}
+
+pub async fn fetch_emails_page_bound(
     session: &mut ImapSession,
     mailbox: &str,
     page: u32,
     limit: u32,
-) -> Result<(Vec<EmailHeader>, u32, bool, Vec<Option<u32>>), String> {
+) -> Result<((Vec<EmailHeader>, u32, bool, Vec<Option<u32>>), Option<u32>), String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let total = mbox.exists;
 
     if total == 0 {
-        return Ok((Vec::new(), 0, false, Vec::new()));
+        return Ok(((Vec::new(), 0, false, Vec::new()), mbox.uid_validity));
     }
 
     let start = (total as i64 - (page * limit) as i64 + 1).max(1) as u32;
@@ -1030,7 +1052,7 @@ pub async fn fetch_emails_page(
 
     // Page is beyond total — return empty result
     if end < start {
-        return Ok((Vec::new(), total, false, Vec::new()));
+        return Ok(((Vec::new(), total, false, Vec::new()), mbox.uid_validity));
     }
 
     let range = format!("{}:{}", start, end);
@@ -1052,7 +1074,7 @@ pub async fn fetch_emails_page(
 
     emails.reverse();
     let has_more = start > 1;
-    Ok((emails, total, has_more, skipped_uids))
+    Ok(((emails, total, has_more, skipped_uids), mbox.uid_validity))
 }
 
 /// Check mailbox status — returns (exists, uid_validity, uid_next, highest_mod_seq).
@@ -1445,16 +1467,20 @@ pub async fn uid_flags_from_in_generation(
 
 /// Fetch headers for specific UIDs — used for delta-sync to fetch only new
 /// emails.
-pub async fn fetch_headers_by_uids(
+pub async fn fetch_headers_by_uids(session: &mut ImapSession, mailbox: &str, uids: &[u32]) -> Result<(Vec<EmailHeader>, u32), String> {
+    fetch_headers_by_uids_bound(session, mailbox, uids).await.map(|(batch, _)| batch)
+}
+
+pub async fn fetch_headers_by_uids_bound(
     session: &mut ImapSession,
     mailbox: &str,
     uids: &[u32],
-) -> Result<(Vec<EmailHeader>, u32), String> {
+) -> Result<((Vec<EmailHeader>, u32), Option<u32>), String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let total = mbox.exists;
 
     if uids.is_empty() {
-        return Ok((Vec::new(), total));
+        return Ok(((Vec::new(), total), mbox.uid_validity));
     }
 
     // Sort descending so newest emails arrive first
@@ -1486,7 +1512,7 @@ pub async fn fetch_headers_by_uids(
 
     // Sort by UID descending (newest first)
     emails.sort_by(|a, b| b.uid.cmp(&a.uid));
-    Ok((emails, total))
+    Ok(((emails, total), mbox.uid_validity))
 }
 
 /// Fetch a single email by UID with full content
@@ -2766,16 +2792,21 @@ pub async fn search_emails_by(
 
 /// [`search_emails_by`] plus the mailbox's EXISTS count: how many messages
 /// the server searched, which a mailbox with no match still reports.
-pub async fn search_emails_counted(
+pub async fn search_emails_counted(session: &mut ImapSession, mailbox: &str, search: &ServerSearch<'_>) -> Result<(Vec<EmailHeader>, u32, u32), String> {
+    search_emails_bound(session, mailbox, search).await.map(|(batch, _)| batch)
+}
+
+pub async fn search_emails_bound(
     session: &mut ImapSession,
     mailbox: &str,
     search: &ServerSearch<'_>,
-) -> Result<(Vec<EmailHeader>, u32, u32), String> {
-    let exists = select_mailbox(session, mailbox).await?.exists;
+) -> Result<((Vec<EmailHeader>, u32, u32), Option<u32>), String> {
+    let selected = select_mailbox(session, mailbox).await?;
+    let exists = selected.exists;
 
     let criteria_parts = search.criteria();
     if criteria_parts.is_empty() {
-        return Ok((Vec::new(), 0, exists));
+        return Ok(((Vec::new(), 0, exists), selected.uid_validity));
     }
 
     let search_str = criteria_parts.join(" ");
@@ -2787,7 +2818,7 @@ pub async fn search_emails_counted(
     let total_matches = uids.len() as u32;
 
     if uids.is_empty() {
-        return Ok((Vec::new(), 0, exists));
+        return Ok(((Vec::new(), 0, exists), selected.uid_validity));
     }
 
     // Limit to last 200
@@ -2820,7 +2851,7 @@ pub async fn search_emails_counted(
         let b_key = b.internal_date.as_ref().or(b.date.as_ref());
         b_key.cmp(&a_key)
     });
-    Ok((emails, total_matches, exists))
+    Ok(((emails, total_matches, exists), selected.uid_validity))
 }
 
 // ── Message-ID probe ────────────────────────────────────────────────────────
@@ -3343,6 +3374,7 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         .unwrap_or(false);
 
     Ok(EmailHeader {
+        jmap_id: None,
         uid,
         seq,
         display_index: None,
