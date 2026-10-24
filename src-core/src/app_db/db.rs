@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 9;
+pub const SCHEMA_VERSION: i64 = 10;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -320,6 +320,10 @@ CREATE TABLE follow_ups (
 CREATE INDEX follow_ups_due ON follow_ups(state, remind_at);
 ";
 
+// NULL retains legacy UID-only authorization. Versioned JSON binds new work
+// to the original native artifact without rewriting any existing obligation.
+const SCHEMA_V10: &str = "ALTER TABLE pending_backup_purge ADD COLUMN proof_json TEXT;";
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenError {
     /// Not a database this build can read. Left exactly as it is.
@@ -490,6 +494,11 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             ))
             .map_err(sql)?;
         }
+        if version < 10 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V10} INSERT OR REPLACE INTO meta(key,value) VALUES ('schema_version','10');"
+            )).map_err(sql)?;
+        }
         Ok(())
     })();
     match stepped {
@@ -604,6 +613,31 @@ mod tests {
         other.join().unwrap();
         assert_eq!(wrote, Ok(()));
         assert_eq!(meta_get(&conn, "other").as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn protected_purge_v9_migration_preserves_legacy_and_reopens() {
+        let dir = scratch("protected-v9");
+        {
+            let c = Connection::open(db_path(&dir)).unwrap();
+            c.execute_batch(&format!("CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+                {SCHEMA_V1} {SCHEMA_V2} {SCHEMA_V3} {SCHEMA_V4} {SCHEMA_V5}
+                {SCHEMA_V6} {SCHEMA_V7} {SCHEMA_V8} {SCHEMA_V9}
+                INSERT INTO meta VALUES ('schema_version','9');
+                INSERT INTO pending_backup_purge VALUES ('a|INBOX',7);")).unwrap();
+        }
+        {
+            let c = open(&dir).unwrap();
+            let columns: Vec<String> = c.prepare("PRAGMA table_info(pending_backup_purge)").unwrap()
+                .query_map([], |r| r.get(1)).unwrap().map(Result::unwrap).collect();
+            assert!(columns.iter().any(|name| name == "proof_json"), "existing queue must gain nullable proof storage");
+            let row: (i64,Option<String>) = c.query_row("SELECT uid,proof_json FROM pending_backup_purge", [], |r| Ok((r.get(0)?,r.get(1)?))).unwrap();
+            assert_eq!(row,(7,None));
+            c.execute("INSERT INTO pending_backup_purge VALUES ('a|INBOX',8,'opaque future')", []).unwrap();
+        }
+        let reopened = open(&dir).unwrap();
+        let raw: String = reopened.query_row("SELECT proof_json FROM pending_backup_purge WHERE uid=8", [], |r| r.get(0)).unwrap();
+        assert_eq!(raw,"opaque future");
     }
 
     #[test]
@@ -843,7 +877,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("9"));
+        assert_eq!(meta_get(&conn, "schema_version"), Some(SCHEMA_VERSION.to_string()));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM net_events", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1, "the v8 row must survive the v9 migration");
         conn.execute(

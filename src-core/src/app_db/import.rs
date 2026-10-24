@@ -316,17 +316,8 @@ fn import_purge_queue(conn: &Connection, app_dir: &Path, retire_after_commit: &m
             .unwrap_or_default();
         queue.insert(scope, list);
     }
-    // Merge, never replace: a purge queued between this process opening the
-    // store and the import would otherwise be dropped.
-    let mut existing = ops::purge_read(conn);
-    for (scope, uids) in queue {
-        existing.entry(scope).or_default().extend(uids);
-    }
-    for uids in existing.values_mut() {
-        uids.sort_unstable();
-        uids.dedup();
-    }
-    match ops::purge_write(conn, &existing) {
+    // Atomic append preserves all concurrent and non-NULL protected evidence.
+    match ops::purge_append_legacy(conn, &queue) {
         Ok(()) => done(&path, retire_after_commit),
         Err(e) => {
             warn!("[app_db] purge queue: {e}");
@@ -403,6 +394,20 @@ mod tests {
         assert!(retired(&dir, "pending_ops.json"));
         assert!(retired(&dir, "pending_server_delete.json"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn protected_purge_legacy_import_does_not_downgrade_existing_proof() {
+        let dir = scratch("protected-purge-import");
+        write(&dir,"pending_backup_purge.json", &json!({"me@test|INBOX":[7,8]}).to_string());
+        let conn = db::open(&dir).unwrap();
+        conn.execute("INSERT INTO pending_backup_purge(scope,uid,proof_json) VALUES ('me@test|INBOX',7,'opaque future proof')",[]).unwrap();
+        run(&conn,&dir);
+        assert!(retired(&dir,"pending_backup_purge.json"));
+        assert_eq!(ops::purge_read(&conn),BTreeMap::from([("me@test|INBOX".into(),vec![8])]));
+        let raw: String = conn.query_row("SELECT proof_json FROM pending_backup_purge WHERE uid=7",[],|r|r.get(0)).unwrap();
+        assert_eq!(raw,"opaque future proof");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -2413,12 +2413,8 @@ fn purge_backup_files(root: &Path, email: &str, mailbox: &str, uids: &HashSet<u3
 /// reachable. Ported from `backup.rs:214-226`.
 fn queue_purge(data_dir: &Path, email: &str, mailbox: &str, uids: &[u32]) -> Result<(), String> {
     crate::maildir::mirror_cur(Path::new("."), email, mailbox)?;
-    let mut q = read_purge_queue(data_dir);
-    let entry = q.entry(format!("{}|{}", email, mailbox)).or_default();
-    entry.extend_from_slice(uids);
-    entry.sort_unstable();
-    entry.dedup();
-    write_purge_queue(data_dir, &q)
+    crate::app_db::with(data_dir, |conn| crate::app_db::ops::purge_append_legacy(conn,
+        &std::collections::BTreeMap::from([(format!("{}|{}",email,mailbox),uids.to_vec())])))
 }
 
 /// What `purge_uids` did: files removed now, or uids queued for the next
@@ -2471,60 +2467,144 @@ pub fn purge_uids(
     Ok(PurgeOutcome { removed, queued: 0 })
 }
 
+/// Native protected purge outcomes are per target. Queued means a durable
+/// protected offline obligation; an online partial failure stays unresolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MirrorPurgeIssue {
+    MissingProof, InvalidProof, Conflict, Unavailable, Listing, Read,
+    Mismatch, Remove, Storage, Acknowledgement,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProvedPurgeOutcome {
+    Removed { files: usize },
+    Queued,
+    Unconfigured,
+    Unresolved { removed: usize, reason: MirrorPurgeIssue },
+}
+
+/// One target, fresh complete fallible listing, every same-UID candidate.
+/// Called off runtime workers with no DB/vault/coordinator lock. Native
+/// replacement stays excluded from byte read through actual unlink.
+fn purge_proved_files(root: &Path, proof: &crate::app_db::ops::MirrorPurgeProof) -> (usize, Option<MirrorPurgeIssue>) {
+    let Ok(handle) = crate::mirror_mutation::MirrorRoot::resolve(root) else { return (0,Some(MirrorPurgeIssue::Unavailable)); };
+    let target = proof.target();
+    let result = handle.mutate(|root| {
+        let cur = crate::maildir::mirror_cur(root,&target.email,&target.mailbox)?;
+        // Collect before deleting anything so an incomplete listing cannot
+        // masquerade as confirmed absence or first-entry-only success.
+        let candidates = match std::fs::read_dir(&cur).and_then(|entries| entries.collect::<Result<Vec<_>,_>>()) {
+            Ok(entries) => entries,
+            Err(_) => return Ok((0,Some(MirrorPurgeIssue::Listing))),
+        };
+        let mut removed = 0;
+        let mut issue = None;
+        for entry in candidates {
+            if crate::maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()) != Some(target.uid) { continue; }
+            let raw = match std::fs::read(entry.path()) {
+                Ok(raw) => raw,
+                Err(_) => { issue.get_or_insert(MirrorPurgeIssue::Read); continue; }
+            };
+            if crate::bulk_worker::bytes_hash(&raw) != proof.sha256() {
+                issue.get_or_insert(MirrorPurgeIssue::Mismatch);
+                continue;
+            }
+            #[cfg(test)]
+            tests::protected_before_unlink();
+            match std::fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                Err(_) => { issue.get_or_insert(MirrorPurgeIssue::Remove); }
+            }
+        }
+        Ok((removed,issue))
+    });
+    result.unwrap_or((0,Some(MirrorPurgeIssue::Unavailable)))
+}
+
+/// Synchronous native capability: callers run the entire call on blocking
+/// execution and hold external access until it returns. Proof comes from an
+/// already native-validated original artifact, never a frontend digest.
+/// Persist before immediate effects so legacy/conflicting obligations refuse
+/// before unlink. No DB lock crosses root resolution, guard waiting or IO.
+pub fn purge_proved(
+    data_dir: &Path, mirror_root: Option<&Path>, external_status: Option<&str>,
+    target: &crate::app_db::ops::MirrorPurgeTarget,
+    proof: Option<&crate::app_db::ops::MirrorPurgeProof>,
+) -> ProvedPurgeOutcome {
+    use crate::app_db::ops::{self,PurgeEnqueue};
+    use ProvedPurgeOutcome::{Unconfigured,Unresolved,Queued,Removed};
+    if mirror_root.is_none() && external_status.unwrap_or("not_configured") == "not_configured" { return Unconfigured; }
+    let Some(proof) = proof else { return Unresolved{removed:0,reason:MirrorPurgeIssue::MissingProof}; };
+    if proof.target() != target { return Unresolved{removed:0,reason:MirrorPurgeIssue::InvalidProof}; }
+    let queued = crate::app_db::with(data_dir, |conn| {
+        if ops::purge_enqueue_proved(conn,proof)? == PurgeEnqueue::Conflict { return Ok(None); }
+        let item = ops::purge_get(conn,target)?;
+        Ok(item.filter(|item| item.proved().as_ref() == Ok(proof)))
+    });
+    let item = match queued {
+        Ok(Some(item)) => item,
+        Ok(None) => return Unresolved{removed:0,reason:MirrorPurgeIssue::Conflict},
+        Err(_) => return Unresolved{removed:0,reason:MirrorPurgeIssue::Storage},
+    };
+    let Some(root) = mirror_root else { return Queued; };
+    let (removed,issue) = purge_proved_files(root,proof);
+    if let Some(reason) = issue { return Unresolved{removed,reason}; }
+    match crate::app_db::with(data_dir, |conn| ops::purge_ack(conn,&item)) {
+        Ok(true) => Removed{files:removed},
+        _ => Unresolved{removed,reason:MirrorPurgeIssue::Acknowledgement},
+    }
+}
+
 /// Keep queue IO, canonicalization and root-guard waits off runtime workers.
 /// The caller awaits completion before any account mirroring begins.
 async fn drain_purge_queue_blocking(ctx: &BackupRunContext) -> Result<(), String> {
     let Some(root) = ctx.mirror_root.as_ref().map(PathBuf::from) else { return Ok(()) };
     let data_dir = ctx.app_dir.clone();
-    tokio::task::spawn_blocking(move || drain_purge_queue(&data_dir, &root))
+    let cancel = ctx.cancel.clone();
+    tokio::task::spawn_blocking(move || drain_purge_queue_cancelled(&data_dir, &root, &cancel))
         .await
         .map_err(|e| format!("backup purge panicked: {e}"))?;
     Ok(())
 }
 
-/// Apply every queued purge against a now-reachable backup root.
-/// Entries are dropped as they are applied; anything left in the map stays
-/// queued for the next run.
-fn drain_purge_queue(data_dir: &Path, root: &Path) -> usize {
-    let q = read_purge_queue(data_dir);
-    if q.is_empty() {
-        return 0;
-    }
-    let mut removed_total = 0usize;
-    let mut leftover: std::collections::BTreeMap<String, Vec<u32>> = Default::default();
-
-    for (key, uids) in q {
-        let Some((email, mailbox)) = key.split_once('|') else {
-            leftover.insert(key, uids);
-            continue; // Keep unresolved legacy entries for inspection.
-        };
-        let uid_set: HashSet<u32> = uids.iter().copied().collect();
-        let mirror = match crate::maildir::mirror_cur(root, email, mailbox) {
-            Ok(mirror) => mirror,
-            Err(e) => {
-                warn!("backup purge: queued mirror refused: {}", e);
-                leftover.insert(key, uids);
-                continue;
+/// Snapshot evidence, release app.db, perform one bounded mirror target,
+/// release root exclusion, then conditionally acknowledge that exact payload.
+fn drain_purge_queue_cancelled(data_dir: &Path, root: &Path, cancel: &AtomicBool) -> usize {
+    use crate::app_db::ops;
+    let items = match crate::app_db::with(data_dir,ops::purge_items) {
+        Ok(items) => items,
+        Err(e) => { warn!("backup purge: queue snapshot failed: {e}"); return 0; }
+    };
+    let mut removed_total = 0;
+    for item in items {
+        if cancel.load(Ordering::Relaxed) { break; }
+        let (removed,complete) = if item.proof_json.is_some() {
+            let Ok(proof) = item.proved() else { continue; };
+            let (removed,issue) = purge_proved_files(root,&proof);
+            (removed,issue.is_none())
+        } else {
+            // Explicit compatibility policy only. Legacy rows never acquire
+            // native proof from today's mirror and never authorize new work.
+            let Some((email,mailbox)) = item.scope.split_once('|') else { continue; };
+            let Ok(cur) = crate::maildir::mirror_cur(root,email,mailbox) else { continue; };
+            if !cur.exists() { continue; }
+            match purge_backup_files(root,email,mailbox,&HashSet::from([item.uid])) {
+                Ok(removed) => (removed,true),
+                Err(_) => continue,
             }
         };
-        if !mirror.exists() {
-            // Folder not mirrored (yet). Keep the entry rather than declare success.
-            leftover.insert(key.clone(), uids);
-            continue;
+        removed_total += removed;
+        if complete {
+            if let Err(e) = crate::app_db::with(data_dir,|conn| ops::purge_ack(conn,&item)) {
+                warn!("backup purge: item acknowledgement failed: {e}");
+            }
         }
-        match purge_backup_files(root, email, mailbox, &uid_set) {
-            Ok(removed) => removed_total += removed,
-            Err(_) => { leftover.insert(key, uids); }
-        }
-    }
-
-    if let Err(e) = write_purge_queue(data_dir, &leftover) {
-        warn!("drain_purge_queue: failed to rewrite queue: {}", e);
-    }
-    if removed_total > 0 {
-        info!("drain_purge_queue: removed {} queued mirror files", removed_total);
     }
     removed_total
+}
+
+#[cfg(test)]
+fn drain_purge_queue(data_dir: &Path, root: &Path) -> usize {
+    drain_purge_queue_cancelled(data_dir,root,&AtomicBool::new(false))
 }
 
 // ── On-demand mirror copy ─────────────────────────────────────────────────────
@@ -3434,6 +3514,332 @@ mod tests {
     }
 
     // ── purge queue ──────────────────────────────────────────────────────────
+
+    fn protected_offline_replacement_case(original: &[u8], replacement: &[u8]) {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let native = tempfile::tempdir().unwrap();
+        let source = native.path().join("7.eml");
+        std::fs::write(&source, original).unwrap();
+        // A native artifact selected before deletion supplies the exact proof.
+        let proof = crate::bulk_worker::StoredProof {
+            uid: 7, name: "7.eml".into(),
+            sha256: crate::bulk_worker::bytes_hash(&std::fs::read(&source).unwrap()),
+        };
+        assert_ne!(proof.sha256, crate::bulk_worker::bytes_hash(replacement));
+        let bound = crate::app_db::ops::MirrorPurgeProof::server("me@test", &crate::bulk::Group {
+            account_id:"account".into(),mailbox:"INBOX".into(),uids:vec![7],
+        }, &"a".repeat(64), &crate::bulk_worker::Identity::Imap {validity:19,message_ids:Default::default()}, &proof).unwrap();
+        let queued = purge_proved(app.path(),None,Some("unavailable"),bound.target(),Some(&bound));
+        assert_eq!(queued,ProvedPurgeOutcome::Queued);
+        std::fs::remove_file(source).unwrap();
+        let cur = crate::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        let candidate = cur.join(crate::maildir::mirror_filename(7, &[]));
+        std::fs::write(&candidate, replacement).unwrap();
+        let removed = drain_purge_queue(app.path(), mirror.path());
+        assert!(candidate.exists(), "queued original A must never erase replacement B");
+        assert_eq!(std::fs::read(candidate).unwrap(), replacement);
+        assert_eq!(removed, 0);
+        let items = protected_items(app.path());
+        assert_eq!(items.len(),1);
+        assert_eq!(items[0].proved().unwrap(),bound);
+    }
+
+    #[test]
+    fn protected_purge_offline_replacement_preserves_new_bytes() {
+        protected_offline_replacement_case(b"Message-ID: <A@test>\r\n\r\noriginal", b"Message-ID: <B@test>\r\n\r\nreplacement");
+    }
+
+    #[test]
+    fn protected_purge_same_mid_same_length_replacement_preserves_new_bytes() {
+        let a = b"Message-ID: <same@test>\r\n\r\nbody A";
+        let b = b"Message-ID: <same@test>\r\n\r\nbody B";
+        assert_eq!(a.len(), b.len());
+        protected_offline_replacement_case(a, b);
+    }
+
+
+    fn protected_native_proof(uid: u32, raw: &[u8]) -> crate::app_db::ops::MirrorPurgeProof {
+        crate::app_db::ops::MirrorPurgeProof::server("me@test", &crate::bulk::Group {
+            account_id: "account".into(), mailbox: "INBOX".into(), uids: vec![uid],
+        }, &"a".repeat(64), &crate::bulk_worker::Identity::Imap {
+            validity: 19, message_ids: Default::default(),
+        }, &crate::bulk_worker::StoredProof {uid, name:format!("{uid}.eml"), sha256:crate::bulk_worker::bytes_hash(raw)}).unwrap()
+    }
+
+    fn protected_items(app: &Path) -> Vec<crate::app_db::ops::PurgeItem> {
+        crate::app_db::with(app, crate::app_db::ops::purge_items).unwrap()
+    }
+
+    fn protected_seed(app: &Path, proof: &crate::app_db::ops::MirrorPurgeProof) {
+        assert_eq!(purge_proved(app, None, Some("unavailable"), proof.target(), Some(proof)), ProvedPurgeOutcome::Queued);
+    }
+
+    #[test]
+    fn protected_purge_exact_and_flag_renamed_duplicates_drain_after_reopen() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7, b"A");
+        // Use independent SQLite connections across the persisted handoff.
+        { let c = crate::app_db::db::open(app.path()).unwrap(); crate::app_db::ops::purge_enqueue_proved(&c, &proof).unwrap(); }
+        let c = crate::app_db::db::open(app.path()).unwrap();
+        assert_eq!(crate::app_db::ops::purge_items(&c).unwrap()[0].proved().unwrap(), proof);
+        drop(c);
+        let cur = crate::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        for name in ["7.eml", "7_S.eml", "7;2,F.eml"] { std::fs::write(cur.join(name), b"A").unwrap(); }
+        std::fs::rename(cur.join("7_S.eml"), cur.join("7_F.eml")).unwrap();
+        assert_eq!(drain_purge_queue(app.path(), mirror.path()), 3);
+        assert!(protected_items(app.path()).is_empty());
+        assert_eq!(drain_purge_queue(app.path(), mirror.path()), 0);
+        assert_eq!(std::fs::read_dir(cur).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn protected_purge_immediate_and_delayed_check_every_same_uid_candidate() {
+        for online in [true,false] {
+            let app = tempfile::tempdir().unwrap();
+            let mirror = tempfile::tempdir().unwrap();
+            let proof = protected_native_proof(7,b"A");
+            let cur = crate::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+            std::fs::create_dir_all(&cur).unwrap();
+            for name in ["7.eml", "7_S.eml"] { std::fs::write(cur.join(name), b"A").unwrap(); }
+            std::fs::write(cur.join("7_F.eml"), b"B").unwrap();
+            std::fs::write(cur.join("8.eml"), b"A").unwrap();
+            if online {
+                assert_eq!(purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof)),
+                    ProvedPurgeOutcome::Unresolved{removed:2,reason:MirrorPurgeIssue::Mismatch});
+            } else {
+                protected_seed(app.path(),&proof);
+                assert_eq!(drain_purge_queue(app.path(), mirror.path()),2);
+            }
+            assert!(!cur.join("7.eml").exists());
+            assert!(!cur.join("7_S.eml").exists());
+            assert_eq!(std::fs::read(cur.join("7_F.eml")).unwrap(),b"B");
+            assert!(cur.join("8.eml").exists());
+            assert_eq!(protected_items(app.path()).len(),1);
+        }
+    }
+
+    #[test]
+    fn protected_purge_empty_listing_completes_but_missing_or_failed_listing_does_not() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        let cur = crate::maildir::mirror_cur(mirror.path(), "me@test", "INBOX").unwrap();
+        protected_seed(app.path(),&proof);
+        assert_eq!(drain_purge_queue(app.path(),mirror.path()),0);
+        assert_eq!(protected_items(app.path()).len(),1);
+        std::fs::create_dir_all(cur.parent().unwrap()).unwrap();
+        std::fs::write(&cur,b"not a directory").unwrap();
+        assert!(matches!(purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof)),
+            ProvedPurgeOutcome::Unresolved{reason:MirrorPurgeIssue::Listing,..}));
+        assert_eq!(protected_items(app.path()).len(),1);
+        std::fs::remove_file(&cur).unwrap();
+        std::fs::create_dir(&cur).unwrap();
+        assert_eq!(purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof)),
+            ProvedPurgeOutcome::Removed{files:0});
+        assert!(protected_items(app.path()).is_empty());
+    }
+
+    #[test]
+    fn protected_purge_unreadable_candidate_preserves_unresolved_obligation() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+        std::fs::create_dir_all(cur.join("7.eml")).unwrap();
+        assert_eq!(purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof)),
+            ProvedPurgeOutcome::Unresolved{removed:0,reason:MirrorPurgeIssue::Read});
+        assert!(cur.join("7.eml").is_dir());
+        assert_eq!(protected_items(app.path()).len(),1);
+    }
+
+    #[test]
+    fn protected_purge_missing_proof_and_unconfigured_never_claim_queue() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        assert_eq!(purge_proved(app.path(),None,Some("not_configured"),proof.target(),Some(&proof)),ProvedPurgeOutcome::Unconfigured);
+        assert_eq!(purge_proved(app.path(),None,None,proof.target(),None),ProvedPurgeOutcome::Unconfigured);
+        for root in [None,Some(mirror.path())] {
+            assert_eq!(purge_proved(app.path(),root,Some("unavailable"),proof.target(),None),
+                ProvedPurgeOutcome::Unresolved{removed:0,reason:MirrorPurgeIssue::MissingProof});
+        }
+        assert!(protected_items(app.path()).is_empty());
+        assert_eq!(purge_proved(app.path(),Some(&mirror.path().join("missing")),Some("unavailable"),proof.target(),Some(&proof)),
+            ProvedPurgeOutcome::Unresolved{removed:0,reason:MirrorPurgeIssue::Unavailable});
+        assert_eq!(protected_items(app.path()).len(),1);
+    }
+
+    #[test]
+    fn protected_purge_failed_persistence_never_claims_queued() {
+        let app = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        let original = b"unreadable database evidence";
+        std::fs::write(app.path().join("app.db"),original).unwrap();
+        assert_eq!(purge_proved(app.path(),None,Some("unavailable"),proof.target(),Some(&proof)),
+            ProvedPurgeOutcome::Unresolved{removed:0,reason:MirrorPurgeIssue::Storage});
+        assert_eq!(std::fs::read(app.path().join("app.db")).unwrap(),original);
+    }
+
+    #[test]
+    fn protected_purge_legacy_overlap_and_conflicting_proof_refuse_before_unlink() {
+        for legacy in [true,false] {
+            let app = tempfile::tempdir().unwrap();
+            let mirror = tempfile::tempdir().unwrap();
+            let proof = protected_native_proof(7,b"A");
+            let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+            std::fs::create_dir_all(&cur).unwrap();
+            std::fs::write(cur.join("7.eml"),b"A").unwrap();
+            if legacy { queue_purge(app.path(),"me@test","INBOX",&[7]).unwrap(); }
+            else { protected_seed(app.path(),&protected_native_proof(7,b"B")); }
+            let before = protected_items(app.path());
+            assert_eq!(purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof)),
+                ProvedPurgeOutcome::Unresolved{removed:0,reason:MirrorPurgeIssue::Conflict});
+            assert_eq!(std::fs::read(cur.join("7.eml")).unwrap(),b"A");
+            assert_eq!(protected_items(app.path()),before);
+        }
+    }
+
+    #[test]
+    fn protected_purge_malformed_future_and_wrong_binding_stay_inspectable() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        let mut future = serde_json::to_value(&proof).unwrap();
+        future["version"] = serde_json::json!(999);
+        let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join("7.eml"),b"A").unwrap();
+        for raw in ["{broken".into(),future.to_string(),serde_json::to_string(&protected_native_proof(8,b"A")).unwrap()] {
+            crate::app_db::with(app.path(),|c| c.execute("INSERT OR REPLACE INTO pending_backup_purge(scope,uid,proof_json) VALUES ('me@test|INBOX',7,?1)",[&raw]).map(|_|()).map_err(|e|e.to_string())).unwrap();
+            assert_eq!(drain_purge_queue(app.path(),mirror.path()),0);
+            assert_eq!(protected_items(app.path())[0].proof_json.as_deref(),Some(raw.as_str()));
+            assert_eq!(std::fs::read(cur.join("7.eml")).unwrap(),b"A");
+        }
+    }
+
+    thread_local! {
+        static BEFORE_PROVED_UNLINK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+    }
+    pub(super) fn protected_before_unlink() {
+        BEFORE_PROVED_UNLINK.with(|hook| { if let Some(work) = hook.borrow_mut().take() { work(); } });
+    }
+
+    #[test]
+    fn protected_purge_real_drain_excludes_native_writer_through_unlink() {
+        use std::sync::mpsc;
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        protected_seed(app.path(),&proof);
+        let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        let name = crate::maildir::mirror_filename(7,&[]);
+        let candidate = cur.join(&name);
+        std::fs::write(&candidate,b"A").unwrap();
+        let root = mirror.path().to_str().unwrap().to_string();
+        let db_dir = app.path().to_path_buf();
+        let (attempt_tx,attempt_rx) = mpsc::channel();
+        let (done_tx,done_rx) = mpsc::channel();
+        let writer = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let keep_writer = writer.clone();
+        BEFORE_PROVED_UNLINK.with(|hook| *hook.borrow_mut() = Some(Box::new(move || {
+            // Reaching app.db here proves the mirror phase released its DB snapshot.
+            let (db_tx,db_rx) = mpsc::channel();
+            std::thread::spawn(move || db_tx.send(crate::app_db::with(&db_dir,crate::app_db::ops::purge_items)).unwrap());
+            assert_eq!(db_rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap().unwrap().len(),1);
+            *keep_writer.borrow_mut() = Some(std::thread::spawn(move || {
+                attempt_tx.send(()).unwrap();
+                let result = write_direct_mirror(Some(&root),&cur,&name,b"B");
+                let _ = done_tx.send(());
+                result
+            }));
+            attempt_rx.recv().unwrap();
+            assert!(done_rx.recv_timeout(std::time::Duration::from_millis(200)).is_err(),
+                "real native writer replaced checked bytes before actual purge unlink");
+        })));
+        assert_eq!(drain_purge_queue(app.path(),mirror.path()),1);
+        writer.borrow_mut().take().unwrap().join().unwrap().unwrap();
+        assert_eq!(std::fs::read(candidate).unwrap(),b"B");
+        assert!(protected_items(app.path()).is_empty());
+    }
+
+    #[test]
+    fn protected_purge_stale_ack_retains_changed_and_concurrent_queue_evidence() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join("7.eml"),b"A").unwrap();
+        let app_dir = app.path().to_path_buf();
+        BEFORE_PROVED_UNLINK.with(|hook| *hook.borrow_mut() = Some(Box::new(move || {
+            crate::app_db::with(&app_dir,|c| {
+                c.execute("UPDATE pending_backup_purge SET proof_json='changed future proof' WHERE uid=7",[]).map_err(|e|e.to_string())?;
+                crate::app_db::ops::purge_append_legacy(c,&std::collections::BTreeMap::from([("other|Sent".into(),vec![9])]))
+            }).unwrap();
+        })));
+        assert_eq!(purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof)),
+            ProvedPurgeOutcome::Unresolved{removed:1,reason:MirrorPurgeIssue::Acknowledgement});
+        let rows = protected_items(app.path());
+        assert_eq!(rows.len(),2);
+        assert_eq!(rows.iter().find(|r|r.uid==7).unwrap().proof_json.as_deref(),Some("changed future proof"));
+        assert!(rows.iter().any(|r|r.uid==9 && r.proof_json.is_none()));
+    }
+
+    #[test]
+    fn protected_purge_cancel_stops_between_targets_and_retains_next_item() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        for uid in [7,8] {
+            protected_seed(app.path(),&protected_native_proof(uid,b"A"));
+            std::fs::write(cur.join(format!("{uid}.eml")),b"A").unwrap();
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        let signal = cancel.clone();
+        BEFORE_PROVED_UNLINK.with(|hook| *hook.borrow_mut() = Some(Box::new(move || signal.store(true,Ordering::Relaxed))));
+        assert_eq!(drain_purge_queue_cancelled(app.path(),mirror.path(),&cancel),1);
+        assert!(!cur.join("7.eml").exists());
+        assert!(cur.join("8.eml").exists());
+        assert_eq!(protected_items(app.path()).iter().map(|r|r.uid).collect::<Vec<_>>(),vec![8]);
+    }
+
+    #[test]
+    fn protected_purge_failed_unlink_preserves_file_and_obligation() {
+        let app = tempfile::tempdir().unwrap();
+        let mirror = tempfile::tempdir().unwrap();
+        let proof = protected_native_proof(7,b"A");
+        let cur = crate::maildir::mirror_cur(mirror.path(),"me@test","INBOX").unwrap();
+        std::fs::create_dir_all(&cur).unwrap();
+        let candidate = cur.join("7.eml");
+        std::fs::write(&candidate,b"A").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let old = std::fs::metadata(&cur).unwrap().permissions();
+            std::fs::set_permissions(&cur,std::fs::Permissions::from_mode(0o500)).unwrap();
+            let out = purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof));
+            std::fs::set_permissions(&cur,old).unwrap();
+            assert_eq!(out,ProvedPurgeOutcome::Unresolved{removed:0,reason:MirrorPurgeIssue::Remove});
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            let held = std::fs::OpenOptions::new().read(true).share_mode(1).open(&candidate).unwrap();
+            assert_eq!(purge_proved(app.path(),Some(mirror.path()),Some("ready"),proof.target(),Some(&proof)),
+                ProvedPurgeOutcome::Unresolved{removed:0,reason:MirrorPurgeIssue::Remove});
+            drop(held);
+        }
+        assert_eq!(std::fs::read(candidate).unwrap(),b"A");
+        assert_eq!(protected_items(app.path()).len(),1);
+        assert_eq!(drain_purge_queue(app.path(),mirror.path()),1);
+        assert!(protected_items(app.path()).is_empty());
+    }
 
     #[test]
     fn drain_purge_queue_removes_files_and_leaves_unreachable_entries_queued() {
