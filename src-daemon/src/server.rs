@@ -1179,10 +1179,11 @@ mod tests {
         use mailvault_core::bulk::{Action, FrozenIntent, Scope};
         use mailvault_core::bulk_worker::{Identity, Selected, Workflow};
         use std::time::Instant;
+        for action in [Action::Delete, Action::ArchiveBackupDelete] {
         let dir = tempfile::tempdir().unwrap();
         let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
         let intent = FrozenIntent::freeze(
-            Action::Delete,
+            action,
             Scope {
                 account_id: Some("a".into()),
                 mailbox: Some("INBOX".into()),
@@ -1207,6 +1208,13 @@ mod tests {
             message_ids: ids,
             ..Default::default()
         });
+        if action == Action::ArchiveBackupDelete {
+            work.groups[0].stored = (1..=20000).map(|uid| mailvault_core::bulk_worker::StoredProof {
+                uid, name:format!("{uid}.eml"), sha256:"a".repeat(64),
+            }).collect();
+            work.groups[0].verified = (1..=20000).collect();
+            work.groups[0].eligible = (1..=20000).collect();
+        }
         work.groups[0].attempted = vec![1, 2, 3, 4, 5];
         work.groups[0].deleted = vec![1, 2, 3, 4, 5];
         work.phase = "delete".into();
@@ -1217,6 +1225,8 @@ mod tests {
             .unwrap()
             .claim(&state.app_dir, "large", intent)
             .unwrap();
+        // Seed the full worker, then measure the next actual steady-state checkpoint.
+        state.bulk.lock().unwrap().checkpoint(&state.app_dir, "large", &work).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let writer = state.clone();
         let checkpoint = std::thread::spawn(move || {
@@ -1244,7 +1254,7 @@ mod tests {
         );
         let elapsed = checkpoint.join().unwrap();
         println!(
-            "BULK_20K_CHECKPOINT_MS={} BULK_20K_STATUS_MS={} BULK_20K_CANCEL_MS={}",
+            "BULK_20K_MODE={action:?} BULK_20K_STEADY_CHECKPOINT_MS={} BULK_20K_STATUS_MS={} BULK_20K_CANCEL_MS={}",
             elapsed.as_millis(),
             status.1.as_millis(),
             cancel.1.as_millis()
@@ -1258,6 +1268,7 @@ mod tests {
             .cancel_token("large")
             .unwrap()
             .load(std::sync::atomic::Ordering::SeqCst));
+        }
     }
     #[tokio::test]
     async fn bulk_duplicate_attempt_still_checks_the_frozen_intent() {

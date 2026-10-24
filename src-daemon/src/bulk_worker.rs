@@ -1418,6 +1418,49 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
     #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_worker_auth_and_provider_failures_persist_service_keys() {
+        use crate::jmap_test_support as support;
+        let _env = crate::credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        for auth in [true, false] {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+            seed_selection(&state, "INBOX");
+            let mut jmap_scenario = support::scenario();
+            jmap_scenario.faults.push(mock_jmap::Fault::Unauthorized);
+            let jmap = mock_jmap::MockJmap::start(jmap_scenario);
+            let imap = MockImap::start(Scenario::new().mailbox(inbox(1)).fault(
+                mock_imap::Trigger::with("FETCH", "BODY.PEEK[]"),
+                mock_imap::Action::Respond("NO".into(), "private-provider-description".into()),
+            ));
+            let _ = config(&imap);
+            let account = if auth {
+                support::account_json(&jmap, imap.port())
+            } else {
+                json!({"email":"one@example.test","password":"pw","imapHost":imap.host(),"imapPort":imap.port()})
+            };
+            let ledger = crate::jmap_sessions::jmap_ledger_path(dir.path(), "acc", "INBOX");
+            std::fs::create_dir_all(ledger.parent().unwrap()).unwrap();
+            std::fs::write(ledger, "{\"7\":\"e1\"}").unwrap();
+            let credentials = dir.path().join("credentials.json");
+            std::fs::write(&credentials, json!({"acc":account.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &credentials);
+            let reply = handle_request_for_test(&state, "bulk.start", json!({"operationId":"provider-error","type":"archive","scope":{"accountId":"acc","mailbox":"INBOX","keys":[7]}})).await;
+            assert!(reply.error.is_none(), "{:?}", reply.error);
+            let pending = wait_drained(&state).await;
+            let expected = if auth {
+                "errors.jmapAuthFailed"
+            } else {
+                "errors.bulkOperationFailed"
+            };
+            assert_eq!(pending["lastError"], expected);
+            assert_eq!(pending["worker"]["lastError"], expected);
+            assert!(!pending.to_string().contains("private-provider-description"));
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    #[tokio::test(flavor = "multi_thread")]
     async fn no_message_id_workers_keep_server_b_when_archive_a_collides_or_fetch_fails() {
         use mailvault_core::message_store;
         let _env = crate::credentials::test_env_lock()
