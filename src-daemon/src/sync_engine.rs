@@ -96,6 +96,14 @@ pub enum SyncStatus {
     Error,
 }
 
+/// A completed attempt can suppress only its requested origin and observed owner.
+/// `None` is a known unbound cache; an unreadable owner never creates a marker.
+#[derive(Clone, PartialEq, Eq)]
+struct BackfillCompletion {
+    requested_origin: String,
+    cache_owner: Option<imap::NativeHeaderIdentity>,
+}
+
 /// The sync engine manages background email sync for all accounts.
 pub struct SyncEngine {
     pool: Arc<ImapPool>,
@@ -117,10 +125,10 @@ pub struct SyncEngine {
     /// The app pauses its own pagination while this is set, so it must clear
     /// the moment the backfill stops — success or failure.
     backfilling: Mutex<HashSet<String>>,
-    /// Keys whose backfill ran and got nowhere. Kept for the life of the
-    /// process so an unfetchable mailbox can't retry in a loop — but NOT
-    /// reported as `backfilling`, or the app would wait on it forever.
-    backfill_gave_up: Mutex<HashSet<String>>,
+    /// Attempts that got nowhere, qualified by requested origin and cache owner.
+    /// Retained for that owner so an unfetchable mailbox cannot retry in a loop;
+    /// never reported as `backfilling`, or the app would wait on it forever.
+    backfill_gave_up: Mutex<HashMap<String, BackfillCompletion>>,
     #[cfg(test)]
     backfill_pause: std::sync::Mutex<Option<Arc<tests::BackfillPause>>>,
     /// Shut while the host has no connectivity — every sync short-circuits
@@ -195,7 +203,7 @@ impl SyncEngine {
             next_ticket: std::sync::atomic::AtomicU64::new(1),
             contacts,
             backfilling: Mutex::new(HashSet::new()),
-            backfill_gave_up: Mutex::new(HashSet::new()),
+            backfill_gave_up: Mutex::new(HashMap::new()),
             #[cfg(test)]
             backfill_pause: std::sync::Mutex::new(None),
             net,
@@ -1209,8 +1217,15 @@ impl SyncEngine {
             return;
         }
         let key = format!("{}\u{1}{}", account.id, mailbox);
-        if self.backfill_gave_up.lock().await.contains(&key) {
-            return; // a previous attempt got nowhere — don't re-scan every sync
+        let io = self.cache_ctx(&account.id, mailbox);
+        let owner = cache_io(&io, |io| io.native_owner()).await;
+        let completion = owner.ok().map(|cache_owner| BackfillCompletion {
+            requested_origin: mailvault_core::bulk_worker::origin_hash(&account.imap_config),
+            cache_owner,
+        });
+        let observed_marker = self.backfill_gave_up.lock().await.get(&key).cloned();
+        if completion.is_some() && observed_marker == completion {
+            return; // the same origin and cache owner already got nowhere
         }
         if !self.backfilling.lock().await.insert(key.clone()) {
             return; // already in flight
@@ -1225,11 +1240,11 @@ impl SyncEngine {
         #[cfg(test)]
         self.pause_backfill_at(tests::BackfillPausePoint::BeforeCompletion).await;
 
-        match fetched {
-            Ok(n) if n > 0 => {}
+        let mark_completion = match fetched {
+            Ok(n) if n > 0 => false,
             Ok(_) => {
                 info!("[backfill] Nothing fetched for {} ({}) — not retrying this session", account.email, mailbox);
-                self.backfill_gave_up.lock().await.insert(key);
+                true
             }
             Err(e) => {
                 warn!("[backfill] Failed for {} ({}): {}", account.email, mailbox, e);
@@ -1240,12 +1255,20 @@ impl SyncEngine {
                 // mailbox itself can't be fetched. A poisoned page is a page, not
                 // an unfetchable mailbox: leave it out of `backfill_gave_up` so
                 // the next sync tick's backfill retries it. Every other error
-                // (dead socket, server refusal, ...) still gives up, since that
-                // set is never cleared except by a process restart. A refused
-                // ownership response says nothing about a future current-owner run.
-                if !e.contains("unparseable") && !matches!(e.as_str(), "errors.bulkIdentityChanged" | "errors.bulkIdentityUncertain") {
-                    self.backfill_gave_up.lock().await.insert(key);
-                }
+                // (dead socket, server refusal, ...) still gives up for this
+                // observed owner. A refused ownership response says nothing
+                // about a future current-owner run.
+                !e.contains("unparseable") && !matches!(e.as_str(), "errors.bulkIdentityChanged" | "errors.bulkIdentityUncertain")
+            }
+        };
+        let mut markers = self.backfill_gave_up.lock().await;
+        // A may finish after a newer B attempt. Neither install nor cleanup
+        // may replace a marker that A did not observe on admission.
+        if markers.get(&key) == observed_marker.as_ref() {
+            if mark_completion {
+                if let Some(completion) = completion { markers.insert(key, completion); }
+            } else {
+                markers.remove(&key);
             }
         }
     }
@@ -1404,10 +1427,14 @@ impl CacheCtx {
         result
     }
 
+    fn native_owner(&self) -> Result<Option<imap::NativeHeaderIdentity>, String> {
+        self.with_db(|conn| mailvault_core::custody::cache::native_identity(conn, &self.account, &self.mailbox))?
+            .ok_or_else(|| "errors.bulkIdentityUncertain".into())
+    }
+
     /// The publication expectation is observed before FETCH, never repaired after it.
     pub(crate) fn native_seed(&self, config: &ImapConfig) -> Result<NativeBatchSeed, String> {
-        let expected = self.with_db(|conn| mailvault_core::custody::cache::native_identity(conn, &self.account, &self.mailbox))?
-            .ok_or("errors.bulkIdentityUncertain")?;
+        let expected = self.native_owner()?;
         Ok(NativeBatchSeed { identity: imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, None), expected: serde_json::json!(expected) })
     }
 
@@ -2068,7 +2095,7 @@ mod tests {
 
         assert!(!engine.is_backfilling("acc1").await);
 
-        engine.backfill_gave_up.lock().await.insert(key.clone());
+        engine.backfill_gave_up.lock().await.insert(key.clone(), BackfillCompletion { requested_origin: "fixture".into(), cache_owner: None });
         assert!(!engine.is_backfilling("acc1").await, "gave-up key must not read as in-flight");
 
         engine.backfilling.lock().await.insert(key);
@@ -2691,7 +2718,7 @@ mod tests {
         let seed_b = io.native_seed(&account_b.imap_config).unwrap();
         io.write_bound_headers(&[test_header(3)], &seed_b, Some(1)).unwrap();
         job.await.unwrap();
-        let poisoned = engine.backfill_gave_up.lock().await.contains("acc1\u{1}INBOX");
+        let poisoned = engine.backfill_gave_up.lock().await.contains_key("acc1\u{1}INBOX");
         engine.backfill_mailbox(&account_b, "INBOX").await;
         assert!(!poisoned, "an ownership race is not a process-lifetime provider failure");
         assert_eq!(cached_uid_set(&engine, "INBOX"), HashSet::from([1, 2, 3]), "fresh current-owner backfill must still run");
@@ -2720,7 +2747,7 @@ mod tests {
         assert_eq!(engine.cache_ctx("acc1", "INBOX").listed_cache_uids(&pinned, &listed, !empty).unwrap_err(), "errors.bulkIdentityChanged");
         assert!(!engine.is_backfilling("acc1").await, "the refused listing must clear in-flight state");
         assert_eq!(with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap()), before, "old listing cannot change any B row or proof");
-        assert!(!engine.backfill_gave_up.lock().await.contains("acc1\u{1}INBOX"), "coverage from another owner is not a successful zero-work result");
+        assert!(!engine.backfill_gave_up.lock().await.contains_key("acc1\u{1}INBOX"), "coverage from another owner is not a successful zero-work result");
         engine.backfill_mailbox(&account_b, "INBOX").await;
         assert_eq!(cached_uid_set(&engine, "INBOX"), (1..=10).collect(), "fresh B must fill its remaining native headers");
         assert!(!engine.is_backfilling("acc1").await);
@@ -2803,6 +2830,35 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn reviewed_native_completion_marker_delayed_failure() {
         completion_marker_allows_new_owner(false, true, true, false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn reviewed_native_completion_marker_preserves_newer_marker() {
+        let dir = scratch_dir("native_completion_newer_marker");
+        let a = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
+        let (account_a, account_b) = (account_for(&a), account_for(&b));
+        let engine = Arc::new(engine_for(&dir));
+        assert!(engine.sync_account(&account_a, "INBOX").await.success);
+        let pause = Arc::new(BackfillPause { point: BackfillPausePoint::BeforeCompletion, reached: tokio::sync::Notify::new(), release: tokio::sync::Notify::new() });
+        *engine.backfill_pause.lock().unwrap() = Some(pause.clone());
+        let running = engine.clone();
+        let job = tokio::spawn(async move { running.backfill_mailbox(&account_a, "INBOX").await });
+        tokio::time::timeout(Duration::from_secs(5), pause.reached.notified()).await.unwrap();
+        app_fetched_headers(&engine, &account_b, "INBOX", &[1, 2, 3], serde_json::json!({"totalEmails": 10, "uidNext": 11})).await;
+        engine.backfill_mailbox(&account_b, "INBOX").await;
+        engine.backfill_mailbox(&account_b, "INBOX").await;
+        let key = "acc1\u{1}INBOX";
+        let newer = engine.backfill_gave_up.lock().await.get(key).cloned();
+        assert!(newer.is_some());
+        pause.release.notify_one();
+        job.await.unwrap();
+        assert!(engine.backfill_gave_up.lock().await.get(key) == newer.as_ref(), "late A cannot overwrite B's completion marker");
+        let commands = b.commands();
+        engine.backfill_mailbox(&account_b, "INBOX").await;
+        assert_eq!(b.commands(), commands, "B's same-owner marker remains useful");
+        assert_eq!(cached_uid_set(&engine, "INBOX"), (1..=10).collect());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     async fn generation_changed_native_backfill(keep_partial: bool) {
@@ -3654,7 +3710,7 @@ mod tests {
 
         assert_eq!(cached_count(&engine, "INBOX"), 2, "uid 3 must arrive on the first pass; uid 2 is the poison");
         assert!(
-            !engine.backfill_gave_up.lock().await.contains(&key),
+            !engine.backfill_gave_up.lock().await.contains_key(&key),
             "a pass that wrote headers is progress, not a give-up"
         );
         assert_eq!(
@@ -3668,7 +3724,7 @@ mod tests {
         // nothing fetched rests the mailbox for the session, as it always has.
         engine.backfill_mailbox(&account, "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 2);
-        assert!(engine.backfill_gave_up.lock().await.contains(&key));
+        assert!(engine.backfill_gave_up.lock().await.contains_key(&key));
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -3691,7 +3747,7 @@ mod tests {
         engine.backfill_mailbox(&account_for(&server), "INBOX").await;
 
         assert!(
-            engine.backfill_gave_up.lock().await.contains(&format!("acc1\u{1}INBOX")),
+            engine.backfill_gave_up.lock().await.contains_key(&format!("acc1\u{1}INBOX")),
             "a dropped connection is not a poisoned page — it must still give up"
         );
 
