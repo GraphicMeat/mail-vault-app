@@ -1,22 +1,22 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, X } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
+import { DockSlot } from '../../components/ui/ToastDock';
 
 // Corner bubble in the style of RestoreTray/OutboxTray: this message could not
 // be drawn by Blitz; one click switches the app to the standard renderer. The
 // caller wraps it in AnimatePresence so the exit animation runs.
 export default function FailureBubble({ onSwitch, onDismiss }) {
   const t = useT();
-  return createPortal(
-    <div className="fixed bottom-6 left-4 z-[60]">
+  return (
+    <DockSlot position="bottom-left">
       <motion.div
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 30, opacity: 0 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="flex items-start gap-3 px-4 py-3 rounded-xl min-w-[280px] max-w-[380px] border bg-mail-surface border-mail-strong"
+        className="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl min-w-[280px] max-w-[380px] border bg-mail-surface border-mail-strong"
         data-testid="blitz-failure-bubble"
         role="status"
       >
@@ -44,7 +44,6 @@ export default function FailureBubble({ onSwitch, onDismiss }) {
           <X size={14} />
         </button>
       </motion.div>
-    </div>,
-    document.body,
+    </DockSlot>
   );
 }

@@ -5,6 +5,7 @@ import {
   HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X, Shield
 } from 'lucide-react';
 import { t as tr, t, useT   } from '../i18n/index.js';
+import { DockSlot } from './ui/ToastDock';
 import { formatCount } from '../utils/formatCount';
 
 export const PHASE_LABELS = () => ({
@@ -89,10 +90,11 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   // Minimized view
   if (minimized && isActive) {
     return (
+      <DockSlot position="bottom-right">
       <motion.div
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="fixed bottom-4 right-4 z-50"
+        className="pointer-events-auto"
       >
         {liveRegion}
         <button
@@ -105,17 +107,18 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
           <Maximize2 size={12} className="text-mail-text-muted" />
         </button>
       </motion.div>
+      </DockSlot>
     );
   }
 
   return (
     <AnimatePresence>
+      <DockSlot position="bottom-right" key="bulk-op-progress">
       <motion.div
-        key="bulk-op-progress"
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
-        className="fixed bottom-4 right-4 z-50"
+        className="pointer-events-auto"
       >
         {liveRegion}
         <div className={`bg-mail-surface border rounded-xl overflow-hidden min-w-[320px]
@@ -236,6 +239,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
           </div>
         </div>
       </motion.div>
+      </DockSlot>
     </AnimatePresence>
   );
 }

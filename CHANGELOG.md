@@ -26,6 +26,7 @@
 - **The helper decides which new mail raises a banner.** Quiet hours, priority senders and the account and folder switches in Settings, Notifications are now applied by the helper that syncs your mail, from your saved settings, instead of by the window. The rules are unchanged. If the helper cannot be reached, the banner is shown, and the notification log in Settings says the rules could not be checked.
 
 ### Fixed
+- **Banners and toasts no longer cover each other.** The selection bar, the undo toast, backup and restore chips and the progress panels now stack along the bottom edge instead of drawing at the same spot.
 - **Backup paths reject unsafe account and folder names.** A name that could escape its folder or alias another path is refused before backup files are read, copied, verified or purged. Invalid old queued purges stay pending while valid work continues.
 - **Searching again and again no longer freezes the app.** A new search now stops the one still running in the background helper, and a folder scan stops within one message instead of finishing the whole folder first. Several quick searches used to leave many scans reading whole folders at once, which could take gigabytes of memory.
 - **Lithuanian verification codes get their bubble.** A mail that says "patvirtinimo kodas" ("confirmation code") or asks you to enter "šį kodą" got no code bubble, because only English and a few other languages' code words were known. Lithuanian "kodas", "patvirtin…" (confirm) and "prisijung…" (sign in) now count; "kodėl" (why) does not.

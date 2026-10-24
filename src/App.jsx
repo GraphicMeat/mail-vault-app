@@ -41,6 +41,7 @@ import { OnboardingResumePrompt } from './components/onboarding/OnboardingResume
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UndoSendToast } from './components/UndoSendToast';
 import { UndoToast } from './components/UndoToast';
+import { ToastDockHost } from './components/ui/ToastDock';
 import { UnsubscribeHost } from './components/UnsubscribeHost';
 import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
@@ -1692,6 +1693,8 @@ function App() {
       )}
 
       {settingsLayer}
+
+      <ToastDockHost />
 
       <AnimatePresence>
         {error && (

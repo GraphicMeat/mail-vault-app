@@ -7,6 +7,7 @@ import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { t as tr, useT  } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { formatCount } from '../utils/formatCount';
+import { DockSlot } from './ui/ToastDock';
 
 /**
  * Minimized bulk-operations session.
@@ -48,13 +49,13 @@ export function BulkSelectionBubble() {
   return (
     <AnimatePresence>
       {visible && (
+        <DockSlot key="bulk-bubble" position="bottom-center" order={1} fill>
         <motion.div
-          key="bulk-bubble"
           initial={{ y: 40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 40, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed inset-x-0 bottom-20 sm:bottom-24 z-40 flex justify-center px-3 pointer-events-none"
+          className="flex justify-center pointer-events-none"
         >
           <div
             className="flex items-center gap-2 pl-3 pr-1 py-1.5 bg-mail-surface border border-mail-accent/40
@@ -84,6 +85,7 @@ export function BulkSelectionBubble() {
             </Button>
           </div>
         </motion.div>
+        </DockSlot>
       )}
     </AnimatePresence>
   );

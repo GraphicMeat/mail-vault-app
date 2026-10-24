@@ -23,6 +23,7 @@ import { describeQuickAction } from "../utils/quickActionCatalog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { isBackedUp, useBackupScan } from "./email/MessageStateIcon";
 import { t, useT } from "../i18n/index.js";
+import { DockSlot } from "./ui/ToastDock";
 
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -314,15 +315,15 @@ export function SelectionActionBar() {
   return (
     <AnimatePresence>
       {hasSelection && (
+        <DockSlot key="selection-bar" position="bottom-center" order={0} fill>
         <motion.div
-          key="selection-bar"
           ref={barRef}
           data-testid="selection-action-bar"
           initial={{ y: 80, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="fixed inset-x-0 bottom-4 sm:bottom-6 z-40 flex justify-center px-3 pointer-events-none"
+          className="flex justify-center pointer-events-none"
         >
           <SelectionActionBarView
             rows={selectedRows}
@@ -369,6 +370,7 @@ export function SelectionActionBar() {
             />
           )}
         </motion.div>
+        </DockSlot>
       )}
       <DeleteConfirmModal
         pending={deleteMode === null ? null : {

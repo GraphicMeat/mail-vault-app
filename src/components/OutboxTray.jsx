@@ -6,6 +6,7 @@ import { useT, tErr } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr } from '../hooks/usePrivacy';
 import { findSentMailboxPath } from '../utils/sentFolder';
+import { DockSlot } from './ui/ToastDock';
 
 // The daemon's marker on a Graph or JMAP send that got no answer after the
 // request left (src-core smtp.rs MAY_HAVE_GONE_OUT). The server may have
@@ -41,7 +42,8 @@ export function OutboxTray({ onRestoreDraft }) {
   if (!items || items.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-4 z-[60] flex flex-col gap-2">
+    <DockSlot position="bottom-right">
+    <div className="pointer-events-auto flex flex-col gap-2">
       <AnimatePresence>
         {items.map(item => {
           const subject = item.composeState?.initialData?.subject || 'New Message';
@@ -142,5 +144,6 @@ export function OutboxTray({ onRestoreDraft }) {
         })}
       </AnimatePresence>
     </div>
+    </DockSlot>
   );
 }

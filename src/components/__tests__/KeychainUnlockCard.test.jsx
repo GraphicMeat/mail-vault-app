@@ -53,7 +53,7 @@ describe('KeychainUnlockCard', () => {
     expect(card.getAttribute('role')).toBe('alert');
     expect(document.getElementById(card.getAttribute('aria-labelledby')).textContent).toBe('Unlock your keychain');
     expect(card.textContent).toMatch(/macOS Keychain/);
-    expect(card.className).toMatch(/fixed/);
+    expect(card.closest('.fixed')).not.toBeNull();
   });
 
   it('shakes when the user clicks anywhere else, and not for clicks on itself', () => {

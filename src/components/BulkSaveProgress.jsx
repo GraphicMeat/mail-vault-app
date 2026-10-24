@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle, Download, Upload, FolderSymlink } from 'lucide-react';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, useT   } from '../i18n/index.js';
+import { DockSlot } from './ui/ToastDock';
 import { formatCount } from '../utils/formatCount';
 
 // Use targeted selectors to avoid re-rendering on every store change
@@ -118,6 +119,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   }, [isComplete, errors, onDismiss]);
 
   return (
+    <DockSlot position="bottom-right">
     <motion.div
       key="bulk-save-progress"
       data-testid="bulk-save-progress"
@@ -125,7 +127,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 100, opacity: 0 }}
-      className="fixed bottom-4 right-4 z-50"
+      className="pointer-events-auto"
     >
       <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
       <div className="bg-mail-surface border border-mail-strong rounded-xl
@@ -208,5 +210,6 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
         </div>
       </div>
     </motion.div>
+    </DockSlot>
   );
 }

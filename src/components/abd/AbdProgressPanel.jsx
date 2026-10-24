@@ -10,6 +10,7 @@ import { formatBytes } from '../../utils/formatBytes';
 import { formatCount } from '../../utils/formatCount';
 import { statusText, KEPT_KEYS } from './abdText';
 import { tErr, useT } from '../../i18n/index.js';
+import { DockSlot } from '../ui/ToastDock';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 
 /**
@@ -91,11 +92,12 @@ function PanelBody({ job }) {
   };
 
   return (
+    <DockSlot position="bottom-right">
     <motion.div
       data-testid="abd-panel"
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="fixed bottom-4 right-4 z-50"
+      className="pointer-events-auto"
     >
       <div className={`bg-mail-surface border rounded-xl overflow-hidden w-[340px] max-w-[calc(100vw-2rem)]
                       ${failed ? 'border-mail-danger' : finished && state === 'completed' ? 'border-mail-local' : 'border-mail-strong'}`}>
@@ -204,5 +206,6 @@ function PanelBody({ job }) {
         )}
       </div>
     </motion.div>
+    </DockSlot>
   );
 }

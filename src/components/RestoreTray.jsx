@@ -5,6 +5,7 @@ import { useSettingsStore } from '../stores/settingsStore.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { useT } from '../i18n/index.js';
 import { Private } from './privacy/Private';
+import { DockSlot } from './ui/ToastDock';
 import { T } from '../i18n/T.jsx';
 
 // Corner bubble for a minimized change-server restore. Mirrors the OutboxTray
@@ -25,7 +26,7 @@ export function RestoreTray() {
   const failed = activeRestore.status === 'failed' || activeRestore.status === 'cancelled';
 
   return (
-    <div className="fixed bottom-6 left-4 z-[60]">
+    <DockSlot position="bottom-left">
       <AnimatePresence>
         <motion.div
           key="restore-bubble"
@@ -33,7 +34,7 @@ export function RestoreTray() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 30, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className={`flex items-start gap-3 px-4 py-3 rounded-xl min-w-[280px] max-w-[380px] border cursor-pointer
+          className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl min-w-[280px] max-w-[380px] border cursor-pointer
                      ${failed ? 'bg-mail-danger-tint border-mail-danger/40' : 'bg-mail-surface border-mail-strong'}`}
           onClick={() => openChangeServer(activeRestore.account_id)}
           data-testid={`restore-bubble-${activeRestore.status}`}
@@ -72,6 +73,6 @@ export function RestoreTray() {
           )}
         </motion.div>
       </AnimatePresence>
-    </div>
+    </DockSlot>
   );
 }
