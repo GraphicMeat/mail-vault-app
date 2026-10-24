@@ -270,6 +270,18 @@ impl SyncEngine {
         Ok(seed)
     }
 
+    #[cfg(test)]
+    async fn pause_backfill_at(&self, point: tests::BackfillPausePoint) {
+        let pause = {
+            let mut slot = self.backfill_pause.lock().unwrap();
+            if slot.as_ref().is_some_and(|pause| pause.point == point) { slot.take() } else { None }
+        };
+        if let Some(pause) = pause {
+            pause.reached.notify_one();
+            pause.release.notified().await;
+        }
+    }
+
     /// The vault root this engine writes into — Task 2.7 (2.3 review F1)
     /// tests this is the identical `PathBuf` `handlers::common::vault_root`
     /// resolves, so the header-cache lock registry (which keys on the raw
@@ -1281,16 +1293,16 @@ impl SyncEngine {
     ) -> Result<usize, String> {
         let io = self.cache_ctx(account.id.as_str(), mailbox);
         let seed = self.prepare_native_seed(&io, &account.imap_config).await?;
+        #[cfg(test)]
+        self.pause_backfill_at(tests::BackfillPausePoint::BeforeListing).await;
         let (listed_validity, listed) = imap::search_all_uid_flags_in_generation(session, mailbox).await?;
         let server_uids: Vec<u32> = listed.into_iter().map(|(uid, _)| uid).collect();
+        let listed_identity = imap::NativeHeaderIdentity::new(&account.imap_config, &account.id, mailbox, listed_validity);
+        let (coverage_seed, read_uids) = (seed.clone(), !server_uids.is_empty());
+        let have = cache_io(&io, move |io| io.listed_cache_uids(&coverage_seed, &listed_identity, read_uids)).await?;
         if server_uids.is_empty() {
             return Ok(0);
         }
-
-        // Cached UID presence is proof only inside the complete identity of
-        // this actual listing SELECT, including generation and provider origin.
-        let listed_identity = imap::NativeHeaderIdentity::new(&account.imap_config, &account.id, mailbox, listed_validity);
-        let have = if seed.matches(&listed_identity) { cache_io(&io, |io| Ok(io.cached_uids())).await? } else { HashSet::new() };
         // Newest first — the user is looking at the top of the list.
         let mut missing: Vec<u32> = server_uids
             .into_iter()
@@ -1324,13 +1336,7 @@ impl SyncEngine {
                 account.email, mailbox, written, missing.len()
             );
             #[cfg(test)]
-            {
-                let pause = self.backfill_pause.lock().unwrap().take();
-                if let Some(pause) = pause {
-                    pause.reached.notify_one();
-                    pause.release.notified().await;
-                }
-            }
+            self.pause_backfill_at(tests::BackfillPausePoint::AfterChunk).await;
         }
 
         Ok(written)
@@ -1398,14 +1404,25 @@ impl CacheCtx {
 
     /// The publication expectation is observed before FETCH, never repaired after it.
     pub(crate) fn native_seed(&self, config: &ImapConfig) -> Result<NativeBatchSeed, String> {
-        let expected = self.with_db(|conn| {
-            let meta = mailvault_core::custody::cache::load_meta(conn, &self.account, &self.mailbox)?;
-            let meta = meta.map(|s| serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string())).transpose()?;
-            let expected = meta.as_ref().and_then(|v| v.get("nativeIdentity")).cloned().unwrap_or(serde_json::Value::Null);
-            if !expected.is_null() { serde_json::from_value::<imap::NativeHeaderIdentity>(expected.clone()).map_err(|e| e.to_string())?; }
-            Ok(expected)
-        })?.ok_or("errors.bulkIdentityUncertain")?;
-        Ok(NativeBatchSeed { identity: imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, None), expected })
+        let expected = self.with_db(|conn| mailvault_core::custody::cache::native_identity(conn, &self.account, &self.mailbox))?
+            .ok_or("errors.bulkIdentityUncertain")?;
+        Ok(NativeBatchSeed { identity: imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, None), expected: serde_json::json!(expected) })
+    }
+
+    /// Coverage and its owner are one custody read, including before zero-work exits.
+    /// An empty provider listing needs only metadata, never a UID-set scan.
+    fn listed_cache_uids(&self, seed: &NativeBatchSeed, listed: &imap::NativeHeaderIdentity, read_uids: bool) -> Result<HashSet<u32>, String> {
+        self.with_db(|conn| {
+            let current = mailvault_core::custody::cache::native_identity(conn, &self.account, &self.mailbox)?;
+            if serde_json::json!(current) != seed.expected && current.as_ref() != Some(listed) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            if read_uids && current.as_ref() == Some(listed) {
+                mailvault_core::custody::cache::uid_set(conn, &self.account, &self.mailbox)
+            } else {
+                Ok(HashSet::new())
+            }
+        })?.ok_or_else(|| "errors.bulkIdentityUncertain".into())
     }
 
     pub(crate) fn write_bound_headers(&self, headers: &[ImapEmailHeader], seed: &NativeBatchSeed, validity: Option<u32>) -> Result<(), String> {
@@ -2624,7 +2641,11 @@ mod tests {
     }
 
     /// Test synchronization is per engine and removed from non-test builds.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    pub(super) enum BackfillPausePoint { BeforeListing, AfterChunk }
+
     pub(super) struct BackfillPause {
+        pub(super) point: BackfillPausePoint,
         pub(super) reached: tokio::sync::Notify,
         pub(super) release: tokio::sync::Notify,
     }
@@ -2636,7 +2657,7 @@ mod tests {
         let b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
         let (account_a, account_b) = (account_for(&a), account_for(&b));
         let engine = Arc::new(engine_for(&dir));
-        let pause = Arc::new(BackfillPause { reached: tokio::sync::Notify::new(), release: tokio::sync::Notify::new() });
+        let pause = Arc::new(BackfillPause { point: BackfillPausePoint::AfterChunk, reached: tokio::sync::Notify::new(), release: tokio::sync::Notify::new() });
         *engine.backfill_pause.lock().unwrap() = Some(pause.clone());
         let running = engine.clone();
         let job = tokio::spawn(async move { running.run_backfill(&account_a, "INBOX").await });
@@ -2682,16 +2703,19 @@ mod tests {
         let (account_a, account_b) = (account_for(&a), account_for(&b));
         let engine = Arc::new(engine_for(&dir));
         assert!(engine.sync_account(&account_a, "INBOX").await.success);
-        a.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", if empty { 0 } else { 3 }))
-            .fault(Trigger::nth("SELECT", 1), Action::Delay(Duration::from_millis(400))));
+        a.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", if empty { 0 } else { 3 })));
+        let pinned = engine.cache_ctx("acc1", "INBOX").native_seed(&account_a.imap_config).unwrap();
+        let listed = imap::NativeHeaderIdentity::new(&account_a.imap_config, "acc1", "INBOX", Some(1));
+        let pause = Arc::new(BackfillPause { point: BackfillPausePoint::BeforeListing, reached: tokio::sync::Notify::new(), release: tokio::sync::Notify::new() });
+        *engine.backfill_pause.lock().unwrap() = Some(pause.clone());
         let running = engine.clone();
         let job = tokio::spawn(async move { running.backfill_mailbox(&account_a, "INBOX").await });
-        tokio::time::timeout(Duration::from_secs(5), async {
-            while a.count_commands("SELECT") == 0 { tokio::time::sleep(Duration::from_millis(1)).await; }
-        }).await.expect("the actual old-owner listing must be in flight after its seed");
+        tokio::time::timeout(Duration::from_secs(5), pause.reached.notified()).await.expect("the actual old-owner seed must be pinned before listing");
         app_fetched_headers(&engine, &account_b, "INBOX", &[1, 2, 3], serde_json::json!({"totalEmails": 10, "uidNext": 11})).await;
         let before = with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap());
+        pause.release.notify_one();
         job.await.unwrap();
+        assert_eq!(engine.cache_ctx("acc1", "INBOX").listed_cache_uids(&pinned, &listed, !empty).unwrap_err(), "errors.bulkIdentityChanged");
         assert!(!engine.is_backfilling("acc1").await, "the refused listing must clear in-flight state");
         assert_eq!(with_store(&engine, |c| mailvault_core::custody::cache::load_headers(c, "acc1", "INBOX", None, mailvault_core::custody::cache::HeaderOrder::Arrival).unwrap()), before, "old listing cannot change any B row or proof");
         assert!(!engine.backfill_gave_up.lock().await.contains("acc1\u{1}INBOX"), "coverage from another owner is not a successful zero-work result");

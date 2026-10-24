@@ -215,6 +215,21 @@ pub fn load_meta(conn: &Connection, account: &str, mailbox: &str) -> Result<Opti
     serde_json::to_string(&value).map(Some).map_err(|e| e.to_string())
 }
 
+/// Read only the stored native owner, without scanning/counting header rows.
+/// Corrupt metadata is unknown, never an observed legacy/absent identity.
+pub fn native_identity(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<crate::imap::NativeHeaderIdentity>, String> {
+    let text: Option<String> = conn.query_row("SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0)).optional().map_err(err)?;
+    let Some(text) = text else { return Ok(None) };
+    let meta: Value = serde_json::from_str(&text).map_err(|_| "errors.bulkIdentityUncertain")?;
+    let object = meta.as_object().ok_or("errors.bulkIdentityUncertain")?;
+    let Some(identity) = object.get("nativeIdentity").filter(|v| !v.is_null()) else { return Ok(None) };
+    let identity: crate::imap::NativeHeaderIdentity = serde_json::from_value(identity.clone()).map_err(|_| "errors.bulkIdentityUncertain")?;
+    if identity.account_id != account || identity.mailbox != mailbox || identity.origin_hash.is_empty() || identity.uid_validity == Some(0) {
+        return Err("errors.bulkIdentityUncertain".into());
+    }
+    Ok(Some(identity))
+}
+
 /// Uids per `IN (...)`: under SQLITE_MAX_VARIABLE_NUMBER on every build
 /// (999 before SQLite 3.32), with the two scope parameters on top.
 const UID_CHUNK: usize = 900;
