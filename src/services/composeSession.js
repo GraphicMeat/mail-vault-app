@@ -25,13 +25,26 @@ export function mergeComposeSnapshot(current, incoming) {
   if (!current) return incoming;
   if (!incoming) return current;
   if (!sameComposeDraft(current, incoming)) return incoming;
-  const legacy = !Number.isSafeInteger(current._draftRevision) && Number.isSafeInteger(incoming._draftRevision);
-  const content = legacy || (current._draftRevision || 0) > (incoming._draftRevision || 0) ? current : incoming;
+  const currentVersioned = Number.isSafeInteger(current._draftRevision);
+  const incomingVersioned = Number.isSafeInteger(incoming._draftRevision);
+  let content = currentVersioned !== incomingVersioned
+    ? (currentVersioned ? incoming : current)
+    : (current._draftRevision || 0) > (incoming._draftRevision || 0) ? current : incoming;
+  const sameRevision = currentVersioned && incomingVersioned && current._draftRevision === incoming._draftRevision;
+  if (sameRevision && compatibleContent(current, incoming)) content = joinContent(current, incoming);
   const accepted = (current._draftAcceptedRevision || 0) > (incoming._draftAcceptedRevision || 0) ? current : incoming;
+  const request = content._draftContent;
+  const exactAcceptance = request && [current, incoming].some(data => data._draftContent
+    && data._draftRevision === content._draftRevision && data._draftAcceptedRevision === content._draftRevision
+    && !data._draftAcceptanceUnknown && JSON.stringify(requestEvidence(data._draftContent)) === JSON.stringify(requestEvidence(request)));
+  const acceptanceUnknown = request && !exactAcceptance && (content._draftAcceptanceUnknown
+    || (accepted._draftAcceptedRevision || 0) >= (content._draftRevision || 0));
+
   return { ...content,
     _draftId: current._draftId || incoming._draftId,
     _draftRevision: content._draftRevision || 0,
     _draftAcceptedRevision: accepted._draftAcceptedRevision || 0,
+    ...(request ? { _draftAcceptanceUnknown: Boolean(acceptanceUnknown) } : {}),
     _draftAccountId: accepted._draftAccountId || accepted._accountId,
     _draftMailbox: accepted._draftMailbox,
     _draftUid: accepted._draftUid,
@@ -48,12 +61,13 @@ const editable = data => data && !data._editScheduledId && !data._draftCleanupOn
 function completeContent(data) {
   const request = data._draftContent || data._draftRecoveredContent;
   const payload = request?.payload || {};
-  const wire = splitWireHtml(payload.html || '');
+  const wire = payload.html == null ? {} : splitWireHtml(payload.html);
   return {
-    to: data.to ?? payload.to ?? '', cc: data.cc ?? payload.cc ?? '', bcc: data.bcc ?? payload.bcc ?? '',
-    subject: data.subject ?? payload.subject ?? '', body: data.body ?? wire.body ?? '',
-    inReplyTo: data.inReplyTo ?? payload.inReplyTo ?? '', references: data.references ?? payload.references ?? '',
-    attachments: data.attachments ?? payload.attachments ?? [],
+    to: data.to ?? payload.to, cc: data.cc ?? payload.cc, bcc: data.bcc ?? payload.bcc,
+    subject: data.subject ?? payload.subject, body: data.body ?? wire.body,
+    inReplyTo: data.inReplyTo ?? payload.inReplyTo, references: data.references ?? payload.references,
+    attachments: data.attachments && payload.attachments && data.attachments.length === payload.attachments.length
+      ? joinKnown(data.attachments, payload.attachments) : data.attachments ?? payload.attachments,
     _quotedHtml: data._quotedHtml ?? wire.quotedHtml, _forward: data._forward ?? wire.forward,
     _accountId: data._accountId ?? request?.accountId, _fromAddress: data._fromAddress ?? request?.fromAddress,
     // Retain request-only plain text, snippet and sender as complete content.
@@ -61,14 +75,83 @@ function completeContent(data) {
       payload: request.payload, snippet: request.snippet } : null,
   };
 }
+// These bounded content trees retain explicit empty values. Missing is
+// unknown: compatibility does not establish equality or native acceptance.
+function compatibleKnown(left, right) {
+  if (left === undefined || right === undefined) return true;
+  if (Array.isArray(left) || Array.isArray(right)) return Array.isArray(left) && Array.isArray(right)
+    && left.length === right.length && left.every((value, index) => compatibleKnown(value, right[index]));
+  if (left && right && typeof left === 'object' && typeof right === 'object') {
+    return [...new Set([...Object.keys(left), ...Object.keys(right)])].every(key => compatibleKnown(left[key], right[key]));
+  }
+  return left === right;
+}
+function joinKnown(preferred, other) {
+  if (preferred === undefined) return other;
+  if (other === undefined) return preferred;
+  if (Array.isArray(preferred)) return preferred.map((value, index) => joinKnown(value, other[index]));
+  if (preferred && other && typeof preferred === 'object' && typeof other === 'object') {
+    return Object.fromEntries([...new Set([...Object.keys(preferred), ...Object.keys(other)])].map(key => [key, joinKnown(preferred[key], other[key])]));
+  }
+  return preferred;
+}
+const attachmentEvidence = attachment => ({ filename: attachment.filename, contentType: attachment.contentType,
+  content: attachment.content ?? undefined, encoding: attachment.encoding ?? (attachment.content != null ? 'base64' : undefined),
+  cid: attachment.cid ?? undefined,
+  source: attachment.source || attachment._source,
+});
+function requestEvidence(request) {
+  const payload = request.payload || {};
+  return { accountId: request.accountId, fromAddress: request.fromAddress, displayName: request.displayName,
+    payload: { to: payload.to, cc: payload.cc, bcc: payload.bcc, subject: payload.subject, html: payload.html, text: payload.text,
+      inReplyTo: payload.inReplyTo, references: payload.references, attachments: payload.attachments?.map(attachmentEvidence) }, snippet: request.snippet };
+}
+function nativeKnowledge(data) {
+  return data._draftNativeContent && data._draftNativeContent.revision === data._draftRevision ? data._draftNativeContent : data._draftRecoveredKnown || {};
+}
+function contentEvidence(data) {
+  const { request, ...form } = completeContent(data);
+  const native = nativeKnowledge(data);
+  form.attachments = form.attachments?.map(attachmentEvidence);
+  const exact = request ? requestEvidence(request) : { payload: {} };
+  // Native text/name/HTML are known return values, never a fake complete
+  // request. In particular, no preview snippet becomes a raw snippet.
+  const wire = joinKnown(exact, { displayName: native.displayName, payload: { html: native.html, text: native.text } });
+  return { form, wire };
+}
+function compatibleContent(left, right) {
+  const a = contentEvidence(left), b = contentEvidence(right);
+  if (!compatibleKnown(a, b)) return false;
+  // An unresolved descriptor cannot prove agreement with supplied bytes.
+  // Native must resolve that relationship; retain both recoverable versions.
+  return !(a.form.attachments && b.form.attachments && a.form.attachments.some((attachment, index) => {
+    const other = b.form.attachments[index];
+    return (attachment.content !== undefined && other.content === undefined && other.source !== undefined)
+      || (other.content !== undefined && attachment.content === undefined && attachment.source !== undefined);
+  }));
+}
+function joinContent(current, incoming) {
+  // Keep the richer exact request atomic, with its revision/UI signature.
+  const preferred = current._draftContent && !incoming._draftContent ? current
+    : current._draftRecoveredContent && !incoming._draftContent && !incoming._draftRecoveredContent ? current : incoming;
+  const other = preferred === current ? incoming : current;
+  const { request: _preferredRequest, ...preferredForm } = completeContent(preferred);
+  const { request: _otherRequest, ...otherForm } = completeContent(other);
+  const form = joinKnown(preferredForm, otherForm);
+  const native = joinKnown(nativeKnowledge(preferred), nativeKnowledge(other));
+  return { ...preferred, ...form,
+    ...(Object.keys(native).length ? { _draftNativeContent: { ...native, revision: preferred._draftRevision } } : {}),
+  };
+}
 function recoveredWindow(window, provenance, draftId) {
   const source = dataFor(window);
   const { request, ...content } = completeContent(source);
   const data = { ...clone(source), ...clone(content) };
   for (const field of ['_draftId', '_draftRevision', '_draftAcceptedRevision', '_draftAccountId', '_draftMailbox', '_draftUid',
-    '_draftContent', '_draftUiSignature', '_draftPreviousIdentity', 'previousIdentity', '_composeWindowId']) delete data[field];
+    '_draftContent', '_draftUiSignature', '_draftAcceptanceUnknown', '_draftNativeContent', '_draftPreviousIdentity', 'previousIdentity', '_composeWindowId']) delete data[field];
   Object.assign(data, { _draftId: draftId, _draftRevision: 0, _draftAcceptedRevision: 0, _draftRecovery: provenance,
-    ...(request ? { _draftRecoveredContent: clone(request) } : {}) });
+    ...(request ? { _draftRecoveredContent: clone(request) } : {}),
+    ...(Object.keys(nativeKnowledge(source)).length ? { _draftRecoveredKnown: clone(nativeKnowledge(source)) } : {}) });
   return { ...window, initialData: data, snapshot: data, minimized: true, detached: false, nativeLabel: undefined };
 }
 
@@ -84,11 +167,19 @@ export function mergeComposeSession(current, restored) {
     if (existing && editable(dataFor(existing)) && editable(dataFor(window))
         && dataFor(existing)._draftId && dataFor(existing)._draftId === dataFor(window)._draftId
         && (dataFor(existing)._draftRevision || 0) === (dataFor(window)._draftRevision || 0)
-        && JSON.stringify(completeContent(dataFor(existing))) !== JSON.stringify(completeContent(dataFor(window)))) {
+        && !compatibleContent(dataFor(existing), dataFor(window))) {
       const provenance = JSON.stringify([dataFor(window)._draftId, dataFor(window)._draftRevision || 0, window.id, sourceIndex]);
-      const exactContent = JSON.stringify(completeContent(dataFor(window)));
-      if (merged.some(item => dataFor(item)?._draftRecovery === provenance
-          && JSON.stringify(completeContent(dataFor(item))) === exactContent)) continue;
+      const exactContent = JSON.stringify(contentEvidence(dataFor(window)));
+      const recovered = merged.find(item => dataFor(item)?._draftRecovery === provenance
+        && compatibleContent(dataFor(item), dataFor(window)));
+      if (recovered) {
+        // Retain newly known fields too. Skipping a compatible unknown view
+        // would forget evidence needed to distinguish a later conflict.
+        const normalized = recoveredWindow(window, provenance, dataFor(recovered)._draftId);
+        const data = joinContent(dataFor(recovered), dataFor(normalized));
+        merged[merged.indexOf(recovered)] = { ...recovered, initialData: data, snapshot: data };
+        continue;
+      }
       const memoKey = provenance + exactContent;
       if (!ids.has(memoKey)) ids.set(memoKey, newDraftId());
       window = recoveredWindow(window, provenance, ids.get(memoKey));

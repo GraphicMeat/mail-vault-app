@@ -297,7 +297,7 @@ it('retains accepted location and offers the same revision retry while native cl
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
-const { useComposeSessionHydration } = await import('../../services/composeSession');
+const { useComposeSessionHydration, mergeComposeSession } = await import('../../services/composeSession');
 function HydrationHarness({ loader, persist, controls, initial = [], focus }) {
   const [windows, setWindows] = React.useState(initial);
   const idRef = React.useRef(20);
@@ -413,4 +413,33 @@ it('retries exact content at an independently accepted revision when request acc
   render(<ComposeModal {...props} snapshotRef={snapshotRef} initialData={{ ...nativeDraft, _draftContent: content, _draftAcceptanceUnknown: true }} />); await tick();
   expect(saveLocalDraft).toHaveBeenCalledExactlyOnceWith({ draftId: 'managed', revision: 2, ...content });
   expect((await snapshotRef.current())._draftAcceptanceUnknown).toBe(false);
+});
+
+it.each([false, true])('hydrates compatible exact request content without invented acceptance (%s pending)', async pending => {
+  const load = deferred(); const loader = () => load.promise; const persist = vi.fn(); const controls = { current: null };
+  render(<HydrationHarness {...{ loader, persist, controls }} />);
+  const native = { ...nativeDraft, _fromAddress: 'me@example.test', _draftNativeContent: { revision: 2, html: '<p>typed</p>', text: 'typed', displayName: 'Me' } };
+  await act(async () => { controls.current.openDraft(native); });
+  const uiContent = { accountId: 'acct-1', fromAddress: 'me@example.test', displayName: 'Me', payload: {
+    to: '', cc: '', bcc: '', subject: '', html: '<p>typed</p>', text: 'typed', inReplyTo: '', references: '', attachments: [],
+  }, snippet: 'typed' };
+  const exact = { ...uiContent, snippet: 'exact untruncated snippet '.repeat(50) };
+  await act(async () => { load.resolve([{ id: 90, initialData: { ...native, _draftContent: exact,
+    _draftUiSignature: JSON.stringify(uiContent), _draftAcceptedRevision: pending ? 1 : 2 } }]); });
+  expect(controls.current.windows).toHaveLength(1); expect(screen.getByTestId('editor-stub').value).toBe('<p>typed</p>');
+  expect(controls.current.windows[0].initialData._draftContent).toEqual(exact);
+  await tick();
+  if (pending) {
+    expect(saveLocalDraft).toHaveBeenCalledExactlyOnceWith({ draftId: 'managed', revision: 2, ...exact });
+    expect(controls.current.windows[0].snapshot._draftAcceptanceUnknown).toBe(false);
+  } else expect(saveLocalDraft).not.toHaveBeenCalled();
+});
+
+it('preserves exact known native-only text and sender when that contender becomes a recovery compose', async () => {
+  const native = { ...nativeDraft, _fromAddress: 'me@example.test', _draftNativeContent: { revision: 2, html: '<p>typed</p>', text: 'exact native plain', displayName: 'Exact Native Sender' } };
+  const windows = mergeComposeSession([{ id: 1, initialData: { ...nativeDraft, body: '<p>owner text</p>' } }], [{ id: 2, initialData: native }]);
+  expect(windows).toHaveLength(2); const recovered = windows[1].snapshot || windows[1].initialData;
+  render(<ComposeModal {...props} initialData={recovered} />); await tick();
+  expect(saveLocalDraft.mock.calls[0][0]).toMatchObject({ draftId: recovered._draftId, revision: 1, displayName: 'Exact Native Sender', payload: { html: '<p>typed</p>', text: 'exact native plain' } });
+  expect(saveLocalDraft.mock.calls[0][0].previousIdentity).toBeUndefined();
 });

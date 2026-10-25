@@ -380,6 +380,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const draftMailboxRef = useRef(initialData?._draftMailbox || null);
   const draftAccountRef = useRef(initialData?._draftAccountId || initialData?._accountId || null);
   const acceptedRevisionRef = useRef(initialData?._draftAcceptedRevision || 0);
+  const acceptanceUnknownRef = useRef(Boolean(initialData?._draftAcceptanceUnknown));
   const issuedDraftRef = useRef({
     revision: initialData?._draftRevision || 0,
     content: initialData?._draftContent || null,
@@ -387,7 +388,9 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   });
   const initialNativeContentRef = useRef(null);
   const recoveredContentRef = useRef(initialData?._draftRecoveredContent || null);
-  const acceptedContentRef = useRef(initialData?._draftRevision > 0 && initialData._draftRevision === initialData._draftAcceptedRevision
+  const recoveryUiBaselineRef = useRef(null);
+  const recoveredKnownRef = useRef(initialData?._draftRecoveredKnown || null);
+  const acceptedContentRef = useRef(!initialData?._draftAcceptanceUnknown && initialData?._draftRevision > 0 && initialData._draftRevision === initialData._draftAcceptedRevision
     ? initialData._draftContent || null : null);
   const saveChainRef = useRef(Promise.resolve());
   const queuedDraftRef = useRef(null);
@@ -961,15 +964,25 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       && initialData._draftRevision > 0 && initialData._draftRevision === initialData._draftAcceptedRevision && !initialData._draftContent) {
     initialNativeContentRef.current = draftSignature;
   }
+  if (initializedRef.current && (recoveredContentRef.current || recoveredKnownRef.current) && recoveryUiBaselineRef.current == null) {
+    recoveryUiBaselineRef.current = draftSignature;
+  }
   const captureDraft = () => {
     if (!maySaveDraft || !selectedAccount || !initializedRef.current) return issuedDraftRef.current;
     if (!draftIdRef.current) draftIdRef.current = newDraftId();
     const issued = issuedDraftRef.current;
     if (issued.signature !== draftSignature && (issued.content || initialNativeContentRef.current !== draftSignature)) {
       // JSON cloning pins bytes, account and descriptors before any await.
+      const content = JSON.parse(draftSignature);
+      const unchangedRecovery = recoveryUiBaselineRef.current === draftSignature;
+      if (unchangedRecovery && recoveredKnownRef.current) {
+        for (const field of ['html', 'text']) if (recoveredKnownRef.current[field] !== undefined) content.payload[field] = recoveredKnownRef.current[field];
+        if (recoveredKnownRef.current.displayName !== undefined) content.displayName = recoveredKnownRef.current.displayName;
+      }
       issuedDraftRef.current = { revision: Math.max(issued.revision, acceptedRevisionRef.current) + 1,
-        signature: draftSignature, content: recoveredContentRef.current || JSON.parse(draftSignature) };
+        signature: draftSignature, content: unchangedRecovery && recoveredContentRef.current ? recoveredContentRef.current : content };
       recoveredContentRef.current = null;
+      recoveredKnownRef.current = null;
     }
     return issuedDraftRef.current;
   };
@@ -1000,6 +1013,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       _draftUiSignature: issued.signature,
       ...(initialData?._draftRecovery ? { _draftRecovery: initialData._draftRecovery } : {}),
       _draftAcceptedRevision: acceptedRevisionRef.current,
+      _draftAcceptanceUnknown: acceptanceUnknownRef.current,
+      ...(initialData?._draftNativeContent?.revision === issued.revision ? { _draftNativeContent: initialData._draftNativeContent } : {}),
+      ...(recoveredContentRef.current ? { _draftRecoveredContent: recoveredContentRef.current } : {}),
+      ...(recoveredKnownRef.current ? { _draftRecoveredKnown: recoveredKnownRef.current } : {}),
       _draftAccountId: draftAccountRef.current || selectedAccountId,
       _baseline: initialSnapshot.current,
       _draftUid: draftUidRef.current,
@@ -1074,7 +1091,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             throw new Error('Draft content was not accepted');
           }
           acceptedContentRef.current = issued.content;
-          if (issuedDraftRef.current === issued) setDraftSaveError(result.cleanup === 'pending' ? 'Draft cleanup pending' : null);
+          if (issuedDraftRef.current === issued) {
+            acceptanceUnknownRef.current = false;
+            setDraftSaveError(result.cleanup === 'pending' ? 'Draft cleanup pending' : null);
+          }
         } catch (err) {
           if (issuedDraftRef.current === issued && aliveRef.current) setDraftSaveError(err?.message || String(err));
           console.warn('[compose:autosave_fail]', err);

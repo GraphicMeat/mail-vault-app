@@ -205,3 +205,44 @@ it('keeps pending request acceptance unknown when native accepted metadata omits
   expect(merged).toHaveLength(1);
   expect(merged[0].initialData).toMatchObject({ _draftRevision: 2, _draftAcceptedRevision: 2, _draftAcceptanceUnknown: true, _draftContent: request });
 });
+
+it('retains incompatible full-snippet evidence and stable recovered IDs through save/load/native remerge', async () => {
+  const a = { ...semanticDraft(), _draftContent: { ...semanticRequest(), snippet: 'prefix'.repeat(100) + 'A' } };
+  const b = { ...a, _draftContent: { ...a._draftContent, snippet: 'prefix'.repeat(100) + 'B' } };
+  const native = semanticDraft();
+  const joined = mergeComposeSession([{ id: 1, initialData: a }], [{ id: 2, initialData: native }]);
+  const restoredB = [{ id: 3, initialData: b }];
+  const forked = mergeComposeSession(joined, restoredB);
+  expect(forked).toHaveLength(2);
+  saveComposeSession(forked); const loaded = await loadComposeSession();
+  const again = mergeComposeSession(mergeComposeSession(loaded, [{ id: 2, initialData: native }]), restoredB);
+  expect(again).toHaveLength(2);
+  expect(again.map(w => (w.snapshot || w.initialData)._draftId)).toEqual(forked.map(w => (w.snapshot || w.initialData)._draftId));
+  expect(again[0].initialData._draftContent.snippet).toBe(a._draftContent.snippet);
+});
+
+it('retains new known snippet evidence when repeated recovery first arrived without a request', () => {
+  const owner = { id: 1, initialData: { ...semanticDraft(), body: '<p>owner</p>' } };
+  const native = semanticDraft(); const source = [{ id: 2, initialData: native }];
+  const first = mergeComposeSession([owner], source);
+  const a = { ...native, _draftContent: { ...semanticRequest(), snippet: 'prefix'.repeat(100) + 'A' } };
+  const enriched = mergeComposeSession(first, [{ id: 2, initialData: a }]);
+  expect(enriched).toHaveLength(2);
+  const recovery = enriched[1].snapshot || enriched[1].initialData;
+  expect(recovery._draftId).toBe((first[1].snapshot || first[1].initialData)._draftId);
+  expect(recovery._draftRecoveredContent?.snippet).toBe(a._draftContent.snippet);
+  const b = { ...a, _draftContent: { ...a._draftContent, snippet: 'prefix'.repeat(100) + 'B' } };
+  const divergent = mergeComposeSession(enriched, [{ id: 2, initialData: b }]);
+  expect(divergent).toHaveLength(3);
+  expect((divergent[2].snapshot || divergent[2].initialData)._draftRecoveredContent.snippet).toBe(b._draftContent.snippet);
+});
+
+it('joins known empty bytes and source descriptors without replacing the immutable request', () => {
+  const source = { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 };
+  const request = semanticRequest(); request.payload.attachments[0].source = source;
+  const rich = { ...semanticDraft(), attachments: [{ filename: 'empty', contentType: 'text/plain' }], _draftContent: request };
+  const merged = mergeComposeSession([{ id: 1, initialData: semanticDraft() }], [{ id: 2, initialData: rich }]);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].initialData.attachments[0]).toMatchObject({ content: '', source });
+  expect(merged[0].initialData._draftContent).toBe(request);
+});

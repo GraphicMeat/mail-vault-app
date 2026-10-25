@@ -193,6 +193,12 @@ export function draftToInitialData({ accountId, mailbox, uid, entry, eml, draftI
     ...original,
     _accountId: accountId,
     _fromAddress: entry?.from?.address || eml.from?.address || '',
+    _draftNativeContent: { revision,
+      ...(typeof eml.html === 'string' ? { html: eml.html } : {}),
+      ...(typeof eml.text === 'string' ? { text: eml.text } : {}),
+      ...(typeof entry?.from?.name === 'string' ? { displayName: entry.from.name }
+        : typeof eml.from?.name === 'string' ? { displayName: eml.from.name } : {}),
+    },
     // Stable identity selects native current bytes; the tuple is the last
     // accepted presentation location, which can change on a content revision.
     ...(draftId ? { _draftId: draftId, _draftRevision: revision, _draftAcceptedRevision: revision, _draftAccountId: accountId } : {}),

@@ -474,3 +474,10 @@ it.each([['', ''], ['native exact plain text', 'Exact Sender']])('carries native
   expect(mapped._draftContent).toBeUndefined();
   expect(mapped).toMatchObject({ _draftId: 'native-id', _draftRevision: 4, _draftAcceptedRevision: 4, _draftAccountId: 'acct-1', _draftMailbox: 'Drafts', _draftUid: 42 });
 });
+
+it('keeps omitted native text/name unknown rather than creating empty semantic evidence', () => {
+  const mapped = draftToInitialData({ accountId: 'acct-1', mailbox: 'Drafts', uid: 42, draftId: 'native-id', revision: 4,
+    entry: { snippet: 'truncated preview' }, eml: { html: '<p>body</p>', attachments: [] } });
+  expect(mapped._draftNativeContent).toEqual({ revision: 4, html: '<p>body</p>' });
+  expect(mapped._draftContent).toBeUndefined();
+});

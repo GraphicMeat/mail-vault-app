@@ -418,11 +418,12 @@ describe('the quoted original in a reply', () => {
     await waitFor(() => expect(saveLocalDraft).toHaveBeenCalledTimes(1));
     unmount();
     onSaveState.mockClear();
-    resolveSave();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(onSaveState).not.toHaveBeenCalled();
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await act(async () => { resolveSave(savedDraftReply(saveLocalDraft.mock.calls[0][0])); });
+      expect(onSaveState).not.toHaveBeenCalled();
+      expect(warning).not.toHaveBeenCalled();
+    } finally { warning.mockRestore(); }
   });
 
   it('runs nothing from the original in the app window', async () => {
