@@ -1218,7 +1218,8 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     {
         return RunExit::Pending("pending_policy".into());
     }
-    if !intent.manual && intent.retries == 0 && intent.stage == "queued" {
+    // Pending stages do not waive due time; retries and cap holds continue.
+    if !intent.manual && intent.retries == 0 && !intent.hold {
         let due = policy::local_zone()
             .ok()
             .and_then(|zone| {
