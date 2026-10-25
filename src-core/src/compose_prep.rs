@@ -699,10 +699,13 @@ pub fn check(params: &Value, ctx: &Context, now: i64) -> Result<Value> {
         Value::Number(n) => n.as_f64(),
         Value::String(s) => trim(s).parse::<f64>().ok(),
         _ => None,
-    }.is_some_and(|v| v > now as f64);
+    }
+    .is_some_and(|v| v > now as f64);
     // Date.parse accepts ISO minute precision, unlike the shared native reader.
     // Normalize only this observed input shape before reusing its billing policy.
-    static MINUTE_EXPIRY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$").unwrap());
+    static MINUTE_EXPIRY: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$").unwrap()
+    });
     if let Some(expiry) = entitlement["billingProfile"]["currentPeriodEnd"].as_str() {
         let normalized = MINUTE_EXPIRY.replace(expiry, "${1}:00$2").into_owned();
         entitlement["billingProfile"]["currentPeriodEnd"] = json!(normalized);

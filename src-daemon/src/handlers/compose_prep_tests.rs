@@ -182,40 +182,68 @@ async fn compose_prep_check_uses_the_native_injected_clock() {
 // Test-only barriers identify the exact point after preparation and before its
 // generation check. The production route has no hook registry or wait.
 type Hook = Arc<dyn Fn() + Send + Sync>;
-static HOOKS: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, Hook>>> = std::sync::LazyLock::new(Default::default);
+static HOOKS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, Hook>>,
+> = std::sync::LazyLock::new(Default::default);
 pub(super) fn before_finish(app: &Path) {
     let hook = HOOKS.lock().unwrap().get(app).cloned();
-    if let Some(hook) = hook { hook(); }
+    if let Some(hook) = hook {
+        hook();
+    }
 }
 #[tokio::test]
 async fn compose_prep_pending_account_or_alias_change_never_publishes_a_result() {
     for mutate_accounts in [true, false] {
-        let (_dir,s)=seed();
-        let started=Arc::new(tokio::sync::Notify::new());
-        let (release, wait)=std::sync::mpsc::channel();let wait=std::sync::Mutex::new(wait);
-        let notify=started.clone();
-        HOOKS.lock().unwrap().insert(s.app_dir.clone(),Arc::new(move||{notify.notify_one();wait.lock().unwrap().recv().unwrap();}));
-        let state=s.clone();let pending=tokio::spawn(async move{rpc(&state,"compose.reply_context",msg()).await});
-        tokio::time::timeout(std::time::Duration::from_secs(2),started.notified()).await.unwrap();
+        let (_dir, s) = seed();
+        let started = Arc::new(tokio::sync::Notify::new());
+        let (release, wait) = std::sync::mpsc::channel();
+        let wait = std::sync::Mutex::new(wait);
+        let notify = started.clone();
+        HOOKS.lock().unwrap().insert(
+            s.app_dir.clone(),
+            Arc::new(move || {
+                notify.notify_one();
+                wait.lock().unwrap().recv().unwrap();
+            }),
+        );
+        let state = s.clone();
+        let pending =
+            tokio::spawn(async move { rpc(&state, "compose.reply_context", msg()).await });
+        tokio::time::timeout(std::time::Duration::from_secs(2), started.notified())
+            .await
+            .unwrap();
         if mutate_accounts {
-            std::fs::write(s.app_dir.join("accounts.json"),json!([{"id":"one","email":"changed@example.test"}]).to_string()).unwrap();
+            std::fs::write(
+                s.app_dir.join("accounts.json"),
+                json!([{"id":"one","email":"changed@example.test"}]).to_string(),
+            )
+            .unwrap();
         } else {
             SettingsDoc::shared(&s.app_dir).patch(&json!({"mailvault-settings":{"state":{"aliases":{"one":[{"address":"new@example.test"}]}}}}),None).unwrap();
         }
         release.send(()).unwrap();
-        let result=pending.await.unwrap();
+        let result = pending.await.unwrap();
         HOOKS.lock().unwrap().remove(&s.app_dir);
-        assert_eq!(result.unwrap_err(),"errors.settingsConflict");
+        assert_eq!(result.unwrap_err(), "errors.settingsConflict");
     }
 }
 
 #[tokio::test]
 async fn compose_prep_distinguishes_empty_accounts_from_unreadable_records() {
-    let (_dir,s)=seed();
-    std::fs::write(s.app_dir.join("accounts.json"),"[]").unwrap();
-    assert_eq!(rpc(&s,"compose.check",chk()).await.unwrap()["key"],"compose.noAccountSelected");
+    let (_dir, s) = seed();
+    std::fs::write(s.app_dir.join("accounts.json"), "[]").unwrap();
+    assert_eq!(
+        rpc(&s, "compose.check", chk()).await.unwrap()["key"],
+        "compose.noAccountSelected"
+    );
     std::fs::remove_file(s.app_dir.join("accounts.json")).unwrap();
-    assert_eq!(rpc(&s,"compose.check",chk()).await.unwrap()["key"],"compose.noAccountSelected");
+    assert_eq!(
+        rpc(&s, "compose.check", chk()).await.unwrap()["key"],
+        "compose.noAccountSelected"
+    );
     std::fs::create_dir(s.app_dir.join("accounts.json")).unwrap();
-    assert_eq!(rpc(&s,"compose.check",chk()).await.unwrap_err(),"compose.preparationUnavailable");
+    assert_eq!(
+        rpc(&s, "compose.check", chk()).await.unwrap_err(),
+        "compose.preparationUnavailable"
+    );
 }
