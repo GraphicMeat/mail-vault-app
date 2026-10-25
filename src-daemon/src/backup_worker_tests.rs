@@ -819,6 +819,7 @@ async fn backup_worker_limit_cap_change_rechecks_current_entitlement() {
         s["requests"]["limit-cap"]["status"] == "limit_reached"
     })
     .await;
+    due_fence_schedule(&r.state, 2);
     patch(
         &r.state,
         json!({"billingProfile":{"hasSubscription":false,"status":"inactive"},"transferLimits":{"one":{"warningEnabled":false}}}),
@@ -2946,4 +2947,202 @@ async fn backup_worker_snapshot_recovery_decides_seven_unsettled_before_compacti
         (2..7).map(|n| NOW + n).collect::<Vec<_>>()
     );
     assert_eq!(read_ledger(&state.app_dir).unwrap().outcomes.len(), 5);
+}
+
+
+// An AccessIdle reply proves the real consumer and its asynchronous scans have
+// settled. A provider entry fails immediately instead of hiding behind a timeout.
+async fn due_fence_idle(r: &mut Rig) {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            assert!(r.calls.try_recv().is_err(), "provider entered before the postponed due time");
+            let (done, idle) = oneshot::channel();
+            r.state.backup_worker.tx.get().unwrap().send(Cmd::AccessIdle { done }).unwrap();
+            if idle.await.unwrap() {
+                assert!(r.calls.try_recv().is_err(), "provider entered before the postponed due time");
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("due-fence traffic never settled");
+}
+fn due_fence_schedule(state: &Arc<DaemonState>, hours: i64) {
+    // Nonzero lastBackupTime: one hour is due now, two hours is due at NOW+1h.
+    patch(state, json!({"backupState":{"one":{"lastBackupTime":NOW - 3_600_000}},"backupGlobalConfig":{"interval":"hourly","hourlyInterval":hours}}));
+}
+async fn due_fence_wakes(r: &mut Rig) {
+    for sequence in 1..=2 {
+        let mut o = observation("main", "due-fence", sequence, if sequence == 1 { "attach" } else { "update" }, NOW - 180_000, false);
+        o["observedAt"] = json!(r.state.clock.now_ms());
+        rpc(&r.state, "backup.context", o).await;
+        wake(&r.state);
+        due_fence_idle(r).await;
+    }
+}
+async fn due_fence_eligible(r: &mut Rig, run: &Value) {
+    r.state.clock.set(NOW + 3_600_000 - 1);
+    wake(&r.state);
+    due_fence_idle(r).await;
+    r.state.clock.set(NOW + 3_600_000);
+    wake(&r.state);
+    let c = call(r).await;
+    assert_eq!(r.state.backup_worker.status()["active"]["runId"], *run);
+    wake(&r.state);
+    paused_quiescent(&r.state).await;
+    assert!(r.calls.try_recv().is_err(), "duplicate eligible provider entry");
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    due_fence_idle(r).await;
+    assert_eq!(settings(&r.state)["backupHistory"]["one"].as_array().unwrap().len(), 1);
+}
+#[tokio::test]
+async fn backup_worker_due_fence_survives_pending_policy_wakes() {
+    let mut r = rig();
+    let (entered, waiting) = oneshot::channel();
+    *r.state.backup_worker.foreground_wait_entered.lock().unwrap() = Some(entered);
+    crate::search_index::note_foreground(&r.state.search_index);
+    enabled(&r.state);
+    due_fence_schedule(&r.state, 1);
+    automatic(&r.state, false);
+    tokio::time::timeout(Duration::from_secs(3), waiting).await.unwrap().unwrap();
+    crate::search_index::note_foreground(&r.state.search_index);
+    let run = r.state.backup_worker.status()["active"]["runId"].clone();
+    due_fence_schedule(&r.state, 2);
+    due_fence_idle(&mut r).await;
+    assert_eq!(r.state.backup_worker.status()["queue"][0]["stage"], "pending_policy");
+    due_fence_wakes(&mut r).await;
+    due_fence_eligible(&mut r, &run).await;
+    finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_due_fence_survives_competing_claim() {
+    let mut r = rig();
+    let guard = adapter::claim_run(&r.state, "one").unwrap();
+    enabled(&r.state);
+    due_fence_schedule(&r.state, 1);
+    automatic(&r.state, false);
+    due_fence_idle(&mut r).await;
+    let pending = r.state.backup_worker.status()["queue"][0].clone();
+    assert_eq!(pending["stage"], "pending_claim");
+    due_fence_schedule(&r.state, 2);
+    drop(guard);
+    due_fence_wakes(&mut r).await;
+    due_fence_eligible(&mut r, &pending["runId"]).await;
+    finish(r).await;
+}
+async fn due_fence_renewal(postpone: bool) {
+    let mut r = rig();
+    rpc(&r.state, "backup.context", observation("main", "renewal", 1, "attach", NOW - 180_000, false)).await;
+    enabled(&r.state);
+    due_fence_schedule(&r.state, 1);
+    wake(&r.state);
+    let first = call(&mut r).await;
+    let active = r.state.backup_worker.status()["active"].clone();
+    let mut offline = observation("main", "renewal", 2, "update", NOW - 180_000, false);
+    offline["online"] = json!(false);
+    rpc(&r.state, "backup.context", offline).await;
+    assert!(first.ctx.cancel.load(SeqCst));
+    assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));
+    if postpone { due_fence_schedule(&r.state, 2); }
+    wake(&r.state);
+    paused_quiescent(&r.state).await;
+    assert!(r.calls.try_recv().is_err(), "renewal overlapped undrained provider");
+    let mut cancelled = result(0);
+    cancelled.success = false;
+    cancelled.cancelled = true;
+    first.reply.send(Ok(cancelled)).ok().unwrap();
+    due_fence_idle(&mut r).await;
+    let renewed = r.state.backup_worker.status()["queue"][0].clone();
+    assert_eq!(renewed["runId"], active["runId"]);
+    assert_ne!(renewed["executionId"], active["executionId"]);
+    assert_eq!(renewed["retries"], 0);
+    assert_eq!(renewed["hold"], false);
+    assert!(!r.state.backup_runs.lock().unwrap().contains_key("one"));
+    rpc(&r.state, "backup.context", observation("main", "renewal", 3, "update", NOW - 180_000, false)).await;
+    // Existing native network recovery settles for12s before admission.
+    r.state.clock.set(NOW + 12_000);
+    wake(&r.state);
+    if postpone {
+        due_fence_idle(&mut r).await;
+        due_fence_wakes(&mut r).await;
+        due_fence_eligible(&mut r, &active["runId"]).await;
+    } else {
+        let resumed = call(&mut r).await;
+        assert_eq!(r.state.backup_worker.status()["active"]["runId"], active["runId"]);
+        assert_ne!(r.state.backup_worker.status()["active"]["executionId"], active["executionId"]);
+        resumed.reply.send(Ok(result(1))).ok().unwrap();
+        due_fence_idle(&mut r).await;
+    }
+    finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_due_fence_rechecks_drained_first_attempt() {
+    due_fence_renewal(true).await;
+}
+#[tokio::test]
+async fn backup_worker_due_fence_preserves_still_due_renewal() {
+    due_fence_renewal(false).await;
+}
+#[tokio::test]
+async fn backup_worker_due_fence_preserves_manual_and_retry() {
+    let mut r = rig();
+    enabled(&r.state);
+    due_fence_schedule(&r.state, 2);
+    manual(&r.state, "one", "future-manual").await;
+    let c = call(&mut r).await;
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    due_fence_idle(&mut r).await;
+    due_fence_schedule(&r.state, 1);
+    wake(&r.state);
+    let first = call(&mut r).await;
+    let run = r.state.backup_worker.status()["active"]["runId"].clone();
+    due_fence_schedule(&r.state, 2);
+    first.reply.send(Err("due-fence retry".into())).ok().unwrap();
+    due_fence_idle(&mut r).await;
+    r.state.clock.set(NOW + 29_999);
+    wake(&r.state);
+    due_fence_idle(&mut r).await;
+    r.state.clock.set(NOW + 30_000);
+    wake(&r.state);
+    let retry = call(&mut r).await;
+    assert_eq!(r.state.backup_worker.status()["active"]["runId"], run);
+    retry.reply.send(Ok(result(1))).ok().unwrap();
+    due_fence_idle(&mut r).await;
+    finish(r).await;
+}
+
+#[tokio::test]
+async fn backup_worker_due_fence_preserves_limit_deadline_after_pending() {
+    let mut r = rig();
+    enabled(&r.state);
+    due_fence_schedule(&r.state, 2);
+    patch(&r.state, json!({"transferLimits":{"one":{"capEnabled":true,"dailyDownLimitBytes":1024}}}));
+    manual(&r.state, "one", "future-limit").await;
+    let first = call(&mut r).await;
+    let mut terminal = frame(&first.ctx);
+    terminal.cancelled = true;
+    terminal.stop_reason = Some("limit_reached");
+    terminal.resume_after_ms = Some((NOW + 10_000) as u64);
+    (first.ctx.on_progress)(terminal);
+    let mut limited = result(0);
+    limited.success = false;
+    limited.cancelled = true;
+    first.reply.send(Ok(limited)).ok().unwrap();
+    due_fence_idle(&mut r).await;
+    let held = r.state.backup_worker.status()["queue"][0].clone();
+    assert_eq!(held["hold"], true);
+    patch(&r.state, json!({"billingProfile":{"hasSubscription":false,"status":"inactive"}}));
+    wake(&r.state);
+    due_fence_idle(&mut r).await;
+    assert_eq!(r.state.backup_worker.status()["queue"][0]["stage"], "pending_policy");
+    patch(&r.state, json!({"billingProfile":{"hasSubscription":true,"status":"active"}}));
+    r.state.clock.set(NOW + 9_999);
+    wake(&r.state);
+    due_fence_idle(&mut r).await;
+    r.state.clock.set(NOW + 10_000);
+    wake(&r.state);
+    let resumed = call(&mut r).await;
+    assert_eq!(r.state.backup_worker.status()["active"]["runId"], held["runId"]);
+    resumed.reply.send(Ok(result(1))).ok().unwrap();
+    due_fence_idle(&mut r).await;
+    finish(r).await;
 }
