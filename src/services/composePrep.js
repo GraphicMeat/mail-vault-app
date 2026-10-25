@@ -34,6 +34,7 @@ export async function prepareCompose(input, { acknowledge = () => flushSafeStora
     }
     if (!isCurrent() || result?.requestId !== requestId || result.settingsVersion !== version) throw unavailable();
     if (frozen.kind === 'message') {
+      if (result.accountId !== null && typeof result.accountId !== 'string') throw unavailable();
       const fields = ['to', 'cc', 'bcc', 'subject', 'inReplyTo', 'references', 'quotedHeaderHtml', 'fullQuotedBodyHtml', 'quotedHtml', 'contextHtml', 'fullOriginalHtml'];
       if (fields.some(key => typeof result[key] !== 'string') || result.bcc !== '' || typeof result.bodyAvailable !== 'boolean') throw unavailable();
       if (frozen.accountId && result.accountId !== frozen.accountId) {
@@ -42,6 +43,7 @@ export async function prepareCompose(input, { acknowledge = () => flushSafeStora
     } else if (frozen.kind === 'mailto') {
       const data = result.initialData;
       if (data !== null && (!data || data._prefill !== true || ['to', 'cc', 'bcc', 'subject', 'body'].some(key => typeof data[key] !== 'string'))) throw unavailable();
+      if (data && data._accountId !== undefined && typeof data._accountId !== 'string') throw unavailable();
       if (frozen.accountId && data && data._accountId !== frozen.accountId) throw unavailable();
     } else throw unavailable();
     return result;

@@ -79,10 +79,6 @@ function AttachmentPreview({ attachment, onRemove }) {
   );
 }
 
-// buildQuoteBlocks also feeds App's `openCompose` _fillFrom patch for a
-// minimized window (no live editor there to react to a fuller `replyTo`) —
-// see src/utils/replyQuote.js.
-
 // The message a reply answers shows beside it as the reading pane would show
 // it (ThreadView, read-only). The detached compose window and the pop-out get
 // the original as HTML over IPC and show that one body (OriginalFrame).
@@ -418,9 +414,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const replyTemplateApplied = useRef(false);
   const replyTemplateCurrentBody = useRef('');
   const initializedRef = useRef(false);
-  // A radial reply opens on the header alone, before resolveMessageBody has
-  // run (RowQuickActions.jsx) — true here already means the body was there
-  // from the start, so the fill-in effect below never has anything to do.
+  // Accepted full quote content survives a failed/header-only later fill.
   const quotedBodyReadyRef = useRef(Boolean(initialData?._quotedHtml));
   const needsPreparation = Boolean(replyTo || initialData?._preparationPending);
   const [preparationReady, setPreparationReady] = useState(!needsPreparation);
@@ -432,6 +426,13 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const preparedContext = useRef(null);
   const preparationWork = useRef({ running: false, desired: null });
   const preparationSource = replyTo || (initialData?._preparationPending ? initialData._replyTo : null);
+  const preparationLocation = useRef(resolveEmailLocation(preparationSource, useMailStore.getState()));
+  const preparationOriginalKey = preparationSource && JSON.stringify([
+    preparationSource._accountId || preparationSource._srcAccountId || preparationLocation.current?.accountId || '',
+    preparationSource._mailbox || preparationLocation.current?.mailbox || '',
+    preparationSource.uid ?? preparationSource.messageId ?? preparationSource.message_id ?? null,
+    preparationSource._selectedQuoteHtml || '',
+  ]);
   const identityGeneration = preparationIdentity({ accountId: selectedAccountId, fromAddress: composeFrom,
     accounts, aliases: aliasesByAccount, sendAsAddresses });
   const currentPreparation = useRef(null);
@@ -564,7 +565,9 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   useEffect(() => {
     if (!preparationSource || !['reply', 'replyAll', 'forward'].includes(mode)) return;
     const state = preparationWork.current;
-    const captured = { source: preparationSource, mode, identityGeneration };
+    const captured = { source: preparationSource, mode, identityGeneration, originalKey: preparationOriginalKey };
+    const quoteOnly = generatedOnce.current && preparedContext.current?.identityGeneration === identityGeneration
+      && preparedContext.current?.mode === mode && preparedContext.current?.originalKey === preparationOriginalKey;
     const request = { cancelled: false };
     const liveIdentity = () => {
       const settings = useSettingsStore.getState();
@@ -578,8 +581,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       && currentPreparation.current.mode === captured.mode
       && currentPreparation.current.identityGeneration === captured.identityGeneration
       && liveIdentity() === captured.identityGeneration;
-    preparationReadyRef.current = false;
-    setPreparationReady(false);
+    // A quote-only fill cannot revoke accepted recipient/thread defaults.
+    // A changed sender, original identity or selected excerpt still fences Send.
+    if (quoteOnly) preparedContext.current = captured;
+    else { preparationReadyRef.current = false; setPreparationReady(false); }
     setPreparationFailed(false);
     const canUsePrepared = (preparedQuote?.source === preparationSource || preparedQuote?.source === replyToProp) && preparedQuote.identityGeneration === identityGeneration;
     request.run = async () => {
