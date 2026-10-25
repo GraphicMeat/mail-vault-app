@@ -1464,13 +1464,17 @@ mod tests {
             let pending = wait_drained(&state).await;
             assert!(server.commands().iter().any(|command| command.contains("BODY.PEEK[]")), "must reach actual archive IO");
             let mut archive = Vec::new();
-            while let Ok(line) = frames.try_recv() {
+            let terminal = loop {
+                let line = tokio::time::timeout(Duration::from_secs(2), frames.recv()).await.unwrap().unwrap();
                 let frame: Value = serde_json::from_str(&line).unwrap();
                 if frame["params"]["name"] == "archive-progress" {
                     let payload = &frame["params"]["payload"];
                     archive.push(json!({"active":payload["active"], "errors":payload["errors"], "bandwidthLimited":payload["bandwidthLimited"]}));
                 }
-            }
+                if frame["params"]["name"] == "bulk-progress" && frame["params"]["payload"]["finished"] == true {
+                    break frame["params"]["payload"].clone();
+                }
+            };
             assert_eq!(archive.last(), Some(&json!({"active":false,"errors":1,"bandwidthLimited":limited})), "actual final archive result must reach the adapter");
             // Counts describe the current phase. Ordinary archive errors survive
             // as diagnostics while entering delete resets that phase's count.
@@ -1479,6 +1483,10 @@ mod tests {
             assert_eq!(pending["worker"]["errors"], errors);
             assert_eq!(pending["lastError"], expected, "typed archive diagnostic");
             assert_eq!(pending["worker"]["lastError"], expected);
+            assert_eq!(terminal["operationId"], "download-limit");
+            assert_eq!(terminal["attemptId"], pending["attemptId"]);
+            assert_eq!(terminal["operation"]["lastError"], expected);
+            assert_eq!(terminal["operation"]["status"], status);
             assert!(!server.commands().iter().any(|command| command.contains("UID STORE")), "unarchived mail stays on server");
             let snapshot = handle_request_for_test(&state, "bulk.status", json!({
                 "operationId":"download-limit", "attemptId":"download-attempt",
