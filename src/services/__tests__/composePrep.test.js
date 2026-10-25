@@ -59,3 +59,8 @@ it('preserves every frozen supplemental large-input digest through the actual ad
     }
   }
 });
+it('refuses malformed result account types before callers can apply defaults', async () => {
+  const input = messagePreparation({ replyTo, mode: 'reply' });
+  send.mockImplementation(async (_, p) => ({ ...prepareDemoCompose(p, { accounts, values: {}, version: 4 }), accountId: 42 }));
+  await expect(prepareCompose(input, { acknowledge: async () => 4 })).rejects.toThrow('compose.preparationUnavailable');
+});
