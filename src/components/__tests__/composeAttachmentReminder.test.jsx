@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent, act } from '@testing-library/react';
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
@@ -79,6 +79,9 @@ vi.mock('../../stores/settingsStore', () => {
   };
 });
 
+const { checkCompose } = vi.hoisted(() => ({ checkCompose: vi.fn() }));
+vi.mock('../../services/composePrep', async original => ({ ...(await original()), checkCompose }));
+const { checkDemoCompose } = await import('../../demo/composePrep');
 const { ComposeModal } = await import('../ComposeModal');
 
 function open(body, extra = {}) {
@@ -95,6 +98,9 @@ function open(body, extra = {}) {
 
 beforeEach(() => {
   queueSend.mockClear();
+  checkCompose.mockImplementation(async input => checkDemoCompose({ ...input, requestId: 'check', expectedSettingsVersion: 1 }, {
+    accounts: mail.accounts, values: { 'mailvault-settings': { state: { ...settings, billingProfile: premium.on ? { hasSubscription: true, status: 'active' } : null } } }, version: 1, now: Date.now(),
+  }));
   mail.accounts = [account];
   premium.on = true;
   settings.attachmentReminder = true;
@@ -199,5 +205,29 @@ describe('current compose validation order', () => {
     const { t } = await import('../../i18n');
     expect(await screen.findByText(t('scheduled.picker.pastTime'))).toBeTruthy();
     expect(queueSend).not.toHaveBeenCalled();
+  });
+});
+
+describe('checked send attempt lifetime', () => {
+  it('does not send while the native check is pending or after an edit', async () => {
+    let finish;
+    checkCompose.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    open('<p>Complete body</p>');
+    fireEvent.submit(screen.getByTestId('compose-send').closest('form'));
+    await act(async () => {});
+    expect(queueSend).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId('compose-subject'), { target: { value: 'Changed' } });
+    await act(async () => finish({ kind: 'ready', route: { delay: null } }));
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(screen.getByTestId('compose-subject').value).toBe('Changed');
+  });
+  it('claims form and shortcut submission synchronously', async () => {
+    open('<p>Complete body</p>');
+    const form = screen.getByTestId('compose-send').closest('form');
+    await act(async () => {
+      fireEvent.submit(form);
+      fireEvent.keyDown(form, { key: 'Enter', shiftKey: true });
+    });
+    await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
   });
 });

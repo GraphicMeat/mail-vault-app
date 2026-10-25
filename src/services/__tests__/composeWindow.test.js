@@ -287,3 +287,29 @@ it('pushes authoritative accounts and fences preparation ACK after child close',
   owner.recover(213); release(9); await Promise.resolve(); await Promise.resolve();
   expect(emitTo.mock.calls.some(([, , m]) => m.requestId === 'prep' && m.type === 'ack')).toBe(false);
 });
+
+describe('checked detached admission', () => {
+  it('never queues or closes on a final invalid outcome', async () => {
+    const open = vi.fn().mockResolvedValue('checked');
+    const emitTo = vi.fn().mockResolvedValue();
+    const queueSend = vi.fn();
+    const remove = vi.fn();
+    const account = { id: 'account', email: 'me@example.test' };
+    const checkPreparation = vi.fn().mockResolvedValueOnce({ kind: 'ready', settingsVersion: 4, route: { delay: null } })
+      .mockResolvedValueOnce({ kind: 'invalid', settingsVersion: 4, key: 'scheduled.picker.pastTime' });
+    const owner = createComposeWindowOwner({ open, emitTo, update: vi.fn(), close: vi.fn(), remove, queueSend,
+      acknowledgePreparation: async () => 4, checkPreparation, sendContext: () => ({ account, senderSettings: { displayName: 'Me' } }) });
+    const handoff = owner.detach({ id: 99, mode: 'new', snapshot: snapshot() });
+    await vi.waitFor(() => expect(open).toHaveBeenCalled());
+    const token = open.mock.calls[0][0].token;
+    const receive = (type, payload, requestId) => owner.receive({ composeId: '99', token, type, payload, requestId });
+    receive('ready', null, 'ready'); receive('initialized', null, 'init'); await handoff;
+    receive('prepare-settings', { purpose: 'send-check', attempt: 1, editorGeneration: 1, snapshot: snapshot(), authoredBodyText: 'Body', timeZone: 'UTC' }, 'check');
+    await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith('checked', 'compose-window-message', expect.objectContaining({ requestId: 'check', type: 'ack' })));
+    receive('send', { attempt: 1, editorGeneration: 1 }, 'send');
+    await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith('checked', 'compose-window-message', expect.objectContaining({ requestId: 'send' })));
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(emitTo.mock.calls.some(([, , m]) => m.type === 'accepted')).toBe(false);
+  });
+});
