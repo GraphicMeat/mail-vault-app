@@ -665,7 +665,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
       )}
 
       {activeTab === 'billing' && (
-        <BillingSettings onNavigate={handleTabChange} />
+        <BillingSettings onNavigate={handleTabChange} onReportBug={onReportBug} />
       )}
 
       {activeTab === 'security' && (

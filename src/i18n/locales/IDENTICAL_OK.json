@@ -145,6 +145,7 @@
   "settings.behavior.minutes4",
   "settings.behavior.minutes5",
   "settings.billing.premium",
+  "settings.billing.trialIssuesNo",
   "settings.cleanup.date",
   "settings.cleanup.newsletter",
   "settings.cleanup.notification",

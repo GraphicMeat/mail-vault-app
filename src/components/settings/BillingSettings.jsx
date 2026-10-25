@@ -12,6 +12,7 @@ import { notify } from '../../stores/focusStore';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { PremiumFeatureList } from './PremiumFeatureList';
+import { TrialFeedbackPrompt, isTrialing } from './TrialFeedbackPrompt';
 import { Toast } from '../Toast';
 import { formatDateLong, formatTime } from '../../utils/dateFormat';
 import { pricingRecord } from '../../utils/pricing';
@@ -122,7 +123,7 @@ function timeAgo(dateStr) {
   return t('settings.billing.dAgo', { Math: Math.floor(hrs / 24) });
 }
 
-export function BillingSettings({ onNavigate }) {
+export function BillingSettings({ onNavigate, onReportBug }) {
   const t = useT();
   const pa = usePrivateAttr();
   const billingEmail = useSettingsStore(s => s.billingEmail);
@@ -686,6 +687,9 @@ export function BillingSettings({ onNavigate }) {
           {t('settings.billing.starShareUnlock')}
         </button>
       )}
+
+      {/* Mid-trial: ask before they cancel over something we could fix. */}
+      {isTrialing(billingProfile) && <TrialFeedbackPrompt onReportBug={onReportBug} />}
 
       {/* Manage Billing — the Stripe portal can change or restart a plan, which
           makes it a purchase mechanism App Review will not accept in-app. */}
