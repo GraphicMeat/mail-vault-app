@@ -319,6 +319,20 @@ pub(crate) fn start(state: Arc<DaemonState>) {
         tracing::warn!("backup worker did not start");
     }
 }
+fn next_queued_deadline(state: &Arc<DaemonState>, ledger: &Ledger) -> Option<tokio::time::Instant> {
+    if ledger.active.is_some() { return None; }
+    let facts = state.backup_worker.facts.lock().unwrap().clone();
+    let now = state.clock.now_ms();
+    if !facts.automatic || facts.paused || facts.loading || now.saturating_sub(facts.last_activity) < 180_000 { return None; }
+    ledger.queue.iter()
+        // Past deadlines blocked by policy/access/foreign claims use ordinary
+        // maintenance or control messages, never a zero-duration timer loop.
+        .filter(|intent| !intent.cancel_requested && intent.not_before > now)
+        .map(|intent| intent.not_before)
+        .min()
+        .and_then(|at| tokio::time::Instant::now().checked_add(Duration::from_millis(at.saturating_sub(now) as u64)))
+}
+
 async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, services: Services) {
     let path = state.app_dir.clone();
     let mut ledger = match common::blocking(move || read_ledger(&path)).await {
@@ -376,7 +390,20 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
     #[cfg(test)] let mut finished_barrier = None;
     let _ = state.backup_worker.tx.get().unwrap().send(Cmd::Wake);
     loop {
-        let (cmd, scan) = tokio::select! { cmd=rx.recv()=>match cmd {Some(cmd)=>(cmd,false),None=>return}, _=tick.tick()=>(Cmd::Wake,true) };
+        let deadline = next_queued_deadline(&state, &ledger);
+        let deadline_wake = async {
+            match deadline {
+                Some(at) => tokio::time::sleep_until(at).await,
+                None => std::future::pending::<()>().await,
+            }
+        };
+        // Recreated after every command/publication: cancel/stop and changed
+        // gates cannot leave a detached retry callback or stale deadline.
+        let (cmd, scan) = tokio::select! {
+            cmd=rx.recv()=>match cmd {Some(cmd)=>(cmd,false),None=>return},
+            _=tick.tick()=>(Cmd::Wake,true),
+            _=deadline_wake=>(Cmd::Wake,true),
+        };
         let mut scan = scan;
         match cmd {
             #[cfg(test)] Cmd::Probe { done } => {let _ = done.send(());}
