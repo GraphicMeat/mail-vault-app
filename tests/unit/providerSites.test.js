@@ -15,6 +15,7 @@ const ALLOWED = {
   // Names a grant's transport for its fingerprint (oauth_tokens.rs); no mail branch.
   'src/services/oauthTokenSync.js': 'grant fingerprint, not a mail branch',
   'src/components/ComposeModal.jsx': IMAP_PATH,
+  'src/App.jsx': 'Detached compose admission uses the same follow-up reminder policy; JMAP takes the IMAP path',
   'src/components/settings/MboxImportDialog.jsx': IMAP_PATH,
   'src/components/settings/MigrationSettings.jsx': IMAP_PATH,
   'src/components/settings/VaultGapRow.jsx': IMAP_PATH,

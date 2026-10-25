@@ -34,6 +34,7 @@ export function ComposeWindow() {
   const [bridgeError, setBridgeError] = useState(null);
   const latest = useRef(null);
   const snapshotRef = useRef(null);
+  const sendInvalidationRef = useRef(null);
   const closing = useRef(false);
   const pending = useRef(new Map());
   const operationPending = useRef(false);
@@ -183,6 +184,7 @@ export function ComposeWindow() {
         event.preventDefault();
         if (closing.current || operationPending.current) return;
         closing.current = true;
+        sendInvalidationRef.current?.();
         try {
           const snapshot = await snapshotRef.current?.() || latest.current;
           latest.current = snapshot;
@@ -214,6 +216,7 @@ export function ComposeWindow() {
 
   const close = useCallback(async (type, explicitSnapshot) => {
     closing.current = true;
+    sendInvalidationRef.current?.();
     try {
       const snapshot = explicitSnapshot || await snapshotRef.current?.() || latest.current;
       latest.current = snapshot;
@@ -242,6 +245,7 @@ export function ComposeWindow() {
         void request('snapshot', snapshot).catch(error => setBridgeError(tErr(error)));
       }}
       snapshotRef={snapshotRef}
+      sendInvalidationRef={sendInvalidationRef}
       onMinimize={snapshot => { latest.current = snapshot; void close('minimize', snapshot).catch(() => {}); }}
       // Back into the main window, open there rather than as a bubble. The
       // promise is handed back so a refused handoff unfreezes this editor.

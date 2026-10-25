@@ -28,6 +28,10 @@ const { invoke, sendStaged, stageOutgoing, preparation } = vi.hoisted(() => ({
 
 vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
 vi.mock('../../services/transport', () => ({ send: async (method, params) => {
+  if (method === 'compose.check') {
+    const { checkDemoCompose } = await import('../../demo/composePrep');
+    return checkDemoCompose(params, { accounts: mail.accounts, values: { 'mailvault-settings': { state: settings } }, version: 0, now: Date.now() });
+  }
   if (method !== 'compose.reply_context') return;
   preparation.calls.push(params);
   if (preparation.gate) await preparation.gate;

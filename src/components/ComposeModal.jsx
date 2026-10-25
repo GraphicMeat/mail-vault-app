@@ -102,7 +102,7 @@ function useSendState(initial, invalidate) {
   return [value, change];
 }
 
-export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup, acknowledgePreparation, prepareSendCheck, finalizeSendCheck, invalidateSendCheck, preparedQuote = null }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup, acknowledgePreparation, prepareSendCheck, finalizeSendCheck, invalidateSendCheck, sendInvalidationRef, preparedQuote = null }) {
   const sendGeneration = useRef(0);
   const submission = useRef(null);
   const confirmation = useRef(null);
@@ -114,6 +114,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     confirmation.current = null;
     invalidateCallback.current?.(sendGeneration.current);
   }, []);
+  if (sendInvalidationRef) sendInvalidationRef.current = invalidate;
   const t = useT();
   const pa = usePrivateAttr();
   const privateInput = usePrivateInputClass();
@@ -1321,6 +1322,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // Save editor state before minimizing so it persists across unmount/remount
   const handleMinimize = async () => {
     if (detaching || terminalIntentRef.current) return;
+    invalidate();
     const snapshot = snapshotRef?.current ? await snapshotRef.current() : latestSnapshotRef.current();
     if (onSaveState) {
       onSaveState(snapshot);
@@ -2161,7 +2163,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       {/* Mentioned an attachment, attached nothing. */}
       <Dialog
         open={showAttachmentReminder}
-        onClose={() => { confirmation.current = null; setShowAttachmentReminder(false); }}
+        onClose={() => { invalidate(); setShowAttachmentReminder(false); }}
         role="alertdialog"
         size="sm"
         panelBg="bg-mail-surface"
@@ -2175,7 +2177,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               {t('compose.attachmentReminder.sendAnyway')}
             </Button>
             <Button variant="primary" data-autofocus data-testid="compose-attachment-reminder-attach"
-              onClick={() => { confirmation.current = null; setShowAttachmentReminder(false); fileInputRef.current?.click(); }}>
+              onClick={() => { invalidate(); setShowAttachmentReminder(false); fileInputRef.current?.click(); }}>
               {t('compose.attachmentReminder.attach')}
             </Button>
           </div>

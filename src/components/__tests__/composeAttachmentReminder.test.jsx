@@ -103,7 +103,7 @@ function open(body, extra = {}) {
 beforeEach(() => {
   queueSend.mockClear();
   checkCompose.mockReset();
-  checkCompose.mockImplementation(async input => checkDemoCompose({ ...input, requestId: 'check', expectedSettingsVersion: 1 }, {
+  checkCompose.mockImplementation(async input => checkDemoCompose({ ...input, scheduleDraft: input.scheduleDraft && { localTime: input.scheduleDraft.localTime, tz: input.scheduleDraft.tz }, requestId: 'check', expectedSettingsVersion: 1 }, {
     accounts: mail.accounts, values: { 'mailvault-settings': { state: { ...settings, billingProfile: premium.on ? { hasSubscription: true, status: 'active' } : null } } }, version: 1, now: Date.now(),
   }));
   mail.accounts = [account];
@@ -112,7 +112,7 @@ beforeEach(() => {
   settings.displayNames = {};
   settings.sendDelay = 0;
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('attachment reminder at send', () => {
   it('asks before sending a message that mentions an attachment and has none', async () => {
@@ -297,7 +297,8 @@ describe('external authority and save boundaries', () => {
   it('waits the existing save without recapturing or checking changed content', async () => {
     const { saveLocalDraft } = await import('../../services/localDrafts');
     let finish;
-    saveLocalDraft.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { savedDraftReply } = await import('../../test/draftReply');
+    saveLocalDraft.mockImplementationOnce(request => new Promise(resolve => { finish = () => resolve(savedDraftReply(request)); }));
     open('<p>Before save</p>');
     await waitFor(() => expect(finish).toBeTypeOf('function'));
     fireEvent.click(screen.getByTestId('compose-send'));
@@ -319,4 +320,46 @@ describe('external authority and save boundaries', () => {
     expect(sent._draftRevision).toBe(checkCompose.mock.calls[0][0].revision);
     expect(queueSend.mock.calls[0][2]).toBe(300);
   });
+});
+
+it('invalidates a pending check synchronously when minimizing', async () => {
+  let finish;
+  checkCompose.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  open('<p>Retain while minimizing</p>');
+  fireEvent.click(screen.getByTestId('compose-send'));
+  await waitFor(() => expect(finish).toBeTypeOf('function'));
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await act(async () => finish({ kind: 'ready', route: { delay: null } }));
+  expect(queueSend).not.toHaveBeenCalled();
+});
+
+it.each(['body', 'attachment'])('immediately retires a pending check on a %s edit', async field => {
+  let finish;
+  checkCompose.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  open('<p>Body before check</p>', { attachments: [{ filename: 'keep.bin', content: 'AA==' }] });
+  fireEvent.click(screen.getByTestId('compose-send'));
+  await waitFor(() => expect(finish).toBeTypeOf('function'));
+  if (field === 'body') fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>New body</p>' } });
+  else fireEvent.click(screen.getByTitle('Remove attachment'));
+  await act(async () => finish({ kind: 'ready', route: { delay: null } }));
+  expect(queueSend).not.toHaveBeenCalled();
+});
+it('checks expiry only after the pending save settles, with the original issued source', async () => {
+  const { saveLocalDraft } = await import('../../services/localDrafts');
+  const { savedDraftReply } = await import('../../test/draftReply');
+  const now = Date.now();
+  let finish;
+  saveLocalDraft.mockImplementationOnce(request => new Promise(resolve => { finish = () => resolve(savedDraftReply(request)); }));
+  const localTime = new Date(now + 120_000).toISOString().slice(0, 16);
+  open('<p>Saved before expiry</p>', { _sendPlan: { kind: 'at' }, _scheduleDraft: { localTime, tz: 'UTC', tzPicked: true } });
+  await waitFor(() => expect(finish).toBeTypeOf('function'));
+  fireEvent.click(screen.getByTestId('compose-send'));
+  expect(checkCompose).not.toHaveBeenCalled();
+  vi.spyOn(Date, 'now').mockReturnValue(now + 180_000);
+  await act(async () => finish());
+  await waitFor(() => expect(checkCompose).toHaveBeenCalledTimes(1));
+  const { t } = await import('../../i18n');
+  expect(await screen.findByText(t('scheduled.picker.pastTime'))).toBeTruthy();
+  expect(queueSend).not.toHaveBeenCalled();
+  expect(checkCompose.mock.calls[0][0]).toMatchObject({ scheduleDraft: { localTime, tz: 'UTC', tzPicked: true }, sendPlan: { kind: 'at' } });
 });
