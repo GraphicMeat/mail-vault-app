@@ -9,6 +9,8 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = "0.4"
+# Fresh native zone names; same exact version already locked through chrono.
+iana-time-zone = "=0.1.65"
 base64 = "0.22"
 mailparse = "0.15"
 charset = "0.1"
