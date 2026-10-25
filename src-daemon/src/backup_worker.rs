@@ -256,7 +256,9 @@ fn compact_outcomes(ledger: &mut Ledger) {
     let mut seen = HashMap::<String, usize>::new();
     ledger.outcomes.reverse();
     ledger.outcomes.retain(|out| {
-        if !out.applied { return true; }
+        if !out.applied {
+            return true;
+        }
         let count = seen.entry(out.intent.account_id.clone()).or_default();
         *count += 1;
         *count <= 5
@@ -862,7 +864,8 @@ async fn finish_run(
     else {
         return Ok(ledger.clone());
     };
-    let user_cancel = intent.cancel_requested || intent.epoch != state.backup_worker.epoch.load(SeqCst);
+    let user_cancel =
+        intent.cancel_requested || intent.epoch != state.backup_worker.epoch.load(SeqCst);
     if let RunExit::Pending(stage) = exit {
         intent.stage = stage.clone();
         for request in &intent.requests {
@@ -877,7 +880,9 @@ async fn finish_run(
             RunExit::Completed(joined) => {
                 if joined.uncertain {
                     intent.stage = "uncertain".into();
-                    for request in &intent.requests { next.requests.insert(request.clone(), response(&intent)); }
+                    for request in &intent.requests {
+                        next.requests.insert(request.clone(), response(&intent));
+                    }
                     next.active = Some(intent);
                     publish(state, &mut next).await?;
                     return Ok(next);
@@ -892,7 +897,9 @@ async fn finish_run(
                     "limit_reached"
                 } else if stalled {
                     "failed"
-                } else if value.is_some_and(|v| v["cancelled"] == true) || (user_cancel && joined.error.is_some()) {
+                } else if value.is_some_and(|v| v["cancelled"] == true)
+                    || (user_cancel && joined.error.is_some())
+                {
                     "cancelled"
                 } else if joined.error.is_none() && value.is_some_and(|v| v["success"] == true) {
                     "success"
@@ -991,12 +998,7 @@ async fn apply_retained(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result
         settle_requests(&mut next.requests, &next.outcomes[index]);
         publish(state, &mut next).await?;
         *state.backup_worker.execution.lock().unwrap() = None;
-        state
-            .backup_worker
-            .controls
-            .lock()
-            .unwrap()
-            .remove(&run);
+        state.backup_worker.controls.lock().unwrap().remove(&run);
         *ledger = next;
     }
     let live = ledger
@@ -1024,8 +1026,13 @@ fn apply_outcome(
     path: &Path,
     out: &Outcome,
 ) -> Result<Option<mailvault_core::settings_doc::Change>, String> {
-    let provider_cancel_error = out.result.as_ref().and_then(|result| result["error_message"].as_str());
-    if out.status == "missing_account" || (out.status == "cancelled" && provider_cancel_error.is_none()) {
+    let provider_cancel_error = out
+        .result
+        .as_ref()
+        .and_then(|result| result["error_message"].as_str());
+    if out.status == "missing_account"
+        || (out.status == "cancelled" && provider_cancel_error.is_none())
+    {
         return Ok(None);
     }
     let doc = SettingsDoc::shared(path);
@@ -1148,7 +1155,10 @@ async fn admit(
         *ledger = next;
         return Ok(ack);
     }
-    let joining_active = next.active.as_ref().is_some_and(|i| i.account_id == account);
+    let joining_active = next
+        .active
+        .as_ref()
+        .is_some_and(|i| i.account_id == account);
     let found = next
         .active
         .iter_mut()
@@ -1159,7 +1169,9 @@ async fn admit(
         i.requests.push(request.clone());
         i.not_before = 0;
         i.hold = false;
-        if !joining_active { i.stage = "queued".into(); }
+        if !joining_active {
+            i.stage = "queued".into();
+        }
         i.clone()
     } else {
         let mut i = new_intent(state, account.clone(), true);
