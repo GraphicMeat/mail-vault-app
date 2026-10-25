@@ -15,7 +15,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
 const sendNotification = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../../services/api', () => ({ sendNotification }));
@@ -107,5 +107,33 @@ describe('Billing — premium that ends between refreshes', () => {
     expect(sendNotification).not.toHaveBeenCalled();
     expect(useSettingsStore.getState().billingEmail).toBe('butcher@mock.test');
     expect(screen.queryByText(/Premium access ended/i)).toBe(null);
+  });
+});
+
+describe('Billing — the free-trial feedback question', () => {
+  const TRIAL_PROFILE = { ...PREMIUM_PROFILE, status: 'trialing', currentPeriodEnd: '2026-11-10T00:00:00Z' };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSubscriptionStatus.mockResolvedValue(TRIAL_PROFILE);
+    signedInAndStale();
+    useSettingsStore.setState({ billingProfile: TRIAL_PROFILE });
+  });
+  afterEach(cleanup);
+
+  it('asks someone mid-trial whether they are having issues, and Yes reaches the report menu', async () => {
+    const onReportBug = vi.fn();
+    render(<BillingSettings onReportBug={onReportBug} />);
+    await screen.findByTestId('trial-feedback');
+    fireEvent.click(screen.getByTestId('trial-feedback-yes'));
+    fireEvent.click(screen.getByTestId('trial-feedback-report'));
+    expect(onReportBug).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not ask a paying subscriber', async () => {
+    fetchSubscriptionStatus.mockResolvedValue({ ...PREMIUM_PROFILE });
+    useSettingsStore.setState({ billingProfile: PREMIUM_PROFILE });
+    render(<BillingSettings onReportBug={() => {}} />);
+    await waitFor(() => expect(fetchSubscriptionStatus).toHaveBeenCalled());
+    expect(screen.queryByTestId('trial-feedback')).toBe(null);
   });
 });
