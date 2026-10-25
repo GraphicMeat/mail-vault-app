@@ -354,7 +354,7 @@ impl SettingsDoc {
         if self.lock().version_loaded {
             return;
         }
-        let sidecar = std::fs::read(self.dir.join(VERSION_NAME)).ok().and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok());
+        let sidecar = self.read_sidecar();
         let mut inner = self.lock();
         if inner.version_loaded {
             return;
@@ -366,22 +366,31 @@ impl SettingsDoc {
         }
     }
 
-    /// Takes in a good file read from disk; a change since this process last
-    /// saw it (another writer, or one before this run) bumps the version.
+    /// The sidecar as it is on disk now (IO: never under `inner`).
+    fn read_sidecar(&self) -> Option<Sidecar> {
+        std::fs::read(self.dir.join(VERSION_NAME)).ok().and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok())
+    }
+
+    /// Takes in a good file read from disk. A matching sidecar supplies the
+    /// recorded version even when unseen writes returned to the cached bytes.
+    /// Otherwise a legacy writer's change bumps it once. Never backwards.
     /// Memory only: the caller records the version after letting go.
-    fn observe_good(inner: &mut Inner, bytes: Vec<u8>, value: Value) {
-        if inner.bytes.as_deref() == Some(&bytes[..]) && inner.doc.is_some() {
-            inner.observed = true;
-            return;
-        }
+    fn observe_good(inner: &mut Inner, bytes: Vec<u8>, value: Value, sidecar: Option<&Sidecar>) {
         let hash = sha_hex(&bytes);
         let changed = match &inner.doc {
             Some(doc) if inner.observed => **doc != value,
             _ => inner.sidecar_hash.as_deref() != Some(hash.as_str()),
         };
-        if changed {
-            inner.version += 1;
-            inner.unrecorded = true;
+        let recorded = sidecar.filter(|s| s.sha256 == hash).map(|s| s.version);
+        match recorded {
+            Some(version) if version >= inner.version => {
+                inner.version = version;
+            }
+            _ if changed => {
+                inner.version += 1;
+                inner.unrecorded = true;
+            }
+            _ => {}
         }
         inner.sidecar_hash = Some(hash);
         inner.observed = true;
@@ -453,9 +462,10 @@ impl SettingsDoc {
             return Err("settings hold no JSON object".to_string());
         }
         self.load_version();
+        let sidecar = self.read_sidecar();
         let doc = {
             let mut inner = self.lock();
-            Self::observe_good(&mut inner, bytes, value);
+            Self::observe_good(&mut inner, bytes, value, sidecar.as_ref());
             Arc::clone(inner.doc.as_ref().expect("observed"))
         };
         self.record_version(false);
@@ -479,6 +489,7 @@ impl SettingsDoc {
     fn current(&self) -> Result<Current, SettingsError> {
         self.load_version();
         let disk = read_disk_settled(&self.path());
+        let sidecar = matches!(disk, Disk::Good(..)).then(|| self.read_sidecar()).flatten();
         let current = {
             let mut inner = self.lock();
             match disk {
@@ -488,7 +499,7 @@ impl SettingsDoc {
                 }
                 Disk::Good(bytes, value) => {
                     let good = bytes.clone();
-                    Self::observe_good(&mut inner, bytes, value);
+                    Self::observe_good(&mut inner, bytes, value, sidecar.as_ref());
                     let values = match inner.doc.as_deref() {
                         Some(Value::Object(map)) => map.clone(),
                         _ => Map::new(),
