@@ -2494,15 +2494,15 @@ fn purge_proved_files(root: &Path, proof: &crate::app_db::ops::MirrorPurgeProof)
         let cur = crate::maildir::mirror_cur(root,&target.email,&target.mailbox)?;
         // Collect before deleting anything so an incomplete listing cannot
         // masquerade as confirmed absence or first-entry-only success.
-        let candidates = match std::fs::read_dir(&cur).and_then(|entries| entries.collect::<Result<Vec<_>,_>>()) {
+        let candidates = match crate::maildir::try_mirror_files(&cur) {
             Ok(entries) => entries,
             Err(_) => return Ok((0,Some(MirrorPurgeIssue::Listing))),
         };
         let mut removed = 0;
         let mut issue = None;
-        for entry in candidates {
-            if crate::maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()) != Some(target.uid) { continue; }
-            let raw = match std::fs::read(entry.path()) {
+        for (uid, _, path) in candidates {
+            if uid != target.uid { continue; }
+            let raw = match std::fs::read(&path) {
                 Ok(raw) => raw,
                 Err(_) => { issue.get_or_insert(MirrorPurgeIssue::Read); continue; }
             };
@@ -2512,7 +2512,7 @@ fn purge_proved_files(root: &Path, proof: &crate::app_db::ops::MirrorPurgeProof)
             }
             #[cfg(test)]
             tests::protected_before_unlink();
-            match std::fs::remove_file(entry.path()) {
+            match std::fs::remove_file(&path) {
                 Ok(()) => removed += 1,
                 Err(_) => { issue.get_or_insert(MirrorPurgeIssue::Remove); }
             }

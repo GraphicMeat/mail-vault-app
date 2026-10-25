@@ -92,9 +92,10 @@ const RECEIVERS: &[&str] = &["reg.", "registry."];
 
 /// `(file, fn, why it needs no registry call of its own)`.
 const ALLOWED: &[(&str, &str, &str)] = &[
-    ("src-core/src/backup.rs", "sync_locations", "pre-sync copy; its caller vault_uids_after_presync invalidates when a copy into the vault was attempted"),
+    ("src-core/src/backup.rs", "sync_locations_at", "pre-sync copy; its caller vault_uids_after_presync_at invalidates when replayed or a copy into the vault was attempted"),
     ("src-core/src/backup.rs", "purge_backup_files", "removes files from the external mirror's cur/, never the app vault"),
-    ("src-core/src/backup.rs", "copy_to_backup", "copies vault files into the external mirror's cur/; it only reads the app vault"),
+    ("src-core/src/backup.rs", "copy_to_backup_at", "copies vault files into the guarded external mirror's cur/; it only reads the app vault"),
+    ("src-core/src/backup.rs", "purge_proved_files", "removes proved files only from the guarded external mirror's cur/, never the app vault"),
     ("src-core/src/import_rehome.rs", "record", "writes only the rehome ledger beside cur/, never a message; the renames are carry_out's"),
     ("src-core/src/import_rehome.rs", "carry_out", "moves or sets aside the files record planned; its daemon caller rehome_pass invalidates per chunk when anything moved or failed"),
     ("src-core/src/import_rehome.rs", "replay_into", "replays the rehome ledger onto the vault and the backup mirror; it returns whether the vault moved and its caller vault_uids_after_presync invalidates on that"),

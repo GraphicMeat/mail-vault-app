@@ -222,6 +222,21 @@ pub fn mirror_files(dir: &Path) -> Vec<(u32, String, PathBuf)> {
         .collect()
 }
 
+/// A complete external-mirror inventory, preserving the names, paths and
+/// duplicate uids returned by `read_dir`, including directory entries.
+/// Opening or iterating the directory must succeed before any entries return.
+pub fn try_mirror_files(dir: &Path) -> std::io::Result<Vec<(u32, String, PathBuf)>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(uid) = mirror_filename_uid(&name) {
+            files.push((uid, name, entry.path()));
+        }
+    }
+    Ok(files)
+}
+
 /// The uid a message filename carries by the external mirror's rule: the text
 /// before the first `:`, `;`, `.` or `_`. The mirror has held
 /// `<uid>:2,<flags>[.eml]` (`;`-spelled on Windows, same as every other vault
