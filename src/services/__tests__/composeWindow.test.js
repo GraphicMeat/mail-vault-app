@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createComposeWindowOwner, composeSnapshotForTransfer, isComposeMessage } from '../composeWindow';
+import { createComposeWindowOwner as createOwner, composeSnapshotForTransfer, isComposeMessage } from '../composeWindow';
 
+const testAccount = { id: 'account', email: 'me@example.test' };
+const createComposeWindowOwner = options => createOwner({ acknowledgePreparation: async () => 4,
+  checkPreparation: async () => ({ kind: 'ready', settingsVersion: 4, route: { delay: 60 } }),
+  sendContext: () => ({ account: testAccount, senderSettings: { displayName: 'Me' }, remindAllowed: true }), ...options });
+const prepareChecked = async (owner, id, token, emitTo) => {
+  owner.receive({ composeId: String(id), token, requestId: 'checked', type: 'prepare-settings', payload: {
+    purpose: 'send-check', attempt: 1, editorGeneration: 1, snapshot: snapshot(), authoredBodyText: 'Body', timeZone: 'UTC' } });
+  await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith(expect.anything(), 'compose-window-message', expect.objectContaining({ requestId: 'checked', type: 'ack' })));
+};
 const snapshot = (subject = 'Draft') => ({
   to: 'to@example.test', cc: 'cc@example.test', bcc: 'bcc@example.test', subject,
   body: '<p>Body</p>', attachments: [{ filename: 'a.pdf' }], _accountId: 'account',
@@ -131,7 +140,8 @@ describe('compose window ownership', () => {
     ready(owner, 83, token);
     owner.receive({ composeId: '83', token, requestId: 'init', type: 'initialized' });
     await handoff;
-    owner.receive({ composeId: '83', token, requestId: 'send', type: 'send', payload: { snapshot: snapshot() } });
+    await prepareChecked(owner, 83, token, emitTo);
+    owner.receive({ composeId: '83', token, requestId: 'send', type: 'send', payload: { attempt: 1, editorGeneration: 1 } });
     owner.receive({ composeId: '83', token, requestId: 'attach', type: 'attach', payload: snapshot() });
     await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith('compose-attach-busy', 'compose-window-message', expect.objectContaining({ requestId: 'attach', type: 'error' })));
     expect(attached).not.toHaveBeenCalled();
@@ -142,15 +152,17 @@ describe('compose window ownership', () => {
     const queueSend = vi.fn();
     const update = vi.fn();
     const open = vi.fn().mockResolvedValue('compose-3');
-    const owner = createComposeWindowOwner({ open, emitTo: vi.fn().mockResolvedValue(undefined), update, close: vi.fn(), queueSend });
+    const emitTo = vi.fn().mockResolvedValue(undefined);
+    const owner = createComposeWindowOwner({ open, emitTo, update, close: vi.fn(), queueSend });
     const handoff = owner.detach({ id: 9, mode: 'new', snapshot: snapshot() });
     await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
     ready(owner, 9, token);
     owner.receive({ composeId: '9', token, requestId: 'init', type: 'initialized' });
     await handoff;
-    owner.receive({ composeId: '9', token, requestId: 'send', type: 'send', payload: { snapshot: snapshot(), delay: 60 } });
+    await prepareChecked(owner, 9, token, emitTo);
+    owner.receive({ composeId: '9', token, requestId: 'send', type: 'send', payload: { attempt: 1, editorGeneration: 1 } });
     owner.receive({ composeId: '9', token, requestId: 'settings', type: 'settings', payload: { key: 'unknown', value: true } });
-    await vi.waitFor(() => expect(queueSend).toHaveBeenCalledWith(expect.objectContaining({ subject: 'Draft' }), 60, expect.anything(), false));
+    await vi.waitFor(() => expect(queueSend).toHaveBeenCalledWith(expect.objectContaining({ subject: 'Draft' }), 60, expect.anything(), false, expect.objectContaining({ account: testAccount })));
     expect(update).not.toHaveBeenCalledWith(9, expect.objectContaining({ settings: expect.anything() }));
   });
 
@@ -169,7 +181,8 @@ describe('compose window ownership', () => {
     owner.receive({ composeId: '91', token, requestId: 'init', type: 'initialized' });
     await handoff;
 
-    owner.receive({ composeId: '91', token, requestId: 'send', type: 'send', payload: { snapshot: snapshot() } });
+    await prepareChecked(owner, 91, token, emitTo);
+    owner.receive({ composeId: '91', token, requestId: 'send', type: 'send', payload: { attempt: 1, editorGeneration: 1 } });
     await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith(
       'compose-sync-error', 'compose-window-message', expect.objectContaining({ type: 'error', payload: 'SMTP unavailable' }),
     ));
@@ -311,5 +324,95 @@ describe('checked detached admission', () => {
     expect(queueSend).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
     expect(emitTo.mock.calls.some(([, , m]) => m.type === 'accepted')).toBe(false);
+  });
+});
+
+const checkedFixture = async (overrides = {}) => {
+  const open = vi.fn().mockResolvedValue('checked-races');
+  const emitTo = vi.fn().mockResolvedValue();
+  const queueSend = vi.fn(); const remove = vi.fn(); const close = vi.fn(); const update = vi.fn();
+  let context = { account: testAccount, senderSettings: { displayName: 'Me' }, remindAllowed: true };
+  const checkPreparation = vi.fn().mockResolvedValue({ kind: 'ready', settingsVersion: 4, route: { delay: null } });
+  const owner = createOwner({ open, emitTo, update, queueSend, remove, close, acknowledgePreparation: async () => 4,
+    checkPreparation, sendContext: () => context, ...overrides });
+  const handoff = owner.detach({ id: 400, mode: 'new', snapshot: snapshot() });
+  await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+  const receive = (type, payload, requestId = type) => owner.receive({ composeId: '400', token, type, payload, requestId });
+  receive('ready'); receive('initialized'); await handoff;
+  const prepare = async (extra = {}, requestId = 'check') => {
+    receive('prepare-settings', { purpose: 'send-check', attempt: 1, editorGeneration: 1, snapshot: snapshot(), authoredBodyText: 'Body', timeZone: 'UTC', ...extra }, requestId);
+    await vi.waitFor(() => expect(emitTo.mock.calls.some(([, , m]) => m.requestId === requestId)).toBe(true));
+  };
+  return { owner, receive, prepare, emitTo, checkPreparation, queueSend, remove, close, update,
+    setContext: next => { context = next; }, context, token };
+};
+
+describe('detached final check authority', () => {
+  it.each(['account deletion', 'account replacement', 'sender name', 'authority generation', 'child edit'])('refuses %s between check and admission', async change => {
+    const f = await checkedFixture(); await f.prepare();
+    if (change === 'account deletion') f.setContext({ ...f.context, account: undefined });
+    if (change === 'account replacement') f.setContext({ ...f.context, account: { ...testAccount } });
+    if (change === 'sender name') f.setContext({ ...f.context, senderSettings: { displayName: 'Changed' } });
+    if (change === 'authority generation') f.owner.invalidateSendPreparation();
+    if (change === 'child edit') f.receive('prepare-settings', { purpose: 'invalidate-send-check', editorGeneration: 2 }, 'edit');
+    f.receive('send', { attempt: 1, editorGeneration: 1 });
+    await vi.waitFor(() => expect(f.emitTo.mock.calls.some(([, , m]) => m.requestId === 'send')).toBe(true));
+    expect(f.queueSend).not.toHaveBeenCalled(); expect(f.remove).not.toHaveBeenCalled();
+  });
+  it.each(['authority', 'edit', 'close'])('refuses a late final ready after %s', async change => {
+    const f = await checkedFixture(); await f.prepare();
+    let finish;
+    f.checkPreparation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    f.receive('send', { attempt: 1, editorGeneration: 1 });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    if (change === 'authority') f.owner.invalidateSendPreparation();
+    if (change === 'edit') f.receive('prepare-settings', { purpose: 'invalidate-send-check', editorGeneration: 2 }, 'edit');
+    if (change === 'close') f.owner.recover(400);
+    finish({ kind: 'ready', route: { delay: null } });
+    await vi.waitFor(() => expect(f.queueSend).not.toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(f.queueSend).not.toHaveBeenCalled(); expect(f.remove).not.toHaveBeenCalled();
+  });
+  it('queues the complete source once and closes on lost accepted ACK', async () => {
+    const f = await checkedFixture(); await f.prepare();
+    f.emitTo.mockImplementation(async (_label, _channel, message) => { if (message.type === 'accepted') throw new Error('ACK lost'); });
+    f.receive('send', { attempt: 1, editorGeneration: 1 });
+    f.receive('send', { attempt: 1, editorGeneration: 1 }, 'duplicate');
+    await vi.waitFor(() => expect(f.close).toHaveBeenCalledWith('checked-races'));
+    expect(f.queueSend).toHaveBeenCalledTimes(1);
+    expect(f.queueSend.mock.calls[0][0]).toMatchObject({ body: '<p>Body</p>', bcc: 'bcc@example.test', _quotedHtml: '<p>part</p>', _composeDelay: null });
+    expect(f.queueSend.mock.calls[0][4]).toMatchObject({ account: testAccount, settings: { displayName: 'Me' } });
+    expect(f.remove).toHaveBeenCalledTimes(1);
+  });
+  it('never accepts snapshot or route replacement at admission', async () => {
+    const f = await checkedFixture(); await f.prepare();
+    f.receive('send', { attempt: 1, editorGeneration: 1, snapshot: snapshot('forged') });
+    await vi.waitFor(() => expect(f.emitTo.mock.calls.some(([, , m]) => m.requestId === 'send')).toBe(true));
+    expect(f.queueSend).not.toHaveBeenCalled();
+  });
+  it('confirms only the stored source and reruns every policy check', async () => {
+    const f = await checkedFixture(); f.checkPreparation.mockResolvedValueOnce({ kind: 'confirm_attachment', settingsVersion: 4 });
+    await f.prepare();
+    f.receive('prepare-settings', { purpose: 'send-check', attempt: 2, editorGeneration: 1, confirmationAttempt: 1 }, 'confirm');
+    await vi.waitFor(() => expect(f.checkPreparation).toHaveBeenCalledTimes(2));
+    expect(f.checkPreparation.mock.calls[1][0]).toMatchObject({ snapshot: snapshot(), sendAnyway: true, settingsVersion: 4 });
+    f.receive('send', { attempt: 2, editorGeneration: 1 });
+    await vi.waitFor(() => expect(f.queueSend).toHaveBeenCalledTimes(1));
+    expect(f.checkPreparation).toHaveBeenCalledTimes(3);
+  });
+  it('does not upgrade final settings authority on conflict', async () => {
+    const acknowledgePreparation = vi.fn(async () => 4);
+    const f = await checkedFixture({ acknowledgePreparation }); await f.prepare();
+    f.checkPreparation.mockRejectedValueOnce(new Error('errors.settingsConflict'));
+    f.receive('send', { attempt: 1, editorGeneration: 1 });
+    await vi.waitFor(() => expect(f.emitTo.mock.calls.some(([, , m]) => m.requestId === 'send' && m.type === 'error')).toBe(true));
+    expect(acknowledgePreparation).toHaveBeenCalledTimes(1); expect(f.queueSend).not.toHaveBeenCalled();
+  });
+  it.each(['invalid', 'confirm_attachment'])('returns ordinary final %s ACK without admission', async kind => {
+    const f = await checkedFixture(); await f.prepare();
+    f.checkPreparation.mockResolvedValueOnce({ kind, key: 'scheduled.picker.pastTime', settingsVersion: 4 });
+    f.receive('send', { attempt: 1, editorGeneration: 1 });
+    await vi.waitFor(() => expect(f.emitTo).toHaveBeenCalledWith('checked-races', 'compose-window-message', expect.objectContaining({ requestId: 'send', type: 'ack', payload: expect.objectContaining({ attempt: 1, outcome: expect.objectContaining({ kind }) }) })));
+    expect(f.queueSend).not.toHaveBeenCalled(); expect(f.remove).not.toHaveBeenCalled();
   });
 });

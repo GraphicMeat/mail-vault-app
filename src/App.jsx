@@ -1,3 +1,4 @@
+import { checkCompose, composeCheckInput } from './services/composePrep';
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { bootstrapTags } from './services/tagMigration';
 import { flushSafeStorage } from './stores/safeStorage';
@@ -18,7 +19,8 @@ import { useAccountStore } from './stores/accountStore';
 import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
-import { useSettingsStore } from './stores/settingsStore';
+import { isGraphAccount } from './services/graphConfig';
+import { useSettingsStore, hasPremiumAccess } from './stores/settingsStore';
 import { composeSenderName } from './utils/sendAsSuggestions';
 import { currentListView } from './stores/viewStore';
 import {
@@ -454,16 +456,11 @@ function App() {
           .catch(() => {});
       },
       close: label => WebviewWindow.getByLabel(label).then(window => window?.destroy()).catch(() => {}),
-      queueSend: async (snapshot, delay, session, scheduled) => {
-        const account = useMailStore.getState().accounts?.find(item => item.id === snapshot?._accountId);
+      queueSend: async (snapshot, delay, session, scheduled, context) => {
+        const account = context.account;
         if (!account) throw new Error(tr('compose.noAccountSelected'));
         const replyTo = snapshot._replyTo || null;
-        const prefs = useSettingsStore.getState();
-        // A detached window's send: the name of the alias it leaves from, else the account's.
-        const settings = { displayName: composeSenderName({
-          account, fromAddress: snapshot._fromAddress, displayName: prefs.getDisplayName(account.id),
-          aliases: prefs.aliases?.[account.id], sendAsAddress: prefs.sendAsAddresses?.[account.id],
-        }) };
+        const settings = context.settings;
         if (scheduled) {
           await scheduleCompose({ snapshot, account, settings, cleanupDraft: (data, kind) => cleanupComposeDraft(data, kind, session.id) });
           return;
@@ -475,7 +472,15 @@ function App() {
           snapshot._composeDelay ?? delay,
         );
       },
-      acknowledgePreparation: () => flushSafeStorage({ acknowledge: true }),
+      acknowledgePreparation: options => flushSafeStorage({ acknowledge: true, ...options }),
+      checkPreparation: ({ settingsVersion, isCurrent, ...input }) => checkCompose(composeCheckInput(input), { settingsVersion, isCurrent }),
+      sendContext: snapshot => {
+        const account = useMailStore.getState().accounts?.find(item => item.id === snapshot?._accountId);
+        const prefs = useSettingsStore.getState();
+        return { account, senderSettings: { displayName: composeSenderName({ account, fromAddress: snapshot._fromAddress,
+          displayName: prefs.getDisplayName(account?.id), aliases: prefs.aliases?.[account?.id], sendAsAddress: prefs.sendAsAddresses?.[account?.id] }) },
+          remindAllowed: !!account && !isGraphAccount(account) && hasPremiumAccess(prefs.billingProfile) };
+      },
       settings: {
         composeContextVisible: value => {
           const store = useSettingsStore.getState();
@@ -522,13 +527,14 @@ function App() {
   useEffect(() => useSettingsStore.subscribe((state, prev) => {
     // Aliases too: a compose window's "Add address..." sends the user to
     // Settings here, and the address they add belongs in that window's From row.
-    if (['billingProfile', 'appFont', 'textScale', 'showMenuBar', 'aliases', 'sendAsAddresses'].some(key => state[key] !== prev[key])) {
-      const { billingProfile, appFont, textScale, showMenuBar, aliases, sendAsAddresses } = state;
-      composeWindowOwnerRef.current?.pushSettings({ billingProfile, appFont, textScale, showMenuBar, aliases, sendAsAddresses });
-    }
+    const relevant = ['aliases', 'sendAsAddresses', 'displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'];
+    if (relevant.some(key => state[key] !== prev[key])) composeWindowOwnerRef.current?.invalidateSendPreparation();
+    const keys = [...relevant, 'appFont', 'textScale', 'showMenuBar'];
+    if (keys.some(key => state[key] !== prev[key])) composeWindowOwnerRef.current?.pushSettings(Object.fromEntries(keys.map(key => [key, state[key]])));
   }), []);
 
   useEffect(() => useMailStore.subscribe((state, previous) => {
+    if (state.accounts !== previous.accounts) composeWindowOwnerRef.current?.invalidateSendPreparation();
     if (state.accounts !== previous.accounts || state.activeAccountId !== previous.activeAccountId)
       composeWindowOwnerRef.current?.pushAccounts(state.accounts, state.activeAccountId);
   }), []);

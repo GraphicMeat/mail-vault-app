@@ -26,7 +26,7 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => children,
 }));
 vi.mock('../RichTextEditor', () => ({
-  RichTextEditor: ({ placeholder }) => React.createElement('div', { 'data-testid': 'editor-stub' }, placeholder),
+  RichTextEditor: ({ content, onUpdate }) => React.createElement('textarea', { 'data-testid': 'editor-stub', value: content || '', onChange: e => onUpdate(e.target.value) }),
   insertImages: vi.fn(),
   textToHtml: (s) => s || '',
   htmlToText: (h) => (h || '').replace(/<\/p>/g, '\n').replace(/<[^>]*>/g, ''),
@@ -98,6 +98,7 @@ function open(body, extra = {}) {
 
 beforeEach(() => {
   queueSend.mockClear();
+  checkCompose.mockReset();
   checkCompose.mockImplementation(async input => checkDemoCompose({ ...input, requestId: 'check', expectedSettingsVersion: 1 }, {
     accounts: mail.accounts, values: { 'mailvault-settings': { state: { ...settings, billingProfile: premium.on ? { hasSubscription: true, status: 'active' } : null } } }, version: 1, now: Date.now(),
   }));
@@ -226,8 +227,42 @@ describe('checked send attempt lifetime', () => {
     const form = screen.getByTestId('compose-send').closest('form');
     await act(async () => {
       fireEvent.submit(form);
-      fireEvent.keyDown(form, { key: 'Enter', shiftKey: true });
+      fireEvent.keyDown(screen.getByTestId('compose-subject'), { key: 'Enter', shiftKey: true });
     });
     await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('same-snapshot confirmation and failures', () => {
+  it('does not carry Send anyway across an edit away and back', async () => {
+    open('<p>attached</p>');
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await screen.findByTestId('compose-attachment-reminder');
+    fireEvent.change(screen.getByTestId('compose-subject'), { target: { value: 'Other' } });
+    fireEvent.change(screen.getByTestId('compose-subject'), { target: { value: 'Hi' } });
+    fireEvent.click(screen.getByTestId('compose-attachment-reminder-send'));
+    await waitFor(() => expect(checkCompose).toHaveBeenCalledTimes(2));
+    expect(checkCompose.mock.calls[1][0].sendAnyway).toBe(false);
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('compose-attachment-reminder')).toBeTruthy();
+  });
+  it('retains body, explicit Bcc, quote and source attachments in a frozen handoff', async () => {
+    open('<p>Full authored body</p>', { bcc: 'private@example.test', _quotedHtml: '<p>Quote</p>', attachments: [{ filename: 'source.bin', source: { uid: 42 }, content: 'AA==' }] });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+    const sent = queueSend.mock.calls[0][0].initialData;
+    expect(sent).toMatchObject({ body: '<p>Full authored body</p>', bcc: 'private@example.test', _quotedHtml: '<p>Quote</p>', attachments: [{ source: { uid: 42 }, content: 'AA==' }] });
+    expect(checkCompose.mock.calls[0][0]).toMatchObject({ authoredBodyText: 'Full authored body\n', attachmentCount: 1, revision: sent._draftRevision });
+    expect(checkCompose.mock.calls[0][0].body).toBeUndefined();
+  });
+  it.each(['compose.preparationUnavailable', 'request timed out'])('keeps the complete draft unsent on %s', async error => {
+    checkCompose.mockRejectedValue(new Error(error));
+    const { onClose } = open('<p>Keep this body</p>', { bcc: 'private@example.test' });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(checkCompose).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId('editor-stub').value).toBe('<p>Keep this body</p>');
   });
 });

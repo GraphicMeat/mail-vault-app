@@ -6,13 +6,14 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { isComposeMessage } from '../services/composeWindow';
-import { setLocale } from '../i18n/index.js';
+import { setLocale, tErr } from '../i18n/index.js';
 import { startPrivacySync } from '../utils/privacy/privacySync';
 import { PrivacyDictionaryHost } from './privacy/PrivacyDictionaryHost';
 
 const composeId = new URLSearchParams(window.location.search).get('compose');
 const token = new URLSearchParams(window.location.search).get('token');
 const requestTimeoutMs = 10_000;
+export const sendCheckTimeoutMs = 70_000;
 const waitForHydration = (store) => {
   const persist = store.persist;
   if (!persist?.hasHydrated || !persist.onFinishHydration || persist.hasHydrated()) return Promise.resolve();
@@ -44,6 +45,10 @@ export function ComposeWindow() {
     pending.current.clear();
   }, []);
 
+  const invalidateSendCheck = useCallback(editorGeneration => {
+    void requestRef.current?.('prepare-settings', { purpose: 'invalidate-send-check', editorGeneration }).catch(() => {});
+  }, []);
+  const requestRef = useRef(null);
   const request = useCallback((type, payload, { timeoutMs = requestTimeoutMs } = {}) => new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const isOperation = type === 'send' || type === 'schedule' || type === 'discard';
@@ -66,6 +71,8 @@ export function ComposeWindow() {
       .catch(error => settle(reject, error));
   }), []);
 
+  requestRef.current = request;
+
   const applySettings = useCallback((patch) => {
     if (patch && typeof patch === 'object') useSettingsStore.setState(patch);
   }, []);
@@ -76,7 +83,7 @@ export function ComposeWindow() {
       applySettings(patch);
       return patch;
     } catch (error) {
-      setBridgeError(error?.message || String(error));
+      setBridgeError(tErr(error));
       throw error;
     }
   }, [applySettings, request]);
@@ -183,7 +190,7 @@ export function ComposeWindow() {
           await currentWindow.destroy();
         } catch (error) {
           closing.current = false;
-          setBridgeError(error?.message || String(error));
+          setBridgeError(tErr(error));
         }
       });
       if (disposed) {
@@ -215,7 +222,7 @@ export function ComposeWindow() {
       return result;
     } catch (error) {
       closing.current = false;
-      setBridgeError(error?.message || String(error));
+      setBridgeError(tErr(error));
       throw error;
     }
   }, [request]);
@@ -232,7 +239,7 @@ export function ComposeWindow() {
       initialData={initialization.snapshot}
       onSaveState={snapshot => {
         latest.current = snapshot;
-        void request('snapshot', snapshot).catch(error => setBridgeError(error?.message || String(error)));
+        void request('snapshot', snapshot).catch(error => setBridgeError(tErr(error)));
       }}
       snapshotRef={snapshotRef}
       onMinimize={snapshot => { latest.current = snapshot; void close('minimize', snapshot).catch(() => {}); }}
@@ -244,8 +251,24 @@ export function ComposeWindow() {
       onContextVisibleChange={visible => relaySetting('composeContextVisible', visible)}
       onAddTemplate={value => relaySetting('addEmailTemplate', value)}
       acknowledgePreparation={() => request('prepare-settings')}
-      onQueueSend={(snapshot, delay) => request('send', { snapshot, delay }, { timeoutMs: null })}
-      onSchedule={snapshot => request('schedule', { snapshot }, { timeoutMs: null })}
+      invalidateSendCheck={invalidateSendCheck}
+      prepareSendCheck={async payload => {
+        try {
+          const result = await request('prepare-settings', { purpose: 'send-check', ...payload }, { timeoutMs: sendCheckTimeoutMs });
+          if (result?.attempt !== payload.attempt || result?.editorGeneration !== payload.editorGeneration || !result.outcome) throw new Error('compose.preparationUnavailable');
+          return result.outcome;
+        } catch (error) {
+          // A timeout retires authority; a late native result remains inert.
+          invalidateSendCheck(payload.editorGeneration + 1);
+          throw error;
+        }
+      }}
+      finalizeSendCheck={async (payload, scheduled) => {
+        const result = await request(scheduled ? 'schedule' : 'send', payload, { timeoutMs: null });
+        if (result == null) return;
+        if (result.attempt !== payload.attempt || result.editorGeneration !== payload.editorGeneration || !result.outcome) throw new Error('compose.preparationUnavailable');
+        return result.outcome;
+      }}
       // Settings lives in the main window, which also answers the native menu's Settings item.
       onUpgrade={() => { void emit('open-settings', { tab: 'billing' }).catch(() => {}); }}
       onOpenAliases={accountId => { void emit('open-settings', { tab: 'accounts', accountId, section: 'aliases' }).catch(() => {}); }}

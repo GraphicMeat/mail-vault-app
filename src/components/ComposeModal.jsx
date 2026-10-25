@@ -10,10 +10,10 @@ import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, Maximize2, PictureInPicture2, ExternalLink, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight, Clock, Columns, PanelRight } from 'lucide-react';
 import { RichTextEditor, insertImages, textToHtml, htmlToText } from './RichTextEditor';
 import { RecipientField } from './RecipientField';
-import { addRecipients, invalidRecipients, removeRecipientToken } from '../utils/recipientTokens';
+import { addRecipients, removeRecipientToken } from '../utils/recipientTokens';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
-import { prepareMessage, preparationIdentity } from '../services/composePrep';
+import { prepareMessage, preparationIdentity, checkCompose, composeCheckInput } from '../services/composePrep';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import { withoutSnippet } from '../utils/withoutSnippet';
@@ -29,7 +29,7 @@ import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 import { SchedulePicker } from './scheduled/SchedulePicker';
 import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
 import { isPastLocalTime, formatWallClock } from '../utils/scheduledTime';
-import { routeSend, MAX_DELAY_MINUTES, FREE_DELAY_MINUTES } from '../utils/sendPlan';
+import { MAX_DELAY_MINUTES, FREE_DELAY_MINUTES } from '../utils/sendPlan';
 import { DelayPicker, SendPlanNote } from './scheduled/SendLater';
 import { RemindIfNoReply } from './scheduled/RemindIfNoReply';
 import { isGraphAccount } from '../services/graphConfig';
@@ -40,7 +40,7 @@ import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 import { replyWireHtml } from '../utils/quoteWire';
 import { clampComposeSize } from '../utils/composeSize';
-import { missingAttachment } from '../utils/missingAttachment';
+import { composeSnapshotForTransfer } from '../services/composeWindow';
 
 // The embedded modal and the detached window both clamp a restored/resized
 // size to whatever space is actually available right now, so a size saved on
@@ -94,8 +94,26 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 const NO_ALIASES = {};
+const SEND_SETTING_KEYS = ['aliases', 'sendAsAddresses', 'displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'];
+// Increment at the setter boundary, before React commits or autosave publishes.
+function useSendState(initial, invalidate) {
+  const [value, setValue] = useState(initial);
+  const change = useCallback(next => { invalidate(); setValue(next); }, [invalidate]);
+  return [value, change];
+}
 
-export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup, acknowledgePreparation, preparedQuote = null }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup, acknowledgePreparation, prepareSendCheck, finalizeSendCheck, invalidateSendCheck, preparedQuote = null }) {
+  const sendGeneration = useRef(0);
+  const submission = useRef(null);
+  const confirmation = useRef(null);
+  const nextAttempt = useRef(0);
+  const invalidateCallback = useRef(invalidateSendCheck);
+  invalidateCallback.current = invalidateSendCheck;
+  const invalidate = useCallback(() => {
+    sendGeneration.current++;
+    confirmation.current = null;
+    invalidateCallback.current?.(sendGeneration.current);
+  }, []);
   const t = useT();
   const pa = usePrivateAttr();
   const privateInput = usePrivateInputClass();
@@ -128,7 +146,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const composeContextVisible = useSettingsStore(s => s.composeContextVisible ?? true);
-  const attachmentReminder = useSettingsStore(s => s.attachmentReminder ?? true);
   const setComposeContextVisible = useSettingsStore(s => s.setComposeContextVisible);
   const composeContextSplit = useSettingsStore(s => s.composeContextSplit ?? null);
   const setComposeContextSplit = useSettingsStore(s => s.setComposeContextSplit);
@@ -149,11 +166,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     activeAccountId,
     selectedAccountId: readingAccountId,
   });
-  const [selectedAccountId, setSelectedAccountId] = useState(initialIdentity.accountId);
+  const [selectedAccountId, setSelectedAccountId] = useSendState(initialIdentity.accountId, invalidate);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
   const composeSendAs = sendAsAddresses?.[selectedAccountId] || '';
   // '' = whatever the selected account sends as by default.
-  const [pickedFrom, setPickedFrom] = useState(initialIdentity.address);
+  const [pickedFrom, setPickedFrom] = useSendState(initialIdentity.address, invalidate);
   // Not memo'd: `accounts` is a fresh array every render anyway.
   let identities = composeIdentities(accounts, sendAsAddresses, aliasesByAccount);
   // A restored/remembered From may be an alias since removed: the row must
@@ -181,15 +198,15 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [autoDetach, setAutoDetach] = useState(() => composeOpenMode === 'window' && !!onDetach && !detached);
   const [autoDetachTick, setAutoDetachTick] = useState(0);
   const [error, setError] = useState(null);
-  const [attachments, setAttachments] = useState([]);
+  const [attachments, setAttachments] = useSendState([], invalidate);
   const [showAttachmentReminder, setShowAttachmentReminder] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
-  const [quotedHtml, setQuotedHtml] = useState('');
+  const [quotedHtml, setQuotedHtml] = useSendState('', invalidate);
   // A restored window keeps what it was: its snapshot says so.
   const isForward = mode === 'forward' || !!initialData?._forward;
-  const [contextHtml, setContextHtml] = useState('');
+  const [contextHtml, setContextHtml] = useSendState('', invalidate);
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
   // Context width as a ratio of the layout; null = 400px. A draft's own wins.
   const [contextSplit, setContextSplit] = useState(() => initialData?._contextSplit || composeContextSplit);
@@ -223,23 +240,23 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // armed at its own time, so its Send saves over the row.
   // A plan cleared back to null (Send now) stays cleared through a minimize,
   // detach or Undo: only a snapshot without the key gets the edit default.
-  const [sendPlan, setSendPlan] = useState(() => (initialData && '_sendPlan' in initialData
+  const [sendPlan, setSendPlan] = useSendState(() => (initialData && '_sendPlan' in initialData
     ? initialData._sendPlan
-    : initialData?._editScheduledId ? { kind: 'at' } : null));
+    : initialData?._editScheduledId ? { kind: 'at' } : null), invalidate);
   const [laterTab, setLaterTab] = useState('in');
   const [delayMinutes, setDelayMinutes] = useState(0);
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [scheduleMaxWidth, setScheduleMaxWidth] = useState();
   // `tzPicked`: the zone was chosen by hand, so no suggestion replaces it.
   // Kept in the draft so a minimize or detach keeps it too.
-  const [scheduleDraft, setScheduleDraft] = useState(() => initialData?._scheduleDraft || ({
+  const [scheduleDraft, setScheduleDraft] = useSendState(() => initialData?._scheduleDraft || ({
     localTime: '',
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  }));
+  }), invalidate);
   const [tzSuggestion, setTzSuggestion] = useState(null);
   // "Remind me if no reply", in days (0 = off). Rides the snapshot like the
   // send plan, so a minimize, an undo or a detach keeps it.
-  const [remindDays, setRemindDays] = useState(() => Number(initialData?._remindDays) || 0);
+  const [remindDays, setRemindDays] = useSendState(() => Number(initialData?._remindDays) || 0, invalidate);
   // Premium, and IMAP only: the daemon has no Graph token to look for a
   // reply with (stores/followUpStore.js).
   const remindOffered = !isGraphAccount(selectedAccount);
@@ -396,7 +413,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [draftSaveError, setDraftSaveError] = useState(null);
   const [draftRetry, setDraftRetry] = useState(0);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useSendState({
     to: '',
     cc: '',
     bcc: '',
@@ -404,7 +421,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     body: '',      // HTML content from the editor
     inReplyTo: '',
     references: ''
-  });
+  }, invalidate);
   
   // Baseline for the dirty check (hasUserContent). Recorded by the init effect
   // from the form it actually produces — a snapshot taken from the render that
@@ -442,8 +459,17 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const aliveRef = useRef(true);
   useEffect(() => {
     aliveRef.current = true;
-    return () => { aliveRef.current = false; };
-  }, []);
+    return () => { aliveRef.current = false; invalidate(); };
+  }, [invalidate]);
+  useEffect(() => {
+    const stopSettings = useSettingsStore.subscribe?.((state, previous) => {
+      if (SEND_SETTING_KEYS.some(key => state[key] !== previous[key])) invalidate();
+    });
+    const stopAccounts = useMailStore.subscribe?.((state, previous) => {
+      if (state.accounts !== previous.accounts) invalidate();
+    });
+    return () => { stopSettings?.(); stopAccounts?.(); };
+  }, [invalidate]);
 
   // The signature block the body carries for an identity: a blank line, the
   // standard "--" separator, then the signature. Empty when it signs nothing.
@@ -929,75 +955,79 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // "Send anyway" on the attachment reminder comes back with `sendAnyway`.
   const handleSend = async (event, sendAnyway = false) => {
     event?.preventDefault();
-    if (detaching) return;
+    if (submission.current || detaching || terminalIntentRef.current || !aliveRef.current) return;
     if (!preparationReadyRef.current || needsPreparation && (preparedContext.current?.source !== currentPreparation.current.source || preparedContext.current?.identityGeneration !== currentPreparation.current.identityGeneration)) { setError(t('compose.preparationUnavailable')); return; }
-    if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
-    // A chip outlined red is not an address: say which, instead of letting
-    // the server bounce the whole message.
-    const notAddress = [formData.to, formData.cc, formData.bcc].flatMap(v => invalidRecipients(v || ''))[0];
-    if (notAddress) { setError(t('compose.invalidRecipient', { address: notAddress })); return; }
-    if (!selectedAccount) { setError(t("compose.noAccountSelected")); return; }
-    // Premium is read last: the cheap text check rules most sends out first.
-    // A reply draft restored as a new window still has the original's subject.
-    if (!sendAnyway && attachmentReminder
-      && missingAttachment({ mode: isForward ? 'forward' : formData.inReplyTo ? 'reply' : mode, subject: formData.subject, bodyText: htmlToText(formData.body), attachmentCount: attachments.length })
-      && hasPremiumAccess(billingProfile)) {
-      setShowAttachmentReminder(true);
-      return;
-    }
-    const { delay, draft } = routeSend(sendPlan, scheduleDraft);
-    // Armed a while ago, a set time can have gone by since.
-    if (draft && (!draft.localTime || isPastLocalTime(draft.localTime, draft.tz))) {
-      setError(t('scheduled.picker.pastTime'));
-      return;
-    }
-
-    if (terminalIntentRef.current) return;
+    const generation = sendGeneration.current;
+    const confirmed = sendAnyway && confirmation.current?.generation === generation ? confirmation.current : null;
+    const attempt = ++nextAttempt.current;
+    const claim = { attempt, generation };
+    submission.current = claim;
+    const current = () => aliveRef.current && !terminalIntentRef.current && submission.current === claim && sendGeneration.current === generation;
+    // composeSnapshot/captureDraft synchronously pins the issued content and cleanup bound.
+    const snapshot = composeSnapshotForTransfer(confirmed?.snapshot || latestSnapshotRef.current());
+    const accountSource = selectedAccount;
+    const account = composeSnapshotForTransfer(accountSource);
+    const senderSettings = { displayName: senderNameFor(accountSource, snapshot._fromAddress) };
+    const timeZone = confirmed?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let draft;
+    const outcome = result => {
+      if (result.kind === 'invalid') { confirmation.current = null; setError(t(result.key, result.args)); return false; }
+      if (result.kind === 'confirm_attachment') {
+        confirmation.current = { snapshot, generation, timeZone, attempt };
+        setShowAttachmentReminder(true); return false;
+      }
+      if (result.kind !== 'ready') throw new Error('compose.preparationUnavailable');
+      return true;
+    };
     setSending(true);
     setError(null);
     try {
       await saveChainRef.current.catch(() => {});
-      // A copy: the route's fields must not stick to this window's snapshot
-      // if the send fails and the window stays open.
-      const snapshot = {
-        ...latestSnapshotRef.current(), _composeDelay: delay, ...(draft && { _scheduleDraft: draft }),
-        // Armed on another account, or before a subscription lapsed: not sent.
-        _remindDays: remindDays > 0 && remindOffered && hasPremiumAccess(billingProfile) ? remindDays : 0,
-      };
-      const settings = { displayName: senderNameFor(selectedAccount, snapshot._fromAddress) };
+      if (!current()) return;
+      const result = prepareSendCheck
+        ? await prepareSendCheck({ attempt, editorGeneration: generation, ...(confirmed
+          ? { confirmationAttempt: confirmed.attempt }
+          : { snapshot, authoredBodyText: htmlToText(snapshot.body), timeZone }) })
+        : await checkCompose(composeCheckInput({ snapshot, mode, authoredBodyText: htmlToText(snapshot.body), timeZone, sendAnyway: !!confirmed }), { isCurrent: current });
+      if (!current()) return;
+      if (!outcome(result)) return;
+      if (finalizeSendCheck) {
+        const final = await finalizeSendCheck({ attempt, editorGeneration: generation }, !!result.route.draft);
+        if (!current()) return;
+        if (final) outcome(final);
+        return;
+      }
+      // No await between current authority comparison and entering the existing owner.
+      if (useMailStore.getState().accounts?.find(a => a.id === snapshot._accountId) !== accountSource
+        || senderNameFor(accountSource, snapshot._fromAddress) !== senderSettings.displayName) throw new Error('compose.preparationUnavailable');
+      draft = result.route.draft;
+      const handoff = composeSnapshotForTransfer(snapshot);
+      handoff._composeDelay = result.route.delay;
+      if (draft) handoff._scheduleDraft = draft;
+      handoff._remindDays = snapshot._remindDays > 0 && !isGraphAccount(account) && hasPremiumAccess(useSettingsStore.getState().billingProfile) ? snapshot._remindDays : 0;
+      confirmation.current = null;
       if (draft) {
-        if (onSchedule) await onSchedule(snapshot);
+        if (onSchedule) await onSchedule(handoff);
         else {
-          await scheduleCompose({ snapshot, account: selectedAccount, settings, cleanupDraft: onDraftCleanup });
-          onSend?.();
-          onClose();
+          await scheduleCompose({ snapshot: handoff, account, settings: senderSettings, cleanupDraft: onDraftCleanup });
+          onSend?.(); onClose();
         }
-      } else if (onQueueSend) {
-        await onQueueSend(snapshot, delay);
-      } else {
-        const composeState = { mode, replyTo: snapshot._replyTo || actionReplyTo, initialData: snapshot };
-        useMailStore.getState().queueSend(
-          composeState,
-          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings, cleanupDraft: onDraftCleanup }),
-          delay,
-        );
-        onSend?.();
-        onClose();
+      } else if (onQueueSend) await onQueueSend(handoff, result.route.delay);
+      else {
+        const composeState = { mode, replyTo: handoff._replyTo || actionReplyTo, initialData: handoff };
+        useMailStore.getState().queueSend(composeState,
+          createComposeSend({ snapshot: handoff, mode, replyTo: composeState.replyTo, account, settings: senderSettings, cleanupDraft: onDraftCleanup }), result.route.delay);
+        onSend?.(); onClose();
       }
     } catch (err) {
-      // An edit moved to another From account cancels its old row before the
-      // new one is created (composeSend.js). If the create is what failed,
-      // this window is now the only copy: it must ask before closing and be
-      // autosaved, even if nothing in it was typed.
-      if (draft && initialData?._editScheduledId && initialData._editScheduledRow?.accountId !== selectedAccountId) {
-        initialSnapshot.current = null;
-      }
-      // tErr: saving an edit over a row that already fired comes back as the
-      // daemon's E_SCHEDULED_NOT_EDITABLE code. The window stays open either
-      // way, holding the message.
-      setError(err?.message ? tErr(err) : t("scheduled.errors.scheduleFailed"));
+      if (!current()) return;
+      confirmation.current = null;
+      if (draft && initialData?._editScheduledId && initialData._editScheduledRow?.accountId !== selectedAccountId) initialSnapshot.current = null;
+      setError(err?.message ? tErr(err) : t('scheduled.errors.scheduleFailed'));
+      invalidate();
     } finally {
-      setSending(false);
+      if (submission.current === claim) submission.current = null;
+      if (aliveRef.current) setSending(false);
     }
   };
 
@@ -1300,6 +1330,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
   const handleDetach = async () => {
     if (!onDetach || sending || detaching) return false;
+    invalidate();
     setDetaching(true);
     setSending(true);
     let transferred = false;
@@ -1333,6 +1364,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // window's write and main's first one never interleave on one draft.
   const handleAttach = async () => {
     if (!onAttach || sending || detaching) return;
+    invalidate();
     setDetaching(true);
     setSending(true);
     try {
@@ -2129,7 +2161,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       {/* Mentioned an attachment, attached nothing. */}
       <Dialog
         open={showAttachmentReminder}
-        onClose={() => setShowAttachmentReminder(false)}
+        onClose={() => { confirmation.current = null; setShowAttachmentReminder(false); }}
         role="alertdialog"
         size="sm"
         panelBg="bg-mail-surface"
@@ -2143,7 +2175,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
               {t('compose.attachmentReminder.sendAnyway')}
             </Button>
             <Button variant="primary" data-autofocus data-testid="compose-attachment-reminder-attach"
-              onClick={() => { setShowAttachmentReminder(false); fileInputRef.current?.click(); }}>
+              onClick={() => { confirmation.current = null; setShowAttachmentReminder(false); fileInputRef.current?.click(); }}>
               {t('compose.attachmentReminder.attach')}
             </Button>
           </div>

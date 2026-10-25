@@ -120,3 +120,13 @@ function validCheckDraft(draft) {
   try { new Intl.DateTimeFormat('en-US', { timeZone: draft.tz }); return true; }
   catch { return false; }
 }
+
+// Only policy inputs cross the read-only native seam; the complete source stays local.
+export const composeCheckInput = ({ snapshot, mode, authoredBodyText, timeZone, sendAnyway }) => ({
+  draftId: snapshot._draftId, revision: snapshot._draftRevision,
+  accountId: snapshot._accountId ?? '', fromAddress: snapshot._fromAddress ?? '',
+  mode, inReplyTo: snapshot.inReplyTo, forward: !!snapshot._forward,
+  to: snapshot.to, cc: snapshot.cc, bcc: snapshot.bcc, subject: snapshot.subject,
+  authoredBodyText, attachmentCount: snapshot.attachments.length,
+  sendPlan: snapshot._sendPlan, scheduleDraft: snapshot._scheduleDraft, timeZone, sendAnyway,
+});
