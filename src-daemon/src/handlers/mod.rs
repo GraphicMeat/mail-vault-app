@@ -1,5 +1,6 @@
-pub mod accounts;
 //! JSON-RPC method handlers. `server::handle_request` routes to these.
+
+pub(crate) mod accounts;
 
 use crate::classification;
 use crate::classification_worker::{enqueue_for_classification, reclassify_all};
