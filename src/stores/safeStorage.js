@@ -333,6 +333,22 @@ function acceptWrite(reply, values) {
     if (after === undefined) cache.delete(name); else cache.set(name, JSON.stringify(after));
     applyToStore(name, before, after);
   }
+  // A reply can include a later coherent document, including changes to a
+  // different store than this write. Adopt clean keys before its version can
+  // suppress their delayed settings-changed event. Dirty/inflight keys retain
+  // their own immutable baseline until that write is acknowledged.
+  if (isSnapshot(reply)) {
+    for (const name of new Set([...cache.keys(), ...Object.keys(reply.values)])) {
+      if (Object.prototype.hasOwnProperty.call(values, name) || dirty.has(name) || inflight.has(name)) continue;
+      const has = Object.prototype.hasOwnProperty.call(reply.values, name);
+      const before = cache.has(name) ? parse(cache.get(name)) : undefined;
+      const after = has ? reply.values[name] : undefined;
+      if (has) accepted.set(name, after); else accepted.delete(name);
+      if (deepEqual(before, after)) continue;
+      if (has) cache.set(name, JSON.stringify(after)); else cache.delete(name);
+      applyToStore(name, before, after);
+    }
+  }
 }
 
 // Old shells still receive their complete document. This shell additionally
