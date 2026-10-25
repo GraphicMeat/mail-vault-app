@@ -74,7 +74,11 @@ impl Ledger {
             "lastOutcomes":self.outcomes,"requests":self.requests,"automaticOwner":"javascript","ready":true})
     }
 }
+#[derive(Default, Clone)]
+struct Facts { automatic: bool, paused: bool, loading: bool, last_activity: i64 }
 enum Cmd {
+    #[cfg(test)]
+    Facts(Facts),
     Manual { account: String, request: String, reply: oneshot::Sender<Result<Value,String>> },
     Wake,
     Finished { run: String, execution: String, joined: adapter::JoinedBackup },
@@ -138,6 +142,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, _s
                 let _=reply.send(result);
             }
             Cmd::Wake=>{},
+            #[cfg(test)] Cmd::Facts(_)=>{},
             Cmd::Finished{..}=>{},
             #[cfg(test)] Cmd::Shutdown=>return,
         }

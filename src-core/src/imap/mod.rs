@@ -20,7 +20,7 @@ pub use async_imap;
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ImapConfig {
     pub email: String,
     pub password: Option<String>,

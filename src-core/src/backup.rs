@@ -291,13 +291,22 @@ pub struct BackupRunContext {
 // in the provider runner while this function owns joining spawned work.
 async fn join_backup_batch<T: Send + 'static>(
     tasks: &mut tokio::task::JoinSet<Result<T, String>>,
-    _cancel: &AtomicBool,
+    cancel: &AtomicBool,
     mut completed: impl FnMut(T),
 ) -> Result<(), String> {
+    let mut first_error = None;
     while let Some(result) = tasks.join_next().await {
-        completed(result.map_err(|e| format!("backup folder worker panicked: {e}"))??);
+        match result.map_err(|e| format!("backup folder worker panicked: {e}")).and_then(|r| r) {
+            Ok(outcome) => completed(outcome),
+            Err(error) => {
+                cancel.store(true, Ordering::SeqCst);
+                first_error.get_or_insert(error);
+                // Do not drop or abort the set. Its other folder tasks may be
+                // awaiting blocking mirror writes, which abort cannot stop.
+            }
+        }
     }
-    Ok(())
+    first_error.map_or(Ok(()), Err)
 }
 
 pub async fn run_imap_account(ctx: BackupRunContext) -> Result<BackupResult, String> {
@@ -511,12 +520,12 @@ pub async fn run_imap_uids(ctx: BackupRunContext, plan: Vec<(String, Vec<u32>)>)
                 external_copy_error: None, external_copy_failed_count: ext_failures,
                 stop_reason: None, limit_bytes: None, resume_after_ms: None,
             });
-            let archived = archive::run_with_backup(
-                Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account_json.clone(), mailbox, uids,
+            let archived = archive::run_with_backup_config(
+                Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account.clone(), mailbox, uids,
                 Arc::clone(&ctx.cancel), None, None, false, "backup", true,
                 // Graph traffic is not wire-counted, so the daily limit does not govern it.
-                None,
-            ).await?;
+                None, None,
+            ).await?.0;
             backed_up += archived.completed;
             errors += archived.errors;
             ext_failures += archived.external_copy_failures;
@@ -618,11 +627,11 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
         external_failures: 0, bandwidth_limited: false, last_error: None,
     };
     if !missing.is_empty() {
-        let archived = archive::run_with_backup(
-            Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account_json.clone(), mailbox.clone(), missing,
+        let archived = archive::run_with_backup_config(
+            Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account.clone(), mailbox.clone(), missing,
             Arc::clone(&ctx.cancel), ctx.mirror_root.clone(), Some(account.email.clone()), false, "backup", false,
-            ctx.limit.clone(),
-        ).await?;
+            ctx.limit.clone(), None,
+        ).await?.0;
         out.backed_up = archived.completed;
         out.errors = archived.errors;
         out.external_failures = archived.external_copy_failures;

@@ -196,7 +196,8 @@ fn run_context(
     skip_folders: usize, mailbox_concurrency: usize, cancel: Arc<AtomicBool>,
     on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync>,
 ) -> Result<BackupRunContext, String> {
-    let account_json = serde_json::to_string(&account).map_err(|e| e.to_string())?;
+    // Core's two archive calls now consume this already-resolved typed config.
+    let account_json = String::new();
     // Mailbox + changes only — account id/email, mirror root and
     // `sidecars: false` are all fixed for the whole run, so the closure
     // closes over them instead of the caller threading five args through

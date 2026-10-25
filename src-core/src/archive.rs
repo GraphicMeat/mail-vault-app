@@ -226,7 +226,7 @@ pub async fn run_config(
     .await
 }
 
-async fn run_with_backup_config(
+pub(crate) async fn run_with_backup_config(
     ctx: Arc<ArchiveCtx>,
     account_id: String,
     account: ImapConfig,

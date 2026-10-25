@@ -6,7 +6,8 @@ struct Call { ctx:BackupRunContext, reply:oneshot::Sender<Result<BackupResult,St
 struct Rig { _dir:tempfile::TempDir,state:Arc<DaemonState>,calls:UnboundedReceiver<Call>,worker:tokio::task::JoinHandle<()> }
 fn settings(state:&Arc<DaemonState>)->Value { SettingsDoc::shared(&state.app_dir).get(None).unwrap().values[STORE]["state"].clone() }
 fn patch(state:&Arc<DaemonState>, value:Value) { SettingsDoc::shared(&state.app_dir).patch(&json!({STORE:{"state":value}}),None).unwrap(); }
-fn rig()->Rig {
+fn rig()->Rig { rig_with_resolve(Arc::new(|_,id,_|Box::pin(async move {Ok(serde_json::from_value(json!({"email":format!("{id}@test"),"imapHost":"127.0.0.1","imapPort":1})).unwrap())}))) }
+fn rig_with_resolve(resolve:Resolve)->Rig {
     let dir=tempfile::tempdir().unwrap();
     let state=DaemonState::for_test(dir.path().join("mail"),dir.path().into(),true);
     state.clock.set(NOW);
@@ -14,7 +15,7 @@ fn rig()->Rig {
     std::fs::write(dir.path().join("accounts.json"),r#"[{"id":"one"},{"id":"two"}]"#).unwrap();
     let (call_tx,calls)=unbounded_channel();
     let services=Services {
-        resolve:Arc::new(|_,id,_|Box::pin(async move {Ok(serde_json::from_value(json!({"email":format!("{id}@test"),"imapHost":"127.0.0.1","imapPort":1})).unwrap())})),
+        resolve,
         provider:Arc::new(move |ctx| {let tx=call_tx.clone();Box::pin(async move {let(reply,rx)=oneshot::channel();tx.send(Call{ctx,reply}).unwrap();rx.await.unwrap()})})
     };
     let (tx,rx)=unbounded_channel();state.backup_worker.tx.set(tx).ok().unwrap();
@@ -114,4 +115,113 @@ async fn backup_worker_panic_retains_actual_claim_as_uncertain() {
     assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));
     assert!(s["requests"]["panic"]["status"]!="success");
     assert!(settings(&r.state)["backupHistory"]["one"].is_null());finish(r).await;
+}
+
+#[tokio::test]
+async fn backup_worker_success_degraded_and_history_consume_isolated_oracle() {
+    let corpus:Value=serde_json::from_str(include_str!("../../src-core/tests/fixtures/backup-schedule-isolated-UTC.json")).unwrap();
+    for name in ["success","degraded"] {
+        let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["category"]=="coordinator" && c["name"]==name).unwrap();
+        let mut r=rig();manual(&r.state,"one",name).await;let c=call(&mut r).await;
+        let input=&expected["input"];let mut out=result(7);out.duration_secs=0.0;out.errors=input["errors"].as_u64().unwrap_or(0) as usize;
+        out.error_message=input["last_error"].as_str().map(str::to_string);out.external_copy_ok=input["external_copy_ok"]!=false;
+        out.external_copy_error=input["external_copy_error"].as_str().map(str::to_string);out.external_copy_failed_count=input["external_copy_failed_count"].as_u64().unwrap_or(0) as usize;
+        c.reply.send(Ok(out)).ok().unwrap();wait(&r.state,|s|s["requests"][name]["status"]=="success").await;
+        let mut observed=settings(&r.state)["backupState"]["one"].clone();observed.as_object_mut().unwrap().remove("lastSchedulerRunId");
+        assert_eq!(observed,expected["output"]["backupState"]["one"]);
+        assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"]["history"]["one"]);finish(r).await;
+    }
+    let mut r=rig();
+    for n in 0..7 {r.state.clock.set(NOW+n*1000);let request=format!("history-{n}");manual(&r.state,"one",&request).await;let c=call(&mut r).await;let mut out=result(7);out.duration_secs=0.0;c.reply.send(Ok(out)).ok().unwrap();wait(&r.state,|s|s["requests"][&request]["status"]=="success").await;}
+    let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["name"]=="history-newest-five-cumulative").unwrap();
+    assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"]["history"]["one"]);
+    assert_eq!(settings(&r.state)["backupState"]["one"]["emailsBackedUp"],49);finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_credentials_failure_history_never_advances_last_time() {
+    let mut r=rig_with_resolve(Arc::new(|_,_,_|Box::pin(async {Err("capture credentials unavailable".into())})));
+    manual(&r.state,"one","credentials").await;
+    wait(&r.state,|s|s["requests"]["credentials"]["status"]=="failed_credentials").await;
+    assert!(r.calls.try_recv().is_err());
+    assert!(settings(&r.state)["backupState"]["one"]["lastBackupTime"].is_null());
+    let corpus:Value=serde_json::from_str(include_str!("../../src-core/tests/fixtures/backup-schedule-isolated-UTC.json")).unwrap();
+    let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["name"]=="credentials-failure").unwrap();
+    assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"]["history"]["one"]);finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_retains_outcome_on_settings_failure_then_applies_once() {
+    let mut r=rig();manual(&r.state,"one","durable").await;let c=call(&mut r).await;
+    let path=r.state.app_dir.join("frontend-settings.json");let saved=r.state.app_dir.join("saved-settings");
+    std::fs::rename(&path,&saved).unwrap();std::fs::create_dir(&path).unwrap();
+    c.reply.send(Ok(result(7))).ok().unwrap();
+    wait(&r.state,|s|s["lastOutcomes"].as_array().is_some_and(|a|a.len()==1 && a[0]["applied"]==false)).await;
+    assert!(!read_ledger(&r.state.app_dir).unwrap().outcomes[0].applied);
+    std::fs::remove_dir(&path).unwrap();std::fs::rename(saved,&path).unwrap();
+    r.state.backup_worker.tx.get().unwrap().send(Cmd::Wake).unwrap();
+    wait(&r.state,|s|s["requests"]["durable"]["status"]=="success" && s["lastOutcomes"][0]["applied"]==true).await;
+    assert_eq!(settings(&r.state)["backupState"]["one"]["emailsBackedUp"],7);assert_eq!(settings(&r.state)["language"],"lt");
+    assert_eq!(settings(&r.state)["backupHistory"]["one"].as_array().unwrap().len(),1);finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_settings_marker_replays_after_metadata_ack_failure() {
+    let mut r=rig();manual(&r.state,"one","metadata-ack").await;let c=call(&mut r).await;
+    app_db::with(&r.state.app_dir,|conn| conn.execute_batch("CREATE TRIGGER fail_backup_ack BEFORE INSERT ON meta WHEN NEW.key='backup.scheduler.v1' AND instr(NEW.value, '"applied":true')>0 BEGIN SELECT RAISE(FAIL,'injected metadata ACK failure'); END;").map_err(|e|e.to_string())).unwrap();
+    c.reply.send(Ok(result(7))).ok().unwrap();
+    tokio::time::timeout(Duration::from_secs(3),async {while settings(&r.state)["backupState"]["one"]["emailsBackedUp"]!=7 {tokio::task::yield_now().await;}}).await.unwrap();
+    assert!(!read_ledger(&r.state.app_dir).unwrap().outcomes[0].applied);
+    app_db::with(&r.state.app_dir,|conn|conn.execute_batch("DROP TRIGGER fail_backup_ack").map_err(|e|e.to_string())).unwrap();
+    r.state.backup_worker.tx.get().unwrap().send(Cmd::Wake).unwrap();
+    wait(&r.state,|s|s["lastOutcomes"][0]["applied"]==true).await;
+    assert_eq!(settings(&r.state)["backupHistory"]["one"].as_array().unwrap().len(),1);
+    assert_eq!(settings(&r.state)["backupState"]["one"]["emailsBackedUp"],7);finish(r).await;
+}
+
+fn automatic(state:&Arc<DaemonState>,paused:bool) {
+    state.backup_worker.tx.get().unwrap().send(Cmd::Facts(Facts{automatic:true,paused,loading:false,last_activity:NOW-180_000})).unwrap();
+}
+fn wake(state:&Arc<DaemonState>) {state.backup_worker.tx.get().unwrap().send(Cmd::Wake).unwrap();}
+fn enabled(state:&Arc<DaemonState>) {patch(state,json!({"billingProfile":{"hasSubscription":true,"status":"active"},"backupGlobalEnabled":true,"backupGlobalConfig":{"interval":"daily"},"hiddenAccounts":{"two":true}}));}
+#[tokio::test]
+async fn backup_worker_automatic_owner_is_inactive_in_production_stage() {
+    let mut r=rig();enabled(&r.state);wake(&r.state);tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(r.calls.try_recv().is_err());assert_eq!(r.state.backup_worker.status()["automaticOwner"],"javascript");finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_retry_ladder_consumes_isolated_trace_without_early_history() {
+    let mut r=rig();enabled(&r.state);automatic(&r.state,false);
+    let corpus:Value=serde_json::from_str(include_str!("../../src-core/tests/fixtures/backup-schedule-isolated-UTC.json")).unwrap();
+    let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["name"]=="retry-exhaustion").unwrap();
+    for (attempt,time) in [NOW,NOW+30_000,NOW+150_000,NOW+450_000].into_iter().enumerate() {
+        if attempt>0 {r.state.clock.set(time-1);wake(&r.state);tokio::time::sleep(Duration::from_millis(20)).await;assert!(r.calls.try_recv().is_err());r.state.clock.set(time);wake(&r.state);}
+        let c=call(&mut r).await;assert_eq!(c.ctx.mailbox_concurrency,3);assert_eq!(r.state.clock.now_ms(),time);
+        c.reply.send(Err("retry failure".into())).ok().unwrap();
+        if attempt<3 {wait(&r.state,|s|s["active"].is_null() && s["queue"][0]["retries"]==attempt+1).await;assert!(settings(&r.state)["backupHistory"]["one"].is_null());}
+    }
+    wait(&r.state,|s|s["lastOutcomes"].as_array().is_some_and(|a|!a.is_empty() && a[0]["applied"]==true)).await;
+    assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"][3]["history"]["one"]);finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_manual_join_suppresses_retry_and_preserves_pause() {
+    let mut r=rig();enabled(&r.state);automatic(&r.state,false);let c=call(&mut r).await;automatic(&r.state,true);
+    let one=manual(&r.state,"one","joined-auto").await;let again=manual(&r.state,"one","replay").await;assert_eq!(one["runId"],again["runId"]);
+    c.reply.send(Err("manual joined failure".into())).ok().unwrap();wait(&r.state,|s|s["requests"]["joined-auto"]["status"]=="failed").await;
+    r.state.clock.set(NOW+60_000);wake(&r.state);tokio::time::sleep(Duration::from_millis(30)).await;assert!(r.calls.try_recv().is_err());finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_progress_prevents_stall_and_stall_cancel_waits_for_join() {
+    let mut r=rig();manual(&r.state,"one","stall").await;let c=call(&mut r).await;
+    r.state.clock.set(NOW+STALL_MS-1);let mut f=frame(&c.ctx);f.active=true;(c.ctx.on_progress)(f);
+    r.state.clock.set(NOW+STALL_MS+1);wake(&r.state);tokio::time::sleep(Duration::from_millis(20)).await;assert!(!c.ctx.cancel.load(SeqCst));
+    r.state.clock.set(NOW+2*STALL_MS);wake(&r.state);wait(&r.state,|s|s["active"]["stage"]=="stopping_stall").await;assert!(c.ctx.cancel.load(SeqCst));
+    assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));assert!(settings(&r.state)["backupHistory"]["one"].is_null());
+    let mut out=result(0);out.cancelled=true;c.reply.send(Ok(out)).ok().unwrap();wait(&r.state,|s|s["requests"]["stall"]["status"]=="failed").await;finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_unreadable_accounts_are_pending_and_removed_account_is_distinct() {
+    let mut r=rig();let guard=adapter::claim_run(&r.state,"one").unwrap();manual(&r.state,"one","accounts").await;
+    wait(&r.state,|s|s["queue"][0]["stage"]=="pending_claim").await;
+    std::fs::write(r.state.app_dir.join("accounts.json"),"broken").unwrap();drop(guard);wake(&r.state);
+    wait(&r.state,|s|s["queue"][0]["stage"]=="pending_accounts").await;assert!(r.calls.try_recv().is_err());
+    std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"two"}]"#).unwrap();wake(&r.state);
+    wait(&r.state,|s|s["requests"]["accounts"]["status"]=="missing_account").await;assert!(settings(&r.state)["backupHistory"]["one"].is_null());finish(r).await;
 }
