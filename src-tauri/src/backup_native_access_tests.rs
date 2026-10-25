@@ -284,8 +284,8 @@ fn backup_access_unknown_slot_is_not_absent_and_never_resolves_a_raw_path() {
 
 /// Actual shell resolver and direct native RPC against a freshly built daemon.
 /// Uses an isolated portable fixture so it never changes the runner's HOME or
-/// installed account/keychain state. The release build ignores no native scope
-/// rules: the fixture goes through the real bookmark resolver on macOS.
+/// installed account/keychain state. The fixture follows the production scope
+/// rules through the real bookmark resolver on macOS.
 #[cfg(unix)]
 #[test]
 #[ignore = "requires a freshly built daemon, selected explicitly by the mini gate"]
@@ -344,7 +344,7 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         "native fixture passphrase",
         &secrets,
         mailvault_core::transfer::crypto::Params {
-            m_kib: 1024,
+            m_kib: mailvault_core::transfer::crypto::MIN_M_KIB,
             t: 1,
             p: 1,
         },
@@ -479,20 +479,25 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         token: &'a str,
         acquired: AtomicUsize,
         released: AtomicUsize,
+        lose_ack: AtomicBool,
     }
     impl Ports for Native<'_> {
         fn call(&self, m: &str, p: Value) -> Result<Value, String> {
-            mailvault_core::daemon_ipc::call(
+            let result = mailvault_core::daemon_ipc::call(
                 self.endpoint,
                 self.token,
                 m,
                 p,
                 Duration::from_secs(30),
             )
-            .map_err(|_| "native RPC unavailable".into())
+            .map_err(|_| "native RPC unavailable".into());
+            if m == "backup.attach_access" && result.as_ref().is_ok_and(|v| v["state"] == "accepted") && self.lose_ack.swap(false,SeqCst) {
+                Err("accepted native ACK deliberately lost at the RPC boundary".into())
+            } else {result}
         }
         fn resolve(&self) -> AttachResolution {
             let r = resolve_native(self.app);
+            assert!(matches!(r.result,Resolution::Authorized{..}),"actual saved native resolver unavailable in the connected fixture");
             if matches!(r.result, Resolution::Authorized { .. }) {
                 self.acquired.fetch_add(1, SeqCst);
             }
@@ -509,6 +514,7 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         token: &token,
         acquired: AtomicUsize::new(0),
         released: AtomicUsize::new(0),
+        lose_ack: AtomicBool::new(true),
     };
     let held = holder();
     let first = rpc(
@@ -590,6 +596,7 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         },
         "actual body fetch entered",
     );
+    assert!(!native.lose_ack.load(SeqCst),"actual accepted ACK was not exercised");
     let old = held.holds.lock().unwrap().keys().next().unwrap().clone();
     let started = Instant::now();
     rpc("ping", json!({}));
@@ -722,7 +729,7 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     reconcile(&held, &native, "shell-c");
     assert_eq!(native.released.load(SeqCst), 3);
     drop(channel);
-    println!("NATIVE_ACCESS_CONNECTED: real resolver, pending/manual/attach, live owner disconnect, joined drain, same-daemon replacement shell, fresh acquisition, persisted pending daemon replacement, byte-exact mirror, responsive ping+event channel during paused resolver, independent actual same-path consumer");
+    println!("NATIVE_ACCESS_CONNECTED: real resolver, pending/manual/attach with lost accepted ACK, live owner disconnect, joined drain, same-daemon replacement shell, fresh acquisition, persisted pending daemon replacement, byte-exact mirror, responsive ping+event channel during paused resolver, independent actual same-path consumer");
 }
 #[test]
 fn backup_access_bookmark_refresh_reacquires_against_renewed_record() {
