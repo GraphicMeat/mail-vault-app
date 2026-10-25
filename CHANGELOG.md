@@ -28,6 +28,7 @@
 
 ### Fixed
 - **Search suggestions offer only senders the search can find.** In All Inboxes the suggestions under the search box listed senders from every folder, your own address from Sent mail included, so picking one turned into a from: search that found nothing in the inbox. The list now follows the folder being searched: the inbox in All Inboxes, the open folder otherwise, every folder when the search covers all of them.
+- **A message deleted at the mailbox leaves All Inboxes.** Delete a message in webmail or another mail app and it stayed in All Inboxes until you restarted MailVault. It now goes at the next sync, like in the folder itself.
 - **You can see what you type in To, Cc and Bcc with many recipients.** The typing space used to shrink to a sliver after a long row of chips; it now moves to its own line.
 - **Security updates for the TLS and DNS libraries.** The helper now uses rustls 0.23.46 and hickory-resolver 0.26.3, which close a TLS 1.3 handshake acceptance flaw and three DNS lookup flaws (an endless retry loop, CNAME records that did not belong, and DNSSEC failures that went unreported).
 - **No new-mail banner for mail you sent.** The copy of a message you just sent lands in your Sent folder, and MailVault announced it as new mail. Anything arriving in a Sent folder (an account's own Sent, Sent Items, Gmail's Sent Mail, a folder you chose as Sent, or a localized name such as Gesendet) is now left out of banners, whoever the From says.

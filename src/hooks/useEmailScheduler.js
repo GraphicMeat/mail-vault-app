@@ -293,13 +293,13 @@ export function useEmailScheduler() {
       announceArrival(accountId, mailbox, newEmails, newest)
         .catch(error => console.warn('[scheduler] Could not announce the arrival:', error));
     }
-    // A restore window saved before the change holds the old flags, and All
-    // Inboxes paints those ahead of the cache. The Notes to Self board keeps
-    // its own copy of each note's flags, whichever list is on screen.
-    if (updatedFlags > 0) {
-      invalidateRestoreDescriptors(accountId);
-      rereadNoteFlags(accountId, mailbox);
-    }
+    // A restore window saved before the change holds the old flags and any
+    // message since deleted at the mailbox (an expunge reports no count of its
+    // own), and All Inboxes paints those ahead of the cache. So any change
+    // drops it. The Notes to Self board keeps its own copy of each note's
+    // flags, whichever list is on screen.
+    invalidateRestoreDescriptors(accountId);
+    if (updatedFlags > 0) rereadNoteFlags(accountId, mailbox);
     if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
     return onScreen;
   };

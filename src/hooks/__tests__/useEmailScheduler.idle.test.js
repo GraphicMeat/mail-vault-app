@@ -596,6 +596,55 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     });
   });
 
+  // A message deleted at the mailbox (webmail, another client) is an EXPUNGE
+  // that wakes the watcher: the change carries no count of its own. The
+  // restore window saved before it still holds the row, and All Inboxes puts
+  // that window in ahead of the disk rows, so the deleted mail came back on
+  // every repaint until the app restarted.
+  describe('a message deleted at the mailbox', () => {
+    const removal = (fields) => reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 0, at: 1, ...fields }] });
+    const held = () => saveRestoreDescriptor({ accountId: 'a1', mailbox: 'INBOX', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] });
+
+    it('drops the restore window before repainting All Inboxes', async () => {
+      held();
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' });
+      let seen = 'unread';
+      mockLoadUnifiedInbox.mockImplementation(() => { seen = getRestoreDescriptor('a1', 'INBOX', 'all'); });
+      eventReplies = [removal()];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
+      expect(seen).toBeNull();
+    });
+
+    it('drops it when the same reply also carries an arrival', async () => {
+      held();
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' });
+      let seen = 'unread';
+      mockLoadUnifiedInbox.mockImplementation(() => { seen = getRestoreDescriptor('a1', 'INBOX', 'all'); });
+      eventReplies = [removal({ newEmails: 1 })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
+      expect(seen).toBeNull();
+    });
+
+    it('drops it for a folder that is not on screen too', async () => {
+      saveRestoreDescriptor({ accountId: 'a1', mailbox: 'Archive', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] });
+      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+      eventReplies = [removal({ mailbox: 'Archive' })];
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+
+      expect(getRestoreDescriptor('a1', 'Archive', 'all')).toBeNull();
+    });
+  });
+
   it('pauses 30s when the daemon is offline, then polls again', async () => {
     mailStore.setState({ accounts: [IMAP_A] });
     eventReplies = [fails('DAEMON_OFFLINE')];
