@@ -151,3 +151,28 @@ it('treats failed or malformed stored sessions as settled empty and strips trans
   expect(values.get('mailvault-compose-session')).not.toContain('_awaitDraftHydration');
   await expect(loadComposeSession()).resolves.toMatchObject([{ initialData: { body: 'native data' } }]);
 });
+
+const semanticDraft = () => ({ _draftId: 'semantic', _draftRevision: 2, _draftAcceptedRevision: 2, _draftAccountId: 'a', _draftMailbox: 'Drafts', _draftUid: 10,
+  _accountId: 'a', _fromAddress: 'from@example.test', to: 'to@example.test', cc: '', bcc: 'secret@example.test', subject: 'Subject', body: '<p>body</p>',
+  _quotedHtml: '', _forward: false, inReplyTo: '<parent>', references: '<root> <parent>',
+  attachments: [{ filename: 'empty', contentType: 'text/plain', size: 0, content: '' }],
+});
+const semanticRequest = () => ({ accountId: 'a', fromAddress: 'from@example.test', displayName: 'Sender', payload: {
+  to: 'to@example.test', cc: '', bcc: 'secret@example.test', subject: 'Subject', html: '<p>body</p>', text: 'body', inReplyTo: '<parent>', references: '<root> <parent>',
+  attachments: [{ filename: 'empty', contentType: 'text/plain', content: '', encoding: 'base64' }],
+}, snippet: 'body' });
+it('deduplicates semantic native and session content without treating request presence as a difference', () => {
+  const native = semanticDraft(); const request = semanticRequest();
+  const merged = mergeComposeSession([{ id: 1, initialData: native }], [{ id: 2, initialData: { ...native, _draftContent: request } }]);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].initialData._draftContent).toEqual(request);
+  expect(merged[0].initialData._draftId).toBe('semantic');
+});
+it.each(['text', 'snippet', 'displayName'])('preserves genuinely different known request-only %s in recovery', field => {
+  const content = semanticRequest(); const different = JSON.parse(JSON.stringify(content));
+  if (field === 'text') different.payload.text = 'different plain bytes'; else different[field] = 'different known value';
+  const merged = mergeComposeSession([{ id: 1, initialData: { ...semanticDraft(), _draftContent: content } }],
+    [{ id: 2, initialData: { ...semanticDraft(), _draftContent: different } }]);
+  expect(merged).toHaveLength(2);
+  expect(merged[1].initialData._draftRecoveredContent).toEqual(different);
+});

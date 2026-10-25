@@ -358,3 +358,49 @@ describe('App production hydration owner with the real editor', () => {
     view.unmount(); await act(async () => { load.resolve([]); }); expect(persist).not.toHaveBeenCalled();
   });
 });
+
+it('preserves complete unversioned restored text against the pending native current in hydration', async () => {
+  const load = deferred(); const loader = () => load.promise; const persist = vi.fn(); const controls = { current: null };
+  render(<HydrationHarness {...{ loader, persist, controls }} />);
+  await act(async () => { controls.current.openDraft(nativeDraft); });
+  expect(screen.queryByTestId('editor-stub')).toBeNull();
+  const file = { filename: 'empty', contentType: 'text/plain', content: '', source: { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 } };
+  const legacy = { ...seed, _draftUid: 22, body: '<p>legacy exact</p>', cc: 'copy@example.test', bcc: 'secret@example.test',
+    _quotedHtml: '<p>full quote</p>', inReplyTo: '<parent>', references: '<root> <parent>', _fromAddress: 'alias@example.test', attachments: [file] };
+  await act(async () => { load.resolve([{ id: 90, initialData: legacy }]); });
+  expect(controls.current.windows).toHaveLength(1);
+  expect(screen.getByTestId('editor-stub').value).toBe('<p>legacy exact</p>');
+  expect(controls.current.windows[0].initialData).toMatchObject({ _draftId: 'managed', _draftAcceptedRevision: 2, _draftUid: 22, _draftRevision: 0 });
+  expect(persist.mock.calls.at(-1)[0][0].initialData.body).toBe('<p>legacy exact</p>');
+  await tick();
+  expect(saveLocalDraft.mock.calls[0][0]).toMatchObject({ draftId: 'managed', revision: 3, fromAddress: 'alias@example.test',
+    payload: { cc: 'copy@example.test', bcc: 'secret@example.test', html: expect.stringContaining('<p>legacy exact</p>'), inReplyTo: '<parent>', references: '<root> <parent>',
+      attachments: [{ content: '', source: { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 } }] } });
+  expect(saveLocalDraft.mock.calls[0][0].payload.html).toContain('full quote');
+});
+
+it('captures an edit before the recovery seed first timer and retries that exact latest request after restore', async () => {
+  saveLocalDraft.mockRejectedValueOnce(Error('recovery vault unavailable'));
+  const file = { filename: 'empty', contentType: 'text/plain', content: '', encoding: 'base64', source: { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 } };
+  const original = { accountId: 'acct-1', fromAddress: 'me@example.test', displayName: 'Exact Name', payload: {
+    to: '', cc: '', bcc: 'secret@example.test', subject: '', html: '<p>old recovery</p>', text: 'old plain text', inReplyTo: '<parent>', references: '<root> <parent>', attachments: [file],
+  }, snippet: 'old snippet' };
+  const snapshotRef = { current: null };
+  const view = render(<ComposeModal {...props} snapshotRef={snapshotRef} initialData={{ _draftId: 'recovered', _draftRevision: 0, _draftAcceptedRevision: 0,
+    _draftRecoveredContent: original, _draftRecovery: 'provenance', _accountId: 'acct-1', _fromAddress: 'me@example.test',
+    body: '<p>old recovery</p>', bcc: 'secret@example.test', inReplyTo: '<parent>', references: '<root> <parent>', attachments: [file] }} />);
+  fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>latest before capture</p>' } });
+  fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'latest@example.test' } });
+  fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 two@example.test' } });
+  await tick();
+  const request = saveLocalDraft.mock.calls[0][0];
+  expect(request).toMatchObject({ draftId: 'recovered', revision: 1, accountId: 'acct-2', fromAddress: 'two@example.test', payload: {
+    to: 'latest@example.test', bcc: 'secret@example.test', html: '<p>latest before capture</p>', text: 'latest before capture',
+    inReplyTo: '<parent>', references: '<root> <parent>', attachments: [{ content: '', source: { attachmentIndex: 2 } }],
+  } });
+  expect(request.previousIdentity).toBeUndefined();
+  const saved = await snapshotRef.current(); view.unmount();
+  render(<ComposeModal {...props} initialData={saved} />); await tick();
+  expect(saveLocalDraft.mock.calls[1][0]).toEqual(request);
+  expect(screen.getByTestId('editor-stub').value).toBe('<p>latest before capture</p>');
+});
