@@ -95,6 +95,7 @@ function open(body, extra = {}) {
 
 beforeEach(() => {
   queueSend.mockClear();
+  mail.accounts = [account];
   premium.on = true;
   settings.attachmentReminder = true;
 });
@@ -163,5 +164,40 @@ describe('attachment reminder at send', () => {
     fireEvent.click(await screen.findByTestId('compose-send'));
 
     await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+  });
+});
+
+// Row 13 characterization: execute the real handleSend, not a reimplementation.
+describe('current compose validation order', () => {
+  it.each([
+    [{ to: '', cc: 'bad-cc', bcc: 'bad-bcc' }, 'compose.pleaseEnterLeastOneRecipient', {}],
+    [{ to: 'bad-to', cc: 'bad-cc', bcc: 'bad-bcc' }, 'compose.invalidRecipient', { address: 'bad-to' }],
+    [{ to: 'ok@example.test', cc: 'bad-cc', bcc: 'bad-bcc' }, 'compose.invalidRecipient', { address: 'bad-cc' }],
+    [{ to: 'ok@example.test', cc: '', bcc: 'bad-bcc' }, 'compose.invalidRecipient', { address: 'bad-bcc' }],
+  ])('validates recipient fields before account, reminder and expired plan: %j', async (fields, key, args) => {
+    const { t } = await import('../../i18n');
+    mail.accounts = [];
+    open('<p>attached</p>', { ...fields, _sendPlan: { kind: 'at' }, _scheduleDraft: { localTime: '2000-01-01T00:00', tz: 'UTC' } });
+    fireEvent.submit(screen.getByTestId('compose-send').closest('form'));
+    expect(await screen.findByText(t(key, args))).toBeTruthy();
+    expect(screen.queryByTestId('compose-attachment-reminder')).toBeNull();
+    expect(queueSend).not.toHaveBeenCalled();
+  });
+  it('requires an account before asking about attachment or an expired plan', async () => {
+    const { t } = await import('../../i18n');
+    mail.accounts = [];
+    open('<p>attached</p>', { _sendPlan: { kind: 'at' }, _scheduleDraft: { localTime: '2000-01-01T00:00', tz: 'UTC' } });
+    fireEvent.submit(screen.getByTestId('compose-send').closest('form'));
+    expect(await screen.findByText(t('compose.noAccountSelected'))).toBeTruthy();
+    expect(screen.queryByTestId('compose-attachment-reminder')).toBeNull();
+  });
+  it('asks about attachment before rejecting an expired absolute plan', async () => {
+    open('<p>attached</p>', { _sendPlan: { kind: 'at' }, _scheduleDraft: { localTime: '2000-01-01T00:00', tz: 'UTC' } });
+    fireEvent.click(await screen.findByTestId('compose-send'));
+    expect(await screen.findByTestId('compose-attachment-reminder')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('compose-attachment-reminder-send'));
+    const { t } = await import('../../i18n');
+    expect(await screen.findByText(t('scheduled.picker.pastTime'))).toBeTruthy();
+    expect(queueSend).not.toHaveBeenCalled();
   });
 });
