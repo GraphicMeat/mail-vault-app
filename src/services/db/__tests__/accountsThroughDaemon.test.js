@@ -24,7 +24,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 globalThis.window = { __TAURI__: { event: { listen: (name, cb) => { h.listeners.set(name, cb); return Promise.resolve(() => {}); } } } };
 
 vi.mock('../../db', async () => await import('../accounts.js'));
-vi.mock('../../../stores/mailStore', () => ({ useMailStore: { setState: (fn) => { h.mailAccounts = fn({ accounts: h.mailAccounts }).accounts; } } }));
+vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => ({ accounts: h.mailAccounts }), setState: (fn) => { h.mailAccounts = fn({ accounts: h.mailAccounts }).accounts; } } }));
 const sync = await import('../../oauthTokenSync.js');
 const accounts = await import('../accounts.js');
 const keychain = await import('../keychain.js');
@@ -786,6 +786,42 @@ describe('round1 refreshed-pair current-read confirmation', () => {
       expect(await sync.saveRefreshedTokens()).toBe(0);
       expect(h.mailAccounts[0]).toEqual(condition === 'newer-grant' ? newer : original);
       expect(sent('credentials.update')).toHaveLength(1);
+      noShellMutation();
+    });
+  }
+});
+
+
+describe('round2 post-confirmation OAuth publication guard', () => {
+  for (const change of ['new-sign-in', 'newer-same-grant']) {
+    it(`keeps ${change} installed during the confirming digest without replaying persistence`, async () => {
+      const original = { id: 'g', email: 'g@x.test', oauth2RefreshToken: 'synthetic-original', oauth2ClientId: 'c', oauth2AccessToken: 'synthetic-old', oauth2ExpiresAt: 1 };
+      blob.g = JSON.stringify(original); h.mailAccounts = [original];
+      const pair = { accountId: 'g', accessToken: 'synthetic-pair', refreshToken: 'synthetic-rotated', expiresAt: 50, chain: [await sync.grantFingerprint(original)] };
+      useDaemon(cmd => cmd === 'oauth2.take_refreshed' ? () => ({ tokens: [pair] }) : undefined);
+      const gate = deferred(), entered = deferred();
+      const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
+      let hashes = 0;
+      vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation((...args) => {
+        if (++hashes === 2) { entered.resolve(); return gate.promise.then(() => digest(...args)); }
+        return digest(...args);
+      });
+      const saving = sync.saveRefreshedTokens();
+      await entered.promise; // confirming read completed, current record already captured
+      const stored = JSON.parse(blob.g);
+      expect(stored.oauth2AccessToken).toBe(pair.accessToken);
+      const newer = { ...stored, oauth2AccessToken: 'synthetic-newer-access', oauth2ExpiresAt: 500,
+        ...(change === 'new-sign-in' ? { oauth2RefreshToken: 'synthetic-new-sign-in', oauth2ExpiresAt: 5 } : {}) };
+      try {
+        await keychain.saveCredentials({ g: JSON.stringify(newer) });
+        h.mailAccounts = [newer];
+      } finally { gate.resolve(); }
+      expect(await saving).toBe(0);
+      expect(h.mailAccounts[0]).toEqual(newer);
+      expect(JSON.parse((await keychain.loadKeychain()).g)).toEqual(newer);
+      expect(JSON.parse(blob.g)).toEqual(newer);
+      expect(sent('credentials.update')).toHaveLength(1);
+      expect(sent('credentials.update')[0][1].chain).toEqual(pair.chain);
       noShellMutation();
     });
   }
