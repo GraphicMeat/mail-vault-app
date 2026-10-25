@@ -3,6 +3,9 @@
 // `unified?.accountId || state.activeAccountId` did exactly that, and
 // loadUnifiedInbox never clears activeAccountId, so the fallback had a target.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 

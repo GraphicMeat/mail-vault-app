@@ -4,6 +4,9 @@
 // of a real INBOX message that shared its uid a vault delete: the server copy
 // stayed, and the vault copy of the wrong folder's message went to the bin.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 

@@ -6,6 +6,9 @@
 // daemon: recover to the server, recover into the vault, or delete for good.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 

@@ -6,6 +6,9 @@
 // now: INBOX only, and only a complete list recounts; otherwise a message that
 // leaves or changes state moves the badge by one.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {

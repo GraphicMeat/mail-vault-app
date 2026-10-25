@@ -7,6 +7,9 @@
 // "Mark unread" because the body cache handed back the flags it was filled
 // with.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {

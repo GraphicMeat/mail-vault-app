@@ -10,6 +10,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../test/viewCountsGuard';
+
+guardViewCounts();
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };

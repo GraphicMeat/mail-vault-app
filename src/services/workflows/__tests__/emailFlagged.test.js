@@ -7,6 +7,9 @@
 // reload or a stretch offline finish the job instead of losing it, so it goes
 // in before the round-trip and comes out only when the round-trip succeeded.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {

@@ -12,6 +12,9 @@
 // 3. Marking the open message unread from the reader must leave it open, on
 //    every surface, and must not be re-marked by the countdown it cancelled.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { selectionKey, rowKey, spansMailboxes } from '../../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { filterUnread } from '../../../utils/emailParser';

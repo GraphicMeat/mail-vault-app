@@ -6,6 +6,9 @@
 // finds them equal (condstore-noop) and never reads a cache row: the message
 // came back to the list still read, and the inbox badge did not count it.
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../slices/serverUids';
 
 if (!globalThis.window) {

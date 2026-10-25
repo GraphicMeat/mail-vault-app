@@ -5,6 +5,9 @@
 // the Sent copy's identity, so any of them can reach the real Sent message.
 // Reminders are shown pinned above the list instead (FollowUpPinnedRows).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 
