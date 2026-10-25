@@ -157,6 +157,25 @@ mod tests {
         assert!(rx.try_recv().is_err());
     }
 
+    #[tokio::test]
+    async fn stale_ui_delta_preserves_concurrent_scheduler_fields_and_explicit_removal() {
+        let (dir, state) = rig();
+        let original = json!({"state":{"language":"en","obsolete":null,"backupHistory":{},"backupState":{},"snapshotLastTimes":{}},"version":3});
+        call(&state, "settings.replace", json!({"values":{"mailvault-settings":original}})).await.unwrap();
+        call(&state, "settings.patch", json!({"patch":{"mailvault-settings":{"state":{"backupHistory":{"one":[{"success":true}]},"backupState":{"one":{"lastBackupTime":42}},"snapshotLastTimes":{"one":42}}}}})).await.unwrap();
+        let edited = json!({"state":{"language":"de","backupHistory":{},"backupState":{},"snapshotLastTimes":{},"literalNull":null},"version":3});
+        let result = call(&state, "settings.replace", json!({"values":{"mailvault-settings":edited},"bases":{"mailvault-settings":original}})).await.unwrap();
+        let disk = on_disk(&dir);
+        assert_eq!(disk["mailvault-settings"]["state"]["backupHistory"]["one"], json!([{"success":true}]));
+        assert_eq!(disk["mailvault-settings"]["state"]["backupState"]["one"]["lastBackupTime"], 42);
+        assert_eq!(disk["mailvault-settings"]["state"]["snapshotLastTimes"]["one"], 42);
+        assert_eq!(disk["mailvault-settings"]["state"]["language"], "de");
+        assert!(disk["mailvault-settings"]["state"].get("obsolete").is_none());
+        assert_eq!(disk["mailvault-settings"]["state"].get("literalNull"), Some(&Value::Null));
+        assert_eq!(disk["mailvault-settings"]["version"], 3);
+        assert_eq!(result["values"], disk);
+    }
+
     #[test]
     fn the_route_logs_no_values() {
         let src = include_str!("settings.rs");
