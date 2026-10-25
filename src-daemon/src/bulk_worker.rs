@@ -1437,10 +1437,26 @@ mod tests {
     // status contract. A fake ArchiveOutcome would miss a discarded typed flag.
     #[tokio::test(flavor = "multi_thread")]
     async fn bulk_worker_archive_download_limit_survives_durable_status() {
-        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _env = crate::credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         for (refusal, limited, expected, phase, status, errors) in [
-            ("copy refused", false, "errors.bulkOperationFailed", "delete", "complete", 0),
-            ("Account exceeded bandwidth limits. (Failure)", true, "errors.bulkDownloadLimited", "archive", "cancelled", 1),
+            (
+                "copy refused",
+                false,
+                "errors.bulkOperationFailed",
+                "delete",
+                "complete",
+                0,
+            ),
+            (
+                "Account exceeded bandwidth limits. (Failure)",
+                true,
+                "errors.bulkDownloadLimited",
+                "archive",
+                "cancelled",
+                1,
+            ),
         ] {
             let dir = tempfile::tempdir().unwrap();
             let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
@@ -1462,20 +1478,35 @@ mod tests {
             })).await;
             assert!(reply.error.is_none(), "{:?}", reply.error);
             let pending = wait_drained(&state).await;
-            assert!(server.commands().iter().any(|command| command.contains("BODY.PEEK[]")), "must reach actual archive IO");
+            assert!(
+                server
+                    .commands()
+                    .iter()
+                    .any(|command| command.contains("BODY.PEEK[]")),
+                "must reach actual archive IO"
+            );
             let mut archive = Vec::new();
             let terminal = loop {
-                let line = tokio::time::timeout(Duration::from_secs(2), frames.recv()).await.unwrap().unwrap();
+                let line = tokio::time::timeout(Duration::from_secs(2), frames.recv())
+                    .await
+                    .unwrap()
+                    .unwrap();
                 let frame: Value = serde_json::from_str(&line).unwrap();
                 if frame["params"]["name"] == "archive-progress" {
                     let payload = &frame["params"]["payload"];
                     archive.push(json!({"active":payload["active"], "errors":payload["errors"], "bandwidthLimited":payload["bandwidthLimited"]}));
                 }
-                if frame["params"]["name"] == "bulk-progress" && frame["params"]["payload"]["finished"] == true {
+                if frame["params"]["name"] == "bulk-progress"
+                    && frame["params"]["payload"]["finished"] == true
+                {
                     break frame["params"]["payload"].clone();
                 }
             };
-            assert_eq!(archive.last(), Some(&json!({"active":false,"errors":1,"bandwidthLimited":limited})), "actual final archive result must reach the adapter");
+            assert_eq!(
+                archive.last(),
+                Some(&json!({"active":false,"errors":1,"bandwidthLimited":limited})),
+                "actual final archive result must reach the adapter"
+            );
             // Counts describe the current phase. Ordinary archive errors survive
             // as diagnostics while entering delete resets that phase's count.
             assert_eq!(pending["currentPhase"], phase);
@@ -1487,14 +1518,30 @@ mod tests {
             assert_eq!(terminal["attemptId"], pending["attemptId"]);
             assert_eq!(terminal["operation"]["lastError"], expected);
             assert_eq!(terminal["operation"]["status"], status);
-            assert!(!server.commands().iter().any(|command| command.contains("UID STORE")), "unarchived mail stays on server");
-            let snapshot = handle_request_for_test(&state, "bulk.status", json!({
-                "operationId":"download-limit", "attemptId":"download-attempt",
-            })).await.result.unwrap();
+            assert!(
+                !server
+                    .commands()
+                    .iter()
+                    .any(|command| command.contains("UID STORE")),
+                "unarchived mail stays on server"
+            );
+            let snapshot = handle_request_for_test(
+                &state,
+                "bulk.status",
+                json!({
+                    "operationId":"download-limit", "attemptId":"download-attempt",
+                }),
+            )
+            .await
+            .result
+            .unwrap();
             assert!(snapshot["active"].is_null());
             // Terminal pending records are compacted out of status; the owned
             // durable record is the frontend's documented recovery source.
-            let raw = handle_request_for_test(&state, "read_pending_operation", json!({})).await.result.unwrap();
+            let raw = handle_request_for_test(&state, "read_pending_operation", json!({}))
+                .await
+                .result
+                .unwrap();
             assert_eq!(raw["lastError"], expected);
             assert_eq!(raw["attemptId"], pending["attemptId"]);
             std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
