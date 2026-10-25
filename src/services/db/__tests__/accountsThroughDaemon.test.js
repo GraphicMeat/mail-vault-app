@@ -624,3 +624,140 @@ describe('late backend completion is not cancelled by a read', () => {
     noShellMutation();
   });
 });
+
+
+describe('round1 reviewed cache and writer interleavings', () => {
+  it('an active legacy read/apply/store excludes native credential and account intents during upgrade', async () => {
+    const store = deferred();
+    let pending = false;
+    let modern = false;
+    useDaemon((cmd, args) => {
+      if (cmd === 'credentials.save' && !modern) return () => Promise.reject(OUTDATED());
+      if (cmd === 'store_credentials') return async () => { pending = true; const snapshot = { ...args.credentials }; await store.promise; blob = snapshot; };
+      return undefined;
+    });
+    const a = attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }));
+    await vi.waitFor(() => expect(pending).toBe(true));
+    modern = true;
+    const b = attempt(keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' }));
+    const metadata = attempt(accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }]));
+    try {
+      expect((await b).error).toBeInstanceOf(Error);
+      expect((await metadata).error).toBeInstanceOf(Error);
+      expect(sent('credentials.save')).toHaveLength(1);
+      expect(sent('accounts.put')).toHaveLength(0);
+    } finally { store.resolve(); await a; }
+    await keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' });
+    expect(Object.keys(blob).sort()).toEqual(['a', 'b', 'old']);
+  });
+  it('an admitted native credential call excludes a competing legacy whole-blob intent', async () => {
+    const native = deferred();
+    let started = false;
+    useDaemon((cmd, args) => {
+      if (cmd === 'credentials.save') return async () => { started = true; await native.promise; Object.assign(blob, args.records); return { saved: ['a'], version: 11 }; };
+      if (cmd === 'credentials.delete') return () => Promise.reject(OUTDATED());
+      return undefined;
+    });
+    const a = attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }));
+    await vi.waitFor(() => expect(started).toBe(true));
+    try {
+      expect((await attempt(keychain.deleteCredentials(['old']))).error).toBeInstanceOf(Error);
+      expect(sent('store_credentials')).toHaveLength(0);
+    } finally { native.resolve(); await a; }
+    await keychain.deleteCredentials(['old']);
+    expect(Object.keys(blob)).toEqual(['a']);
+  });
+  it('an admitted native account mutation excludes legacy credential preservation conflicts', async () => {
+    const native = deferred();
+    let started = false;
+    useDaemon((cmd, args) => {
+      if (cmd === 'accounts.put') return async () => { started = true; await native.promise; return daemon.call(cmd, args); };
+      if (cmd === 'credentials.save') return () => Promise.reject(OUTDATED());
+      return undefined;
+    });
+    const metadata = attempt(accounts.ensureAccountsInFile([{ id: 'a', email: 'a@x.test' }]));
+    await vi.waitFor(() => expect(started).toBe(true));
+    try {
+      expect((await attempt(keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' }))).error).toBeInstanceOf(Error);
+      expect(sent('store_credentials')).toHaveLength(0);
+    } finally { native.resolve(); await metadata; }
+  });
+  for (const method of ['credentials.save', 'credentials.update', 'credentials.delete']) {
+    it(`${method}: an old epoch success keeps operation truth without patching the reconnected cache`, async () => {
+      await keychain.loadKeychain();
+      const wire = deferred();
+      let admitted = false;
+      const result = method.endsWith('save') ? { saved: ['old'], version: 100 }
+        : method.endsWith('delete') ? { deleted: ['old'], version: 100 } : { updated: true, version: 100 };
+      useDaemon(cmd => cmd === method ? () => { admitted = true; return wire.promise; } : undefined);
+      const op = method.endsWith('save') ? keychain.saveCredentials({ old: '{"id":"old","email":"old@x.test","password":"obsolete"}' })
+        : method.endsWith('delete') ? keychain.deleteCredentials(['old']) : keychain.updateCredentials('old', { password: 'obsolete' });
+      const pending = attempt(op);
+      await vi.waitFor(() => expect(admitted).toBe(true));
+      blob.old = '{"id":"old","email":"old@x.test","password":"current"}';
+      h.listeners.get('daemon-reconnected')();
+      await vi.waitFor(async () => expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current'));
+      wire.resolve(result);
+      const settled = await pending;
+      expect(settled.error).toBeUndefined();
+      if (method.endsWith('update')) expect(settled.value).toBe(true);
+      expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current');
+      delete blob.old; blob.next = '{"id":"next","email":"next@x.test"}';
+      h.listeners.get('credentials-changed')({ payload: { version: 1, ids: ['old', 'next'] } });
+      await vi.waitFor(async () => expect((await keychain.loadKeychain()).old).toBeUndefined());
+      blob.last = '{"id":"last","email":"last@x.test"}';
+      h.listeners.get('credentials-changed')({ payload: { version: 2, ids: ['last'] } });
+      await vi.waitFor(async () => expect((await keychain.loadKeychain()).last).toBeDefined());
+      expect(sent(method)).toHaveLength(1);
+      noShellMutation();
+    });
+  }
+  it('a delayed foreign deletion/event is not hidden by this windows later per-record reply', async () => {
+    await keychain.loadKeychain();
+    delete blob.old;
+    blob.foreign = '{"id":"foreign","email":"foreign@x.test"}';
+    await keychain.saveCredentials({ mine: '{"id":"mine","email":"mine@x.test"}' }); // version11 only patched mine
+    h.listeners.get('credentials-changed')({ payload: { version: 10, ids: ['old', 'foreign'] } });
+    h.listeners.get('credentials-changed')({ payload: { version: 11, ids: ['mine'] } });
+    await vi.waitFor(async () => expect(Object.keys(await keychain.loadKeychain()).sort()).toEqual(['foreign', 'mine']));
+  });
+  it('an older success reply cannot overwrite a newer same-connection full refresh', async () => {
+    await keychain.loadKeychain();
+    const wire = deferred();
+    let admitted = false;
+    useDaemon(cmd => cmd === 'credentials.save' ? () => { admitted = true; return wire.promise; } : undefined);
+    const pending = attempt(keychain.saveCredentials({ old: '{"id":"old","email":"old@x.test","password":"obsolete"}' }));
+    await vi.waitFor(() => expect(admitted).toBe(true));
+    blob.old = '{"id":"old","email":"old@x.test","password":"current"}';
+    h.listeners.get('credentials-changed')({ payload: { version: 12, ids: ['old'] } });
+    await vi.waitFor(async () => expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current'));
+    wire.resolve({ saved: ['old'], version: 11 });
+    expect((await pending).error).toBeUndefined();
+    expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current');
+  });
+  it('a historical OAuth update success cannot publish its pair over the newer reconciled grant', async () => {
+    const original = { id: 'g', email: 'g@x.test', oauth2RefreshToken: 'synthetic-original', oauth2ClientId: 'c', oauth2ExpiresAt: 1 };
+    blob.g = JSON.stringify(original);
+    const chain = [await sync.grantFingerprint(original)];
+    const pair = { accountId: 'g', accessToken: 'synthetic-pair', refreshToken: 'synthetic-rotated', expiresAt: 50, chain };
+    const newer = { ...original, oauth2RefreshToken: 'synthetic-new-grant', oauth2AccessToken: 'synthetic-new-access', oauth2ExpiresAt: 5 };
+    const wire = deferred(); let admitted = false;
+    h.mailAccounts = [original];
+    useDaemon((cmd, args) => {
+      if (cmd === 'oauth2.take_refreshed') return () => ({ tokens: [pair] });
+      if (cmd === 'credentials.update') return () => { admitted = true; expect(args.chain).toEqual(chain); return wire.promise; };
+      return undefined;
+    });
+    const saving = sync.saveRefreshedTokens();
+    await vi.waitFor(() => expect(admitted).toBe(true));
+    blob.g = JSON.stringify(newer); h.mailAccounts = [newer];
+    h.listeners.get('daemon-reconnected')();
+    await vi.waitFor(async () => expect(JSON.parse((await keychain.loadKeychain()).g).oauth2RefreshToken).toBe(newer.oauth2RefreshToken));
+    wire.resolve({ updated: true, version: 100 });
+    expect(await saving).toBe(0);
+    expect(h.mailAccounts[0]).toEqual(newer);
+    expect(JSON.parse((await keychain.loadKeychain()).g)).toEqual(newer);
+    expect(sent('credentials.update')).toHaveLength(1);
+    noShellMutation();
+  });
+});
