@@ -68,7 +68,11 @@ it('matches the immutable check policy and route cases through the actual isolat
     } else if (c.category === 'route') {
       const routed = createDemoBackend({ now: () => c.input.now });
       const out = await routed.invoke('daemon_rpc', { method: 'compose.check', params: { ...base, sendPlan: c.input.plan, scheduleDraft: c.input.scheduleDraft, timeZone: c.input.timeZone } });
-      expect(out.route, c.name).toEqual(c.output);
+      // Route-only fixtures retain expired drafts. Full check must apply the
+      // separate past-time outcome using the independently captured epoch.
+      const time = fixture.cases.find(t => t.category === 'time' && t.input.localTime === c.input.scheduleDraft?.localTime && t.input.timeZone === c.input.scheduleDraft?.tz);
+      if (time && time.output.epoch <= c.input.now) expect(out, c.name).toMatchObject({ kind: 'invalid', key: 'scheduled.picker.pastTime' });
+      else expect(out.route, c.name).toEqual(c.output);
     } else if (c.category === 'premium') {
       const entitled = createDemoBackend({ now: () => c.input.now, initialSettings: { 'mailvault-settings': { state: c.input.state } } });
       const out = await entitled.invoke('daemon_rpc', { method: 'compose.check', params: { ...base, authoredBodyText: 'attached' } });
