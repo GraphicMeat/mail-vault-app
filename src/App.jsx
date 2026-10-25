@@ -18,7 +18,7 @@ import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
-import { composeSenderName, resolveInitialComposeIdentity } from './utils/sendAsSuggestions';
+import { composeSenderName } from './utils/sendAsSuggestions';
 import { currentListView } from './stores/viewStore';
 import {
   clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH,
@@ -100,13 +100,13 @@ import { initOAuthTokenSync } from './services/oauthTokenSync.js';
 import { useAbdStore } from './stores/abdStore';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
-import { prepareMessage, preparationIdentity } from './services/composePrep';
+import { createReplyFillController } from './services/replyFill';
 import { setMailtoComposeOpener, startMailtoBridge, retryMailtoCompose } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
 import { openComposeResolved } from './utils/replyTarget';
 import { useComposeSessionHydration, isTerminalCompose, composeSessionData, mergeComposeSnapshot } from './services/composeSession';
-import { sameReply, applyReplyFill } from './utils/sameReply';
+import { sameReply } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
@@ -360,7 +360,13 @@ function App() {
   const [composeWindows, setComposeWindows] = useState([]);
   const composeWindowsRef = useRef(composeWindows);
   composeWindowsRef.current = composeWindows;
-  const replyFillWork = useRef(new Map());
+  const replyFillController = useRef(null);
+  if (!replyFillController.current) replyFillController.current = createReplyFillController({
+    getWindows: () => composeWindowsRef.current,
+    setWindows: setComposeWindows,
+    getContext: () => ({ mail: useMailStore.getState(), settings: useSettingsStore.getState() }),
+    onError: () => useMailStore.setState({ error: tr('compose.preparationUnavailable') }),
+  });
   const [mailtoError, setMailtoError] = useState(false);
   const composeIdRef = useRef(0);
   const composeWindowOwnerRef = useRef(null);
@@ -387,48 +393,7 @@ function App() {
     // window: the fetch finishing late must not reopen a reply the user
     // already sent, discarded or closed, or pull one they minimized back out.
     if (state._fillFrom) {
-      const target = composeWindowsRef.current.find(w => !w.detached && !isTerminalCompose(composeSessionData(w))
-        && sameReply(w, { mode: state.mode, replyTo: state._fillFrom }));
-      if (!target) return;
-      const identityFor = window => {
-        const prefs = useSettingsStore.getState();
-        const mail = useMailStore.getState();
-        const accounts = prefs.getOrderedAccounts(mail.accounts);
-        const data = window.snapshot || window.initialData;
-        const initial = resolveInitialComposeIdentity({ replyTo: window.replyTo, initialData: data,
-          accounts, activeAccountId: mail.activeAccountId, selectedAccountId: mail.lastSelectedAccountId });
-        const accountId = data?._accountId || initial.accountId;
-        const fromAddress = data?._fromAddress || initial.address || prefs.sendAsAddresses?.[accountId] || accounts.find(a => a.id === accountId)?.email || '';
-        return { accountId, fromAddress, generation: preparationIdentity({ accountId, fromAddress, accounts,
-          aliases: prefs.aliases || {}, sendAsAddresses: prefs.sendAsAddresses }) };
-      };
-      const identity = identityFor(target);
-      const slot = replyFillWork.current.get(target.id) || { running: false, desired: null, generation: 0 };
-      replyFillWork.current.set(target.id, slot);
-      const generation = ++slot.generation;
-      const current = windows => {
-        const window = windows.find(w => w.id === target.id && !w.detached && !isTerminalCompose(composeSessionData(w))
-          && sameReply(w, { mode: state.mode, replyTo: state._fillFrom }));
-        return Boolean(window && slot.generation === generation && identityFor(window).generation === identity.generation);
-      };
-      slot.desired = async () => {
-        try {
-          const result = await prepareMessage({ replyTo: state.replyTo, mode: state.mode, accountId: identity.accountId,
-            pickedFrom: identity.fromAddress }, { isCurrent: () => current(composeWindowsRef.current) });
-          if (!current(composeWindowsRef.current)) return;
-          const prepared = { source: state.replyTo, identityGeneration: identity.generation, result };
-          setComposeWindows(prev => current(prev) ? applyReplyFill(prev, { ...state, _fillWindowId: target.id }, prepared) : prev);
-        } catch {
-          if (current(composeWindowsRef.current)) useMailStore.setState({ error: tr('compose.preparationUnavailable') });
-        }
-      };
-      if (!slot.running) {
-        slot.running = true;
-        void (async () => {
-          try { while (slot.desired) { const next = slot.desired; slot.desired = null; await next(); } }
-          finally { slot.running = false; if (replyFillWork.current.get(target.id) === slot) replyFillWork.current.delete(target.id); }
-        })();
-      }
+      void replyFillController.current.fill(state);
       return;
     }
     const restoredData = state.snapshot || state.initialData;

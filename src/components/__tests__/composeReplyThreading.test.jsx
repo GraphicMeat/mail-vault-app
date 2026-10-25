@@ -465,3 +465,42 @@ it('reveals an automatically detached editor when initial preparation fails', as
     expect(screen.getByTestId('compose-send').disabled).toBe(true);
   } finally { settings.composeOpenMode = previous; }
 });
+
+it.each(['ACK', 'RPC'])('re-resolves a removed default sender during %s without losing authored fields', async phase => {
+  let release; const gate = new Promise(r => { release = r; });
+  const acknowledgePreparation = vi.fn(async () => { if (phase === 'ACK') await gate; return 0; });
+  if (phase === 'RPC') preparation.gate = gate;
+  const second = { id: 'acct-2', email: 'second@example.test', name: 'Second' };
+  const original = { accounts: mail.accounts, active: mail.activeAccountId, selected: mail.lastSelectedAccountId };
+  const snapshotRef = { current: null };
+  const props = { mode: 'reply', replyTo: parent, onClose: () => {}, acknowledgePreparation, snapshotRef };
+  try {
+    mail.accounts = [account, second]; mail.activeAccountId = account.id;
+    const { rerender } = render(<ComposeModal {...props} />);
+    await waitFor(() => expect(phase === 'ACK' ? acknowledgePreparation.mock.calls.length : preparation.calls.length).toBe(1));
+    fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'authored@example.test' } });
+    fireEvent.change(screen.getByTestId('compose-subject'), { target: { value: 'Authored after removal' } });
+    fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>Kept after account removal</p>' } });
+    mail.accounts = [second]; mail.activeAccountId = second.id; mail.lastSelectedAccountId = second.id;
+    rerender(<ComposeModal {...props} />);
+    expect(stageOutgoing).not.toHaveBeenCalled();
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getByTestId('compose-send').disabled).toBe(false));
+    const snapshot = await snapshotRef.current();
+    expect(snapshot._accountId).toBe(second.id); expect(snapshot._fromAddress).toBe(second.email);
+    expect(snapshot.to).toBe('authored@example.test'); expect(snapshot.subject).toBe('Authored after removal');
+    expect(snapshot.body).toBe('<p>Kept after account removal</p>'); expect(snapshot._preparationPending).toBe(false);
+    expect(preparation.calls.at(-1).accountId).toBe(second.id);
+  } finally { mail.accounts = original.accounts; mail.activeAccountId = original.active; mail.lastSelectedAccountId = original.selected; }
+});
+it('preserves an explicitly picked removed alias while its account remains configured', async () => {
+  const snapshotRef = { current: null };
+  const message = { ...parent, to: [...parent.to, { address: 'removed-alias@example.test' }, { address: 'friend@example.test' }] };
+  render(<ComposeModal mode="replyAll" initialData={{ _preparationPending: true, _replyTo: message, _accountId: account.id,
+    _fromAddress: 'removed-alias@example.test', body: '<p>Saved authored content</p>' }} onClose={() => {}} snapshotRef={snapshotRef} />);
+  await waitFor(() => expect(screen.getByTestId('compose-send').disabled).toBe(false));
+  const snapshot = await snapshotRef.current();
+  expect(snapshot._accountId).toBe(account.id); expect(snapshot._fromAddress).toBe('removed-alias@example.test');
+  expect(snapshot.to).toBe('them@example.test, friend@example.test'); expect(snapshot.body).toBe('<p>Saved authored content</p>');
+  expect(preparation.calls.at(-1).pickedFrom).toBe('removed-alias@example.test');
+});
