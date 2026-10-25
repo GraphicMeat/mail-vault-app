@@ -127,11 +127,15 @@ fn explicit_zone_rechecks_fold_and_gap_and_invalid_configuration_is_bounded() {
 }
 #[test]
 fn fixed_process_zone_uses_the_live_native_provider() {
-    let zone = local_zone().expect("the native machine timezone must be available, never assumed UTC");
+    let zone =
+        local_zone().expect("the native machine timezone must be available, never assumed UTC");
     if let Ok(expected) = std::env::var("TZ") {
         let config = json!({"interval":"hours","hours":[1,3,9]});
-        for now in [1772951400000,1793511000000,1793514600000] {
-            assert_eq!(next_in_zone(&json!({}),&config,now,&zone).unwrap(),next_eligible(&json!({}),&config,now,&expected).unwrap());
+        for now in [1772951400000, 1793511000000, 1793514600000] {
+            assert_eq!(
+                next_in_zone(&json!({}), &config, now, &zone).unwrap(),
+                next_eligible(&json!({}), &config, now, &expected).unwrap()
+            );
         }
     }
 }

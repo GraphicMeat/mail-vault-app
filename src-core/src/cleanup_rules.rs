@@ -165,11 +165,21 @@ fn parse_date_str(s: &str) -> Option<i64> {
     // the calendar/time/offset. No timezone-less inference is introduced.
     let bytes = t.as_bytes();
     let minute_iso = (bytes.len() == 17 && bytes[16] == b'Z')
-        || (bytes.len() == 22 && matches!(bytes[16], b'+' | b'-') && bytes[19] == b':'
-            && [17,18,20,21].iter().all(|i| bytes[*i].is_ascii_digit()));
-    if minute_iso && bytes[4] == b'-' && bytes[7] == b'-' && bytes[10] == b'T' && bytes[13] == b':'
-        && [0,1,2,3,5,6,8,9,11,12,14,15].iter().all(|i| bytes[*i].is_ascii_digit()) {
-        if let Ok(d) = chrono::DateTime::parse_from_rfc3339(&format!("{}:00{}", &t[..16], &t[16..])) {
+        || (bytes.len() == 22
+            && matches!(bytes[16], b'+' | b'-')
+            && bytes[19] == b':'
+            && [17, 18, 20, 21].iter().all(|i| bytes[*i].is_ascii_digit()));
+    if minute_iso
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes[10] == b'T'
+        && bytes[13] == b':'
+        && [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15]
+            .iter()
+            .all(|i| bytes[*i].is_ascii_digit())
+    {
+        if let Ok(d) = chrono::DateTime::parse_from_rfc3339(&format!("{}:00{}", &t[..16], &t[16..]))
+        {
             return Some(d.timestamp_millis());
         }
     }
@@ -186,7 +196,9 @@ fn parse_date_str(s: &str) -> Option<i64> {
     // "1 Jan 2020 12:00:00 GMT": RFC 2822 without the weekday is accepted by
     // chrono; a bare date is UTC midnight, as in JS.
     if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d") {
-        return d.and_hms_opt(0, 0, 0).map(|n| n.and_utc().timestamp_millis());
+        return d
+            .and_hms_opt(0, 0, 0)
+            .map(|n| n.and_utc().timestamp_millis());
     }
     None
 }
@@ -260,7 +272,9 @@ pub fn has_premium_access(state: &Value, now_ms: i64) -> bool {
             }
         }
     }
-    let Some(bp) = state.get("billingProfile").filter(|b| b.is_object()) else { return false };
+    let Some(bp) = state.get("billingProfile").filter(|b| b.is_object()) else {
+        return false;
+    };
     if !truthy(bp.get("hasSubscription")) {
         return false;
     }
@@ -530,42 +544,96 @@ mod tests {
     }
     #[test]
     fn row14_explicit_zone_minute_dates_preserve_existing_forms() {
-        for text in ["2026-10-26T00:00Z", "2026-10-26T02:00+02:00", "2026-10-25T20:00-04:00", "2026-10-26T00:00:00Z", "Mon, 26 Oct 2026 00:00:00 +0000", "2026-10-26"] {
-            assert_eq!(js_date_ms(Some(&json!(text))),Some(1_792_972_800_000),"{text}");
+        for text in [
+            "2026-10-26T00:00Z",
+            "2026-10-26T02:00+02:00",
+            "2026-10-25T20:00-04:00",
+            "2026-10-26T00:00:00Z",
+            "Mon, 26 Oct 2026 00:00:00 +0000",
+            "2026-10-26",
+        ] {
+            assert_eq!(
+                js_date_ms(Some(&json!(text))),
+                Some(1_792_972_800_000),
+                "{text}"
+            );
         }
-        assert_eq!(js_date_ms(Some(&json!("2026-10-26T00:00:00.123Z"))),Some(1_792_972_800_123));
-        assert_eq!(js_date_ms(Some(&json!(1_792_972_800_000i64))),Some(1_792_972_800_000));
-        for text in ["2026-10-26T00:00", "2026-10-26T25:00Z", "2026-10-26T00:61Z", "2026-10-26T00:00+99:00", "2026-10-26T00:00+02", "2026-02-30T00:00Z", "invalid"] {
-            assert_eq!(js_date_ms(Some(&json!(text))),None,"{text}");
+        assert_eq!(
+            js_date_ms(Some(&json!("2026-10-26T00:00:00.123Z"))),
+            Some(1_792_972_800_123)
+        );
+        assert_eq!(
+            js_date_ms(Some(&json!(1_792_972_800_000i64))),
+            Some(1_792_972_800_000)
+        );
+        for text in [
+            "2026-10-26T00:00",
+            "2026-10-26T25:00Z",
+            "2026-10-26T00:61Z",
+            "2026-10-26T00:00+99:00",
+            "2026-10-26T00:00+02",
+            "2026-02-30T00:00Z",
+            "invalid",
+        ] {
+            assert_eq!(js_date_ms(Some(&json!(text))), None, "{text}");
         }
     }
     #[test]
     fn row14_existing_seconds_iso_share_is_not_a_numeric_epoch() {
-        assert!(!has_premium_access(&json!({"shareGrant":{"expiresAt":"2026-10-26T00:00:00Z"}}),1_792_929_600_000));
-        assert!(!has_premium_access(&json!({"shareGrant":{"expiresAt":"2026-10-26T00:00Z"}}),1_792_929_600_000));
+        assert!(!has_premium_access(
+            &json!({"shareGrant":{"expiresAt":"2026-10-26T00:00:00Z"}}),
+            1_792_929_600_000
+        ));
+        assert!(!has_premium_access(
+            &json!({"shareGrant":{"expiresAt":"2026-10-26T00:00Z"}}),
+            1_792_929_600_000
+        ));
     }
     #[test]
     fn row14_share_grants_compare_finite_numbers_without_date_parsing() {
         let now = 1_792_929_600_000;
-        for expiry in [json!(now+1),json!("1792929600001")] {
-            assert!(has_premium_access(&json!({"shareGrant":{"expiresAt":expiry},"billingProfile":{"hasSubscription":true,"clientAccessGranted":false}}),now));
+        for expiry in [json!(now + 1), json!("1792929600001")] {
+            assert!(has_premium_access(
+                &json!({"shareGrant":{"expiresAt":expiry},"billingProfile":{"hasSubscription":true,"clientAccessGranted":false}}),
+                now
+            ));
         }
-        for expiry in [Value::Null,json!(now),json!("1792929600000"),json!(false),json!(0),json!(""),json!("bad"),json!("Infinity"),json!("2026-10-26T00:00Z"),json!("2026-10-26T00:00:00Z")] {
-            assert!(!has_premium_access(&json!({"shareGrant":{"expiresAt":expiry}}),now),"{expiry}");
+        for expiry in [
+            Value::Null,
+            json!(now),
+            json!("1792929600000"),
+            json!(false),
+            json!(0),
+            json!(""),
+            json!("bad"),
+            json!("Infinity"),
+            json!("2026-10-26T00:00Z"),
+            json!("2026-10-26T00:00:00Z"),
+        ] {
+            assert!(
+                !has_premium_access(&json!({"shareGrant":{"expiresAt":expiry}}), now),
+                "{expiry}"
+            );
         }
-        assert!(!has_premium_access(&json!({"shareGrant":{}}),now));
-        assert!(!has_premium_access(&json!({}),now));
+        assert!(!has_premium_access(&json!({"shareGrant":{}}), now));
+        assert!(!has_premium_access(&json!({}), now));
     }
     #[test]
     fn row14_canceled_minute_expiry_keeps_billing_precedence_and_boundary() {
         let mut state = json!({"billingProfile":{"hasSubscription":true,"status":"canceled","currentPeriodEnd":"2026-10-26T00:00Z"}});
-        assert!(has_premium_access(&state,1_792_929_600_000));
-        assert!(!has_premium_access(&state,1_792_972_800_000));
-        assert!(!has_premium_access(&state,1_792_972_800_001));
-        state["billingProfile"]["premiumAccess"] = json!(false); assert!(!has_premium_access(&state,1_792_929_600_000));
-        state["billingProfile"]["premiumAccess"] = json!(true); state["billingProfile"]["clientAccessGranted"] = json!(false); assert!(!has_premium_access(&state,1_792_929_600_000));
-        state["billingProfile"]["clientAccessGranted"] = json!(true); assert!(has_premium_access(&state,1_792_929_600_000));
-        state["billingProfile"] = json!({"hasSubscription":true,"status":"unpaid","currentPeriodEnd":"2026-10-26T00:00Z"}); assert!(!has_premium_access(&state,1_792_929_600_000));
+        assert!(has_premium_access(&state, 1_792_929_600_000));
+        assert!(!has_premium_access(&state, 1_792_972_800_000));
+        assert!(!has_premium_access(&state, 1_792_972_800_001));
+        state["billingProfile"]["premiumAccess"] = json!(false);
+        assert!(!has_premium_access(&state, 1_792_929_600_000));
+        state["billingProfile"]["premiumAccess"] = json!(true);
+        state["billingProfile"]["clientAccessGranted"] = json!(false);
+        assert!(!has_premium_access(&state, 1_792_929_600_000));
+        state["billingProfile"]["clientAccessGranted"] = json!(true);
+        assert!(has_premium_access(&state, 1_792_929_600_000));
+        state["billingProfile"] =
+            json!({"hasSubscription":true,"status":"unpaid","currentPeriodEnd":"2026-10-26T00:00Z"});
+        assert!(!has_premium_access(&state, 1_792_929_600_000));
     }
 
 }

@@ -519,17 +519,28 @@ fn read_settings_json() -> Result<String, String> {
 // one release. Atomic, refused unless a JSON object, under the daemon's lock;
 // off the main thread (an fsync, and up to 2s waiting for that lock).
 #[tauri::command(async)]
-fn write_settings_json(data: String, values: Option<serde_json::Value>, bases: Option<serde_json::Value>) -> Result<Option<serde_json::Value>, String> {
+fn write_settings_json(
+    data: String,
+    values: Option<serde_json::Value>,
+    bases: Option<serde_json::Value>,
+) -> Result<Option<serde_json::Value>, String> {
     let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data dir: {}", e))?;
     if let Some(values) = values {
         let doc = mailvault_core::settings_doc::SettingsDoc::shared(&data_dir);
-        doc.replace_rebased(&values, &bases.unwrap_or_else(|| serde_json::json!({})), None)
-            .map_err(|e| e.catalog_key().to_string())?;
+        doc.replace_rebased(
+            &values,
+            &bases.unwrap_or_else(|| serde_json::json!({})),
+            None,
+        )
+        .map_err(|e| e.catalog_key().to_string())?;
         let snapshot = doc.get(None).map_err(|e| e.catalog_key().to_string())?;
-        let actual = serde_json::to_string(&snapshot.values).map_err(|_| "errors.settingsWriteFailed".to_string())?;
+        let actual = serde_json::to_string(&snapshot.values)
+            .map_err(|_| "errors.settingsWriteFailed".to_string())?;
         log_redact::set_verbose(log_redact::verbose_from_settings(&actual));
-        return Ok(Some(serde_json::json!({"values":snapshot.values,"version":snapshot.version})));
+        return Ok(Some(
+            serde_json::json!({"values":snapshot.values,"version":snapshot.version}),
+        ));
     }
     mailvault_core::settings_doc::write_document(&data_dir, &data)?;
     log_redact::set_verbose(log_redact::verbose_from_settings(&data));

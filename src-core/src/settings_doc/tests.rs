@@ -498,15 +498,37 @@ fn errors_name_catalog_keys() {
 fn rebased_ui_defaults_preserve_new_native_keys_but_remove_explicit_old_fields() {
     let dir = tempfile::tempdir().unwrap();
     let doc = super::SettingsDoc::shared(dir.path());
-    doc.replace(&serde_json::json!({"mailvault-settings":{"version":3,"state":{"language":"en"}}}),None).unwrap();
+    doc.replace(
+        &serde_json::json!({"mailvault-settings":{"version":3,"state":{"language":"en"}}}),
+        None,
+    )
+    .unwrap();
     let base = doc.get(None).unwrap().values["mailvault-settings"].clone();
     doc.patch(&serde_json::json!({"mailvault-settings":{"state":{"backupHistory":{"one":[{"success":true}]},"snapshotLastTimes":{"one":42}}}}),None).unwrap();
     doc.replace_rebased(&serde_json::json!({"mailvault-settings":{"version":3,"state":{"language":"de","backupHistory":{},"snapshotLastTimes":{},"literalNull":null}}}),&serde_json::json!({"mailvault-settings":base}),None).unwrap();
     let stored = &doc.get(None).unwrap().values["mailvault-settings"];
-    assert_eq!(stored["state"]["backupHistory"]["one"],serde_json::json!([{"success":true}]));
-    assert_eq!(stored["state"]["snapshotLastTimes"]["one"],42);
-    assert_eq!(stored["state"].get("literalNull"),Some(&serde_json::Value::Null));
-    let fresh = stored.clone(); let mut edited = stored.clone(); edited["state"].as_object_mut().unwrap().remove("snapshotLastTimes");
-    doc.replace_rebased(&serde_json::json!({"mailvault-settings":edited}),&serde_json::json!({"mailvault-settings":fresh}),None).unwrap();
-    assert!(doc.get(None).unwrap().values["mailvault-settings"]["state"].get("snapshotLastTimes").is_none());
+    assert_eq!(
+        stored["state"]["backupHistory"]["one"],
+        serde_json::json!([{"success":true}])
+    );
+    assert_eq!(stored["state"]["snapshotLastTimes"]["one"], 42);
+    assert_eq!(
+        stored["state"].get("literalNull"),
+        Some(&serde_json::Value::Null)
+    );
+    let fresh = stored.clone();
+    let mut edited = stored.clone();
+    edited["state"]
+        .as_object_mut()
+        .unwrap()
+        .remove("snapshotLastTimes");
+    doc.replace_rebased(
+        &serde_json::json!({"mailvault-settings":edited}),
+        &serde_json::json!({"mailvault-settings":fresh}),
+        None,
+    )
+    .unwrap();
+    assert!(doc.get(None).unwrap().values["mailvault-settings"]["state"]
+        .get("snapshotLastTimes")
+        .is_none());
 }

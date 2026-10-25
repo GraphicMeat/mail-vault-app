@@ -23,8 +23,16 @@ use std::sync::Arc;
 
 pub(crate) const CHANGED_EVENT: &str = "settings-changed";
 
-pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
-    if !matches!(method, "settings.get" | "settings.patch" | "settings.replace") {
+pub(crate) async fn route(
+    state: &Arc<DaemonState>,
+    method: &str,
+    params: &Value,
+    id: Value,
+) -> Option<RpcResponse> {
+    if !matches!(
+        method,
+        "settings.get" | "settings.patch" | "settings.replace"
+    ) {
         return None;
     }
     let doc = SettingsDoc::shared(&state.app_dir);
@@ -32,23 +40,37 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     let params = params.clone();
     // File IO and an fsync: off the async workers.
     let joined = tokio::task::spawn_blocking(move || run(&doc, &method, &params)).await;
-    let outcome = joined.unwrap_or_else(|e| Err(SettingsError::Io(format!("settings task failed: {e}"))));
+    let outcome =
+        joined.unwrap_or_else(|e| Err(SettingsError::Io(format!("settings task failed: {e}"))));
     Some(match outcome {
         Ok(Outcome::Read(v)) => RpcResponse::success(id, v),
         Ok(Outcome::Wrote(change)) => {
             if !change.changed.is_empty() {
-                state.events.emit(CHANGED_EVENT, json!({"keys": change.changed, "version": change.version}));
+                state.events.emit(
+                    CHANGED_EVENT,
+                    json!({"keys": change.changed, "version": change.version}),
+                );
             }
-            RpcResponse::success(id, json!({"version": change.version, "changed": change.changed}))
+            RpcResponse::success(
+                id,
+                json!({"version": change.version, "changed": change.changed}),
+            )
         }
         Ok(Outcome::Rebased(change, snapshot)) => {
             if !change.changed.is_empty() {
-                state.events.emit(CHANGED_EVENT, json!({"keys": change.changed, "version": change.version}));
+                state.events.emit(
+                    CHANGED_EVENT,
+                    json!({"keys": change.changed, "version": change.version}),
+                );
             }
             RpcResponse::success(id, snapshot)
         }
         Err(e) => {
-            let code = if matches!(e, SettingsError::NotAnObject) { ipc::INVALID_PARAMS } else { ipc::INTERNAL_ERROR };
+            let code = if matches!(e, SettingsError::NotAnObject) {
+                ipc::INVALID_PARAMS
+            } else {
+                ipc::INTERNAL_ERROR
+            };
             RpcResponse::error(id, code, e.catalog_key())
         }
     })
@@ -67,10 +89,12 @@ fn base_version(params: &Value) -> Option<u64> {
 fn run(doc: &SettingsDoc, method: &str, params: &Value) -> Result<Outcome, SettingsError> {
     match method {
         "settings.get" => {
-            let keys: Option<Vec<String>> = params
-                .get("keys")
-                .and_then(Value::as_array)
-                .map(|keys| keys.iter().filter_map(|k| k.as_str().map(str::to_owned)).collect());
+            let keys: Option<Vec<String>> =
+                params.get("keys").and_then(Value::as_array).map(|keys| {
+                    keys.iter()
+                        .filter_map(|k| k.as_str().map(str::to_owned))
+                        .collect()
+                });
             let snap = doc.get(keys.as_deref())?;
             let mut out = json!({"values": Value::Object(snap.values), "version": snap.version});
             if let Some(from) = snap.recovered {
@@ -87,9 +111,13 @@ fn run(doc: &SettingsDoc, method: &str, params: &Value) -> Result<Outcome, Setti
             if let Some(bases) = params.get("bases") {
                 let change = doc.replace_rebased(values, bases, base_version(params))?;
                 let snapshot = doc.get(None)?;
-                Ok(Outcome::Rebased(change, json!({"values":snapshot.values,"version":snapshot.version})))
+                Ok(Outcome::Rebased(
+                    change,
+                    json!({"values":snapshot.values,"version":snapshot.version}),
+                ))
             } else {
-                doc.replace(values, base_version(params)).map(Outcome::Wrote)
+                doc.replace(values, base_version(params))
+                    .map(Outcome::Wrote)
             }
         }
     }
