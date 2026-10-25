@@ -51,7 +51,7 @@ pub(crate) struct BackupState {
     execution: Mutex<Option<String>>,
     facts: Mutex<Facts>,
     #[cfg(test)]
-    pending_access_exit: Mutex<Option<(oneshot::Sender<()>,oneshot::Receiver<()>)>>,
+    pending_access_exit: Mutex<Option<(oneshot::Sender<()>, oneshot::Receiver<()>)>>,
     #[cfg(test)]
     scans_in_flight: std::sync::atomic::AtomicUsize,
 }
@@ -241,14 +241,20 @@ struct Services {
 }
 enum RunExit {
     Pending(String),
-    PendingAccess { observed: Option<mailvault_core::backup_access::Attempt> },
+    PendingAccess {
+        observed: Option<mailvault_core::backup_access::Attempt>,
+    },
     Completed(adapter::JoinedBackup),
     Credentials(String),
     Missing,
 }
 impl RunExit {
-    fn pending_stage(&self)->Option<&str> {
-        match self {Self::Pending(stage)=>Some(stage),Self::PendingAccess{..}=>Some("pending_access"),_=>None}
+    fn pending_stage(&self) -> Option<&str> {
+        match self {
+            Self::Pending(stage) => Some(stage),
+            Self::PendingAccess { .. } => Some("pending_access"),
+            _ => None,
+        }
     }
 }
 impl Default for Services {
@@ -860,9 +866,12 @@ async fn pump(state: &Arc<DaemonState>, ledger: &mut Ledger, services: &Services
         let execution = driver_intent.execution_id.clone();
         let exit = run_intent(&st, &driver_intent, services).await;
         #[cfg(test)]
-        if exit.pending_stage()==Some("pending_access") {
-            let barrier=st.backup_worker.pending_access_exit.lock().unwrap().take();
-            if let Some((entered,release))=barrier {let _=entered.send(());let _=release.await;}
+        if exit.pending_stage() == Some("pending_access") {
+            let barrier = st.backup_worker.pending_access_exit.lock().unwrap().take();
+            if let Some((entered, release)) = barrier {
+                let _ = entered.send(());
+                let _ = release.await;
+            }
         }
         let _ = st.backup_worker.tx.get().unwrap().send(Cmd::Finished {
             run,
@@ -901,8 +910,8 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     if !ids.contains(&intent.account_id) {
         return RunExit::Missing;
     }
-    if let Err(observed)=access::root(state, intent).await {
-        return RunExit::PendingAccess {observed};
+    if let Err(observed) = access::root(state, intent).await {
+        return RunExit::PendingAccess { observed };
     }
     let now = state.clock.now_ms();
     if !intent.manual && !policy::scheduled(&settings, &intent.account_id, now) {
@@ -941,12 +950,10 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
                 return match admission_facts(state).await {
                     Err(stage) => RunExit::Pending(stage),
                     Ok((_, ids, _)) if !ids.contains(&intent.account_id) => RunExit::Missing,
-                    Ok(_) => {
-                        match access::root(state,intent).await {
-                            Err(observed)=>RunExit::PendingAccess{observed},
-                            Ok(_)=>RunExit::Credentials(error),
-                        }
-                    }
+                    Ok(_) => match access::root(state, intent).await {
+                        Err(observed) => RunExit::PendingAccess { observed },
+                        Ok(_) => RunExit::Credentials(error),
+                    },
                 }
             }
         };
@@ -959,7 +966,7 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     }
     let mirror_root = match access::root(state, intent).await {
         Ok(root) => root,
-        Err(observed) => return RunExit::PendingAccess{observed},
+        Err(observed) => return RunExit::PendingAccess { observed },
     };
     let facts = state.backup_worker.facts.lock().unwrap().clone();
     if !intent.manual
@@ -1044,21 +1051,20 @@ async fn finish_run(
     // run_intent has returned and released its preparation claim. A result
     // decided before attach cannot retire the newer acquisition. No actual
     // provider completion enters this no-start-only path.
-    if let RunExit::PendingAccess{observed}=exit {
-        if !cancelled(state,&intent) && access::newer_authority(state,&intent,observed) {
-            intent.stage="queued".into();
-            for request in &intent.requests {next.requests.insert(request.clone(),response(&intent));}
-            next.queue.insert(0,intent);
-            publish(state,&mut next).await?;
+    if let RunExit::PendingAccess { observed } = exit {
+        if !cancelled(state, &intent) && access::newer_authority(state, &intent, observed) {
+            intent.stage = "queued".into();
+            for request in &intent.requests {
+                next.requests.insert(request.clone(), response(&intent));
+            }
+            next.queue.insert(0, intent);
+            publish(state, &mut next).await?;
             return Ok(next);
         }
     }
     let (attached, owner_lost) = access::joined(state, &intent, exit);
     let uncertain = matches!(exit,RunExit::Completed(joined) if joined.uncertain);
-    if !uncertain
-        && !user_cancel
-        && (owner_lost || (attached && exit.pending_stage().is_some()))
-    {
+    if !uncertain && !user_cancel && (owner_lost || (attached && exit.pending_stage().is_some())) {
         access::renew(state, &mut intent);
         for request in &intent.requests {
             next.requests.insert(request.clone(), response(&intent));
@@ -1122,7 +1128,7 @@ async fn finish_run(
                     },
                 )
             }
-            RunExit::Pending(_) | RunExit::PendingAccess{..} => unreachable!(),
+            RunExit::Pending(_) | RunExit::PendingAccess { .. } => unreachable!(),
         };
         if status == "failed" && !user_cancel {
             if let Some(delay) = policy::retry_delay(intent.retries, intent.manual) {

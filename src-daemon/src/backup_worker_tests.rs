@@ -1724,60 +1724,132 @@ async fn backup_access_foreign_status_does_not_reprobe_pending_intent() {
 
 #[tokio::test]
 async fn backup_access_attach_after_pending_decision_keeps_new_authority() {
-    let mut r=rig();let stamp=access_slot(&r);
-    let (entered_tx,entered_rx)=oneshot::channel();let (release_tx,release_rx)=oneshot::channel();
-    *r.state.backup_worker.pending_access_exit.lock().unwrap()=Some((entered_tx,release_rx));
-    let ack=manual(&r.state,"one","late-access-decision").await;entered_rx.await.unwrap();
-    let attempt=access_attempt(&r,&ack,"shell-b");
-    assert_eq!(access_attach(&r,&attempt,&stamp,"/native-authorized").await["state"],"accepted");
-    assert_eq!(access_query(&r,&attempt,false).await["safeRelease"],false);
+    let mut r = rig();
+    let stamp = access_slot(&r);
+    let (entered_tx, entered_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel();
+    *r.state.backup_worker.pending_access_exit.lock().unwrap() = Some((entered_tx, release_rx));
+    let ack = manual(&r.state, "one", "late-access-decision").await;
+    entered_rx.await.unwrap();
+    let attempt = access_attempt(&r, &ack, "shell-b");
+    assert_eq!(
+        access_attach(&r, &attempt, &stamp, "/native-authorized").await["state"],
+        "accepted"
+    );
+    assert_eq!(
+        access_query(&r, &attempt, false).await["safeRelease"],
+        false
+    );
     release_tx.send(()).unwrap();
-    let provider=tokio::time::timeout(Duration::from_secs(3),async {
+    let provider = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            if let Ok(call)=r.calls.try_recv() {break Some(call);}
-            let status=r.state.backup_worker.status();
-            if status["accessReceipts"].as_array().unwrap().iter().any(|v|v["attempt"]==attempt && v["safeRelease"]==true) {break None;}
+            if let Ok(call) = r.calls.try_recv() {
+                break Some(call);
+            }
+            let status = r.state.backup_worker.status();
+            if status["accessReceipts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v["attempt"] == attempt && v["safeRelease"] == true)
+            {
+                break None;
+            }
             tokio::task::yield_now().await;
         }
-    }).await.unwrap();
-    let started=provider.is_some();let mut held_until_join=false;
-    if let Some(c)=provider {
-        held_until_join=access_query(&r,&attempt,true).await["safeRelease"]==false;
-        assert_eq!(c.ctx.mirror_root.as_deref(),Some("/native-authorized"));
+    })
+    .await
+    .unwrap();
+    let started = provider.is_some();
+    let mut held_until_join = false;
+    if let Some(c) = provider {
+        held_until_join = access_query(&r, &attempt, true).await["safeRelease"] == false;
+        assert_eq!(c.ctx.mirror_root.as_deref(), Some("/native-authorized"));
         c.reply.send(Ok(result(1))).ok().unwrap();
-        wait(&r.state,|s|s["requests"]["late-access-decision"]["status"]=="success").await;
+        wait(&r.state, |s| {
+            s["requests"]["late-access-decision"]["status"] == "success"
+        })
+        .await;
     }
     finish(r).await;
-    assert!(started,"a pre-attach Pending result drained newer accepted authority before provider admission");
+    assert!(
+        started,
+        "a pre-attach Pending result drained newer accepted authority before provider admission"
+    );
     assert!(held_until_join);
 }
 
-async fn late_access_negative(lose_owner:bool) {
-    let mut r=rig();let stamp=access_slot(&r);
-    let (entered_tx,entered_rx)=oneshot::channel();let (release_tx,release_rx)=oneshot::channel();
-    *r.state.backup_worker.pending_access_exit.lock().unwrap()=Some((entered_tx,release_rx));
-    let ack=manual(&r.state,"one","late-access-negative").await;entered_rx.await.unwrap();
-    let attempt=access_attempt(&r,&ack,"shell-b");
-    assert_eq!(access_attach(&r,&attempt,&stamp,"/native-authorized").await["state"],"accepted");
-    if lose_owner {access::owner_lost(&r.state,"shell-b");}
-    else {app_db::with(&r.state.app_dir,|c|app_db::locations::save_meta(c,"external-backup","/changed-choice","native",2,false)).unwrap();}
+async fn late_access_negative(lose_owner: bool) {
+    let mut r = rig();
+    let stamp = access_slot(&r);
+    let (entered_tx, entered_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel();
+    *r.state.backup_worker.pending_access_exit.lock().unwrap() = Some((entered_tx, release_rx));
+    let ack = manual(&r.state, "one", "late-access-negative").await;
+    entered_rx.await.unwrap();
+    let attempt = access_attempt(&r, &ack, "shell-b");
+    assert_eq!(
+        access_attach(&r, &attempt, &stamp, "/native-authorized").await["state"],
+        "accepted"
+    );
+    if lose_owner {
+        access::owner_lost(&r.state, "shell-b");
+    } else {
+        app_db::with(&r.state.app_dir, |c| {
+            app_db::locations::save_meta(
+                c,
+                "external-backup",
+                "/changed-choice",
+                "native",
+                2,
+                false,
+            )
+        })
+        .unwrap();
+    }
     release_tx.send(()).unwrap();
-    let provider=tokio::time::timeout(Duration::from_secs(3),async {
+    let provider = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            if let Ok(call)=r.calls.try_recv() {break Some(call);}
-            let s=r.state.backup_worker.status();
-            if s["pendingAccess"].as_array().is_some_and(|a|a.iter().any(|i|i["executionId"]!=ack["executionId"])) && s["accessReceipts"].as_array().unwrap().iter().any(|v|v["attempt"]==attempt && v["safeRelease"]==true) {break None;}
+            if let Ok(call) = r.calls.try_recv() {
+                break Some(call);
+            }
+            let s = r.state.backup_worker.status();
+            if s["pendingAccess"]
+                .as_array()
+                .is_some_and(|a| a.iter().any(|i| i["executionId"] != ack["executionId"]))
+                && s["accessReceipts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|v| v["attempt"] == attempt && v["safeRelease"] == true)
+            {
+                break None;
+            }
             tokio::task::yield_now().await;
         }
-    }).await.unwrap();
-    let did_start=provider.is_some();
-    if let Some(c)=provider {c.reply.send(Ok(result(1))).ok().unwrap();wait(&r.state,|s|s["active"].is_null()).await;}
-    let drained=access_query(&r,&attempt,false).await["state"]=="drained";
-    let no_history=settings(&r.state)["backupHistory"]["one"].is_null();
+    })
+    .await
+    .unwrap();
+    let did_start = provider.is_some();
+    if let Some(c) = provider {
+        c.reply.send(Ok(result(1))).ok().unwrap();
+        wait(&r.state, |s| s["active"].is_null()).await;
+    }
+    let drained = access_query(&r, &attempt, false).await["state"] == "drained";
+    let no_history = settings(&r.state)["backupHistory"]["one"].is_null();
     finish(r).await;
-    assert!(!did_start,"late authority bypassed fresh slot/owner validation");assert!(drained);assert!(no_history);
+    assert!(
+        !did_start,
+        "late authority bypassed fresh slot/owner validation"
+    );
+    assert!(drained);
+    assert!(no_history);
 }
 #[tokio::test]
-async fn backup_access_late_attach_revalidates_slot_before_provider() {late_access_negative(false).await;}
+async fn backup_access_late_attach_revalidates_slot_before_provider() {
+    late_access_negative(false).await;
+}
 #[tokio::test]
-async fn backup_access_late_attach_cannot_keep_a_lost_owner() {late_access_negative(true).await;}
+async fn backup_access_late_attach_cannot_keep_a_lost_owner() {
+    late_access_negative(true).await;
+}

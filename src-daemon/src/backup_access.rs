@@ -243,29 +243,54 @@ pub(super) async fn route(
         Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
     })
 }
-pub(super) async fn root(state: &Arc<DaemonState>, intent: &Intent) -> Result<Option<String>, Option<Attempt>> {
+pub(super) async fn root(
+    state: &Arc<DaemonState>,
+    intent: &Intent,
+) -> Result<Option<String>, Option<Attempt>> {
     let path = state.app_dir.clone();
-    let stamp = common::blocking(move || wire::slot_stamp(&path)).await.and_then(|result|result);
+    let stamp = common::blocking(move || wire::slot_stamp(&path))
+        .await
+        .and_then(|result| result);
     let access = &state.backup_worker.access;
     let records = access.records.lock().unwrap();
-    let authority = records.values().find(|r| r.attempt.execution_id == intent.execution_id && r.root.is_some());
+    let authority = records
+        .values()
+        .find(|r| r.attempt.execution_id == intent.execution_id && r.root.is_some());
     if let Some(r) = authority {
-        if !r.lost && stamp.as_ref().is_ok_and(|stamp|r.slot.as_ref()==stamp.as_ref()) && access.owners.lock().unwrap().contains(&r.attempt.owner_id) {
+        if !r.lost
+            && stamp
+                .as_ref()
+                .is_ok_and(|stamp| r.slot.as_ref() == stamp.as_ref())
+            && access.owners.lock().unwrap().contains(&r.attempt.owner_id)
+        {
             return Ok(r.root.clone());
         }
         return Err(Some(r.attempt.clone()));
     }
-    if stamp.is_ok_and(|stamp|stamp.is_none()) {Ok(None)} else {Err(None)}
+    if stamp.is_ok_and(|stamp| stamp.is_none()) {
+        Ok(None)
+    } else {
+        Err(None)
+    }
 }
 /// A no-start probe may finish after the command loop accepted fresh native
 /// authority. Only that newer live acquisition can survive its stale result;
 /// the requeued driver must still revalidate the saved slot before any IO.
-pub(super) fn newer_authority(state:&Arc<DaemonState>,intent:&Intent,observed:&Option<Attempt>)->bool {
-    let access=&state.backup_worker.access;
-    access.records.lock().unwrap().values().any(|r|
-        r.attempt.execution_id==intent.execution_id && r.attempt.run_id==intent.run_id && r.root.is_some()
-        && !r.lost && r.phase!="uncertain" && Some(&r.attempt)!=observed.as_ref()
-        && access.owners.lock().unwrap().contains(&r.attempt.owner_id))
+pub(super) fn newer_authority(
+    state: &Arc<DaemonState>,
+    intent: &Intent,
+    observed: &Option<Attempt>,
+) -> bool {
+    let access = &state.backup_worker.access;
+    access.records.lock().unwrap().values().any(|r| {
+        r.attempt.execution_id == intent.execution_id
+            && r.attempt.run_id == intent.run_id
+            && r.root.is_some()
+            && !r.lost
+            && r.phase != "uncertain"
+            && Some(&r.attempt) != observed.as_ref()
+            && access.owners.lock().unwrap().contains(&r.attempt.owner_id)
+    })
 }
 
 pub(super) fn set_phase(state: &Arc<DaemonState>, execution: &str, phase: &str) {
