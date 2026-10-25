@@ -598,3 +598,26 @@ describe('demo mailbox backend', () => {
     expect(Buffer.from(backend.snapshot().messages.find(row => row.uid === 201).attachments[0].contentBase64, 'base64').toString('ascii')).toContain('%PDF-1.4');
   });
 });
+
+it('preserves native-shaped backup config and completion under a neutral settings delta', async () => {
+  const name='mailvault-settings';
+  const baseline={version:3,state:{language:'en',obsolete:'remove',backupGlobalEnabled:false,backupSchedules:{legacy:{enabled:true,interval:'daily'}},backupState:{},backupHistory:{}}};
+  const backend=createDemoBackend({initialSettings:{[name]:baseline}});
+  const call=(method,params={})=>backend.invoke('daemon_rpc',{method,params});
+  const configured=await call('backup.schedule.set',{baseVersion:0,patch:{backupGlobalEnabled:true,backupSchedules:{legacy:null}}});
+  expect(configured.config.backupGlobalEnabled).toBe(true);
+  const accountId=backend.accounts[0].id;
+  const accepted=await call('backup.run_now',{accountId,requestId:'demo-native-manual'});
+  expect((await call('backup.schedule.get')).requests['demo-native-manual'].status).toBe('success');
+  const neutral=structuredClone(baseline);neutral.state.language='de';delete neutral.state.obsolete;neutral.state.literalNull=null;
+  const written=await call('settings.replace',{values:{[name]:neutral},bases:{[name]:baseline}});
+  const current=(await call('settings.get')).values[name].state;
+  expect(current.backupGlobalEnabled).toBe(true);
+  expect(current.backupSchedules).toEqual({});
+  expect(current.backupHistory[accountId]).toHaveLength(1);
+  expect(current.backupState[accountId].lastStatus).toBe('success');
+  expect(current.language).toBe('de');expect(current.obsolete).toBeUndefined();expect(current.literalNull).toBeNull();
+  expect(written.values[name].state).toEqual(current);
+  expect((await call('backup.run_now',{accountId,requestId:'demo-native-manual'})).runId).toBe(accepted.runId);
+  expect((await call('settings.get')).values[name].state.backupHistory[accountId]).toHaveLength(1);
+});
