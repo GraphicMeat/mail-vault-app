@@ -27,12 +27,19 @@ async fn rpc(state:&Arc<DaemonState>, method:&str,params:Value)->Value {
     assert!(response.error.is_none(),"{method}: {:?}",response.error);response.result.unwrap()
 }
 async fn manual(state:&Arc<DaemonState>,id:&str,request:&str)->Value { rpc(state,"backup.run_now",json!({"accountId":id,"requestId":request})).await }
-async fn call(rig:&mut Rig)->Call {tokio::time::timeout(Duration::from_secs(2),rig.calls.recv()).await.expect("admitted worker never invoked provider").unwrap()}
+async fn call(rig:&mut Rig)->Call {match tokio::time::timeout(Duration::from_secs(2),rig.calls.recv()).await {Ok(Some(call))=>call,_=>panic!("provider not called; lifecycle {}",rig.state.backup_worker.status())}}
 async fn wait(state:&Arc<DaemonState>, predicate:impl Fn(&Value)->bool)->Value {
     tokio::time::timeout(Duration::from_secs(3),async {loop {let s=state.backup_worker.status();if predicate(&s){return s;}tokio::task::yield_now().await;}}).await.expect("worker never published expected lifecycle state")
 }
 fn result(emails:usize)->BackupResult {BackupResult{emails_backed_up:emails,errors:0,duration_secs:2.0,success:true,error_message:None,cancelled:false,completed_folders:4,external_copy_ok:true,external_copy_error:None,external_copy_failed_count:0}}
 fn frame(ctx:&BackupRunContext)->BackupProgress {adapter::failed_frame(&ctx.account_id,"fixture error".into())}
+// JSON stores JavaScript's integral seconds as 0 and Rust's f64 seconds as
+// 0.0. Assert numeric duration equality, then compare every remaining field.
+fn assert_history(actual:&Value,expected:&Value) {
+    let mut actual=actual.clone();let a=actual.as_array_mut().unwrap();let e=expected.as_array().unwrap();assert_eq!(a.len(),e.len());
+    for (a,e) in a.iter_mut().zip(e){assert_eq!(a["durationSecs"].as_f64(),e["durationSecs"].as_f64());a["durationSecs"]=e["durationSecs"].clone();}
+    assert_eq!(&actual,expected);
+}
 async fn finish(rig:Rig) {let _=rig.state.backup_worker.tx.get().unwrap().send(Cmd::Shutdown);rig.worker.await.unwrap();}
 
 #[tokio::test]
@@ -128,13 +135,16 @@ async fn backup_worker_success_degraded_and_history_consume_isolated_oracle() {
         out.external_copy_error=input["external_copy_error"].as_str().map(str::to_string);out.external_copy_failed_count=input["external_copy_failed_count"].as_u64().unwrap_or(0) as usize;
         c.reply.send(Ok(out)).ok().unwrap();wait(&r.state,|s|s["requests"][name]["status"]=="success").await;
         let mut observed=settings(&r.state)["backupState"]["one"].clone();observed.as_object_mut().unwrap().remove("lastSchedulerRunId");
+        // A targeted RFC merge patch clears lastError by removing its key.
+        // Both absence and explicit null represent no error to consumers.
+        if observed.get("lastError").is_none(){observed["lastError"]=Value::Null;}
         assert_eq!(observed,expected["output"]["backupState"]["one"]);
-        assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"]["history"]["one"]);finish(r).await;
+        assert_history(&settings(&r.state)["backupHistory"]["one"],&expected["output"]["history"]["one"]);finish(r).await;
     }
     let mut r=rig();
     for n in 0..7 {r.state.clock.set(NOW+n*1000);let request=format!("history-{n}");manual(&r.state,"one",&request).await;let c=call(&mut r).await;let mut out=result(7);out.duration_secs=0.0;c.reply.send(Ok(out)).ok().unwrap();wait(&r.state,|s|s["requests"][&request]["status"]=="success").await;}
     let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["name"]=="history-newest-five-cumulative").unwrap();
-    assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"]["history"]["one"]);
+    assert_history(&settings(&r.state)["backupHistory"]["one"],&expected["output"]["history"]["one"]);
     assert_eq!(settings(&r.state)["backupState"]["one"]["emailsBackedUp"],49);finish(r).await;
 }
 #[tokio::test]
@@ -146,7 +156,7 @@ async fn backup_worker_credentials_failure_history_never_advances_last_time() {
     assert!(settings(&r.state)["backupState"]["one"]["lastBackupTime"].is_null());
     let corpus:Value=serde_json::from_str(include_str!("../../src-core/tests/fixtures/backup-schedule-isolated-UTC.json")).unwrap();
     let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["name"]=="credentials-failure").unwrap();
-    assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"]["history"]["one"]);finish(r).await;
+    assert_history(&settings(&r.state)["backupHistory"]["one"],&expected["output"]["history"]["one"]);finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_retains_outcome_on_settings_failure_then_applies_once() {
@@ -198,7 +208,7 @@ async fn backup_worker_retry_ladder_consumes_isolated_trace_without_early_histor
         if attempt<3 {wait(&r.state,|s|s["active"].is_null() && s["queue"][0]["retries"]==attempt+1).await;assert!(settings(&r.state)["backupHistory"]["one"].is_null());}
     }
     wait(&r.state,|s|s["lastOutcomes"].as_array().is_some_and(|a|!a.is_empty() && a[0]["applied"]==true)).await;
-    assert_eq!(settings(&r.state)["backupHistory"]["one"],expected["output"][3]["history"]["one"]);finish(r).await;
+    assert_history(&settings(&r.state)["backupHistory"]["one"],&expected["output"][3]["history"]["one"]);finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_manual_join_suppresses_retry_and_preserves_pause() {
@@ -224,4 +234,52 @@ async fn backup_worker_unreadable_accounts_are_pending_and_removed_account_is_di
     wait(&r.state,|s|s["queue"][0]["stage"]=="pending_accounts").await;assert!(r.calls.try_recv().is_err());
     std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"two"}]"#).unwrap();wake(&r.state);
     wait(&r.state,|s|s["requests"]["accounts"]["status"]=="missing_account").await;assert!(settings(&r.state)["backupHistory"]["one"].is_null());finish(r).await;
+}
+
+#[tokio::test]
+async fn backup_worker_stale_progress_and_cancel_cannot_change_new_execution() {
+    let mut r=rig();let ack=manual(&r.state,"one","old").await;let old=call(&mut r).await;
+    let old_progress=old.ctx.on_progress.clone();let old_frame=frame(&old.ctx);old.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["old"]["status"]=="success").await;
+    manual(&r.state,"one","new").await;let new=call(&mut r).await;
+    rpc(&r.state,"backup.cancel",json!({"runId":ack["runId"]})).await;assert!(!new.ctx.cancel.load(SeqCst));
+    r.state.clock.set(NOW+STALL_MS-1);old_progress(old_frame);
+    r.state.clock.set(NOW+STALL_MS+1);wake(&r.state);
+    wait(&r.state,|s|s["active"]["stage"]=="stopping_stall").await;
+    let mut out=result(0);out.cancelled=true;new.reply.send(Ok(out)).ok().unwrap();wait(&r.state,|s|s["requests"]["new"]["status"]=="failed").await;finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_stop_fences_a_delayed_automatic_scan() {
+    let mut r=rig();enabled(&r.state);automatic(&r.state,true);
+    rpc(&r.state,"backup.stop",json!({})).await;
+    // An earlier read of settings may return after Stop. It cannot re-enable
+    // the scheduler or become fresh intent just by being delivered late.
+    r.state.backup_worker.tx.get().unwrap().send(Cmd::Due(vec!["one".into()])).unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(r.state.backup_worker.status()["queue"].as_array().unwrap().is_empty(),"late automatic scan recreated stopped intent");
+    assert!(r.calls.try_recv().is_err());finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_limit_cap_change_rechecks_current_entitlement() {
+    let mut r=rig();enabled(&r.state);patch(&r.state,json!({"transferLimits":{"one":{"capEnabled":true,"dailyDownLimitBytes":1024}}}));
+    manual(&r.state,"one","limit-cap").await;let c=call(&mut r).await;
+    let mut terminal=frame(&c.ctx);terminal.cancelled=true;terminal.stop_reason=Some("limit_reached");terminal.limit_bytes=Some(1024);terminal.resume_after_ms=Some((NOW+10_000) as u64);terminal.completed_folders=4;(c.ctx.on_progress)(terminal);
+    let mut out=result(0);out.success=false;out.cancelled=true;c.reply.send(Ok(out)).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["limit-cap"]["status"]=="limit_reached").await;
+    patch(&r.state,json!({"billingProfile":{"hasSubscription":false,"status":"inactive"},"transferLimits":{"one":{"warningEnabled":false}}}));automatic(&r.state,false);
+    wait(&r.state,|s|s["active"].is_null() && s["queue"][0]["stage"]=="pending_policy").await;assert!(r.calls.try_recv().is_err());
+    patch(&r.state,json!({"billingProfile":{"hasSubscription":true,"status":"active"}}));wake(&r.state);
+    tokio::time::sleep(Duration::from_millis(40)).await;assert!(r.calls.try_recv().is_err(),"entitlement recheck erased the midnight hold");
+    patch(&r.state,json!({"transferLimits":{"one":{"capEnabled":false}}}));wake(&r.state);
+    let c=call(&mut r).await;assert_eq!(c.ctx.skip_folders,0,"ordinal without known folder order became skip authority");
+    c.reply.send(Ok(result(7))).ok().unwrap();wait(&r.state,|s|s["active"].is_null() && s["lastOutcomes"].as_array().is_some_and(|a|a.len()>=2)).await;finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_removed_during_credentials_is_not_failed_credentials() {
+    let (release,rx)=oneshot::channel();let rx=Arc::new(Mutex::new(Some(rx)));let (entered,mut entered_rx)=unbounded_channel();
+    let r=rig_with_resolve(Arc::new(move |_,_,_|{let rx=rx.lock().unwrap().take().unwrap();let entered=entered.clone();Box::pin(async move {entered.send(()).unwrap();rx.await.unwrap();Err("credentials no longer present".into())})}));
+    manual(&r.state,"one","removed").await;entered_rx.recv().await.unwrap();
+    std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"two"}]"#).unwrap();release.send(()).unwrap();
+    wait(&r.state,|s|s["requests"]["removed"]["status"]=="missing_account").await;
+    assert!(settings(&r.state)["backupHistory"]["one"].is_null());finish(r).await;
 }

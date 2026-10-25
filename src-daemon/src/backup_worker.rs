@@ -197,7 +197,12 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             Cmd::Running{run,execution,cap}=> {
                 if let Some(i)=ledger.active.as_mut().filter(|i|i.run_id==run && i.execution_id==execution) {i.stage="running".into();i.cap=cap;let _=publish(&state,&mut ledger).await;}
             }
-            Cmd::Finished{run,execution,exit}=>pending_finish=Some((run,execution,exit)),
+            Cmd::Finished{run,execution,exit}=>{
+                // A real joined run may free work that was waiting behind it.
+                // A pending probe must not immediately probe itself forever.
+                if !matches!(exit,RunExit::Pending(_)){scan=true;}
+                pending_finish=Some((run,execution,exit));
+            },
             Cmd::Due(ids)=> {
                 for id in ids {
                     if ledger.active.iter().chain(ledger.queue.iter()).any(|i|i.account_id==id) {continue;}

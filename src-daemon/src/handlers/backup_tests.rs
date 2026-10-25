@@ -574,3 +574,22 @@ async fn backup_native_manual_ack_is_idempotent_and_not_completion() {
     let conflict = handle_request_for_test(&s, "backup.run_now", json!({"accountId":"other","requestId":"lost-ack"})).await;
     assert!(conflict.error.is_some(), "request identity must not redirect work");
 }
+
+#[tokio::test(flavor="multi_thread", worker_threads=2)]
+async fn backup_real_mirror_drain_retains_claim_after_cancel_ack() {
+    use mailvault_core::{app_db,mirror_mutation::MirrorRoot};
+    let (_vault,s)=st();let mirror=tempfile::tempdir().unwrap();
+    let cur=mailvault_core::maildir::mirror_cur(mirror.path(),"user@example.com","INBOX").unwrap();
+    std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),b"legacy queued copy").unwrap();
+    let scope="user@example.com|INBOX".to_string();
+    app_db::with(&s.app_dir,|c|app_db::ops::purge_append_legacy(c,&std::collections::BTreeMap::from([(scope,vec![7])]))).unwrap();
+    let root=MirrorRoot::resolve(mirror.path()).unwrap();let(entered,ready)=tokio::sync::oneshot::channel();let(release,held)=std::sync::mpsc::channel();
+    let holding=tokio::task::spawn_blocking(move ||root.mutate(|_|{entered.send(()).ok();held.recv().unwrap();Ok(())}));ready.await.unwrap();
+    backup_run_account(&s,json!({"accountId":"acct1","accountJson":account_json(),"mirrorRoot":mirror.path()})).await.unwrap();
+    backup_cancel(&s,json!({"accountId":"acct1"})).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    assert!(s.backup_runs.lock().unwrap().contains_key("acct1"),"cancel ACK released admission while actual mirror drain was blocked");
+    assert!(claim_run(&s,"acct1").is_none());
+    release.send(()).unwrap();holding.await.unwrap().unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5),async {while s.backup_runs.lock().unwrap().contains_key("acct1"){tokio::task::yield_now().await;}}).await.unwrap();
+}
