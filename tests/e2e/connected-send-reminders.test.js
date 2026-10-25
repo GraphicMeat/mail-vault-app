@@ -245,6 +245,31 @@ describe('Send reminders on the mock server', function () {
     expect((await listing(withLuke, 'Sent')).length).toBe(before + 1);
   });
 
+  it('keeps the complete composer unsent when the native final check fails', async function () {
+    const subject = `Retained check failure ${RUN}`;
+    const before = (await listing(withLuke, 'Sent')).length;
+    await composeTo(subject, 'Keep the complete authored body.');
+    await browser.execute(() => {
+      const original = window.__TAURI__;
+      window.__COMPOSE_CHECK_FAILURE__ = original;
+      window.__TAURI__ = { ...original, core: { ...original.core, invoke: (command, args) => {
+        if (command === 'daemon_rpc' && args?.method === 'compose.check') return Promise.reject(new Error('compose.preparationUnavailable'));
+        return original.core.invoke(command, args);
+      } } };
+    });
+    try {
+      expect(await click('[data-testid="compose-send"]')).toBe(true);
+      await browser.waitUntil(() => visible('[data-testid="compose-error"]'), { timeout: 10_000, timeoutMsg: 'Failed check did not remain visible in the composer' });
+      expect(await modalCount()).toBe(1);
+      expect((await listing(withLuke, 'Sent')).length).toBe(before);
+      expect(await browser.execute(() => document.querySelector('[data-testid="compose-subject"]')?.value)).toBe(subject);
+      expect(await browser.execute(() => document.querySelector('.ProseMirror')?.textContent)).toContain('Keep the complete authored body.');
+    } finally {
+      await browser.execute(() => { window.__TAURI__ = window.__COMPOSE_CHECK_FAILURE__; delete window.__COMPOSE_CHECK_FAILURE__; });
+      await closeComposeHard();
+    }
+  });
+
   it('records an armed "remind me if no reply" under the Message-ID that went out', async function () {
     const subject = `Waiting on an answer ${RUN}`;
     await composeTo(subject, 'Can you confirm by Friday?');

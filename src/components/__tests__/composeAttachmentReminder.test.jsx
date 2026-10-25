@@ -62,16 +62,20 @@ const settings = {
   attachmentReminder: true,
 };
 const premium = { on: true };
+const settingListeners = new Set();
+const accountListeners = new Set();
 vi.mock('../../stores/mailStore', () => {
   const hook = vi.fn((selector) => selector(mail));
   hook.getState = () => mail;
   hook.setState = vi.fn();
+  hook.subscribe = callback => { accountListeners.add(callback); return () => accountListeners.delete(callback); };
   return { useMailStore: hook };
 });
 vi.mock('../../stores/accountStore', () => ({ useAccountStore: (selector) => selector(mail) }));
 vi.mock('../../stores/settingsStore', () => {
   const hook = vi.fn((selector) => selector(settings));
   hook.getState = () => settings;
+  hook.subscribe = callback => { settingListeners.add(callback); return () => settingListeners.delete(callback); };
   return {
     useSettingsStore: hook,
     hasPremiumAccess: () => premium.on,
@@ -105,6 +109,8 @@ beforeEach(() => {
   mail.accounts = [account];
   premium.on = true;
   settings.attachmentReminder = true;
+  settings.displayNames = {};
+  settings.sendDelay = 0;
 });
 afterEach(cleanup);
 
@@ -264,5 +270,53 @@ describe('same-snapshot confirmation and failures', () => {
     expect(queueSend).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('editor-stub').value).toBe('<p>Keep this body</p>');
+  });
+});
+
+describe('external authority and save boundaries', () => {
+  it.each(['settings', 'account', 'unmount'])('refuses late ready after %s changes while the check is pending', async change => {
+    let finish;
+    checkCompose.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    open('<p>Complete body</p>');
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    await act(async () => {
+      if (change === 'settings') {
+        const previous = { ...settings }; settings.displayNames = { 'acct-1': 'Changed' };
+        settingListeners.forEach(callback => callback(settings, previous));
+      }
+      if (change === 'account') {
+        const previous = { ...mail }; mail.accounts = [{ ...account, name: 'Changed' }];
+        accountListeners.forEach(callback => callback(mail, previous));
+      }
+      if (change === 'unmount') cleanup();
+      finish({ kind: 'ready', route: { delay: null } });
+    });
+    expect(queueSend).not.toHaveBeenCalled();
+  });
+  it('waits the existing save without recapturing or checking changed content', async () => {
+    const { saveLocalDraft } = await import('../../services/localDrafts');
+    let finish;
+    saveLocalDraft.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    open('<p>Before save</p>');
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    fireEvent.click(screen.getByTestId('compose-send'));
+    expect(checkCompose).not.toHaveBeenCalled();
+    const previous = { ...settings }; settings.sendDelay = 60;
+    settingListeners.forEach(callback => callback(settings, previous));
+    await act(async () => finish(undefined));
+    expect(checkCompose).not.toHaveBeenCalled();
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(screen.getByTestId('editor-stub').value).toBe('<p>Before save</p>');
+  });
+  it('uses the returned route on a handoff copy without raising the issued cleanup bound', async () => {
+    checkCompose.mockResolvedValue({ kind: 'ready', route: { delay: 300 } });
+    open('<p>Body</p>', { _composeDelay: 60, _draftRevision: 3, _draftAcceptedRevision: 2, _sendPlan: { kind: 'in', minutes: 1 } });
+    fireEvent.click(screen.getByTestId('compose-send'));
+    await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+    const sent = queueSend.mock.calls[0][0].initialData;
+    expect(sent._composeDelay).toBe(300);
+    expect(sent._draftRevision).toBe(checkCompose.mock.calls[0][0].revision);
+    expect(queueSend.mock.calls[0][2]).toBe(300);
   });
 });
