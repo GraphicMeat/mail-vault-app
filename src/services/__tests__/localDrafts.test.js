@@ -466,3 +466,11 @@ describe('saveLocalDraft: the optimistic row also feeds the per-group archived-i
     expect(group?.has(1700000000)).toBe(true);
   });
 });
+
+it.each([['', ''], ['native exact plain text', 'Exact Sender']])('carries native semantic text/name presence without fabricating an immutable request (%j, %j)', (text, name) => {
+  const mapped = draftToInitialData({ accountId: 'acct-1', mailbox: 'Drafts', uid: 42, draftId: 'native-id', revision: 4,
+    entry: { from: { address: 'alias@example.test', name } }, eml: { html: '<p>body</p>', text, from: { address: 'alias@example.test', name }, attachments: [] } });
+  expect(mapped._draftNativeContent).toMatchObject({ revision: 4, html: '<p>body</p>', text, displayName: name });
+  expect(mapped._draftContent).toBeUndefined();
+  expect(mapped).toMatchObject({ _draftId: 'native-id', _draftRevision: 4, _draftAcceptedRevision: 4, _draftAccountId: 'acct-1', _draftMailbox: 'Drafts', _draftUid: 42 });
+});

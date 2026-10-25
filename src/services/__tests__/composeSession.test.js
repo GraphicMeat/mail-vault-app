@@ -176,3 +176,32 @@ it.each(['text', 'snippet', 'displayName'])('preserves genuinely different known
   expect(merged).toHaveLength(2);
   expect(merged[1].initialData._draftRecoveredContent).toEqual(different);
 });
+
+it.each([false, true])('joins accepted native/request representations in either direction (%s) and retains exact long snippet evidence', reverse => {
+  const native = { ...semanticDraft(), _draftNativeContent: { revision: 2, html: '<p>body</p>', text: 'body', displayName: 'Sender' } };
+  const request = { ...semanticRequest(), snippet: 'long raw snippet '.repeat(50) + 'A' };
+  const rich = { ...semanticDraft(), _draftContent: request, _draftUiSignature: 'exact-ui-signature' };
+  const [first, second] = reverse ? [rich, native] : [native, rich];
+  const once = mergeComposeSession([{ id: 1, initialData: first }], [{ id: 2, initialData: second }]);
+  expect(once).toHaveLength(1); expect(once[0].initialData._draftContent).toEqual(request);
+  expect(once[0].initialData._draftUiSignature).toBe('exact-ui-signature');
+  expect(once[0].initialData._draftNativeContent).toMatchObject({ text: 'body', displayName: 'Sender' });
+  const b = { ...rich, _draftContent: { ...request, snippet: 'long raw snippet '.repeat(50) + 'B' } };
+  const forked = mergeComposeSession(once, [{ id: 3, initialData: b }]);
+  expect(forked).toHaveLength(2); expect(forked[1].initialData._draftRecoveredContent.snippet).toBe(b._draftContent.snippet);
+});
+it('retains explicit empty request-only evidence rather than replacing it with absent native metadata', () => {
+  const content = semanticRequest(); content.payload.text = ''; content.displayName = ''; content.snippet = '';
+  const native = semanticDraft();
+  const once = mergeComposeSession([{ id: 1, initialData: { ...native, _draftContent: content } }], [{ id: 2, initialData: native }]);
+  expect(once).toHaveLength(1); expect(once[0].initialData._draftContent).toEqual(content);
+  const knownDifferent = { ...native, _draftNativeContent: { revision: 2, text: 'known nonempty', displayName: '' } };
+  expect(mergeComposeSession(once, [{ id: 3, initialData: knownDifferent }])).toHaveLength(2);
+});
+it('keeps pending request acceptance unknown when native accepted metadata omits its original raw snippet', () => {
+  const native = { ...semanticDraft(), _draftNativeContent: { revision: 2, text: 'body', displayName: 'Sender' } };
+  const request = semanticRequest(); const pending = { ...semanticDraft(), _draftAcceptedRevision: 1, _draftContent: request };
+  const merged = mergeComposeSession([{ id: 1, initialData: native }], [{ id: 2, initialData: pending }]);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].initialData).toMatchObject({ _draftRevision: 2, _draftAcceptedRevision: 2, _draftAcceptanceUnknown: true, _draftContent: request });
+});

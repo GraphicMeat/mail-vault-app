@@ -404,3 +404,13 @@ it('captures an edit before the recovery seed first timer and retries that exact
   expect(saveLocalDraft.mock.calls[1][0]).toEqual(request);
   expect(screen.getByTestId('editor-stub').value).toBe('<p>latest before capture</p>');
 });
+
+it('retries exact content at an independently accepted revision when request acceptance is unknown', async () => {
+  const content = { accountId: 'acct-1', fromAddress: 'me@example.test', displayName: 'Me', payload: {
+    to: '', cc: '', bcc: '', subject: '', html: '<p>typed</p>', text: 'typed', inReplyTo: '', references: '', attachments: [],
+  }, snippet: 'typed' };
+  const snapshotRef = { current: null };
+  render(<ComposeModal {...props} snapshotRef={snapshotRef} initialData={{ ...nativeDraft, _draftContent: content, _draftAcceptanceUnknown: true }} />); await tick();
+  expect(saveLocalDraft).toHaveBeenCalledExactlyOnceWith({ draftId: 'managed', revision: 2, ...content });
+  expect((await snapshotRef.current())._draftAcceptanceUnknown).toBe(false);
+});
