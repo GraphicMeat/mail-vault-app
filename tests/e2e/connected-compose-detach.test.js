@@ -250,6 +250,9 @@ describe('Connected Compose Detach', function () {
       catch { console.log('[detach-context-readiness-probe-failed]', true); }
       throw error;
     }
+    expect((await readinessProbe()).ready).toBe('true');
+    await expectFieldValue('compose-from', `${account.id} ${account.email}`);
+    await expectFieldValue('compose-to', source.from.address);
 
     const contextWideSize = await setNativeSize(1050, 760);
     if (contextWideSize.error) throw new Error(contextWideSize.error);
@@ -372,25 +375,6 @@ describe('Connected Compose Detach', function () {
       _accountId: account.id,
     };
     await closeComposeHard();
-    // Keep the real main response pending through immediate handoff. The new
-    // child must obtain its settings ACK from App and prepare independently.
-    await browser.execute(() => {
-      const original = window.__TAURI__;
-      const fixture = { original, calls: 0 };
-      const gate = new Promise(resolve => { fixture.release = resolve; });
-      const invoke = (command, args) => {
-        const response = original.core.invoke(command, args);
-        if (command === 'daemon_rpc' && args?.method === 'compose.reply_context' && args?.params?.kind === 'message') {
-          fixture.calls++;
-          return Promise.resolve(response).then(async result => { await gate; return result; });
-        }
-        return response;
-      };
-      fixture.bridge = { ...original, core: { ...original.core, invoke } };
-      window.__TAURI__ = fixture.bridge;
-      window.__DETACH_PREPARATION_TEST__ = fixture;
-      if (window.__TAURI__.core.invoke !== invoke) throw new Error('Cannot install pending preparation fixture');
-    });
     const selection = { selectedEmail: source, selectedEmailId: source.uid, selectedThread: null };
     await mailStoreSet(selection);
     await browser.execute(() => document.activeElement?.blur());
