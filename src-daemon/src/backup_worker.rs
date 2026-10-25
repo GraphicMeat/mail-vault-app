@@ -177,7 +177,9 @@ enum Cmd {
         done: oneshot::Sender<()>,
     },
     #[cfg(test)]
-    AccessIdle {done:oneshot::Sender<bool>},
+    AccessIdle {
+        done: oneshot::Sender<bool>,
+    },
     #[cfg(test)]
     PauseManual {
         armed: oneshot::Sender<()>,
@@ -479,8 +481,14 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 let _ = done.send(());
             }
             #[cfg(test)]
-            Cmd::AccessIdle{done} => {
-                let _=done.send(ledger.active.is_none() && pending_finish.is_none() && deferred_probe_scan.is_none() && state.backup_worker.scans_in_flight.load(SeqCst)==0 && rx.is_empty());
+            Cmd::AccessIdle { done } => {
+                let _ = done.send(
+                    ledger.active.is_none()
+                        && pending_finish.is_none()
+                        && deferred_probe_scan.is_none()
+                        && state.backup_worker.scans_in_flight.load(SeqCst) == 0
+                        && rx.is_empty(),
+                );
             }
             #[cfg(test)]
             Cmd::PauseManual {
