@@ -19,7 +19,7 @@ const schedulingEvidence=(state,id)=>({
   history:(state?.backupHistory?.[id]||[]).map(row=>pick(row,['timestamp','emailsBackedUp','durationSecs','success','errors','externalCopyOk','externalCopyFailedCount'])),
 });
 async function observeActualContext(){
-  await browser.execute(()=>{
+  const installed=await browser.execute(()=>{
     const original=window.__TAURI__.core.invoke;
     const diagnostic={frames:[],events:[]};window.__BACKUP_CONTEXT_DIAGNOSTIC__=diagnostic;
     const append=(rows,row)=>{rows.push(row);if(rows.length>400)rows.shift();};
@@ -37,7 +37,9 @@ async function observeActualContext(){
     const events=['keydown','click','mousemove','scroll','visibilitychange'];events.forEach(name=>document.addEventListener(name,event,{passive:true}));
     window.addEventListener('online',event);window.addEventListener('offline',event);
     diagnostic.restore=()=>{if(window.__TAURI__.core.invoke===wrapped)window.__TAURI__.core.invoke=original;events.forEach(name=>document.removeEventListener(name,event));window.removeEventListener('online',event);window.removeEventListener('offline',event);};
+    return window.__TAURI__.core.invoke===wrapped;
   });
+  assert.equal(installed,true,'Actual context observation hook was not installed');
 }
 const actualContextEvidence=()=>browser.execute(()=>({now:Date.now(),online:navigator.onLine,visibility:document.visibilityState,frames:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.frames||[],events:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.events||[]}));
 
@@ -114,7 +116,7 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
         console.log('NATIVE_IDLE_AFTER_CONTEXT '+JSON.stringify(await actualContextEvidence()));
         const status=await rpc('backup.schedule.status');
         const intent=value=>pick(value,['accountId','runId','executionId','stage','manual','retries','notBefore','pauseRequested','cancelRequested']);
-        console.log('NATIVE_IDLE_AFTER_STATUS '+JSON.stringify({now:Date.now(),ready:status.ready,context:status.context,active:intent(status.active),queue:(status.queue||[]).map(intent),pendingAccess:(status.pendingAccess||[]).map(intent),outcomes:(status.lastOutcomes||[]).map(outcome=>({at:outcome.at,status:outcome.status,applied:outcome.applied,intent:intent(outcome.intent)}))}));
+        console.log('NATIVE_IDLE_AFTER_STATUS '+JSON.stringify({now:Date.now(),ready:status.ready,context:pick(status.context,['automaticEnabled','lastActivityAt','loading','paused']),active:intent(status.active),queue:(status.queue||[]).map(intent),pendingAccess:(status.pendingAccess||[]).map(intent),outcomes:(status.lastOutcomes||[]).map(outcome=>({at:outcome.at,status:outcome.status,applied:outcome.applied,intent:intent(outcome.intent)}))}));
         console.log('NATIVE_IDLE_AFTER_SETTINGS '+JSON.stringify(schedulingEvidence(stateOnDisk(),vader.id)));
       } catch(error) { console.log('NATIVE_IDLE_DIAGNOSTIC_ERROR '+error?.name); }
       await browser.execute(()=>window.__BACKUP_CONTEXT_DIAGNOSTIC__?.restore());
