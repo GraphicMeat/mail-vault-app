@@ -161,6 +161,11 @@ struct Facts {
 }
 enum Cmd {
     #[cfg(test)]
+    PauseManual { armed: oneshot::Sender<()>, entered: oneshot::Sender<()>, release: oneshot::Receiver<()> },
+    #[cfg(test)]
+    PauseFinished { armed: oneshot::Sender<()>, entered: oneshot::Sender<()>, release: oneshot::Receiver<()> },
+
+    #[cfg(test)]
     Facts(Facts),
     Manual {
         account: String,
@@ -365,16 +370,21 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
     let mut tick = tokio::time::interval(Duration::from_secs(60));
     tick.tick().await;
     let mut pending_finish = None;
+    #[cfg(test)] let mut manual_barrier = None;
+    #[cfg(test)] let mut finished_barrier = None;
     let _ = state.backup_worker.tx.get().unwrap().send(Cmd::Wake);
     loop {
         let (cmd, scan) = tokio::select! { cmd=rx.recv()=>match cmd {Some(cmd)=>(cmd,false),None=>return}, _=tick.tick()=>(Cmd::Wake,true) };
         let mut scan = scan;
         match cmd {
+            #[cfg(test)] Cmd::PauseManual { armed, entered, release } => {manual_barrier = Some((entered, release)); let _ = armed.send(());}
+            #[cfg(test)] Cmd::PauseFinished { armed, entered, release } => {finished_barrier = Some((entered, release)); let _ = armed.send(());}
             Cmd::Manual {
                 account,
                 request,
                 reply,
             } => {
+                #[cfg(test)] if let Some((entered, release)) = manual_barrier.take() {let _ = entered.send(()); let _ = release.await;}
                 let result = admit(&state, &mut ledger, account, request).await;
                 let _ = reply.send(result);
                 scan = true;
@@ -448,6 +458,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 execution,
                 exit,
             } => {
+                #[cfg(test)] if let Some((entered, release)) = finished_barrier.take() {let _ = entered.send(()); let _ = release.await;}
                 // A real joined run may free work that was waiting behind it.
                 // A pending probe must not immediately probe itself forever.
                 if !matches!(exit, RunExit::Pending(_)) {

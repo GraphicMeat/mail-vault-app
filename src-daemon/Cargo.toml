@@ -53,6 +53,8 @@ default = ["blitz-render"] # blitz-render
 blitz-render = ["dep:mailvault-render"] # blitz-render
 
 [dev-dependencies]
+# Controlled time for the real backup worker deadline tests only.
+tokio = { version = "1", features = ["test-util"] }
 mock-imap = { path = "../src-mock-imap" }
 # The JMAP bridge's tests (handlers::jmap_bridge) run against the in-process mock.
 mock-jmap = { path = "../src-mock-jmap" }

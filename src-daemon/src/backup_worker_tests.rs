@@ -991,3 +991,114 @@ async fn backup_worker_provider_cancel_error_projects_failure_without_history_or
     assert!(settings(&r.state)["backupHistory"]["one"].is_null());
     finish(r).await;
 }
+
+// These barriers pause the real command consumer, never a copied scheduler.
+// The provider still returns through its actual joined adapter/completion path.
+async fn pause_command(state: &Arc<DaemonState>, finished: bool) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+    let (armed, ready) = oneshot::channel();
+    let (entered, waiting) = oneshot::channel();
+    let (release, held) = oneshot::channel();
+    let command = if finished { Cmd::PauseFinished { armed, entered, release: held } }
+        else { Cmd::PauseManual { armed, entered, release: held } };
+    state.backup_worker.tx.get().unwrap().send(command).ok().unwrap();
+    tokio::time::timeout(Duration::from_secs(2), ready).await.unwrap().unwrap();
+    (waiting, release)
+}
+
+#[tokio::test]
+async fn backup_fix1_cancel_consumption_cancels_replacement_retry_token() {
+    let mut r = rig(); enabled(&r.state); automatic(&r.state, false);
+    let first = call(&mut r).await;
+    let run = r.state.backup_worker.status()["active"]["runId"].clone();
+    // Keep a fresh automatic scan from creating a separate logical run. The
+    // already-owned retry remains eligible independently of this due time.
+    patch(&r.state, json!({"backupState":{"one":{"lastBackupTime":NOW}}}));
+    let (entered, release) = pause_command(&r.state, true).await;
+    first.reply.send(Err("joined automatic failure".into())).ok().unwrap();
+    tokio::time::timeout(Duration::from_secs(2), entered).await.unwrap().unwrap();
+    assert!(!r.state.backup_runs.lock().unwrap().contains_key("one"), "actual provider must have drained before its Finished is consumed");
+    let mut cancel = Box::pin(rpc(&r.state, "backup.cancel", json!({"runId":run})));
+    assert!(futures::poll!(cancel.as_mut()).is_pending());
+    release.send(()).unwrap();
+    assert_eq!(cancel.await["accepted"], true);
+    let survived = r.state.backup_worker.status()["queue"].as_array().unwrap().iter().any(|i|i["runId"] == run);
+    r.state.clock.set(NOW + 30_000); wake(&r.state);
+    if survived {
+        let retry = call(&mut r).await;
+        let mut out = result(0); out.cancelled = true; retry.reply.send(Ok(out)).ok().unwrap();
+        wait(&r.state, |s|s["active"].is_null()).await;
+    } else { assert!(r.calls.try_recv().is_err()); }
+    finish(r).await;
+    assert!(!survived, "accepted Cancel left the freshly installed retry intent/token live");
+}
+
+#[tokio::test]
+async fn backup_fix1_stop_consumption_fences_manual_already_ahead_in_channel() {
+    let mut r = rig(); manual(&r.state,"one","held-before-stop").await;
+    let first = call(&mut r).await;
+    let (entered, release) = pause_command(&r.state, false).await;
+    let mut queued = Box::pin(manual(&r.state,"two","queued-before-stop"));
+    assert!(futures::poll!(queued.as_mut()).is_pending());
+    tokio::time::timeout(Duration::from_secs(2), entered).await.unwrap().unwrap();
+    let mut stop = Box::pin(rpc(&r.state,"backup.stop",json!({})));
+    assert!(futures::poll!(stop.as_mut()).is_pending());
+    release.send(()).unwrap(); queued.await;
+    assert_eq!(stop.await["accepted"], true);
+    assert!(first.ctx.cancel.load(SeqCst));
+    assert!(r.state.backup_runs.lock().unwrap().contains_key("one"), "Stop ACK must retain the undrained first run");
+    let survived = r.state.backup_worker.status()["requests"]["queued-before-stop"]["status"] != "cancelled";
+    let mut out = result(0); out.cancelled = true; first.reply.send(Ok(out)).ok().unwrap();
+    if survived {
+        let unexpected = call(&mut r).await;
+        assert_eq!(unexpected.ctx.account_id,"two");
+        let mut out = result(0); out.cancelled = true; unexpected.reply.send(Ok(out)).ok().unwrap();
+    }
+    wait(&r.state, |s|s["active"].is_null()).await;
+    if !survived {
+        manual(&r.state,"two","manual-after-accepted-stop").await;
+        let later = call(&mut r).await; later.reply.send(Ok(result(1))).ok().unwrap();
+        wait(&r.state, |s|s["requests"]["manual-after-accepted-stop"]["status"] == "success").await;
+    }
+    finish(r).await;
+    assert!(!survived,"accepted Stop left an earlier queued Manual alive in the RPC's newer epoch");
+}
+
+// Keep the paused runtime busy while blocking filesystem workers complete:
+// Tokio's idle auto-advance must not substitute a later minute maintenance tick.
+async fn paused_state(state: &Arc<DaemonState>, predicate: impl Fn(&Value)->bool) {
+    let until = std::time::Instant::now() + Duration::from_secs(3);
+    loop { if predicate(&state.backup_worker.status()) {return;} assert!(std::time::Instant::now()<until,"paused worker did not publish expected state");tokio::task::yield_now().await; }
+}
+async fn paused_call(rig: &mut Rig) -> Call {
+    let until = std::time::Instant::now() + Duration::from_secs(2);
+    loop { if let Ok(call)=rig.calls.try_recv() {return call;} assert!(std::time::Instant::now()<until,"retry deadline did not autonomously invoke the provider");tokio::task::yield_now().await; }
+}
+#[tokio::test]
+async fn backup_fix1_retry_timer_wakes_real_loop_at_each_captured_deadline() {
+    let mut r = rig(); enabled(&r.state); automatic(&r.state,false);
+    let first = call(&mut r).await;
+    tokio::time::pause(); let began = tokio::time::Instant::now();
+    first.reply.send(Err("timer retry".into())).ok().unwrap();
+    paused_state(&r.state,|s|s["active"].is_null() && s["queue"][0]["retries"]==1).await;
+    for (attempt, deadline, delay) in [(1,30_000,30_000),(2,150_000,120_000),(3,450_000,300_000)] {
+        for _ in 0..8 {tokio::task::yield_now().await;}
+        r.state.clock.set(NOW+deadline-1);
+        tokio::time::advance(Duration::from_millis(delay-1)).await;
+        for _ in 0..8 {tokio::task::yield_now().await;}
+        assert!(r.calls.try_recv().is_err(),"retry began before its deadline");
+        r.state.clock.set(NOW+deadline);
+        tokio::time::advance(Duration::from_millis(1)).await;
+        // No Cmd::Wake, Facts update or RPC at the deadline: the production
+        // worker select must be awakened by its own retry/hold deadline timer.
+        let retry=paused_call(&mut r).await;
+        assert_eq!(tokio::time::Instant::now()-began,Duration::from_millis(deadline as u64));
+        if attempt<3 {
+            retry.reply.send(Err("timer retry".into())).ok().unwrap();
+            paused_state(&r.state,|s|s["active"].is_null() && s["queue"][0]["retries"]==attempt+1).await;
+        } else {
+            retry.reply.send(Ok(result(1))).ok().unwrap();
+            paused_state(&r.state,|s|s["active"].is_null() && s["queue"].as_array().unwrap().is_empty()).await;
+        }
+    }
+    tokio::time::resume(); finish(r).await;
+}
