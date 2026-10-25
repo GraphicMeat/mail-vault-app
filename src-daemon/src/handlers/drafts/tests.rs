@@ -1604,7 +1604,7 @@ async fn drafts_review_stable_id_rejects_absent_tracked_tuple() {
     assert!(stable["drafts"][0]["eml"]["html"].as_str().unwrap().contains("current words"));
 }
 
-async fn foreign_receipt_before_install(point: &'static str, after: &'static str, stage: bool) {
+async fn foreign_receipt_before_install(point: &'static str, after: &'static str, stage: bool, state: compose_receipts::State, same_mid: bool) {
     let h = Harness::new();
     saved(&h.s, req("preinstall-receipt", 1, "accepted words")).await;
     let prior = row(&h.s, "preinstall-receipt").current.unwrap();
@@ -1614,10 +1614,12 @@ async fn foreign_receipt_before_install(point: &'static str, after: &'static str
         if at == point {
             let pending = row(&s, "preinstall-receipt").pending.unwrap();
             let copy = if stage { pending.prepared } else { pending.copy };
-            let mut scope = copy.identity.scope;
+            let mut scope = copy.identity.scope.clone();
             scope.message_id = "<foreign-receipt@example.test>".into();
             let raw = b"Message-ID: <foreign-receipt@example.test>\r\n\r\nforeign";
-            let receipt = Receipt::present(Identity::from_bytes(scope, raw).unwrap());
+            let identity = if same_mid { copy.identity } else { Identity::from_bytes(scope, raw).unwrap() };
+            let mut receipt = Receipt::present(identity);
+            receipt.state = state;
             app_db::with(&s.app_dir, |c| compose_receipts::save(c, &receipt))?;
         }
         if at == after { return Err("observe immediately after install".into()); }
@@ -1632,16 +1634,145 @@ async fn foreign_receipt_before_install(point: &'static str, after: &'static str
     assert_eq!(row(&h.s, "preinstall-receipt").current.unwrap().identity, prior.identity);
     assert_eq!(read_copy(&h.s, &prior, true).unwrap().unwrap(), prior_raw);
     let mut foreign_scope = copy.identity.scope;
-    foreign_scope.message_id = "<foreign-receipt@example.test>".into();
-    assert_eq!(app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &foreign_scope)).unwrap().len(), 1);
+    if !same_mid { foreign_scope.message_id = "<foreign-receipt@example.test>".into(); }
+    let history = app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &foreign_scope)).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, state);
 }
 
 #[tokio::test]
 async fn drafts_review_receipts_stage_refuses_different_mid_before_bytes() {
-    foreign_receipt_before_install("before_prepared_store", "after_prepared_store", true).await;
+    for state in [compose_receipts::State::Present, compose_receipts::State::Cleaned] {
+        for same_mid in [false, true] {
+            foreign_receipt_before_install("before_prepared_store", "after_prepared_store", true, state, same_mid).await;
+        }
+    }
 }
 
 #[tokio::test]
 async fn drafts_review_receipts_destination_refuses_different_mid_before_bytes() {
-    foreign_receipt_before_install("before_destination", "after_bytes", false).await;
+    for state in [compose_receipts::State::Present, compose_receipts::State::Cleaned] {
+        for same_mid in [false, true] {
+            foreign_receipt_before_install("before_destination", "after_bytes", false, state, same_mid).await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn drafts_review_receipt_inventory_commit_before_install_is_unresolved() {
+    for stage in [true, false] {
+        let h = Harness::new();
+        saved(&h.s, req("receipt-version", 1, "accepted words")).await;
+        let prior = row(&h.s, "receipt-version").current.unwrap();
+        let s = h.s.clone();
+        h.hook(move |point| {
+            let target = if stage { "after_prepared_receipt_inventory" } else { "after_destination_receipt_inventory" };
+            if point == target {
+                app_db::with(&s.app_dir, |c| app_db::db::meta_set(c, "unrelated-commit", "new value"))?;
+            }
+            Ok(())
+        });
+        assert!(rpc(&h.s, "drafts.save", req("receipt-version", 2, "new words")).await.is_err());
+        let record = row(&h.s, "receipt-version");
+        let pending = record.pending.unwrap();
+        let copy = if stage { pending.prepared } else { pending.copy };
+        let l = copy.location();
+        assert!(message_store::read_raw(&h.s.data_dir, &l.account_id, &l.mailbox, l.uid).unwrap().is_none());
+        assert_eq!(record.current.unwrap().identity, prior.identity);
+    }
+}
+
+#[tokio::test]
+async fn drafts_review_install_refuses_scheduled_ownership_and_invalid_receipt_history() {
+    for stage in [true, false] {
+        for evidence in ["scheduled", "malformed", "future", "mismatched-key"] {
+            let h = Harness::new();
+            saved(&h.s, req("purpose-preinstall", 1, "accepted words")).await;
+            let prior = row(&h.s, "purpose-preinstall").current.unwrap();
+            let s = h.s.clone();
+            h.hook(move |point| {
+                let before = if stage { "before_prepared_store" } else { "before_destination" };
+                if point == before {
+                    let pending = row(&s, "purpose-preinstall").pending.unwrap();
+                    let copy = if stage { pending.prepared } else { pending.copy };
+                    let l = copy.location();
+                    app_db::with(&s.app_dir, |c| {
+                        if evidence == "scheduled" {
+                            mailvault_core::app_db::scheduled::insert(c, "scheduled-owner", &l.account_id, &l.mailbox, l.uid, "{}", "2026-10-26T12:00", "UTC", 0)?;
+                        } else {
+                            let proof = Receipt::present(copy.identity);
+                            compose_receipts::save(c, &proof)?;
+                            let mut invalid = proof;
+                            let value = match evidence {
+                                "malformed" => "{broken".to_string(),
+                                "future" => { invalid.version = 42; serde_json::to_string(&invalid).unwrap() },
+                                _ => { invalid.identity.scope.uid += 1; serde_json::to_string(&invalid).unwrap() },
+                            };
+                            c.execute("UPDATE meta SET value=?1 WHERE key LIKE 'compose_receipt:%'", [value]).map_err(|e| e.to_string())?;
+                        }
+                        Ok(())
+                    })?;
+                }
+                Ok(())
+            });
+            assert!(rpc(&h.s, "drafts.save", req("purpose-preinstall", 2, "new words")).await.is_err(), "{stage}/{evidence}");
+            let record = row(&h.s, "purpose-preinstall");
+            let pending = record.pending.unwrap();
+            let copy = if stage { pending.prepared } else { pending.copy };
+            let l = copy.location();
+            assert!(message_store::read_raw(&h.s.data_dir, &l.account_id, &l.mailbox, l.uid).unwrap().is_none(), "{stage}/{evidence}");
+            assert_eq!(record.current.unwrap().identity, prior.identity);
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drafts_review_large_private_receipt_inventory_leaves_shared_work_responsive() {
+    let h = Harness::new();
+    app_db::with(&h.s.app_dir, |c| {
+        let transaction = c.unchecked_transaction().map_err(|e| e.to_string())?;
+        for uid in 1..=2048 {
+            let raw = b"Message-ID: <history@example.test>\r\n\r\nhistory";
+            let scope = Scope::new("one", "Unrelated", uid, "history@example.test").unwrap();
+            compose_receipts::save(&transaction, &Receipt::present(Identity::from_bytes(scope, raw).unwrap()))?;
+        }
+        transaction.commit().map_err(|e| e.to_string())
+    }).unwrap();
+    let (tx, started) = tokio::sync::oneshot::channel();
+    let tx = Mutex::new(Some(tx));
+    let gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let pause = gate.clone();
+    h.hook(move |point| {
+        if point == "after_prepared_receipt_inventory" {
+            let notify = { tx.lock().unwrap().take() };
+            if let Some(tx) = notify {
+                let _ = tx.send(());
+                let mut ready = pause.0.lock().unwrap();
+                while !*ready {
+                    let (next, timeout) = pause.1.wait_timeout(ready, std::time::Duration::from_secs(10)).unwrap();
+                    ready = next;
+                    if timeout.timed_out() { return Err("private inventory pause timed out".into()); }
+                }
+            }
+        }
+        Ok(())
+    });
+    let s = h.s.clone();
+    let pending = tokio::spawn(async move { rpc(&s, "drafts.save", req("receipt-foreground", 1, "words")).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), started).await.unwrap().unwrap();
+    let heartbeat = tokio::time::timeout(std::time::Duration::from_secs(2), rpc(&h.s, "daemon.heartbeat", json!({}))).await;
+    let s = h.s.clone();
+    let work = tokio::time::timeout(std::time::Duration::from_secs(2), tokio::task::spawn_blocking(move || {
+        with_mailbox_write(&s, "one", "Unrelated", |_| {
+            custody::with_conn(&s, |c| entries::get(c, "one", "Unrelated", 1).map(|_| ()))?;
+            app_db::with(&s.app_dir, |c| app_db::db::meta_set(c, "foreground", "complete"))
+        })
+    })).await;
+    release(gate);
+    heartbeat.unwrap().unwrap();
+    work.unwrap().unwrap().unwrap();
+    assert!(pending.await.unwrap().is_err());
+    h.clear();
+    let _ = rpc(&h.s, "drafts.save", req("receipt-foreground", 1, "words")).await;
+    saved(&h.s, req("receipt-foreground", 1, "words")).await;
 }

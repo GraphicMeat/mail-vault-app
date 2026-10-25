@@ -89,6 +89,79 @@ pub fn load(conn: &Connection, scope: &Scope) -> Result<Vec<Receipt>, String> {
     Ok(out)
 }
 
+/// Private read-only receipt inventory for one physical tuple across MIDs.
+/// Enumeration runs off mailbox/custody/shared app.db locks. Keep this reader
+/// alive, with no open statement or transaction, through the final scalar.
+/// Participating publishers must also hold the tuple's mailbox serialization;
+/// data_version alone does not fence arbitrary external SQL writers.
+pub struct TupleInventory {
+    conn: Connection,
+    version: i64,
+    receipts: Vec<Receipt>,
+}
+
+impl TupleInventory {
+    /// Bounded freshness check only; never enumerate account history here.
+    pub fn current(&self) -> Result<&[Receipt], String> {
+        if !self.conn.is_autocommit() || data_version(&self.conn)? != self.version {
+            return Err("compose receipt inventory changed; retry".into());
+        }
+        Ok(&self.receipts)
+    }
+}
+
+fn data_version(conn: &Connection) -> Result<i64, String> {
+    conn.query_row("PRAGMA data_version", [], |row| row.get(0))
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+thread_local! {
+    static TUPLE_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The ordinary app.db handle must already be initialized by the caller.
+/// Missing/unreadable/unknown account evidence is unresolved, never absence.
+pub fn inventory_tuple(
+    app_dir: &std::path::Path,
+    account: &str,
+    mailbox: &str,
+    uid: u32,
+) -> Result<TupleInventory, String> {
+    if account.trim().is_empty() || mailbox.is_empty() || uid == 0 {
+        return Err("invalid compose receipt tuple".into());
+    }
+    let conn = Connection::open_with_flags(db::db_path(app_dir), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| error.to_string())?;
+    let version = data_version(&conn)?;
+    let prefix = account_prefix(account);
+    let upper = format!("{prefix}~");
+    #[cfg(test)]
+    TUPLE_SCANS.with(|count| count.set(count.get() + 1));
+    let receipts = {
+        let mut query = conn.prepare("SELECT key, value FROM meta WHERE key >= ?1 AND key < ?2")
+            .map_err(|error| error.to_string())?;
+        let rows = query.query_map(params![prefix, upper], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }).map_err(|error| error.to_string())?;
+        let mut matching = Vec::new();
+        for row in rows {
+            let (key, raw) = row.map_err(|error| error.to_string())?;
+            let receipt: Receipt = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+            if !receipt.is_valid() || receipt.identity.scope.account_id != account || receipt.identity.key() != key {
+                return Err("invalid compose receipt account history".into());
+            }
+            if receipt.identity.scope.mailbox == mailbox && receipt.identity.scope.uid == uid {
+                matching.push(receipt);
+            }
+        }
+        matching
+    };
+    let inventory = TupleInventory { conn, version, receipts };
+    inventory.current()?;
+    Ok(inventory)
+}
+
 /// Call only after durable pending work retains this complete proof. Exact
 /// compare-and-delete cannot retire a later lifecycle state or another digest.
 pub fn retire(conn: &Connection, receipt: &Receipt) -> Result<bool, String> {
@@ -183,4 +256,58 @@ mod tests {
         assert!(load(&c, &a.identity.scope).is_err()); assert!(save(&c, &a).is_err());
         assert!(remove_account(&c, "a").is_err());
     }
+    fn tuple_receipt(account: &str, mailbox: &str, uid: u32, mid: &str) -> Receipt {
+        let raw = format!("Message-ID: <{mid}>\r\n\r\nfixture");
+        Receipt::present(Identity::from_bytes(Scope::new(account, mailbox, uid, mid).unwrap(), raw.as_bytes()).unwrap())
+    }
+
+    #[test]
+    fn receipt_tuple_inventory_validates_all_account_history_and_keeps_only_tuple() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = db::open(dir.path()).unwrap();
+        let first = tuple_receipt("one", "Drafts", 7, "first@example.test");
+        let mut other_mid = tuple_receipt("one", "Drafts", 7, "second@example.test");
+        other_mid.state = State::Cleaned;
+        let unrelated = tuple_receipt("one", "Other", 8, "other@example.test");
+        for proof in [&first, &other_mid, &unrelated] { save(&c, proof).unwrap(); }
+        let inventory = inventory_tuple(dir.path(), "one", "Drafts", 7).unwrap();
+        let tuple = inventory.current().unwrap();
+        assert_eq!(tuple.len(), 2);
+        assert!(tuple.contains(&first) && tuple.contains(&other_mid));
+        assert!(!tuple.contains(&unrelated));
+        for invalid in ["{broken".to_string(), {
+            let mut future = unrelated.clone(); future.version = 42;
+            serde_json::to_string(&future).unwrap()
+        }, serde_json::to_string(&first).unwrap()] {
+            db::meta_set(&c, &unrelated.identity.key(), &invalid).unwrap();
+            assert!(inventory_tuple(dir.path(), "one", "Drafts", 7).is_err());
+        }
+    }
+
+    #[test]
+    fn receipt_tuple_inventory_rechecks_same_reader_without_rescanning_or_open_transaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = db::open(dir.path()).unwrap();
+        let proof = tuple_receipt("one", "Drafts", 7, "one@example.test");
+        save(&c, &proof).unwrap();
+        let before = TUPLE_SCANS.with(|count| count.get());
+        let inventory = inventory_tuple(dir.path(), "one", "Drafts", 7).unwrap();
+        assert!(inventory.conn.is_autocommit());
+        assert_eq!(inventory.current().unwrap(), &[proof]);
+        let other = db::open(dir.path()).unwrap();
+        db::meta_set(&other, "unrelated", "commit").unwrap();
+        assert!(inventory.current().is_err());
+        assert_eq!(TUPLE_SCANS.with(|count| count.get()), before + 1);
+        assert!(inventory_tuple(dir.path(), "one", "Drafts", 7).unwrap().current().is_ok());
+    }
+
+    #[test]
+    fn receipt_tuple_inventory_private_read_failure_does_not_create_a_database() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(inventory_tuple(dir.path(), "one", "Drafts", 7).is_err());
+        assert!(!db::db_path(dir.path()).exists());
+        std::fs::create_dir(db::db_path(dir.path())).unwrap();
+        assert!(inventory_tuple(dir.path(), "one", "Drafts", 7).is_err());
+    }
+
 }

@@ -220,21 +220,24 @@ fn adopt(s: &Arc<DaemonState>, r: &mut Record, l: &Location) -> Result<(), Strin
 }
 fn allocate(s: &Arc<DaemonState>, account: &str, mailbox: &str) -> Result<u32, String> {
     with_mailbox_write(s, account, mailbox, |root| {
-        let mut uid = vault_files::free_local_uid(root, account, mailbox);
-        loop {
-            let loc = Location {
-                account_id: account.into(),
-                mailbox: mailbox.into(),
-                uid,
-            };
-            if app_db::with(&s.app_dir, |c| db::owner(c, &loc))?.is_none()
-                && !vault_files::exists(root, account, mailbox, uid)
-                && !scheduled(s, &loc)?
-            {
-                return Ok(uid);
+        custody::with_conn(s, |c| {
+            let mut uid = vault_files::free_local_uid(root, account, mailbox);
+            loop {
+                let loc = Location {
+                    account_id: account.into(),
+                    mailbox: mailbox.into(),
+                    uid,
+                };
+                if app_db::with(&s.app_dir, |c| db::owner(c, &loc))?.is_none()
+                    && entries::get(c, account, mailbox, uid)?.is_none()
+                    && !vault_files::exists(root, account, mailbox, uid)
+                    && !scheduled(s, &loc)?
+                {
+                    return Ok(uid);
+                }
+                uid = uid.checked_add(1).ok_or("draft uid exhausted")?;
             }
-            uid = uid.checked_add(1).ok_or("draft uid exhausted")?;
-        }
+        })
     })
 }
 fn prepare_copy(
@@ -251,39 +254,80 @@ fn prepare_copy(
 }
 fn install(
     s: &Arc<DaemonState>,
+    id: &str,
+    pending: &Intent,
     copy: &Copy,
     prepared: &message_store::Prepared,
     flags: &[String],
 ) -> Result<(), String> {
     let l = copy.location();
+    app_db::handle(&s.app_dir).map_err(|error| error.to_string())?;
+    let receipts = compose_receipts::inventory_tuple(&s.app_dir, &l.account_id, &l.mailbox, l.uid)?;
+    probe(s, if copy.entry.is_null() {
+        "after_prepared_receipt_inventory"
+    } else {
+        "after_destination_receipt_inventory"
+    })?;
     let i = inventory(s, &l)?;
     with_mailbox_write(s, &l.account_id, &l.mailbox, |root| {
-        if root != prepared.root()
-            || message_store::vault_format(root) != prepared.format()
-            || prepared.uid() != l.uid
-            || !copy.identity.matches_bytes(prepared.raw())
-        {
-            return Err("draft prepared identity changed".into());
-        }
-        let held = checked_bytes(s, root, &l, &i)?;
-        if let Some(bytes) = held {
-            if !copy.identity.matches_bytes(&bytes) {
+        // Publication uses the same mailbox -> vault -> custody unit as exact
+        // retirement. A physical absence does not override custody or purpose.
+        custody::with_conn(s, |c| {
+            if root != prepared.root()
+                || message_store::vault_format(root) != prepared.format()
+                || prepared.uid() != l.uid
+                || !copy.identity.matches_bytes(prepared.raw())
+            {
+                return Err("draft prepared identity changed".into());
+            }
+            if scheduled(s, &l)? {
+                return Err("scheduled ownership cannot install draft bytes".into());
+            }
+            if entries::get(c, &l.account_id, &l.mailbox, l.uid)?.is_some() {
+                if copy.entry.is_null() {
+                    return Err("draft preparation custody conflict".into());
+                }
+                draft_owner(c, &l, copy)?;
+            }
+            let held = checked_bytes(s, root, &l, &i)?;
+            app_db::with(&s.app_dir, |c| {
+                let record = db::load(c, id)?.ok_or("draft intent missing")?;
+                if db::owner(c, &l)?.as_deref() != Some(id)
+                    || !same_attempt(&record, pending)
+                    || (copy.identity != pending.copy.identity && copy.identity != pending.prepared.identity)
+                {
+                    return Err("draft installation attempt changed".into());
+                }
+                Ok(())
+            })?;
+            // The retained private reader performs only a scalar here. The
+            // mailbox excludes participating receipt publishers until store.
+            let history = receipts.current()?;
+            let proof = Receipt::present(copy.identity.clone());
+            if history.iter().any(|receipt| receipt != &proof)
+                || (held.is_none() && !history.is_empty())
+            {
+                return Err("draft installation receipt conflict".into());
+            }
+            if let Some(bytes) = held {
+                if !copy.identity.matches_bytes(&bytes) {
+                    return Err("draft destination occupied".into());
+                }
+                return Ok(());
+            }
+            if !vault_files::store_prepared(
+                &s.vault_registry,
+                root,
+                &l.account_id,
+                &l.mailbox,
+                prepared,
+                flags,
+                false,
+            )? {
                 return Err("draft destination occupied".into());
             }
-            return Ok(());
-        }
-        if !vault_files::store_prepared(
-            &s.vault_registry,
-            root,
-            &l.account_id,
-            &l.mailbox,
-            prepared,
-            flags,
-            false,
-        )? {
-            return Err("draft destination occupied".into());
-        }
-        Ok(())
+            Ok(())
+        })
     })
 }
 fn retire(s: &Arc<DaemonState>, copy: &Copy, prepared: bool) -> Result<(), String> {
@@ -382,7 +426,7 @@ fn finish(
     if !p.copy.identity.matches_bytes(&raw) {
         return Err("prepared draft changed".into());
     }
-    install(s, &p.copy, ready, &drafts::FLAGS.map(String::from))?;
+    install(s, &r.draft_id, &p, &p.copy, ready, &drafts::FLAGS.map(String::from))?;
     probe(s, "after_bytes")?;
     let l = p.copy.location();
     let i = inventory(s, &l)?;
@@ -602,7 +646,7 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
         return cleanup(s, &mut r);
     }
     if same_attempt(&r, &p) {
-        install(s, &p.prepared, &stage_ready, &["seen".into()])?;
+        install(s, id, &p, &p.prepared, &stage_ready, &["seen".into()])?;
         finish(s, &mut r, &ready)?;
     }
     Ok(())
@@ -695,6 +739,11 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
             return Err("draft pending retry".into());
         }
         cleanup(s, &mut r)?;
+        // An aborted higher complete revision remains immutable. A lower save
+        // must not reach finish and clear that durable retry constraint.
+        if r.retry.as_ref().is_some_and(|retry| request.revision < retry.revision) {
+            return Err("draft higher revision retry pending".into());
+        }
         if request.revision < r.revision {
             return Ok(response(&r, "superseded"));
         }
@@ -763,6 +812,9 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     }
     if r.epoch != preparation_epoch {
         return Err("draft preparation attempt changed; retry".into());
+    }
+    if r.retry.as_ref().is_some_and(|retry| request.revision < retry.revision) {
+        return Err("draft higher revision retry pending".into());
     }
     if r.retry.as_ref().is_some_and(|retry| {
         retry.revision == request.revision
@@ -848,12 +900,12 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
         prepared: prepared.clone(),
         root: common::vault_root(s)?,
     };
-    r.pending = Some(intent);
+    r.pending = Some(intent.clone());
     persist(s, &r)?;
     let stage_ready = stage_ready.with_local_uid(stage_uid)?;
     let destination_ready = destination_ready.with_local_uid(uid)?;
     probe(s, "before_prepared_store")?;
-    install(s, &prepared, &stage_ready, &["seen".into()])?;
+    install(s, &r.draft_id, &intent, &prepared, &stage_ready, &["seen".into()])?;
     probe(s, "after_prepared_store")?;
     finish(s, &mut r, &destination_ready)?;
     Ok(response(&r, "saved"))
@@ -894,7 +946,7 @@ fn validate_open_tuple(
         .chain(record.pending.iter().map(|intent| &intent.copy))
         .find(|copy| copy.location() == *location && drafts::editable(&copy.entry))
         .ok_or("draft tuple is not editable")?;
-    let _ = read_copy(s, copy, false)?;
+    read_copy(s, copy, false)?.ok_or("draft tuple body missing")?;
     Ok(())
 }
 
