@@ -152,18 +152,38 @@ describe('complete draft revisions at the actual component boundary', () => {
     expect(saveLocalDraft).toHaveBeenCalledTimes(2);
     expect(saveLocalDraft.mock.calls.at(-1)[0].payload).toMatchObject({ html: '', text: '', cc: '', bcc: '', inReplyTo: '', references: '', attachments: [] });
   });
-  it('persists an equal-length changed quote', async () => {
-    const view = render(<ComposeModal {...props} initialData={{ ...seed, _quotedHtml: '<p>AAAA</p>' }} />); await tick();
-    view.rerender(<ComposeModal {...props} initialData={{ ...seed, _quotedHtml: '<p>BBBB</p>' }} />); await tick();
+  it('persists an equal-length selected quote delivered by late body fill', async () => {
+    const onSaveState = vi.fn();
+    const header = { uid: 8, messageId: '<parent@example.test>', from: { address: 'them@example.test' }, to: [{ address: 'me@example.test' }], subject: 'Original', _selectedQuoteHtml: '<p>AAAA</p>' };
+    const view = render(<ComposeModal {...props} mode="reply" replyTo={header} onSaveState={onSaveState} />);
+    fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>typed</p>' } }); await tick();
+    const oldQuote = onSaveState.mock.calls.at(-1)[0]._quotedHtml;
+    expect(oldQuote).toContain('AAAA');
+    view.rerender(<ComposeModal {...props} mode="reply" replyTo={{ ...header, html: '<p>BBBB</p>', _selectedQuoteHtml: '<p>BBBB</p>' }} onSaveState={onSaveState} />); await tick();
+    const newQuote = onSaveState.mock.calls.at(-1)[0]._quotedHtml;
+    expect(newQuote).toContain('BBBB'); expect(newQuote.length).toBe(oldQuote.length);
     expect(saveLocalDraft).toHaveBeenCalledTimes(2);
     expect(saveLocalDraft.mock.calls.at(-1)[0].payload.html).toContain('BBBB');
   });
-  it('persists changed attachment bytes with the same filename and size', async () => {
+  it('persists actual replacement attachment bytes with the same filename and size', async () => {
     const file = { filename: 'f.bin', size: 3, contentType: 'application/octet-stream', content: 'QUFB' };
-    const view = render(<ComposeModal {...props} initialData={{ ...seed, attachments: [file] }} />); await tick();
-    view.rerender(<ComposeModal {...props} initialData={{ ...seed, attachments: [{ ...file, content: 'QkJC' }] }} />); await tick();
-    expect(saveLocalDraft).toHaveBeenCalledTimes(2);
-    expect(saveLocalDraft.mock.calls.at(-1)[0].payload.attachments[0].content).toBe('QkJC');
+    const onSaveState = vi.fn();
+    const view = render(<ComposeModal {...props} initialData={{ ...seed, attachments: [file] }} onSaveState={onSaveState} />); await tick();
+    fireEvent.click(screen.getByTestId('compose-attachment').querySelector('button'));
+    const RealFileReader = globalThis.FileReader;
+    let finish;
+    const readDone = new Promise(resolve => { finish = resolve; });
+    const readerSpy = vi.spyOn(globalThis, 'FileReader').mockImplementation(function () {
+      const reader = new RealFileReader(); reader.addEventListener('loadend', finish); return reader;
+    });
+    try {
+      fireEvent.change(view.container.querySelector('input[type="file"]'), { target: { files: [new File(['BBB'], 'f.bin', { type: 'application/octet-stream' })] } });
+      await act(async () => { await readDone; }); await tick();
+      const actual = onSaveState.mock.calls.at(-1)[0].attachments;
+      expect(actual).toHaveLength(1); expect(actual[0]).toMatchObject({ filename: 'f.bin', size: 3, content: 'QkJC' });
+      expect(saveLocalDraft).toHaveBeenCalledTimes(2);
+      expect(saveLocalDraft.mock.calls.at(-1)[0].payload.attachments[0].content).toBe('QkJC');
+    } finally { readerSpy.mockRestore(); }
   });
   it('freezes account and physical identity while old folder resolution waits', async () => {
     const folder = deferred(); resolveDraftsMailbox.mockReturnValueOnce(folder.promise).mockResolvedValue('SecondDrafts');
