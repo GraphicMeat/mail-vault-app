@@ -584,3 +584,5 @@ pub(crate) async fn handle_reclassify_all(state: Arc<DaemonState>, params: Value
 
     RpcResponse::success(id, serde_json::json!({"started": true, "accountId": account_id}))
 }
+
+pub mod drafts;

@@ -21,7 +21,20 @@ fn drafts_mime_roundtrip_retains_envelope_threading_and_bytes(){
     let account:ImapConfig=serde_json::from_value(json!({"email":"one@example.test","imapHost":"offline.invalid","name":"Alias","fromEmail":"alias@example.test"})).unwrap();
     let raw=smtp::build_draft_mime(&account,&r.outgoing().unwrap()).unwrap().raw_rfc2822;
     let parsed=vault_eml::parse_eml_bytes(&raw,42,vec![]).unwrap();
-    assert_eq!(parsed.from.address,"alias@example.test");assert_eq!(parsed.to[0].address,"jane@example.test");assert_eq!(parsed.cc[0].address,"copy@example.test");assert_eq!(parsed.bcc[0].address,"blind@example.test");
+    let mime=mailparse::parse_mail(&raw).unwrap();
+    use mailparse::MailHeaderMap;
+    let header=mime.headers.get_first_header("To").unwrap();
+    let to=header.get_value();
+    let original=case("complete-alias-threaded-attachment")["input"]["payload"].clone();
+    let direct:smtp::OutgoingEmail=serde_json::from_value(original).unwrap();
+    assert_eq!(r.snapshot.to,r.outgoing().unwrap().to);assert_eq!(r.snapshot.to,direct.to);
+    let direct_raw=smtp::build_draft_mime(&account,&direct).unwrap().raw_rfc2822;
+    let direct_mail=mailparse::parse_mail(&direct_raw).unwrap();
+    println!("ROW12_FIXED_DIRECT_TO raw={:?} decoded={:?}",direct_mail.headers.get_first_header("To").unwrap().get_value_raw(),direct_mail.headers.get_first_value("To"));
+    println!("ROW12_FIXED_HEADER raw={:?} header_aware={:?}",header.get_value_raw(),mailparse::addrparse_header(header));
+    println!("ROW12_FIXED_RECIPIENT_DIAGNOSTIC outgoing={} to_header={:?} addrparse={:?} parsed={:?}",r.snapshot.to,to,mailparse::addrparse(&to),parsed.to);
+
+    assert_eq!(parsed.from.address,"alias@example.test");assert_eq!(parsed.to.iter().map(|a|a.address.as_str()).collect::<Vec<_>>(),vec!["jane@example.test","next@example.test"]);assert_eq!(parsed.cc[0].address,"copy@example.test");assert_eq!(parsed.bcc[0].address,"blind@example.test");
     assert!(parsed.html.unwrap().contains("Words"));assert_eq!(parsed.attachments[0].content,"AAEC");
     let headers=String::from_utf8_lossy(&raw);assert!(headers.contains("In-Reply-To: <parent@example.test>"));assert!(headers.contains("<root@example.test>"));
 }

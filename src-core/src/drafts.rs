@@ -59,7 +59,7 @@ pub struct Copy {pub identity:Identity,pub entry:Value}
 impl Copy {pub fn location(&self)->Location {let s=&self.identity.scope;Location{account_id:s.account_id.clone(),mailbox:s.mailbox.clone(),uid:s.uid}}}
 #[derive(Debug,Clone,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-pub struct Intent {pub revision:u64,pub request_hash:String,pub fingerprint:String,pub copy:Copy,pub root:std::path::PathBuf}
+pub struct Intent {pub revision:u64,pub request_hash:String,pub fingerprint:String,pub copy:Copy,pub prepared:Copy,pub root:std::path::PathBuf}
 #[derive(Debug,Clone,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub struct Record {
