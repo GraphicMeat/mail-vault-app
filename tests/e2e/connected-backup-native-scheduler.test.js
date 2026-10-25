@@ -9,6 +9,38 @@ const wait=(predicate,timeout,message)=>browser.waitUntil(predicate,{timeout,int
 const invoke=(command,args={})=>browser.executeAsync((c,a,done)=>{window.__TAURI__.core.invoke(c,a).then(done,e=>done({__error:String(e?.message||e)}));},command,args);
 const rpc=(method,params={})=>invoke('daemon_rpc',{method,params});
 const stateOnDisk=()=>JSON.parse(readFileSync(join(appDataDir(browser.testDataDir),'frontend-settings.json'),'utf8'))['mailvault-settings']?.state;
+const pick=(value,keys)=>Object.fromEntries(keys.filter(key=>value?.[key]!==undefined).map(key=>[key,value[key]]));
+const scheduleKeys=['enabled','interval','timeOfDay','dayOfWeek','dayOfMonth','weekday'];
+const schedulingEvidence=(state,id)=>({
+  now:Date.now(),backupGlobalEnabled:state?.backupGlobalEnabled,
+  globalConfig:pick(state?.backupGlobalConfig,scheduleKeys),targetSchedule:pick(state?.backupSchedules?.[id],scheduleKeys),targetHidden:state?.hiddenAccounts?.[id],
+  billing:pick(state?.billingProfile,['hasSubscription','clientAccessGranted','premiumAccess','status','currentPeriodEnd']),shareGrant:pick(state?.shareGrant,['expiresAt']),
+  backupState:pick(state?.backupState?.[id],['lastBackupTime','lastStatus','lastSchedulerRunId','emailsBackedUp']),
+  history:(state?.backupHistory?.[id]||[]).map(row=>pick(row,['timestamp','emailsBackedUp','durationSecs','success','errors','externalCopyOk','externalCopyFailedCount'])),
+});
+async function observeActualContext(){
+  await browser.execute(()=>{
+    const original=window.__TAURI__.core.invoke;
+    const diagnostic={frames:[],events:[]};window.__BACKUP_CONTEXT_DIAGNOSTIC__=diagnostic;
+    const append=(rows,row)=>{rows.push(row);if(rows.length>400)rows.shift();};
+    const select=(value,keys)=>Object.fromEntries(keys.filter(key=>value?.[key]!==undefined).map(key=>[key,value[key]]));
+    const wrapped=function(command,args){
+      const observed=command==='daemon_rpc'&&args?.method==='backup.context';
+      const frame=observed?{sentAt:Date.now(),payload:select(args.params,['surfaceId','sessionId','sequence','kind','lastActivityAt','loading','visibility','online','observedAt','heartbeatGap'])}:null;
+      if(frame)append(diagnostic.frames,frame);
+      const actual=original.call(this,command,args);
+      if(frame)Promise.resolve(actual).then(reply=>{frame.repliedAt=Date.now();frame.reply=select(reply,['accepted','surfaceId','sessionId','sequence','retired']);},error=>{frame.repliedAt=Date.now();frame.errorName=error?.name;});
+      return actual;
+    };
+    window.__TAURI__.core.invoke=wrapped;
+    const event=e=>append(diagnostic.events,{at:Date.now(),type:e.type,trusted:e.isTrusted,online:navigator.onLine,visibility:document.visibilityState});
+    const events=['keydown','click','mousemove','scroll','visibilitychange'];events.forEach(name=>document.addEventListener(name,event,{passive:true}));
+    window.addEventListener('online',event);window.addEventListener('offline',event);
+    diagnostic.restore=()=>{if(window.__TAURI__.core.invoke===wrapped)window.__TAURI__.core.invoke=original;events.forEach(name=>document.removeEventListener(name,event));window.removeEventListener('online',event);window.removeEventListener('offline',event);};
+  });
+}
+const actualContextEvidence=()=>browser.execute(()=>({now:Date.now(),online:navigator.onLine,visibility:document.visibilityState,frames:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.frames||[],events:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.events||[]}));
+
 
 describe('Native backup scheduler survives observers and owns automatic work',function(){
   this.timeout(720000);
@@ -50,9 +82,11 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
     const replay=await rpc('backup.run_now',{accountId:luke.id,requestId:'native-access-first'});assert.equal(replay.runId,first.runId);assert.equal(stateOnDisk().backupHistory[luke.id].length,1);
   });
   it('aggregates main loading and child activity, then admits automatically after native idle with its observer detached',async function(){
+    await observeActualContext();
     await openSettings();assert.equal(await browser.execute(()=>{const button=document.querySelector('[data-testid="settings-detach"]');button?.click();return !!button;}),true);
     await wait(async()=>(await browser.getWindowHandles()).length===2,15000,'Settings did not detach');
     const child=(await browser.getWindowHandles()).find(h=>h!==main);
+    await browser.switchToWindow(child);await observeActualContext();
     await browser.switchToWindow(main);
     await browser.execute(id=>{
       window.__MAIL_STORE__.setState({loading:true});
@@ -65,12 +99,26 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
     await wait(async()=>Date.now()-idleStart>=185000,190000,'Native idle observation period did not elapse');
     let s=await rpc('backup.schedule.status');assert.equal(s.context.loading,true,'Child false cleared main loading');assert.equal(s.active,null);assert.ok(!s.queue.some(i=>i.accountId===vader.id));
     await browser.switchToWindow(child);await browser.execute(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',bubbles:true})));
+    console.log('NATIVE_IDLE_CHILD_CONTEXT '+JSON.stringify(await actualContextEvidence()));
     await browser.closeWindow();await browser.switchToWindow(main);
     await wait(async()=>(await browser.getWindowHandles()).length===1,15000,'Child window did not retire');
     await browser.execute(()=>{window.__BACKUP_UI_OBSERVER__.detach();window.__MAIL_STORE__.setState({loading:false});});
     await wait(async()=>(await rpc('backup.schedule.status')).context?.loading===false,10000,'Main loading did not clear');
     s=await rpc('backup.schedule.status');assert.ok(Date.now()-s.context.lastActivityAt<15000,'Child activity did not survive native retirement');assert.ok(!s.active&&!s.queue.length,'Recent child activity did not gate admission');
-    await wait(async()=>stateOnDisk().backupHistory?.[vader.id]?.some(h=>h.success===true),240000,'Native idle deadline never admitted the automatic account');
+    console.log('NATIVE_IDLE_BEFORE_SETTINGS '+JSON.stringify(schedulingEvidence(stateOnDisk(),vader.id)));
+    try {
+      await wait(async()=>stateOnDisk().backupHistory?.[vader.id]?.some(h=>h.success===true),240000,'Native idle deadline never admitted the automatic account');
+    } finally {
+      // Observe after the bounded waiter, never add an RPC or poll during it.
+      try {
+        console.log('NATIVE_IDLE_AFTER_CONTEXT '+JSON.stringify(await actualContextEvidence()));
+        const status=await rpc('backup.schedule.status');
+        const intent=value=>pick(value,['accountId','runId','executionId','stage','manual','retries','notBefore','pauseRequested','cancelRequested']);
+        console.log('NATIVE_IDLE_AFTER_STATUS '+JSON.stringify({now:Date.now(),ready:status.ready,context:status.context,active:intent(status.active),queue:(status.queue||[]).map(intent),pendingAccess:(status.pendingAccess||[]).map(intent),outcomes:(status.lastOutcomes||[]).map(outcome=>({at:outcome.at,status:outcome.status,applied:outcome.applied,intent:intent(outcome.intent)}))}));
+        console.log('NATIVE_IDLE_AFTER_SETTINGS '+JSON.stringify(schedulingEvidence(stateOnDisk(),vader.id)));
+      } catch(error) { console.log('NATIVE_IDLE_DIAGNOSTIC_ERROR '+error?.name); }
+      await browser.execute(()=>window.__BACKUP_CONTEXT_DIAGNOSTIC__?.restore());
+    }
     s=await rpc('backup.schedule.status');const outcome=s.lastOutcomes.find(o=>o.intent.accountId===vader.id&&o.status==='success');assert.ok(outcome);assert.equal(outcome.intent.manual,false);
     assert.ok(readdirSync(join(root,vader.email,'INBOX','cur')).length>0);assert.equal(await browser.execute(()=>window.__AUTOMATIC_UI_SNAPSHOT_CALLS__),0);
   });
