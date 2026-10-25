@@ -291,4 +291,29 @@ mod tests {
         assert!(events.try_recv().is_err(),"committed write emits exactly once");
     }
 
+    #[tokio::test]
+    async fn implicit_retry_rebuilds_a_coherent_applied_view_after_concurrent_write() {
+        let (dir,state)=rig();let doc=SettingsDoc::shared(dir.path());
+        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}),None).unwrap();
+        let before=doc.get(None).unwrap();let path=dir.path().to_path_buf();
+        let once=std::sync::atomic::AtomicBool::new(false);let mut events=state.events.subscribe();
+        let response=route_with_view(&state,"backup.schedule.set",&json!({"patch":{"backupGlobalEnabled":false}}),json!(3),move |snapshot,ids,now| {
+            if !once.swap(true,std::sync::atomic::Ordering::SeqCst) {
+                SettingsDoc::shared(&path).patch(&json!({STORE:{"state":{"backupState":{"one":{"lastBackupTime":84}},"backupHistory":{"one":[{"success":true,"timestamp":84}]}}}}),None).map_err(|e|e.catalog_key())?;
+            }
+            view(snapshot,ids,now)
+        }).await.unwrap();
+        assert!(response.error.is_none(),"{:?}",response.error);
+        let accepted=response.result.unwrap();let after=doc.get(None).unwrap();
+        assert_eq!(after.version,before.version+2);
+        assert_eq!(accepted["version"],after.version);
+        assert_eq!(accepted["config"]["backupGlobalEnabled"],false);
+        assert_eq!(accepted["state"]["backupState"]["one"]["lastBackupTime"],84);
+        assert_eq!(accepted["state"]["backupHistory"],after.values[STORE]["state"]["backupHistory"]);
+        let (name,payload)=mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(name,super::super::settings::CHANGED_EVENT);
+        assert_eq!(payload,json!({"keys":[STORE],"version":after.version}));
+        assert!(events.try_recv().is_err());
+    }
+
 }
