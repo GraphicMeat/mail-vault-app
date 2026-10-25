@@ -632,7 +632,7 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     let Resolution::Authorized { root: other_root } = other.result else {
         panic!("second actual native acquisition unavailable");
     };
-    assert_eq!(std::path::Path::new(&other_root), mirror.as_path());
+    assert_eq!(std::fs::canonicalize(&other_root).unwrap(), std::fs::canonicalize(&mirror).unwrap());
     release_backup_path(&other_root);
     assert_eq!(held.holds.lock().unwrap().len(), 1);
     // Lose the actual authorizing channel while the real provider is paused.
