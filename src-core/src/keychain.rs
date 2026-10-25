@@ -113,8 +113,12 @@ fn part_names(key: &str, primary: &str) -> Option<Vec<String>> {
 /// Parts the previous primary named that `new` no longer uses: delete them
 /// after `new.primary` is written.
 pub fn stale_parts(key: &str, old_primary: Option<&str>, new: &SplitSecret) -> Vec<String> {
-    let old = old_primary.and_then(|p| part_names(key, p)).unwrap_or_default();
-    old.into_iter().filter(|name| !new.parts.iter().any(|(n, _)| n == name)).collect()
+    let old = old_primary
+        .and_then(|p| part_names(key, p))
+        .unwrap_or_default();
+    old.into_iter()
+        .filter(|name| !new.parts.iter().any(|(n, _)| n == name))
+        .collect()
 }
 
 /// How a split secret reaches the platform store (`keyring` in the shell and
@@ -160,8 +164,13 @@ pub fn write_split_secret(
     for (name, value) in &split.parts {
         store.set(name, value).map_err(SplitWriteError::Part)?;
     }
-    store.set(key, &split.primary).map_err(SplitWriteError::Primary)?;
-    let mut written = SplitWritten { parts: split.parts.len(), stale_left: Vec::new() };
+    store
+        .set(key, &split.primary)
+        .map_err(SplitWriteError::Primary)?;
+    let mut written = SplitWritten {
+        parts: split.parts.len(),
+        stale_left: Vec::new(),
+    };
     for name in stale_parts(key, old.as_deref(), &split) {
         if let Err(e) = store.delete(&name) {
             written.stale_left.push((name, e));
@@ -374,7 +383,9 @@ mod tests {
         write(&mut store, &"a".repeat(40), 8, "g1");
         let stale = store["credentials"].clone();
         write(&mut store, &"b".repeat(40), 8, "g2");
-        let joined = join_secret("credentials", &stale, &mut |name| Ok(store.get(name).cloned()));
+        let joined = join_secret("credentials", &stale, &mut |name| {
+            Ok(store.get(name).cloned())
+        });
         assert_eq!(joined.unwrap(), "b".repeat(40));
     }
 
@@ -406,17 +417,30 @@ mod tests {
     }
 
     #[test]
-    fn a_split_write_sets_parts_then_the_primary_then_drops_the_old_parts_and_never_deletes_the_primary() {
+    fn a_split_write_sets_parts_then_the_primary_then_drops_the_old_parts_and_never_deletes_the_primary(
+    ) {
         let mut store = MapStore::default();
         write_split_secret(&mut store, "credentials", &"a".repeat(20), 8, "g1").unwrap();
         store.calls.clear();
-        let written = write_split_secret(&mut store, "credentials", &"b".repeat(12), 8, "g2").unwrap();
+        let written =
+            write_split_secret(&mut store, "credentials", &"b".repeat(12), 8, "g2").unwrap();
         assert_eq!(written.parts, 2);
         assert_eq!(
             store.calls,
-            vec!["set credentials.g2.0", "set credentials.g2.1", "set credentials", "delete credentials.g1.0", "delete credentials.g1.1", "delete credentials.g1.2"]
+            vec![
+                "set credentials.g2.0",
+                "set credentials.g2.1",
+                "set credentials",
+                "delete credentials.g1.0",
+                "delete credentials.g1.1",
+                "delete credentials.g1.2"
+            ]
         );
-        let joined = join_secret("credentials", &store.entries["credentials"].clone(), &mut |n| Ok(store.entries.get(n).cloned()));
+        let joined = join_secret(
+            "credentials",
+            &store.entries["credentials"].clone(),
+            &mut |n| Ok(store.entries.get(n).cloned()),
+        );
         assert_eq!(joined.unwrap(), "b".repeat(12));
         // Back inline: the primary is overwritten, never deleted.
         store.calls.clear();
@@ -431,7 +455,8 @@ mod tests {
         let mut store = MapStore::default();
         write_split_secret(&mut store, "credentials", "old", 8, "g1").unwrap();
         store.fail_set = Some("credentials.g2.1".to_string());
-        let err = write_split_secret(&mut store, "credentials", &"c".repeat(20), 8, "g2").unwrap_err();
+        let err =
+            write_split_secret(&mut store, "credentials", &"c".repeat(20), 8, "g2").unwrap_err();
         assert_eq!(err, SplitWriteError::Part("refused".to_string()));
         assert_eq!(store.entries["credentials"], "old");
     }

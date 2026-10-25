@@ -30,7 +30,12 @@ use std::sync::Arc;
 
 pub(crate) const CHANGED_EVENT: &str = "credentials-changed";
 
-pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
+pub(crate) async fn route(
+    state: &Arc<DaemonState>,
+    method: &str,
+    params: &Value,
+    id: Value,
+) -> Option<RpcResponse> {
     let (change, key) = match method {
         "credentials.get" => return Some(RpcResponse::success(id, credentials::app_read().await)),
         "credentials.save" => (save(params), "saved"),
@@ -39,48 +44,78 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         _ => return None,
     };
     let Some(change) = change else {
-        return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, CredError::Invalid.catalog_key()));
+        return Some(RpcResponse::error(
+            id,
+            ipc::INVALID_PARAMS,
+            CredError::Invalid.catalog_key(),
+        ));
     };
     Some(match credentials::change_credentials(change).await {
-        Err(CredError::StaleGrant) => {
-            RpcResponse::success(id, json!({"updated": false, "staleGrant": true, "version": credentials::write_generation()}))
-        }
+        Err(CredError::StaleGrant) => RpcResponse::success(
+            id,
+            json!({"updated": false, "staleGrant": true, "version": credentials::write_generation()}),
+        ),
         Ok((ids, version)) => {
             if !ids.is_empty() {
                 crate::handlers::oauth2::credentials_written(state);
-                state.events.emit(CHANGED_EVENT, json!({"ids": ids, "version": version}));
+                state
+                    .events
+                    .emit(CHANGED_EVENT, json!({"ids": ids, "version": version}));
             }
-            let answer = if key == "updated" { json!(!ids.is_empty()) } else { json!(ids) };
+            let answer = if key == "updated" {
+                json!(!ids.is_empty())
+            } else {
+                json!(ids)
+            };
             let mut reply = serde_json::Map::new();
             reply.insert(key.to_string(), answer);
             reply.insert("version".to_string(), json!(version));
             RpcResponse::success(id, Value::Object(reply))
         }
         Err(e) => {
-            let code = if e == CredError::Invalid { ipc::INVALID_PARAMS } else { ipc::INTERNAL_ERROR };
+            let code = if e == CredError::Invalid {
+                ipc::INVALID_PARAMS
+            } else {
+                ipc::INTERNAL_ERROR
+            };
             RpcResponse::error(id, code, e.catalog_key())
         }
     })
 }
 
 fn save(params: &Value) -> Option<CredChange> {
-    let records: HashMap<String, String> = serde_json::from_value(params.get("records")?.clone()).ok()?;
+    let records: HashMap<String, String> =
+        serde_json::from_value(params.get("records")?.clone()).ok()?;
     Some(CredChange::Save(records))
 }
 
 fn update(params: &Value) -> Option<CredChange> {
-    let id = params.get("id")?.as_str().filter(|s| !s.is_empty())?.to_string();
+    let id = params
+        .get("id")?
+        .as_str()
+        .filter(|s| !s.is_empty())?
+        .to_string();
     let fields = params.get("fields")?.as_object()?.clone();
     let chain = match params.get("chain") {
         None | Some(Value::Null) => None,
-        Some(Value::Array(items)) => Some(items.iter().map(|v| v.as_str().map(str::to_owned)).collect::<Option<Vec<_>>>()?),
+        Some(Value::Array(items)) => Some(
+            items
+                .iter()
+                .map(|v| v.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()?,
+        ),
         Some(_) => return None,
     };
     Some(CredChange::Update { id, fields, chain })
 }
 
 fn delete(params: &Value) -> Option<CredChange> {
-    let ids = params.get("ids")?.as_array()?.iter().map(|v| v.as_str().map(str::to_owned)).collect::<Option<Vec<_>>>()?;
+    let ids = params
+        .get("ids")?
+        .as_array()?
+        .iter()
+        .map(|v| v.as_str().map(str::to_owned))
+        .collect::<Option<Vec<_>>>()?;
     Some(CredChange::Delete(ids))
 }
 
@@ -112,7 +147,9 @@ mod tests {
     /// The debug file bypass, never the real keychain: the test box has an
     /// installed MailVault whose entry this must not touch.
     fn rig(blob: Option<Value>) -> Rig {
-        let env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let env = credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let previous_env = std::env::var_os("MAILVAULT_TEST_CREDENTIALS");
         let dir = tempfile::tempdir().unwrap();
         let creds = dir.path().join("credentials.json");
@@ -121,7 +158,13 @@ mod tests {
         }
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
         let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
-        Rig { _dir: dir, state, creds, previous_env, _env: env }
+        Rig {
+            _dir: dir,
+            state,
+            creds,
+            previous_env,
+            _env: env,
+        }
     }
 
     fn record(id: &str, password: &str) -> String {
@@ -143,7 +186,10 @@ mod tests {
     #[tokio::test]
     async fn get_answers_the_shape_get_credentials_answered() {
         let rig = rig(None);
-        assert_eq!(call(&rig, "credentials.get", json!({})).await.unwrap(), json!({"status": "empty", "credentials": {}}));
+        assert_eq!(
+            call(&rig, "credentials.get", json!({})).await.unwrap(),
+            json!({"status": "empty", "credentials": {}})
+        );
         std::fs::write(&rig.creds, json!({"a": record("a", "pa")}).to_string()).unwrap();
         let got = call(&rig, "credentials.get", json!({})).await.unwrap();
         assert_eq!(got["status"], json!("granted"));
@@ -152,21 +198,42 @@ mod tests {
         // next whole-blob write drop every account), and no content quoted.
         std::fs::write(&rig.creds, format!("{{\"a\": {SECRET}")).unwrap();
         let broken = call(&rig, "credentials.get", json!({})).await.unwrap();
-        assert!(broken["status"] == json!("unavailable") || broken["status"] == json!("denied"), "{broken}");
+        assert!(
+            broken["status"] == json!("unavailable") || broken["status"] == json!("denied"),
+            "{broken}"
+        );
         assert!(!broken.to_string().contains(SECRET));
     }
 
     #[tokio::test]
     async fn save_replaces_its_own_records_and_keeps_every_other_account() {
-        let rig = rig(Some(json!({"old": record("old", "keep"), "a": record("a", "stale")})));
-        let reply = call(&rig, "credentials.save", json!({"records": {"a": record("a", "new"), "b": record("b", "pb")}})).await.unwrap();
+        let rig = rig(Some(
+            json!({"old": record("old", "keep"), "a": record("a", "stale")}),
+        ));
+        let reply = call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"a": record("a", "new"), "b": record("b", "pb")}}),
+        )
+        .await
+        .unwrap();
         assert_eq!(reply["saved"], json!(["a", "b"]));
         let blob = stored(&rig);
         assert_eq!(blob.len(), 3);
-        assert_eq!(blob["old"], record("old", "keep"), "an account the request did not name is untouched");
+        assert_eq!(
+            blob["old"],
+            record("old", "keep"),
+            "an account the request did not name is untouched"
+        );
         assert_eq!(blob["a"], record("a", "new"));
         // Saving the same again writes nothing and keeps the version.
-        let again = call(&rig, "credentials.save", json!({"records": {"b": record("b", "pb")}})).await.unwrap();
+        let again = call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"b": record("b", "pb")}}),
+        )
+        .await
+        .unwrap();
         assert_eq!(again["saved"], json!([]));
         assert_eq!(again["version"], reply["version"]);
     }
@@ -174,7 +241,13 @@ mod tests {
     #[tokio::test]
     async fn a_fresh_install_starts_from_an_empty_blob() {
         let rig = rig(None);
-        call(&rig, "credentials.save", json!({"records": {"a": record("a", "pa")}})).await.unwrap();
+        call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"a": record("a", "pa")}}),
+        )
+        .await
+        .unwrap();
         assert_eq!(stored(&rig).keys().collect::<Vec<_>>(), vec!["a"]);
     }
 
@@ -186,8 +259,14 @@ mod tests {
         let broken = format!("{{\"old\": \"{SECRET}\"");
         std::fs::write(&rig.creds, &broken).unwrap();
         for (method, params) in [
-            ("credentials.save", json!({"records": {"a": record("a", "pa")}})),
-            ("credentials.update", json!({"id": "old", "fields": {"oauth2AccessToken": "x"}})),
+            (
+                "credentials.save",
+                json!({"records": {"a": record("a", "pa")}}),
+            ),
+            (
+                "credentials.update",
+                json!({"id": "old", "fields": {"oauth2AccessToken": "x"}}),
+            ),
             ("credentials.delete", json!({"ids": ["old"]})),
         ] {
             let err = call(&rig, method, params).await.unwrap_err();
@@ -198,21 +277,45 @@ mod tests {
 
     #[tokio::test]
     async fn update_merges_fields_into_the_stored_record_only() {
-        let rig = rig(Some(json!({"g": json!({"id": "g", "authType": "oauth2", "oauth2RefreshToken": "rt-1", "oauth2ClientId": "c"}).to_string(), "p": record("p", "pp")})));
-        let reply = call(&rig, "credentials.update", json!({"id": "g", "fields": {"oauth2AccessToken": "at-2", "oauth2ExpiresAt": 99}})).await.unwrap();
+        let rig = rig(Some(
+            json!({"g": json!({"id": "g", "authType": "oauth2", "oauth2RefreshToken": "rt-1", "oauth2ClientId": "c"}).to_string(), "p": record("p", "pp")}),
+        ));
+        let reply = call(
+            &rig,
+            "credentials.update",
+            json!({"id": "g", "fields": {"oauth2AccessToken": "at-2", "oauth2ExpiresAt": 99}}),
+        )
+        .await
+        .unwrap();
         assert_eq!(reply["updated"], json!(true));
         let g: Value = serde_json::from_str(&stored(&rig)["g"]).unwrap();
-        assert_eq!(g, json!({"id": "g", "authType": "oauth2", "oauth2RefreshToken": "rt-1", "oauth2ClientId": "c", "oauth2AccessToken": "at-2", "oauth2ExpiresAt": 99}));
+        assert_eq!(
+            g,
+            json!({"id": "g", "authType": "oauth2", "oauth2RefreshToken": "rt-1", "oauth2ClientId": "c", "oauth2AccessToken": "at-2", "oauth2ExpiresAt": 99})
+        );
         assert_eq!(stored(&rig)["p"], record("p", "pp"));
-        let missing = call(&rig, "credentials.update", json!({"id": "gone", "fields": {"oauth2AccessToken": "x"}})).await.unwrap();
+        let missing = call(
+            &rig,
+            "credentials.update",
+            json!({"id": "gone", "fields": {"oauth2AccessToken": "x"}}),
+        )
+        .await
+        .unwrap();
         assert_eq!(missing["updated"], json!(false));
-        assert!(!stored(&rig).contains_key("gone"), "an update never creates a record");
+        assert!(
+            !stored(&rig).contains_key("gone"),
+            "an update never creates a record"
+        );
     }
 
     #[tokio::test]
     async fn delete_removes_only_the_named_ids() {
-        let rig = rig(Some(json!({"a": record("a", "pa"), "b": record("b", "pb")})));
-        let reply = call(&rig, "credentials.delete", json!({"ids": ["a", "zz"]})).await.unwrap();
+        let rig = rig(Some(
+            json!({"a": record("a", "pa"), "b": record("b", "pb")}),
+        ));
+        let reply = call(&rig, "credentials.delete", json!({"ids": ["a", "zz"]}))
+            .await
+            .unwrap();
         assert_eq!(reply["deleted"], json!(["a"]));
         assert_eq!(stored(&rig).keys().collect::<Vec<_>>(), vec!["b"]);
     }
@@ -225,7 +328,12 @@ mod tests {
                 let state = Arc::clone(&rig.state);
                 tokio::spawn(async move {
                     let id = format!("acct-{i}");
-                    handle_request_for_test(&state, "credentials.save", json!({"records": {id.clone(): record(&id, "p")}})).await
+                    handle_request_for_test(
+                        &state,
+                        "credentials.save",
+                        json!({"records": {id.clone(): record(&id, "p")}}),
+                    )
+                    .await
                 })
             })
             .collect();
@@ -237,7 +345,11 @@ mod tests {
         }
         versions.sort();
         versions.dedup();
-        assert_eq!(versions.len(), 20, "one change at a time, each its own version");
+        assert_eq!(
+            versions.len(),
+            20,
+            "one change at a time, each its own version"
+        );
         let blob = stored(&rig);
         assert_eq!(blob.len(), 21);
         for i in 0..20 {
@@ -257,7 +369,11 @@ mod tests {
             ("credentials.update", json!({"id": "a"})),
             ("credentials.delete", json!({"ids": [1]})),
         ] {
-            assert_eq!(call(&rig, method, params.clone()).await.unwrap_err(), "errors.credentialsInvalid", "{method} {params}");
+            assert_eq!(
+                call(&rig, method, params.clone()).await.unwrap_err(),
+                "errors.credentialsInvalid",
+                "{method} {params}"
+            );
         }
         assert_eq!(stored(&rig).len(), 1);
     }
@@ -267,17 +383,38 @@ mod tests {
     async fn no_secret_reaches_an_event_a_reply_or_an_error() {
         let rig = rig(Some(json!({"a": record("a", "pa")})));
         let mut rx = rig.state.events.subscribe();
-        let reply = call(&rig, "credentials.save", json!({"records": {"s": record("s", SECRET)}})).await.unwrap();
+        let reply = call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"s": record("s", SECRET)}}),
+        )
+        .await
+        .unwrap();
         assert!(!reply.to_string().contains(SECRET));
         let line = rx.try_recv().expect("an event");
-        assert!(!line.contains(SECRET) && !line.contains("s@x.test"), "{line}");
+        assert!(
+            !line.contains(SECRET) && !line.contains("s@x.test"),
+            "{line}"
+        );
         let (name, payload) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
         assert_eq!(name, CHANGED_EVENT);
         assert_eq!(payload, json!({"ids": ["s"], "version": reply["version"]}));
-        let err = call(&rig, "credentials.save", json!({"records": {"s": format!("{{\"password\": \"{SECRET}\"")}})).await.unwrap_err();
+        let err = call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"s": format!("{{\"password\": \"{SECRET}\"")}}),
+        )
+        .await
+        .unwrap_err();
         assert!(!err.contains(SECRET));
         // A change that writes nothing is silent.
-        call(&rig, "credentials.save", json!({"records": {"s": record("s", SECRET)}})).await.unwrap();
+        call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"s": record("s", SECRET)}}),
+        )
+        .await
+        .unwrap();
         assert!(rx.try_recv().is_err());
     }
 
@@ -297,9 +434,21 @@ mod tests {
     async fn a_stale_grants_update_never_overwrites_a_newer_sign_in() {
         let rig = rig(None);
         let grant_a = oauth_record("RT1", "at-1");
-        call(&rig, "credentials.save", json!({"records": {"g": grant_a.to_string()}})).await.unwrap();
+        call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"g": grant_a.to_string()}}),
+        )
+        .await
+        .unwrap();
         let grant_b = oauth_record("RT2", "at-reconnect");
-        call(&rig, "credentials.save", json!({"records": {"g": grant_b.to_string()}})).await.unwrap();
+        call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"g": grant_b.to_string()}}),
+        )
+        .await
+        .unwrap();
         let before = stored(&rig);
         let mut rx = rig.state.events.subscribe();
         let reply = call(
@@ -319,7 +468,13 @@ mod tests {
     async fn a_same_grant_update_saves_a_rotated_pair_and_never_a_foreign_refresh_token() {
         let rig = rig(None);
         let record = oauth_record("RT1", "at-1");
-        call(&rig, "credentials.save", json!({"records": {"g": record.to_string()}})).await.unwrap();
+        call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"g": record.to_string()}}),
+        )
+        .await
+        .unwrap();
         let chain = json!([fp(&record, None), fp(&record, Some("RT3"))]);
         let reply = call(
             &rig,
@@ -330,7 +485,14 @@ mod tests {
         .unwrap();
         assert_eq!(reply["updated"], json!(true));
         let g: Value = serde_json::from_str(&stored(&rig)["g"]).unwrap();
-        assert_eq!((g["oauth2AccessToken"].clone(), g["oauth2RefreshToken"].clone(), g["oauth2ExpiresAt"].clone()), (json!("at-3"), json!("RT3"), json!(30)));
+        assert_eq!(
+            (
+                g["oauth2AccessToken"].clone(),
+                g["oauth2RefreshToken"].clone(),
+                g["oauth2ExpiresAt"].clone()
+            ),
+            (json!("at-3"), json!("RT3"), json!(30))
+        );
         // A refresh token the chain does not name is never merged; the
         // access token of the same grant still is.
         let chain = json!([fp(&g, None)]);
@@ -338,7 +500,13 @@ mod tests {
             .await
             .unwrap();
         let g: Value = serde_json::from_str(&stored(&rig)["g"]).unwrap();
-        assert_eq!((g["oauth2AccessToken"].clone(), g["oauth2RefreshToken"].clone()), (json!("at-4"), json!("RT3")));
+        assert_eq!(
+            (
+                g["oauth2AccessToken"].clone(),
+                g["oauth2RefreshToken"].clone()
+            ),
+            (json!("at-4"), json!("RT3"))
+        );
     }
 
     /// A write that outlives its clock (a keychain prompt nobody answers)
@@ -352,7 +520,10 @@ mod tests {
         impl Drop for ResetWriteTest {
             fn drop(&mut self) {
                 crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, SeqCst);
-                crate::credentials::TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()).take();
+                crate::credentials::TEST_WRITE_GATE
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .take();
             }
         }
         let _reset = ResetWriteTest;
@@ -360,9 +531,19 @@ mod tests {
         let (release, parked) = std::sync::mpsc::channel::<()>();
         *crate::credentials::TEST_WRITE_GATE.lock().unwrap() = Some(parked);
 
-        let first = call(&rig, "credentials.save", json!({"records": {"a": record("a", "pa")}})).await;
+        let first = call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"a": record("a", "pa")}}),
+        )
+        .await;
         let started = std::time::Instant::now();
-        let second = call(&rig, "credentials.save", json!({"records": {"b": record("b", "pb")}})).await;
+        let second = call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"b": record("b", "pb")}}),
+        )
+        .await;
         let elapsed = started.elapsed();
         let second_wrote = stored(&rig).contains_key("b");
 
@@ -375,25 +556,53 @@ mod tests {
         .await
         .expect("the parked write returned");
         // Assert only after releasing and joining the synthetic late write.
-        assert_eq!(first, Err("errors.keychainWriteFailed".to_string()), "the reply timed out; its write completed later");
+        assert_eq!(
+            first,
+            Err("errors.keychainWriteFailed".to_string()),
+            "the reply timed out; its write completed later"
+        );
         assert_eq!(second, Err("errors.keychainBusy".to_string()));
-        assert!(elapsed < Duration::from_secs(2), "busy at once, not queued: {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "busy at once, not queued: {elapsed:?}"
+        );
         assert!(!second_wrote);
-        let third = call(&rig, "credentials.save", json!({"records": {"c": record("c", "pc")}})).await;
+        let third = call(
+            &rig,
+            "credentials.save",
+            json!({"records": {"c": record("c", "pc")}}),
+        )
+        .await;
         crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, SeqCst);
         third.unwrap();
         let blob = stored(&rig);
         let mut ids: Vec<&String> = blob.keys().collect();
         ids.sort();
-        assert_eq!(ids, vec!["a", "c", "old"], "the parked write landed first, the later change on top of it");
+        assert_eq!(
+            ids,
+            vec!["a", "c", "old"],
+            "the parked write landed first, the later change on top of it"
+        );
     }
 
     #[test]
     fn the_handler_and_the_writer_log_no_record() {
-        for src in [include_str!("credentials.rs"), include_str!("../credentials.rs")] {
+        for src in [
+            include_str!("credentials.rs"),
+            include_str!("../credentials.rs"),
+        ] {
             let code = &src[..src.rfind("#[cfg(test)]\nmod tests").unwrap()];
-            for line in code.lines().filter(|l| l.contains("info!(") || l.contains("warn!(") || l.contains("error!(")) {
-                assert!(!line.contains("record") && !line.contains("blob)") && !line.contains("json)") && !line.contains("params"), "{line}");
+            for line in code
+                .lines()
+                .filter(|l| l.contains("info!(") || l.contains("warn!(") || l.contains("error!("))
+            {
+                assert!(
+                    !line.contains("record")
+                        && !line.contains("blob)")
+                        && !line.contains("json)")
+                        && !line.contains("params"),
+                    "{line}"
+                );
             }
         }
     }

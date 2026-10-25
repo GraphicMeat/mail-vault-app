@@ -641,7 +641,9 @@ fn keyring_entry(name: &str) -> Result<Entry, String> {
 /// (Windows). Parts first, then the manifest, then the previous generation's
 /// parts go: a reader always finds a complete set.
 fn write_credentials_blob(json: &str) -> Result<(), String> {
-    use mailvault_core::keychain::{secret_limit, write_split_secret, SecretStore, SplitWriteError};
+    use mailvault_core::keychain::{
+        secret_limit, write_split_secret, SecretStore, SplitWriteError,
+    };
     // The same write the daemon's `credentials.save` does (one order, in core).
     struct Keyring;
     impl SecretStore for Keyring {
@@ -653,14 +655,31 @@ fn write_credentials_blob(json: &str) -> Result<(), String> {
             }
         }
         fn set(&mut self, name: &str, value: &str) -> Result<(), String> {
-            keyring_entry(name)?.set_password(value).map_err(|e| e.to_string())
+            keyring_entry(name)?
+                .set_password(value)
+                .map_err(|e| e.to_string())
         }
         fn delete(&mut self, name: &str) -> Result<(), String> {
-            keyring_entry(name)?.delete_credential().map_err(|e| e.to_string())
+            keyring_entry(name)?
+                .delete_credential()
+                .map_err(|e| e.to_string())
         }
     }
-    let generation = format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
-    let written = write_split_secret(&mut Keyring, CREDENTIALS_KEY, json, secret_limit(), &generation).map_err(|e| match e {
+    let generation = format!(
+        "{:x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
+    let written = write_split_secret(
+        &mut Keyring,
+        CREDENTIALS_KEY,
+        json,
+        secret_limit(),
+        &generation,
+    )
+    .map_err(|e| match e {
         SplitWriteError::Part(e) => format!("Failed to store credentials part: {}", e),
         SplitWriteError::Primary(e) => format!("Failed to store credentials: {}", e),
     })?;
@@ -668,7 +687,10 @@ fn write_credentials_blob(json: &str) -> Result<(), String> {
         info!("Credentials stored in {} parts", written.parts);
     }
     for (name, e) in written.stale_left {
-        warn!("store_credentials: could not remove stale part {}: {}", name, e);
+        warn!(
+            "store_credentials: could not remove stale part {}: {}",
+            name, e
+        );
     }
     Ok(())
 }
@@ -3053,7 +3075,9 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
 
         // Native changes bound admission at 5s, read at 20s and write at
         // 20s. Leave time for the daemon to report failure/uncertainty.
-        "credentials.get" | "credentials.save" | "credentials.update" | "credentials.delete" => Some(Duration::from_secs(50)),
+        "credentials.get" | "credentials.save" | "credentials.update" | "credentials.delete" => {
+            Some(Duration::from_secs(50))
+        }
 
         "vault_search"
         | "vault_rows"
@@ -4614,9 +4638,17 @@ mod tests {
 
     #[test]
     fn reply_timeout_bounds_the_credential_rpcs_past_the_daemons_own_clocks() {
-        for method in ["credentials.get", "credentials.save", "credentials.update", "credentials.delete"] {
+        for method in [
+            "credentials.get",
+            "credentials.save",
+            "credentials.update",
+            "credentials.delete",
+        ] {
             let t = crate::reply_timeout(method).expect(method);
-            assert!(t > std::time::Duration::from_secs(45) && t <= std::time::Duration::from_secs(55), "{method}: {t:?}");
+            assert!(
+                t > std::time::Duration::from_secs(45) && t <= std::time::Duration::from_secs(55),
+                "{method}: {t:?}"
+            );
         }
     }
 
