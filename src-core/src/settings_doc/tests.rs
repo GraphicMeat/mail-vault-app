@@ -175,7 +175,10 @@ fn two_processes_answer_the_same_version_for_the_same_document() {
     daemon.patch(&json!({"b": 2}), None).unwrap();
     let last = daemon.patch(&json!({"c": 3}), None).unwrap();
     let fresh = shell.get(None).unwrap().version;
-    assert_eq!(fresh, last.version, "missed writes retain the recorded version");
+    assert_eq!(
+        fresh, last.version,
+        "missed writes retain the recorded version"
+    );
     daemon.patch(&json!({"d": 4}), Some(fresh)).unwrap();
     let fresh = daemon.get(None).unwrap().version;
     let last = shell.patch(&json!({"e": 5}), Some(fresh)).unwrap();
@@ -184,14 +187,19 @@ fn two_processes_answer_the_same_version_for_the_same_document() {
     let before = fs::read(daemon.path()).unwrap();
     assert_eq!(
         daemon.patch(&json!({"stale": true}), Some(first.version)),
-        Err(SettingsError::Conflict { current: last.version })
+        Err(SettingsError::Conflict {
+            current: last.version
+        })
     );
     assert_eq!(fs::read(daemon.path()).unwrap(), before);
 
     // A worker read that sees several writes must also adopt their version.
     daemon.patch(&json!({"f": 6}), None).unwrap();
     let last = daemon.patch(&json!({"g": 7}), None).unwrap();
-    assert_eq!(*shell.read().unwrap(), json!({"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7}));
+    assert_eq!(
+        *shell.read().unwrap(),
+        json!({"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7})
+    );
     assert_eq!(shell.get(None).unwrap().version, last.version);
 }
 
@@ -230,10 +238,14 @@ fn same_bytes_after_unseen_writes_refuse_a_stale_base() {
     // No intervening get: the write's own current-document check is the fence.
     assert_eq!(
         shell.patch(&json!({"stale": true}), Some(first.version)),
-        Err(SettingsError::Conflict { current: last.version })
+        Err(SettingsError::Conflict {
+            current: last.version
+        })
     );
     assert_eq!(fs::read(daemon.path()).unwrap(), before);
-    let accepted = shell.patch(&json!({"fresh": true}), Some(last.version)).unwrap();
+    let accepted = shell
+        .patch(&json!({"fresh": true}), Some(last.version))
+        .unwrap();
     assert!(accepted.version > last.version);
     assert_eq!(disk(d.path()), json!({"a": 1, "fresh": true}));
     assert_eq!(daemon.get(None).unwrap().version, accepted.version);
@@ -254,12 +266,15 @@ fn legacy_writes_and_stale_sidecars_never_roll_versions_back() {
     let before = fs::read(doc.path()).unwrap();
     assert_eq!(
         doc.patch(&json!({"stale": true}), Some(first.version)),
-        Err(SettingsError::Conflict { current: legacy.version })
+        Err(SettingsError::Conflict {
+            current: legacy.version
+        })
     );
     assert_eq!(fs::read(doc.path()).unwrap(), before);
 
     // Even a matching old sidecar cannot lower this instance's known version.
-    let mut sidecar: Value = serde_json::from_slice(&fs::read(d.path().join(VERSION_NAME)).unwrap()).unwrap();
+    let mut sidecar: Value =
+        serde_json::from_slice(&fs::read(d.path().join(VERSION_NAME)).unwrap()).unwrap();
     sidecar["version"] = json!(1);
     fs::write(d.path().join(VERSION_NAME), sidecar.to_string()).unwrap();
     assert_eq!(doc.get(None).unwrap().version, legacy.version);
@@ -280,7 +295,9 @@ fn legacy_writes_and_stale_sidecars_never_roll_versions_back() {
     let before = fs::read(doc.path()).unwrap();
     assert_eq!(
         doc.patch(&json!({"stale": true}), Some(next.version)),
-        Err(SettingsError::Conflict { current: last.version })
+        Err(SettingsError::Conflict {
+            current: last.version
+        })
     );
     assert_eq!(fs::read(doc.path()).unwrap(), before);
 }

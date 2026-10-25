@@ -368,7 +368,9 @@ impl SettingsDoc {
 
     /// The sidecar as it is on disk now (IO: never under `inner`).
     fn read_sidecar(&self) -> Option<Sidecar> {
-        std::fs::read(self.dir.join(VERSION_NAME)).ok().and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok())
+        std::fs::read(self.dir.join(VERSION_NAME))
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok())
     }
 
     /// Takes in a good file read from disk. A matching sidecar supplies the
