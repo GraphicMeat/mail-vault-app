@@ -413,3 +413,20 @@ fn the_module_logs_no_account_field() {
         panic!("accounts_doc logs: {line}");
     }
 }
+
+#[test]
+fn changed_recovery_at_the_same_version_is_refused() {
+    let d = dir();
+    fs::write(d.path().join(FILE_NAME), "broken").unwrap();
+    seed_backup(d.path(), json!([{"id":"a", "password":"only-A"}]));
+    let doc = doc(d.path());
+    let proof = list(&doc).unwrap();
+    seed_backup(d.path(), json!([{"id":"b", "password":"only-B"}]));
+    assert_eq!(list(&doc).unwrap().version, proof.version, "actual recovery keeps version");
+    let result = run(&doc, "accounts.put", &json!({"entry":{"id":"x"}}), true);
+    assert!(matches!(result, Err(AccountsError::Conflict { .. })));
+    assert_eq!(fs::read(d.path().join(FILE_NAME)).unwrap(), b"broken");
+}
+fn seed_backup(d: &Path, value: Value) {
+    fs::write(d.join(SPEC.backup_name(1)), value.to_string()).unwrap();
+}

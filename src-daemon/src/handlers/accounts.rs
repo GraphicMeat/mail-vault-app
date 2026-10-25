@@ -29,6 +29,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     }
     let doc = accounts_doc::shared(&state.app_dir);
     let live = !accounts_doc::writes(method) || legacy_secrets_kept(state, &doc).await;
+    #[cfg(test)]
+    pause_after_preservation(&state.app_dir).await;
     let method = method.to_string();
     let params = params.clone();
     // File IO and an fsync: off the async workers.
@@ -80,6 +82,19 @@ async fn legacy_secrets_kept(state: &Arc<DaemonState>, doc: &Arc<mailvault_core:
 }
 
 #[cfg(test)]
+type PreservationPause = (Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>);
+#[cfg(test)]
+fn preservation_pauses() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, PreservationPause>> {
+    static PAUSES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, PreservationPause>>> = std::sync::OnceLock::new();
+    PAUSES.get_or_init(Default::default)
+}
+#[cfg(test)]
+async fn pause_after_preservation(path: &std::path::Path) {
+    let pause = preservation_pauses().lock().unwrap().get(path).cloned();
+    if let Some((entered, release)) = pause { entered.notify_one(); release.notified().await; }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::server::{handle_request_for_test, DaemonState};
@@ -113,6 +128,62 @@ mod tests {
             None => Ok(resp.result.unwrap_or(Value::Null)),
         }
     }
+
+    struct PauseGuard(std::path::PathBuf, PreservationPause);
+    impl Drop for PauseGuard {
+        fn drop(&mut self) {
+            preservation_pauses().lock().unwrap().remove(&self.0);
+            self.1.1.notify_one();
+        }
+    }
+    async fn snapshot_race(initial_secret: bool) {
+        let (dir, state) = rig();
+        let a = if initial_secret { json!({"id":"a", "password":"legacy-A"}) } else { json!({"id":"a"}) };
+        let path = dir.path().join("accounts.json");
+        std::fs::write(&path, json!([a.clone()]).to_string()).unwrap();
+        let creds = dir.path().join("credentials.json");
+        std::fs::write(&creds, "{}").unwrap();
+        let pause = (Arc::new(tokio::sync::Notify::new()), Arc::new(tokio::sync::Notify::new()));
+        preservation_pauses().lock().unwrap().insert(state.app_dir.clone(), pause.clone());
+        let guard = PauseGuard(state.app_dir.clone(), pause.clone());
+        let mut rx = state.events.subscribe();
+        let requested = call(&state, "accounts.put", json!({"entry":{"id":"x"}}));
+        let intervene = async {
+            pause.0.notified().await;
+            let blob: Value = serde_json::from_slice(&std::fs::read(&creds).unwrap()).unwrap();
+            assert_eq!(blob.get("a").is_some(), initial_secret, "preservation completed before pause");
+            // A compatibility writer completes while preservation holds no document lock.
+            let bytes = serde_json::to_vec(&json!([a, {"id":"b", "password":"only-B"}])).unwrap();
+            std::fs::write(&path, &bytes).unwrap();
+            // A core read can also finish while the route is paused.
+            accounts_doc::run(&accounts_doc::shared(dir.path()), "accounts.reorder", &json!({"ids":[]}), false).unwrap();
+            pause.1.notify_one();
+            bytes
+        };
+        let (result, rewritten) = tokio::join!(requested, intervene);
+        drop(guard);
+        let blob: Value = serde_json::from_slice(&std::fs::read(&creds).unwrap()).unwrap();
+        assert!(blob.get("b").is_none(), "B was not in the preserved snapshot");
+        assert_eq!(result, Err("errors.accountsConflict".to_string()));
+        assert_eq!(std::fs::read(&path).unwrap(), rewritten);
+        assert!(!dir.path().join("accounts.json.bak1").exists());
+        while let Ok(line) = rx.try_recv() {
+            let (name, _) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
+            assert_ne!(name, CHANGED_EVENT);
+        }
+        // Only an explicit fresh caller attempt can preserve B and apply X.
+        let fresh = call(&state, "accounts.list", json!({})).await.unwrap()["version"].as_u64().unwrap();
+        call(&state, "accounts.put", json!({"entry":{"id":"x"}, "baseVersion":fresh})).await.unwrap();
+        let blob: Value = serde_json::from_slice(&std::fs::read(&creds).unwrap()).unwrap();
+        let b: Value = serde_json::from_str(blob["b"].as_str().unwrap()).unwrap();
+        assert_eq!(b["password"], "only-B");
+        assert!(on_disk(&dir).as_array().unwrap().iter().any(|a| a["id"] == "x"));
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("only-B"));
+    }
+    #[tokio::test]
+    async fn changed_legacy_snapshot_is_refused_before_live_scrub() { snapshot_race(true).await; }
+    #[tokio::test]
+    async fn changed_no_legacy_snapshot_is_refused_before_live_scrub() { snapshot_race(false).await; }
 
     #[tokio::test]
     async fn every_method_is_routed_through_the_server_chain() {
