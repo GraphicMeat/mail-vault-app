@@ -82,7 +82,9 @@ impl Save {
     }
     pub fn request_hash(&self) -> String {
         let mut content = self.clone();
-        content.draft_id.clear(); content.revision = 1; content.previous_identity = None;
+        content.draft_id.clear();
+        content.revision = 1;
+        content.previous_identity = None;
         bytes_hash(&serde_json::to_vec(&content).expect("typed draft request"))
     }
     pub fn content_hash(&self) -> String {

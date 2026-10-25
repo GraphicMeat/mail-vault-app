@@ -85,7 +85,9 @@ struct Inventory {
 }
 fn inventory(s: &Arc<DaemonState>, l: &Location) -> Result<Inventory, String> {
     let (root, fence) = with_mailbox_write(s, &l.account_id, &l.mailbox, |root| {
-        if !root.is_dir() { return Err("draft vault unavailable".into()); }
+        if !root.is_dir() {
+            return Err("draft vault unavailable".into());
+        }
         Ok((
             root.to_path_buf(),
             s.vault_registry
@@ -113,7 +115,8 @@ fn checked_bytes(
     l: &Location,
     i: &Inventory,
 ) -> Result<Option<Vec<u8>>, String> {
-    if !root.is_dir() || root != i.root
+    if !root.is_dir()
+        || root != i.root
         || s.vault_registry
             .target_fence(root, &l.account_id, &l.mailbox, l.uid)
             .as_ref()
@@ -200,9 +203,16 @@ fn adopt(s: &Arc<DaemonState>, r: &mut Record, l: &Location) -> Result<(), Strin
             let proof = Scope::new(&l.account_id, &l.mailbox, l.uid, mid)
                 .and_then(|scope| Identity::from_bytes(scope, &raw))
                 .ok_or("draft identity mismatch")?;
-            let copy = Copy { identity: proof, entry: row };
-            let history = app_db::with(&s.app_dir, |c| compose_receipts::load(c, &copy.identity.scope))?;
-            if !history.is_empty() { return Err("staged compose ownership is not editable".into()); }
+            let copy = Copy {
+                identity: proof,
+                entry: row,
+            };
+            let history = app_db::with(&s.app_dir, |c| {
+                compose_receipts::load(c, &copy.identity.scope)
+            })?;
+            if !history.is_empty() {
+                return Err("staged compose ownership is not editable".into());
+            }
             r.current = Some(copy);
             persist(s, r)
         })
@@ -407,8 +417,12 @@ fn finish(
                 return Err("draft destination changed before acceptance".into());
             }
             let expected = r.clone();
-            if !same_attempt(&expected, &p) { return Err("draft attempt changed".into()); }
-            if let Some(old) = r.current.take() { add_cleanup(r, old); }
+            if !same_attempt(&expected, &p) {
+                return Err("draft attempt changed".into());
+            }
+            if let Some(old) = r.current.take() {
+                add_cleanup(r, old);
+            }
             add_cleanup(r, p.prepared);
             r.current = Some(p.copy);
             r.revision = p.revision;
@@ -438,7 +452,11 @@ fn same_attempt(record: &Record, pending: &Intent) -> bool {
 }
 
 fn add_cleanup(record: &mut Record, copy: Copy) {
-    if !record.cleanup.iter().any(|old| old.identity == copy.identity) {
+    if !record
+        .cleanup
+        .iter()
+        .any(|old| old.identity == copy.identity)
+    {
         record.cleanup.push(copy);
     }
 }
@@ -455,7 +473,9 @@ fn pending_raw(s: &Arc<DaemonState>, pending: &Intent) -> Result<Option<Vec<u8>>
         }
     }
     common::with_vault_write(s, |root| {
-        if root != pending.root { return Err("pending draft vault moved".into()); }
+        if root != pending.root {
+            return Err("pending draft vault moved".into());
+        }
         let id = format!("sha256-{}", pending.prepared.identity.sha256);
         match mailvault_core::jmap_store::blobs::get(root, &id) {
             Ok(raw) if pending.prepared.identity.matches_bytes(&raw) => Ok(Some(raw)),
@@ -478,12 +498,16 @@ fn abort_uninstalled(s: &Arc<DaemonState>, id: &str, pending: &Intent) -> Result
     let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
     with_mailbox_write(s, &stage.account_id, &stage.mailbox, |root| {
         custody::with_conn(s, |c| {
-            if root != pending.root || checked_bytes(s, root, &stage, &stage_inventory)?.is_some()
-                || entries::get(c, &stage.account_id, &stage.mailbox, stage.uid)?.is_some() {
+            if root != pending.root
+                || checked_bytes(s, root, &stage, &stage_inventory)?.is_some()
+                || entries::get(c, &stage.account_id, &stage.mailbox, stage.uid)?.is_some()
+            {
                 return Err("draft stage absence unresolved".into());
             }
             let expected = load(s, id)?;
-            if !same_attempt(&expected, pending) { return Err("draft attempt changed".into()); }
+            if !same_attempt(&expected, pending) {
+                return Err("draft attempt changed".into());
+            }
             let mut next = expected.clone();
             add_cleanup(&mut next, pending.prepared.clone());
             receipt_history(s, &pending.prepared, true)?;
@@ -494,14 +518,26 @@ fn abort_uninstalled(s: &Arc<DaemonState>, id: &str, pending: &Intent) -> Result
     with_mailbox_write(s, &destination.account_id, &destination.mailbox, |root| {
         custody::with_conn(s, |c| {
             if root != pending.root
-                || s.vault_registry.target_fence(root, &stage.account_id, &stage.mailbox, stage.uid).as_ref() != Some(&stage_inventory.fence)
+                || s.vault_registry
+                    .target_fence(root, &stage.account_id, &stage.mailbox, stage.uid)
+                    .as_ref()
+                    != Some(&stage_inventory.fence)
                 || entries::get(c, &stage.account_id, &stage.mailbox, stage.uid)?.is_some()
                 || checked_bytes(s, root, &destination, &destination_inventory)?.is_some()
-                || entries::get(c, &destination.account_id, &destination.mailbox, destination.uid)?.is_some() {
+                || entries::get(
+                    c,
+                    &destination.account_id,
+                    &destination.mailbox,
+                    destination.uid,
+                )?
+                .is_some()
+            {
                 return Err("draft destination absence unresolved".into());
             }
             let expected = load(s, id)?;
-            if !same_attempt(&expected, pending) { return Err("draft attempt changed".into()); }
+            if !same_attempt(&expected, pending) {
+                return Err("draft attempt changed".into());
+            }
             let mut next = expected.clone();
             add_cleanup(&mut next, pending.copy.clone());
             next.retry = Some(drafts::RetryConstraint {
@@ -530,9 +566,18 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
     };
     let Some(p) = pending else { return Ok(()) };
     // Restart/retry preparation uses retained vault bytes, outside draft locks.
-    let Some(raw) = pending_raw(s, &p)? else { return abort_uninstalled(s, id, &p); };
+    let Some(raw) = pending_raw(s, &p)? else {
+        return abort_uninstalled(s, id, &p);
+    };
     let stage = p.prepared.location();
-    let stage_ready = prepare_copy(s, &stage.account_id, &stage.mailbox, stage.uid, raw.clone(), &["seen".into()])?;
+    let stage_ready = prepare_copy(
+        s,
+        &stage.account_id,
+        &stage.mailbox,
+        stage.uid,
+        raw.clone(),
+        &["seen".into()],
+    )?;
     let l = p.copy.location();
     let ready = prepare_copy(
         s,
@@ -556,11 +601,13 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
 }
 
 fn response(record: &Record, disposition: &str) -> Value {
-    let pending = record.pending.as_ref().map(|intent| json!({
-        "revision": intent.revision,
-        "identity": intent.copy.identity,
-        "preparedIdentity": intent.prepared.identity,
-    }));
+    let pending = record.pending.as_ref().map(|intent| {
+        json!({
+            "revision": intent.revision,
+            "identity": intent.copy.identity,
+            "preparedIdentity": intent.prepared.identity,
+        })
+    });
     let mut value = json!({
         "draftId": record.draft_id,
         "revision": record.revision,
@@ -703,10 +750,16 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     let lock = draft_lock(s, &request.draft_id);
     let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
     let mut r = load(s, &request.draft_id)?;
-    if r.discarded { return Err("draft discarded".into()); }
-    if r.epoch != preparation_epoch { return Err("draft preparation attempt changed; retry".into()); }
-    if r.retry.as_ref().is_some_and(|retry| retry.revision == request.revision &&
-        (retry.request_hash != request_hash || retry.fingerprint != fingerprint)) {
+    if r.discarded {
+        return Err("draft discarded".into());
+    }
+    if r.epoch != preparation_epoch {
+        return Err("draft preparation attempt changed; retry".into());
+    }
+    if r.retry.as_ref().is_some_and(|retry| {
+        retry.revision == request.revision
+            && (retry.request_hash != request_hash || retry.fingerprint != fingerprint)
+    }) {
         return Err("draft revision conflict".into());
     }
     if request.revision < r.revision {
@@ -751,7 +804,9 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
         }
         _ => mailbox(s, &request.account_id)?,
     };
-    if target_mailbox == PREPARED { return Err("reserved draft preparation mailbox".into()); }
+    if target_mailbox == PREPARED {
+        return Err("reserved draft preparation mailbox".into());
+    }
     if target_mailbox != prepared_mailbox {
         return Err("draft mailbox changed during preparation".into());
     }
@@ -845,8 +900,13 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
             if scheduled(s, &l)? || app_db::with(&s.app_dir, |c| db::owner(c, &l))?.is_some() {
                 continue;
             }
-            if let Some(scope) = row["message_id"].as_str().and_then(|mid| Scope::new(&l.account_id, &l.mailbox, l.uid, mid)) {
-                if !app_db::with(&s.app_dir, |c| compose_receipts::load(c, &scope))?.is_empty() { continue; }
+            if let Some(scope) = row["message_id"]
+                .as_str()
+                .and_then(|mid| Scope::new(&l.account_id, &l.mailbox, l.uid, mid))
+            {
+                if !app_db::with(&s.app_dir, |c| compose_receipts::load(c, &scope))?.is_empty() {
+                    continue;
+                }
             }
             if content && exact.as_ref() == Some(&l) {
                 let id = uuid::Uuid::new_v4().to_string();
@@ -854,8 +914,10 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
                 let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
                 let mut r = Record::new(&id);
                 match adopt(s, &mut r, &l) {
-                    Ok(()) => {},
-                    Err(error) if error == "draft body missing" => return Ok(json!({"drafts":[],"missingBody":true})),
+                    Ok(()) => {}
+                    Err(error) if error == "draft body missing" => {
+                        return Ok(json!({"drafts":[],"missingBody":true}))
+                    }
                     Err(error) => return Err(error),
                 }
             } else {
@@ -880,11 +942,19 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
                 .find(|c| c.location() == *loc && drafts::editable(&c.entry));
             if let Some(copy) = actual {
                 let raw = read_copy(s, copy, false)?;
-                if r.discarded { return Ok(json!({"drafts":[],"managed":[response(&r,"unchanged")],"terminal":true,"missingBody":false})); }
-                if raw.is_none() { return Ok(json!({"drafts":[],"missingBody":true})); }
+                if r.discarded {
+                    return Ok(
+                        json!({"drafts":[],"managed":[response(&r,"unchanged")],"terminal":true,"missingBody":false}),
+                    );
+                }
+                if raw.is_none() {
+                    return Ok(json!({"drafts":[],"missingBody":true}));
+                }
             } else if let Some(pending) = r.pending.as_ref().filter(|p| p.copy.location() == *loc) {
                 let _ = read_copy(s, &pending.copy, false)?;
-                return Ok(json!({"drafts":[],"managed":[response(&r,"unchanged")],"pending":true,"missingBody":false}));
+                return Ok(
+                    json!({"drafts":[],"managed":[response(&r,"unchanged")],"pending":true,"missingBody":false}),
+                );
             } else {
                 return Err("draft identity is not editable".into());
             }
