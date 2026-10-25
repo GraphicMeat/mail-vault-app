@@ -3998,5 +3998,7 @@
   "errors.bulkAccountUnavailable": "Das ausgewählte Konto ist nicht verfügbar.",
   "errors.bulkLocalFoldersRead": "Die Informationen zu lokalen Ordnern konnten nicht geprüft werden.",
   "errors.bulkOperationFailed": "Der Sammelvorgang konnte nicht abgeschlossen werden. Prüfe den Fortschritt, bevor du es erneut versuchst.",
-  "errors.bulkDownloadLimited": "Das Downloadlimit des Anbieters wurde erreicht. Versuche es nach dem Zurücksetzen erneut. Bereits archivierte Nachrichten bleiben erhalten."
+  "errors.bulkDownloadLimited": "Das Downloadlimit des Anbieters wurde erreicht. Versuche es nach dem Zurücksetzen erneut. Bereits archivierte Nachrichten bleiben erhalten.",
+  "errors.backupStalled": "Die Sicherung reagiert nicht mehr. Sie wird vollständig angehalten, bevor ein neuer Versuch startet.",
+  "errors.backupRunUncertain": "Der Abschluss der Sicherung ist ungewiss. Das Konto bleibt bis zum Neustart des MailVault-Prozesses reserviert."
 }

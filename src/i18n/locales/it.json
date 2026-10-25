@@ -3998,5 +3998,7 @@
   "errors.bulkAccountUnavailable": "L’account selezionato non è disponibile.",
   "errors.bulkLocalFoldersRead": "Impossibile verificare le informazioni sulle cartelle locali.",
   "errors.bulkOperationFailed": "Impossibile completare l’operazione in blocco. Controlla l’avanzamento prima di riprovare.",
-  "errors.bulkDownloadLimited": "È stato raggiunto il limite di download del provider. Riprova dopo il ripristino del limite. I messaggi già archiviati vengono conservati."
+  "errors.bulkDownloadLimited": "È stato raggiunto il limite di download del provider. Riprova dopo il ripristino del limite. I messaggi già archiviati vengono conservati.",
+  "errors.backupStalled": "Il backup non risponde più. L’arresto terminerà prima di un nuovo tentativo.",
+  "errors.backupRunUncertain": "Il completamento del backup è incerto. L’account resta riservato fino al riavvio del processo MailVault."
 }

@@ -3998,5 +3998,7 @@
   "errors.bulkAccountUnavailable": "Le compte sélectionné est indisponible.",
   "errors.bulkLocalFoldersRead": "Les informations des dossiers locaux n’ont pas pu être vérifiées.",
   "errors.bulkOperationFailed": "L’opération groupée n’a pas pu se terminer. Vérifiez sa progression avant de réessayer.",
-  "errors.bulkDownloadLimited": "La limite de téléchargement du fournisseur a été atteinte. Réessayez après sa réinitialisation. Les messages déjà archivés sont conservés."
+  "errors.bulkDownloadLimited": "La limite de téléchargement du fournisseur a été atteinte. Réessayez après sa réinitialisation. Les messages déjà archivés sont conservés.",
+  "errors.backupStalled": "La sauvegarde ne répond plus. Son arrêt se terminera avant une nouvelle tentative.",
+  "errors.backupRunUncertain": "La fin de la sauvegarde est incertaine. Le compte reste réservé jusqu’au redémarrage du processus MailVault."
 }

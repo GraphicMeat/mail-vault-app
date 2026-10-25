@@ -165,7 +165,7 @@ async fn backup_worker_retains_outcome_on_settings_failure_then_applies_once() {
 #[tokio::test]
 async fn backup_worker_settings_marker_replays_after_metadata_ack_failure() {
     let mut r=rig();manual(&r.state,"one","metadata-ack").await;let c=call(&mut r).await;
-    app_db::with(&r.state.app_dir,|conn| conn.execute_batch("CREATE TRIGGER fail_backup_ack BEFORE INSERT ON meta WHEN NEW.key='backup.scheduler.v1' AND instr(NEW.value, '"applied":true')>0 BEGIN SELECT RAISE(FAIL,'injected metadata ACK failure'); END;").map_err(|e|e.to_string())).unwrap();
+    app_db::with(&r.state.app_dir,|conn| conn.execute_batch(r#"CREATE TRIGGER fail_backup_ack BEFORE INSERT ON meta WHEN NEW.key='backup.scheduler.v1' AND instr(NEW.value, '"applied":true')>0 BEGIN SELECT RAISE(FAIL,'injected metadata ACK failure'); END;"#).map_err(|e|e.to_string())).unwrap();
     c.reply.send(Ok(result(7))).ok().unwrap();
     tokio::time::timeout(Duration::from_secs(3),async {while settings(&r.state)["backupState"]["one"]["emailsBackedUp"]!=7 {tokio::task::yield_now().await;}}).await.unwrap();
     assert!(!read_ledger(&r.state.app_dir).unwrap().outcomes[0].applied);

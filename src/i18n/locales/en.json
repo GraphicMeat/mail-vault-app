@@ -3998,5 +3998,7 @@
   "errors.bulkAccountUnavailable": "The selected account is unavailable.",
   "errors.bulkLocalFoldersRead": "Local folder information could not be verified.",
   "errors.bulkOperationFailed": "The bulk operation could not finish. Review its progress before trying again.",
-  "errors.bulkDownloadLimited": "The provider's download limit was reached. Try again after it resets. Already archived messages are kept."
+  "errors.bulkDownloadLimited": "The provider's download limit was reached. Try again after it resets. Already archived messages are kept.",
+  "errors.backupStalled": "Backup stopped responding. It will finish stopping before another attempt starts.",
+  "errors.backupRunUncertain": "Backup completion is uncertain. Its account remains reserved until the daemon restarts."
 }

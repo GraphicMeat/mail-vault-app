@@ -51,7 +51,6 @@ fn mailbox_concurrency(params: &Value) -> usize {
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tracing::warn;
 
 /// RAII guard for one entry in `DaemonState.backup_runs`. Constructed right
 /// after the entry is inserted and moved into the spawned run's async block,
@@ -79,13 +78,14 @@ impl BackupRunGuard {
 /// then): the check and insert share one lock. Legacy, gap-save and native
 /// scheduler entrypoints all use it; none can replace a live owner.
 pub(crate) fn claim_run(state: &Arc<DaemonState>, account_id: &str) -> Option<BackupRunGuard> {
+    claim_controlled(state, account_id, Arc::new(AtomicBool::new(false)))
+}
+
+pub(crate) fn claim_controlled(state: &Arc<DaemonState>, account_id: &str, cancel: Arc<AtomicBool>) -> Option<BackupRunGuard> {
     let mut runs = state.backup_runs.lock().unwrap_or_else(|p| p.into_inner());
-    if runs.contains_key(account_id) {
-        return None;
-    }
-    let cancel = Arc::new(AtomicBool::new(false));
-    runs.insert(account_id.to_string(), Arc::clone(&cancel));
-    Some(BackupRunGuard { state: Arc::clone(state), account_id: account_id.to_string(), cancel })
+    if runs.contains_key(account_id) { return None; }
+    runs.insert(account_id.to_string(), cancel.clone());
+    Some(BackupRunGuard { state: state.clone(), account_id: account_id.to_string(), cancel })
 }
 
 /// The one terminal frame for a run that ended before its own terminal emit
@@ -148,39 +148,11 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
 
     common::vault_root(state)?;
     let guard = claim_run(state, &account_id).ok_or("Backup already running")?;
-    let cancel = guard.cancel();
-    let on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync> = {
-        let bus = state.events.clone();
-        Arc::new(move |progress| {
-            if let Ok(v) = serde_json::to_value(progress) { bus.emit("backup-progress", v); }
-        })
-    };
-    let ctx = run_context(state, account_id.clone(), account, mirror_root, skip_folders,
-        mailbox_concurrency, cancel, on_progress)?;
-    let state2 = Arc::clone(state);
-    let run_account_id = account_id.clone();
+    let state2 = state.clone();
+    let id = account_id.clone();
     tokio::spawn(async move {
-        // Held for this whole block: dropped at the end, on every exit path
-        // (normal return, `result` holding an `Err`, or a panic unwinding
-        // through this async block), which removes this run's own
-        // `backup_runs` entry — never a newer run's for the same account,
-        // since `BackupRunGuard::drop` only removes by `Arc::ptr_eq`.
-        let _guard = guard;
-
-        let result = provider()(ctx).await;
-
-        // `run_imap_account` emits its own terminal `backup-progress` frame
-        // (`active: false`) on every path that reaches the end of its folder
-        // loop. It only does NOT reach that when it `?`-returns early (LIST
-        // or UID FETCH failing outright) — that's the one case this task
-        // must still tell JS about, and the only one: emitting here
-        // unconditionally would give JS two `active:false` frames per run.
-        if let Err(e) = result {
-            warn!("backup_run_account: {} failed before its own terminal event: {}", run_account_id, e);
-            if let Ok(v) = serde_json::to_value(failed_frame(&run_account_id, e)) {
-                state2.events.emit("backup-progress", v);
-            }
-        }
+        let _ = run_claimed(state2, guard, id, account, Some(account_json), mirror_root,
+            skip_folders, mailbox_concurrency, None, provider()).await;
     });
 
     Ok(serde_json::json!({"runId": account_id}))
@@ -192,12 +164,12 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
 /// until a native slot has been proved absent (slice 3 supplies scoped access).
 fn run_context(
     state: &Arc<DaemonState>, account_id: String,
-    account: mailvault_core::imap::ImapConfig, mirror_root: Option<String>,
+    account: mailvault_core::imap::ImapConfig, account_json: Option<String>, mirror_root: Option<String>,
     skip_folders: usize, mailbox_concurrency: usize, cancel: Arc<AtomicBool>,
     on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync>,
 ) -> Result<BackupRunContext, String> {
     // Core's two archive calls now consume this already-resolved typed config.
-    let account_json = String::new();
+    let account_json = account_json.unwrap_or_default();
     // Mailbox + changes only — account id/email, mirror root and
     // `sidecars: false` are all fixed for the whole run, so the closure
     // closes over them instead of the caller threading five args through
@@ -256,6 +228,61 @@ pub(crate) fn provider() -> Provider {
         else if ctx.account.oauth2_transport.as_deref() == Some("graph") { backup::run_graph_account(ctx).await }
         else { backup::run_imap_account(ctx).await }
     }))
+}
+
+// A dropped/unwinding supervisor cannot claim its provider and nested blocking
+// IO drained. Only a normal joined task result explicitly releases admission.
+struct DrainClaim { state: Arc<DaemonState>, guard: Option<BackupRunGuard> }
+impl Drop for DrainClaim {
+    fn drop(&mut self) {
+        if let Some(guard) = self.guard.take() { self.state.backup_worker.retain_uncertain(guard); }
+    }
+}
+
+pub(crate) async fn run_claimed(
+    state: Arc<DaemonState>, guard: BackupRunGuard, account_id: String,
+    account: mailvault_core::imap::ImapConfig, account_json: Option<String>, mirror_root: Option<String>,
+    skip_folders: usize, mailbox_concurrency: usize, correlation: Option<(String,String)>, runner: Provider,
+) -> JoinedBackup {
+    let terminal = Arc::new(std::sync::Mutex::new(None));
+    let on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync> = {
+        let captured = terminal.clone(); let state = state.clone(); let account_id = account_id.clone();
+        Arc::new(move |progress| {
+            if progress.account_id != account_id { return; }
+            if let Some((_,execution))=&correlation {if !state.backup_worker.observe_execution(execution,state.clock.now_ms()){return;}}
+            if let Ok(mut value) = serde_json::to_value(&progress) {
+                if !progress.active { *captured.lock().unwrap_or_else(|p|p.into_inner())=Some(value.clone()); }
+                if let Some((run, execution)) = &correlation {
+                    value["runId"]=Value::String(run.clone());value["executionId"]=Value::String(execution.clone());
+                }
+                state.events.emit("backup-progress",value);
+            }
+        })
+    };
+    let ctx = match run_context(&state,account_id.clone(),account,account_json,mirror_root,skip_folders,mailbox_concurrency,guard.cancel(),on_progress.clone()) {
+        Ok(ctx)=>ctx,
+        Err(error)=>{on_progress(failed_frame(&account_id,error.clone()));return JoinedBackup{error:Some(error),terminal:terminal.lock().unwrap_or_else(|p|p.into_inner()).clone(),..Default::default()};}
+    };
+    let mut claim=DrainClaim{state:state.clone(),guard:Some(guard)};
+    let joined=tokio::spawn(async move { runner(ctx).await }).await;
+    let mut outcome=JoinedBackup::default();
+    match joined {
+        Ok(result)=>{
+            // The reused runners join their folder batches and each folder's
+            // blocking IO. A terminal callback alone never reaches this line.
+            drop(claim.guard.take());
+            match result {
+                Ok(result)=>outcome.result=serde_json::to_value(result).ok(),
+                Err(error)=>{
+                    if terminal.lock().unwrap_or_else(|p|p.into_inner()).is_none() {on_progress(failed_frame(&account_id,error.clone()));}
+                    outcome.error=Some(error);
+                }
+            }
+        }
+        Err(_)=>{outcome.uncertain=true;outcome.error=Some("errors.backupRunUncertain".into());}
+    }
+    outcome.terminal=terminal.lock().unwrap_or_else(|p|p.into_inner()).clone();
+    outcome
 }
 
 /// Cancels one account's in-flight backup run by setting its `AtomicBool` in

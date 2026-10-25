@@ -3998,5 +3998,7 @@
   "errors.bulkAccountUnavailable": "A conta selecionada não está disponível.",
   "errors.bulkLocalFoldersRead": "Não foi possível verificar as informações das pastas locais.",
   "errors.bulkOperationFailed": "Não foi possível concluir a operação em lote. Confira o progresso antes de tentar novamente.",
-  "errors.bulkDownloadLimited": "O limite de download do provedor foi atingido. Tente novamente após a redefinição do limite. As mensagens já arquivadas são mantidas."
+  "errors.bulkDownloadLimited": "O limite de download do provedor foi atingido. Tente novamente após a redefinição do limite. As mensagens já arquivadas são mantidas.",
+  "errors.backupStalled": "O backup parou de responder. Ele será totalmente interrompido antes de uma nova tentativa.",
+  "errors.backupRunUncertain": "A conclusão do backup é incerta. A conta permanece reservada até reiniciar o processo do MailVault."
 }

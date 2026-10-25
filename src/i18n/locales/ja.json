@@ -3998,5 +3998,7 @@
   "errors.bulkAccountUnavailable": "選択したアカウントは利用できません。",
   "errors.bulkLocalFoldersRead": "ローカルフォルダーの情報を検証できませんでした。",
   "errors.bulkOperationFailed": "一括操作を完了できませんでした。再試行する前に進行状況を確認してください。",
-  "errors.bulkDownloadLimited": "プロバイダーのダウンロード上限に達しました。上限がリセットされた後にもう一度お試しください。アーカイブ済みのメッセージは保持されます。"
+  "errors.bulkDownloadLimited": "プロバイダーのダウンロード上限に達しました。上限がリセットされた後にもう一度お試しください。アーカイブ済みのメッセージは保持されます。",
+  "errors.backupStalled": "バックアップが応答しなくなりました。停止が完了してから再試行します。",
+  "errors.backupRunUncertain": "バックアップの完了を確認できません。MailVault のプロセスが再起動するまで、このアカウントは予約されたままです。"
 }

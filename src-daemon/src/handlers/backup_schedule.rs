@@ -16,7 +16,11 @@ pub(crate) async fn route(
     params: &Value,
     id: Value,
 ) -> Option<RpcResponse> {
-    route_with_view(state, method, params, id, view).await
+    let mut response=route_with_view(state, method, params, id, view).await?;
+    if let Some(Value::Object(result))=response.result.as_mut() {
+        if let Value::Object(live)=state.backup_worker.status() {result.extend(live);}
+    }
+    Some(response)
 }
 
 // Narrow preparation seam: settings writes and the event bus remain real.
