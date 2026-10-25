@@ -82,6 +82,8 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   const globalScope = useSettingsStore(s => s.backupScope);
   const activeBackup = useBackupStore(s => s.activeBackup);
   const queue = useBackupStore(s => s.queue);
+  const nativeStatus = useBackupStore(s => s.nativeStatus);
+  const pendingNative = nativeStatus?.pendingAccess?.some(i => i.accountId === account.id);
 
   const config = backupSchedules[account.id] || { enabled: false, interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1 };
   const state = backupState[account.id] || {};
@@ -339,6 +341,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
 
       {verificationSection}
 
+      {pendingNative && <div role="status" className="text-xs text-mail-text-muted">{t('svc.backupScheduler.pendingAccess')}</div>}
       {state.lastStatus === 'failed' && state.lastError && (
         <div className="text-mail-danger text-xs">{state.lastError}</div>
       )}
@@ -545,7 +548,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             </div>
             <div>
               <div className="text-xs text-mail-text-muted">{t('settings.backup.account.nextRun')}</div>
-              <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.nextRunTime)}</div>
+              <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(nativeStatus?.nextEligibleTimes?.[account.id])}</div>
             </div>
             <div>
               <div className="text-xs text-mail-text-muted">{t('settings.backup.account.backedUp')}</div>

@@ -4000,5 +4000,11 @@
   "errors.bulkOperationFailed": "无法完成批量操作。请先查看进度，再重试。",
   "errors.bulkDownloadLimited": "已达到服务提供商的下载上限。请在上限重置后重试。已归档的邮件会保留。",
   "errors.backupStalled": "备份已停止响应。完全停止后才会开始下一次尝试。",
-  "errors.backupRunUncertain": "无法确认备份是否完成。MailVault 进程重启前，此账户将保持保留状态。"
+  "errors.backupRunUncertain": "无法确认备份是否完成。MailVault 进程重启前，此账户将保持保留状态。",
+  "svc.backupScheduler.completedTitle": "备份完成 - {{account}}",
+  "svc.backupScheduler.partialTitle": "备份部分完成 - {{account}}",
+  "svc.backupScheduler.failedTitle": "备份失败 - {{account}}",
+  "svc.backupScheduler.completedCount": "已备份 {{count}} 封新邮件。",
+  "svc.backupScheduler.pendingAccess": "正在等待访问备份位置。",
+  "svc.backupScheduler.uncertain": "备份状态不确定，正在等待原生进程。"
 }

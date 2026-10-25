@@ -4000,5 +4000,11 @@
   "errors.bulkOperationFailed": "Der Sammelvorgang konnte nicht abgeschlossen werden. Prüfe den Fortschritt, bevor du es erneut versuchst.",
   "errors.bulkDownloadLimited": "Das Downloadlimit des Anbieters wurde erreicht. Versuche es nach dem Zurücksetzen erneut. Bereits archivierte Nachrichten bleiben erhalten.",
   "errors.backupStalled": "Die Sicherung reagiert nicht mehr. Sie wird vollständig angehalten, bevor ein neuer Versuch startet.",
-  "errors.backupRunUncertain": "Der Abschluss der Sicherung ist ungewiss. Das Konto bleibt bis zum Neustart des MailVault-Prozesses reserviert."
+  "errors.backupRunUncertain": "Der Abschluss der Sicherung ist ungewiss. Das Konto bleibt bis zum Neustart des MailVault-Prozesses reserviert.",
+  "svc.backupScheduler.completedTitle": "Sicherung abgeschlossen - {{account}}",
+  "svc.backupScheduler.partialTitle": "Sicherung teilweise abgeschlossen - {{account}}",
+  "svc.backupScheduler.failedTitle": "Sicherung fehlgeschlagen - {{account}}",
+  "svc.backupScheduler.completedCount": "{{count}} neue E-Mails gesichert.",
+  "svc.backupScheduler.pendingAccess": "Warten auf Zugriff auf den Sicherungsort.",
+  "svc.backupScheduler.uncertain": "Sicherungsstatus unklar; der native Worker wird abgewartet."
 }

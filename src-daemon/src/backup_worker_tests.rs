@@ -2086,3 +2086,42 @@ async fn backup_worker_snapshot_success_is_native_without_ui_listener() {
     assert_eq!(crate::snapshot::list_snapshots(&r.state.data_dir,"one").unwrap().len(),1);
     finish(r).await;
 }
+
+#[test]
+fn backup_worker_snapshot_recovery_preserves_receipts_and_skips_legacy() {
+    let r = tempfile::tempdir().unwrap();
+    let state = DaemonState::for_test(r.path().join("mail"),r.path().into(),true);
+    let make = |applied, snapshot| Outcome { intent:new_intent(&state,"one".into(),true), status:"success".into(), at:NOW, result:Some(json!({"success":true})), terminal:None,error:None,applied,snapshot };
+    let mut ledger = Ledger::default();
+    ledger.outcomes = vec![make(true,Value::Null),make(false,Value::Null),make(true,json!({"status":"queued"})),make(true,json!({"status":"dispatched"})),make(true,json!({"status":"created","receipt":{"filename":"known.gz"},"createdAt":NOW}))];
+    assert!(snapshots::recover(&mut ledger));
+    assert_eq!(ledger.outcomes[0].snapshot["reason"],"legacy_skipped");
+    assert!(ledger.outcomes[1].snapshot.is_null());
+    assert_eq!(ledger.outcomes[2].snapshot["status"],"queued");
+    assert_eq!(ledger.outcomes[3].snapshot["status"],"uncertain");
+    assert_eq!(ledger.outcomes[4].snapshot["receipt"]["filename"],"known.gz");
+}
+
+#[tokio::test]
+async fn backup_worker_snapshot_scan_keeps_controls_responsive_and_stop_truthful() {
+    let mut r = rig();
+    patch(&r.state,json!({"billingProfile":{"hasSubscription":true,"status":"active"},"snapshotAutoEnabled":true}));
+    std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"one","email":"one@test"}]"#).unwrap();
+    std::fs::create_dir_all(r.state.data_dir.join("Maildir/one/INBOX/cur")).unwrap();
+    let (entered, rx) = oneshot::channel(); let (release, wait_release) = std::sync::mpsc::channel();
+    *r.state.backup_worker.snapshot_barrier.lock().unwrap() = Some((entered,wait_release));
+    manual(&r.state,"one","snapshot-held").await;
+    let c = call(&mut r).await; c.reply.send(Ok(result(1))).ok();
+    tokio::time::timeout(Duration::from_secs(3),rx).await.unwrap().unwrap();
+    let s = rpc(&r.state,"backup.schedule.status",json!({})).await;
+    assert_eq!(s["requests"]["snapshot-held"]["status"],"success");
+    assert_eq!(s["lastOutcomes"][0]["snapshot"]["status"],"dispatched");
+    patch(&r.state,json!({"language":"de"}));
+    rpc(&r.state,"backup.stop",json!({})).await;
+    assert_eq!(r.state.backup_worker.status()["lastOutcomes"][0]["snapshot"]["status"],"dispatched","Stop pretended the scan drained");
+    release.send(()).unwrap();
+    wait(&r.state,|s|s["lastOutcomes"][0]["snapshot"]["status"] == "applied").await;
+    assert_eq!(settings(&r.state)["language"],"de");
+    assert!(settings(&r.state)["snapshotLastTimes"]["one"].as_i64().is_some());
+    finish(r).await;
+}

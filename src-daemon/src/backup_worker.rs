@@ -33,6 +33,8 @@ use tokio::sync::{
 mod access;
 #[path = "backup_context.rs"]
 mod context;
+#[path = "backup_snapshot.rs"]
+mod snapshots;
 
 const META: &str = "backup.scheduler.v1";
 const STORE: &str = "mailvault-settings";
@@ -53,6 +55,8 @@ pub(crate) struct BackupState {
     execution: Mutex<Option<String>>,
     facts: Mutex<Facts>,
     context: Mutex<context::Context>,
+    #[cfg(test)]
+    snapshot_barrier: Mutex<Option<(oneshot::Sender<()>, std::sync::mpsc::Receiver<()>)>>,
     #[cfg(test)]
     pending_access_exit: Mutex<Option<(oneshot::Sender<()>, oneshot::Receiver<()>)>>,
     #[cfg(test)]
@@ -150,6 +154,8 @@ struct Outcome {
     terminal: Option<Value>,
     error: Option<String>,
     applied: bool,
+    #[serde(default)]
+    snapshot: Value,
 }
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -166,8 +172,16 @@ impl Ledger {
     fn view(&self) -> Value {
         json!({"revision":self.revision,"queue":self.queue,"active":self.active,
             "pendingAccess":self.queue.iter().filter(|i| i.stage == "pending_access").collect::<Vec<_>>(),
-            "lastOutcomes":self.outcomes,"requests":self.requests,"automaticOwner":"daemon","ready":true})
+            "lastOutcomes":self.outcomes.iter().map(outcome_view).collect::<Vec<_>>(),"requests":self.requests,"automaticOwner":"daemon","ready":true})
     }
+}
+fn outcome_view(out: &Outcome) -> Value {
+    let mut value = serde_json::to_value(out).expect("serializable backup outcome");
+    let result = out.result.as_ref();
+    let degraded = result.is_some_and(|r| r["errors"].as_u64().unwrap_or(0) > 0 || r["external_copy_ok"] == false || r["external_copy_failed_count"].as_u64().unwrap_or(0) > 0);
+    let title = if out.status == "success" { if degraded { "svc.backupScheduler.partialTitle" } else { "svc.backupScheduler.completedTitle" } } else { "svc.backupScheduler.failedTitle" };
+    value["presentation"] = json!({"titleKey":title,"countKey":"svc.backupScheduler.completedCount","count":result.and_then(|r|r["emails_backed_up"].as_u64()).unwrap_or(0),"accountId":out.intent.account_id});
+    value
 }
 #[derive(Clone)]
 struct Facts {
@@ -180,6 +194,7 @@ impl Default for Facts {
     fn default() -> Self { Self { automatic: true, paused: false, loading: false, last_activity: 0 } }
 }
 enum Cmd {
+    SnapshotFinished { run: String, execution: String, result: Result<Value, String>, at: i64 },
     Context { observation: context::Observation, reply: oneshot::Sender<Value> },
     RetireSurface(String),
     ConfigChanged { rearm: bool },
@@ -317,7 +332,7 @@ fn compact_outcomes(ledger: &mut Ledger) {
     let mut seen = HashMap::<String, usize>::new();
     ledger.outcomes.reverse();
     ledger.outcomes.retain(|out| {
-        if !out.applied {
+        if !out.applied || !snapshots::settled(&out.snapshot) {
             return true;
         }
         let count = seen.entry(out.intent.account_id.clone()).or_default();
@@ -386,7 +401,7 @@ pub(crate) fn start(state: Arc<DaemonState>) {
 fn refresh_context(state: &Arc<DaemonState>) {
     let c = state.backup_worker.context.lock().unwrap();
     // Tests may inject the accepted legacy Facts seam directly.
-    if c.last_activity == 0 && !c.loading() && c.deadline(state.clock.now_ms()).is_none() { return; }
+    if !c.observed() { return; }
     let mut facts = state.backup_worker.facts.lock().unwrap();
     facts.loading = c.loading(); facts.paused = c.paused(state.clock.now_ms());
     facts.last_activity = facts.last_activity.max(c.last_activity);
@@ -427,6 +442,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         }
     };
     state.backup_worker.epoch.store(ledger.epoch, SeqCst);
+    if snapshots::recover(&mut ledger) { if publish(&state, &mut ledger).await.is_err() { return; } }
     // A fresh daemon has no surviving in-process execution. An ordinal alone
     // does not prove folder ordering; restart always resumes incrementally at 0.
     if let Some(mut interrupted) = ledger.active.take() {
@@ -441,6 +457,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 terminal: None,
                 error: None,
                 applied: true,
+                snapshot: Value::Null,
             };
             settle_requests(&mut ledger.requests, &out);
             ledger.outcomes.push(out);
@@ -469,6 +486,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
     let mut tick = tokio::time::interval(Duration::from_secs(60));
     tick.tick().await;
     let mut pending_finish = None;
+    let mut pending_snapshot = None;
     // A real wake consumed during an admission probe cannot be serviced until
     // that probe returns. Coalesce one recheck for that exact execution.
     let mut deferred_probe_scan: Option<String> = None;
@@ -495,6 +513,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         };
         let mut scan = scan;
         match cmd {
+            Cmd::SnapshotFinished { run, execution, result, at } => { pending_snapshot = Some((run, execution, result, at)); }
             Cmd::Context { observation, reply } => {
                 let result = state.backup_worker.context.lock().unwrap().observe(observation, state.clock.now_ms());
                 refresh_context(&state);
@@ -740,12 +759,16 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         if pending_finish.is_some() {
             continue;
         }
+        if let Some((run, execution, result, at)) = pending_snapshot.take() {
+            if snapshots::completed(&state, &mut ledger, &run, &execution, &result, at).await.is_err() { pending_snapshot = Some((run, execution, result, at)); }
+        }
         if settle_cancelled(&state, &mut ledger).await.is_err() {
             continue;
         }
         if apply_retained(&state, &mut ledger).await.is_err() {
             continue;
         }
+        if pending_snapshot.is_none() { let _ = snapshots::drive(&state, &mut ledger).await; }
         if scan {
             check_stall(&state, &mut ledger).await;
             scan_automatic(&state);
@@ -800,6 +823,7 @@ async fn settle_cancelled(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Resu
             terminal: None,
             error: None,
             applied: true,
+            snapshot: Value::Null,
         };
         settle_requests(&mut next.requests, &out);
         next.outcomes.push(out);
@@ -1284,6 +1308,7 @@ async fn finish_run(
             terminal,
             error,
             applied: false,
+            snapshot: Value::Null,
         };
         next.outcomes.push(outcome);
     }

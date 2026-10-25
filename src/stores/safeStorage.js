@@ -367,12 +367,49 @@ async function writeThroughShell(values, bases) {
   acceptWrite(reply, values);
 }
 
+const BACKUP_CONFIG_KEYS = ['backupGlobalEnabled', 'backupGlobalConfig', 'backupSchedules', 'backupMailboxConcurrency', 'backupNotifyOnSuccess', 'backupNotifyOnFailure', 'snapshotAutoEnabled', 'snapshotCadence'];
+// JSON merge-patch for the user's exact delta, including explicit removals.
+function mergeDelta(before, after) {
+  if (!after || typeof after !== 'object' || Array.isArray(after)) return after;
+  const patch = {};
+  for (const key of new Set([...Object.keys(before || {}), ...Object.keys(after)])) {
+    if (!Object.hasOwn(after, key)) patch[key] = null;
+    else if (!deepEqual(before?.[key], after[key])) patch[key] = mergeDelta(before?.[key], after[key]);
+  }
+  return patch;
+}
+async function writeBackupConfig(values, bases) {
+  const name = 'mailvault-settings';
+  const before = bases[name]?.state; const after = values[name]?.state;
+  if (!after) return values;
+  const patch = {};
+  for (const key of BACKUP_CONFIG_KEYS) if (!deepEqual(before?.[key], after[key])) {
+    patch[key] = Object.hasOwn(after, key) ? mergeDelta(before?.[key], after[key]) : null;
+  }
+  if (!Object.keys(patch).length) return values;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await rpc('backup.schedule.get', {});
+    if (!Number.isSafeInteger(current?.version)) throw new Error('errors.settingsNotLoaded');
+    try { await rpc('backup.schedule.set', { baseVersion: current.version, patch }); break; }
+    catch (e) { if (errText(e) !== 'errors.settingsConflict' || attempt === 2) throw e; }
+  }
+  // This whole-store delta must have no opinion on the config just accepted
+  // natively. SettingsDoc rebases its other fields on the later document.
+  const adjusted = structuredClone(values);
+  for (const key of BACKUP_CONFIG_KEYS) {
+    if (before && Object.hasOwn(before, key)) adjusted[name].state[key] = before[key];
+    else delete adjusted[name].state[key];
+  }
+  return adjusted;
+}
+
 async function send(names) {
   const values = Object.fromEntries(names.map(n => [n, cache.has(n) ? parse(cache.get(n)) : null]));
   const bases = names.includes('mailvault-settings') ? { 'mailvault-settings': accepted.get('mailvault-settings') ?? null } : {};
   if (mode !== 'shell') {
     try {
-      const reply = await rpc('settings.replace', { values, bases });
+      const writeValues = await writeBackupConfig(values, bases);
+      const reply = await rpc('settings.replace', { values: writeValues, bases });
       if (reply && Number.isInteger(reply.version)) {
         mode = 'daemon';
         acceptWrite(reply, values);

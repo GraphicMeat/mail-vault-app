@@ -346,6 +346,10 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
   let uploadSeq = 0;
   let settings = clone(initialSettings);
   let settingsVersion = 0;
+  let backupRevision = 0;
+  const backupRequests = {};
+  const backupOutcomes = [];
+  const backupView = () => ({ accessIncarnation: 'demo-backup', owner: 'daemon', automaticOwner: 'daemon', ready: true, version: settingsVersion, revision: backupRevision, config: clone(settings['mailvault-settings']?.state || {}), queue: [], active: null, pendingAccess: [], requests: clone(backupRequests), lastOutcomes: clone(backupOutcomes), nextEligibleTimes: {} });
   const listeners = new Map();
   const journal = [];
   // Startup recovery fixtures are separate from the legacy write API.
@@ -933,6 +937,37 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         }
         // The settings document (handlers/settings.rs) over the same
         // `settings` object read/write_settings_json use.
+        if (method.startsWith('backup.')) {
+          const p = args.params || {};
+          if (method === 'backup.context') return { accepted: true, surfaceId: p.surfaceId, sessionId: p.sessionId, sequence: p.sequence };
+          if (method === 'backup.schedule.get' || method === 'backup.schedule.status') return backupView();
+          if (method === 'backup.schedule.set') {
+            if (p.baseVersion != null && p.baseVersion !== settingsVersion) throw new Error('errors.settingsConflict');
+            const apply = (target, patch) => { for (const [key, value] of Object.entries(patch)) { if (value === null) delete target[key]; else if (value && typeof value === 'object' && !Array.isArray(value)) { target[key] ||= {}; apply(target[key], value); } else target[key] = clone(value); } };
+            settings['mailvault-settings'] ||= { version: 3, state: {} };
+            apply(settings['mailvault-settings'].state, p.patch || {}); settingsVersion++;
+            emit('settings-changed', { keys: ['mailvault-settings'], version: settingsVersion }); return backupView();
+          }
+          if (method === 'backup.stop' || method === 'backup.cancel') return { accepted: true };
+          if (method === 'backup.run_now') {
+            if (backupRequests[p.requestId]) return clone(backupRequests[p.requestId]);
+            const runId = `demo-backup-${++backupRevision}`; const executionId = runId;
+            const rows = messages.filter(row => row.accountId === p.accountId && row.serverPresent);
+            rows.forEach(row => { row.vaultPresent = true; row.vaultFlags = [...new Set([...(row.vaultFlags || []), 'archived'])]; });
+            const result = { success: true, emails_backed_up: rows.length, errors: 0, external_copy_ok: true, duration_secs: 0 };
+            const receipt = { accountId: p.accountId, runId, executionId, status: 'success', result, message: null };
+            backupRequests[p.requestId] = receipt;
+            const state = settings['mailvault-settings']?.state;
+            if (state) {
+              state.backupState ||= {}; state.backupHistory ||= {};
+              state.backupState[p.accountId] = { ...(state.backupState[p.accountId] || {}), lastStatus: 'success', lastBackupTime: sessionNow, emailsBackedUp: (state.backupState[p.accountId]?.emailsBackedUp || 0) + rows.length };
+              state.backupHistory[p.accountId] = [{ timestamp: sessionNow, success: true, emailsBackedUp: rows.length }, ...(state.backupHistory[p.accountId] || [])].slice(0, 5); settingsVersion++;
+            }
+            backupOutcomes.push({ intent: { accountId: p.accountId, runId, executionId, manual: true }, at: sessionNow, status: 'success', result, applied: true });
+            emit('backup-schedule-changed', backupView()); emit('settings-changed', { keys: ['mailvault-settings'], version: settingsVersion }); emit('demo:state', { type: 'backup', accountId: p.accountId });
+            return { accountId: p.accountId, runId, executionId, status: 'queued' };
+          }
+        }
         if (method === 'settings.get' || method === 'settings.patch' || method === 'settings.replace') {
           const p = args.params || {};
           if (method === 'settings.get') {

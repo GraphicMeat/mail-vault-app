@@ -35,6 +35,11 @@ pub(crate) async fn route(
     ) {
         return None;
     }
+    let backup_keys = ["transferLimits", "billingProfile", "shareGrant", "hiddenAccounts"];
+    let wake_backup = method != "settings.get" && backup_keys.iter().any(|key| {
+        params["patch"]["mailvault-settings"]["state"].get(*key).is_some()
+            || params["values"]["mailvault-settings"]["state"][*key] != params["bases"]["mailvault-settings"]["state"][*key]
+    });
     let doc = SettingsDoc::shared(&state.app_dir);
     let method = method.to_string();
     let params = params.clone();
@@ -45,6 +50,7 @@ pub(crate) async fn route(
     Some(match outcome {
         Ok(Outcome::Read(v)) => RpcResponse::success(id, v),
         Ok(Outcome::Wrote(change)) => {
+            if wake_backup && !change.changed.is_empty() { crate::backup_worker::configuration_changed(state, false); }
             if !change.changed.is_empty() {
                 state.events.emit(
                     CHANGED_EVENT,
@@ -57,6 +63,7 @@ pub(crate) async fn route(
             )
         }
         Ok(Outcome::Rebased(change, snapshot)) => {
+            if wake_backup && !change.changed.is_empty() { crate::backup_worker::configuration_changed(state, false); }
             if !change.changed.is_empty() {
                 state.events.emit(
                     CHANGED_EVENT,

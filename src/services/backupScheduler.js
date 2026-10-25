@@ -1,1063 +1,189 @@
-import * as api from './api';
+import { send } from './transport';
 import { notify } from '../stores/focusStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import { useMailStore } from '../stores/mailStore';
-import { hasValidCredentials, resolveServerAccount } from './authUtils';
-import { createSnapshotFromMaildir } from './snapshotService';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
-import { downloadCapChanged } from './downloadCapWatch';
 import { t } from '../i18n/index.js';
 
-// Re-prompt the share-to-unlock panel at most weekly.
-const SHARE_UNLOCK_COOLDOWN_MS = 7 * 86_400_000;
-
-const RETRY_DELAYS = [30_000, 120_000, 300_000]; // 30s, 2min, 5min
-
-/** A run that has emitted no progress event for this long is not running. */
-export const BACKUP_STALL_MS = 15 * 60_000;
-/** How often the hook calls tick(). */
-export const TICK_MS = 60_000;
-
-/**
- * Body for the "partially complete" notification.
- *
- * Both halves are partial results, and either can be the only one: messages the
- * server refused to send, and messages that reached the vault but not the
- * external mirror. The backend's own words (`error_message`) carry the count
- * and the server's error, so they lead.
- */
-export function partialBackupNotice(entry, result = {}) {
-  const parts = [];
-  if (entry.error) parts.push(entry.error);
-  else if (entry.errors > 0) parts.push(t('svc.backupScheduler.messageSCouldFetched', { entry: entry.errors }));
-  if (entry.externalCopyOk === false) {
-    parts.push(t('svc.backupScheduler.failedCopyExternalBackup', { result: result.external_copy_failed_count || entry.externalCopyFailedCount || t('svc.backupScheduler.some') }));
+const terminal = new Set(['success', 'degraded', 'failed', 'failed_credentials', 'cancelled', 'limit_reached', 'missing_account']);
+const pending = new Map();
+const observers = new Set();
+let generation = 0;
+let initialization;
+let unlisteners = [];
+let current;
+let refresh;
+let refreshNeeded = false;
+let eventGeneration = 0;
+let poll;
+let doneTimer;
+let lastProgressAt = 0;
+let hostHydrated = false;
+function retryAmbiguous() {
+  for (const [accountId, waiter] of pending) {
+    if (!waiter.ambiguous || waiter.retrying) continue;
+    waiter.retrying = true;
+    send('backup.run_now', { accountId, requestId: waiter.requestId }).then(() => { waiter.ambiguous = false; }).catch(() => {}).finally(() => { waiter.retrying = false; void requestRefresh(); });
   }
-  return t('svc.backupScheduler.emailsBackedUp', { entry: entry.emailsBackedUp, parts: parts.join(' ') }).trim();
 }
+const presented = new Set();
+const keyOf = o => `${current?.accessIncarnation}/${o.intent?.runId}/${o.intent?.executionId}/${o.at}`;
+const hasHost = () => [...observers].some(o => o.present);
+const ignoreFailure = fn => { try { Promise.resolve(fn()).catch(() => {}); } catch { /* presentation cannot change a native result */ } };
 
-/**
- * A terminal `backup-progress` frame, in the shape the completion handling in
- * `_runBackup` reads.
- *
- * The daemon runs the backup on its own thread and answers `backup_run_account`
- * with `{runId}` in milliseconds, dropping the run's `BackupResult` on the
- * floor — so this frame, the one with `active: false`, is the only place that
- * result reaches the app. Two of its fields are named for the progress frame
- * they have always ridden on rather than for `BackupResult`: `completed_emails`
- * is `emails_backed_up`, `last_error` is `error_message`.
- *
- * No `duration_secs`: the frame has never carried one and `_runBackup` already
- * falls back to its own wall clock, which is the truer number now that the work
- * happens in another process.
- */
-export function terminalFrameToResult(p = {}) {
-  return {
-    cancelled: p.cancelled === true,
-    completed_folders: p.completed_folders || 0,
-    emails_backed_up: p.completed_emails || 0,
-    errors: p.errors || 0,
-    // Explicit on the wire, never derived from `cancelled`: a run that died
-    // before its own terminal emit is neither complete nor cancelled, and the
-    // daemon's stand-in frame is the only one that says so.
-    success: p.success !== false,
-    error_message: p.last_error || null,
-    external_copy_ok: p.external_copy_ok !== false,
-    external_copy_error: p.external_copy_error || null,
-    external_copy_failed_count: p.external_copy_failed_count || 0,
-    // Set (with `cancelled: true`) when the run stopped because the account's
-    // daily download limit was spent: 'limit_reached', the limit in bytes and
-    // the next UTC midnight in epoch ms (src-core/src/backup.rs
-    // `BackupProgress::stop_reason`). snake_case like the rest of the frame.
-    stop_reason: p.stop_reason || null,
-    limit_bytes: p.limit_bytes ?? null,
-    resume_after_ms: p.resume_after_ms ?? null,
-  };
+function resultFor(receipt) {
+  if (!receipt || !terminal.has(receipt.status)) return null;
+  if (receipt.status === 'success' && receipt.result?.success !== true) return null;
+  const result = receipt.result;
+  const degraded = receipt.status === 'success' && (result.errors > 0 || result.external_copy_ok === false || result.external_copy_failed_count > 0);
+  return { status: degraded ? 'degraded' : receipt.status, message: receipt.message || result?.error_message || result?.external_copy_error || null };
 }
-
-/** `BackupProgress::stop_reason` of a run that stopped at the daily download limit. */
-export const STOP_LIMIT_REACHED = 'limit_reached';
-
-/** Slack after the daemon's UTC midnight before a held account runs again. */
-export const LIMIT_RESUME_MARGIN_MS = 30_000;
-
-/** "Stopped at your daily limit of X MB. Continues after midnight UTC." */
-export function limitStopMessage(limitBytes) {
-  return t('svc.backupScheduler.stoppedAtDailyLimit', {
-    limit: Number.isFinite(limitBytes) ? Math.round(limitBytes / (1024 * 1024)) : '',
+function present(outcome) {
+  if (!outcome.applied) return;
+  const key = keyOf(outcome); if (presented.has(key)) return; presented.add(key);
+  const result = resultFor(outcome); if (!result || !hasHost()) return;
+  const settings = useSettingsStore.getState();
+  const success = result.status === 'success';
+  const partial = result.status === 'degraded';
+  const account = useMailStore.getState().accounts.find(a => a.id === outcome.intent.accountId);
+  const count = outcome.result?.emails_backed_up || 0;
+  if ((success && settings.backupNotifyOnSuccess) || (!success && settings.backupNotifyOnFailure)) {
+    const descriptor = outcome.presentation || {};
+    const title = descriptor.titleKey || (success ? 'svc.backupScheduler.completedTitle' : partial ? 'svc.backupScheduler.partialTitle' : 'svc.backupScheduler.failedTitle');
+    ignoreFailure(() => notify(t(title, { account: account?.email || outcome.intent.accountId }), result.message || t('svc.backupScheduler.completedCount', { count })));
+  }
+  if (IS_APPSTORE_BUILD || !success || hasPremiumAccess(settings.billingProfile)) return;
+  ignoreFailure(async () => {
+    const store = useBackupStore.getState();
+    if (outcome.intent.manual && !settings.upsellBackupShown) {
+      await settings.markUpsellBackupShown(); await store.setBackupUpsell({ emailsBackedUp: count });
+    } else if (!(settings.shareGrant?.expiresAt > Date.now()) && Date.now() - (settings.shareUnlockLastShownAt || 0) > 7 * 86400000) {
+      await settings.markShareUnlockShown(); await store.setShareUnlock({ emailsBackedUp: count });
+    }
   });
 }
-
-/**
- * Lifecycle states for the backup coordinator.
- * Only 'idle' and 'running' allow new work to start.
- * Paused states block queue processing until resumed.
- */
-export const State = {
-  IDLE: 'idle',
-  RUNNING: 'running',
-  PAUSED_SLEEP: 'paused_sleep',
-  PAUSED_OFFLINE: 'paused_offline',
-};
-
-/**
- * The schedule an account runs on: the global one when it is on, else the
- * account's own. `null`/`enabled: false` means no automatic run.
- */
-function scheduleConfigFor(settings, accountId) {
-  if (settings.backupGlobalEnabled) return { ...settings.backupGlobalConfig, enabled: true };
-  return settings.backupSchedules?.[accountId] ?? null;
+function project(view) {
+  const store = useBackupStore.getState();
+  store.setQueue((view.queue || []).map(i => i.accountId));
+  useBackupStore.setState({ nativeStatus: view });
+  const active = view.active || view.pendingAccess?.[0];
+  if (active) {
+    clearTimeout(doneTimer);
+    const old = useBackupStore.getState().activeBackup;
+    if (old?.executionId !== active.executionId || old?.status !== active.stage) store.setActiveBackup({
+      accountId: active.accountId, runId: active.runId, executionId: active.executionId,
+      accountEmail: useMailStore.getState().accounts.find(a => a.id === active.accountId)?.email,
+      active: true, done: false, status: active.stage, queueLength: view.queue?.length || 0,
+      completedEmails: 0, completedFolders: 0, totalFolders: 0,
+    });
+  } else {
+    const old = useBackupStore.getState().activeBackup;
+    const completed = (view.lastOutcomes || []).find(o => o.intent?.executionId === old?.executionId && o.applied);
+    if (old && completed) {
+      const revision = view.revision; const execution = old.executionId;
+      store.setActiveBackup({ ...old, active: false, done: true, status: completed.status });
+      clearTimeout(doneTimer);
+      doneTimer = setTimeout(() => {
+        if (current?.revision === revision && useBackupStore.getState().activeBackup?.executionId === execution) useBackupStore.getState().clearActiveBackup();
+      }, 3000);
+    } else if (old && !old.done) store.clearActiveBackup();
+  }
 }
-
-class BackupCoordinator {
-  constructor() {
-    this._state = State.IDLE;
-    this._running = new Map();       // accountId -> boolean
-    this._retryCount = new Map();    // accountId -> number
-    this._queue = [];                // sequential backup queue
-    this._queueRunning = false;
-    this._pausedAccountId = null;    // account that was interrupted by pause
-    this._checkpoints = new Map();   // accountId -> completedFolders (resume position)
-    this._manualIds = new Set();     // accounts triggered manually (bypass gates)
-    this._manualResolvers = new Map(); // accountId -> { promise, resolve } for triggerManualBackup
-    this._terminalWaiters = new Map(); // accountId -> resolve, for the run's terminal backup-progress frame
-    this._lastProgressAt = 0;        // last backup-progress / archive-progress event
-    this._stalled = new Set();       // accounts the watchdog cancelled (retry, don't call it cancelled)
-    this._flushTimer = null;         // trailing flush for the progress throttle
-    this._limitHolds = new Map();    // accountId -> { until, timer }: stopped at the daily limit, runs again after `until`
-    this._timers = new Set();        // armed due-checks and retry backoffs; stopAll cancels them
+function consume(view, query = false) {
+  if (!view || !Number.isSafeInteger(view.revision) || typeof view.accessIncarnation !== 'string') return;
+  if (current?.accessIncarnation !== view.accessIncarnation && !query) { void requestRefresh(); return; }
+  if (current?.accessIncarnation === view.accessIncarnation && view.revision < current.revision) return;
+  current = view; project(view);
+  if (hasHost() && !hostHydrated) {
+    for (const out of view.lastOutcomes || []) presented.add(keyOf(out));
+    hostHydrated = true;
+  } else if (hasHost()) {
+    for (const out of view.lastOutcomes || []) present(out);
   }
-
-  /** A setTimeout stopAll can take back: a stop must not be followed by a run. */
-  _later(fn, ms) {
-    const timer = setTimeout(() => {
-      this._timers.delete(timer);
-      fn();
-    }, ms);
-    this._timers.add(timer);
+  for (const [accountId, waiter] of pending) {
+    const receipt = view.requests?.[waiter.requestId];
+    if (receipt?.accountId !== accountId) continue;
+    const result = resultFor(receipt); if (!result) continue;
+    pending.delete(accountId); waiter.resolve(result);
   }
-
-  // ── Lifecycle transitions ──────────────────────────────────────────────
-
-  get state() { return this._state; }
-
-  /** Called by hook on sleep detection (heartbeat gap) */
-  onSleep() {
-    if (this._state === State.RUNNING || this._state === State.IDLE) {
-      console.log('[backup] Sleep detected — pausing coordinator');
-      this._state = State.PAUSED_SLEEP;
-      if (this._hasActiveWork()) this._pauseCurrentBackup();
-    }
-  }
-
-  /** Called by hook after wake (with delay for network recovery) */
-  onWake() {
-    if (this._state === State.PAUSED_SLEEP) {
-      console.log('[backup] Wake detected — resuming coordinator');
-      this._state = State.IDLE;
-      // Re-queue the interrupted account if any
-      this._resumeInterrupted();
-      this._scheduleCheck();
-    }
-  }
-
-  /** Called by hook on navigator.onLine change */
-  onOnline() {
-    if (this._state === State.PAUSED_OFFLINE) {
-      console.log('[backup] Online — resuming coordinator');
-      this._state = State.IDLE;
-      this._resumeInterrupted();
-      this._scheduleCheck();
-    }
-  }
-
-  onOffline() {
-    if (this._state === State.RUNNING || this._state === State.IDLE) {
-      console.log('[backup] Offline — pausing coordinator');
-      this._state = State.PAUSED_OFFLINE;
-      if (this._hasActiveWork()) this._pauseCurrentBackup();
-    }
-  }
-
-  // ── Public API ─────────────────────────────────────────────────────────
-
-  /** Queue automatic backup for an account (called by idle check) */
-  queueBackup(accountId) {
-    if (this._running.get(accountId)) return;
-    // Stopped at its daily download limit and not yet past the reset: every
-    // automatic path (idle check, retry, wake) lands here, and a run before
-    // midnight would only stop again at once.
-    if (this._isHeldForLimit(accountId)) return;
-    if (this._queue.includes(accountId)) return;
-    this._queue.push(accountId);
-    this._publishQueue();
-    this._processQueue();
-  }
-
-  /** Trigger manual backup — bypasses idle/lifecycle gates.
-   *  Returns a promise that resolves with { status, message? } when the backup completes.
-   *  status: 'success' | 'failed' | 'cancelled' | 'skipped_credentials'
-   */
-  triggerManualBackup(accountId) {
-    // One account, one pending promise. `_manualResolvers.set` used to overwrite
-    // the first resolver, so "Back up now" followed by "Back up all" left the
-    // card's promise dangling and its spinner stuck.
-    const pending = this._manualResolvers.get(accountId);
-    if (pending) return pending.promise;
-
-    let resolve;
-    const promise = new Promise((r) => { resolve = r; });
-    this._manualResolvers.set(accountId, { promise, resolve });
-    // A run already in flight resolves this promise on its terminal path.
-    // It stays whatever it was (manual or automatic); only a run we queue
-    // here is marked manual.
-    if (!this._running.get(accountId)) {
-      this._manualIds.add(accountId);
-      // Never through queueBackup: it returns early for an id already queued,
-      // which is how a click on an account the schedule had queued resolved
-      // nothing and left the card spinning.
-      const at = this._queue.indexOf(accountId);
-      if (at !== -1) this._queue.splice(at, 1);
-      this._queue.unshift(accountId);
-      this._publishQueue();
-      this._processQueue();
-    }
-    return promise;
-  }
-
-  /** Full stop — cancel active backup and clear queue */
-  stopAll() {
-    for (const timer of this._timers) clearTimeout(timer);
-    this._timers.clear();
-    this._queue = [];
-    this._publishQueue();
-    this._manualIds.clear();
-    this._checkpoints.clear();
-    for (const accountId of [...this._limitHolds.keys()]) this._releaseLimitHold(accountId);
-    // Nothing queued here will ever reach a terminal path, so every promise a
-    // click is still holding resolves now rather than dangling with its button.
-    for (const accountId of [...this._manualResolvers.keys()]) {
-      this._resolveManual(accountId, { status: 'cancelled' });
-    }
-    if (this._hasActiveWork()) {
-      api.backupCancel(this._activeAccountId()).catch(() => {});
-    }
-  }
-
-  isRunning(accountId) {
-    return this._running.get(accountId) || false;
-  }
-
-  /**
-   * Once-a-minute self-heal, called by the hook whether or not the user is idle.
-   *
-   * Two failure modes it exists for, both seen in the wild on 2026-09-10: a
-   * queue full of work with nobody driving it, and a run whose Rust side stopped
-   * answering while the card still spun.
-   */
-  tick() {
-    if (!this._queueRunning && this._queue.length > 0 && (!this._isPaused() || this._hasManualInQueue())) {
-      console.warn('[backup] tick: queue was idle with work pending, resuming');
-      this._processQueue();
-    }
-
-    if (this._hasActiveWork() && Date.now() - this._lastProgressAt > BACKUP_STALL_MS) {
-      for (const [id, running] of this._running) {
-        if (!running) continue;
-        // Already marked on an earlier tick: the cancel we sent then
-        // produced no terminal frame either, so none is coming. The daemon's
-        // event bus is a broadcast channel — it drops frames in flight
-        // across a channel reconnect and queued frames under a lagged
-        // receiver — and a run whose frame went that way would park
-        // `_runBackup` forever, which holds `_queueRunning` true and wedges
-        // the whole queue, not just this account. Settle it ourselves.
-        //
-        // Not a timer of its own: the watchdog's clock is `_lastProgressAt`,
-        // restamped by every progress frame, so a genuinely slow six-hour
-        // backup never reaches here. A fixed timeout from the RPC call would
-        // false-fail it.
-        // `completed_folders` carries this run's own start position, not 0:
-        // the cancelled branch of `_runBackup` writes it straight into
-        // `_checkpoints`, so a synthesized 0 would throw away the resume
-        // position the retry right below is about to read back.
-        if (this._stalled.has(id) && this._settleRun(id, terminalFrameToResult({
-          account_id: id, active: false, cancelled: true, success: false,
-          completed_folders: this._checkpoints.get(id) || 0,
-        }))) {
-          console.warn(`[backup] tick: ${id} reported no terminal frame after a cancel — settling it as stalled`);
-          continue; // stays marked: the cancelled branch routes it to a retry
-        }
-        this._stalled.add(id);
-      }
-      console.warn(`[backup] tick: no progress for ${BACKUP_STALL_MS / 60_000} minutes — cancelling the run`);
-      // The daemon reports { cancelled: true, completed_folders } on its
-      // terminal frame through the normal path; _runBackup routes it to a
-      // retry because the id is in _stalled.
-      api.backupCancel(this._activeAccountId()).catch(() => {});
-    }
-  }
-
-  /**
-   * Check all enabled accounts and queue those that are due.
-   * Called by the hook on idle / wake / visibility.
-   */
-  checkAndQueueDue() {
-    if (this._isPaused()) return;
-
-    const settings = useSettingsStore.getState();
-
-    // Automatic backups are premium. No subscription — no unattended run, and no
-    // surprise "Backup complete" notification for someone who never signed in.
-    // A schedule left enabled by a lapsed subscription stops here too; the lapse
-    // itself is announced by BillingSettings' premiumDropNotice. Manual
-    // "Back up now" stays free — triggerManualBackup never comes through here.
-    if (!hasPremiumAccess(settings.billingProfile)) return;
-
-    const mailState = useMailStore.getState();
-    const accounts = mailState.accounts || [];
-    const { hiddenAccounts, backupState } = settings;
-
-    if (accounts.length === 0) return;
-
-    // Gate: don't start automatic backups while mail is loading
-    if (mailState.loading) {
-      console.log('[backup] Mail loading — deferring backup check');
-      return;
-    }
-
-    let queued = 0;
-    const now = Date.now();
-
-    for (const account of accounts) {
-      if (hiddenAccounts?.[account.id]) continue;
-
-      const config = scheduleConfigFor(settings, account.id);
-      if (!config?.enabled) continue;
-
-      const accountState = backupState[account.id];
-      const nextEligible = computeNextEligibleTime(accountState, config, now);
-
-      if (now >= nextEligible) {
-        console.log(`[backup] ${account.email} is due (next eligible: ${new Date(nextEligible).toLocaleString()})`);
-        this.queueBackup(account.id);
-        queued++;
-      }
-    }
-
-    if (queued > 0) {
-      console.log(`[backup] Queued ${queued} account(s) for backup`);
-    }
-  }
-
-  // ── Queue processing ───────────────────────────────────────────────────
-
-  async _processQueue() {
-    if (this._queueRunning || this._queue.length === 0) return;
-
-    // Don't process if paused (unless there are manual backups in the queue)
-    if (this._isPaused() && !this._hasManualInQueue()) return;
-
-    this._queueRunning = true;
-    // Whatever throws in here, the loop must hand the queue back. A single
-    // escaping rejection used to leave `_queueRunning` true forever, and every
-    // later queueBackup was a silent no-op.
-    let inFlight = null;
-    try {
-      while (this._queue.length > 0) {
-        // Paused: manual work still runs, from wherever it sits in the queue.
-        // Taking only the head is how 15 manual ids pushed behind the
-        // automatic ones ran nothing at all.
-        const paused = this._isPaused();
-        let accountId;
-        if (paused) {
-          const manualAt = this._queue.findIndex(id => this._manualIds.has(id));
-          if (manualAt === -1) break; // nothing but automatic work left
-          accountId = this._queue.splice(manualAt, 1)[0];
-        } else {
-          accountId = this._queue.shift();
-        }
-        this._publishQueue();
-        if (this._running.get(accountId)) continue;
-
-        // Save paused state before manual backup — restore it afterward
-        // so automatic items remain blocked by the original pause reason
-        const savedState = paused ? this._state : null;
-
-        this._state = State.RUNNING;
-        inFlight = accountId;
-        await this._runBackup(accountId);
-        inFlight = null;
-
-        // Restore paused state if we were running a manual job through a pause gate
-        if (savedState && !this._isPaused()) {
-          this._state = savedState;
-        }
-      }
-    } finally {
-      // `_runBackup` awaits resolveServerAccount outside its own try, so a
-      // rejection there skips its finally and would leave the account marked
-      // running: never queueable again, and the stall watchdog cancelling a run
-      // nobody started.
-      if (inFlight) this._running.set(inFlight, false);
-      this._queueRunning = false;
-      if (this._state === State.RUNNING) {
-        this._state = State.IDLE;
-      }
-    }
-  }
-
-  async _runBackup(accountId) {
-    const isManual = this._manualIds.has(accountId);
-    this._manualIds.delete(accountId);
-
-    console.log(`[backup] _runBackup started for ${accountId} (${isManual ? 'manual' : 'automatic'})`);
-    this._running.set(accountId, true);
-    this._lastProgressAt = Date.now();
-
-    const accounts = useMailStore.getState().accounts || [];
-    let account = accounts.find(a => a.id === accountId);
-    if (!account) {
-      console.warn(`[backup] Account ${accountId} not found — skipping`);
-      this._running.set(accountId, false);
-      this._resolveManual(accountId, { status: 'failed', message: t('errors.accountNotFound') });
-      return;
-    }
-    console.log(`[backup] Running backup for ${account.email}`);
-
-    // Show active backup in ephemeral store (for sidebar indicator)
-    useBackupStore.getState().setActiveBackup({
-      accountId,
-      accountEmail: account.email,
-      folder: t('settings.migration.starting'),
-      totalFolders: 0,
-      completedFolders: 0,
-      completedEmails: 0,
-      active: true,
-      manual: isManual,
-      queueLength: this._queue.length,
-    });
-
-    // Resolve fully credentialed account (keychain + token refresh)
-    const resolved = await resolveServerAccount(accountId, account);
-    if (!resolved.ok) {
-      console.warn(`[backup] Skipping ${account.email} — ${resolved.message}`);
-      const storeNow = useSettingsStore.getState();
-      storeNow.updateBackupState(accountId, {
-        lastStatus: 'failed',
-        lastError: resolved.message,
-      });
-      // Record a failed history entry so the UI stays consistent
-      storeNow.addBackupHistoryEntry(accountId, {
-        timestamp: Date.now(),
-        emailsBackedUp: 0,
-        durationSecs: 0,
-        success: false,
-        error: resolved.message,
-      });
-      this._running.set(accountId, false);
-      // Clear active progress without showing "Complete"
-      useBackupStore.getState().clearActiveBackup();
-      this._resolveManual(accountId, { status: 'failed_credentials', message: resolved.message });
-      return;
-    }
-
-    try {
-      const freshAccount = resolved.account;
-
-      const startTime = Date.now();
-      // External backup path resolved in Rust via bookmark/native access — pass null to use stored location
-      const skipFolders = this._checkpoints.get(accountId) || 0;
-      if (skipFolders > 0) {
-        console.log(`[backup] Resuming ${account.email} from folder ${skipFolders}`);
-      }
-      // A stall mark set while this account was still resolving credentials
-      // belongs to no Rust run; only one set from here on counts.
-      this._stalled.delete(accountId);
-
-      // `backup_run_account` is fire-and-forget: it ACKs the start with
-      // `{runId}` in milliseconds and the daemon keeps running for minutes
-      // afterwards. Its reply says nothing about the outcome — the run's
-      // terminal `backup-progress` frame does — so this awaits the frame.
-      //
-      // Awaiting the ACK instead is what made this account look finished
-      // while its run was still live: `_running` cleared, a history entry
-      // filed for zero emails, and the next tick free to start a SECOND run
-      // over the top of the first (which displaces the mirror's
-      // security-scoped access the first one is still writing through —
-      // `src-tauri/src/backup.rs`'s `hold_backup_path`).
-      const done = new Promise((resolve) => { this._terminalWaiters.set(accountId, resolve); });
+  if (!pending.size) { clearInterval(poll); poll = null; maybeDetach(); }
+}
+function requestRefresh() {
+  refreshNeeded = true;
+  if (refresh) return refresh;
+  const owner = generation;
+  refresh = (async () => {
+    while (refreshNeeded && owner === generation) {
+      refreshNeeded = false; const eventAtStart = eventGeneration;
       try {
-        const settings = useSettingsStore.getState();
-        const requestedConcurrency = Number(settings.backupMailboxConcurrency ?? 3);
-        const concurrency = hasPremiumAccess(settings.billingProfile)
-          ? Math.min(5, Math.max(1, Number.isFinite(requestedConcurrency) ? Math.trunc(requestedConcurrency) : 3))
-          : 1;
-        const args = [accountId, JSON.stringify(freshAccount), null, skipFolders];
-        if (concurrency > 1) args.push(concurrency);
-        await api.backupRunAccount(...args);
-      } catch (err) {
-        // The run never started, so no frame is ever coming for it. Drop the
-        // waiter here rather than park this account on an event that cannot
-        // arrive; the catch below reports the failure exactly as it always has.
-        this._terminalWaiters.delete(accountId);
-        throw err;
-      }
-      const result = await done;
-
-      // Daemon Err-synthesis fallback: a run that died before reaching its own
-      // terminal emit (bad credential, LIST timeout, connection loss) arrives
-      // as `{cancelled: false, success: false, error_message}`.
-      // `terminal_backup_progress` (src-core/src/backup.rs) sets
-      // `success: !cancelled` on every real runner frame, so `success: false`
-      // and `cancelled: false` together can only be this fallback shape —
-      // never a completed run. Route it through the retry ladder rather than
-      // the completion path below, and do it before any checkpoint mutation
-      // so a retried run keeps its resume position instead of re-scanning
-      // from scratch.
-      if (result.success === false && !result.cancelled) {
-        this._running.set(accountId, false);
-        // `_failOrRetry` already falls back to 'Unknown error' for a null
-        // message (same as every other caller here) — no literal needed.
-        this._failOrRetry(accountId, account, result.error_message);
-        return;
-      }
-
-      // Stopped at the account's daily download limit: not a failure and not a
-      // cancel. Keep the resume position, say so on the card, and run again
-      // after the reset (UTC midnight, the frame says when).
-      if (result.cancelled && result.stop_reason === STOP_LIMIT_REACHED) {
-        this._checkpoints.set(accountId, result.completed_folders || 0);
-        this._stalled.delete(accountId);
-        const message = limitStopMessage(result.limit_bytes);
-        const resumeAfterMs = Number.isFinite(result.resume_after_ms) ? result.resume_after_ms : null;
-        console.log(`[backup] ${account.email} stopped at its daily download limit — checkpoint ${result.completed_folders}, resumes after ${resumeAfterMs ? new Date(resumeAfterMs).toISOString() : 'the reset'}`);
-        useSettingsStore.getState().updateBackupState(accountId, { lastStatus: 'limit', lastError: message });
-        this._holdForLimit(accountId, resumeAfterMs);
-        this._retryCount.delete(accountId);
-        this._running.set(accountId, false);
-        this._resolveManual(accountId, { status: 'limit_reached', message, resumeAfterMs });
-        return;
-      }
-
-      // Track checkpoint for potential resume
-      if (result.cancelled) {
-        this._checkpoints.set(accountId, result.completed_folders || 0);
-        console.log(`[backup] Cancelled ${account.email} at folder ${result.completed_folders} — checkpoint saved`);
-        // Consume the watchdog's mark either way: a bandwidth stop that lands
-        // after a stall must not leave it behind for this account's next run.
-        const stalled = this._stalled.delete(accountId);
-        // Server-initiated stop (e.g. Gmail daily bandwidth limit) — tell the user why
-        if (result.error_message) {
-          useSettingsStore.getState().updateBackupState(accountId, {
-            lastStatus: 'failed',
-            lastError: result.error_message,
-          });
-        } else if (stalled) {
-          // Our own watchdog stopped this one. Reporting it as "cancelled" is
-          // how a run that died quietly stayed dead all evening — retry it.
-          this._running.set(accountId, false);
-          this._failOrRetry(accountId, account, t('svc.backupScheduler.stalled', { minutes: BACKUP_STALL_MS / 60_000 }));
-          return;
-        }
-        this._running.set(accountId, false);
-        this._resolveManual(accountId, { status: 'cancelled' });
-        return;
-      }
-
-      // Completed — clear checkpoint
-      this._checkpoints.delete(accountId);
-      this._releaseLimitHold(accountId);
-
-      const externalDegraded = result.external_copy_ok === false;
-      // Messages the server refused. The run still saved everything else, so
-      // this is a partial result — the same shape as a degraded external copy,
-      // never a failed backup (2026-08-27: 788 of 789 saved, reported failed).
-      const messageErrors = result.errors || 0;
-      const entry = {
-        timestamp: Date.now(),
-        emailsBackedUp: result.emails_backed_up || 0,
-        durationSecs: result.duration_secs || ((Date.now() - startTime) / 1000),
-        success: result.success !== false,
-        errors: messageErrors,
-        error: result.error_message || null,
-        externalCopyOk: result.external_copy_ok !== false,
-        externalCopyError: result.external_copy_error || null,
-        externalCopyFailedCount: result.external_copy_failed_count || 0,
-      };
-      const degraded = entry.success && (externalDegraded || messageErrors > 0);
-
-      const storeNow = useSettingsStore.getState();
-      storeNow.addBackupHistoryEntry(accountId, entry);
-      storeNow.updateBackupState(accountId, {
-        lastBackupTime: Date.now(),
-        lastStatus: entry.success ? (degraded ? 'degraded' : 'success') : 'failed',
-        lastError: entry.error || (externalDegraded ? result.external_copy_error : null),
-        emailsBackedUp: (storeNow.backupState[accountId]?.emailsBackedUp || 0) + entry.emailsBackedUp
-      });
-
-      // Create Time Capsule snapshot after successful backup (premium only, respects cadence)
-      if (entry.success && hasPremiumAccess(storeNow.billingProfile) && storeNow.snapshotAutoEnabled) {
-        const cadence = storeNow.snapshotCadence || 'after_every_backup';
-        const lastSnap = storeNow.snapshotLastTimes?.[accountId] || 0;
-        const now = Date.now();
-        const isDue = cadence === 'after_every_backup'
-          || (cadence === 'daily' && now - lastSnap >= 86_400_000)
-          || (cadence === 'weekly' && now - lastSnap >= 604_800_000);
-
-        if (isDue) {
-          createSnapshotFromMaildir(accountId, account.email)
-            .then(() => storeNow.recordSnapshotTime(accountId))
-            .catch(err => {
-              console.warn(`[backup] Snapshot creation failed for ${account.email}:`, err.message);
-            });
-        }
-      }
-
-      // Send notification
-      if (entry.success && !degraded && storeNow.backupNotifyOnSuccess) {
-        notify(
-          `Backup complete - ${account.email}`,
-          `${entry.emailsBackedUp} new emails backed up.`
-        );
-      } else if (degraded && storeNow.backupNotifyOnFailure) {
-        notify(
-          `Backup partially complete - ${account.email}`,
-          partialBackupNotice(entry, result)
-        );
-      } else if (!entry.success && storeNow.backupNotifyOnFailure) {
-        notify(
-          `Backup failed - ${account.email}`,
-          `${entry.error || 'Unknown error'}. Will retry on next idle.`
-        );
-      }
-
-      // First manual backup ever (non-premium, non-MAS): offer to automate.
-      // Shown once; afterward a low-key "Automate" chip remains on the card.
-      // MAS builds must not reference external purchases at all.
-      let showedBackupUpsell = false;
-      try {
-        if (!IS_APPSTORE_BUILD && isManual && entry.success && !degraded
-            && !hasPremiumAccess(storeNow.billingProfile) && !storeNow.upsellBackupShown) {
-          storeNow.markUpsellBackupShown();
-          useBackupStore.getState().setBackupUpsell({ emailsBackedUp: entry.emailsBackedUp });
-          showedBackupUpsell = true;
-        }
-      } catch (e) {
-        console.warn('[backup] Automation upsell prompt failed (backup itself was fine):', e);
-      }
-
-      // Share-to-unlock: prompt non-premium users to star/share for free
-      // premium. Non-MAS only (MAS gates backups via StoreKit + review rules).
-      // Skip when the automation upsell just showed — never stack two modals.
-      //
-      // Wrapped: this is a cosmetic prompt raised AFTER the backup already
-      // succeeded. Letting it throw drops into the catch below, which reports
-      // a completed backup as failed and — for automatic backups — re-queues
-      // up to three more runs of work that was already done.
-      try {
-        if (!IS_APPSTORE_BUILD && entry.success && !degraded
-            && !hasPremiumAccess(storeNow.billingProfile) && !showedBackupUpsell) {
-          const grantActive = !!(storeNow.shareGrant?.expiresAt && storeNow.shareGrant.expiresAt > Date.now());
-          const sinceLast = Date.now() - (storeNow.shareUnlockLastShownAt || 0);
-          if (!grantActive && sinceLast > SHARE_UNLOCK_COOLDOWN_MS) {
-            storeNow.markShareUnlockShown();
-            useBackupStore.getState().setShareUnlock({ emailsBackedUp: entry.emailsBackedUp });
-          }
-        }
-      } catch (e) {
-        console.warn('[backup] Share-unlock prompt failed (backup itself was fine):', e);
-      }
-
-      this._retryCount.delete(accountId);
-      this._resolveManual(accountId, {
-        status: entry.success ? (degraded ? 'degraded' : 'success') : 'failed',
-        message: entry.error || (externalDegraded ? result.external_copy_error : null),
-      });
-    } catch (err) {
-      console.error(`[backup] Backup failed for ${account.email}:`, err);
-
-      // If we were paused (cancelled), don't count as a retry
-      if (this._isPaused()) {
-        console.log(`[backup] Backup interrupted by pause for ${account.email}`);
-        this._pausedAccountId = accountId;
-        this._running.set(accountId, false);
-        this._resolveManual(accountId, { status: 'cancelled' });
-        return;
-      }
-
-      this._failOrRetry(accountId, account, err.message || String(err));
-    } finally {
-      this._running.set(accountId, false);
-      if (!this._isPaused()) {
-        this._showNextOrDone();
-      }
+        const view = await send('backup.schedule.get', {});
+        if (owner !== generation) return;
+        if (eventAtStart !== eventGeneration) { refreshNeeded = true; continue; }
+        consume(view, true);
+      } catch { /* reconnect or the pending-call observer retries */ }
     }
-  }
-
-  // ── Internal helpers ───────────────────────────────────────────────────
-
-  /**
-   * A run that did not finish: back off and try again, or give up and say so.
-   *
-   * Manual runs resolve immediately — the user is watching the button.
-   * Automatic runs get three retries with backoff, then a failed history entry.
-   * Called from the catch block and from the watchdog's stalled branch, so a
-   * run our own tick() killed is retried rather than filed as "cancelled".
-   */
-  _failOrRetry(accountId, account, message) {
-    const hasManualResolver = this._manualResolvers.has(accountId);
-    const retries = this._retryCount.get(accountId) || 0;
-    if (!hasManualResolver && retries < 3) {
-      this._retryCount.set(accountId, retries + 1);
-      const delay = RETRY_DELAYS[retries];
-      console.warn(`[backup] Retry ${retries + 1}/3 for ${account.email} — re-queuing in ${delay / 1000}s`);
-      this._later(() => this.queueBackup(accountId), delay);
-      return;
-    }
-    const storeNow = useSettingsStore.getState();
-    storeNow.updateBackupState(accountId, {
-      lastBackupTime: Date.now(),
-      lastStatus: 'failed',
-      lastError: message,
-    });
-    storeNow.addBackupHistoryEntry(accountId, {
-      timestamp: Date.now(),
-      emailsBackedUp: 0,
-      durationSecs: 0,
-      success: false,
-      error: message,
-    });
-    if (storeNow.backupNotifyOnFailure) {
-      notify(
-        `Backup failed - ${account.email}`,
-        `${message || 'Unknown error'}. Will retry on next idle.`
-      );
-    }
-    this._retryCount.delete(accountId);
-    this._resolveManual(accountId, { status: 'failed', message });
-  }
-
-  // ── Daily download limit ───────────────────────────────────────────────
-
-  /**
-   * Hold an account whose run stopped at the daily limit: no automatic run
-   * before `resumeAfterMs`, then one timer queues it. Held in memory only,
-   * like the checkpoints: a restart just runs the account again, and the
-   * daemon stops it at once if the day is still spent.
-   */
-  _holdForLimit(accountId, resumeAfterMs) {
-    this._releaseLimitHold(accountId);
-    const until = (resumeAfterMs ?? Math.floor(Date.now() / 86_400_000 + 1) * 86_400_000) + LIMIT_RESUME_MARGIN_MS;
-    const timer = setTimeout(() => {
-      this._limitHolds.delete(accountId);
-      // The same gates as any scheduled run (`checkAndQueueDue`): a free user's
-      // "Back up now" that hit the limit, an account with no schedule, a hidden
-      // one and a lapsed subscription all stop here. The person's next manual
-      // click is the only thing that runs them.
-      if (this._isScheduledRun(accountId)) this.queueBackup(accountId);
-    }, Math.max(0, until - Date.now()));
-    this._limitHolds.set(accountId, { until, timer });
-  }
-
-  /**
-   * Follow the daily download limits in Settings: an account held at the
-   * limit whose cap is switched off, or whose download limit changes, is
-   * released now instead of at the reset, and runs again at once if the
-   * schedule would run it (the same gates as the midnight re-queue). If the day
-   * is still spent under the new limit, the daemon stops it and it is held
-   * again. Returns the unsubscribe; the scheduler hook owns it.
-   */
-  watchTransferLimits() {
-    return useSettingsStore.subscribe((state, previous) => {
-      if (state.transferLimits === previous.transferLimits) return;
-      for (const accountId of [...this._limitHolds.keys()]) {
-        if (!downloadCapChanged(previous.transferLimits?.[accountId], state.transferLimits?.[accountId])) continue;
-        this._releaseLimitHold(accountId);
-        if (this._isScheduledRun(accountId)) this.queueBackup(accountId);
-      }
-    });
-  }
-
-  /** Whether an automatic run of this account is allowed right now: Premium, visible, scheduled. */
-  _isScheduledRun(accountId) {
-    const settings = useSettingsStore.getState();
-    if (!hasPremiumAccess(settings.billingProfile)) return false;
-    if (settings.hiddenAccounts?.[accountId]) return false;
-    return !!scheduleConfigFor(settings, accountId)?.enabled;
-  }
-
-  _isHeldForLimit(accountId) {
-    const hold = this._limitHolds.get(accountId);
-    if (!hold) return false;
-    if (Date.now() >= hold.until) {
-      this._releaseLimitHold(accountId);
-      return false;
-    }
-    return true;
-  }
-
-  _releaseLimitHold(accountId) {
-    const hold = this._limitHolds.get(accountId);
-    if (!hold) return;
-    clearTimeout(hold.timer);
-    this._limitHolds.delete(accountId);
-  }
-
-  _isPaused() {
-    return this._state === State.PAUSED_SLEEP
-        || this._state === State.PAUSED_OFFLINE;
-  }
-
-  _hasActiveWork() {
-    return this._activeAccountId() !== null;
-  }
-
-  /** The account currently mid-backup, if any — the queue runs one at a time. */
-  _activeAccountId() {
-    for (const [accountId, running] of this._running) {
-      if (running) return accountId;
-    }
-    return null;
-  }
-
-  /** Mirror the queue into the store so every account card can show its place. */
-  _publishQueue() {
-    useBackupStore.getState().setQueue([...this._queue]);
-  }
-
-  _hasManualInQueue() {
-    return this._queue.some(id => this._manualIds.has(id));
-  }
-
-  /**
-   * Hand a run its outcome (if one is still waiting for it).
-   *
-   * Two callers: the terminal `backup-progress` frame, which is the normal
-   * path, and `tick`'s watchdog for the runs no frame ever arrives for.
-   * Returns whether anything was waiting.
-   */
-  _settleRun(accountId, result) {
-    const resolve = this._terminalWaiters.get(accountId);
-    if (!resolve) return false;
-    this._terminalWaiters.delete(accountId);
-    resolve(result);
-    return true;
-  }
-
-  /** Resolve the manual-backup promise for an account (if one exists). */
-  _resolveManual(accountId, result) {
-    const entry = this._manualResolvers.get(accountId);
-    if (entry) {
-      this._manualResolvers.delete(accountId);
-      entry.resolve(result);
-    }
-  }
-
-  _pauseCurrentBackup() {
-    this._pausedAccountId = this._activeAccountId();
-    // Cancel the Rust-side backup — it will cause the await in _runBackup to reject/return
-    api.backupCancel(this._pausedAccountId).catch(() => {});
-  }
-
-  _resumeInterrupted() {
-    if (this._pausedAccountId) {
-      const accountId = this._pausedAccountId;
-      this._pausedAccountId = null;
-      // Re-queue at the front so it picks up where it left off (Rust backup is incremental)
-      if (!this._queue.includes(accountId) && !this._running.get(accountId)) {
-        this._queue.unshift(accountId);
-        this._publishQueue();
-        console.log(`[backup] Re-queued interrupted account ${accountId}`);
-      }
-    }
-    // Re-queuing is not resuming. `_processQueue` broke out of its loop when the
-    // pause landed, and `_scheduleCheck` cannot restart it: queueBackup returns
-    // early for an id already in the queue, before it ever reaches the loop.
-    // No-op on an empty queue.
-    this._processQueue();
-  }
-
-  _scheduleCheck() {
-    // Small delay to let state settle after wake/online/idle transitions
-    this._later(() => this.checkAndQueueDue(), 2000);
-  }
-
-  _showNextOrDone() {
-    if (this._queue.length > 0) {
-      const nextId = this._queue[0];
-      const nextAcc = (useMailStore.getState().accounts || []).find(a => a.id === nextId);
-      useBackupStore.getState().setActiveBackup({
-        accountId: nextId, accountEmail: nextAcc?.email || nextId,
-        folder: t('svc.backupScheduler.queued'), totalFolders: 0, completedFolders: 0, completedEmails: 0,
-        active: true, queueLength: this._queue.length,
-      });
-    } else {
-      // Show "Done" briefly before clearing
-      const current = useBackupStore.getState().activeBackup;
-      if (current) {
-        useBackupStore.getState().setActiveBackup({
-          ...current,
-          folder: t('svc.backupScheduler.complete'),
-          active: true,
-          done: true,
-          queueLength: 0,
-        });
-        setTimeout(() => {
-          useBackupStore.getState().clearActiveBackup();
-        }, 3000);
-      } else {
-        useBackupStore.getState().clearActiveBackup();
-      }
-    }
-  }
-
-  /** Start listening to backup-progress Tauri events for live UI updates */
-  async initProgressListener() {
+  })().finally(() => { refresh = null; });
+  return refresh;
+}
+function progress(payload) {
+  const active = current?.active;
+  if (!active || payload.account_id !== active.accountId || payload.runId !== active.runId || payload.executionId !== active.executionId) return;
+  if (payload.active !== false && Date.now() - lastProgressAt < 2000) return;
+  lastProgressAt = Date.now();
+  const old = useBackupStore.getState().activeBackup;
+  if (!old || old.executionId !== active.executionId) return;
+  useBackupStore.getState().setActiveBackup({ ...old, folder: payload.folder, totalFolders: payload.total_folders,
+    completedFolders: payload.completed_folders, completedEmails: payload.completed_emails,
+    // A terminal progress frame is display data, never a completion receipt.
+    active: true, done: false,
+  });
+  if (payload.active === false) void requestRefresh();
+}
+async function ensure() {
+  if (initialization) return initialization;
+  const owner = ++generation;
+  initialization = (async () => {
     try {
       const { listen } = await import('@tauri-apps/api/event');
-      let lastUpdate = 0;
-      let pendingPayload = null;
-      const apply = () => {
-        this._flushTimer = null;
-        const p = pendingPayload;
-        if (!p) return;
-        lastUpdate = Date.now();
-        const current = useBackupStore.getState().activeBackup;
-        if (current && current.accountId === p.account_id) {
-          useBackupStore.getState().setActiveBackup({
-            ...current,
-            folder: p.folder,
-            totalFolders: p.total_folders,
-            completedFolders: p.completed_folders,
-            completedEmails: p.completed_emails,
-            // Rust's last word for a run is `active: false` with folder
-            // "Cancelled" or "Complete". Forcing true here is what left the card
-            // spinning on "Cancelled (2/9)" and "Back up all accounts now" greyed
-            // out for six hours.
-            active: p.active !== false,
-          });
-        }
-      };
-      await listen('backup-progress', (event) => {
-        this._lastProgressAt = Date.now();
-        pendingPayload = event.payload;
-        // The final event is the one that clears the spinner — never throttle it away.
-        if (event.payload.active === false) {
-          if (this._flushTimer) clearTimeout(this._flushTimer);
-          apply();
-          // The same frame, second job: it is also the daemon's only report
-          // that the run is over, so it is what completes `_runBackup`'s
-          // await. Deliberately this listener and not a second
-          // `listen('backup-progress')` — one subscription, one throttle,
-          // and no way for the two to disagree about which frame is final.
-          // Keyed off the payload, not the store: a frame for an account the
-          // card is not showing still has a run waiting on it.
-          this._settleRun(event.payload.account_id, terminalFrameToResult(event.payload));
-          return;
-        }
-        // Throttle store updates to once per 2 seconds to avoid flooding re-renders,
-        // but keep a trailing flush so the last event of a burst still lands.
-        const elapsed = Date.now() - lastUpdate;
-        if (elapsed < 2000) {
-          if (this._flushTimer) clearTimeout(this._flushTimer);
-          this._flushTimer = setTimeout(apply, 2000 - elapsed);
-          return;
-        }
-        apply();
-      });
-      // Fires per stored message. No store write — it exists so the stall
-      // watchdog can tell a slow folder from a dead run.
-      await listen('archive-progress', () => {
-        this._lastProgressAt = Date.now();
-      });
-      console.log('[backup] Progress listener initialized');
-    } catch (e) {
-      console.warn('[backup] Failed to init progress listener:', e);
-    }
-  }
-}
-
-// ── Scheduling logic ────────────────────────────────────────────────────────
-
-const MIN_BACKUP_INTERVAL_MS = 60 * 60 * 1000; // Never re-backup within 1 hour
-
-/**
- * Compute the earliest time an account is eligible for its next backup.
- * Respects interval, timeOfDay, dayOfWeek and (for 'hours') hours from config.
- */
-export function computeNextEligibleTime(accountState, config, now = Date.now()) {
-  const lastBackup = accountState?.lastBackupTime || 0;
-
-  // "At set hours": the top of the next selected hour strictly after the hour
-  // that already holds a backup. Two consecutive selected hours are legal, and
-  // MIN_BACKUP_INTERVAL does not apply — the user picked these hours because
-  // the drive is free then.
-  if (config?.interval === 'hours') {
-    const hours = [...new Set(config.hours || [])]
-      .filter(h => Number.isInteger(h) && h >= 0 && h < 24)
-      .sort((a, b) => a - b);
-    if (hours.length === 0) return Number.MAX_SAFE_INTEGER; // nothing picked — never due
-    // Start from the current hour, never earlier: a selected hour that passed
-    // while the app was busy or the user was active is missed, not caught up
-    // at 09:30 — the whole point is that the drive is only touched inside the
-    // chosen hours.
-    const cursor = new Date(now);
-    cursor.setMinutes(0, 0, 0);
-    if (lastBackup) {
-      const after = new Date(lastBackup);
-      after.setMinutes(0, 0, 0);
-      after.setHours(after.getHours() + 1);
-      if (after.getTime() > cursor.getTime()) cursor.setTime(after.getTime());
-    }
-    for (let i = 0; i < 48; i++) {
-      if (hours.includes(cursor.getHours())) return cursor.getTime();
-      cursor.setHours(cursor.getHours() + 1);
-    }
-    return Number.MAX_SAFE_INTEGER;
-  }
-
-  // Never backed up — eligible immediately
-  if (lastBackup === 0) return 0;
-
-  const intervalMs = getIntervalMs(config);
-
-  // Base: lastBackup + interval
-  let next = lastBackup + intervalMs;
-
-  // For daily/weekly, align to configured timeOfDay
-  if (config.interval === 'daily' || config.interval === 'weekly') {
-    const timeOfDay = config.timeOfDay || '03:00';
-    const [hours, minutes] = timeOfDay.split(':').map(Number);
-
-    // Find the next occurrence of timeOfDay after lastBackup + interval
-    const candidate = new Date(next);
-    candidate.setHours(hours, minutes, 0, 0);
-
-    // If the aligned time is before next (interval not yet elapsed), push to next day
-    if (candidate.getTime() < next) {
-      candidate.setDate(candidate.getDate() + 1);
-    }
-
-    // For weekly, advance to the correct day of week
-    if (config.interval === 'weekly' && config.dayOfWeek != null) {
-      const targetDay = config.dayOfWeek; // 0=Sun, 1=Mon, ...
-      while (candidate.getDay() !== targetDay) {
-        candidate.setDate(candidate.getDate() + 1);
+      const registrations = await Promise.allSettled([
+        listen('backup-schedule-changed', ({ payload }) => { if (owner !== generation) return; eventGeneration++; consume(payload); }),
+        listen('backup-progress', ({ payload }) => { if (owner === generation) progress(payload); }),
+        ...['daemon-reconnected', 'daemon-events-lagged'].map(name => listen(name, () => { if (owner === generation) { retryAmbiguous(); void requestRefresh(); } })),
+      ]);
+      for (const result of registrations) if (result.status === 'fulfilled') {
+        if (owner === generation) unlisteners.push(result.value); else result.value();
       }
-    }
-
-    next = candidate.getTime();
-  }
-
-  // Enforce minimum interval
-  return Math.max(next, lastBackup + MIN_BACKUP_INTERVAL_MS);
+    } catch { /* query reconciliation still works when listener installation fails */ }
+    if (owner === generation) await requestRefresh();
+  })();
+  return initialization;
 }
-
-function getIntervalMs(config) {
-  if (config.interval === 'hourly') return (config.hourlyInterval || 1) * 3600_000;
-  if (config.interval === 'weekly') return 7 * 24 * 3600_000;
-  return 24 * 3600_000; // daily default
+function maybeDetach() {
+  if (observers.size || pending.size) return;
+  generation++; unlisteners.splice(0).forEach(fn => ignoreFailure(fn));
+  initialization = null; current = null; hostHydrated = false;
+  clearTimeout(doneTimer);
 }
-
-export const backupScheduler = new BackupCoordinator();
+export const backupScheduler = {
+  observe({ present = false } = {}) {
+    const observer = { present }; observers.add(observer);
+    if (present && current && !hostHydrated) { for (const out of current.lastOutcomes || []) presented.add(keyOf(out)); hostHydrated = true; }
+    void ensure();
+    return () => { observers.delete(observer); if (!hasHost()) hostHydrated = false; maybeDetach(); };
+  },
+  triggerManualBackup(accountId) {
+    if (pending.has(accountId)) return pending.get(accountId).promise;
+    let resolve; const promise = new Promise(done => { resolve = done; });
+    const requestId = crypto.randomUUID(); pending.set(accountId, { requestId, resolve, promise });
+    void ensure().then(async () => {
+      try { await send('backup.run_now', { accountId, requestId }); } catch { const waiter = pending.get(accountId); if (waiter?.requestId === requestId) waiter.ambiguous = true; }
+      await requestRefresh();
+    }).catch(() => {});
+    if (!poll) poll = setInterval(() => { retryAmbiguous(); void requestRefresh(); }, 2000);
+    return promise;
+  },
+  isRunning(accountId) { return current?.active?.accountId === accountId || (current?.queue || []).some(i => i.accountId === accountId); },
+  stopAll() { return send('backup.stop', {}).then(() => requestRefresh()); },
+  status() { return send('backup.schedule.get', {}); },
+};

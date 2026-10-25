@@ -4000,5 +4000,11 @@
   "errors.bulkOperationFailed": "L’opération groupée n’a pas pu se terminer. Vérifiez sa progression avant de réessayer.",
   "errors.bulkDownloadLimited": "La limite de téléchargement du fournisseur a été atteinte. Réessayez après sa réinitialisation. Les messages déjà archivés sont conservés.",
   "errors.backupStalled": "La sauvegarde ne répond plus. Son arrêt se terminera avant une nouvelle tentative.",
-  "errors.backupRunUncertain": "La fin de la sauvegarde est incertaine. Le compte reste réservé jusqu’au redémarrage du processus MailVault."
+  "errors.backupRunUncertain": "La fin de la sauvegarde est incertaine. Le compte reste réservé jusqu’au redémarrage du processus MailVault.",
+  "svc.backupScheduler.completedTitle": "Sauvegarde terminée - {{account}}",
+  "svc.backupScheduler.partialTitle": "Sauvegarde partielle - {{account}}",
+  "svc.backupScheduler.failedTitle": "Échec de la sauvegarde - {{account}}",
+  "svc.backupScheduler.completedCount": "{{count}} nouveaux e-mails sauvegardés.",
+  "svc.backupScheduler.pendingAccess": "En attente d’accès à l’emplacement de sauvegarde.",
+  "svc.backupScheduler.uncertain": "État incertain ; en attente du processus natif."
 }

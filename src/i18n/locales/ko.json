@@ -4000,5 +4000,11 @@
   "errors.bulkOperationFailed": "일괄 작업을 완료하지 못했습니다. 다시 시도하기 전에 진행 상황을 확인하세요.",
   "errors.bulkDownloadLimited": "공급자의 다운로드 한도에 도달했습니다. 한도가 초기화된 후 다시 시도하세요. 이미 보관된 메시지는 유지됩니다.",
   "errors.backupStalled": "백업이 응답하지 않습니다. 완전히 중지된 후에 다시 시도합니다.",
-  "errors.backupRunUncertain": "백업 완료 여부를 확인할 수 없습니다. MailVault 프로세스가 다시 시작될 때까지 계정이 예약된 상태로 유지됩니다."
+  "errors.backupRunUncertain": "백업 완료 여부를 확인할 수 없습니다. MailVault 프로세스가 다시 시작될 때까지 계정이 예약된 상태로 유지됩니다.",
+  "svc.backupScheduler.completedTitle": "백업 완료 - {{account}}",
+  "svc.backupScheduler.partialTitle": "백업 일부 완료 - {{account}}",
+  "svc.backupScheduler.failedTitle": "백업 실패 - {{account}}",
+  "svc.backupScheduler.completedCount": "새 메일 {{count}}개를 백업했습니다.",
+  "svc.backupScheduler.pendingAccess": "백업 위치에 대한 접근을 기다리는 중입니다.",
+  "svc.backupScheduler.uncertain": "백업 상태가 불확실합니다. 기본 작업 프로세스를 기다리는 중입니다."
 }

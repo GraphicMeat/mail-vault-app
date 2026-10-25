@@ -93,6 +93,7 @@ impl Context {
             }
         }
     }
+    pub fn observed(&self) -> bool { !self.sessions.is_empty() }
     pub fn loading(&self) -> bool { self.sessions.values().any(|s| s.live && s.loading) }
     pub fn interrupted(&self, now: i64) -> bool {
         self.offline || self.sessions.values().any(|s| s.live && s.wake_at.is_some_and(|at| at > now))

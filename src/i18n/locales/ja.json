@@ -4000,5 +4000,11 @@
   "errors.bulkOperationFailed": "一括操作を完了できませんでした。再試行する前に進行状況を確認してください。",
   "errors.bulkDownloadLimited": "プロバイダーのダウンロード上限に達しました。上限がリセットされた後にもう一度お試しください。アーカイブ済みのメッセージは保持されます。",
   "errors.backupStalled": "バックアップが応答しなくなりました。停止が完了してから再試行します。",
-  "errors.backupRunUncertain": "バックアップの完了を確認できません。MailVault のプロセスが再起動するまで、このアカウントは予約されたままです。"
+  "errors.backupRunUncertain": "バックアップの完了を確認できません。MailVault のプロセスが再起動するまで、このアカウントは予約されたままです。",
+  "svc.backupScheduler.completedTitle": "バックアップ完了 - {{account}}",
+  "svc.backupScheduler.partialTitle": "バックアップが一部完了 - {{account}}",
+  "svc.backupScheduler.failedTitle": "バックアップ失敗 - {{account}}",
+  "svc.backupScheduler.completedCount": "新しいメール {{count}} 件をバックアップしました。",
+  "svc.backupScheduler.pendingAccess": "バックアップ先へのアクセスを待っています。",
+  "svc.backupScheduler.uncertain": "バックアップの状態が不明です。ネイティブ処理を待っています。"
 }

@@ -4000,5 +4000,11 @@
   "errors.bulkOperationFailed": "Impossibile completare l’operazione in blocco. Controlla l’avanzamento prima di riprovare.",
   "errors.bulkDownloadLimited": "È stato raggiunto il limite di download del provider. Riprova dopo il ripristino del limite. I messaggi già archiviati vengono conservati.",
   "errors.backupStalled": "Il backup non risponde più. L’arresto terminerà prima di un nuovo tentativo.",
-  "errors.backupRunUncertain": "Il completamento del backup è incerto. L’account resta riservato fino al riavvio del processo MailVault."
+  "errors.backupRunUncertain": "Il completamento del backup è incerto. L’account resta riservato fino al riavvio del processo MailVault.",
+  "svc.backupScheduler.completedTitle": "Backup completato - {{account}}",
+  "svc.backupScheduler.partialTitle": "Backup parzialmente completato - {{account}}",
+  "svc.backupScheduler.failedTitle": "Backup non riuscito - {{account}}",
+  "svc.backupScheduler.completedCount": "{{count}} nuove email salvate.",
+  "svc.backupScheduler.pendingAccess": "In attesa dell’accesso alla posizione di backup.",
+  "svc.backupScheduler.uncertain": "Stato del backup incerto; in attesa del processo nativo."
 }

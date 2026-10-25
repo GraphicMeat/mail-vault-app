@@ -6,6 +6,8 @@ import { create } from 'zustand';
  * on every high-frequency progress update during backups.
  */
 export const useBackupStore = create((set) => ({
+  nativeStatus: null,
+
   // Active backup progress (for toast / sidebar display)
   activeBackup: null, // { accountId, accountEmail, folder, totalFolders, completedFolders, completedEmails, active, done, queueLength }
   setActiveBackup: (backup) => set({ activeBackup: backup }),
