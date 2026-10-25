@@ -1615,7 +1615,7 @@ async fn foreign_receipt_before_install(point: &'static str, after: &'static str
             let pending = row(&s, "preinstall-receipt").pending.unwrap();
             let copy = if stage { pending.prepared } else { pending.copy };
             let mut scope = copy.identity.scope;
-            scope.message_id = "foreign-receipt@example.test".into();
+            scope.message_id = "<foreign-receipt@example.test>".into();
             let raw = b"Message-ID: <foreign-receipt@example.test>\r\n\r\nforeign";
             let receipt = Receipt::present(Identity::from_bytes(scope, raw).unwrap());
             app_db::with(&s.app_dir, |c| compose_receipts::save(c, &receipt))?;
@@ -1632,7 +1632,7 @@ async fn foreign_receipt_before_install(point: &'static str, after: &'static str
     assert_eq!(row(&h.s, "preinstall-receipt").current.unwrap().identity, prior.identity);
     assert_eq!(read_copy(&h.s, &prior, true).unwrap().unwrap(), prior_raw);
     let mut foreign_scope = copy.identity.scope;
-    foreign_scope.message_id = "foreign-receipt@example.test".into();
+    foreign_scope.message_id = "<foreign-receipt@example.test>".into();
     assert_eq!(app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &foreign_scope)).unwrap().len(), 1);
 }
 
