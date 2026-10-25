@@ -287,6 +287,19 @@ pub struct BackupRunContext {
 
 // ── Core backup runner ───────────────────────────────────────────────────────
 
+// Shared batch join boundary. The callback keeps successful folder accounting
+// in the provider runner while this function owns joining spawned work.
+async fn join_backup_batch<T: Send + 'static>(
+    tasks: &mut tokio::task::JoinSet<Result<T, String>>,
+    _cancel: &AtomicBool,
+    mut completed: impl FnMut(T),
+) -> Result<(), String> {
+    while let Some(result) = tasks.join_next().await {
+        completed(result.map_err(|e| format!("backup folder worker panicked: {e}"))??);
+    }
+    Ok(())
+}
+
 pub async fn run_imap_account(ctx: BackupRunContext) -> Result<BackupResult, String> {
     let start = std::time::Instant::now();
 
@@ -379,8 +392,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
             let ctx = ctx.clone();
             tasks.spawn(net_activity::with_purpose("backup", async move { backup_imap_folder(ctx, index, mailbox).await }));
         }
-        while let Some(result) = tasks.join_next().await {
-            let outcome = result.map_err(|e| format!("backup folder worker panicked: {e}"))??;
+        join_backup_batch(&mut tasks, &ctx.cancel, |outcome| {
             let slot = outcome.index.saturating_sub(ctx.skip_folders);
             if slot < done.len() { done[slot] = outcome.completed; }
             total_backed_up += outcome.backed_up;
@@ -397,7 +409,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                 external_copy_failed_count: total_ext_failures,
                 stop_reason: None, limit_bytes: None, resume_after_ms: None,
             });
-        }
+        }).await?;
         if ctx.cancel.load(Ordering::Relaxed) { cancelled = true; break; }
     }
 
@@ -1050,8 +1062,7 @@ async fn run_graph_backup_parallel(
             let index = *index;
             tasks.spawn(async move { backup_graph_folder(ctx, index, folder).await });
         }
-        while let Some(result) = tasks.join_next().await {
-            let out = result.map_err(|e| format!("graph backup worker panicked: {e}"))??;
+        join_backup_batch(&mut tasks, &ctx.cancel, |out| {
             if let Some(why) = out.refused.clone() { refused.get_or_insert((out.index, why)); }
             let slot = out.index.saturating_sub(skip);
             if slot < done.len() { done[slot] = out.completed; }
@@ -1067,7 +1078,7 @@ async fn run_graph_backup_parallel(
                 external_copy_error: None, external_copy_failed_count: external_failures,
                 stop_reason: None, limit_bytes: None, resume_after_ms: None,
             });
-        }
+        }).await?;
     }
     let cancelled = ctx.cancel.load(Ordering::Relaxed);
     let completed = contiguous_completed_checkpoint(skip, &done).min(total_folders);
@@ -4953,5 +4964,48 @@ mod tests {
         assert!(restored.flags.contains(&"archived".to_string()));
         assert_eq!(reg.uid_sets(root, "acct", "INBOX"), Some((vec![7, 42], vec![42])));
         assert_eq!(scan_cur_uids(&cur).unwrap(), HashSet::from([7, 42]), "the status count holds records");
+    }
+}
+
+#[cfg(test)]
+mod backup_batch_drain_tests {
+    use super::*;
+    // Err and JoinError must both wait for an already-running blocking mirror
+    // unit and preserve its successful folder accounting. Dropping JoinSet
+    // aborts its async owner but cannot stop that blocking unit.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn backup_batch_error_and_panic_wait_for_blocking_sibling() {
+        for panic in [false, true] {
+            let cancel = Arc::new(AtomicBool::new(false));
+            let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let mut tasks = tokio::task::JoinSet::new();
+            tasks.spawn(async move {
+                tokio::task::spawn_blocking(move || {
+                    entered_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                }).await.unwrap();
+                Ok(7usize)
+            });
+            entered_rx.await.unwrap();
+            tasks.spawn(async move {
+                if panic { panic!("deliberate folder failure"); }
+                Err("folder failed".to_string())
+            });
+            let held = cancel.clone();
+            let join = tokio::spawn(async move {
+                let mut accounted = 0;
+                let result = join_backup_batch(&mut tasks, &held, |n| accounted += n).await;
+                (result, accounted)
+            });
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let premature = join.is_finished();
+            release_tx.send(()).unwrap();
+            let (result, accounted) = join.await.unwrap();
+            assert!(!premature, "batch released admission before blocking sibling drained");
+            assert!(cancel.load(Ordering::SeqCst), "error did not cancel owned sibling work");
+            assert!(result.is_err());
+            assert_eq!(accounted, 7, "successful sibling accounting was discarded");
+        }
     }
 }
