@@ -1,4 +1,5 @@
 {
+  "compose.preparationUnavailable": "Diese Nachricht konnte nicht vorbereitet werden. Bitte versuche es erneut.",
   "compose.draftContentNotAccepted": "Der Entwurf konnte nicht gespeichert werden. Bitte erneut versuchen.",
   "compose.draftCleanupPending": "Die Bereinigung des Entwurfs steht noch aus.",
   "compose.draftCleanupUnknown": "Die Bereinigung des Entwurfs konnte nicht bestätigt werden. Bitte erneut versuchen.",

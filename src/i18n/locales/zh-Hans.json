@@ -1,4 +1,5 @@
 {
+  "compose.preparationUnavailable": "无法准备此邮件。请重试。",
   "compose.draftContentNotAccepted": "无法保存草稿。请重试。",
   "compose.draftCleanupPending": "草稿清理仍在等待中。",
   "compose.draftCleanupUnknown": "无法确认草稿清理状态。请重试。",

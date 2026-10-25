@@ -117,6 +117,10 @@ const forward = {
 
 beforeEach(() => {
   invoke.mockReset();
+  mail.accounts = [account];
+  mail.activeAccountId = account.id;
+  mail.lastSelectedAccountId = account.id;
+  settings.lastComposeIdentity = null;
   settings.getSignature = () => ACCOUNT_SIGNATURE;
   settings.aliases = { 'acct-1': [DESK, SHOP, QUIET] };
   settings.sendAsAddresses = {};
@@ -202,5 +206,32 @@ describe('the signature follows the address a message leaves from', () => {
     const text = await bodyText();
     expect(text).not.toContain('Best, Me');
     expect(text).not.toContain('Original words');
+  });
+});
+
+// Row 13: actual component identity initialization is the source of truth.
+describe('current compose account precedence', () => {
+  const other = { id: 'acct-2', email: 'other@example.test', name: 'Other' };
+  it.each([
+    [{ _accountId: 'acct-2' }, 'acct-2 other@example.test'],
+    [{ _srcAccountId: 'acct-2' }, 'acct-2 other@example.test'],
+    [{ _accountId: 'gone' }, 'acct-1 me@example.test'],
+    [{}, 'acct-1 me@example.test'],
+  ])('replies honor configured provenance then active account: %j', async (provenance, expected) => {
+    mail.accounts = [account, other]; mail.lastSelectedAccountId = other.id;
+    settings.lastComposeIdentity = { accountId: other.id, address: 'old@example.test' };
+    render(<ComposeModal mode="reply" replyTo={{ ...forward, ...provenance }} {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId('compose-from').value).toBe(expected));
+  });
+  it('fresh compose follows reading account and remembers only its address', async () => {
+    mail.accounts = [account, other]; mail.lastSelectedAccountId = other.id;
+    settings.lastComposeIdentity = { accountId: other.id, address: 'removed@example.test' };
+    render(<ComposeModal mode="new" {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId('compose-from').value).toBe('acct-2 removed@example.test'));
+  });
+  it('restored compose retains its removed From alias and account', async () => {
+    mail.accounts = [account, other];
+    render(<ComposeModal mode="new" initialData={{ _accountId: other.id, _fromAddress: 'removed@example.test', to: 'someone@example.test' }} {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId('compose-from').value).toBe('acct-2 removed@example.test'));
   });
 });

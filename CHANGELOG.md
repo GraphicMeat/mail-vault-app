@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add read-only native compose preparation and preflight contracts, characterized against the current JavaScript behavior. Compose callers remain on their current path during migration.
+
 - Add daemon workers for the four ordinary bulk mail actions, with exact identity checkpoints, verified backup copies, operation cancellation, and native backup-access lifetime. The existing bulk UI remains active during migration.
 
 ### Added

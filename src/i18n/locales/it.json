@@ -1,4 +1,5 @@
 {
+  "compose.preparationUnavailable": "Impossibile preparare questo messaggio. Riprova.",
   "compose.draftContentNotAccepted": "Impossibile salvare la bozza. Riprova.",
   "compose.draftCleanupPending": "La pulizia della bozza è ancora in sospeso.",
   "compose.draftCleanupUnknown": "Impossibile confermare la pulizia della bozza. Riprova.",

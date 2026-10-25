@@ -833,6 +833,11 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // Compose's send (the daemon's handlers/compose.rs): stage the copy in
         // the vault, then send it and drop the copy once "the server" holds
         // its own, as the daemon does. Built from the demo's own commands.
+        // Slice 1 is read-only and has no demo caller yet. Fail closed until
+        // the reviewed UI adapter supplies demo preparation at its own seam.
+        if (method === 'compose.reply_context' || method === 'compose.check') {
+          throw new Error('compose.preparationUnavailable');
+        }
         if (method === 'compose.receipts.remove_account') return { removed: 0, simulated: true };
         if (method === 'compose.stage' || method === 'compose.send') {
           const p = args.params || {};

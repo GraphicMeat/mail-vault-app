@@ -47,6 +47,7 @@ pub fn is_foreground_method(method: &str) -> bool {
             | "views.keywords" | "views.keyword_detail" | "views.senders"
             | "people.list" | "people.get" | "people.stats" | "people.messages" | "people.suggest" | "people.review.list"
             | "people.contacts.top" | "people.contacts.search"
+            | "compose.reply_context" | "compose.check"
     )
 }
 

@@ -1,4 +1,5 @@
 {
+  "compose.preparationUnavailable": "No se pudo preparar este mensaje. Inténtalo de nuevo.",
   "compose.draftContentNotAccepted": "No se pudo guardar el borrador. Vuelve a intentarlo.",
   "compose.draftCleanupPending": "La limpieza del borrador sigue pendiente.",
   "compose.draftCleanupUnknown": "No se pudo confirmar la limpieza del borrador. Vuelve a intentarlo.",

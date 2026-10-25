@@ -1,4 +1,5 @@
 {
+  "compose.preparationUnavailable": "Could not prepare this message. Please try again.",
   "compose.draftContentNotAccepted": "The draft could not be saved. Please retry.",
   "compose.draftCleanupPending": "Draft cleanup is still pending.",
   "compose.draftCleanupUnknown": "Draft cleanup could not be confirmed. Please retry.",

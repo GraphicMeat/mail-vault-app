@@ -1,4 +1,5 @@
 {
+  "compose.preparationUnavailable": "Impossible de préparer ce message. Réessayez.",
   "compose.draftContentNotAccepted": "Le brouillon n’a pas pu être enregistré. Réessayez.",
   "compose.draftCleanupPending": "Le nettoyage du brouillon est toujours en attente.",
   "compose.draftCleanupUnknown": "Le nettoyage du brouillon n’a pas pu être confirmé. Réessayez.",

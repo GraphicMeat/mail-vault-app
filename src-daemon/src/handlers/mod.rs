@@ -586,3 +586,5 @@ pub(crate) async fn handle_reclassify_all(state: Arc<DaemonState>, params: Value
 }
 
 pub mod drafts;
+
+pub(crate) mod compose_prep;

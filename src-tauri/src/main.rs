@@ -3005,6 +3005,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // Full draft MIME/attachment preparation may outlast a short UI read.
         // Expiry is unknown completion, never cancellation of native work.
         "drafts.save" => Some(Duration::from_secs(600)),
+        "compose.reply_context" | "compose.check" => Some(Duration::from_secs(30)),
         // list can recover one selected body; discard validates exact local IO.
         "drafts.list" | "drafts.discard" => Some(Duration::from_secs(120)),
         "bulk.start" | "bulk.resume" | "bulk.status" | "bulk.cancel" | "bulk.discard" => Some(Duration::from_secs(30)),
@@ -4439,6 +4440,13 @@ mod tests {
     #[test]
     fn reply_timeout_delegates_render_methods_to_blitz_tiles() {
         assert_eq!(crate::reply_timeout("render.open"), Some(std::time::Duration::from_secs(10)));
+    }
+
+    #[test]
+    fn reply_timeout_bounds_read_only_compose_preparation() {
+        for method in ["compose.reply_context", "compose.check"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)));
+        }
     }
 
     #[test]

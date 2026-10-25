@@ -1,4 +1,5 @@
 {
+  "compose.preparationUnavailable": "Não foi possível preparar esta mensagem. Tente novamente.",
   "compose.draftContentNotAccepted": "Não foi possível salvar o rascunho. Tente novamente.",
   "compose.draftCleanupPending": "A limpeza do rascunho ainda está pendente.",
   "compose.draftCleanupUnknown": "Não foi possível confirmar a limpeza do rascunho. Tente novamente.",
