@@ -62,3 +62,27 @@ it('accepts only exact native invalid/confirm/route unions including absent opti
   send.mockImplementation(async (_, p) => ready(p)); expect(await prep.checkCompose(p)).not.toHaveProperty('draftId');
   send.mockImplementation(async (_, p) => ({ ...ready(p), revision: 0 })); await expect(prep.checkCompose(p)).rejects.toThrow('compose.preparationUnavailable');
 });
+
+it.each([
+  ['2030-02-31T09:00', 'UTC'], ['2030-04-31T09:00', 'UTC'],
+  ['2030-02-29T09:00', 'UTC'], ['1900-02-29T09:00', 'UTC'], ['2100-02-29T09:00', 'UTC'],
+  ['2030-00-01T09:00', 'UTC'], ['2030-13-01T09:00', 'UTC'], ['2030-01-00T09:00', 'UTC'], ['2030-01-32T09:00', 'UTC'],
+  ['2030-01-01T24:00', 'UTC'], ['2030-01-01T99:00', 'UTC'], ['2030-01-01T09:60', 'UTC'], ['2030-01-01T09:99', 'UTC'],
+  ['2030-01-01T09:00', 'not-a-zone'], ['2030-01-01T09:00', 'Europe/Not_A_City'], ['2030-01-01T09:00', ' UTC '],
+])('refuses matching ready envelopes with invalid wall time or zone %s %s', async (localTime, tz) => {
+  send.mockImplementation(async (_, p) => ({ ...ready(p), route: { draft: { localTime, tz } } }));
+  await expect(prep.checkCompose(input())).rejects.toThrow('compose.preparationUnavailable');
+});
+it.each([
+  ['2000-02-29T09:00', 'UTC'], ['2024-02-29T23:59', 'UTC'], ['2400-02-29T00:00', 'UTC'],
+  ['0000-02-29T09:00', 'UTC'], ['0100-02-28T09:00', 'UTC'], ['9999-12-31T23:59', 'UTC'],
+  ['2026-03-29T03:30', 'Europe/Vilnius'], ['2026-10-25T03:30', 'Europe/Vilnius'],
+  ['2026-03-08T02:30', 'America/New_York'], ['2026-11-01T01:30', 'America/New_York'],
+  ['2030-01-01T09:00', 'Asia/Kathmandu'], ['2030-01-01T09:00', 'Pacific/Chatham'],
+  ['2030-01-01T09:00', 'Etc/GMT+5'], ['2030-01-01T09:00', 'US/Eastern'], ['2030-01-01T09:00', 'Etc/UTC'],
+])('preserves valid Gregorian wall times, DST gaps/folds and supported zone aliases %s %s', async (localTime, tz) => {
+  const draft = { localTime, tz };
+  send.mockImplementation(async (_, p) => ({ ...ready(p), route: { draft } }));
+  const result = await prep.checkCompose(input());
+  expect(result.route).toEqual({ draft });
+});
