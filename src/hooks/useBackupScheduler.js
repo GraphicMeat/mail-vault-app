@@ -7,7 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 export function useBackupScheduler({ main = true } = {}) {
   useEffect(() => {
     const surfaceId = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label || 'browser';
-    const sessionId = crypto.randomUUID();
+    let sessionId = crypto.randomUUID();
     let sequence = 0;
     let retired = false;
     let activity = Date.now();
@@ -24,6 +24,14 @@ export function useBackupScheduler({ main = true } = {}) {
       Promise.resolve().then(() => send('backup.context', payload)).catch(() => {});
     };
     facts('attach');
+    let reconnectUnlisten;
+    import('@tauri-apps/api/event').then(async ({ listen }) => {
+      const unlisten = await listen('daemon-reconnected', () => {
+        if (retired) return;
+        facts('retire'); sessionId = crypto.randomUUID(); sequence = 0; facts('attach');
+      });
+      if (retired) unlisten(); else reconnectUnlisten = unlisten;
+    }).catch(() => {});
     const observer = backupScheduler.observe?.({ present: main });
     const markActive = () => {
       const now = Date.now(); if (now - keyAt < 1000) return;
@@ -45,7 +53,7 @@ export function useBackupScheduler({ main = true } = {}) {
     const retire = () => { if (retired) return; retired = true; facts('retire'); };
     window.addEventListener('beforeunload', retire);
     return () => {
-      retire(); clearInterval(heartbeat); loading(); observer?.();
+      retire(); clearInterval(heartbeat); loading(); observer?.(); reconnectUnlisten?.();
       events.forEach(e => document.removeEventListener(e, markActive));
       document.removeEventListener('mousemove', mouse);
       document.removeEventListener('visibilitychange', visibility);

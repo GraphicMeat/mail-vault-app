@@ -217,7 +217,7 @@ mod tests {
             set["state"]["backupHistory"]["one"],
             json!([{"success":true}])
         );
-        assert_eq!(set["owner"], "javascript");
+        assert_eq!(set["owner"], "daemon");
         assert_eq!(set["active"], Value::Null);
         assert!(state.backup_runs.lock().unwrap().is_empty());
         assert_eq!(

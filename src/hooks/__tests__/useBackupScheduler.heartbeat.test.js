@@ -3,6 +3,7 @@ import { it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup } from '@testing-library/react';
 const send = vi.hoisted(() => vi.fn(async () => ({ accepted: true })));
 const detach = vi.hoisted(() => vi.fn());
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
 vi.mock('../../services/transport', () => ({ send }));
 vi.mock('../../services/backupScheduler', () => ({ backupScheduler: { observe: () => detach } }));
 vi.mock('../../stores/mailStore', () => ({ useMailStore: { getState: () => ({ loading: true }), subscribe: () => () => {} } }));
