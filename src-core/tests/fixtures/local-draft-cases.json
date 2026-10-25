@@ -1,0 +1,1537 @@
+{
+  "schemaVersion": 1,
+  "boundary": "Actual JS mappings and orchestration under scripted dependency replies. Not MIME, filesystem, or component durability proof.",
+  "source": {
+    "snapshotCommit": "dc651927dfbb9b07483a57c65e0df0e203fd00c4",
+    "files": {
+      "src/services/localDrafts.js": "e5cc9e851c34181787a9a536b0c6c1995c892a388590bfee81c0e0ce2bde670d",
+      "src/services/composeSession.js": "c4ea4ee7124a87636c33163f507e8ef6e35a6e22f1ccd98d127d79eae41c9eb6",
+      "src/services/attachmentUtils.js": "a6f5f02e363e66367329c68ba51693d5eeee3e376dd26e56e0d8f85187be425a",
+      "src/components/ComposeModal.jsx": "b39e1ee370b0aaa904190abe96b409b52962608fab650861aada4c14d8a62269",
+      "src/App.jsx": "cd85bc3928bf1d621e9ff26528a375b6fd814072557ec6b6a9b8e5bfbfe41d34",
+      "src/utils/quoteWire.js": "3e3a63f27b904cd89d30c9cce7c1c77fd78ac8b1a41c76c9f613c2fc5eeba3e8",
+      "src/stores/slices/unifiedHelpers.js": "fcb80eace56c834974cc6825870d4a44004afdf1a8d2a4974a40be0cba28c41a"
+    },
+    "generatorSha256": "df6f7b1ce5849f37caa7703b5e651c1c43688ddd3448434f79e5e3603a2572fa"
+  },
+  "unsafeCases": [
+    "unsafe-staged-send-also-opens",
+    "unsafe-empty-supplied-content",
+    "unsafe-discard-hides-on-IO-failure"
+  ],
+  "cases": [
+    {
+      "name": "active-nested-role-before-name",
+      "input": {
+        "name": "active-nested-role-before-name",
+        "active": "one",
+        "list": [
+          {
+            "name": "Drafts",
+            "path": "Decoy"
+          },
+          {
+            "path": "Folders",
+            "children": [
+              {
+                "name": "Entwürfe",
+                "path": "Folders/Entwürfe",
+                "special_use": "\\Drafts"
+              }
+            ]
+          }
+        ]
+      },
+      "output": "Folders/Entwürfe",
+      "trace": []
+    },
+    {
+      "name": "cached-role",
+      "input": {
+        "name": "cached-role",
+        "active": "other",
+        "cached": [
+          {
+            "path": "[Gmail]/Drafts",
+            "specialUse": "\\Drafts"
+          }
+        ]
+      },
+      "output": "[Gmail]/Drafts",
+      "trace": [
+        [
+          "cachedMailboxes",
+          "one"
+        ]
+      ]
+    },
+    {
+      "name": "case-insensitive-name",
+      "input": {
+        "name": "case-insensitive-name",
+        "active": "one",
+        "list": [
+          {
+            "path": "custom",
+            "name": "dRaFtS"
+          }
+        ]
+      },
+      "output": "custom",
+      "trace": []
+    },
+    {
+      "name": "literal-fallback",
+      "input": {
+        "name": "literal-fallback",
+        "active": "other"
+      },
+      "output": "Drafts",
+      "trace": [
+        [
+          "cachedMailboxes",
+          "one"
+        ]
+      ]
+    },
+    {
+      "name": "cache-error-fallback",
+      "input": {
+        "name": "cache-error-fallback",
+        "active": "other",
+        "fail": "cache"
+      },
+      "output": "Drafts",
+      "trace": [
+        [
+          "cachedMailboxes",
+          "one"
+        ]
+      ]
+    },
+    {
+      "name": "complete-alias-threaded-attachment",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "account": {
+          "id": "one",
+          "email": "one@example.test",
+          "name": "Owner"
+        },
+        "fromAddress": "alias@example.test",
+        "displayName": "Alias",
+        "payload": {
+          "to": "\"Doe, Jane\" <jane@example.test>, next@example.test",
+          "cc": "copy@example.test",
+          "bcc": "blind@example.test",
+          "subject": "Draft",
+          "html": "<p>Words</p>",
+          "text": "Words",
+          "inReplyTo": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "cid": "logo",
+              "encoding": "base64"
+            }
+          ]
+        },
+        "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+        "hasAttachments": true
+      },
+      "output": {
+        "entry": {
+          "uid": 42,
+          "from": {
+            "address": "alias@example.test",
+            "name": "Alias"
+          },
+          "to": [
+            {
+              "address": "\"Doe",
+              "name": ""
+            },
+            {
+              "address": "Jane\" <jane@example.test>",
+              "name": ""
+            },
+            {
+              "address": "next@example.test",
+              "name": ""
+            }
+          ],
+          "subject": "Draft",
+          "date": "2026-10-25T00:00:00.000Z",
+          "has_attachments": true,
+          "message_id": "<fixed@example.test>",
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>",
+          "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+          "flags": [
+            "archived",
+            "seen",
+            "draft"
+          ],
+          "source": "local_draft"
+        },
+        "visible": {
+          "localEmails": [
+            {
+              "uid": 42,
+              "from": {
+                "address": "alias@example.test",
+                "name": "Alias"
+              },
+              "to": [
+                {
+                  "address": "\"Doe",
+                  "name": ""
+                },
+                {
+                  "address": "Jane\" <jane@example.test>",
+                  "name": ""
+                },
+                {
+                  "address": "next@example.test",
+                  "name": ""
+                }
+              ],
+              "subject": "Draft",
+              "date": "2026-10-25T00:00:00.000Z",
+              "has_attachments": true,
+              "message_id": "<fixed@example.test>",
+              "in_reply_to": "<parent@example.test>",
+              "references": "<root@example.test> <parent@example.test>",
+              "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+              "flags": [
+                "archived",
+                "seen",
+                "draft"
+              ],
+              "source": "local",
+              "_origin": "local_draft",
+              "isLocal": true,
+              "isArchived": true,
+              "_accountId": "one"
+            }
+          ],
+          "emails": [],
+          "archivedEmailIds": [
+            "one:Legacy/Entwürfe:42"
+          ],
+          "savedEmailIds": [
+            "one:Legacy/Entwürfe:42"
+          ]
+        }
+      },
+      "trace": [
+        [
+          "build",
+          {
+            "id": "one",
+            "email": "one@example.test",
+            "name": "Alias",
+            "fromEmail": "alias@example.test"
+          },
+          {
+            "to": "\"Doe, Jane\" <jane@example.test>, next@example.test",
+            "cc": "copy@example.test",
+            "bcc": "blind@example.test",
+            "subject": "Draft",
+            "html": "<p>Words</p>",
+            "text": "Words",
+            "inReplyTo": "<parent@example.test>",
+            "references": "<root@example.test> <parent@example.test>",
+            "attachments": [
+              {
+                "filename": "inline.png",
+                "contentType": "image/png",
+                "content": "AAEC",
+                "cid": "logo",
+                "encoding": "base64"
+              }
+            ]
+          }
+        ],
+        [
+          "rpc",
+          "maildir_store",
+          {
+            "accountId": "one",
+            "mailbox": "Legacy/Entwürfe",
+            "uid": 42,
+            "rawSourceBase64": "c2NyaXB0ZWQgbWltZQ==",
+            "flags": [
+              "archived",
+              "seen",
+              "draft"
+            ]
+          }
+        ],
+        [
+          "index",
+          "one",
+          "Legacy/Entwürfe",
+          [
+            {
+              "uid": 42,
+              "from": {
+                "address": "alias@example.test",
+                "name": "Alias"
+              },
+              "to": [
+                {
+                  "address": "\"Doe",
+                  "name": ""
+                },
+                {
+                  "address": "Jane\" <jane@example.test>",
+                  "name": ""
+                },
+                {
+                  "address": "next@example.test",
+                  "name": ""
+                }
+              ],
+              "subject": "Draft",
+              "date": "2026-10-25T00:00:00.000Z",
+              "has_attachments": true,
+              "message_id": "<fixed@example.test>",
+              "in_reply_to": "<parent@example.test>",
+              "references": "<root@example.test> <parent@example.test>",
+              "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+              "flags": [
+                "archived",
+                "seen",
+                "draft"
+              ],
+              "source": "local_draft"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "no-recipients",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "account": {
+          "id": "one",
+          "email": "one@example.test",
+          "name": "Owner"
+        },
+        "fromAddress": "alias@example.test",
+        "displayName": "Alias",
+        "payload": {
+          "to": "",
+          "cc": "",
+          "bcc": "",
+          "subject": "",
+          "html": "",
+          "text": "",
+          "inReplyTo": "",
+          "references": "",
+          "attachments": []
+        },
+        "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+        "hasAttachments": false
+      },
+      "output": {
+        "entry": {
+          "uid": 42,
+          "from": {
+            "address": "alias@example.test",
+            "name": "Alias"
+          },
+          "to": [],
+          "subject": "",
+          "date": "2026-10-25T00:00:00.000Z",
+          "has_attachments": false,
+          "message_id": "<fixed@example.test>",
+          "in_reply_to": null,
+          "references": null,
+          "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+          "flags": [
+            "archived",
+            "seen",
+            "draft"
+          ],
+          "source": "local_draft"
+        },
+        "visible": {
+          "localEmails": [
+            {
+              "uid": 42,
+              "from": {
+                "address": "alias@example.test",
+                "name": "Alias"
+              },
+              "to": [],
+              "subject": "",
+              "date": "2026-10-25T00:00:00.000Z",
+              "has_attachments": false,
+              "message_id": "<fixed@example.test>",
+              "in_reply_to": null,
+              "references": null,
+              "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+              "flags": [
+                "archived",
+                "seen",
+                "draft"
+              ],
+              "source": "local",
+              "_origin": "local_draft",
+              "isLocal": true,
+              "isArchived": true,
+              "_accountId": "one"
+            }
+          ],
+          "emails": [],
+          "archivedEmailIds": [
+            "one:Legacy/Entwürfe:42"
+          ],
+          "savedEmailIds": [
+            "one:Legacy/Entwürfe:42"
+          ]
+        }
+      },
+      "trace": [
+        [
+          "build",
+          {
+            "id": "one",
+            "email": "one@example.test",
+            "name": "Alias",
+            "fromEmail": "alias@example.test"
+          },
+          {
+            "to": "",
+            "cc": "",
+            "bcc": "",
+            "subject": "",
+            "html": "",
+            "text": "",
+            "inReplyTo": "",
+            "references": "",
+            "attachments": []
+          }
+        ],
+        [
+          "rpc",
+          "maildir_store",
+          {
+            "accountId": "one",
+            "mailbox": "Legacy/Entwürfe",
+            "uid": 42,
+            "rawSourceBase64": "c2NyaXB0ZWQgbWltZQ==",
+            "flags": [
+              "archived",
+              "seen",
+              "draft"
+            ]
+          }
+        ],
+        [
+          "index",
+          "one",
+          "Legacy/Entwürfe",
+          [
+            {
+              "uid": 42,
+              "from": {
+                "address": "alias@example.test",
+                "name": "Alias"
+              },
+              "to": [],
+              "subject": "",
+              "date": "2026-10-25T00:00:00.000Z",
+              "has_attachments": false,
+              "message_id": "<fixed@example.test>",
+              "in_reply_to": null,
+              "references": null,
+              "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+              "flags": [
+                "archived",
+                "seen",
+                "draft"
+              ],
+              "source": "local_draft"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "missing-MIME-no-write",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "account": {
+          "id": "one",
+          "email": "one@example.test",
+          "name": "Owner"
+        },
+        "fromAddress": "alias@example.test",
+        "displayName": "Alias",
+        "payload": {
+          "to": "\"Doe, Jane\" <jane@example.test>, next@example.test",
+          "cc": "copy@example.test",
+          "bcc": "blind@example.test",
+          "subject": "Draft",
+          "html": "<p>Words</p>",
+          "text": "Words",
+          "inReplyTo": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "cid": "logo",
+              "encoding": "base64"
+            }
+          ]
+        },
+        "snippet": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+        "hasAttachments": true
+      },
+      "output": {
+        "entry": null,
+        "visible": {
+          "localEmails": [],
+          "emails": [],
+          "archivedEmailIds": [],
+          "savedEmailIds": []
+        }
+      },
+      "trace": [
+        [
+          "build",
+          {
+            "id": "one",
+            "email": "one@example.test",
+            "name": "Alias",
+            "fromEmail": "alias@example.test"
+          },
+          {
+            "to": "\"Doe, Jane\" <jane@example.test>, next@example.test",
+            "cc": "copy@example.test",
+            "bcc": "blind@example.test",
+            "subject": "Draft",
+            "html": "<p>Words</p>",
+            "text": "Words",
+            "inReplyTo": "<parent@example.test>",
+            "references": "<root@example.test> <parent@example.test>",
+            "attachments": [
+              {
+                "filename": "inline.png",
+                "contentType": "image/png",
+                "content": "AAEC",
+                "cid": "logo",
+                "encoding": "base64"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "name": "forward-quote-CID-threading-legacy",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "from": {
+            "address": "alias@example.test"
+          },
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "<p>Words</p><hr data-mailvault-quote=\"forward\"><p>Original<img src=\"cid:logo\"></p>",
+          "text": "Words",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "size": 3,
+              "contentId": "<logo>"
+            }
+          ]
+        }
+      },
+      "output": {
+        "to": "jane@example.test",
+        "cc": "copy@example.test",
+        "bcc": "blind@example.test",
+        "subject": "Draft",
+        "body": "<p>Words</p>",
+        "inReplyTo": "<parent@example.test>",
+        "references": "<root@example.test> <parent@example.test>",
+        "attachments": [
+          {
+            "filename": "inline.png",
+            "contentType": "image/png",
+            "size": 3,
+            "content": "AAEC",
+            "cid": "logo"
+          }
+        ],
+        "_quotedHtml": "<p>Original<img src=\"cid:logo\"></p>",
+        "_forward": true,
+        "_contextHtml": "<p>Original<img src=\"cid:logo\"></p>",
+        "_showContext": true,
+        "_accountId": "one",
+        "_fromAddress": "alias@example.test",
+        "_draftUid": 42,
+        "_draftMailbox": "Legacy/Entwürfe"
+      },
+      "trace": []
+    },
+    {
+      "name": "text-fallback-escape",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "from": {
+            "address": "alias@example.test"
+          },
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "",
+          "text": "<keep> & text\r\nline",
+          "attachments": []
+        }
+      },
+      "output": {
+        "to": "jane@example.test",
+        "cc": "copy@example.test",
+        "bcc": "blind@example.test",
+        "subject": "Draft",
+        "body": "&lt;keep&gt; &amp; text<br>line",
+        "inReplyTo": "<parent@example.test>",
+        "references": "<root@example.test> <parent@example.test>",
+        "attachments": [],
+        "_quotedHtml": "",
+        "_forward": false,
+        "_accountId": "one",
+        "_fromAddress": "alias@example.test",
+        "_draftUid": 42,
+        "_draftMailbox": "Legacy/Entwürfe"
+      },
+      "trace": []
+    },
+    {
+      "name": "empty-body",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "from": {
+            "address": "alias@example.test"
+          },
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "",
+          "text": "",
+          "attachments": []
+        }
+      },
+      "output": {
+        "to": "jane@example.test",
+        "cc": "copy@example.test",
+        "bcc": "blind@example.test",
+        "subject": "Draft",
+        "body": "",
+        "inReplyTo": "<parent@example.test>",
+        "references": "<root@example.test> <parent@example.test>",
+        "attachments": [],
+        "_quotedHtml": "",
+        "_forward": false,
+        "_accountId": "one",
+        "_fromAddress": "alias@example.test",
+        "_draftUid": 42,
+        "_draftMailbox": "Legacy/Entwürfe"
+      },
+      "trace": []
+    },
+    {
+      "name": "reopen-legacy",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "source": "local_draft",
+          "flags": [
+            "archived",
+            "seen",
+            "draft"
+          ],
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "<p>Words</p><hr data-mailvault-quote=\"forward\"><p>Original<img src=\"cid:logo\"></p>",
+          "text": "Words",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "size": 3,
+              "contentId": "<logo>"
+            }
+          ]
+        }
+      },
+      "output": {
+        "result": true,
+        "opened": [
+          {
+            "to": "jane@example.test",
+            "cc": "copy@example.test",
+            "bcc": "blind@example.test",
+            "subject": "Draft",
+            "body": "<p>Words</p>",
+            "inReplyTo": "<parent@example.test>",
+            "references": "<root@example.test> <parent@example.test>",
+            "attachments": [
+              {
+                "filename": "inline.png",
+                "contentType": "image/png",
+                "size": 3,
+                "content": "AAEC",
+                "cid": "logo"
+              }
+            ],
+            "_quotedHtml": "<p>Original<img src=\"cid:logo\"></p>",
+            "_forward": true,
+            "_contextHtml": "<p>Original<img src=\"cid:logo\"></p>",
+            "_showContext": true,
+            "_accountId": "one",
+            "_fromAddress": "one@example.test",
+            "_draftUid": 42,
+            "_draftMailbox": "Legacy/Entwürfe"
+          }
+        ]
+      },
+      "trace": [
+        [
+          "entry",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ],
+        [
+          "body",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ]
+      ]
+    },
+    {
+      "name": "unsafe-staged-send-also-opens",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "source": "local_draft",
+          "flags": [
+            "seen",
+            "draft"
+          ],
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "<p>Words</p><hr data-mailvault-quote=\"forward\"><p>Original<img src=\"cid:logo\"></p>",
+          "text": "Words",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "size": 3,
+              "contentId": "<logo>"
+            }
+          ]
+        }
+      },
+      "output": {
+        "result": true,
+        "opened": [
+          {
+            "to": "jane@example.test",
+            "cc": "copy@example.test",
+            "bcc": "blind@example.test",
+            "subject": "Draft",
+            "body": "<p>Words</p>",
+            "inReplyTo": "<parent@example.test>",
+            "references": "<root@example.test> <parent@example.test>",
+            "attachments": [
+              {
+                "filename": "inline.png",
+                "contentType": "image/png",
+                "size": 3,
+                "content": "AAEC",
+                "cid": "logo"
+              }
+            ],
+            "_quotedHtml": "<p>Original<img src=\"cid:logo\"></p>",
+            "_forward": true,
+            "_contextHtml": "<p>Original<img src=\"cid:logo\"></p>",
+            "_showContext": true,
+            "_accountId": "one",
+            "_fromAddress": "one@example.test",
+            "_draftUid": 42,
+            "_draftMailbox": "Legacy/Entwürfe"
+          }
+        ]
+      },
+      "trace": [
+        [
+          "entry",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ],
+        [
+          "body",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ]
+      ]
+    },
+    {
+      "name": "server-archive-refused",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "source": "server",
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "<p>Words</p><hr data-mailvault-quote=\"forward\"><p>Original<img src=\"cid:logo\"></p>",
+          "text": "Words",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "size": 3,
+              "contentId": "<logo>"
+            }
+          ]
+        }
+      },
+      "output": {
+        "result": false,
+        "opened": []
+      },
+      "trace": [
+        [
+          "entry",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ]
+      ]
+    },
+    {
+      "name": "local-sent-refused",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "source": "local_sent",
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "<p>Words</p><hr data-mailvault-quote=\"forward\"><p>Original<img src=\"cid:logo\"></p>",
+          "text": "Words",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "size": 3,
+              "contentId": "<logo>"
+            }
+          ]
+        }
+      },
+      "output": {
+        "result": false,
+        "opened": []
+      },
+      "trace": [
+        [
+          "entry",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ]
+      ]
+    },
+    {
+      "name": "missing-body-refused",
+      "input": {
+        "accountId": "one",
+        "mailbox": "Legacy/Entwürfe",
+        "uid": 42,
+        "entry": {
+          "source": "local_draft",
+          "in_reply_to": "<parent@example.test>",
+          "references": "<root@example.test> <parent@example.test>"
+        },
+        "eml": null
+      },
+      "output": {
+        "result": false,
+        "opened": []
+      },
+      "trace": [
+        [
+          "entry",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ],
+        [
+          "body",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ]
+      ]
+    },
+    {
+      "name": "provided-bytes-CID-order",
+      "input": {
+        "name": "provided-bytes-CID-order",
+        "attachments": [
+          {
+            "filename": "inline.png",
+            "contentType": "image/png",
+            "content": "AAEC",
+            "cid": "logo",
+            "encoding": "base64"
+          }
+        ]
+      },
+      "output": {
+        "attachments": [
+          {
+            "filename": "inline.png",
+            "contentType": "image/png",
+            "content": "AAEC",
+            "cid": "logo",
+            "encoding": "base64"
+          }
+        ]
+      },
+      "trace": []
+    },
+    {
+      "name": "grouped-source-indices",
+      "input": {
+        "name": "grouped-source-indices",
+        "attachments": [
+          {
+            "filename": "f2",
+            "contentType": "application/octet-stream",
+            "cid": "c2",
+            "_source": {
+              "accountId": "one",
+              "mailbox": "Legacy/Entwürfe",
+              "uid": 42,
+              "attachmentIndex": 2
+            }
+          },
+          {
+            "filename": "f0",
+            "contentType": "application/octet-stream",
+            "cid": "c0",
+            "_source": {
+              "accountId": "one",
+              "mailbox": "Legacy/Entwürfe",
+              "uid": 42,
+              "attachmentIndex": 0
+            }
+          }
+        ],
+        "bytes": [
+          "Ag==",
+          "AA=="
+        ]
+      },
+      "output": {
+        "attachments": [
+          {
+            "filename": "f2",
+            "contentType": "application/octet-stream",
+            "cid": "c2",
+            "_source": {
+              "accountId": "one",
+              "mailbox": "Legacy/Entwürfe",
+              "uid": 42,
+              "attachmentIndex": 2
+            },
+            "content": "Ag=="
+          },
+          {
+            "filename": "f0",
+            "contentType": "application/octet-stream",
+            "cid": "c0",
+            "_source": {
+              "accountId": "one",
+              "mailbox": "Legacy/Entwürfe",
+              "uid": 42,
+              "attachmentIndex": 0
+            },
+            "content": "AA=="
+          }
+        ]
+      },
+      "trace": [
+        [
+          "rpc",
+          "maildir_read_attachments",
+          {
+            "accountId": "one",
+            "mailbox": "Legacy/Entwürfe",
+            "uid": 42,
+            "attachmentIndices": [
+              2,
+              0
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "name": "unsafe-empty-supplied-content",
+      "input": {
+        "name": "unsafe-empty-supplied-content",
+        "attachments": [
+          {
+            "filename": "empty",
+            "contentType": "application/octet-stream",
+            "content": ""
+          }
+        ]
+      },
+      "output": {
+        "error": "Could not read the attachment empty from the original email"
+      },
+      "trace": []
+    },
+    {
+      "name": "missing-source-bytes",
+      "input": {
+        "name": "missing-source-bytes",
+        "attachments": [
+          {
+            "filename": "gone",
+            "_source": {
+              "accountId": "one",
+              "mailbox": "Legacy/Entwürfe",
+              "uid": 42,
+              "attachmentIndex": 0
+            }
+          }
+        ],
+        "bytes": []
+      },
+      "output": {
+        "error": "Could not read the attachment gone from the original email"
+      },
+      "trace": [
+        [
+          "rpc",
+          "maildir_read_attachments",
+          {
+            "accountId": "one",
+            "mailbox": "Legacy/Entwürfe",
+            "uid": 42,
+            "attachmentIndices": [
+              0
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "name": "discard-exact-identity",
+      "input": {
+        "_accountId": "one",
+        "_draftUid": 42,
+        "_draftMailbox": "Legacy/Entwürfe"
+      },
+      "output": {
+        "localEmails": [],
+        "emails": [],
+        "archivedEmailIds": [],
+        "savedEmailIds": []
+      },
+      "trace": [
+        [
+          "rpc",
+          "maildir_delete",
+          {
+            "accountId": "one",
+            "mailbox": "Legacy/Entwürfe",
+            "uid": 42
+          }
+        ],
+        [
+          "removeIndex",
+          "one",
+          "Legacy/Entwürfe",
+          42
+        ]
+      ]
+    },
+    {
+      "name": "unsafe-discard-hides-on-IO-failure",
+      "input": {
+        "_accountId": "one",
+        "_draftUid": 42,
+        "_draftMailbox": "Legacy/Entwürfe"
+      },
+      "output": {
+        "localEmails": [],
+        "emails": [],
+        "archivedEmailIds": [],
+        "savedEmailIds": []
+      },
+      "trace": [
+        [
+          "rpc",
+          "maildir_delete",
+          {
+            "accountId": "one",
+            "mailbox": "Legacy/Entwürfe",
+            "uid": 42
+          }
+        ]
+      ]
+    },
+    {
+      "name": "unsaved-discard-noop",
+      "input": {},
+      "output": null,
+      "trace": []
+    },
+    {
+      "name": "latest-baseline-snapshot-normalization",
+      "input": [
+        {
+          "id": 1,
+          "initialData": {
+            "subject": "old"
+          },
+          "snapshot": {
+            "to": "",
+            "cc": "",
+            "bcc": "",
+            "subject": "",
+            "body": "<p>baseline</p>",
+            "attachments": [],
+            "_accountId": "one",
+            "_draftUid": 42,
+            "_draftMailbox": "Legacy/Entwürfe"
+          },
+          "detached": true,
+          "nativeLabel": "child"
+        },
+        {
+          "id": 2
+        }
+      ],
+      "output": {
+        "stored": [
+          {
+            "id": 1,
+            "initialData": {
+              "to": "",
+              "cc": "",
+              "bcc": "",
+              "subject": "",
+              "body": "<p>baseline</p>",
+              "attachments": [],
+              "_accountId": "one",
+              "_draftUid": 42,
+              "_draftMailbox": "Legacy/Entwürfe"
+            },
+            "detached": false,
+            "minimized": true
+          }
+        ],
+        "restored": [
+          {
+            "id": 1,
+            "initialData": {
+              "to": "",
+              "cc": "",
+              "bcc": "",
+              "subject": "",
+              "body": "<p>baseline</p>",
+              "attachments": [],
+              "_accountId": "one",
+              "_draftUid": 42,
+              "_draftMailbox": "Legacy/Entwürfe"
+            },
+            "detached": false,
+            "minimized": true
+          }
+        ]
+      },
+      "trace": []
+    },
+    {
+      "name": "hydrate-id-collision",
+      "input": {
+        "current": [
+          {
+            "id": 1,
+            "initialData": {
+              "subject": "opened before hydration"
+            }
+          }
+        ],
+        "restored": [
+          {
+            "id": 1,
+            "initialData": {
+              "to": "",
+              "cc": "",
+              "bcc": "",
+              "subject": "",
+              "body": "<p>baseline</p>",
+              "attachments": [],
+              "_accountId": "one",
+              "_draftUid": 42,
+              "_draftMailbox": "Legacy/Entwürfe"
+            },
+            "detached": false,
+            "minimized": true
+          }
+        ]
+      },
+      "output": [
+        {
+          "id": 1,
+          "initialData": {
+            "subject": "opened before hydration"
+          }
+        },
+        {
+          "id": 2,
+          "initialData": {
+            "to": "",
+            "cc": "",
+            "bcc": "",
+            "subject": "",
+            "body": "<p>baseline</p>",
+            "attachments": [],
+            "_accountId": "one",
+            "_draftUid": 42,
+            "_draftMailbox": "Legacy/Entwürfe"
+          },
+          "detached": false,
+          "minimized": true
+        }
+      ],
+      "trace": []
+    },
+    {
+      "name": "invalid-session-{bad",
+      "input": "{bad",
+      "output": [],
+      "trace": []
+    },
+    {
+      "name": "invalid-session-{}",
+      "input": "{}",
+      "output": [],
+      "trace": []
+    },
+    {
+      "name": "clear-empty-session",
+      "input": [],
+      "output": {
+        "storage": null
+      },
+      "trace": []
+    },
+    {
+      "name": "scheduled-no-draft-identity",
+      "input": {
+        "row": {
+          "id": "scheduled-1",
+          "accountId": "one",
+          "uid": 99,
+          "mailbox": "Scheduled",
+          "localTime": "2026-10-26T12:00",
+          "tz": "Europe/Vilnius",
+          "envelope": "{\"from\":\"alias@example.test\",\"remindDays\":3}"
+        },
+        "eml": {
+          "subject": "Draft",
+          "from": {
+            "address": "one@example.test"
+          },
+          "to": [
+            {
+              "address": "jane@example.test",
+              "name": "Doe, Jane"
+            }
+          ],
+          "cc": [
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "blind@example.test"
+            }
+          ],
+          "html": "<p>Words</p><hr data-mailvault-quote=\"forward\"><p>Original<img src=\"cid:logo\"></p>",
+          "text": "Words",
+          "attachments": [
+            {
+              "filename": "inline.png",
+              "contentType": "image/png",
+              "content": "AAEC",
+              "size": 3,
+              "contentId": "<logo>"
+            }
+          ],
+          "rawSource": "SW4tUmVwbHktVG86IDxwYXJlbnRAZXhhbXBsZS50ZXN0Pg0KUmVmZXJlbmNlczogPHJvb3RAZXhhbXBsZS50ZXN0Pg0KIDxwYXJlbnRAZXhhbXBsZS50ZXN0Pg0KDQpib2R5"
+        }
+      },
+      "output": {
+        "to": "jane@example.test",
+        "cc": "copy@example.test",
+        "bcc": "blind@example.test",
+        "subject": "Draft",
+        "body": "<p>Words</p>",
+        "inReplyTo": "<parent@example.test>",
+        "references": "<root@example.test> <parent@example.test>",
+        "attachments": [
+          {
+            "filename": "inline.png",
+            "contentType": "image/png",
+            "size": 3,
+            "content": "AAEC",
+            "isFromOriginal": true,
+            "cid": "logo"
+          }
+        ],
+        "_quotedHtml": "<p>Original<img src=\"cid:logo\"></p>",
+        "_forward": true,
+        "_contextHtml": "<p>Original<img src=\"cid:logo\"></p>",
+        "_showContext": true,
+        "_baseline": {
+          "to": "jane@example.test",
+          "subject": "Draft",
+          "body": "<p>Words</p>"
+        },
+        "_accountId": "one",
+        "_fromAddress": "alias@example.test",
+        "_scheduleDraft": {
+          "localTime": "2026-10-26T12:00",
+          "tz": "Europe/Vilnius"
+        },
+        "_remindDays": 3,
+        "_editScheduledId": "scheduled-1",
+        "_editScheduledRow": {
+          "accountId": "one",
+          "localTime": "2026-10-26T12:00",
+          "tz": "Europe/Vilnius"
+        }
+      },
+      "trace": []
+    },
+    {
+      "name": "same-webview-clock-counter",
+      "input": {},
+      "output": {
+        "uids": [
+          1792886400,
+          1792886401
+        ],
+        "distinct": true
+      },
+      "trace": []
+    }
+  ]
+}
