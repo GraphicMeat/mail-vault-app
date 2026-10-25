@@ -61,7 +61,7 @@ describe('saving what the daemon refreshed', () => {
   it('takes the refreshed pairs and saves each through updateOAuth2Tokens', async () => {
     expect(await sync.saveRefreshedTokens()).toBe(1);
     expect(calls('oauth2.take_refreshed')).toHaveLength(1);
-    expect(h.update).toHaveBeenCalledWith('g1', { accessToken: PAIR.accessToken, refreshToken: PAIR.refreshToken, expiresAt: PAIR.expiresAt });
+    expect(h.update).toHaveBeenCalledWith('g1', { accessToken: PAIR.accessToken, refreshToken: PAIR.refreshToken, expiresAt: PAIR.expiresAt, chain: PAIR.chain });
     expect(h.accounts[0]).toMatchObject({ oauth2AccessToken: PAIR.accessToken, oauth2RefreshToken: PAIR.refreshToken, oauth2ExpiresAt: PAIR.expiresAt });
   });
 

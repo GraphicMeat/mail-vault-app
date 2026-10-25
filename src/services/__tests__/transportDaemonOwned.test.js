@@ -217,3 +217,14 @@ describe('daemon-owned commands', () => {
     await expect(send('owned_cmd', {})).rejects.toBe(rpc);
   });
 });
+
+// Actual trusted classifier boundaries used by the account/credential adapters.
+describe('credential mutation compatibility classification', () => {
+  it.each(['errors.daemonUnavailable', 'prefix errors.daemonOutdated suffix', 'METHOD_NOT_FOUND', 'connection refused'])('does not turn %s into unsupported authority', async (message) => {
+    DAEMON_OWNED.add('credentials.save');
+    daemonCall.mockRejectedValue(new DaemonError(message, 'RPC_ERROR'));
+    const error = await send('credentials.save', { records: {} }).catch(e => e);
+    expect(error.code).not.toBe('DAEMON_OUTDATED');
+    if (message === 'errors.daemonUnavailable') expect(error.code).toBe('DAEMON_UNAVAILABLE');
+  });
+});
