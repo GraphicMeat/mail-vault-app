@@ -314,13 +314,30 @@ mod tests {
         assert_eq!(stored(&rig).keys().collect::<Vec<_>>(), vec!["b"]);
     }
 
-    #[tokio::test]
+    struct SaveTaskDrain(Vec<std::sync::mpsc::Receiver<()>>);
+    impl Drop for SaveTaskDrain {
+        fn drop(&mut self) {
+            for done in self.0.drain(..) {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() {
+                    eprintln!("credential save tasks did not drain; refusing fixture teardown");
+                    std::process::abort();
+                }
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn twenty_parallel_saves_to_different_ids_all_survive() {
         let rig = rig(Some(json!({"old": record("old", "keep")})));
+        let mut cleanup = SaveTaskDrain(Vec::new());
         let tasks: Vec<_> = (0..20)
             .map(|i| {
                 let state = Arc::clone(&rig.state);
+                let (done, receiver) = std::sync::mpsc::channel();
+                cleanup.0.push(receiver);
+                let completion = crate::credentials::TestTaskDone(done);
                 tokio::spawn(async move {
+                    let _completion = completion;
                     let id = format!("acct-{i}");
                     handle_request_for_test(
                         &state,
@@ -332,8 +349,9 @@ mod tests {
             })
             .collect();
         let mut versions = Vec::new();
-        for t in tasks {
-            let resp = t.await.unwrap();
+        let results = futures::future::join_all(tasks).await;
+        for result in results {
+            let resp = result.unwrap();
             assert!(resp.error.is_none(), "{:?}", resp.error);
             versions.push(resp.result.unwrap()["version"].as_u64().unwrap());
         }
@@ -506,24 +524,10 @@ mod tests {
     /// A write that outlives its clock (a keychain prompt nobody answers)
     /// keeps the lock until it returns, so a change asked for meanwhile is
     /// refused at once, and nothing that write lands overwrites a later one.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_parked_write_makes_the_next_change_busy_and_never_clobbers_a_later_one() {
-        use std::sync::atomic::Ordering::SeqCst;
         let rig = rig(Some(json!({"old": record("old", "keep")})));
-        struct ResetWriteTest;
-        impl Drop for ResetWriteTest {
-            fn drop(&mut self) {
-                crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, SeqCst);
-                crate::credentials::TEST_WRITE_GATE
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .take();
-            }
-        }
-        let _reset = ResetWriteTest;
-        crate::credentials::TEST_WRITE_TIMEOUT_MS.store(300, SeqCst);
-        let (release, parked) = std::sync::mpsc::channel::<()>();
-        *crate::credentials::TEST_WRITE_GATE.lock().unwrap() = Some(parked);
+        let mut gate = ParkedWrite::arm();
 
         let first = call(
             &rig,
@@ -541,14 +545,8 @@ mod tests {
         let elapsed = started.elapsed();
         let second_wrote = stored(&rig).contains_key("b");
 
-        release.send(()).unwrap();
-        tokio::time::timeout(Duration::from_secs(5), async {
-            while crate::credentials::WRITE_PARKED.load(SeqCst) {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("the parked write returned");
+        gate.wait_until_entered();
+        gate.finish();
         // Assert only after releasing and joining the synthetic late write.
         assert_eq!(
             first,
@@ -567,7 +565,6 @@ mod tests {
             json!({"records": {"c": record("c", "pc")}}),
         )
         .await;
-        crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, SeqCst);
         third.unwrap();
         let blob = stored(&rig);
         let mut ids: Vec<&String> = blob.keys().collect();
@@ -579,53 +576,7 @@ mod tests {
         );
     }
 
-    // The runtime keeps a second worker available so Drop can release and join
-    // a synthetic blocking job even while an assertion unwinds this test.
-    struct ParkedWrite {
-        release: Option<std::sync::mpsc::Sender<()>>,
-        entered: std::sync::mpsc::Receiver<()>,
-        done: Option<std::sync::mpsc::Receiver<()>>,
-    }
-
-    impl ParkedWrite {
-        fn arm() -> Self {
-            use crate::credentials::{TEST_WRITE_ENTERED, TEST_WRITE_FINISHED, TEST_WRITE_GATE, TEST_WRITE_TIMEOUT_MS};
-            let (release, gate) = std::sync::mpsc::channel();
-            let (started, entered) = std::sync::mpsc::channel();
-            let (finished, done) = std::sync::mpsc::channel();
-            *TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(gate);
-            *TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()) = Some(started);
-            *TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()) = Some(finished);
-            TEST_WRITE_TIMEOUT_MS.store(300, std::sync::atomic::Ordering::SeqCst);
-            Self { release: Some(release), entered, done: Some(done) }
-        }
-
-        fn wait_until_entered(&self) {
-            self.entered.recv_timeout(Duration::from_secs(5)).expect("the synthetic write entered its gate");
-        }
-
-        fn finish(&mut self) {
-            self.release.take();
-            self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5)).expect("terminal completion and exclusion release");
-            self.done.take();
-        }
-    }
-
-    impl Drop for ParkedWrite {
-        fn drop(&mut self) {
-            self.release.take();
-            if let Some(done) = self.done.take() {
-                if done.recv_timeout(Duration::from_secs(5)).is_err() {
-                    eprintln!("credential test could not drain its blocking write; refusing fixture teardown");
-                    std::process::abort();
-                }
-            }
-            crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, std::sync::atomic::Ordering::SeqCst);
-            crate::credentials::TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()).take();
-            crate::credentials::TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()).take();
-            crate::credentials::TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()).take();
-        }
-    }
+    use crate::credentials::TestWritePause as ParkedWrite;
 
     struct RecheckAck {
         owner: usize,

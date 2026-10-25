@@ -288,6 +288,8 @@ impl TokenStore {
     /// Lay a just-read record over the held entry: the later expiry wins. A
     /// record the daemon does not manage (or none) drops the entry.
     fn reconcile(&self, account_id: &str, record: &Value) -> Option<Entry> {
+        #[cfg(test)]
+        tests::before_publication(account_id);
         let mut entries = self.entries();
         let Some((grant, access_token, expires_at)) = grant_of(record) else {
             entries.remove(account_id);
@@ -431,10 +433,13 @@ impl TokenStore {
 async fn read_record(account_id: &str, read: Read) -> Result<(ImapConfig, Value), String> {
     #[cfg(test)]
     tests::record_credential_lookup(account_id);
-    match read {
+    let result = match read {
         Read::Guarded => credentials::resolve_account_with_record_guarded(account_id).await,
         Read::Quiet => credentials::resolve_account_with_record_quiet(account_id).await,
-    }
+    };
+    #[cfg(test)]
+    tests::record_read_finished(account_id);
+    result
 }
 
 /// The ONE function: a valid access token for `account_id`, refreshed first
@@ -494,6 +499,8 @@ async fn refresh(
         grant.client_id.clone(),
     );
     let result = mailvault_core::net_activity::with_account(grant.email.clone(), request).await;
+    #[cfg(test)]
+    tests::before_refresh_publication(account_id);
     let failure = match result {
         Ok(tokens) if !tokens.access_token.is_empty() => {
             let token = tokens.access_token.clone();
@@ -833,6 +840,219 @@ mod tests {
             .unwrap()
             .insert(id.into(), count.clone());
         (LookupTrap(id.into()), count)
+    }
+
+    type ReadHook = (String, std::sync::mpsc::Sender<()>, Option<std::sync::mpsc::Receiver<()>>);
+    static RECORD_READ_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+    static PUBLICATION_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+    static REFRESH_RESULT_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+
+    fn run_read_hook(hook: &Mutex<Option<ReadHook>>, id: &str) {
+        let taken = {
+            let mut held = hook.lock().unwrap_or_else(|e| e.into_inner());
+            if held.as_ref().is_some_and(|(owner, _, _)| owner == id) { held.take() } else { None }
+        };
+        if let Some((_, entered, gate)) = taken {
+            let _ = entered.send(());
+            if let Some(gate) = gate { let _ = gate.recv(); }
+        }
+    }
+    pub(super) fn record_read_finished(id: &str) { run_read_hook(&RECORD_READ_HOOK, id); }
+    pub(super) fn before_publication(id: &str) { run_read_hook(&PUBLICATION_HOOK, id); }
+    pub(super) fn before_refresh_publication(id: &str) { run_read_hook(&REFRESH_RESULT_HOOK, id); }
+
+    struct FreshRig {
+        _dir: tempfile::TempDir,
+        state: Arc<DaemonState>,
+        releases: Vec<std::sync::mpsc::Sender<()>>,
+        tasks: Vec<(tokio::task::JoinHandle<()>, std::sync::mpsc::Receiver<()>)>,
+        write: Option<credentials::TestWritePause>,
+        shared: Option<Arc<credentials::TestSharedBlobRead>>,
+        shared_done: Option<std::sync::mpsc::Receiver<()>>,
+        quiet_done: Option<std::sync::mpsc::Receiver<()>>,
+        _restore: credentials::TestEnvRestore,
+        _env: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl FreshRig {
+        fn new(record: Value) -> Self {
+            let env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+            let restore = credentials::TestEnvRestore::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+            store(&state, &[("g", &record)]);
+            Self { _dir:dir, state, releases:vec![], tasks:vec![], write:None, shared:None, shared_done:None, quiet_done:None, _restore:restore, _env:env }
+        }
+        fn spawn<T: Send + 'static>(&mut self, future: impl std::future::Future<Output=T> + Send + 'static) -> std::sync::mpsc::Receiver<T> {
+            let (result, receiver) = std::sync::mpsc::channel();
+            let (done, completion) = std::sync::mpsc::channel();
+            let guard = credentials::TestTaskDone(done);
+            let task = tokio::spawn(async move { let _guard = guard; let value = future.await; let _ = result.send(value); });
+            self.tasks.push((task, completion));
+            receiver
+        }
+        fn access(&mut self) -> std::sync::mpsc::Receiver<Result<Option<String>, TokenError>> {
+            let state=Arc::clone(&self.state);
+            self.spawn(async move { access_token(&state,"g",Read::Quiet).await })
+        }
+        fn request(&mut self, method: &'static str, params: Value) -> std::sync::mpsc::Receiver<crate::ipc::RpcResponse> {
+            let state=Arc::clone(&self.state);
+            self.spawn(async move { crate::server::handle_request_for_test(&state,method,params).await })
+        }
+        fn shared_pause(&mut self) -> std::sync::mpsc::Receiver<()> {
+            let (release,gate)=std::sync::mpsc::channel();
+            let (captured,read)=std::sync::mpsc::channel();
+            let (finished,done)=std::sync::mpsc::channel();
+            let control=Arc::new(credentials::TestSharedBlobRead {
+                path:self.state.app_dir.join("credentials.json"), gate:Mutex::new(Some(gate)), captured:Mutex::new(Some(captured)), finished:Mutex::new(Some(finished)), joined:Mutex::new(None), starts:0.into(),active:0.into(),max_active:0.into(),
+            });
+            *credentials::TEST_SHARED_BLOB_READ.lock().unwrap_or_else(|e|e.into_inner())=Some(Arc::clone(&control));
+            self.shared=Some(control);self.shared_done=Some(done);self.releases.push(release);read
+        }
+        fn join_notice(&self) -> std::sync::mpsc::Receiver<()> {
+            let (joined,notice)=std::sync::mpsc::channel();
+            *self.shared.as_ref().unwrap().joined.lock().unwrap_or_else(|e|e.into_inner())=Some(joined);notice
+        }
+        fn hook(&mut self, target: &Mutex<Option<ReadHook>>, gated: bool) -> std::sync::mpsc::Receiver<()> {
+            let (entered,notice)=std::sync::mpsc::channel();
+            let gate=if gated { let (release,gate)=std::sync::mpsc::channel();self.releases.push(release);Some(gate) } else {None};
+            *target.lock().unwrap_or_else(|e|e.into_inner())=Some(("g".into(),entered,gate));notice
+        }
+        fn release_all(&mut self) { self.releases.clear(); }
+        fn quiet_notice(&mut self) {
+            let (done,notice)=std::sync::mpsc::channel();
+            *TEST_RECHECK_DONE.lock().unwrap_or_else(|e|e.into_inner())=Some((Arc::as_ptr(&self.state) as usize,done));self.quiet_done=Some(notice);
+        }
+        fn finish_quiet(&mut self) { recv(self.quiet_done.as_ref().unwrap());self.quiet_done.take(); }
+    }
+    fn recv<T>(receiver:&std::sync::mpsc::Receiver<T>)->T { receiver.recv_timeout(Duration::from_secs(5)).expect("synthetic task/barrier completion") }
+    fn stale(result: &Result<Option<String>,TokenError>)->bool { matches!(result,Err(TokenError{kind:FailKind::Unreadable,fallback:None,..})) }
+    fn fresh_grant(rt:&str,token:&str)->Value { gmail(json!({"id":"g","oauth2RefreshToken":rt,"oauth2AccessToken":token,"oauth2ExpiresAt":now_ms()+3_600_000})) }
+    fn changed_request(record:&Value,delete:bool)->(&'static str,Value) { if delete {("credentials.delete",json!({"ids":["g"]}))}else{("credentials.save",json!({"records":{"g":record.to_string()}}))} }
+
+    impl Drop for FreshRig {
+        fn drop(&mut self) {
+            self.release_all();
+            self.write.take();
+            for (_,done) in self.tasks.drain(..) {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() { eprintln!("freshness test tasks did not drain");std::process::abort(); }
+            }
+            if let Some(done)=self.shared_done.take() {
+                if self.shared.as_ref().is_some_and(|s|s.starts.load(std::sync::atomic::Ordering::SeqCst)>0) && done.recv_timeout(Duration::from_secs(5)).is_err() { eprintln!("synthetic backend read did not drain");std::process::abort(); }
+            }
+            if let Some(done)=self.quiet_done.take() {
+                let unused={let mut hook=TEST_RECHECK_DONE.lock().unwrap_or_else(|e|e.into_inner());if hook.as_ref().is_some_and(|(owner,_)|*owner==Arc::as_ptr(&self.state) as usize){hook.take();true}else{false}};
+                if !unused && done.recv_timeout(Duration::from_secs(5)).is_err() {eprintln!("freshness quiet recheck did not drain");std::process::abort();}
+            }
+            credentials::TEST_SHARED_BLOB_READ.lock().unwrap_or_else(|e|e.into_inner()).take();
+            RECORD_READ_HOOK.lock().unwrap_or_else(|e|e.into_inner()).take();
+            PUBLICATION_HOOK.lock().unwrap_or_else(|e|e.into_inner()).take();
+            REFRESH_RESULT_HOOK.lock().unwrap_or_else(|e|e.into_inner()).take();
+        }
+    }
+
+    async fn post_completion_join(delete:bool) {
+        use std::sync::atomic::Ordering::SeqCst;
+        let old=fresh_grant("synthetic-old-grant","synthetic-old-token");
+        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
+        let mut rig=FreshRig::new(old);
+        let captured=rig.shared_pause();
+        rig.write=Some(credentials::TestWritePause::arm());
+        let (method,params)=changed_request(&new,delete);
+        let write=rig.request(method,params);
+        rig.write.as_ref().unwrap().wait_until_entered();
+        let timed=recv(&write);
+        let old_reader=rig.access();recv(&captured);
+        rig.write.as_mut().unwrap().finish();rig.write.take();
+        let joined=rig.join_notice();let current=rig.access();recv(&joined);
+        let starts_before_release=rig.shared.as_ref().unwrap().starts.load(SeqCst);
+        let active_before_release=rig.shared.as_ref().unwrap().active.load(SeqCst);
+        rig.release_all();
+        let prior=recv(&old_reader);let answer=recv(&current);
+        assert_eq!(timed.error.unwrap().message,"errors.keychainWriteFailed");
+        assert_eq!(starts_before_release,1);assert_eq!(active_before_release,1);
+        if delete { assert!(matches!(answer,Err(TokenError{kind:FailKind::NoRecord,..})),"post-completion delete read used the pre-write grant"); }
+        else { assert!(answer.ok().flatten().as_deref()==Some("synthetic-new-token"),"post-completion OAuth read used the pre-write grant"); }
+        assert!(stale(&prior),"the earlier read must refuse after invalidation");
+        assert_eq!(rig.shared.as_ref().unwrap().starts.load(SeqCst),2);
+        assert_eq!(rig.shared.as_ref().unwrap().max_active.load(SeqCst),1);
+    }
+
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn post_completion_oauth_read_does_not_join_old_blob() { post_completion_join(false).await; }
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn post_completion_delete_read_does_not_join_old_blob() { post_completion_join(true).await; }
+
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn prewrite_reader_cannot_publish_after_invalidation() {
+        for delete in [false,true] {
+            let old=fresh_grant("synthetic-old-grant","synthetic-old-token");
+            let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
+            let mut rig=FreshRig::new(old);
+            let flight=rig.state.tokens.flight("g");let held=flight.lock().await;
+            let read=rig.hook(&RECORD_READ_HOOK,false);let pending=rig.access();recv(&read);
+            let (method,params)=changed_request(&new,delete);let reply=recv(&rig.request(method,params));
+            drop(held);let answer=recv(&pending);
+            assert!(reply.error.is_none());
+            assert!(stale(&answer),"a pre-write reader re-trusted its old grant after completed invalidation");
+            let next=recv(&rig.access());
+            if delete {assert!(matches!(next,Err(TokenError{kind:FailKind::NoRecord,..})));}else{assert!(next.ok().flatten().as_deref()==Some("synthetic-new-token"));}
+        }
+    }
+
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn publication_fence_rejects_invalidation_before_entry_lock() {
+        let mut rig=FreshRig::new(fresh_grant("synthetic-old-grant","synthetic-old-token"));
+        let reached=rig.hook(&PUBLICATION_HOOK,true);let pending=rig.access();recv(&reached);
+        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
+        assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());
+        rig.release_all();let answer=recv(&pending);
+        assert!(stale(&answer),"publication after invalidation must be refused under the entries lock");
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"));
+        assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
+        assert!(recv(&rig.request("credentials.delete",json!({"ids":["g"]}))).error.is_none());
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"),"publication first must then be invalidated");
+    }
+
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn stale_recheck_cannot_retrust_its_prewrite_record() {
+        let mut old=fresh_grant("synthetic-old-grant","synthetic-expired-token");old["oauth2ExpiresAt"]=json!(1);
+        let mut rig=FreshRig::new(old);
+        let _mock=test_token_mock(vec![granted("synthetic-refreshed-token",Some("synthetic-rotated-refresh"))]);
+        assert!(recv(&rig.access()).is_ok());assert_eq!(rig.state.tokens.unsaved().len(),1);
+        let flight=rig.state.tokens.flight("g");let held=flight.lock().await;
+        let read=rig.hook(&RECORD_READ_HOOK,false);let state=Arc::clone(&rig.state);
+        let explicit=rig.spawn(async move {recheck_unsaved(&state).await});recv(&read);
+        let newer_read=rig.hook(&RECORD_READ_HOOK,true);rig.quiet_notice();
+        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
+        assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());recv(&newer_read);
+        drop(held);recv(&explicit);
+        let trusted=rig.state.tokens.has_trusted_token_for_test("g");
+        let unsaved=rig.state.tokens.unsaved().len();
+        rig.release_all();rig.finish_quiet();
+        assert!(!trusted,"an obsolete quiet recheck must leave the entry unchecked");assert_eq!(unsaved,1);
+        assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
+    }
+
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn obsolete_refresh_result_cannot_publish_token_or_cooldown() {
+        for granted_result in [true,false] {
+            let mut old=fresh_grant("synthetic-old-grant","synthetic-expired-token");old["oauth2ExpiresAt"]=json!(1);
+            let mut rig=FreshRig::new(old);
+            let response=if granted_result {granted("synthetic-obsolete-refresh",Some("synthetic-obsolete-rotation"))}else{(400,json!({"error":"invalid_grant"}).to_string())};
+            let _mock=test_token_mock(vec![response]);
+            let reached=rig.hook(&REFRESH_RESULT_HOOK,true);let pending=rig.access();recv(&reached);
+            let mut events=rig.state.events.subscribe();
+            let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
+            assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());
+            rig.release_all();let answer=recv(&pending);
+            assert!(stale(&answer),"an obsolete refresh completion must refuse without an old fallback");
+            assert!(rig.state.tokens.unsaved().is_empty());
+            assert!(rig.state.tokens.entries().get("g").unwrap().cooldown.is_none());
+            let announced:Vec<_>=std::iter::from_fn(||events.try_recv().ok()).filter_map(|line|mailvault_core::daemon_ipc::parse_event(&line)).filter(|(name,_)|name==REFRESHED_EVENT).collect();
+            assert!(announced.is_empty());assert_eq!(test_token_posts().len(),1,"no internal retry");
+            assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
+        }
     }
 
     // Every test here takes `credentials::test_env_lock` first and the token
