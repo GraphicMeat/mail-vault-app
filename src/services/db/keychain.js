@@ -371,10 +371,11 @@ export async function deleteCredentials(ids) {
 // daemon's copy, unless this window has written since the read started.
 let refreshing = null;
 let refreshAgain = false;
-async function refreshCache() {
+function refreshCache() {
   if (refreshing) { refreshAgain = true; return refreshing; }
   const epoch = connectionEpoch;
-  const task = (async () => {
+  const task = Promise.resolve().then(async () => {
+    try {
     if (!keychainLoaded) await loadKeychain();
     do {
       refreshAgain = false;
@@ -392,9 +393,14 @@ async function refreshCache() {
       cacheRevision += 1;
     } while (refreshAgain);
     return keychainCache;
-  })();
+    } finally {
+      // Clear before this promise settles: an event arriving immediately
+      // afterward must start a new read rather than join a completed task.
+      if (refreshing === task) refreshing = null;
+    }
+  });
   refreshing = task;
-  try { return await task; } finally { if (refreshing === task) refreshing = null; }
+  return task;
 }
 
 // A refresh pair can be published only after a current successful native read.
