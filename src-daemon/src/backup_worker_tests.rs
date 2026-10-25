@@ -34,7 +34,8 @@ fn rig() -> Rig {
         })
     }))
 }
-fn rig_with_resolve(resolve: Resolve) -> Rig {
+fn rig_with_resolve(resolve: Resolve) -> Rig { rig_with_provider(resolve,None) }
+fn rig_with_provider(resolve:Resolve,provider:Option<adapter::Provider>)->Rig {
     let dir = tempfile::tempdir().unwrap();
     let state = DaemonState::for_test(dir.path().join("mail"), dir.path().into(), true);
     state.clock.set(NOW);
@@ -47,14 +48,14 @@ fn rig_with_resolve(resolve: Resolve) -> Rig {
     let (call_tx, calls) = unbounded_channel();
     let services = Services {
         resolve,
-        provider: Arc::new(move |ctx| {
+        provider: provider.unwrap_or_else(||Arc::new(move |ctx| {
             let tx = call_tx.clone();
             Box::pin(async move {
                 let (reply, rx) = oneshot::channel();
                 tx.send(Call { ctx, reply }).unwrap();
                 rx.await.unwrap()
             })
-        }),
+        })),
     };
     let (tx, rx) = unbounded_channel();
     state.backup_worker.tx.set(tx).ok().unwrap();
@@ -1371,4 +1372,85 @@ async fn backup_access_provider_panic_retains_authority_and_guard() {
     assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));
     assert!(settings(&r.state)["backupHistory"]["one"].is_null());
     finish(r).await;
+}
+#[tokio::test]
+async fn backup_access_retry_receipt_is_execution_specific() {
+    let mut r=rig();let stamp=access_slot(&r);enabled(&r.state);automatic(&r.state,false);
+    let s=wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let first=s["pendingAccess"][0].clone();let a=access_attempt(&r,&first,"shell-a");
+    access_attach(&r,&a,&stamp,"/native-authorized").await;
+    let c=call(&mut r).await;c.reply.send(Err("retry fixture".into())).ok().unwrap();
+    let s=wait(&r.state,|s|s["active"].is_null() && s["queue"][0]["retries"]==1).await;
+    let retry=s["queue"][0].clone();assert_eq!(retry["runId"],first["runId"]);assert_ne!(retry["executionId"],first["executionId"]);
+    assert_eq!(access_query(&r,&a,false).await["state"],"drained");
+    r.state.clock.set(NOW+30_000);wake(&r.state);
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    assert!(r.calls.try_recv().is_err());
+    let b=access_attempt(&r,&retry,"shell-a");access_attach(&r,&b,&stamp,"/native-authorized").await;
+    let c=call(&mut r).await;
+    assert_eq!(access_attach(&r,&a,&stamp,"/redirect").await["state"],"drained");
+    assert_eq!(access_query(&r,&b,true).await["safeRelease"],false);
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state,|s|s["lastOutcomes"].as_array().is_some_and(|a|!a.is_empty() && a[0]["applied"]==true)).await;
+    assert_eq!(access_query(&r,&b,false).await["state"],"drained");finish(r).await;
+}
+#[tokio::test]
+async fn backup_access_joined_receipt_survives_failed_history_application() {
+    let mut r=rig();let stamp=access_slot(&r);let ack=manual(&r.state,"one","scope-history").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");access_attach(&r,&attempt,&stamp,"/native-authorized").await;
+    let c=call(&mut r).await;
+    let path=r.state.app_dir.join("frontend-settings.json");let saved=r.state.app_dir.join("saved-settings");
+    std::fs::rename(&path,&saved).unwrap();std::fs::create_dir(&path).unwrap();
+    c.reply.send(Ok(result(7))).ok().unwrap();
+    wait(&r.state,|s|s["lastOutcomes"][0]["applied"]==false).await;
+    assert_eq!(access_query(&r,&attempt,true).await["safeRelease"],true);
+    assert_eq!(access_attach(&r,&attempt,&stamp,"/redirect").await["state"],"drained");
+    std::fs::remove_dir(&path).unwrap();std::fs::rename(saved,&path).unwrap();wake(&r.state);
+    wait(&r.state,|s|s["requests"]["scope-history"]["status"]=="success").await;
+    assert_eq!(settings(&r.state)["backupHistory"]["one"].as_array().unwrap().len(),1);assert!(r.calls.try_recv().is_err());
+    finish(r).await;
+}
+#[tokio::test]
+async fn backup_access_slot_changed_during_credentials_blocks_provider() {
+    let (entered_tx,entered_rx)=oneshot::channel();let entered=Arc::new(Mutex::new(Some(entered_tx)));
+    let (release_tx,release_rx)=oneshot::channel();let release=Arc::new(Mutex::new(Some(release_rx)));
+    let mut r=rig_with_resolve(Arc::new(move|_,_,_| {
+        let entered=entered.lock().unwrap().take();let release=release.lock().unwrap().take();
+        Box::pin(async move {if let Some(entered)=entered {entered.send(()).ok();}if let Some(release)=release {release.await.ok();}Ok(serde_json::from_value(json!({"email":"one@test","imapHost":"127.0.0.1","imapPort":1})).unwrap())})
+    }));
+    let stamp=access_slot(&r);let ack=manual(&r.state,"one","credential-slot").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");access_attach(&r,&attempt,&stamp,"/old-native-root").await;
+    entered_rx.await.unwrap();
+    let ping=handle_request_for_test(&r.state,"daemon.ping",json!({})).await;assert!(ping.error.is_none());
+    assert_eq!(access_query(&r,&attempt,false).await["safeRelease"],false);
+    app_db::with(&r.state.app_dir,|c|app_db::locations::save_meta(c,"external-backup","/new-choice","native",2,false)).unwrap();
+    release_tx.send(()).ok();
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty() && s["pendingAccess"][0]["executionId"]!=ack["executionId"]).await;
+    assert_eq!(access_query(&r,&attempt,false).await["state"],"drained");assert!(r.calls.try_recv().is_err());finish(r).await;
+}
+
+#[tokio::test]
+async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal() {
+    use mailvault_core::mirror_mutation::MirrorRoot;
+    let (entered_tx,entered_rx)=oneshot::channel();let entered=Arc::new(Mutex::new(Some(entered_tx)));
+    let provider:adapter::Provider=Arc::new(move|ctx| {
+        (ctx.on_progress)(frame(&ctx));
+        if let Some(entered)=entered.lock().unwrap().take(){entered.send(()).ok();}
+        adapter::provider()(ctx)
+    });
+    let r=rig_with_provider(Arc::new(|_,_,_|Box::pin(async {Ok(serde_json::from_value(json!({"email":"one@test","imapHost":"127.0.0.1","imapPort":1})).unwrap())})),Some(provider));
+    let stamp=access_slot(&r);let mirror=tempfile::tempdir().unwrap();
+    let cur=mailvault_core::maildir::mirror_cur(mirror.path(),"one@test","INBOX").unwrap();std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),b"legacy queued copy").unwrap();
+    app_db::with(&r.state.app_dir,|c|app_db::ops::purge_append_legacy(c,&BTreeMap::from([("one@test|INBOX".into(),vec![7])]))).unwrap();
+    let root=MirrorRoot::resolve(mirror.path()).unwrap();let (locked_tx,locked_rx)=oneshot::channel();let (release_tx,release_rx)=std::sync::mpsc::channel();
+    let holding=tokio::task::spawn_blocking(move||root.mutate(|_| {locked_tx.send(()).ok();release_rx.recv().unwrap();Ok(())}));locked_rx.await.unwrap();
+    let ack=manual(&r.state,"one","real-blocking-scope").await;wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");access_attach(&r,&attempt,&stamp,mirror.path().to_str().unwrap()).await;entered_rx.await.unwrap();
+    rpc(&r.state,"backup.cancel",json!({"runId":ack["runId"]})).await;
+    let before=access_query(&r,&attempt,true).await;let claimed=r.state.backup_runs.lock().unwrap().contains_key("one");let file_remains=cur.join("7.eml").exists();
+    release_tx.send(()).unwrap();holding.await.unwrap().unwrap();wait(&r.state,|s|s["active"].is_null()).await;
+    assert_eq!(before["safeRelease"],false);assert!(claimed);assert!(file_remains);
+    assert_eq!(access_query(&r,&attempt,false).await["state"],"drained");finish(r).await;
 }

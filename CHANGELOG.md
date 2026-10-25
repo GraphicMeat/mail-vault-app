@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep native backup folder access bound to its exact execution through reconnects and cancellation, releasing it only after verified rejection or joined completion. Automatic scheduling and the backup UI retain their current owner.
+
 - Add the staged native backup queue with joined completion, safe cancellation and idempotent recovery. Full IMAP backups use the background connection lane, leaving reader priority permits available. Automatic scheduling and the existing backup UI retain their current owner during migration.
 
 - Preserve concurrent native backup history, status and snapshot times when unrelated settings are saved, including the shell fallback.

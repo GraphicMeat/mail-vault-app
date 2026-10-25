@@ -3185,7 +3185,9 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "backup.run_now"
         | "backup.cancel"
         | "backup.stop"
-        | "backup.schedule.status" => Some(Duration::from_secs(30)),
+        | "backup.schedule.status"
+        | "backup.attach_access"
+        | "backup.access_status" => Some(Duration::from_secs(30)),
 
         // Task 4.4 / decision 8: inline-blocking, same reasoning as
         // archive_emails/bulk_delete_emails above, the whole ZIP
