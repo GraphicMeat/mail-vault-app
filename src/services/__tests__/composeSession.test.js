@@ -58,3 +58,33 @@ describe('compose UI session', () => {
     ]);
   });
 });
+
+describe('stable draft session recovery', () => {
+  it('deduplicates a stable draft and preserves shorter newer unsaved content and accepted location', () => {
+    const merged = mergeComposeSession(
+      [{ id: 1, initialData: { _draftId: 'same', _draftRevision: 2, _draftAcceptedRevision: 2, body: 'old long disk text', _draftUid: 22 } }],
+      [{ id: 2, initialData: { _draftId: 'same', _draftRevision: 3, _draftAcceptedRevision: 1, body: 'x', _draftUid: 11, _draftContent: { payload: { html: 'x' } } } }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].snapshot || merged[0].initialData).toMatchObject({ body: 'x', _draftRevision: 3, _draftAcceptedRevision: 2, _draftUid: 22 });
+    expect(merged[0].id).toBe(1);
+  });
+  it('keeps divergent equal revision snapshots as separate recoverable content without two owners', () => {
+    const merged = mergeComposeSession(
+      [{ id: 1, initialData: { _draftId: 'same', _draftRevision: 3, _draftAcceptedRevision: 2, body: 'left' } }],
+      [{ id: 1, initialData: { _draftId: 'same', _draftRevision: 3, _draftAcceptedRevision: 2, body: 'right' } }],
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.map(w => (w.snapshot || w.initialData).body)).toEqual(['left', 'right']);
+    expect(merged.filter(w => (w.snapshot || w.initialData)._draftId === 'same')).toHaveLength(1);
+    expect(new Set(merged.map(w => w.id)).size).toBe(2);
+  });
+  it('fills canonical identity into an unversioned session without replacing its complete text', () => {
+    const merged = mergeComposeSession(
+      [{ id: 1, initialData: { _accountId: 'a', _draftMailbox: 'Drafts', _draftUid: 10, body: 'unsaved' } }],
+      [{ id: 2, initialData: { _draftId: 'adopted', _draftRevision: 1, _draftAcceptedRevision: 1, _accountId: 'a', _draftMailbox: 'Drafts', _draftUid: 10, body: 'disk' } }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].snapshot || merged[0].initialData).toMatchObject({ body: 'unsaved', _draftId: 'adopted', _draftAcceptedRevision: 1 });
+  });
+});

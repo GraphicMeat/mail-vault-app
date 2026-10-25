@@ -74,6 +74,7 @@ vi.mock('../../services/localDrafts', () => ({
   saveLocalDraft,
   deleteLocalDraft,
   newDraftUid: () => 1,
+  newDraftId: () => "stable-draft",
 }));
 vi.mock('../../services/workflows/messageMutations', () => ({
   markAnswered: vi.fn().mockResolvedValue(undefined),
@@ -133,12 +134,13 @@ vi.mock('../../stores/settingsStore', () => {
 const { ComposeModal } = await import('../ComposeModal');
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+const accepted = (request, uid = 42) => ({ draftId: request.draftId, revision: request.revision, disposition: 'saved', cleanup: 'complete', discarded: false, pending: null, cleanupIdentities: [], current: { identity: { accountId: request.accountId, mailbox: 'LegacyDrafts', uid }, entry: { uid, draftId: request.draftId, revision: request.revision } }, accountId: request.accountId, mailbox: 'LegacyDrafts', uid });
 const seed = { to: '', cc: '', bcc: '', subject: '', body: '<p>typed</p>', attachments: [], _accountId: 'acct-1', _draftUid: 42, _draftMailbox: 'LegacyDrafts' };
 const props = { mode: 'new', onClose() {}, onMinimize() {}, onSaveState() {} };
 async function tick() { await act(async () => { await vi.advanceTimersByTimeAsync(300); }); }
 beforeEach(() => {
   vi.useFakeTimers(); settings.lastComposeIdentity = null; settings.composeOpenMode = undefined;
-  saveLocalDraft.mockReset().mockResolvedValue(undefined);
+  saveLocalDraft.mockReset().mockImplementation(async request => accepted(request));
   deleteLocalDraft.mockReset().mockResolvedValue(undefined);
   resolveDraftsMailbox.mockReset().mockResolvedValue('Drafts'); readAttachments.mockReset();
 });
@@ -187,17 +189,20 @@ describe('complete draft revisions at the actual component boundary', () => {
       expect(saveLocalDraft.mock.calls.at(-1)[0].payload.attachments[0].content).toBe('QkJC');
     } finally { readerSpy.mockRestore(); }
   });
-  it('freezes account and physical identity while old folder resolution waits', async () => {
-    const folder = deferred(); resolveDraftsMailbox.mockReturnValueOnce(folder.promise).mockResolvedValue('SecondDrafts');
+  it('freezes account and identity while the old native save waits', async () => {
+    const save = deferred(); saveLocalDraft.mockReturnValueOnce(save.promise);
     render(<ComposeModal {...props} initialData={{ ...seed, _draftMailbox: null }} />); await tick();
     fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 two@example.test' } }); await tick();
-    await act(async () => { folder.resolve('FirstDrafts'); });
-    expect(saveLocalDraft.mock.calls.map(([request]) => [request.accountId, request.mailbox])).toEqual([['acct-1', 'FirstDrafts'], ['acct-2', 'SecondDrafts']]);
+    const first = saveLocalDraft.mock.calls[0][0];
+    await act(async () => { save.resolve(accepted(first)); });
+    expect(saveLocalDraft.mock.calls.map(([request]) => [request.accountId, request.fromAddress, request.draftId])).toEqual([['acct-1', 'me@example.test', 'stable-draft'], ['acct-2', 'two@example.test', 'stable-draft']]);
+    expect(saveLocalDraft.mock.calls[1][0].revision).toBeGreaterThan(first.revision);
+    expect(resolveDraftsMailbox).not.toHaveBeenCalled();
   });
   it('keeps the old durable draft if destination save fails', async () => {
     const durable = new Map([['acct-1/LegacyDrafts/42', 'old text']]);
     deleteLocalDraft.mockImplementation(async ({ accountId, mailbox, uid }) => { durable.delete(`${accountId}/${mailbox}/${uid}`); });
-    saveLocalDraft.mockImplementation(async request => { if (request.accountId === 'acct-2') throw Error('destination unavailable'); durable.set(`${request.accountId}/${request.mailbox}/${request.uid}`, request.payload.text); });
+    saveLocalDraft.mockImplementation(async request => { if (request.accountId === 'acct-2') throw Error('destination unavailable'); durable.set(`${request.accountId}/LegacyDrafts/42`, request.payload.text); return accepted(request); });
     render(<ComposeModal {...props} initialData={seed} />); await tick();
     fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 two@example.test' } }); await tick();
     expect(durable.get('acct-1/LegacyDrafts/42')).toBe('typed');
@@ -208,7 +213,58 @@ describe('complete draft revisions at the actual component boundary', () => {
     fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>latest</p>' } });
     fireEvent.click(screen.getByTestId('compose-detach')); await act(async () => {});
     expect(onDetach).not.toHaveBeenCalled();
-    await act(async () => { save.resolve({ uid: 42, mailbox: 'LegacyDrafts' }); });
+    await act(async () => { save.resolve(accepted(saveLocalDraft.mock.calls[0][0])); });
     expect(onDetach).toHaveBeenCalledTimes(1); expect(onDetach.mock.calls[0][0].body).toBe('<p>latest</p>');
+  });
+});
+
+describe('revision recovery at the actual component boundary', () => {
+  it('separates newer issued content from an older accepted save reply', async () => {
+    const first = deferred(); const second = deferred();
+    saveLocalDraft.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const onSaveState = vi.fn(); const snapshotRef = { current: null };
+    render(<ComposeModal {...props} initialData={seed} onSaveState={onSaveState} snapshotRef={snapshotRef} />); await tick();
+    const older = saveLocalDraft.mock.calls[0][0];
+    fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>x</p>' } }); await tick();
+    const issued = onSaveState.mock.calls.at(-1)[0];
+    expect(issued._draftRevision).toBeGreaterThan(older.revision);
+    expect(issued._draftAcceptedRevision).toBe(0);
+    await act(async () => { first.resolve(accepted(older, 100)); });
+    const pending = onSaveState.mock.calls.at(-1)[0];
+    expect(pending.body).toBe('<p>x</p>'); expect(pending._draftRevision).toBe(issued._draftRevision);
+    expect(pending._draftAcceptedRevision).toBe(older.revision); expect(pending._draftUid).toBe(100);
+    await act(async () => { second.resolve(accepted(saveLocalDraft.mock.calls[1][0], 101)); });
+    expect((await snapshotRef.current())._draftUid).toBe(101);
+  });
+  it('retries unchanged failed content with the same complete revision after restoration', async () => {
+    saveLocalDraft.mockRejectedValueOnce(Error('vault unavailable'));
+    const onSaveState = vi.fn(); const snapshotRef = { current: null };
+    const view = render(<ComposeModal {...props} initialData={seed} onSaveState={onSaveState} snapshotRef={snapshotRef} />); await tick();
+    const request = saveLocalDraft.mock.calls[0][0];
+    expect(screen.getByRole('alert').textContent).toContain('vault unavailable');
+    const saved = await snapshotRef.current(); view.unmount();
+    render(<ComposeModal {...props} initialData={saved} />); await tick();
+    expect(saveLocalDraft).toHaveBeenCalledTimes(2);
+    expect(saveLocalDraft.mock.calls[1][0]).toEqual(request);
+  });
+  it('does not accept submitted content when native reports a superseded revision', async () => {
+    const save = deferred(); saveLocalDraft.mockReturnValueOnce(save.promise);
+    const onSaveState = vi.fn(); const snapshotRef = { current: null };
+    render(<ComposeModal {...props} initialData={seed} onSaveState={onSaveState} snapshotRef={snapshotRef} />); await tick();
+    const request = saveLocalDraft.mock.calls[0][0];
+    await act(async () => { save.resolve({ ...accepted({ ...request, revision: 8 }, 108), disposition: 'superseded' }); });
+    const saved = await snapshotRef.current();
+    expect(saved.body).toBe('<p>typed</p>'); expect(saved._draftRevision).toBe(request.revision);
+    expect(saved._draftAcceptedRevision).toBe(8); expect(saved._draftUid).toBe(108);
+    expect(screen.getByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await tick();
+    expect(saveLocalDraft.mock.calls[1][0]).toEqual(request);
+  });
+  it('allocates a stable identity for blank detach without saving a blank draft', async () => {
+    const onDetach = vi.fn().mockResolvedValue(undefined);
+    render(<ComposeModal {...props} onDetach={onDetach} />); await tick();
+    fireEvent.click(screen.getByTestId('compose-detach')); await act(async () => {});
+    expect(onDetach.mock.calls[0][0]).toMatchObject({ _draftId: 'stable-draft', _draftRevision: 0, _draftAcceptedRevision: 0 });
+    expect(saveLocalDraft).not.toHaveBeenCalled();
   });
 });

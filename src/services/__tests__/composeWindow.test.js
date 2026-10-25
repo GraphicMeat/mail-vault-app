@@ -218,3 +218,17 @@ describe('compose window ownership', () => {
     expect(isComposeMessage(null, 'draft-7')).toBe(false);
   });
 });
+
+it('preserves newer child snapshot when a delayed older revision arrives before attach', async () => {
+  const update = vi.fn(); const open = vi.fn().mockResolvedValue('compose-revisions');
+  const owner = createComposeWindowOwner({ open, emitTo: vi.fn().mockResolvedValue(undefined), update, close: vi.fn(), queueSend: vi.fn() });
+  const old = { ...snapshot(), _draftId: 'stable', _draftRevision: 2, _draftAcceptedRevision: 2, _draftUid: 20 };
+  const latest = { ...old, body: 'x', _draftRevision: 3, _draftAcceptedRevision: 2 };
+  const handoff = owner.detach({ id: 101, mode: 'new', snapshot: old });
+  await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+  ready(owner, 101, token); owner.receive({ composeId: '101', token, requestId: 'init', type: 'initialized' }); await handoff;
+  owner.receive({ composeId: '101', token, requestId: 'new', type: 'snapshot', payload: latest });
+  owner.receive({ composeId: '101', token, requestId: 'old', type: 'snapshot', payload: old });
+  owner.receive({ composeId: '101', token, requestId: 'attach', type: 'attach' });
+  await vi.waitFor(() => expect(update).toHaveBeenCalledWith(101, expect.objectContaining({ detached: false, initialData: expect.objectContaining({ body: 'x', _draftRevision: 3 }) })));
+});
