@@ -569,17 +569,20 @@ async fn accounts_fallback(
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let dir = mailvault_core::paths::app_data_dir()
-        .map_err(|_| "errors.accountsWriteFailed".to_string())?;
-    accounts_fallback_at(dir, method, params).await
+    accounts_fallback_at(None, method, params).await
 }
 
 async fn accounts_fallback_at(
-    dir: std::path::PathBuf,
+    dir: Option<std::path::PathBuf>,
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || {
+        let dir = match dir {
+            Some(dir) => dir,
+            None => mailvault_core::paths::app_data_dir()
+                .map_err(|_| "errors.accountsWriteFailed".to_string())?,
+        };
         let doc = mailvault_core::accounts_doc::shared(&dir);
         mailvault_core::accounts_doc::run(
             &doc,
@@ -5343,7 +5346,11 @@ mod accounts_fallback_tests {
         let credentials = dir.path().join("credentials.json");
         fs::write(&credentials, "synthetic-unreadable").unwrap();
         let call = |method: &str, params| {
-            accounts_fallback_at(dir.path().to_path_buf(), method.to_owned(), params)
+            accounts_fallback_at(
+                Some(dir.path().to_path_buf()),
+                method.to_owned(),
+                params,
+            )
         };
         let list = call("accounts.list", json!({})).await.unwrap();
         let base = list["version"].as_u64().unwrap();

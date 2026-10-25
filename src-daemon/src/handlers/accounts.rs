@@ -400,12 +400,26 @@ mod tests {
         );
     }
 
-    /// The daemon holds a token for the account: a request naming its param
-    /// `account` would get it injected. Neither the event, the reply nor the
-    /// file may ever carry a secret.
+    /// A usable unexpired synthetic grant would populate the trusted cache
+    /// if injection ran. An extra account param must not trigger that IO;
+    /// mutation outputs still contain only nonsecret metadata.
     #[tokio::test]
     async fn no_secret_reaches_the_file_the_event_or_the_reply() {
         let (dir, state) = rig();
+        let _mock = crate::handlers::oauth2::test_token_mock(Vec::new());
+        let native_token = "synthetic-native-token";
+        let stored = json!({
+            "id":"g", "email":"g@gmail.test", "imapHost":"imap.gmail.com",
+            "authType":"oauth2", "oauth2Provider":"google",
+            "oauth2ClientId":mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,
+            "oauth2AccessToken":native_token, "oauth2RefreshToken":"synthetic-refresh",
+            "oauth2ExpiresAt":chrono::Utc::now().timestamp_millis() + 3_600_000,
+        });
+        std::fs::write(
+            dir.path().join("credentials.json"),
+            json!({"g":stored.to_string()}).to_string(),
+        )
+        .unwrap();
         let mut rx = state.events.subscribe();
         let secret = "ya29.SECRET-token";
         let reply = call(
@@ -418,6 +432,10 @@ mod tests {
         )
         .await
         .unwrap();
+        assert!(
+            !state.tokens.has_trusted_token_for_test("g"),
+            "native account routes must not look up an OAuth grant"
+        );
         assert!(!reply.to_string().contains(secret));
         let text = std::fs::read_to_string(dir.path().join("accounts.json")).unwrap();
         assert!(
@@ -441,6 +459,16 @@ mod tests {
         .await
         .unwrap();
         assert!(rx.try_recv().is_err());
+        let token = crate::oauth_tokens::access_token(
+            &state,
+            "g",
+            crate::oauth_tokens::Read::Quiet,
+        )
+        .await
+        .unwrap();
+        assert_eq!(token.as_deref(), Some(native_token));
+        assert!(state.tokens.has_trusted_token_for_test("g"));
+        assert!(crate::handlers::oauth2::test_token_posts().is_empty());
     }
 
     /// An older release left passwords and tokens in accounts.json. The
