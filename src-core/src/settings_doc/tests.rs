@@ -669,3 +669,48 @@ fn rebased_ui_defaults_preserve_new_native_keys_but_remove_explicit_old_fields()
         .get("snapshotLastTimes")
         .is_none());
 }
+
+#[test]
+fn raw_fallback_preserves_bytes_without_metadata_and_rejects_nonobjects() {
+    let d = dir();
+    let raw = " { \n \"synthetic\" : [1, 2] } \n";
+    write_document(d.path(), raw).unwrap();
+    assert_eq!(fs::read(d.path().join(FILE_NAME)).unwrap(), raw.as_bytes());
+    assert!(!d.path().join(VERSION_NAME).exists());
+    assert!(backups(d.path()).is_empty());
+    for invalid in ["[]", "null", "broken"] {
+        assert_eq!(write_document(d.path(), invalid), Err("errors.settingsInvalid".into()));
+        assert_eq!(fs::read(d.path().join(FILE_NAME)).unwrap(), raw.as_bytes());
+    }
+    assert!(!d.path().join(VERSION_NAME).exists());
+    assert!(backups(d.path()).is_empty());
+}
+
+#[test]
+fn rebased_store_keeps_native_fields_and_other_stores_replace_whole() {
+    let d = dir();
+    let doc = SettingsDoc::open(d.path());
+    let base = json!({"version":3,"state":{"language":"en","remove":true,"nested":{"remove":true}}});
+    doc.replace(&json!({"mailvault-settings":base,"other":{"kept":true,"remove":true}}),None).unwrap();
+    doc.patch(&json!({"mailvault-settings":{"state":{"backupHistory":{"one":[1]},"backupState":{"one":"done"},"snapshotLastTimes":{"one":42}}}}),None).unwrap();
+    doc.replace_rebased(&json!({"mailvault-settings":{"version":4,"state":{"language":"de","nested":{"literalNull":null}}},"other":{"kept":false}}),&json!({"mailvault-settings":base,"other":{"kept":true,"remove":true}}),None).unwrap();
+    let got = doc.get(None).unwrap().values;
+    assert_eq!(got["mailvault-settings"],json!({"version":4,"state":{"language":"de","nested":{"literalNull":null},"backupHistory":{"one":[1]},"backupState":{"one":"done"},"snapshotLastTimes":{"one":42}}}));
+    assert_eq!(got["other"],json!({"kept":false}));
+}
+
+#[test]
+fn changed_keys_are_sorted_unique_and_noop_keeps_all_document_bytes() {
+    let d = dir();
+    let doc = SettingsDoc::open(d.path());
+    let first = doc.patch(&json!({"z":0,"a":0}),None).unwrap();
+    assert_eq!(first.changed,vec!["a","z"]);
+    let change = doc.patch(&json!({"z":1,"a":1}),None).unwrap();
+    assert_eq!(change.changed,vec!["a","z"]);
+    let before = fs::read(doc.path()).unwrap();
+    let sidecar = fs::read(d.path().join(VERSION_NAME)).unwrap();
+    let noop = doc.patch(&json!({"z":1,"a":1}),Some(change.version)).unwrap();
+    assert_eq!(noop,Change {version:change.version,changed:vec![]});
+    assert_eq!(fs::read(doc.path()).unwrap(),before);
+    assert_eq!(fs::read(d.path().join(VERSION_NAME)).unwrap(),sidecar);
+}
