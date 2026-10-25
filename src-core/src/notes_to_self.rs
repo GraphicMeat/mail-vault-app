@@ -22,7 +22,9 @@ pub fn normalize_identity(addr: &str) -> String {
 /// Gmail/Googlemail ignore local dots and plus tags; other domains fold case.
 pub fn fold_identity(addr: &str) -> String {
     let trimmed = addr.to_lowercase();
-    let Some(at) = trimmed.rfind('@') else { return trimmed };
+    let Some(at) = trimmed.rfind('@') else {
+        return trimmed;
+    };
     let local = &trimmed[..at];
     let domain = &trimmed[at + 1..];
     if !GMAIL_DOMAINS.contains(&domain) {

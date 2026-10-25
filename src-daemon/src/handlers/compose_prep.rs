@@ -119,8 +119,10 @@ pub(crate) async fn route(
     let answer = tokio::task::spawn_blocking(move || {
         let full_message = method == "compose.reply_context"
             && params.get("kind").and_then(Value::as_str) == Some("message");
-        if !full_message && serde_json::to_vec(&params).map_err(|_| UNAVAILABLE)?.len()
-            > compose_prep::MAX_REQUEST_BYTES {
+        if !full_message
+            && serde_json::to_vec(&params).map_err(|_| UNAVAILABLE)?.len()
+                > compose_prep::MAX_REQUEST_BYTES
+        {
             return Err(UNAVAILABLE);
         }
         let loaded = load(&app)?;

@@ -258,45 +258,90 @@ fn settings_and_entitlement_are_native_inputs() {
     assert_eq!(compose_prep::check(&p, &ctx, 0).unwrap()["kind"], "ready");
 }
 
-#[path="support/compose_prep_supplement.rs"]
+#[path = "support/compose_prep_supplement.rs"]
 mod supplement;
 #[test]
 fn actual_js_whitespace_identity_paths_match() {
-    let f=supplement::fixture();
-    let mut mismatches=Vec::new();
+    let f = supplement::fixture();
+    let mut mismatches = Vec::new();
     for c in f["identityCases"].as_array().unwrap() {
-        let i=&c["input"];
-        let ctx=Context{accounts:serde_json::from_value(i["accounts"].clone()).unwrap(),settings:i["settings"].clone(),settings_version:7};
-        let p=json!({"kind":"message","requestId":c["name"],"accountId":"one","pickedFrom":i["picked"],"mode":i["mode"],"original":{"header":i["message"]},"presentation":{"originalLabel":"Original","dateLabel":"","subjectCandidate":"Re: Topic"}});
-        let out=compose_prep::reply_context(&p,&ctx).unwrap();
-        if out["to"]!=c["output"]["to"]||out["cc"]!=c["output"]["cc"] {mismatches.push(c["name"].clone());}
-        assert_eq!(out["bcc"],"");
+        let i = &c["input"];
+        let ctx = Context {
+            accounts: serde_json::from_value(i["accounts"].clone()).unwrap(),
+            settings: i["settings"].clone(),
+            settings_version: 7,
+        };
+        let p = json!({"kind":"message","requestId":c["name"],"accountId":"one","pickedFrom":i["picked"],"mode":i["mode"],"original":{"header":i["message"]},"presentation":{"originalLabel":"Original","dateLabel":"","subjectCandidate":"Re: Topic"}});
+        let out = compose_prep::reply_context(&p, &ctx).unwrap();
+        if out["to"] != c["output"]["to"] || out["cc"] != c["output"]["cc"] {
+            mismatches.push(c["name"].clone());
+        }
+        assert_eq!(out["bcc"], "");
     }
-    assert!(mismatches.is_empty(),"source-derived whitespace recipient mismatches: {mismatches:?}");
+    assert!(
+        mismatches.is_empty(),
+        "source-derived whitespace recipient mismatches: {mismatches:?}"
+    );
 }
 #[test]
 fn actual_js_complete_large_quote_bytes_match() {
-    let ctx=Context{accounts:serde_json::from_value(json!([{"id":"one","email":"owner@example.test"}])).unwrap(),settings:json!({}),settings_version:7};
-    let mut refusals=Vec::new();
+    let ctx = Context {
+        accounts: serde_json::from_value(json!([{"id":"one","email":"owner@example.test"}]))
+            .unwrap(),
+        settings: json!({}),
+        settings_version: 7,
+    };
+    let mut refusals = Vec::new();
     for case in supplement::fixture()["largeCases"].as_array().unwrap() {
-        match compose_prep::reply_context(&supplement::request(case),&ctx) {Ok(out)=>supplement::assert_digests(case,&out),Err(error)=>refusals.push((case["spec"]["name"].clone(),error))}
+        match compose_prep::reply_context(&supplement::request(case), &ctx) {
+            Ok(out) => supplement::assert_digests(case, &out),
+            Err(error) => refusals.push((case["spec"]["name"].clone(), error)),
+        }
     }
-    assert!(refusals.is_empty(),"source-supported complete messages refused: {refusals:?}");
+    assert!(
+        refusals.is_empty(),
+        "source-supported complete messages refused: {refusals:?}"
+    );
 }
 #[test]
 fn shared_identity_wrapper_keeps_its_existing_trim_contract() {
     use mailvault_core::notes_to_self::normalize_identity;
-    assert_eq!(normalize_identity("\u{feff}OWNER@example.test\u{feff}"),"\u{feff}owner@example.test\u{feff}");
-    assert_eq!(normalize_identity("\u{85}OWNER@example.test\u{85}"),"owner@example.test");
-    assert_eq!(normalize_identity("  J.ohn+tag@googlemail.com  "),"john@gmail.com");
+    assert_eq!(
+        normalize_identity("\u{feff}OWNER@example.test\u{feff}"),
+        "\u{feff}owner@example.test\u{feff}"
+    );
+    assert_eq!(
+        normalize_identity("\u{85}OWNER@example.test\u{85}"),
+        "owner@example.test"
+    );
+    assert_eq!(
+        normalize_identity("  J.ohn+tag@googlemail.com  "),
+        "john@gmail.com"
+    );
 }
 
 #[test]
 fn complete_message_inputs_still_require_valid_shape_and_fences() {
-    let f=supplement::fixture();let c=f["largeCases"].as_array().unwrap().iter().find(|c|c["spec"]["name"]=="original-over-2MiB-selected").unwrap();
-    let ctx=context(&fixture());
-    let mut p=supplement::request(c);p["requestId"]=json!("");assert!(compose_prep::reply_context(&p,&ctx).is_err());
-    p["requestId"]=json!("valid");p["expectedSettingsVersion"]=json!(8);assert_eq!(compose_prep::reply_context(&p,&ctx).unwrap_err(),"errors.settingsConflict");
-    p.as_object_mut().unwrap().remove("expectedSettingsVersion");p["original"]["html"]=json!(42);assert!(compose_prep::reply_context(&p,&ctx).is_err());
-    let mailto=json!({"kind":"mailto","requestId":"mailto","href":format!("mailto:a@example.test?body={}","x".repeat(compose_prep::MAX_REQUEST_BYTES+1))});assert!(compose_prep::reply_context(&mailto,&ctx).is_err());
+    let f = supplement::fixture();
+    let c = f["largeCases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["spec"]["name"] == "original-over-2MiB-selected")
+        .unwrap();
+    let ctx = context(&fixture());
+    let mut p = supplement::request(c);
+    p["requestId"] = json!("");
+    assert!(compose_prep::reply_context(&p, &ctx).is_err());
+    p["requestId"] = json!("valid");
+    p["expectedSettingsVersion"] = json!(8);
+    assert_eq!(
+        compose_prep::reply_context(&p, &ctx).unwrap_err(),
+        "errors.settingsConflict"
+    );
+    p.as_object_mut().unwrap().remove("expectedSettingsVersion");
+    p["original"]["html"] = json!(42);
+    assert!(compose_prep::reply_context(&p, &ctx).is_err());
+    let mailto = json!({"kind":"mailto","requestId":"mailto","href":format!("mailto:a@example.test?body={}","x".repeat(compose_prep::MAX_REQUEST_BYTES+1))});
+    assert!(compose_prep::reply_context(&mailto, &ctx).is_err());
 }
