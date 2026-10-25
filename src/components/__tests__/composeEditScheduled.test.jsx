@@ -53,6 +53,7 @@ vi.mock('../../services/localDrafts', async () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),
   saveLocalDraft: vi.fn((await import('../../test/draftReply')).savedDraftReply),
   deleteLocalDraft: vi.fn().mockResolvedValue(undefined),
+  cleanupDraftFor: vi.fn().mockResolvedValue({ discarded: true, cleanup: 'complete' }),
   newDraftUid: () => 1,
   newDraftId: () => "stable-draft",
 }));

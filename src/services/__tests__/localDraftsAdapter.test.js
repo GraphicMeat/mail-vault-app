@@ -149,3 +149,21 @@ it('does not publish a delayed child reconciliation after its owner fence change
   expect(store.state.localEmails).toEqual([]);
   expect((await import('../draftProjection')).getDraftProjection().managed).toEqual([]);
 });
+
+
+it('conditionally retires only the original issued bound and publishes a validated native skip', async () => {
+  const skipped = { ...reply(5, 50), discarded: false, skipped: true, reason: 'newer_revision', newerRevision: 5, throughRevision: 3 };
+  send.mockResolvedValue(skipped);
+  await expect(drafts.cleanupDraftFor({ _draftId: 'd', _draftRevision: 5, _draftCleanupThroughRevision: 3 })).resolves.toEqual(skipped);
+  expect(send.mock.calls).toEqual([['drafts.discard', { draftId: 'd', throughRevision: 3 }]]);
+  expect(store.state.localEmails.map(row => row.uid)).toEqual([50]);
+});
+it('never degrades an unbound or malformed conditional cleanup to unconditional discard', async () => {
+  expect(await drafts.cleanupDraftFor({ _draftId: 'd' })).toMatchObject({ discarded: false, skipped: true, reason: 'unbound_revision' });
+  expect(send).not.toHaveBeenCalled();
+  send.mockResolvedValueOnce({ draftId: 'd', discarded: true, cleanup: 'complete' });
+  await expect(drafts.cleanupDraftFor({ _draftId: 'd', _draftRevision: 3 })).rejects.toThrow();
+  expect(send.mock.calls).toEqual([['drafts.discard', { draftId: 'd', throughRevision: 3 }]]);
+  send.mockResolvedValueOnce({ ...reply(2), skipped: true, reason: 'newer_revision', newerRevision: 2, throughRevision: 3 });
+  await expect(drafts.cleanupDraftFor({ _draftId: 'd', _draftRevision: 3 })).rejects.toThrow();
+});

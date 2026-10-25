@@ -1,9 +1,9 @@
 /** Native compose handoff: use real Tauri window handles, never browser tabs. */
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder, visibleRowSubjects } from './helpers.js';
 import {
   openComposeFresh, setField, fieldValue, testidPresent, clickBubble, closeComposeHard, mailStoreSet, modalOpen, settingsCall,
   waitForNativeCompose, openComposeFreshNative, inlineComposeShown, closeNativeCompose,
-  dropFiles, pdfFile, attachments, composeOverflow, MODAL,
+  dropFiles, pdfFile, attachments, composeOverflow, MODAL, nativeComposeRpc, waitForLocalDraft,
 } from './composeHelpers.js';
 
 // A native window's field is present before its state has arrived: a second WebView2 hydrates slower
@@ -108,6 +108,42 @@ describe('Connected Compose Detach', function () {
     await settingsCall('setComposeOpenMode', 'app');
     await clickBubble();
     expect(await fieldValue('compose-subject')).toBe('Typed in detached window');
+  });
+
+  it('projects child COW saves and account moves into main without a refresh', async () => {
+    await closeComposeHard();
+    const [account, other] = browser.mockAccounts;
+    await switchToFolder(account.email, 'Drafts', { requireRows: false });
+    await openComposeFresh(); await setField('compose-to', 'projection@example.test');
+    await setField('compose-subject', 'Main projection before detach');
+    await waitForLocalDraft(account.id, 'Main projection before detach');
+    const initial = (await nativeComposeRpc('drafts.list')).managed.find(record => record.current?.entry?.subject === 'Main projection before detach');
+    if (!initial) throw new Error('Native draft metadata missing before child projection control');
+    await browser.$('[data-testid="compose-detach"]').click();
+    await browser.switchToWindow(await waitForNativeCompose(mainHandle, 'Projection compose did not detach'));
+    await browser.waitUntil(() => testidPresent('compose-subject'), { timeout: 15_000 });
+    await setField('compose-subject', 'Child accepted COW projection');
+    let current;
+    await browser.waitUntil(async () => {
+      current = (await nativeComposeRpc('drafts.list', { draftId: initial.draftId })).managed[0];
+      return current?.current?.entry?.subject === 'Child accepted COW projection';
+    }, { timeout: 15_000, timeoutMsg: 'Child native COW save did not commit' });
+    expect(current.current.identity.uid).not.toBe(initial.current.identity.uid);
+    await browser.switchToWindow(mainHandle);
+    await browser.waitUntil(async () => (await visibleRowSubjects()).some(subject => subject.includes('Child accepted COW projection')),
+      { timeout: 15_000, timeoutMsg: 'Main did not project the accepted child COW identity' });
+    const rows = await browser.execute(id => window.__MAIL_STORE__.getState().localEmails.filter(row => row.draftId === id).map(row => ({ uid: row.uid, subject: row.subject })), initial.draftId);
+    expect(rows).toEqual([{ uid: current.current.identity.uid, subject: 'Child accepted COW projection' }]);
+    const child = (await browser.getWindowHandles()).find(handle => handle !== mainHandle);
+    await browser.switchToWindow(child); await setField('compose-from', `${other.id} ${other.email}`);
+    await browser.waitUntil(async () => (await nativeComposeRpc('drafts.list', { draftId: initial.draftId })).managed[0]?.current?.identity?.accountId === other.id,
+      { timeout: 15_000, timeoutMsg: 'Child account move did not commit' });
+    await browser.switchToWindow(mainHandle);
+    await browser.waitUntil(async () => !(await visibleRowSubjects()).some(subject => subject.includes('Child accepted COW projection')),
+      { timeout: 15_000, timeoutMsg: 'Main retained a stale source-account draft after child move' });
+    await switchToFolder(other.email, 'Drafts', { requireRows: false });
+    await browser.waitUntil(async () => (await visibleRowSubjects()).some(subject => subject.includes('Child accepted COW projection')),
+      { timeout: 15_000, timeoutMsg: 'Destination account lost the child draft projection' });
   });
 
   it('keeps an attachment with a long name inside a pop-out compose window', async () => {

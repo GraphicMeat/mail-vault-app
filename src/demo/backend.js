@@ -595,11 +595,16 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     }
     if (method === 'drafts.discard') {
       if (!p.draftId) throw new Error('Draft identity required');
+      const conditional = Object.hasOwn(p, 'throughRevision');
+      if (conditional && (!Number.isSafeInteger(p.throughRevision) || p.throughRevision < 0)) throw new Error('Invalid draft cleanup revision');
       const record = draftRecords.get(p.draftId) || { draftId: p.draftId, revision: 0, current: null };
+      if (conditional && !record.discarded && record.revision > p.throughRevision) return {
+        ...draftView(record), skipped: true, reason: 'newer_revision', newerRevision: record.revision, throughRevision: p.throughRevision,
+      };
       if (record.current) { const row = find(record.current.identity); if (row) row.vaultPresent = false; }
       record.current = null; record.discarded = true; draftRecords.set(p.draftId, record);
       emit('demo:state', { type: 'draft-discard' });
-      return { draftId: p.draftId, discarded: true, cleanup: 'complete', cleanupIdentities: [], simulated: true };
+      return { draftId: p.draftId, discarded: true, cleanup: 'complete', cleanupIdentities: [], simulated: true, ...(conditional ? { throughRevision: p.throughRevision } : {}) };
     }
     if (p.includeContent && !p.draftId && !p.identity) throw new Error('Select one draft');
     const record = p.draftId ? draftRecords.get(p.draftId) : p.identity ? (p.includeContent ? adoptDraft(p.identity) : draftOwner(p.identity)) : null;

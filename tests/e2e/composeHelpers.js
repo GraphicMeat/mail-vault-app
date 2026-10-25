@@ -852,3 +852,22 @@ export async function waitForLocalDraft(accountId, subject, timeout = 15_000) {
   }
   return raw;
 }
+
+
+/** Real daemon calls used to inspect native compose state and seed crash boundaries. */
+export async function nativeComposeRpc(method, params = {}) {
+  const result = await invoke('daemon_rpc', { method, params });
+  if (!result.ok) throw new Error(`${method}: ${result.error}`);
+  return result.value;
+}
+
+export async function persistedComposeData(subject) {
+  let data;
+  await browser.waitUntil(async () => {
+    const settings = await nativeComposeRpc('settings.get', { keys: ['mailvault-compose-session'] });
+    data = (settings.values['mailvault-compose-session'] || []).map(window => window.snapshot || window.initialData)
+      .find(snapshot => snapshot?.subject === subject);
+    return Boolean(data?._draftId && data._draftContent && data._draftRevision === data._draftAcceptedRevision);
+  }, { timeout: 15_000, interval: 200, timeoutMsg: `Complete compose session for ${subject} did not reach native settings` });
+  return data;
+}

@@ -77,6 +77,7 @@ vi.mock('../../services/localDrafts', () => ({
   resolveDraftsMailbox,
   saveLocalDraft,
   deleteLocalDraft,
+  cleanupDraftFor: vi.fn().mockResolvedValue({ discarded: true, cleanup: 'complete' }),
   newDraftUid: () => 1,
   newDraftId: () => "stable-draft",
 }));
@@ -447,7 +448,7 @@ it('preserves exact known native-only text and sender when that contender become
 
 // Terminal intent must fence the real editor and be owned by the same hook App uses.
 describe('terminal draft owner with the real editor', () => {
-  const window = () => ({ id: 4, initialData: { ...nativeDraft, _draftId: 'terminal', _draftRevision: 0, _draftAcceptedRevision: 0 } });
+  const window = () => ({ id: 4, initialData: { ...nativeDraft, _draftId: 'terminal', _draftRevision: 0, _draftAcceptedRevision: 0, _draftUid: null, _draftMailbox: null } });
   const discardClick = async () => {
     fireEvent.click(screen.getByTestId('compose-discard'));
     const dialog = screen.getByTestId('compose-discard-dialog');
@@ -485,12 +486,12 @@ describe('terminal draft owner with the real editor', () => {
     const rpc = deferred(); const flush = vi.fn().mockRejectedValueOnce(Error('settings disk unavailable')).mockResolvedValue(undefined);
     const discard = vi.fn(() => rpc.promise); const controls = { current: null }; const persist = vi.fn(); const loader = () => Promise.resolve([]);
     render(<HydrationHarness {...{ loader, persist, controls }} initial={[{ ...window(), minimized: true }]}
-      terminalOptions={{ discard, flush }} />); await act(async () => {});
+      terminalOptions={{ discard, discardThrough: discard, flush }} />); await act(async () => {});
     let operation; await act(async () => { operation = controls.current.terminalCleanup({ ...nativeDraft, _draftId: 'terminal', body: 'latest minimized' }, 'sent', 4); });
     await act(async () => { controls.current.fresh(); });
     await act(async () => { rpc.reject(Error('lost ACK')); await operation; });
     expect(controls.current.windows).toHaveLength(2);
-    const terminal = controls.current.windows.find(w => w.id === 4);
+    const terminal = controls.current.windows.find(w => w.snapshot?._draftTerminal === 'sent');
     expect(terminal.snapshot).toMatchObject({ body: 'latest minimized', _draftTerminal: 'sent', _draftCleanupState: 'unknown' });
     expect(terminal.snapshot._draftCleanupPersistError).toBe(true);
     expect(persist.mock.calls.at(-1)[0]).toHaveLength(2);
@@ -530,7 +531,7 @@ describe('terminal draft owner with the real editor', () => {
 
 
 describe('automatic cleanup protects reopened writers', () => {
-  it('keeps a real reopened editor with unpublished text after old outbox cancellation and acceptance', async () => {
+  it.each([false, true])('keeps a real reopened editor after old outbox cancellation and acceptance (published=%s)', async published => {
     const controls = { current: null }; const loader = () => Promise.resolve([]); const cleanup = vi.fn();
     const data = { ...nativeDraft, _draftId: 'reopened' }; const sent = deferred();
     render(<HydrationHarness loader={loader} persist={vi.fn()} controls={controls} initial={[{ id: 30, initialData: data }]}
@@ -538,7 +539,8 @@ describe('automatic cleanup protects reopened writers', () => {
     const editor = screen.getByTestId('editor-stub');
     fireEvent.change(editor, { target: { value: '<p>unpublished complete words</p>' } });
     // No timer/publication: parent is deliberately behind this actual editor.
-    expect(controls.current.windows[0].snapshot).toBeUndefined();
+    if (published) { await tick(); expect(controls.current.windows[0].snapshot._draftRevision).toBe(3); }
+    else expect(controls.current.windows[0].snapshot).toBeUndefined();
     const { createComposeSlice } = await import('../../stores/slices/composeSlice');
     let state; const get = () => state; const set = update => { state = { ...state, ...(typeof update === 'function' ? update(state) : update) }; };
     state = createComposeSlice(set, get);
@@ -582,4 +584,23 @@ describe('automatic cleanup protects reopened writers', () => {
     expect(recovered.body).toBe('<p>retain contender</p>'); expect(recovered._draftId).not.toBe('admission');
     expect(recovered._draftUid).toBeUndefined(); expect(recovered._draftTerminal).toBeUndefined();
   });
+});
+
+
+it.each(['unknown', 'pending'])('the standalone editor freezes discard and exposes a cleanup-only retry after %s', async outcome => {
+  const onClose = vi.fn();
+  if (outcome === 'unknown') deleteLocalDraft.mockRejectedValueOnce(Error('internal draft identity byte-proof failure'));
+  else deleteLocalDraft.mockResolvedValueOnce({ draftId: 'stable-draft', discarded: true, cleanup: 'pending' });
+  deleteLocalDraft.mockResolvedValueOnce({ draftId: 'stable-draft', discarded: true, cleanup: 'complete' });
+  render(<ComposeModal {...props} onClose={onClose} initialData={{ ...seed, _draftUid: null, _draftMailbox: null }} />);
+  fireEvent.click(screen.getByTestId('compose-discard'));
+  fireEvent.click([...screen.getByTestId('compose-discard-dialog').querySelectorAll('button')].find(button => button.textContent === 'Discard'));
+  await act(async () => {}); await tick();
+  expect(onClose).not.toHaveBeenCalled(); expect(saveLocalDraft).not.toHaveBeenCalled();
+  expect(deleteLocalDraft).toHaveBeenCalledWith({ draftId: 'stable-draft' });
+  const status = screen.getByTestId('compose-terminal-status');
+  expect(status.textContent).not.toContain('byte-proof');
+  expect(screen.getByTestId('compose-send').disabled).toBe(true);
+  fireEvent.click(status.querySelector('button')); await act(async () => {});
+  expect(deleteLocalDraft).toHaveBeenCalledTimes(2); expect(onClose).toHaveBeenCalledTimes(1);
 });

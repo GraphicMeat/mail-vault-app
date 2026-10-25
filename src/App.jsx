@@ -460,13 +460,13 @@ function App() {
           aliases: prefs.aliases?.[account.id], sendAsAddress: prefs.sendAsAddresses?.[account.id],
         }) };
         if (scheduled) {
-          await scheduleCompose({ snapshot, account, settings, cleanupDraft: cleanupComposeDraft });
+          await scheduleCompose({ snapshot, account, settings, cleanupDraft: (data, kind) => cleanupComposeDraft(data, kind, session.id) });
           return;
         }
         const composeState = { mode: session.mode, replyTo, initialData: snapshot };
         useMailStore.getState().queueSend(
           composeState,
-          createComposeSend({ snapshot, mode: session.mode, replyTo, account, settings, cleanupDraft: cleanupComposeDraft }),
+          createComposeSend({ snapshot, mode: session.mode, replyTo, account, settings, cleanupDraft: (data, kind) => cleanupComposeDraft(data, kind, session.id) }),
           snapshot._composeDelay ?? delay,
         );
       },

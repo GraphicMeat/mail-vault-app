@@ -119,6 +119,25 @@ export function discardDraftFor(saved) {
     mailbox: saved?._draftMailbox, uid: saved?._draftUid });
 }
 
+/** Retire only the issued revision that actually left compose. */
+export async function cleanupDraftFor(saved) {
+  const draftId = saved?._draftId;
+  const throughRevision = saved?._draftCleanupThroughRevision ?? saved?._draftRevision;
+  if (!draftId || !Number.isSafeInteger(throughRevision) || throughRevision < 0) {
+    return { draftId, discarded: false, skipped: true, reason: 'unbound_revision' };
+  }
+  const startedGeneration = getDraftProjection().generation;
+  const response = await send('drafts.discard', { draftId, throughRevision });
+  const terminal = response?.discarded === true && ['complete', 'pending'].includes(response.cleanup);
+  const skipped = response?.discarded === false && response.skipped === true && response.reason === 'newer_revision'
+    && Number.isSafeInteger(response.newerRevision) && response.newerRevision > throughRevision;
+  if (response?.draftId !== draftId || response.throughRevision !== throughRevision || (!terminal && !skipped)) {
+    throw new Error(t('compose.draftCleanupUnknown'));
+  }
+  publishDraftOutcome(response, startedGeneration);
+  return response;
+}
+
 // ── Reopening a saved draft ──
 //
 // A draft row is not a message to read: it is the message the user was

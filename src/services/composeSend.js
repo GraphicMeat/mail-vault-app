@@ -3,7 +3,7 @@
 
 import * as api from './api';
 import * as db from './db';
-import { deleteLocalDraft } from './localDrafts';
+import { cleanupDraftFor } from './localDrafts';
 import { markAnswered, markForwarded } from './workflows/messageMutations';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
@@ -196,10 +196,7 @@ const EDITED_ROW_DUE_MARGIN_MS = 6 * 60 * 1000;
 const cleanupAcceptedDraft = async (snapshot, kind, cleanupDraft) => {
   try {
     if (cleanupDraft) await cleanupDraft(snapshot, kind);
-    else if (snapshot._draftId) await deleteLocalDraft({ draftId: snapshot._draftId });
-    else if (snapshot._draftUid && snapshot._draftMailbox) await deleteLocalDraft({
-      accountId: snapshot._draftAccountId || snapshot._accountId, mailbox: snapshot._draftMailbox, uid: snapshot._draftUid,
-    });
+    else await cleanupDraftFor(snapshot);
   } catch (error) { console.warn('[composeSend] accepted mail draft cleanup remains pending:', error); }
 };
 

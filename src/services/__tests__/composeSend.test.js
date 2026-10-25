@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  invoke, stageOutgoing, sendStaged, deleteLocalDraft, markAnswered, markForwarded, createSchedule, ensureFreshToken,
+  invoke, stageOutgoing, sendStaged, cleanupDraftFor, markAnswered, markForwarded, createSchedule, ensureFreshToken,
   replaceSchedule, cancelSchedule, billing, listeners, daemonCall,
 } = vi.hoisted(() => ({
   daemonCall: vi.fn().mockResolvedValue({}),
@@ -18,7 +18,7 @@ const {
   invoke: vi.fn().mockResolvedValue(undefined),
   stageOutgoing: vi.fn(),
   sendStaged: vi.fn(),
-  deleteLocalDraft: vi.fn().mockResolvedValue(undefined),
+  cleanupDraftFor: vi.fn().mockResolvedValue(undefined),
   markAnswered: vi.fn().mockResolvedValue(undefined),
   markForwarded: vi.fn().mockResolvedValue(undefined),
   createSchedule: vi.fn().mockResolvedValue(undefined),
@@ -41,7 +41,7 @@ vi.mock('../api', () => ({
 }));
 vi.mock('../db', () => ({ getCachedMailboxes: vi.fn().mockResolvedValue([]), saveAccount: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../authUtils', () => ({ ensureFreshToken: (...args) => ensureFreshToken(...args) }));
-vi.mock('../localDrafts', () => ({ deleteLocalDraft: (...args) => deleteLocalDraft(...args) }));
+vi.mock('../localDrafts', () => ({ cleanupDraftFor: (...args) => cleanupDraftFor(...args) }));
 vi.mock('../workflows/messageMutations', () => ({
   markAnswered: (...args) => markAnswered(...args),
   markForwarded: (...args) => markForwarded(...args),
@@ -106,7 +106,7 @@ beforeEach(() => {
   stageOutgoing.mockImplementation(async () => stagedReply());
   sendStaged.mockReset();
   sendStaged.mockImplementation(async () => sentReply());
-  deleteLocalDraft.mockReset().mockResolvedValue(undefined);
+  cleanupDraftFor.mockReset().mockResolvedValue(undefined);
   markAnswered.mockClear();
   markForwarded.mockClear();
   createSchedule.mockReset();
@@ -221,7 +221,7 @@ describe('createComposeSend', () => {
     expect(sendParams().map(p => [p.uid, p.messageId, p.mailbox])).toEqual([
       [STAGED_UID, '<one@example.test>', 'Sent'], [STAGED_UID, '<one@example.test>', 'Sent'],
     ]);
-    expect(deleteLocalDraft).toHaveBeenCalledWith({ accountId: 'acct-1', mailbox: 'Drafts', uid: 42 });
+    expect(cleanupDraftFor).toHaveBeenCalledWith(snapshot);
     expect(mailStore.useMailStore.getState().sentEmails).toHaveLength(1);
     expect(mailStore.useMailStore.getState().sentEmails[0]).toMatchObject({
       uid: STAGED_UID, messageId: '<one@example.test>', inReplyTo: '<parent@example.test>',
@@ -313,7 +313,7 @@ describe('createComposeSend', () => {
 
     await createComposeSend({ snapshot: switchedDraft, mode: 'new', replyTo: null, account: sender, settings: { displayName: 'Sender B' } })();
 
-    expect(deleteLocalDraft).toHaveBeenCalledWith({ accountId: 'acct-a', mailbox: 'Drafts', uid: 42 });
+    expect(cleanupDraftFor).toHaveBeenCalledWith(expect.objectContaining({ _draftAccountId: 'acct-a', _draftUid: 42 }));
   });
 });
 
@@ -452,7 +452,7 @@ describe('scheduleCompose', () => {
     expect(ensureFreshToken).not.toHaveBeenCalled();
     expect(createSchedule).not.toHaveBeenCalled();
     expect(replaceSchedule).not.toHaveBeenCalled();
-    expect(deleteLocalDraft).not.toHaveBeenCalled();
+    expect(cleanupDraftFor).not.toHaveBeenCalled();
   });
 
   it('rejects an incomplete schedule before touching account credentials', async () => {
@@ -475,7 +475,7 @@ describe('scheduleCompose', () => {
     await expect(scheduleCompose({ snapshot: scheduledSnapshot, account, settings: { displayName: 'Alias name' } }))
       .rejects.toThrow('daemon unavailable');
 
-    expect(deleteLocalDraft).not.toHaveBeenCalled();
+    expect(cleanupDraftFor).not.toHaveBeenCalled();
   });
 
   const editSnapshot = (accountId = 'acct-1') => ({
@@ -497,7 +497,7 @@ describe('scheduleCompose', () => {
       email: expect.objectContaining({ to: 'recipient@example.test', subject: 'A subject' }),
       localTime: '2026-10-02T10:00', tz: 'Europe/Vilnius', fireAt: expect.any(Number), sentMailbox: 'Sent',
     }));
-    expect(deleteLocalDraft).toHaveBeenCalledWith({ accountId: 'acct-1', mailbox: 'Drafts', uid: 42 });
+    expect(cleanupDraftFor).toHaveBeenCalledWith(snapshot);
   });
 
   it('keeps everything when the daemon refuses the edit because the row already fired', async () => {
@@ -506,7 +506,7 @@ describe('scheduleCompose', () => {
     await expect(scheduleCompose({ snapshot: editSnapshot(), account })).rejects.toThrow('E_SCHEDULED_NOT_EDITABLE');
 
     expect(createSchedule).not.toHaveBeenCalled();
-    expect(deleteLocalDraft).not.toHaveBeenCalled();
+    expect(cleanupDraftFor).not.toHaveBeenCalled();
   });
 
   /// A row is bound to the account whose vault holds it: an edit moved to
@@ -531,7 +531,7 @@ describe('scheduleCompose', () => {
     await expect(scheduleCompose({ snapshot: editSnapshot('acct-other'), account })).rejects.toThrow('E_SCHEDULED_NOT_EDITABLE');
 
     expect(createSchedule).not.toHaveBeenCalled();
-    expect(deleteLocalDraft).not.toHaveBeenCalled();
+    expect(cleanupDraftFor).not.toHaveBeenCalled();
   });
 
   it('keeps the draft when the new row fails after the old one was cancelled', async () => {
@@ -540,7 +540,7 @@ describe('scheduleCompose', () => {
     await expect(scheduleCompose({ snapshot: editSnapshot('acct-other'), account })).rejects.toThrow('daemon unavailable');
 
     expect(cancelSchedule).toHaveBeenCalledWith('row-1');
-    expect(deleteLocalDraft).not.toHaveBeenCalled();
+    expect(cleanupDraftFor).not.toHaveBeenCalled();
   });
 });
 
@@ -559,7 +559,7 @@ describe('accepted delivery is separate from terminal cleanup', () => {
   });
   it('uses the canonical captured ID without a UID in the standalone send fallback', async () => {
     await createComposeSend({ snapshot: { ...snapshot, _draftId: 'no-uid', _draftUid: null }, account })();
-    expect(deleteLocalDraft).toHaveBeenCalledWith({ draftId: 'no-uid' });
+    expect(cleanupDraftFor).toHaveBeenCalledWith(expect.objectContaining({ _draftId: 'no-uid', _draftUid: null }));
   });
   it.each([false, true])('keeps accepted schedule create/replace after cleanup rejects (edit=%s)', async edit => {
     const cleanupDraft = vi.fn().mockRejectedValue(Error('lost cleanup'));
@@ -583,15 +583,15 @@ describe('accepted delivery is separate from terminal cleanup', () => {
 // already accepted send and invite the real outbox's transport retry.
 describe('accepted physical draft cleanup cannot become a delivery failure', () => {
   it('keeps SMTP acceptance and Sent projection when the actual draft deletion rejects', async () => {
-    deleteLocalDraft.mockRejectedValueOnce(Error('discard acknowledgement lost'));
+    cleanupDraftFor.mockRejectedValueOnce(Error('discard acknowledgement lost'));
     await expect(createComposeSend({ snapshot, account, mode: 'new' })()).resolves.toBeUndefined();
-    expect(sendStaged).toHaveBeenCalledTimes(1); expect(deleteLocalDraft).toHaveBeenCalledTimes(1);
+    expect(sendStaged).toHaveBeenCalledTimes(1); expect(cleanupDraftFor).toHaveBeenCalledTimes(1);
     expect(mailStore.useMailStore.getState().sentEmails).toHaveLength(1);
   });
   it('keeps an accepted schedule when the actual draft deletion rejects', async () => {
-    deleteLocalDraft.mockRejectedValueOnce(Error('discard acknowledgement lost'));
+    cleanupDraftFor.mockRejectedValueOnce(Error('discard acknowledgement lost'));
     await expect(scheduleCompose({ snapshot: { ...snapshot, _scheduleDraft: { localTime: '2099-01-01T09:00', tz: 'UTC' } }, account })).resolves.toBeUndefined();
-    expect(createSchedule).toHaveBeenCalledTimes(1); expect(deleteLocalDraft).toHaveBeenCalledTimes(1);
+    expect(createSchedule).toHaveBeenCalledTimes(1); expect(cleanupDraftFor).toHaveBeenCalledTimes(1);
     expect(cancelSchedule).not.toHaveBeenCalled();
   });
 });

@@ -17,7 +17,7 @@
  *     the accidental one the harness used to hand out.
  */
 
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, reloadApp } from './helpers.js';
 import { SEND_REFUSED_TO } from './mockImap.js';
 import {
   openComposeFresh,
@@ -42,6 +42,10 @@ import {
   closeBubble,
   outboxItems,
   settingsCall,
+  nativeComposeRpc,
+  persistedComposeData,
+  waitForLocalDraft,
+  localIndex,
 } from './composeHelpers.js';
 
 const DISCARD_DIALOG = '[data-testid="compose-discard-dialog"]';
@@ -90,6 +94,30 @@ describe('Connected Compose Lifecycle', function () {
     // The delay select reads the global setting on open — put it back so the
     // next case starts from "Send now".
     await settingsCall('setSendDelay', 0);
+  });
+
+  it('restores a recorded discard as cleanup only without an editor, transport or schedule', async function () {
+    const subject = 'Cleanup-only restart boundary';
+    await freshCompose(); await fillDraft({ subject });
+    const account = browser.mockAccounts[0];
+    await waitForLocalDraft(account.id, subject);
+    expect(await clickButtonTitle('Minimize')).toBe(true);
+    const snapshot = await persistedComposeData(subject);
+    const scheduledBefore = await nativeComposeRpc('scheduled.list');
+    // This is the durable UI state at a crash after intent, before RPC ACK.
+    // Native cleanup itself is real and is performed only by startup recovery.
+    const terminal = { ...snapshot, _draftCleanupOnly: true, _draftTerminal: 'discard', _draftCleanupState: 'unknown' };
+    await nativeComposeRpc('settings.replace', { values: { 'mailvault-compose-session': [{ id: 700, initialData: terminal, minimized: true }] } });
+    await reloadApp();
+    await browser.waitUntil(async () => {
+      const state = await nativeComposeRpc('drafts.list', { draftId: snapshot._draftId });
+      return state.managed.some(record => record.draftId === snapshot._draftId && record.discarded && record.cleanup === 'complete');
+    }, { timeout: 15_000, timeoutMsg: 'Startup did not settle the recorded discard through native cleanup' });
+    expect(await modalCount()).toBe(0);
+    expect(await browser.execute(() => ({ pending: window.__MAIL_STORE__.getState().pendingSends.length, outbox: window.__MAIL_STORE__.getState().outboxItems.length }))).toEqual({ pending: 0, outbox: 0 });
+    expect(await nativeComposeRpc('scheduled.list')).toEqual(scheduledBefore);
+    expect((await localIndex(account.id, 'Sent')).some(row => row.subject === subject)).toBe(false);
+    expect((await localIndex(account.id, 'Drafts')).some(row => row.subject === subject)).toBe(false);
   });
 
   // -------------------------------------------------------------------------

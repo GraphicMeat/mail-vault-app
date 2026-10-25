@@ -15,13 +15,12 @@
  * Harness facts these lean on (see composeHelpers.js):
  *   - `browser.testDataDir` is the app's real HOME, so the Maildir under it is
  *     the same one the app writes.
- *   - There is no way inside the app to leave a draft in the vault with no
- *     window owning it — closing is a discard. `snapshotDraft` + `restoreDraft`
- *     put the app's OWN bytes and index entry back after the window is gone,
- *     which is the state a restart leaves behind.
+ *   - Closing is terminal discard. The fixture clears only the persisted UI
+ *     session through settings.replace and reloads the app, leaving the real
+ *     canonical native draft intact for reopening.
  */
 
-import { waitForApp, waitForEmails, switchToFolder, visibleRowSubjects } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder, visibleRowSubjects, reloadApp } from './helpers.js';
 import {
   openComposeFresh,
   closeComposeHard,
@@ -41,7 +40,8 @@ import {
   localIndex,
   waitForLocalDraft,
   snapshotDraft,
-  restoreDraft,
+  nativeComposeRpc,
+  persistedComposeData,
   flatten,
 } from './composeHelpers.js';
 
@@ -81,17 +81,14 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
     if (files) expect(await attachViaInput(files)).toBe(true);
     await waitForLocalDraft(id, subject);
 
+    expect(await clickButtonTitle('Minimize')).toBe(true);
+    const sessionData = await persistedComposeData(subject);
     const snapshot = await snapshotDraft(id, subject);
-    // Closing is a discard, which is what takes the vault copy with it — the
-    // point here is to be rid of the WINDOW.
-    await closeComposeHard();
-    await browser.waitUntil(
-      async () => !readDrafts(id).some((t) => flatten(t).includes(subject)),
-      { timeout: 15_000, interval: 300, timeoutMsg: `Discarding "${subject}" left its draft in the vault` },
-    );
-
-    await restoreDraft(id, snapshot);
-    return snapshot;
+    // Lose only the UI session, then boot again from the real canonical draft.
+    // No tombstoned bytes are resurrected through legacy storage helpers.
+    await nativeComposeRpc('settings.replace', { values: { 'mailvault-compose-session': [] } });
+    await reloadApp();
+    return { ...snapshot, sessionData };
   }
 
   /** Open `subject` from the account's Drafts folder and wait for the window. */
@@ -181,9 +178,8 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
     await setField('compose-subject', FINISHED);
     await waitForLocalDraft(account.id, FINISHED);
 
-    // The reopened window adopted the draft's uid and mailbox, so its autosave
-    // REPLACED the draft. A fresh uid would leave both rows in the folder and
-    // the user with two copies of one message.
+    // A COW autosave changes its physical UID while retaining one logical draft.
+    // The retired copy must disappear rather than become a second list row.
     expect(listDrafts(account.id).length).toBe(before);
     expect(await draftSubjects(account.id)).toContain(FINISHED);
     expect(await draftSubjects(account.id)).not.toContain(SUBJECT);
@@ -194,17 +190,14 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
 
   it('carries the threading headers a reply draft was written with', async function () {
     const SUBJECT = 'Re: keeping the thread';
-    await orphanedDraft(SUBJECT, { to: 'recipient@example.com', body: 'Answering below' });
-    const entry = (await localIndex(account.id, 'Drafts')).find((e) => e.subject === SUBJECT);
-    // A fresh compose has no parent, so seed the headers a reply draft would
-    // have had — the index is the only place they survive the vault parse.
-    await restoreDraft(account.id, {
-      rawBase64: (await snapshotDraft(account.id, SUBJECT)).rawBase64,
-      entry: {
-        ...entry,
-        in_reply_to: '<parent@mock.test>',
-        references: '<root@mock.test> <parent@mock.test>',
-      },
+    const { sessionData } = await orphanedDraft(SUBJECT, { to: 'recipient@example.com', body: 'Answering below' });
+    // Seed reply headers through the real complete native save contract. The
+    // canonical current draft, rather than an overridden legacy index, owns them.
+    const request = sessionData._draftContent;
+    await nativeComposeRpc('drafts.save', {
+      draftId: sessionData._draftId, revision: sessionData._draftRevision + 1,
+      accountId: request.accountId, fromAddress: request.fromAddress, displayName: request.displayName, snippet: request.snippet,
+      snapshot: { ...request.payload, inReplyTo: '<parent@mock.test>', references: '<root@mock.test> <parent@mock.test>' },
     });
 
     await openDraftRow(account.email, SUBJECT);

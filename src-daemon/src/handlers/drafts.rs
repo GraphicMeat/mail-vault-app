@@ -934,10 +934,20 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     finish(s, &mut r, &destination_ready)?;
     Ok(response(&r, "saved"))
 }
-fn discard(s: &Arc<DaemonState>, id: &str) -> Result<Value, String> {
+fn discard(s: &Arc<DaemonState>, id: &str, through_revision: Option<u64>) -> Result<Value, String> {
     let lock = draft_lock(s, id);
     let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
     let mut r = load(s, id)?;
+    let newest = r.revision.max(r.pending.as_ref().map_or(0, |p| p.revision))
+        .max(r.retry.as_ref().map_or(0, |p| p.revision));
+    if !r.discarded && through_revision.is_some_and(|bound| newest > bound) {
+        let mut outcome = response(&r, "unchanged");
+        outcome["skipped"] = json!(true);
+        outcome["reason"] = json!("newer_revision");
+        outcome["newerRevision"] = json!(newest);
+        outcome["throughRevision"] = json!(through_revision);
+        return Ok(outcome);
+    }
     r.discarded = true;
     if let Some(c) = r.current.take() {
         r.cleanup.push(c);
@@ -948,9 +958,9 @@ fn discard(s: &Arc<DaemonState>, id: &str) -> Result<Value, String> {
     }
     persist(s, &r)?;
     cleanup(s, &mut r)?;
-    Ok(
-        json!({"draftId":id,"discarded":true,"cleanup":if r.cleanup.is_empty(){"complete"}else{"pending"},"cleanupIdentities":r.cleanup.iter().map(|c|&c.identity).collect::<Vec<_>>()}),
-    )
+    let mut outcome = json!({"draftId":id,"discarded":true,"cleanup":if r.cleanup.is_empty(){"complete"}else{"pending"},"cleanupIdentities":r.cleanup.iter().map(|c|&c.identity).collect::<Vec<_>>()});
+    if let Some(bound) = through_revision { outcome["throughRevision"] = json!(bound); }
+    Ok(outcome)
 }
 // A stable id is primary after COW retires its former physical tuple. A tuple
 // supplied alongside it is still a checked association, never a historic alias.
@@ -1180,6 +1190,17 @@ pub(crate) async fn route(
     if !matches!(method, "drafts.save" | "drafts.discard" | "drafts.list") {
         return None;
     }
+    // A supplied condition never degrades to unconditional discard. JS-issued
+    // revisions are safe integers; accept zero to fence a delayed first save.
+    let through_revision = if method == "drafts.discard" {
+        match params.get("throughRevision") {
+            None => None,
+            Some(value) => match value.as_u64().filter(|v| *v <= 9_007_199_254_740_991) {
+                Some(bound) => Some(bound),
+                None => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "invalid throughRevision")),
+            },
+        }
+    } else { None };
     let request = if method == "drafts.save" {
         match Save::parse(params.clone()) {
             Ok(r) => Some(r),
@@ -1197,7 +1218,7 @@ pub(crate) async fn route(
             .as_str()
             .filter(|s| !s.is_empty())
             .ok_or("draftId required".into())
-            .and_then(|id| discard(&s, id)),
+            .and_then(|id| discard(&s, id, through_revision)),
         _ => list(&s, &params),
     })
     .await
