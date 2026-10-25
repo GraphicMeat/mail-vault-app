@@ -1074,7 +1074,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       references: formData.references,
       attachments: [...attachments],
       _quotedHtml: quotedHtml,
-      _preparationPending: !preparationReadyRef.current,
+      _preparationPending: !preparationReady,
       _preparationEdits: { ...editRevision.current },
       _forward: isForward,
       _contextHtml: contextHtml,

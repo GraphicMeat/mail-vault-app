@@ -5,7 +5,7 @@ import { resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { sameReply, applyReplyFill } from '../utils/sameReply';
 import { isTerminalCompose, composeSessionData } from './composeSession';
 
-export function createReplyFillController({ getWindows, setWindows, getContext, onError }) {
+export function createReplyFillController({ getWindows, commitWindows, getContext, onError }) {
   const slots = new Map();
   const identityFor = window => {
     const { settings, mail } = getContext();
@@ -20,20 +20,19 @@ export function createReplyFillController({ getWindows, setWindows, getContext, 
       aliases: settings.aliases || {}, sendAsAddresses: settings.sendAsAddresses }) };
   };
   const targetFor = (windows, slot, intent) => windows.find(window => window.id === slot.id && !window.detached
-    && !isTerminalCompose(composeSessionData(window)) && sameReply(window, { mode: intent.state.mode, replyTo: intent.state._fillFrom }));
+    && !isTerminalCompose(composeSessionData(window)) && (sameReply(window, { mode: intent.state.mode, replyTo: intent.state._fillFrom })
+      || window.mode === intent.state.mode && window.replyTo === intent.state.replyTo));
 
-  const commit = (slot, intent, identity, result) => new Promise(resolve => {
-    setWindows(windows => {
-      if (slot.intent !== intent) { resolve('superseded'); return windows; }
-      const target = targetFor(windows, slot, intent);
-      if (!target) { resolve('gone'); return windows; }
-      if (identityFor(target).generation !== identity.generation) { resolve('identity'); return windows; }
-      const prepared = { source: intent.state.replyTo, identityGeneration: identity.generation, result };
-      const next = applyReplyFill(windows, { ...intent.state, _fillWindowId: slot.id }, prepared);
-      resolve('applied');
-      return next;
+  const commit = (slot, intent, identity, result) => {
+    const original = targetFor(getWindows(), slot, intent)?.replyTo || intent.state._fillFrom;
+    const state = { ...intent.state, _fillFrom: original, _fillWindowId: slot.id };
+    const prepared = { source: intent.state.replyTo, identityGeneration: identity.generation, result };
+    // Only immutable proposal data and the updater's own windows are read.
+    // The owning hook acknowledges an actual commit, never this evaluation.
+    return commitWindows(windows => applyReplyFill(windows, state, prepared), {
+      id: slot.id, mode: intent.state.mode, original,
     });
-  });
+  };
 
   const run = async slot => {
     try {
@@ -63,9 +62,13 @@ export function createReplyFillController({ getWindows, setWindows, getContext, 
           onError?.(error);
           continue;
         }
-        const outcome = await commit(slot, intent, identity, result);
-        if (outcome === 'identity' || outcome === 'superseded') continue;
-        if (slot.intent === intent) slot.intent = null;
+        if (!current()) continue;
+        await commit(slot, intent, identity, result);
+        if (slot.intent !== intent) continue;
+        const accepted = targetFor(getWindows(), slot, intent);
+        if (!accepted) { slot.intent = null; continue; }
+        if (identityFor(accepted).generation !== identity.generation) continue;
+        slot.intent = null;
       }
     } catch (error) {
       slot.intent = null;

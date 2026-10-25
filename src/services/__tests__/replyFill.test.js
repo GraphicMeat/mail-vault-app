@@ -23,7 +23,7 @@ const make = (minimized = true, large = false) => {
   const full = { ...header, html: large ? '<p>' + '界'.repeat(750000) + 'FINAL_ORIGINAL</p>' : '<p>full body</p>',
     _threadContext: Array.from({ length: large ? 70 : 2 }, (_, i) => ({ ...header, date: `stamp-${i}`, html: `<p>START-${i}:` + (large ? 'x'.repeat(35000) : '') + `:END-${i}</p>` })) };
   const onError = vi.fn();
-  const controller = createReplyFillController({ getWindows: () => windows, setWindows: updater => { windows = updater(windows); }, getContext: () => io.context, onError });
+  const controller = createReplyFillController({ getWindows: () => windows, commitWindows: async apply => { windows = apply(windows); return windows; }, getContext: () => io.context, onError });
   return { controller, onError, full, issued, data, get windows() { return windows; }, set windows(value) { windows = value; },
     fill: () => controller.fill({ mode: 'reply', _fillFrom: header, replyTo: full }) };
 };
@@ -77,15 +77,15 @@ describe('App-owned asynchronous reply fills', () => {
   });
 });
 it('retains the fill if identity changes before the queued React updater commits', async () => {
-  const h = make(); let windows = h.windows; const queued = [];
-  const controller = createReplyFillController({ getWindows: () => windows, setWindows: updater => queued.push(updater), getContext: () => io.context, onError: h.onError });
+  const h = make(); h.full.messageId = '<learned-on-body@example.test>'; let windows = h.windows; const queued = [];
+  const controller = createReplyFillController({ getWindows: () => windows, commitWindows: apply => new Promise(resolve => queued.push({ apply, resolve })), getContext: () => io.context, onError: h.onError });
   const filling = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: h.full });
   await vi.waitFor(() => expect(queued).toHaveLength(1));
   windows = windows.map(w => ({ ...w, snapshot: { ...w.snapshot, _accountId: 'two', _fromAddress: two.email, body: '<p>Latest before commit</p>' } }));
   io.context.version = 2;
-  windows = queued.shift()(windows);
+  { const item = queued.shift(); windows = item.apply(windows); item.resolve(windows); }
   await vi.waitFor(() => expect(queued).toHaveLength(1));
-  windows = queued.shift()(windows); await filling;
+  { const item = queued.shift(); windows = item.apply(windows); item.resolve(windows); } await filling;
   expect(windows[0].replyTo === h.full).toBe(true); expect(windows[0].snapshot._quotedHtml).toContain('full body');
   expect(windows[0].snapshot.body).toBe('<p>Latest before commit</p>'); expect(windows[0].snapshot._draftContent).toBe(h.issued);
   expect(io.calls).toHaveLength(2); expect(h.onError).not.toHaveBeenCalled();
@@ -94,7 +94,6 @@ it('retains the fill if identity changes before the queued React updater commits
 it('does not acknowledge a discarded updater evaluation and replays after an async continuation turn', async () => {
   const h = make(); let windows = h.windows; let update; let commit; let settled = false;
   const controller = createReplyFillController({ getWindows: () => windows, getContext: () => io.context, onError: h.onError,
-    setWindows: apply => { update = apply; apply(windows); },
     commitWindows: apply => new Promise(resolve => { update = apply; apply(windows); commit = resolve; }),
   });
   const filling = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: h.full });

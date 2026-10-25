@@ -103,6 +103,7 @@ const mail = {
 const settings = {
   getSignature: () => '', getDisplayName: () => 'Me', getOrderedAccounts: (accounts) => accounts,
   sendAsAddresses: {}, sendDelay: 0, emailTemplates: [], spellcheckEnabled: true,
+  setComposeOpenMode: vi.fn(),
   addEmailTemplate: vi.fn(), lastComposeIdentity: null, setLastComposeIdentity: vi.fn(),
 };
 vi.mock('../../stores/mailStore', () => {
