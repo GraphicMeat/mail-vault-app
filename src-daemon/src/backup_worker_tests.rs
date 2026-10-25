@@ -1245,3 +1245,46 @@ async fn backup_fix1_retry_timer_wakes_real_loop_without_deadline_command() {
     tokio::time::resume();
     finish(r).await;
 }
+
+fn access_slot(r: &Rig) -> String {
+    app_db::with(&r.state.app_dir,|c|app_db::locations::save_meta(c,"external-backup","/display-only","native",1,false)).unwrap();
+    mailvault_core::backup_access::slot_stamp(&r.state.app_dir).unwrap().unwrap()
+}
+fn access_attempt(r:&Rig, ack:&Value, owner:&str)->Value {
+    access::owner_connected(&r.state,owner);
+    json!({"incarnation":r.state.backup_worker.access.incarnation,"runId":ack["runId"],"executionId":ack["executionId"],"ownerId":owner,"acquisitionId":uuid::Uuid::new_v4().to_string()})
+}
+async fn access_attach(r:&Rig, attempt:&Value, stamp:&str, root:&str)->Value {
+    rpc(&r.state,"backup.attach_access",json!({"attempt":attempt,"slotStamp":stamp,"resolution":{"status":"authorized","root":root}})).await
+}
+#[tokio::test]
+async fn backup_access_authorized_root_reaches_actual_provider() {
+    let mut r=rig();
+    let stamp=access_slot(&r);
+    let ack=manual(&r.state,"one","native-root").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");
+    let attached=access_attach(&r,&attempt,&stamp,"/native-authorized").await;
+    assert_eq!(attached["state"],"accepted");
+    let reached=tokio::time::timeout(Duration::from_millis(200),r.calls.recv()).await;
+    let observed=reached.is_ok();
+    if let Ok(Some(c))=reached {
+        assert_eq!(c.ctx.mirror_root.as_deref(),Some("/native-authorized"));
+        c.reply.send(Ok(result(1))).ok();
+        wait(&r.state,|s|s["requests"]["native-root"]["status"]=="success").await;
+    }
+    finish(r).await;
+    assert!(observed,"accepted native authority never reached the real worker/provider handoff");
+}
+#[tokio::test]
+async fn backup_access_fence_before_attach_prevents_start() {
+    let mut r=rig(); let stamp=access_slot(&r);
+    let ack=manual(&r.state,"one","fence").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");
+    let fenced=rpc(&r.state,"backup.access_status",json!({"attempt":attempt,"fenceUnstarted":true})).await;
+    assert_eq!(fenced["safeRelease"],true);
+    let late=access_attach(&r,&attempt,&stamp,"/native-authorized").await;
+    assert_eq!(late["state"],"fenced"); assert!(r.calls.try_recv().is_err());
+    finish(r).await;
+}

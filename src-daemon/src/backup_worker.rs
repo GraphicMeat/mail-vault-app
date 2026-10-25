@@ -29,6 +29,9 @@ use tokio::sync::{
     oneshot,
 };
 
+#[path = "backup_access.rs"]
+mod access;
+
 const META: &str = "backup.scheduler.v1";
 const STORE: &str = "mailvault-settings";
 const EVENT: &str = "backup-schedule-changed";
@@ -36,6 +39,7 @@ const STALL_MS: i64 = 900_000;
 
 #[derive(Default)]
 pub(crate) struct BackupState {
+    access: access::State,
     tx: OnceLock<UnboundedSender<Cmd>>,
     view: Mutex<Value>,
     controls: Mutex<HashMap<String, Arc<AtomicBool>>>,
@@ -97,6 +101,8 @@ impl BackupState {
                 view["active"]["stage"] = json!("stopping");
             }
         }
+        view["accessIncarnation"] = json!(self.access.incarnation);
+        view["accessReceipts"] = self.access.receipts();
         if view.is_null() {
             json!({"revision":0,"queue":[],"active":null,"pendingAccess":[],"lastOutcomes":[],"automaticOwner":"javascript","ready":false})
         } else {
@@ -187,6 +193,8 @@ enum Cmd {
         reply: oneshot::Sender<Result<Value, String>>,
     },
     Wake,
+    Access { request: access::Request, reply: oneshot::Sender<Result<Value, String>> },
+    OwnerLost(String),
     Cancel {
         run: String,
         reply: oneshot::Sender<Result<Value, String>>,
@@ -470,6 +478,12 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 scan = true;
             }
             Cmd::Wake => scan = true,
+            Cmd::Access { request, reply } => {
+                let result = access::process(&state, &mut ledger, request).await;
+                let _ = reply.send(result);
+                scan = true;
+            }
+            Cmd::OwnerLost(owner) => { access::interrupt_owner(&state, &mut ledger, &owner); scan = true; }
             Cmd::Cancel { run, reply } => {
                 let mut next = ledger.clone();
                 // Sideband cancellation may have seen an older execution's
@@ -1317,6 +1331,7 @@ pub(crate) async fn route(
     params: &Value,
     id: Value,
 ) -> Option<RpcResponse> {
+    if let Some(response) = access::route(state, method, params, id.clone()).await { return Some(response); }
     if !matches!(
         method,
         "backup.run_now" | "backup.cancel" | "backup.stop" | "backup.schedule.status"

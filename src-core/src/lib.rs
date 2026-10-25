@@ -13,6 +13,7 @@ pub mod autostart;
 pub mod cleanup_rules;
 pub mod windows_mailto;
 pub mod backup;
+pub mod backup_access;
 pub mod fetch_mode;
 pub mod fsx;
 pub mod log_redact;
