@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add the staged native backup queue with joined completion, safe cancellation and idempotent recovery. Full IMAP backups use the background connection lane, leaving reader priority permits available. Automatic scheduling and the existing backup UI retain their current owner during migration.
+
 - Preserve concurrent native backup history, status and snapshot times when unrelated settings are saved, including the shell fallback.
 
 - Keep the provider download-limit explanation when a manual bulk archive stops, including after recovery. Already archived messages remain saved.

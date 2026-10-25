@@ -623,6 +623,9 @@ async fn backup_worker_retry_ladder_consumes_isolated_trace_without_early_histor
         let c = call(&mut r).await;
         assert_eq!(c.ctx.mailbox_concurrency, 3);
         assert_eq!(r.state.clock.now_ms(), time);
+        // The real core error path sets the shared token to drain siblings.
+        // That internal cancellation must not become explicit user intent.
+        c.ctx.cancel.store(true, SeqCst);
         c.reply.send(Err("retry failure".into())).ok().unwrap();
         if attempt < 3 {
             wait(&r.state, |s| {

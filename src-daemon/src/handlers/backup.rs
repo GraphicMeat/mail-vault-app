@@ -1,40 +1,11 @@
-//! Daemon route for the account backup run (Phase 3 remainder, Task 1),
-//! calling into `mailvault_core::backup::run_imap_account` with the same
-//! `ArchiveCtx` a manual archive run would build (`handlers::archive::archive_ctx`,
-//! widened to `pub(crate)` for this reuse — same pool, vault root, write
-//! gate and in-process custody/nudge sinks a manual archive run gets, an
-//! improvement over the app-side runner this replaces, which had no gate at
-//! all) plus two daemon-specific sinks: `backup-progress` events on the
-//! shared bus, and the flag catch-up wired straight to
-//! `handlers::vault_flags::apply_flags` in-process (no more
-//! `daemon_call_blocking("vault_apply_flags", ...)` RPC bridge against
-//! itself, `backup.rs:850-886`).
+//! Guarded account backups over the existing IMAP/Graph/JMAP engines.
 //!
-//! Fire-and-forget, same shape `handlers/migration.rs`'s `spawn_migration`
-//! uses: `backup_run_account` returns `{"runId": accountId}` immediately —
-//! the run itself reports progress over `channel.open` ("backup-progress"
-//! events), not over this RPC's reply. No cutover in this task: nothing
-//! calls this route yet (mirrors `handlers/migration.rs`'s own posture).
-//!
-//! Cancellation is `DaemonState.backup_runs`, keyed by `account_id` (see its
-//! doc comment in `server.rs` for why this is not another `run_tokens`
-//! kind). Task 4 adds `backup_cancel` (looks the account up, sets its flag,
-//! tolerant of a missing/already-finished account like the app-side
-//! `backup_cancel` it replaces) and makes the map's entry-removal
-//! panic-safe: `BackupRunGuard` below, moved into the spawned task and
-//! dropped at the end of its body on every exit path — success, error, or a
-//! panic — same shape `handlers::common::RunGuard` uses for `run_tokens`,
-//! sized to this map's single-`Arc`-per-key shape instead of that one's
-//! `Vec`-per-kind shape.
-//!
-//! Task 2 adds the Graph dispatch below (`is_graph` check, same test
-//! `src-tauri/src/backup.rs`'s `run_account_backup` makes at ~line 618-621):
-//! `backup_run_account` builds one `BackupRunContext` and hands it to
-//! whichever runner the account's `oauth2_transport` calls for. The Graph
-//! runner reuses the same `archive_ctx` (root, pool, gate) and the same
-//! `on_progress`/`apply_flags` closures — it just never calls `apply_flags`,
-//! matching `run_graph_backup`'s own behavior today (no read-state catch-up
-//! on the Graph path).
+//! Legacy kickoff keeps its immediate account-shaped ACK. Native scheduling
+//! consumes the actual joined result and internally captured terminal-limit
+//! metadata; progress events are output, never completion authority. Every
+//! entrypoint shares the account claim with gap-save. A supervisor retains its
+//! real guard on uncertain drain, and only normal joined completion releases
+//! admission. External-location authorization remains a native shell concern.
 
 use crate::handlers::common;
 use crate::handlers::vault_flags as vault_flags_handler;

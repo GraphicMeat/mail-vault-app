@@ -158,20 +158,10 @@ pub struct DaemonState {
     /// its own entry via `Drop`, keyed by pointer identity so it never
     /// removes a sibling run's.
     pub run_tokens: std::sync::Mutex<std::collections::HashMap<&'static str, Vec<Arc<RunTokens>>>>,
-    /// Task 1 (Phase 3 backup remainder): one cancel token per in-flight
-    /// account backup run, keyed by `account_id` rather than a fixed
-    /// `&'static str` kind — a backup run is naturally one-per-account, and
-    /// the `backup_cancel` route (Task 4) needs to name *which* account to
-    /// cancel, which `run_tokens`' kind-keyed shape cannot express. Entries
-    /// are removed by `handlers::backup::BackupRunGuard`'s `Drop` (Task 4),
-    /// via `Arc::ptr_eq`, on every exit path — success, error, or a panic
-    /// inside the run — never by key alone, so a finishing (or panicking)
-    /// run can't remove a newer run's token for the same account.
-    /// ponytail: replace-on-insert if a second run for the same account is
-    /// ever allowed to start concurrently — orphans the first token
-    /// uncancellably, same shape `run_tokens`/`RunGuard`'s doc already
-    /// describes fixing for kind-keyed runs. Not observed in this task: a
-    /// backup route has no caller that starts two runs for one account yet.
+    /// Atomic account admission shared by legacy backup, the native worker
+    /// and gap-save. Arc-matching guards remove only their own token after
+    /// known drain; the adapter retains the real guard if drain is uncertain.
+    /// Legacy account cancellation skips tokens owned by the native worker.
     pub backup_runs: std::sync::Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>,
     /// Task 3.6: in-daemon insights snapshots, moved whole from
     /// `src-tauri/src/insights.rs`. The app's own copy and its three Tauri

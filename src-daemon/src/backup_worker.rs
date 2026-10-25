@@ -250,7 +250,21 @@ fn save_ledger(path: &Path, ledger: &Ledger) -> Result<(), String> {
         db::in_txn(conn, || db::meta_set(conn, META, &bytes))
     })
 }
+fn compact_outcomes(ledger: &mut Ledger) {
+    // Unacknowledged outcomes remain replayable. Applied history is bounded
+    // before publication, including the same write that settles a request.
+    let mut seen = HashMap::<String, usize>::new();
+    ledger.outcomes.reverse();
+    ledger.outcomes.retain(|out| {
+        if !out.applied { return true; }
+        let count = seen.entry(out.intent.account_id.clone()).or_default();
+        *count += 1;
+        *count <= 5
+    });
+    ledger.outcomes.reverse();
+}
 async fn publish(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result<(), String> {
+    compact_outcomes(ledger);
     ledger.epoch = state.backup_worker.epoch.load(SeqCst);
     ledger.revision = ledger.revision.saturating_add(1);
     let path = state.app_dir.clone();
@@ -848,6 +862,7 @@ async fn finish_run(
     else {
         return Ok(ledger.clone());
     };
+    let user_cancel = intent.cancel_requested || intent.epoch != state.backup_worker.epoch.load(SeqCst);
     if let RunExit::Pending(stage) = exit {
         intent.stage = stage.clone();
         for request in &intent.requests {
@@ -862,6 +877,7 @@ async fn finish_run(
             RunExit::Completed(joined) => {
                 if joined.uncertain {
                     intent.stage = "uncertain".into();
+                    for request in &intent.requests { next.requests.insert(request.clone(), response(&intent)); }
                     next.active = Some(intent);
                     publish(state, &mut next).await?;
                     return Ok(next);
@@ -876,7 +892,7 @@ async fn finish_run(
                     "limit_reached"
                 } else if stalled {
                     "failed"
-                } else if value.is_some_and(|v| v["cancelled"] == true) {
+                } else if value.is_some_and(|v| v["cancelled"] == true) || (user_cancel && joined.error.is_some()) {
                     "cancelled"
                 } else if joined.error.is_none() && value.is_some_and(|v| v["success"] == true) {
                     "success"
@@ -900,9 +916,7 @@ async fn finish_run(
             }
             RunExit::Pending(_) => unreachable!(),
         };
-        if status == "failed" && !cancelled(state, &intent)
-            || (status == "failed" && intent.stage == "stopping_stall")
-        {
+        if status == "failed" && !user_cancel {
             if let Some(delay) = policy::retry_delay(intent.retries, intent.manual) {
                 intent.retries += 1;
                 intent.not_before = at.saturating_add(delay);
@@ -961,12 +975,10 @@ async fn finish_run(
     Ok(next)
 }
 async fn apply_retained(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result<(), String> {
-    for index in 0..ledger.outcomes.len() {
-        if ledger.outcomes[index].applied {
-            continue;
-        }
+    while let Some(index) = ledger.outcomes.iter().position(|out| !out.applied) {
         let path = state.app_dir.clone();
         let outcome = ledger.outcomes[index].clone();
+        let run = outcome.intent.run_id.clone();
         let change = common::blocking(move || apply_outcome(&path, &outcome)).await??;
         if let Some(change) = change.filter(|c| !c.changed.is_empty()) {
             state.events.emit(
@@ -984,25 +996,7 @@ async fn apply_retained(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result
             .controls
             .lock()
             .unwrap()
-            .remove(&next.outcomes[index].intent.run_id);
-        *ledger = next;
-    }
-    // Outcomes needed for replay are never pruned. Once acknowledged, keep
-    // only the same small newest-five account window as settings history.
-    let mut next = ledger.clone();
-    let mut seen = HashMap::<String, usize>::new();
-    next.outcomes.reverse();
-    next.outcomes.retain(|out| {
-        if !out.applied {
-            return true;
-        }
-        let count = seen.entry(out.intent.account_id.clone()).or_default();
-        *count += 1;
-        *count <= 5
-    });
-    next.outcomes.reverse();
-    if next.outcomes.len() != ledger.outcomes.len() {
-        publish(state, &mut next).await?;
+            .remove(&run);
         *ledger = next;
     }
     let live = ledger
@@ -1030,7 +1024,8 @@ fn apply_outcome(
     path: &Path,
     out: &Outcome,
 ) -> Result<Option<mailvault_core::settings_doc::Change>, String> {
-    if matches!(out.status.as_str(), "cancelled" | "missing_account") {
+    let provider_cancel_error = out.result.as_ref().and_then(|result| result["error_message"].as_str());
+    if out.status == "missing_account" || (out.status == "cancelled" && provider_cancel_error.is_none()) {
         return Ok(None);
     }
     let doc = SettingsDoc::shared(path);
@@ -1053,7 +1048,12 @@ fn apply_outcome(
         }
         let mut state = json!({"lastSchedulerRunId":out.intent.run_id});
         let mut patch = json!({});
-        if out.status == "limit_reached" {
+        if out.status == "cancelled" {
+            // The existing coordinator projects a provider's cancelled+error
+            // result without recording failed history or changing last time.
+            state["lastStatus"] = json!("failed");
+            state["lastError"] = json!(provider_cancel_error);
+        } else if out.status == "limit_reached" {
             state["lastStatus"] = json!("limit");
             state["lastError"] = Value::Null;
         } else {
@@ -1148,6 +1148,7 @@ async fn admit(
         *ledger = next;
         return Ok(ack);
     }
+    let joining_active = next.active.as_ref().is_some_and(|i| i.account_id == account);
     let found = next
         .active
         .iter_mut()
@@ -1158,9 +1159,7 @@ async fn admit(
         i.requests.push(request.clone());
         i.not_before = 0;
         i.hold = false;
-        if i.stage != "running" && i.stage != "preparing" {
-            i.stage = "queued".into();
-        }
+        if !joining_active { i.stage = "queued".into(); }
         i.clone()
     } else {
         let mut i = new_intent(state, account.clone(), true);
