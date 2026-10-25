@@ -494,9 +494,14 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 // Reconciliation of an old hold must not repeatedly move an
                 // unrelated pending execution into preparing before its next
                 // status sample. Current attach/fence keeps its admission wake.
-                let wake=match &request {
-                    access::Request::Attach(a)=>a.attempt.incarnation==state.backup_worker.access.incarnation,
-                    access::Request::Status(q)=>q.fence_unstarted && q.attempt.incarnation==state.backup_worker.access.incarnation,
+                let wake = match &request {
+                    access::Request::Attach(a) => {
+                        a.attempt.incarnation == state.backup_worker.access.incarnation
+                    }
+                    access::Request::Status(q) => {
+                        q.fence_unstarted
+                            && q.attempt.incarnation == state.backup_worker.access.incarnation
+                    }
                 };
                 let result = access::process(&state, &mut ledger, request).await;
                 let _ = reply.send(result);
