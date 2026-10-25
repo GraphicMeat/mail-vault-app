@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "下書きを保存できませんでした。再試行してください。",
+  "compose.draftCleanupPending": "下書きの後処理はまだ完了していません。",
+  "compose.draftCleanupUnknown": "下書きの後処理を確認できませんでした。再試行してください。",
+  "compose.draftCleanupWorking": "下書きを破棄しています...",
+  "compose.draftCleanupStorageFailed": "復元用に下書きの後処理を保存できませんでした。再試行してください。",
+  "compose.sentCleanupPending": "メールを送信しました。下書きの後処理はまだ完了していません。",
+  "compose.scheduledCleanupPending": "メールの送信を予約しました。下書きの後処理はまだ完了していません。",
+  "compose.draftStateUnavailable": "保存した下書きを利用できません。再試行してください。",
   "settings.icons.title": "アプリアイコン",
   "settings.icons.purple": "パープル",
   "settings.icons.teal": "ティール",

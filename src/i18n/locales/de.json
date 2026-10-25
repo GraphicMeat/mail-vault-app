@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "Der Entwurf konnte nicht gespeichert werden. Bitte erneut versuchen.",
+  "compose.draftCleanupPending": "Die Bereinigung des Entwurfs steht noch aus.",
+  "compose.draftCleanupUnknown": "Die Bereinigung des Entwurfs konnte nicht bestätigt werden. Bitte erneut versuchen.",
+  "compose.draftCleanupWorking": "Entwurf wird verworfen...",
+  "compose.draftCleanupStorageFailed": "Die Bereinigung des Entwurfs konnte nicht für die Wiederherstellung gespeichert werden. Bitte erneut versuchen.",
+  "compose.sentCleanupPending": "E-Mail gesendet. Die Bereinigung des Entwurfs steht noch aus.",
+  "compose.scheduledCleanupPending": "E-Mail geplant. Die Bereinigung des Entwurfs steht noch aus.",
+  "compose.draftStateUnavailable": "Der gespeicherte Entwurf ist nicht verfügbar. Bitte erneut versuchen.",
   "settings.icons.title": "App-Symbol",
   "settings.icons.purple": "Violett",
   "settings.icons.teal": "Petrol",

@@ -595,3 +595,22 @@ describe('accepted physical draft cleanup cannot become a delivery failure', () 
     expect(cancelSchedule).not.toHaveBeenCalled();
   });
 });
+
+
+it('the actual outbox finishes accepted mail after cleanup error and Undo never cleans a draft', async () => {
+  const { createComposeSlice } = await import('../../stores/slices/composeSlice');
+  let state;
+  const get = () => state;
+  const set = update => { state = { ...state, ...(typeof update === 'function' ? update(state) : update) }; };
+  state = createComposeSlice(set, get);
+  const cleanupDraft = vi.fn().mockRejectedValue(Error('cleanup acknowledgement lost'));
+  const data = { ...snapshot, _draftId: 'outbox-owned' };
+  const compose = { mode: 'new', initialData: data };
+  state.queueSend(compose, createComposeSend({ snapshot: data, account, cleanupDraft }), 60);
+  expect(state.cancelPendingSend()).toBe(compose);
+  expect(cleanupDraft).not.toHaveBeenCalled(); expect(sendStaged).not.toHaveBeenCalled();
+  state.queueSend(compose, createComposeSend({ snapshot: data, account, cleanupDraft }), 0);
+  await vi.waitFor(() => expect(state.outboxItems[0]?.status).toBe('sent'));
+  expect(sendStaged).toHaveBeenCalledTimes(1); expect(cleanupDraft).toHaveBeenCalledTimes(1);
+  expect(state.outboxItems[0].error).toBeNull();
+});

@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "无法保存草稿。请重试。",
+  "compose.draftCleanupPending": "草稿清理仍在等待中。",
+  "compose.draftCleanupUnknown": "无法确认草稿清理状态。请重试。",
+  "compose.draftCleanupWorking": "正在丢弃草稿...",
+  "compose.draftCleanupStorageFailed": "无法保存草稿清理状态以供恢复。请重试。",
+  "compose.sentCleanupPending": "邮件已发送，草稿清理仍在等待中。",
+  "compose.scheduledCleanupPending": "邮件已安排发送，草稿清理仍在等待中。",
+  "compose.draftStateUnavailable": "已保存的草稿不可用。请重试。",
   "settings.icons.title": "应用图标",
   "settings.icons.purple": "紫色",
   "settings.icons.teal": "青绿",

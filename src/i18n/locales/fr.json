@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "Le brouillon n’a pas pu être enregistré. Réessayez.",
+  "compose.draftCleanupPending": "Le nettoyage du brouillon est toujours en attente.",
+  "compose.draftCleanupUnknown": "Le nettoyage du brouillon n’a pas pu être confirmé. Réessayez.",
+  "compose.draftCleanupWorking": "Suppression du brouillon...",
+  "compose.draftCleanupStorageFailed": "Le nettoyage du brouillon n’a pas pu être enregistré pour la reprise. Réessayez.",
+  "compose.sentCleanupPending": "E-mail envoyé. Le nettoyage du brouillon est toujours en attente.",
+  "compose.scheduledCleanupPending": "E-mail programmé. Le nettoyage du brouillon est toujours en attente.",
+  "compose.draftStateUnavailable": "Le brouillon enregistré n’est pas disponible. Réessayez.",
   "settings.icons.title": "Icône de l'app",
   "settings.icons.purple": "Violet",
   "settings.icons.teal": "Sarcelle",

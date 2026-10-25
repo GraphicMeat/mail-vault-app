@@ -138,3 +138,14 @@ it('does not open a late nonterminal content reply after the same draft became t
   expect(open).not.toHaveBeenCalled();
   expect(projection.getDraftProjection().managed[0]).toMatchObject({ discarded: true, cleanup: 'complete' });
 });
+
+
+it('does not publish a delayed child reconciliation after its owner fence changes', async () => {
+  let finish; let current = true;
+  send.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const read = drafts.reconcileLocalDraft('d', { isCurrent: () => current });
+  current = false; finish({ drafts: [reply(4, 40)], managed: [reply(4, 40)] });
+  await read;
+  expect(store.state.localEmails).toEqual([]);
+  expect((await import('../draftProjection')).getDraftProjection().managed).toEqual([]);
+});

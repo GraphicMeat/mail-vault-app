@@ -1127,7 +1127,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       let result;
       try {
         result = onDiscard ? await onDiscard(snapshot) : await deleteLocalDraft({ draftId: snapshot._draftId });
-        if (!result?.discarded || !['complete', 'pending'].includes(result.cleanup)) throw new Error('Draft discard outcome unavailable');
+        if (!result?.discarded || !['complete', 'pending'].includes(result.cleanup)) throw new Error(t('compose.draftCleanupUnknown'));
       } catch {
         setTerminalState('unknown');
         setError(t('compose.draftCleanupUnknown'));

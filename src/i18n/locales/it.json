@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "Impossibile salvare la bozza. Riprova.",
+  "compose.draftCleanupPending": "La pulizia della bozza è ancora in sospeso.",
+  "compose.draftCleanupUnknown": "Impossibile confermare la pulizia della bozza. Riprova.",
+  "compose.draftCleanupWorking": "Eliminazione della bozza...",
+  "compose.draftCleanupStorageFailed": "Impossibile salvare la pulizia della bozza per il ripristino. Riprova.",
+  "compose.sentCleanupPending": "Email inviata. La pulizia della bozza è ancora in sospeso.",
+  "compose.scheduledCleanupPending": "Email programmata. La pulizia della bozza è ancora in sospeso.",
+  "compose.draftStateUnavailable": "La bozza salvata non è disponibile. Riprova.",
   "settings.icons.title": "Icona dell'app",
   "settings.icons.purple": "Viola",
   "settings.icons.teal": "Petrolio",

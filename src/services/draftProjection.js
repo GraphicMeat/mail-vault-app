@@ -3,6 +3,7 @@
 import { normalizeMessageId } from '../utils/emailParser.js';
 import { vaultKey } from '../stores/slices/unifiedHelpers.js';
 import { send } from './transport.js';
+import { t } from '../i18n/index.js';
 
 let records = new Map();
 let generation = 0;
@@ -75,7 +76,7 @@ export function refreshDraftProjection() {
     try {
       // Always unfiltered: an account move can leave cleanup in the old account.
       const reply = await send('drafts.list', {});
-      if (!Array.isArray(reply?.managed) || !Array.isArray(reply?.drafts)) throw new Error('Draft metadata unavailable');
+      if (!Array.isArray(reply?.managed) || !Array.isArray(reply?.drafts)) throw new Error(t('compose.draftStateUnavailable'));
       if (generation === started && inFlight === request) {
         for (const record of reply.managed) remember(record);
         available = true;

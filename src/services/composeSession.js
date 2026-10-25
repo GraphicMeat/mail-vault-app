@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { splitWireHtml } from '../utils/quoteWire';
 import { safeStorage, flushSafeStorage } from '../stores/safeStorage';
 import { flushSync } from 'react-dom';
+import { t } from '../i18n/index.js';
 
 const KEY = 'mailvault-compose-session';
 
@@ -263,7 +264,7 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
       let ownerId;
       commit(prev => {
         const existing = prev.find(window => window.id === sourceId || sameComposeDraft(dataFor(window), captured));
-        ownerId = existing?.id || ++idRef.current;
+        ownerId = existing?.id || ownerId || ++idRef.current;
         const data = { ...captured, _draftCleanupOnly: true, _draftTerminal: captured._draftTerminal || kind,
           _draftCleanupState: captured._draftCleanupState || 'unknown', _draftCleanupPersistError: false };
         const owner = { ...existing, id: ownerId, initialData: data, snapshot: data,
@@ -274,11 +275,11 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
       let result;
       try {
         result = await discard(captured);
-        if (!result?.discarded || !['complete', 'pending'].includes(result.cleanup)) throw new Error('Draft discard outcome unavailable');
+        if (!result?.discarded || !['complete', 'pending'].includes(result.cleanup)) throw new Error(t('compose.draftCleanupUnknown'));
       } catch { result = { draftId: captured._draftId, discarded: false, cleanup: 'unknown' }; }
       commit(prev => result.cleanup === 'complete' ? prev.filter(window => window.id !== ownerId) : prev.map(window => {
         if (window.id !== ownerId) return window;
-        const data = { ...dataFor(window), _draftCleanupState: result.cleanup };
+        const data = { ...dataFor(window), _draftId: result.draftId || captured._draftId, _draftCleanupState: result.cleanup };
         return { ...window, initialData: data, snapshot: data, minimized: true, _terminalActive: false };
       }));
       if (result.cleanup !== 'complete') {

@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "No se pudo guardar el borrador. Vuelve a intentarlo.",
+  "compose.draftCleanupPending": "La limpieza del borrador sigue pendiente.",
+  "compose.draftCleanupUnknown": "No se pudo confirmar la limpieza del borrador. Vuelve a intentarlo.",
+  "compose.draftCleanupWorking": "Descartando borrador...",
+  "compose.draftCleanupStorageFailed": "No se pudo guardar la limpieza del borrador para recuperarla. Vuelve a intentarlo.",
+  "compose.sentCleanupPending": "Correo enviado. La limpieza del borrador sigue pendiente.",
+  "compose.scheduledCleanupPending": "Correo programado. La limpieza del borrador sigue pendiente.",
+  "compose.draftStateUnavailable": "El borrador guardado no está disponible. Vuelve a intentarlo.",
   "settings.icons.title": "Icono de la app",
   "settings.icons.purple": "Morado",
   "settings.icons.teal": "Verde azulado",

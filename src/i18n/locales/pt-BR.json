@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "Não foi possível salvar o rascunho. Tente novamente.",
+  "compose.draftCleanupPending": "A limpeza do rascunho ainda está pendente.",
+  "compose.draftCleanupUnknown": "Não foi possível confirmar a limpeza do rascunho. Tente novamente.",
+  "compose.draftCleanupWorking": "Descartando rascunho...",
+  "compose.draftCleanupStorageFailed": "Não foi possível salvar a limpeza do rascunho para recuperação. Tente novamente.",
+  "compose.sentCleanupPending": "E-mail enviado. A limpeza do rascunho ainda está pendente.",
+  "compose.scheduledCleanupPending": "E-mail agendado. A limpeza do rascunho ainda está pendente.",
+  "compose.draftStateUnavailable": "O rascunho salvo não está disponível. Tente novamente.",
   "settings.icons.title": "Ícone do app",
   "settings.icons.purple": "Roxo",
   "settings.icons.teal": "Azul-petróleo",

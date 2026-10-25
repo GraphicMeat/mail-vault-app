@@ -246,3 +246,14 @@ it('joins known empty bytes and source descriptors without replacing the immutab
   expect(merged[0].initialData.attachments[0]).toMatchObject({ content: '', source });
   expect(merged[0].initialData._draftContent).toBe(request);
 });
+
+
+it('round-trips terminal cleanup without a stale equal-revision editable recovery fork', async () => {
+  const data = { _draftId: 'terminal', _draftRevision: 4, body: 'captured', attachments: [], _draftCleanupOnly: true,
+    _draftTerminal: 'sent', _draftCleanupState: 'unknown' };
+  saveComposeSession([{ id: 6, initialData: data }]);
+  const loaded = await loadComposeSession();
+  const merged = mergeComposeSession([{ id: 9, initialData: { _draftId: 'terminal', _draftRevision: 4, body: 'stale editable', attachments: [] } }], loaded);
+  expect(merged).toHaveLength(1);
+  expect(merged[0]).toMatchObject({ minimized: true, detached: false, snapshot: data });
+});

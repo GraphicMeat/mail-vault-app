@@ -9,6 +9,7 @@ import { send } from './transport';
 import { getAccountCacheMailboxes } from './cacheManager';
 import { getRealAttachments, replaceCidUrls } from './attachmentUtils';
 import { splitWireHtml } from '../utils/quoteWire';
+import { t } from '../i18n/index.js';
 
 /**
  * The account's Drafts mailbox path, from the folder list we already hold.
@@ -51,7 +52,7 @@ const physicalTuple = identity => ({ accountId: identity.accountId, mailbox: ide
 export async function saveLocalDraft({ draftId, revision, accountId, fromAddress, displayName, payload, snapshot = payload, snippet, previousIdentity }) {
   if (!draftId || !Number.isSafeInteger(revision) || revision < 1 || !accountId
       || snapshotFields.some(field => typeof snapshot?.[field] !== 'string') || !Array.isArray(snapshot?.attachments)) {
-    throw new Error('A complete draft with stable identity and revision is required');
+    throw new Error(t('compose.draftContentNotAccepted'));
   }
   const request = { draftId, revision, accountId, fromAddress: fromAddress ?? '', displayName: displayName ?? '',
     snapshot: { ...Object.fromEntries(snapshotFields.map(field => [field, snapshot[field]])),
@@ -74,7 +75,7 @@ export async function saveLocalDraft({ draftId, revision, accountId, fromAddress
     await reconcileLocalDraft(draftId).catch(() => {});
     throw error;
   }
-  if (response?.draftId !== draftId || !['saved', 'unchanged', 'superseded'].includes(response.disposition)) throw new Error('Draft save outcome unavailable');
+  if (response?.draftId !== draftId || !['saved', 'unchanged', 'superseded'].includes(response.disposition)) throw new Error(t('compose.draftContentNotAccepted'));
   publishDraftOutcome(response, startedGeneration);
   // The caller decides acceptance from disposition/revision. A superseded
   // response can inform projection but never claims submitted content saved.
@@ -82,10 +83,10 @@ export async function saveLocalDraft({ draftId, revision, accountId, fromAddress
 }
 
 export async function reconcileLocalDraft(draftId, { isCurrent = () => true } = {}) {
-  if (!draftId) throw new Error('Draft identity required');
+  if (!draftId) throw new Error(t('compose.draftStateUnavailable'));
   const startedGeneration = getDraftProjection().generation;
   const response = await send('drafts.list', { draftId });
-  if (!Array.isArray(response?.drafts) || !Array.isArray(response?.managed)) throw new Error('Draft state unavailable');
+  if (!Array.isArray(response?.drafts) || !Array.isArray(response?.managed)) throw new Error(t('compose.draftStateUnavailable'));
   if (isCurrent()) for (const record of response.managed) publishDraftOutcome(record, startedGeneration);
   return response;
 }
@@ -93,7 +94,7 @@ export async function reconcileLocalDraft(draftId, { isCurrent = () => true } = 
 async function readDraft(params) {
   const startedGeneration = getDraftProjection().generation;
   const response = await send('drafts.list', { ...params, includeContent: true });
-  if (!Array.isArray(response?.drafts)) throw new Error('Draft open outcome unavailable');
+  if (!Array.isArray(response?.drafts)) throw new Error(t('compose.draftStateUnavailable'));
   for (const record of response.managed || []) publishDraftOutcome(record, startedGeneration);
   return response;
 }
@@ -104,11 +105,11 @@ export async function deleteLocalDraft({ draftId, accountId, mailbox, uid } = {}
     if (!accountId || !mailbox || !uid) return;
     const response = await readDraft({ identity: { accountId, mailbox, uid } });
     draftId = response.drafts[0]?.draftId || response.managed?.[0]?.draftId;
-    if (!draftId) throw new Error('Draft identity unavailable');
+    if (!draftId) throw new Error(t('compose.draftStateUnavailable'));
   }
   const startedGeneration = getDraftProjection().generation;
   const response = await send('drafts.discard', { draftId });
-  if (response?.draftId !== draftId || response.discarded !== true || !['complete', 'pending'].includes(response.cleanup)) throw new Error('Draft discard outcome unavailable');
+  if (response?.draftId !== draftId || response.discarded !== true || !['complete', 'pending'].includes(response.cleanup)) throw new Error(t('compose.draftCleanupUnknown'));
   publishDraftOutcome(response, startedGeneration);
   return response;
 }

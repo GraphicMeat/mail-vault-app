@@ -1,4 +1,12 @@
 {
+  "compose.draftContentNotAccepted": "The draft could not be saved. Please retry.",
+  "compose.draftCleanupPending": "Draft cleanup is still pending.",
+  "compose.draftCleanupUnknown": "Draft cleanup could not be confirmed. Please retry.",
+  "compose.draftCleanupWorking": "Discarding draft...",
+  "compose.draftCleanupStorageFailed": "Draft cleanup could not be saved for recovery. Please retry.",
+  "compose.sentCleanupPending": "Email sent. Draft cleanup is still pending.",
+  "compose.scheduledCleanupPending": "Email scheduled. Draft cleanup is still pending.",
+  "compose.draftStateUnavailable": "The saved draft is unavailable. Please retry.",
   "settings.icons.title": "App icon",
   "settings.icons.purple": "Purple",
   "settings.icons.teal": "Teal",

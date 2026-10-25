@@ -10,6 +10,14 @@ This document describes the stable architecture of the codebase and the design r
 - Preserve feature parity across providers and views wherever practical.
 - Prefer changes that improve resilience without obscuring control flow.
 
+## Local drafts and compose recovery
+
+Local-only drafts use a stable logical draft ID across editor windows, account changes and restarts. The daemon owns `drafts.save`, `drafts.list` and `drafts.discard`, MIME/attachment preparation, copy-on-write vault identities, revision ordering and durable terminal cleanup in the existing app.db. An issued complete revision and its exact request remain separate from the last native accepted revision and physical location. An unknown save reply retains the same immutable revision for retry. Account moves publish the destination before retiring old copies. Native metadata projects one logical draft onto the existing list and UID caches; stale physical copies cannot become duplicate editable drafts.
+
+The existing compose-session settings value remains UI recovery state. Main owns a cleanup-only entry for explicit discard and draft retirement after actual send or schedule acceptance. It freezes the stable ID and latest complete snapshot before discard, fences further autosaves, distinguishes acknowledged native cleanup-pending from an unknown RPC outcome, and preserves terminal intent through minimize, detach, hydration and source-window removal. Unknown cleanup stays in the committed current session array and is acknowledged with `flushSafeStorage` before its last UI owner is released; a failed flush keeps the in-memory entry and a retry indication. Restore and explicit Retry perform only canonical draft cleanup, never reopen an editor or resend/recreate a schedule. No additional queue, persistence key or polling worker is involved.
+
+Undo-send retains its existing editable snapshot until actual `sendStaged` success. Afterwards draft cleanup failure cannot become an SMTP/outbox retry or invalidate a successful schedule. The queued closure retains main's terminal-owner callback after the editor closes. Detached bridge acceptance continues to mean main owns the undo queue. Child accepted identity changes signal a coalesced, owner-fenced native metadata reconciliation in main, rather than treating child-provided identity as proof or querying on keystrokes.
+
 ## System Overview
 
 MailVault is a desktop application built from three runtime pieces: a React frontend, a thin Tauri v2 shell, and a Rust daemon sidecar that does the work.
