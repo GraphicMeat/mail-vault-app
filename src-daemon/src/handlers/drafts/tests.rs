@@ -1519,3 +1519,87 @@ async fn drafts_stable_id_reports_pending_terminal_and_missing_without_blank_con
     assert_eq!(terminal["terminal"], true);
     assert!(terminal["drafts"].as_array().unwrap().is_empty());
 }
+
+async fn foreign_custody_before_install(point: &'static str, stage: bool) {
+    let h = Harness::new();
+    saved(&h.s, req("preinstall-foreign", 1, "accepted words")).await;
+    let prior = row(&h.s, "preinstall-foreign").current.unwrap();
+    let prior_raw = read_copy(&h.s, &prior, true).unwrap().unwrap();
+    let s = h.s.clone();
+    h.hook(move |at| {
+        if at == point {
+            let pending = row(&s, "preinstall-foreign").pending.unwrap();
+            let copy = if stage { pending.prepared } else { pending.copy };
+            let l = copy.location();
+            custody::with_conn(&s, |c| {
+                entries::upsert(c, &l.account_id, &l.mailbox, &[json!({
+                    "uid":l.uid,"message_id":"<foreign@example.test>",
+                    "source":"server","flags":["seen"]
+                })]).map(|_| ())
+            })?;
+        }
+        Ok(())
+    });
+    let result = rpc(&h.s, "drafts.save", req("preinstall-foreign", 2, "new words")).await;
+    let after = row(&h.s, "preinstall-foreign");
+    let pending = after.pending.as_ref().expect("exact intent retained");
+    let copy = if stage { &pending.prepared } else { &pending.copy };
+    let l = copy.location();
+    assert!(message_store::read_raw(&h.s.data_dir, &l.account_id, &l.mailbox, l.uid)
+        .unwrap().is_none(), "foreign custody-only tuple received draft bytes");
+    assert!(result.is_err());
+    assert_eq!(after.revision, 1);
+    assert_eq!(after.current.as_ref().unwrap().identity, prior.identity);
+    assert_eq!(read_copy(&h.s, &prior, true).unwrap().unwrap(), prior_raw);
+    assert_eq!(custody::with_conn(&h.s, |c| entries::get(c, &l.account_id, &l.mailbox, l.uid))
+        .unwrap().unwrap()["source"], "server");
+}
+
+#[tokio::test]
+async fn drafts_review_stage_refuses_foreign_custody_before_bytes() {
+    foreign_custody_before_install("before_prepared_store", true).await;
+}
+
+#[tokio::test]
+async fn drafts_review_destination_refuses_foreign_custody_before_bytes() {
+    foreign_custody_before_install("before_destination", false).await;
+}
+
+#[tokio::test]
+async fn drafts_review_higher_aborted_fingerprint_survives_lower_revision_and_reopen() {
+    let h = Harness::new();
+    saved(&h.s, req("aborted-higher", 1, "accepted one")).await;
+    h.hook(|point| {
+        if point == "before_prepared_store" { Err("stage unavailable".into()) } else { Ok(()) }
+    });
+    assert!(rpc(&h.s, "drafts.save", req("aborted-higher", 3, "frozen three")).await.is_err());
+    h.clear();
+    assert!(rpc(&h.s, "drafts.save", req("aborted-higher", 3, "frozen three")).await.is_err());
+    assert_eq!(row(&h.s, "aborted-higher").retry.unwrap().revision, 3);
+    // Either defer revision 2 or accept it while retaining revision 3's constraint.
+    let _ = rpc(&h.s, "drafts.save", req("aborted-higher", 2, "intervening two")).await;
+    crate::custody::close(&h.s);
+    let reopened = DaemonState::for_test(h.s.data_dir.clone(), h.s.app_dir.clone(), true);
+    assert!(rpc(&reopened, "drafts.save", req("aborted-higher", 3, "changed three"))
+        .await.is_err(), "intervening revision erased the higher fingerprint");
+    assert_eq!(row(&reopened, "aborted-higher").retry.unwrap().revision, 3);
+    let accepted = saved(&reopened, req("aborted-higher", 3, "frozen three")).await;
+    assert_eq!(accepted["revision"], 3);
+}
+
+#[tokio::test]
+async fn drafts_review_stable_id_rejects_absent_tracked_tuple() {
+    let h = Harness::new();
+    saved(&h.s, req("absent-association", 1, "current words")).await;
+    h.hook(|point| {
+        if point == "before_destination" { Err("destination unavailable".into()) } else { Ok(()) }
+    });
+    assert!(rpc(&h.s, "drafts.save", req("absent-association", 2, "pending words")).await.is_err());
+    let pending = row(&h.s, "absent-association").pending.unwrap();
+    let l = pending.copy.location();
+    let exact = json!({"accountId":l.account_id,"mailbox":l.mailbox,"uid":l.uid});
+    assert!(rpc(&h.s, "drafts.list", json!({"draftId":"absent-association", "identity":exact,"includeContent":true}))
+        .await.is_err(), "absent pending tuple silently resolved accepted content");
+    let stable = rpc(&h.s, "drafts.list", json!({"draftId":"absent-association","includeContent":true})).await.unwrap();
+    assert!(stable["drafts"][0]["eml"]["html"].as_str().unwrap().contains("current words"));
+}
