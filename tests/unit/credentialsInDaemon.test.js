@@ -21,8 +21,8 @@ describe('staged native credential capability', () => {
   it('chains the actual native router and shares the split writer', () => {
     expect(read('src-daemon/src/handlers/mod.rs')).toContain('pub(crate) mod credentials;');
     expect(read('src-daemon/src/server.rs')).toContain('crate::handlers::credentials::route(');
-    expect(shell).toContain('write_split_secret(&mut Keyring');
-    expect(read('src-daemon/src/credentials.rs')).toContain('write_split_secret(&mut Keyring');
+    expect(shell).toMatch(/write_split_secret\(\s*&mut Keyring/);
+    expect(read('src-daemon/src/credentials.rs')).toMatch(/write_split_secret\(\s*&mut Keyring/);
   });
 
   it('demo credential reads delegate to its existing synthetic credential read', async () => {
