@@ -125,13 +125,19 @@ async function loadKeychain() {
 
   // Single attempt - no retry loop. The Rust side has its own timeout+retry.
   const epoch = connectionEpoch;
-  const writes = localWrites;
   _keychainLoadPromise = (async () => {
     try {
       console.log('[db.js] Loading accounts from keychain...');
       keychainSession.recordOutcome('requesting');
-      const result = await readCredentials();
-      if (epoch !== connectionEpoch || writes !== localWrites) return;
+      let result;
+      // A read overtaken by a confirmed local mutation is stale presentation
+      // data. Obtain a fresh read before settling the shared load promise.
+      for (;;) {
+        const writes = localWrites;
+        result = await readCredentials();
+        if (epoch !== connectionEpoch) return;
+        if (writes === localWrites) break;
+      }
 
       // Structured response: { status, credentials?, message? }
       const status = result?.status || 'unavailable';
