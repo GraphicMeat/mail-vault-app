@@ -585,6 +585,246 @@ mod tests {
         );
     }
 
+    // The runtime keeps a second worker available so Drop can release and join
+    // a synthetic blocking job even while an assertion unwinds this test.
+    struct ParkedWrite {
+        release: Option<std::sync::mpsc::Sender<()>>,
+        entered: std::sync::mpsc::Receiver<()>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+
+    impl ParkedWrite {
+        fn arm() -> Self {
+            use crate::credentials::{TEST_WRITE_ENTERED, TEST_WRITE_FINISHED, TEST_WRITE_GATE, TEST_WRITE_TIMEOUT_MS};
+            let (release, gate) = std::sync::mpsc::channel();
+            let (started, entered) = std::sync::mpsc::channel();
+            let (finished, done) = std::sync::mpsc::channel();
+            *TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(gate);
+            *TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()) = Some(started);
+            *TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()) = Some(finished);
+            TEST_WRITE_TIMEOUT_MS.store(300, std::sync::atomic::Ordering::SeqCst);
+            Self { release: Some(release), entered, done: Some(done) }
+        }
+
+        fn wait_until_entered(&self) {
+            self.entered.recv_timeout(Duration::from_secs(5)).expect("the synthetic write entered its gate");
+        }
+
+        fn finish(&mut self) {
+            self.release.take();
+            self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).expect("terminal completion and exclusion release");
+        }
+    }
+
+    impl Drop for ParkedWrite {
+        fn drop(&mut self) {
+            self.release.take();
+            if let Some(done) = self.done.take() {
+                let _ = done.recv_timeout(Duration::from_secs(5));
+            }
+            crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, std::sync::atomic::Ordering::SeqCst);
+            crate::credentials::TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()).take();
+            crate::credentials::TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()).take();
+            crate::credentials::TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()).take();
+        }
+    }
+
+    struct RecheckAck {
+        owner: usize,
+        done: std::sync::mpsc::Receiver<()>,
+    }
+
+    impl RecheckAck {
+        fn arm(state: &Arc<DaemonState>) -> Self {
+            let owner = Arc::as_ptr(state) as usize;
+            let (sender, done) = std::sync::mpsc::channel();
+            *crate::oauth_tokens::TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner()) = Some((owner, sender));
+            Self { owner, done }
+        }
+
+        fn finish(&self) {
+            self.done.recv_timeout(Duration::from_secs(5)).expect("the actual quiet recheck finished");
+        }
+    }
+
+    impl Drop for RecheckAck {
+        fn drop(&mut self) {
+            let mut hook = crate::oauth_tokens::TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
+            if hook.as_ref().is_some_and(|(owner, _)| *owner == self.owner) {
+                hook.take();
+            }
+        }
+    }
+
+    fn fresh_oauth(rt: &str, at: &str) -> Value {
+        let mut record = oauth_record(rt, at);
+        record["imapHost"] = json!("imap.gmail.com");
+        record["oauth2ExpiresAt"] = json!(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64 + 3_600_000);
+        record
+    }
+
+    async fn prime_cached_grant(rig: &Rig, token: &str) {
+        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await.unwrap();
+        assert!(got.as_deref() == Some(token), "the seeded grant must be loaded");
+        assert!(rig.state.tokens.has_trusted_token_for_test("g"), "a trusted cache entry must exist before the parked write");
+    }
+
+    fn changed_events(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<Value> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|line| mailvault_core::daemon_ipc::parse_event(&line))
+            .filter_map(|(name, payload)| (name == CHANGED_EVENT).then_some(payload))
+            .collect()
+    }
+
+    fn token_waiter(rig: &Rig) -> Arc<crate::abd_worker::JobHandle> {
+        use mailvault_core::abd::{DateScope, DeleteMode, JobFile, Mode, NewJob, Provider, Scope, Timing};
+        let job = JobFile::create(NewJob {
+            account_id: "g".into(), account_email: "g@gmail.test".into(), host: "imap.gmail.com".into(),
+            provider: Provider::Imap, mode: Mode::ArchiveDelete, timing: Timing::AfterAll,
+            delete_mode: DeleteMode::MoveToTrashAndEmpty,
+            scope: Scope { folders: vec!["INBOX".into()], dates: DateScope::All, date_choice: "all".into(), year_bounds: vec![] },
+            now_ms: rig.state.clock.now_ms(),
+        });
+        let handle = crate::abd_worker::JobHandle::new(&job);
+        *handle.parked.lock().unwrap_or_else(|e| e.into_inner()) = Some(crate::abd_worker::Parked::Token);
+        rig.state.abd.jobs.lock().unwrap_or_else(|e| e.into_inner()).insert("g".into(), Arc::clone(&handle));
+        handle
+    }
+
+    async fn parked_reply(rig: &Rig, gate: &ParkedWrite, method: &'static str, params: Value) -> crate::ipc::RpcResponse {
+        let state = Arc::clone(&rig.state);
+        let pending = tokio::spawn(async move { handle_request_for_test(&state, method, params).await });
+        gate.wait_until_entered();
+        pending.await.unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_save_invalidates_cached_grant_after_timeout() {
+        let old = fresh_oauth("synthetic-old-grant", "synthetic-old-token");
+        let new = fresh_oauth("synthetic-new-grant", "synthetic-new-token");
+        let rig = rig(Some(json!({"g": old.to_string(), "other": record("other", "keep")})));
+        prime_cached_grant(&rig, "synthetic-old-token").await;
+        let mut rx = rig.state.events.subscribe();
+        let mut gate = ParkedWrite::arm();
+        let timed = parked_reply(&rig, &gate, "credentials.save", json!({"records":{"g":new.to_string()}})).await;
+        let busy = call(&rig, "credentials.delete", json!({"ids":["other"]})).await;
+        let premature = changed_events(&mut rx);
+        gate.finish();
+        assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
+        assert_eq!(busy, Err("errors.keychainBusy".into()));
+        assert!(premature.is_empty());
+        assert_eq!(stored(&rig)["g"], new.to_string());
+        assert_eq!(stored(&rig)["other"], record("other", "keep"));
+        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await.unwrap();
+        assert!(got.as_deref() == Some("synthetic-new-token"), "late save must stop serving the trusted old grant");
+        let events = changed_events(&mut rx);
+        assert_eq!(events, vec![json!({"ids":["g"],"version":credentials::write_generation()})]);
+        assert!(changed_events(&mut rx).is_empty(), "one terminal change event only");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_delete_invalidates_cached_grant_after_timeout() {
+        let old = fresh_oauth("synthetic-old-grant", "synthetic-old-token");
+        let rig = rig(Some(json!({"g":old.to_string()})));
+        prime_cached_grant(&rig, "synthetic-old-token").await;
+        let mut rx = rig.state.events.subscribe();
+        let mut gate = ParkedWrite::arm();
+        let timed = parked_reply(&rig, &gate, "credentials.delete", json!({"ids":["g"]})).await;
+        gate.finish();
+        assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
+        assert!(!stored(&rig).contains_key("g"));
+        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await;
+        assert!(matches!(got, Err(crate::oauth_tokens::TokenError { kind: crate::oauth_tokens::FailKind::NoRecord, .. })), "late delete must stop serving its cached grant");
+        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":credentials::write_generation()})]);
+        assert!(changed_events(&mut rx).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_failed_write_invalidates_trust_without_changed_notice_or_wake() {
+        use futures::FutureExt;
+        let old = fresh_oauth("synthetic-old-grant", "synthetic-old-token");
+        let rig = rig(Some(json!({"g":old.to_string()})));
+        prime_cached_grant(&rig, "synthetic-old-token").await;
+        let waiter = token_waiter(&rig);
+        let quiet = RecheckAck::arm(&rig.state);
+        let mut rx = rig.state.events.subscribe();
+        let before = credentials::write_generation();
+        let mut gate = ParkedWrite::arm();
+        let timed = parked_reply(&rig, &gate, "credentials.save", json!({"records":{"g":fresh_oauth("synthetic-new-grant","synthetic-new-token").to_string()}})).await;
+        std::fs::remove_file(&rig.creds).unwrap();
+        std::fs::create_dir(&rig.creds).unwrap();
+        gate.finish();
+        assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
+        assert!(credentials::write_generation() > before);
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"), "terminal uncertainty invalidates token trust");
+        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await;
+        assert!(matches!(got, Err(crate::oauth_tokens::TokenError { kind: crate::oauth_tokens::FailKind::Unreadable, .. })), "an unreadable store cannot be hidden by a cached grant");
+        assert!(changed_events(&mut rx).is_empty());
+        assert!(waiter.ctl.wake.notified().now_or_never().is_none());
+        assert!(matches!(quiet.done.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn late_saved_refresh_wakes_token_wait_and_rechecks_unsaved_pair() {
+        let mut old = fresh_oauth("synthetic-original-refresh", "synthetic-expired-token");
+        old["oauth2ExpiresAt"] = json!(1);
+        let rig = rig(Some(json!({"g":old.to_string()})));
+        let _mock = crate::handlers::oauth2::test_token_mock(vec![(200,json!({"access_token":"synthetic-refreshed-token","refresh_token":"synthetic-rotated-refresh","expires_in":3600}).to_string())]);
+        let token = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await.unwrap();
+        assert!(token.as_deref() == Some("synthetic-refreshed-token"));
+        let offered = call(&rig, "oauth2.take_refreshed", json!({})).await.unwrap();
+        assert_eq!(offered["tokens"].as_array().unwrap().len(), 1);
+        let pair = &offered["tokens"][0];
+        let mut saved = old;
+        saved["oauth2AccessToken"] = pair["accessToken"].clone();
+        saved["oauth2RefreshToken"] = pair["refreshToken"].clone();
+        saved["oauth2ExpiresAt"] = pair["expiresAt"].clone();
+        let waiter = token_waiter(&rig);
+        let quiet = RecheckAck::arm(&rig.state);
+        let mut rx = rig.state.events.subscribe();
+        let mut gate = ParkedWrite::arm();
+        let timed = parked_reply(&rig, &gate, "credentials.save", json!({"records":{"g":saved.to_string()}})).await;
+        gate.finish();
+        quiet.finish();
+        assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
+        tokio::time::timeout(Duration::from_secs(5), waiter.ctl.wake.notified()).await.expect("the real parked-token control was woken");
+        let offered = call(&rig, "oauth2.take_refreshed", json!({})).await.unwrap();
+        assert!(offered["tokens"].as_array().unwrap().is_empty(), "the real quiet recheck observed the saved pair");
+        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":credentials::write_generation()})]);
+        assert!(changed_events(&mut rx).is_empty());
+    }
+
+    #[tokio::test]
+    async fn timely_changes_notify_once_and_noops_or_refusals_stay_silent() {
+        use futures::FutureExt;
+        let old = fresh_oauth("synthetic-old-grant", "synthetic-old-token");
+        let rig = rig(Some(json!({"g":old.to_string()})));
+        prime_cached_grant(&rig, "synthetic-old-token").await;
+        let new = fresh_oauth("synthetic-new-grant", "synthetic-new-token");
+        let mut rx = rig.state.events.subscribe();
+        let saved = call(&rig, "credentials.save", json!({"records":{"g":new.to_string()}})).await.unwrap();
+        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":saved["version"]})]);
+        prime_cached_grant(&rig, "synthetic-new-token").await;
+        let waiter = token_waiter(&rig);
+        let version = credentials::write_generation();
+        for (method, params) in [
+            ("credentials.save", json!({"records":{"g":new.to_string()}})),
+            ("credentials.delete", json!({"ids":["missing"]})),
+            ("credentials.update", json!({"id":"g","fields":{"oauth2AccessToken":"synthetic-stale"},"chain":[fp(&old,None)]})),
+            ("credentials.save", json!({})),
+        ] {
+            let reply = call(&rig, method, params).await;
+            assert!(reply.is_ok() || reply == Err("errors.credentialsInvalid".into()));
+            assert_eq!(credentials::write_generation(), version);
+            assert!(changed_events(&mut rx).is_empty());
+            assert!(waiter.ctl.wake.notified().now_or_never().is_none());
+        }
+        let deleted = call(&rig, "credentials.delete", json!({"ids":["g"]})).await.unwrap();
+        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":deleted["version"]})]);
+        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await;
+        assert!(matches!(got, Err(crate::oauth_tokens::TokenError { kind: crate::oauth_tokens::FailKind::NoRecord, .. })));
+    }
+
     #[test]
     fn the_handler_and_the_writer_log_no_record() {
         for src in [

@@ -323,6 +323,11 @@ impl TokenStore {
         Some(entry)
     }
 
+    #[cfg(test)]
+    pub(crate) fn has_trusted_token_for_test(&self, account_id: &str) -> bool {
+        self.cached(account_id, self.now()).is_some()
+    }
+
     /// The app wrote the credentials blob: read it again before trusting a
     /// held token, so a new sign-in (or a removed account) takes effect.
     pub(crate) fn credentials_changed(&self) {
@@ -554,6 +559,9 @@ pub(crate) async fn resolve(state: &DaemonState, account_id: &str, read: Read) -
     })
 }
 
+#[cfg(test)]
+pub(crate) static TEST_RECHECK_DONE: Mutex<Option<(usize, std::sync::mpsc::Sender<()>)>> = Mutex::new(None);
+
 /// After the app wrote credentials: read the record of every account with a
 /// refreshed pair not yet seen stored, quietly, so `unsaved` stops offering
 /// what was saved.
@@ -563,6 +571,14 @@ pub(crate) async fn recheck_unsaved(state: &DaemonState) {
             let flight = state.tokens.flight(&account_id);
             let _held = flight.lock().await;
             state.tokens.reconcile(&account_id, &record);
+        }
+    }
+    #[cfg(test)]
+    {
+        let mut hook = TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
+        if hook.as_ref().is_some_and(|(owner, _)| *owner == state as *const DaemonState as usize) {
+            let (_, done) = hook.take().unwrap();
+            let _ = done.send(());
         }
     }
 }

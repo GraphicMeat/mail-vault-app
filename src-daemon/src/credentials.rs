@@ -1328,6 +1328,11 @@ pub(crate) static TEST_WRITE_TIMEOUT_MS: std::sync::atomic::AtomicU64 =
 pub(crate) static TEST_WRITE_GATE: std::sync::Mutex<Option<std::sync::mpsc::Receiver<()>>> =
     std::sync::Mutex::new(None);
 
+#[cfg(test)]
+pub(crate) static TEST_WRITE_ENTERED: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> = std::sync::Mutex::new(None);
+#[cfg(test)]
+pub(crate) static TEST_WRITE_FINISHED: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> = std::sync::Mutex::new(None);
+
 fn write_timeout() -> Duration {
     #[cfg(test)]
     {
@@ -1415,6 +1420,10 @@ pub(crate) async fn change_credentials(
                 BLOB_READ.bump();
                 WRITE_PARKED.store(false, SeqCst);
                 drop(held);
+                #[cfg(test)]
+                if let Some(done) = TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                    let _ = done.send(());
+                }
             });
             Err(CredError::WriteFailed)
         }
@@ -1441,6 +1450,9 @@ fn change_test_file(path: &std::path::Path, change: &CredChange) -> Result<Vec<S
             .unwrap_or_else(|e| e.into_inner())
             .take();
         if let Some(gate) = gate {
+            if let Some(entered) = TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                let _ = entered.send(());
+            }
             let _ = gate.recv();
         }
     }
