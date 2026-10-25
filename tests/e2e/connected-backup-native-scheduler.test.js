@@ -20,28 +20,29 @@ const schedulingEvidence=(state,id)=>({
 });
 async function observeActualContext(){
   const installed=await browser.execute(()=>{
-    const original=window.__TAURI__.core.invoke;
-    const diagnostic={frames:[],events:[]};window.__BACKUP_CONTEXT_DIAGNOSTIC__=diagnostic;
+    const originalTauri=window.__TAURI__;const originalCore=originalTauri.core;const original=originalCore.invoke;
+    const descriptor=Object.getOwnPropertyDescriptor(originalCore,'invoke');
+    const diagnostic={frames:[],events:[],invokeDescriptor:{writable:descriptor?.writable,configurable:descriptor?.configurable,hasGetter:!!descriptor?.get}};window.__BACKUP_CONTEXT_DIAGNOSTIC__=diagnostic;
     const append=(rows,row)=>{rows.push(row);if(rows.length>400)rows.shift();};
     const select=(value,keys)=>Object.fromEntries(keys.filter(key=>value?.[key]!==undefined).map(key=>[key,value[key]]));
     const wrapped=function(command,args){
       const observed=command==='daemon_rpc'&&args?.method==='backup.context';
       const frame=observed?{sentAt:Date.now(),payload:select(args.params,['surfaceId','sessionId','sequence','kind','lastActivityAt','loading','visibility','online','observedAt','heartbeatGap'])}:null;
       if(frame)append(diagnostic.frames,frame);
-      const actual=original.call(this,command,args);
+      const actual=original.call(originalCore,command,args);
       if(frame)Promise.resolve(actual).then(reply=>{frame.repliedAt=Date.now();frame.reply=select(reply,['accepted','surfaceId','sessionId','sequence','retired']);},error=>{frame.repliedAt=Date.now();frame.errorName=error?.name;});
       return actual;
     };
-    window.__TAURI__.core.invoke=wrapped;
+    window.__TAURI__={...originalTauri,core:{...originalCore,invoke:wrapped}};
     const event=e=>append(diagnostic.events,{at:Date.now(),type:e.type,trusted:e.isTrusted,online:navigator.onLine,visibility:document.visibilityState});
     const events=['keydown','click','mousemove','scroll','visibilitychange'];events.forEach(name=>document.addEventListener(name,event,{passive:true}));
     window.addEventListener('online',event);window.addEventListener('offline',event);
-    diagnostic.restore=()=>{if(window.__TAURI__.core.invoke===wrapped)window.__TAURI__.core.invoke=original;events.forEach(name=>document.removeEventListener(name,event));window.removeEventListener('online',event);window.removeEventListener('offline',event);};
+    diagnostic.restore=()=>{if(window.__TAURI__.core.invoke===wrapped)window.__TAURI__=originalTauri;events.forEach(name=>document.removeEventListener(name,event));window.removeEventListener('online',event);window.removeEventListener('offline',event);};
     return window.__TAURI__.core.invoke===wrapped;
   });
   assert.equal(installed,true,'Actual context observation hook was not installed');
 }
-const actualContextEvidence=()=>browser.execute(()=>({now:Date.now(),online:navigator.onLine,visibility:document.visibilityState,frames:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.frames||[],events:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.events||[]}));
+const actualContextEvidence=()=>browser.execute(()=>({now:Date.now(),online:navigator.onLine,visibility:document.visibilityState,invokeDescriptor:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.invokeDescriptor,frames:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.frames||[],events:window.__BACKUP_CONTEXT_DIAGNOSTIC__?.events||[]}));
 
 
 describe('Native backup scheduler survives observers and owns automatic work',function(){
