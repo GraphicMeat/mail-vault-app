@@ -1620,9 +1620,12 @@ async fn backup_access_slot_changed_during_credentials_blocks_provider() {
 async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal() {
     use mailvault_core::mirror_mutation::MirrorRoot;
     // This fixture alone logs its loopback provider position, never user data.
-    let _provider_trace = tracing::subscriber::set_default(tracing_subscriber::fmt()
-        .with_env_filter("mailvault_core::imap=info")
-        .with_test_writer().finish());
+    let _provider_trace = tracing::subscriber::set_default(
+        tracing_subscriber::fmt()
+            .with_env_filter("mailvault_core::imap=info")
+            .with_test_writer()
+            .finish(),
+    );
 
     async fn wait_stage(state: &Arc<DaemonState>, stage: &str, predicate: impl Fn(&Value) -> bool) {
         let reached = tokio::time::timeout(Duration::from_secs(3), async {
@@ -1641,6 +1644,19 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
             panic!("real mirror drain stage timed out: {summary}");
         }
     }
+    // A refused closed port costs about two seconds per attempt on Windows.
+    // End real transport deterministically; keep the actual provider and drain.
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1",0)).await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let accepted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let observed = accepted.clone();
+    let (stop_transport, mut transport_stop) = oneshot::channel::<()>();
+    let transport = tokio::spawn(async move {
+        loop { tokio::select! {
+            connection = listener.accept() => { let (socket,_) = connection.unwrap(); observed.fetch_add(1,SeqCst); drop(socket); }
+            _ = &mut transport_stop => break,
+        } }
+    });
     let (entered_tx, entered_rx) = oneshot::channel();
     let entered = Arc::new(Mutex::new(Some(entered_tx)));
     let provider: adapter::Provider = Arc::new(move |ctx| {
@@ -1651,10 +1667,10 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
         adapter::provider()(ctx)
     });
     let r = rig_with_provider(
-        Arc::new(|_, _, _| {
-            Box::pin(async {
+        Arc::new(move |_, _, _| {
+            Box::pin(async move {
                 Ok(serde_json::from_value(
-                    json!({"email":"one@test","imapHost":"127.0.0.1","imapPort":1}),
+                    json!({"email":"one@test","imapHost":"127.0.0.1","imapPort":port}),
                 )
                 .unwrap())
             })
@@ -1703,6 +1719,9 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
     assert!(claimed);
     assert!(file_remains);
     assert_eq!(access_query(&r, &attempt, false).await["state"], "drained");
+    assert!(accepted.load(SeqCst) > 0,"the real provider never reached the owned transport");
+    stop_transport.send(()).ok();
+    transport.await.unwrap();
     finish(r).await;
 }
 
