@@ -784,14 +784,28 @@ mod tests {
     /// (`cache_arrivals`, by blob download; Task 9c), and no IMAP is dialled.
     #[tokio::test]
     async fn jmap_a_pushed_arrival_body_is_kept_in_the_vault() {
-        let (dir, state, m, mut account) = setup(vec![], timing()).await;
+        let (trap, port) = crate::jmap_test_support::imap_trap();
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        state.idle.set_push_timing(timing());
+        let m = MockJmap::start(scenario(vec![]));
+        let mut account = account_for(&m);
+        // The trap is part of the exact native origin: configure it before
+        // priming, rather than requesting an unproved identity takeover later.
+        account.imap_config.port = Some(port);
+        let primed = state.sync_engine.sync_account(&account, "INBOX").await;
+        assert!(primed.success, "priming sync: {:?}", primed.error);
+        let owner = crate::custody::with_conn(&state, |conn| {
+            mailvault_core::custody::cache::native_identity(conn, &account.id, "INBOX")
+        }).unwrap().unwrap();
+        assert_eq!(owner, mailvault_core::imap::NativeHeaderIdentity::new(
+            &account.imap_config, &account.id, "INBOX", Some(1),
+        ).with_jmap_mailbox("mb-inbox"));
         std::fs::write(
             dir.path().join("frontend-settings.json"),
             json!({"mailvault-settings": {"state": {"fetchMode": "hoarder"}}}).to_string(),
         )
         .unwrap();
-        let (trap, port) = crate::jmap_test_support::imap_trap();
-        account.imap_config.port = Some(port);
         watch(&state, &account).await;
         wait_status(&state, |s| s.idling, 5_000, "the stream open and caught up").await;
 

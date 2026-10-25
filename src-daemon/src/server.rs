@@ -1361,11 +1361,14 @@ mod tests {
                 let operation = std::thread::spawn(move || {
                     let started = Instant::now();
                     if stage == "claim" {
-                        let _journal = writer.journal.lock().unwrap();
-                        let mut bulk = writer.bulk.lock().unwrap();
+                        // Exercise the production off-lock admission seam, not
+                        // the legacy core helper under an artificial outer lock.
+                        writer.bulk.lock().unwrap()
+                            .begin_admission("admission", "initial").unwrap();
                         tx.send(()).unwrap();
-                        bulk.claim_attempt(&writer.app_dir, "admission", "initial", original)
-                            .unwrap();
+                        crate::bulk_worker::prepare_claim(
+                            &writer, "admission", "initial", original,
+                        ).unwrap();
                         return started.elapsed();
                     }
                     tx.send(()).unwrap();
