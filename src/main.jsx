@@ -1,6 +1,7 @@
 import './e2eMotion';
 import { watchAppIcon } from './utils/appIcon';
 import React from 'react';
+import { useBackupScheduler } from './hooks/useBackupScheduler';
 import ReactDOM from 'react-dom/client';
 import { MotionConfig } from 'framer-motion';
 import { setLocale } from './i18n/index.js';
@@ -241,6 +242,7 @@ class ErrorBoundary extends React.Component {
 
 // Component that dismisses splash once mounted (proves React rendered)
 function SplashDismisser({ children }) {
+  useBackupScheduler({ main: !isAuxiliaryWindow });
   React.useEffect(() => {
     dismissSplash();
   }, []);

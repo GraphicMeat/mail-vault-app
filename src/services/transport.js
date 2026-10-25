@@ -308,7 +308,7 @@ export const DAEMON_OWNED = new Set([
   // safeStorage.js is the caller; it keeps the shell's two settings commands
   // as the fallback for a daemon without these.
   'settings.get', 'settings.patch', 'settings.replace',
-  'backup.schedule.get', 'backup.schedule.set',
+  'backup.schedule.get', 'backup.schedule.set', 'backup.run_now', 'backup.cancel', 'backup.stop', 'backup.schedule.status', 'backup.context',
   // Phase 1 row 5: what an account's download mode keeps, its daily limits
   // and the banner's warning, and which server mailbox a vault directory
   // holds (handlers/policy.rs).

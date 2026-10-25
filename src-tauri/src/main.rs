@@ -3186,6 +3186,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "backup.cancel"
         | "backup.stop"
         | "backup.schedule.status"
+        | "backup.context"
         | "backup.attach_access"
         | "backup.access_status" => Some(Duration::from_secs(30)),
 
@@ -3439,7 +3440,7 @@ fn webview_rpc_token(
     if matches!(
         method,
         "backup.attach_access" | "backup.access_status" | "channel.open"
-    ) || method.starts_with("backup.owner_")
+    ) || method.starts_with("backup.owner_") || method == "backup.surface_retire"
     {
         return Err("errors.settingsInvalid".into());
     }
@@ -3449,9 +3450,13 @@ fn webview_rpc_token(
 #[tauri::command]
 async fn daemon_rpc(
     app_handle: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     method: String,
-    params: serde_json::Value,
+    mut params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    if method == "backup.context" {
+        if let Some(object) = params.as_object_mut() { object.insert("surfaceId".into(), serde_json::json!(backup::surface_id(window.label()))); }
+    }
     let fast_token = webview_rpc_token(
         &method,
         daemon_channel::is_connected(),
@@ -4294,6 +4299,7 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) { backup::retire_surface(window.label()); }
             // Paths from the latest native drop are the only ones the
             // webview may read back through read_dropped_files.
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {

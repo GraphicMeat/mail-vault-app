@@ -52,6 +52,7 @@ async fn route_with_view(
             "errors.settingsInvalid",
         ));
     }
+    let rearm = params["patch"]["backupGlobalEnabled"] == true || params["patch"]["backupSchedules"].is_object();
     let params = params.clone();
     let app_dir = state.app_dir.clone();
     let now = state.clock.now_ms();
@@ -59,6 +60,9 @@ async fn route_with_view(
         tokio::task::spawn_blocking(move || run(&app_dir, set, &params, now, prepare)).await;
     Some(match joined.unwrap_or(Err("errors.settingsWriteFailed")) {
         Ok((snapshot, change)) => {
+            if set {
+                crate::backup_worker::configuration_changed(state, rearm);
+            }
             if let Some(change) = change.filter(|c| !c.changed.is_empty()) {
                 state.events.emit(
                     super::settings::CHANGED_EVENT,
@@ -118,7 +122,7 @@ fn view(snapshot: &Snapshot, ids: &[String], now: i64) -> Result<Value, &'static
         json!({"version":snapshot.version,"config":policy::config_view(settings),
         "state":{"backupState":settings["backupState"],"backupHistory":settings["backupHistory"],"snapshotLastTimes":settings["snapshotLastTimes"]},
         "nextEligibleTimes":next,"invalidSchedules":invalid,
-        "owner":"javascript","queue":[],"active":null,"pendingAccess":[],"lastOutcomes":[]}),
+        "owner":"daemon","queue":[],"active":null,"pendingAccess":[],"lastOutcomes":[]}),
     )
 }
 fn run(

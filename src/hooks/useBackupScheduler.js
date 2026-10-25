@@ -1,124 +1,56 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { send } from '../services/transport';
 import { backupScheduler } from '../services/backupScheduler';
+import { useMailStore } from '../stores/mailStore';
 
-const IDLE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes of no user activity
-const IDLE_CHECK_INTERVAL_MS = 60_000;    // Check every 60 seconds
-const WAKE_SETTLE_MS = 10_000;            // Wait 10s after wake for network recovery
-const VISIBILITY_SETTLE_MS = 15_000;      // Wait 15s after tab visible + verify still idle
-// A heartbeat gap longer than this is a machine that slept. It must clear
-// what a merely hidden page does to a 15s interval: with the main window in
-// the tray (or minimized) Chromium/WebView2 runs chained timers at most once
-// a minute, so ~60-75s gaps are routine there and are not sleep.
-const SLEEP_GAP_MS = 150_000;
-
-/**
- * React bridge for the backup coordinator.
- *
- * Tracks user idleness, visibility, online/offline, and sleep/wake,
- * then feeds lifecycle events to the coordinator which owns all
- * scheduling decisions (gates, queue, pause/resume).
- */
-export function useBackupScheduler() {
-  const lastActivityRef = useRef(Date.now());
-
+/** One sensor publisher per webview. Native owns every eligibility timer. */
+export function useBackupScheduler({ main = true } = {}) {
   useEffect(() => {
-    // ── Activity tracking ──────────────────────────────────────────────
-
-    let throttled = false;
+    const surfaceId = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label || 'browser';
+    const sessionId = crypto.randomUUID();
+    let sequence = 0;
+    let retired = false;
+    let activity = Date.now();
+    let tick = activity;
+    let keyAt = -Infinity;
+    let mouseAt = -Infinity;
+    const facts = (kind = 'update', extra = {}) => {
+      if (retired && kind !== 'retire') return;
+      const payload = { surfaceId, sessionId, sequence: ++sequence, kind };
+      if (kind !== 'retire') Object.assign(payload, {
+        lastActivityAt: activity, observedAt: Date.now(), loading: main && !!useMailStore.getState().loading,
+        visibility: document.visibilityState === 'hidden' ? 'hidden' : 'visible', online: navigator.onLine !== false, ...extra,
+      });
+      Promise.resolve().then(() => send('backup.context', payload)).catch(() => {});
+    };
+    facts('attach');
+    const observer = backupScheduler.observe?.({ present: main });
     const markActive = () => {
-      if (throttled) return;
-      throttled = true;
-      lastActivityRef.current = Date.now();
-      setTimeout(() => { throttled = false; }, 1000);
+      const now = Date.now(); if (now - keyAt < 1000) return;
+      keyAt = activity = now; facts();
+    };
+    const mouse = () => {
+      const now = Date.now(); if (now - mouseAt < 5000) return;
+      mouseAt = activity = now; facts();
     };
     const events = ['keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(e => document.addEventListener(e, markActive, { passive: true }));
-
-    // mousemove tracked separately with longer throttle
-    let mouseThrottled = false;
-    const markMouseActive = () => {
-      if (mouseThrottled) return;
-      mouseThrottled = true;
-      lastActivityRef.current = Date.now();
-      setTimeout(() => { mouseThrottled = false; }, 5000);
-    };
-    document.addEventListener('mousemove', markMouseActive, { passive: true });
-
-    // ── Init progress event listener ───────────────────────────────────
-
-    backupScheduler.initProgressListener();
-
-    // A cap switched off or a changed download limit releases a daily-limit hold now.
-    const stopLimitWatch = backupScheduler.watchTransferLimits();
-
-    // ── Periodic idle check ────────────────────────────────────────────
-
-    const idleInterval = setInterval(() => {
-      // Self-heal runs whether or not the user is idle: a wedged queue and a
-      // stalled run are exactly the states the idle path cannot reach.
-      backupScheduler.tick();
-      const idleMs = Date.now() - lastActivityRef.current;
-      // Idleness is the trigger for starting automatic work, never a reason to
-      // stop it: a backup that was running keeps running when the user comes
-      // back. Only sleep and going offline pause the coordinator.
-      if (idleMs >= IDLE_THRESHOLD_MS) {
-        backupScheduler.checkAndQueueDue();
-      }
-    }, IDLE_CHECK_INTERVAL_MS);
-
-    // ── Sleep/wake detection ───────────────────────────────────────────
-
-    let lastTick = Date.now();
-    const heartbeat = setInterval(() => {
-      const now = Date.now();
-      const gap = now - lastTick;
-      lastTick = now;
-      if (gap > SLEEP_GAP_MS) {
-        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap)`);
-        backupScheduler.onSleep(); // mark as paused_sleep first
-        // Wait for network recovery, then resume
-        setTimeout(() => {
-          console.log('[backup] Post-wake resume');
-          backupScheduler.onWake();
-        }, WAKE_SETTLE_MS);
-      }
-    }, 15_000);
-
-    // ── Visibility change ──────────────────────────────────────────────
-    // Only trigger backup check if user stays idle after returning to the app.
-    // This prevents starting backups at exactly the wrong moment (user just switched back).
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        setTimeout(() => {
-          const idleMs = Date.now() - lastActivityRef.current;
-          if (idleMs >= IDLE_THRESHOLD_MS) {
-            backupScheduler.checkAndQueueDue();
-          }
-        }, VISIBILITY_SETTLE_MS);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    // ── Online/offline ─────────────────────────────────────────────────
-
-    const handleOnline = () => backupScheduler.onOnline();
-    const handleOffline = () => backupScheduler.onOffline();
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // ── Cleanup ────────────────────────────────────────────────────────
-
+    document.addEventListener('mousemove', mouse, { passive: true });
+    const visibility = () => facts();
+    const network = () => facts();
+    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('online', network); window.addEventListener('offline', network);
+    const loading = main ? useMailStore.subscribe((state, prev) => { if (state.loading !== prev.loading) facts(); }) : () => {};
+    const heartbeat = setInterval(() => { const now = Date.now(); const gap = now - tick; tick = now; facts('update', { heartbeatGap: gap }); }, 15_000);
+    const retire = () => { if (retired) return; retired = true; facts('retire'); };
+    window.addEventListener('beforeunload', retire);
     return () => {
+      retire(); clearInterval(heartbeat); loading(); observer?.();
       events.forEach(e => document.removeEventListener(e, markActive));
-      document.removeEventListener('mousemove', markMouseActive);
-      clearInterval(idleInterval);
-      clearInterval(heartbeat);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      stopLimitWatch();
-      backupScheduler.stopAll();
+      document.removeEventListener('mousemove', mouse);
+      document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('online', network); window.removeEventListener('offline', network);
+      window.removeEventListener('beforeunload', retire);
     };
-  }, []);
+  }, [main]);
 }

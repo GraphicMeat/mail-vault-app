@@ -1,5 +1,4 @@
-//! Native account-backup lifecycle. Production automatic admission remains
-//! disabled while JavaScript owns the surface/context coordinator.
+//! Native account-backup lifecycle, admission and retained completion.
 use crate::{
     handlers::{backup as adapter, common},
     ipc::{self, RpcResponse},
@@ -32,6 +31,8 @@ use tokio::sync::{
 
 #[path = "backup_access.rs"]
 mod access;
+#[path = "backup_context.rs"]
+mod context;
 
 const META: &str = "backup.scheduler.v1";
 const STORE: &str = "mailvault-settings";
@@ -51,6 +52,7 @@ pub(crate) struct BackupState {
     progress: AtomicI64,
     execution: Mutex<Option<String>>,
     facts: Mutex<Facts>,
+    context: Mutex<context::Context>,
     #[cfg(test)]
     pending_access_exit: Mutex<Option<(oneshot::Sender<()>, oneshot::Receiver<()>)>>,
     #[cfg(test)]
@@ -107,7 +109,7 @@ impl BackupState {
             }
         }
         if view.is_null() {
-            json!({"revision":0,"queue":[],"active":null,"pendingAccess":[],"lastOutcomes":[],"automaticOwner":"javascript","ready":false})
+            json!({"revision":0,"queue":[],"active":null,"pendingAccess":[],"lastOutcomes":[],"automaticOwner":"daemon","ready":false})
         } else {
             view["accessIncarnation"] = json!(self.access.incarnation);
             view["accessReceipts"] = self.access.receipts();
@@ -127,6 +129,8 @@ struct Intent {
     retries: usize,
     not_before: i64,
     checkpoint: usize,
+    #[serde(default)]
+    pause_requested: bool,
     #[serde(default)]
     cap: Value,
     #[serde(default)]
@@ -162,17 +166,23 @@ impl Ledger {
     fn view(&self) -> Value {
         json!({"revision":self.revision,"queue":self.queue,"active":self.active,
             "pendingAccess":self.queue.iter().filter(|i| i.stage == "pending_access").collect::<Vec<_>>(),
-            "lastOutcomes":self.outcomes,"requests":self.requests,"automaticOwner":"javascript","ready":true})
+            "lastOutcomes":self.outcomes,"requests":self.requests,"automaticOwner":"daemon","ready":true})
     }
 }
-#[derive(Default, Clone)]
+#[derive(Clone)]
 struct Facts {
     automatic: bool,
     paused: bool,
     loading: bool,
     last_activity: i64,
 }
+impl Default for Facts {
+    fn default() -> Self { Self { automatic: true, paused: false, loading: false, last_activity: 0 } }
+}
 enum Cmd {
+    Context { observation: context::Observation, reply: oneshot::Sender<Value> },
+    RetireSurface(String),
+    ConfigChanged { rearm: bool },
     #[cfg(test)]
     Probe {
         done: oneshot::Sender<()>,
@@ -326,7 +336,8 @@ async fn publish(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result<(), St
     let path = state.app_dir.clone();
     let copy = ledger.clone();
     common::blocking(move || save_ledger(&path, &copy)).await??;
-    let view = ledger.view();
+    let mut view = ledger.view();
+    view["accessIncarnation"] = json!(state.backup_worker.access.incarnation);
     *state
         .backup_worker
         .view
@@ -372,31 +383,37 @@ pub(crate) fn start(state: Arc<DaemonState>) {
         tracing::warn!("backup worker did not start");
     }
 }
+fn refresh_context(state: &Arc<DaemonState>) {
+    let c = state.backup_worker.context.lock().unwrap();
+    // Tests may inject the accepted legacy Facts seam directly.
+    if c.last_activity == 0 && !c.loading() && c.deadline(state.clock.now_ms()).is_none() { return; }
+    let mut facts = state.backup_worker.facts.lock().unwrap();
+    facts.loading = c.loading(); facts.paused = c.paused(state.clock.now_ms());
+    facts.last_activity = facts.last_activity.max(c.last_activity);
+}
+fn automatic_ready(state: &Arc<DaemonState>) -> bool {
+    let f = state.backup_worker.facts.lock().unwrap();
+    f.automatic && !f.paused && !f.loading && state.clock.now_ms().saturating_sub(f.last_activity) >= 180_000
+}
+async fn interrupt_paused(state: &Arc<DaemonState>, ledger: &mut Ledger) {
+    if !state.backup_worker.context.lock().unwrap().interrupted(state.clock.now_ms()) { return; }
+    if let Some(i) = ledger.active.as_mut().filter(|i| !i.manual && !i.cancel_requested && i.stage != "uncertain") {
+        i.pause_requested = true; i.stage = "pausing".into();
+        if let Some(token) = state.backup_worker.controls.lock().unwrap().get(&i.run_id) { token.store(true, SeqCst); }
+        let _ = publish(state, ledger).await;
+    }
+}
 fn next_queued_deadline(state: &Arc<DaemonState>, ledger: &Ledger) -> Option<tokio::time::Instant> {
-    if ledger.active.is_some() {
-        return None;
-    }
-    let facts = state.backup_worker.facts.lock().unwrap().clone();
     let now = state.clock.now_ms();
-    if !facts.automatic
-        || facts.paused
-        || facts.loading
-        || now.saturating_sub(facts.last_activity) < 180_000
-    {
-        return None;
+    let f = state.backup_worker.facts.lock().unwrap().clone();
+    if !f.automatic { return None; }
+    let mut deadlines = vec![];
+    if let Some(at) = state.backup_worker.context.lock().unwrap().deadline(now) { deadlines.push(at); }
+    if !f.loading && !f.paused && f.last_activity.saturating_add(180_000) > now { deadlines.push(f.last_activity.saturating_add(180_000)); }
+    if ledger.active.is_none() && automatic_ready(state) {
+        deadlines.extend(ledger.queue.iter().filter(|i| !i.cancel_requested && i.not_before > now).map(|i| i.not_before));
     }
-    ledger
-        .queue
-        .iter()
-        // Past deadlines blocked by policy/access/foreign claims use ordinary
-        // maintenance or control messages, never a zero-duration timer loop.
-        .filter(|intent| !intent.cancel_requested && intent.not_before > now)
-        .map(|intent| intent.not_before)
-        .min()
-        .and_then(|at| {
-            tokio::time::Instant::now()
-                .checked_add(Duration::from_millis(at.saturating_sub(now) as u64))
-        })
+    deadlines.into_iter().min().and_then(|at| tokio::time::Instant::now().checked_add(Duration::from_millis(at.saturating_sub(now) as u64)))
 }
 
 async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, services: Services) {
@@ -461,6 +478,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
     let mut finished_barrier = None;
     let _ = state.backup_worker.tx.get().unwrap().send(Cmd::Wake);
     loop {
+        refresh_context(&state);
         let deadline = next_queued_deadline(&state, &ledger);
         let deadline_wake = async {
             match deadline {
@@ -477,6 +495,22 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         };
         let mut scan = scan;
         match cmd {
+            Cmd::Context { observation, reply } => {
+                let result = state.backup_worker.context.lock().unwrap().observe(observation, state.clock.now_ms());
+                refresh_context(&state);
+                let _ = reply.send(result);
+                interrupt_paused(&state, &mut ledger).await;
+                scan = true;
+            }
+            Cmd::RetireSurface(surface) => {
+                state.backup_worker.context.lock().unwrap().retire_surface(Some(&surface));
+                refresh_context(&state);
+                scan = true;
+            }
+            Cmd::ConfigChanged { rearm } => {
+                if rearm { state.backup_worker.facts.lock().unwrap().automatic = true; }
+                scan = true;
+            }
             #[cfg(test)]
             Cmd::Probe { done } => {
                 let _ = done.send(());
@@ -554,6 +588,8 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 scan |= wake;
             }
             Cmd::OwnerLost(owner) => {
+                state.backup_worker.context.lock().unwrap().retire_surface(None);
+                refresh_context(&state);
                 access::interrupt_owner(&state, &mut ledger, &owner);
                 scan = true;
             }
@@ -658,7 +694,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             }
             Cmd::Due { epoch, ids } => {
                 if epoch != state.backup_worker.epoch.load(SeqCst)
-                    || !state.backup_worker.facts.lock().unwrap().automatic
+                    || !automatic_ready(&state)
                 {
                     continue;
                 }
@@ -728,6 +764,7 @@ fn new_intent(state: &Arc<DaemonState>, account: String, manual: bool) -> Intent
         retries: 0,
         not_before: 0,
         checkpoint: 0,
+        pause_requested: false,
         cap: Value::Null,
         hold: false,
         last_progress: state.clock.now_ms(),
@@ -962,10 +999,12 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     if !ids.contains(&intent.account_id) {
         return RunExit::Missing;
     }
+    if !intent.manual && !automatic_ready(state) { return RunExit::Pending("pending_policy".into()); }
     if let Err(observed) = access::root(state, intent).await {
         return RunExit::PendingAccess { observed };
     }
     let now = state.clock.now_ms();
+    if !intent.manual && !automatic_ready(state) { return RunExit::Pending("pending_policy".into()); }
     if !intent.manual && !policy::scheduled(&settings, &intent.account_id, now) {
         return RunExit::Pending("pending_policy".into());
     }
@@ -1016,6 +1055,7 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     if !ids.contains(&intent.account_id) {
         return RunExit::Missing;
     }
+    if !intent.manual && !automatic_ready(state) { return RunExit::Pending("pending_policy".into()); }
     let mirror_root = match access::root(state, intent).await {
         Ok(root) => root,
         Err(observed) => return RunExit::PendingAccess { observed },
@@ -1121,6 +1161,16 @@ async fn finish_run(
         for request in &intent.requests {
             next.requests.insert(request.clone(), response(&intent));
         }
+        next.queue.insert(0, intent);
+        publish(state, &mut next).await?;
+        return Ok(next);
+    }
+    if intent.pause_requested && !user_cancel && !uncertain {
+        intent.pause_requested = false;
+        intent.checkpoint = 0;
+        access::renew(state, &mut intent);
+        state.backup_worker.controls.lock().unwrap().insert(intent.run_id.clone(), Arc::new(AtomicBool::new(false)));
+        for request in &intent.requests { next.requests.insert(request.clone(), response(&intent)); }
         next.queue.insert(0, intent);
         publish(state, &mut next).await?;
         return Ok(next);
@@ -1464,6 +1514,27 @@ pub(crate) async fn route(
     if let Some(response) = access::route(state, method, params, id.clone()).await {
         return Some(response);
     }
+    if method == "backup.context" {
+        let observation = match context::Observation::parse(params) {
+            Ok(o) => o,
+            Err(e) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, e)),
+        };
+        start(state.clone());
+        let (reply, rx) = oneshot::channel();
+        let _ = state.backup_worker.tx.get().unwrap().send(Cmd::Context { observation, reply });
+        return Some(match rx.await {
+            Ok(v) => RpcResponse::success(id, v),
+            Err(_) => RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.settingsNotLoaded"),
+        });
+    }
+    if method == "backup.surface_retire" {
+        if let Some(surface) = params["surfaceId"].as_str() {
+            start(state.clone());
+            let _ = state.backup_worker.tx.get().unwrap().send(Cmd::RetireSurface(surface.into()));
+            return Some(RpcResponse::success(id, json!({"accepted":true})));
+        }
+        return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.settingsInvalid"));
+    }
     if !matches!(
         method,
         "backup.run_now" | "backup.cancel" | "backup.stop" | "backup.schedule.status"
@@ -1575,4 +1646,9 @@ pub(crate) fn channel_owner(state: &Arc<DaemonState>, owner: Option<&str>) -> Op
         state: state.clone(),
         owner: owner.into(),
     })
+}
+
+pub(crate) fn configuration_changed(state: &Arc<DaemonState>, rearm: bool) {
+    start(state.clone());
+    let _ = state.backup_worker.tx.get().unwrap().send(Cmd::ConfigChanged { rearm });
 }

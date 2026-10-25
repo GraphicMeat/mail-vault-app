@@ -509,6 +509,8 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
             | "backup.schedule.status"
             | "backup.attach_access"
             | "backup.access_status"
+            | "backup.context"
+            | "backup.surface_retire"
     ) {
         return route_request(state, req).await;
     }

@@ -2026,3 +2026,36 @@ async fn backup_access_unavailable_observations_stay_quiet_and_can_recover() {
         "unavailable observation published its own next resolver trigger"
     );
 }
+
+fn observation(surface: &str, session: &str, sequence: u64, kind: &str, activity: i64, loading: bool) -> Value {
+    if kind == "retire" { return json!({"surfaceId":surface,"sessionId":session,"sequence":sequence,"kind":kind}); }
+    json!({"surfaceId":surface,"sessionId":session,"sequence":sequence,"kind":kind,"lastActivityAt":activity,"loading":loading,"visibility":"visible","online":true,"observedAt":NOW})
+}
+#[tokio::test]
+async fn backup_worker_retired_surface_cannot_resume_or_clear_main_loading() {
+    let mut r = rig(); enabled(&r.state);
+    rpc(&r.state, "backup.context", observation("main","a",1,"attach",NOW-180_000,true)).await;
+    rpc(&r.state, "backup.context", observation("child","b",1,"attach",NOW-180_000,false)).await;
+    rpc(&r.state, "backup.context", observation("child","b",2,"retire",0,false)).await;
+    let rejected = rpc(&r.state, "backup.context", observation("child","b",3,"update",0,false)).await;
+    assert_eq!(rejected["accepted"],false);
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    assert!(r.calls.try_recv().is_err(), "child cleared main loading");
+    rpc(&r.state, "backup.context", observation("main","a",2,"retire",0,false)).await;
+    let c = call(&mut r).await; c.reply.send(Ok(result(1))).ok();
+    wait(&r.state,|s| !s["lastOutcomes"].as_array().unwrap().is_empty()).await;
+    finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_context_sequence_and_strictmode_fence_late_attach() {
+    let r = rig();
+    rpc(&r.state,"backup.context",observation("main","old",2,"retire",0,false)).await;
+    let old = rpc(&r.state,"backup.context",observation("main","old",1,"attach",NOW,true)).await;
+    assert_eq!(old["accepted"],false);
+    let new = rpc(&r.state,"backup.context",observation("main","new",1,"attach",NOW,false)).await;
+    assert_eq!(new["accepted"],true);
+    let stale = rpc(&r.state,"backup.context",observation("main","new",1,"update",0,true)).await;
+    assert_eq!(stale["accepted"],false);
+    assert!(!r.state.backup_worker.facts.lock().unwrap().loading);
+    finish(r).await;
+}

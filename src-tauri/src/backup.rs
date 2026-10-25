@@ -401,3 +401,13 @@ pub(crate) fn external_status_fields(
         .unwrap_or(None);
     ("needs_reauth".to_string(), err)
 }
+
+// A shell process/window generation is separate from mirror authorization.
+pub(crate) fn surface_id(label: &str) -> String {
+    static SHELL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    format!("{}:{label}", SHELL.get_or_init(|| uuid::Uuid::new_v4().to_string()))
+}
+pub(crate) fn retire_surface(label: &str) {
+    let id = surface_id(label);
+    crate::daemon_channel::notify("backup.surface_retire", json!({"surfaceId":id}));
+}

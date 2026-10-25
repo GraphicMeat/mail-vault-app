@@ -1,105 +1,40 @@
 // @vitest-environment jsdom
-//
-// The sleep/wake heartbeat reads a long gap between two ticks as the machine
-// having slept. A hidden page is not a sleeping machine: once the main window
-// sits in the tray, Chromium (WebView2) runs chained timers at most once a
-// minute, so a 15s interval really fires every ~60s. That gap must not pause
-// the backup coordinator every minute; a real sleep still must.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup } from '@testing-library/react';
-
-const stopLimitWatch = vi.hoisted(() => vi.fn());
-const scheduler = vi.hoisted(() => ({
-  initProgressListener: vi.fn(),
-  watchTransferLimits: vi.fn(() => stopLimitWatch),
-  tick: vi.fn(),
-  checkAndQueueDue: vi.fn(),
-  onSleep: vi.fn(),
-  onWake: vi.fn(),
-  onOnline: vi.fn(),
-  onOffline: vi.fn(),
-  stopAll: vi.fn(),
-}));
-vi.mock('../../services/backupScheduler', () => ({ backupScheduler: scheduler }));
-
+const send = vi.hoisted(() => vi.fn(async () => ({ accepted: true })));
+const detach = vi.hoisted(() => vi.fn());
+vi.mock('../../services/transport', () => ({ send }));
+vi.mock('../../services/backupScheduler', () => ({ backupScheduler: { observe: () => detach } }));
+vi.mock('../../stores/mailStore', () => ({ useMailStore: { getState: () => ({ loading: true }), subscribe: () => () => {} } }));
 import { useBackupScheduler } from '../useBackupScheduler';
-
-// Moves the wall clock by `gapMs` in total but lets only one heartbeat tick
-// run, the way a throttled (or slept) timer fires late.
-function tickAfter(gapMs) {
-  vi.setSystemTime(Date.now() + gapMs - 15_000);
-  vi.advanceTimersByTime(15_000);
-}
-
-describe('useBackupScheduler heartbeat', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    Object.values(scheduler).forEach(fn => fn.mockClear());
-    stopLimitWatch.mockClear();
-  });
-  afterEach(() => {
-    cleanup();
-    vi.useRealTimers();
-  });
-
-  it('does not read a hidden page\'s once-a-minute timers as sleep', () => {
-    renderHook(() => useBackupScheduler());
-    for (let i = 0; i < 10; i++) tickAfter(75_000);
-    expect(scheduler.onSleep).not.toHaveBeenCalled();
-  });
-
-  it('follows the daily limit settings while mounted, and stops following them on unmount', () => {
-    const { unmount } = renderHook(() => useBackupScheduler());
-    expect(scheduler.watchTransferLimits).toHaveBeenCalledTimes(1);
-    expect(stopLimitWatch).not.toHaveBeenCalled();
-    unmount();
-    expect(stopLimitWatch).toHaveBeenCalledTimes(1);
-  });
-
-  it('still pauses and resumes the coordinator across a real sleep', () => {
-    renderHook(() => useBackupScheduler());
-    tickAfter(10 * 60_000);
-    expect(scheduler.onSleep).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(10_000);
-    expect(scheduler.onWake).toHaveBeenCalledTimes(1);
-  });
+const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(1792929600000); send.mockClear(); detach.mockClear(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
+it('publishes measured hidden and real-sleep gaps without deciding sleep', async () => {
+  renderHook(() => useBackupScheduler()); await flush();
+  vi.setSystemTime(Date.now() + 60000); vi.advanceTimersByTime(15000); await flush();
+  expect(send.mock.calls.at(-1)[1].heartbeatGap).toBe(75000);
+  vi.setSystemTime(Date.now() + 136000); vi.advanceTimersByTime(15000); await flush();
+  expect(send.mock.calls.at(-1)[1].heartbeatGap).toBe(151000);
+  expect(send.mock.calls.every(([method]) => method === 'backup.context')).toBe(true);
 });
-
-// Real hook, fake browser events/clock only. Visibility's delayed idle probe
-// makes the throttle's boundary observable between the minute interval ticks.
-for (const [first, second, gap] of [['keydown', 'click', 500], ['mousemove', 'mousemove', 4000]]) {
-  it(`keeps the first ${first} activity timestamp inside its throttle`, () => {
-    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-25T12:00:00Z'));
-    Object.values(scheduler).forEach(fn => fn.mockClear());
-    const { unmount } = renderHook(() => useBackupScheduler());
-    vi.advanceTimersByTime(1000); document.dispatchEvent(new Event(first));
-    vi.advanceTimersByTime(gap); document.dispatchEvent(new Event(second));
-    vi.advanceTimersByTime(165000-gap);
-    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
-    document.dispatchEvent(new Event('visibilitychange'));
-    vi.advanceTimersByTime(15000);
-    expect(scheduler.checkAndQueueDue).toHaveBeenCalledTimes(1);
-    unmount(); vi.useRealTimers();
-  });
-}
-it('rechecks actual activity after the visibility settle delay', () => {
-  vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-25T12:00:00Z'));
-  Object.values(scheduler).forEach(fn => fn.mockClear());
-  const { unmount } = renderHook(() => useBackupScheduler());
-  vi.advanceTimersByTime(180000); scheduler.checkAndQueueDue.mockClear();
-  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
-  document.dispatchEvent(new Event('visibilitychange'));
-  vi.advanceTimersByTime(14000); document.dispatchEvent(new Event('click'));
-  vi.advanceTimersByTime(1000);
-  expect(scheduler.checkAndQueueDue).not.toHaveBeenCalled();
-  unmount(); vi.useRealTimers();
+it('retires its exact session and never wakes or stops work after unmount', async () => {
+  const { unmount } = renderHook(() => useBackupScheduler()); await flush();
+  const attach = send.mock.calls[0][1];
+  vi.setSystemTime(Date.now() + 151000); vi.advanceTimersByTime(15000); unmount(); await flush();
+  expect(send.mock.calls.at(-1)[1]).toEqual({ surfaceId: attach.surfaceId, sessionId: attach.sessionId, sequence: 3, kind: 'retire' });
+  const count = send.mock.calls.length; vi.advanceTimersByTime(300000); await flush();
+  expect(send).toHaveBeenCalledTimes(count); expect(detach).toHaveBeenCalledTimes(1);
 });
-it('retirement fences the old delayed wake without stopping native work', () => {
-  vi.useFakeTimers(); Object.values(scheduler).forEach(fn => fn.mockClear());
-  const { unmount } = renderHook(() => useBackupScheduler());
-  tickAfter(151000); unmount();
-  expect(scheduler.stopAll).not.toHaveBeenCalled();
-  vi.advanceTimersByTime(10000);
-  expect(scheduler.onWake).not.toHaveBeenCalled();
-  vi.useRealTimers();
+it('publishes child loading independently and uses fresh mount identities', async () => {
+  const first = renderHook(() => useBackupScheduler({ main: false })); await flush();
+  const attach = send.mock.calls[0][1]; expect(attach.loading).toBe(false);
+  first.unmount(); renderHook(() => useBackupScheduler()); await flush();
+  const last = send.mock.calls.at(-1)[1]; expect(last.loading).toBe(true); expect(last.sessionId).not.toBe(attach.sessionId);
+});
+it.each([['keydown','click',500],['mousemove','mousemove',4000]])('preserves the first %s timestamp within its throttle', async (first, second, gap) => {
+  renderHook(() => useBackupScheduler()); await flush();
+  document.dispatchEvent(new Event(first)); await flush(); const at = send.mock.calls.at(-1)[1].lastActivityAt;
+  vi.advanceTimersByTime(gap); document.dispatchEvent(new Event(second)); await flush();
+  expect(send.mock.calls.at(-1)[1].lastActivityAt).toBe(at);
 });

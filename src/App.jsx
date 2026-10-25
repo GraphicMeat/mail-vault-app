@@ -82,7 +82,6 @@ import ChangeServerModal from './components/ChangeServerModal.jsx';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { useUpdateAvailable } from './hooks/useUpdateAvailable';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
-import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useAfterSettingsClose, useSettingsWindow } from './hooks/useSettingsWindow';
 import { useExportWindow } from './hooks/useExportWindow';
@@ -671,9 +670,6 @@ function App() {
 
   // Pipeline coordinator — manages background caching for all accounts
   usePipelineCoordinator();
-
-  // Backup scheduler — bridges backup singleton to React lifecycle
-  useBackupScheduler();
 
   // Offline search index: tell the app what to index as settings change
   useSearchIndexConfig();
