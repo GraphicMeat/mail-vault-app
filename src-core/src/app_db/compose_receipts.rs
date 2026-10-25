@@ -131,24 +131,33 @@ pub fn inventory_tuple(
     if account.trim().is_empty() || mailbox.is_empty() || uid == 0 {
         return Err("invalid compose receipt tuple".into());
     }
-    let conn = Connection::open_with_flags(db::db_path(app_dir), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| error.to_string())?;
+    let conn = Connection::open_with_flags(
+        db::db_path(app_dir),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|error| error.to_string())?;
     let version = data_version(&conn)?;
     let prefix = account_prefix(account);
     let upper = format!("{prefix}~");
     #[cfg(test)]
     TUPLE_SCANS.with(|count| count.set(count.get() + 1));
     let receipts = {
-        let mut query = conn.prepare("SELECT key, value FROM meta WHERE key >= ?1 AND key < ?2")
+        let mut query = conn
+            .prepare("SELECT key, value FROM meta WHERE key >= ?1 AND key < ?2")
             .map_err(|error| error.to_string())?;
-        let rows = query.query_map(params![prefix, upper], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        }).map_err(|error| error.to_string())?;
+        let rows = query
+            .query_map(params![prefix, upper], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| error.to_string())?;
         let mut matching = Vec::new();
         for row in rows {
             let (key, raw) = row.map_err(|error| error.to_string())?;
             let receipt: Receipt = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
-            if !receipt.is_valid() || receipt.identity.scope.account_id != account || receipt.identity.key() != key {
+            if !receipt.is_valid()
+                || receipt.identity.scope.account_id != account
+                || receipt.identity.key() != key
+            {
                 return Err("invalid compose receipt account history".into());
             }
             if receipt.identity.scope.mailbox == mailbox && receipt.identity.scope.uid == uid {
@@ -157,7 +166,11 @@ pub fn inventory_tuple(
         }
         matching
     };
-    let inventory = TupleInventory { conn, version, receipts };
+    let inventory = TupleInventory {
+        conn,
+        version,
+        receipts,
+    };
     inventory.current()?;
     Ok(inventory)
 }
@@ -258,7 +271,13 @@ mod tests {
     }
     fn tuple_receipt(account: &str, mailbox: &str, uid: u32, mid: &str) -> Receipt {
         let raw = format!("Message-ID: <{mid}>\r\n\r\nfixture");
-        Receipt::present(Identity::from_bytes(Scope::new(account, mailbox, uid, mid).unwrap(), raw.as_bytes()).unwrap())
+        Receipt::present(
+            Identity::from_bytes(
+                Scope::new(account, mailbox, uid, mid).unwrap(),
+                raw.as_bytes(),
+            )
+            .unwrap(),
+        )
     }
 
     #[test]
@@ -269,16 +288,23 @@ mod tests {
         let mut other_mid = tuple_receipt("one", "Drafts", 7, "second@example.test");
         other_mid.state = State::Cleaned;
         let unrelated = tuple_receipt("one", "Other", 8, "other@example.test");
-        for proof in [&first, &other_mid, &unrelated] { save(&c, proof).unwrap(); }
+        for proof in [&first, &other_mid, &unrelated] {
+            save(&c, proof).unwrap();
+        }
         let inventory = inventory_tuple(dir.path(), "one", "Drafts", 7).unwrap();
         let tuple = inventory.current().unwrap();
         assert_eq!(tuple.len(), 2);
         assert!(tuple.contains(&first) && tuple.contains(&other_mid));
         assert!(!tuple.contains(&unrelated));
-        for invalid in ["{broken".to_string(), {
-            let mut future = unrelated.clone(); future.version = 42;
-            serde_json::to_string(&future).unwrap()
-        }, serde_json::to_string(&first).unwrap()] {
+        for invalid in [
+            "{broken".to_string(),
+            {
+                let mut future = unrelated.clone();
+                future.version = 42;
+                serde_json::to_string(&future).unwrap()
+            },
+            serde_json::to_string(&first).unwrap(),
+        ] {
             db::meta_set(&c, &unrelated.identity.key(), &invalid).unwrap();
             assert!(inventory_tuple(dir.path(), "one", "Drafts", 7).is_err());
         }
@@ -298,7 +324,10 @@ mod tests {
         db::meta_set(&other, "unrelated", "commit").unwrap();
         assert!(inventory.current().is_err());
         assert_eq!(TUPLE_SCANS.with(|count| count.get()), before + 1);
-        assert!(inventory_tuple(dir.path(), "one", "Drafts", 7).unwrap().current().is_ok());
+        assert!(inventory_tuple(dir.path(), "one", "Drafts", 7)
+            .unwrap()
+            .current()
+            .is_ok());
     }
 
     #[test]

@@ -263,11 +263,14 @@ fn install(
     let l = copy.location();
     app_db::handle(&s.app_dir).map_err(|error| error.to_string())?;
     let receipts = compose_receipts::inventory_tuple(&s.app_dir, &l.account_id, &l.mailbox, l.uid)?;
-    probe(s, if copy.entry.is_null() {
-        "after_prepared_receipt_inventory"
-    } else {
-        "after_destination_receipt_inventory"
-    })?;
+    probe(
+        s,
+        if copy.entry.is_null() {
+            "after_prepared_receipt_inventory"
+        } else {
+            "after_destination_receipt_inventory"
+        },
+    )?;
     let i = inventory(s, &l)?;
     with_mailbox_write(s, &l.account_id, &l.mailbox, |root| {
         // Publication uses the same mailbox -> vault -> custody unit as exact
@@ -294,7 +297,8 @@ fn install(
                 let record = db::load(c, id)?.ok_or("draft intent missing")?;
                 if db::owner(c, &l)?.as_deref() != Some(id)
                     || !same_attempt(&record, pending)
-                    || (copy.identity != pending.copy.identity && copy.identity != pending.prepared.identity)
+                    || (copy.identity != pending.copy.identity
+                        && copy.identity != pending.prepared.identity)
                 {
                     return Err("draft installation attempt changed".into());
                 }
@@ -426,7 +430,14 @@ fn finish(
     if !p.copy.identity.matches_bytes(&raw) {
         return Err("prepared draft changed".into());
     }
-    install(s, &r.draft_id, &p, &p.copy, ready, &drafts::FLAGS.map(String::from))?;
+    install(
+        s,
+        &r.draft_id,
+        &p,
+        &p.copy,
+        ready,
+        &drafts::FLAGS.map(String::from),
+    )?;
     probe(s, "after_bytes")?;
     let l = p.copy.location();
     let i = inventory(s, &l)?;
@@ -741,7 +752,10 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
         cleanup(s, &mut r)?;
         // An aborted higher complete revision remains immutable. A lower save
         // must not reach finish and clear that durable retry constraint.
-        if r.retry.as_ref().is_some_and(|retry| request.revision < retry.revision) {
+        if r.retry
+            .as_ref()
+            .is_some_and(|retry| request.revision < retry.revision)
+        {
             return Err("draft higher revision retry pending".into());
         }
         if request.revision < r.revision {
@@ -813,7 +827,10 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     if r.epoch != preparation_epoch {
         return Err("draft preparation attempt changed; retry".into());
     }
-    if r.retry.as_ref().is_some_and(|retry| request.revision < retry.revision) {
+    if r.retry
+        .as_ref()
+        .is_some_and(|retry| request.revision < retry.revision)
+    {
         return Err("draft higher revision retry pending".into());
     }
     if r.retry.as_ref().is_some_and(|retry| {
@@ -905,7 +922,14 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     let stage_ready = stage_ready.with_local_uid(stage_uid)?;
     let destination_ready = destination_ready.with_local_uid(uid)?;
     probe(s, "before_prepared_store")?;
-    install(s, &r.draft_id, &intent, &prepared, &stage_ready, &["seen".into()])?;
+    install(
+        s,
+        &r.draft_id,
+        &intent,
+        &prepared,
+        &stage_ready,
+        &["seen".into()],
+    )?;
     probe(s, "after_prepared_store")?;
     finish(s, &mut r, &destination_ready)?;
     Ok(response(&r, "saved"))
