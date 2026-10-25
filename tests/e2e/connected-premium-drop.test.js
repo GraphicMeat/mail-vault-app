@@ -98,34 +98,22 @@ describe('Billing — premium that stops applying to this device', function () {
 
   it('stops automatic backups when premium lapses, and keeps the schedule for the day it comes back', async function () {
     const accountId = browser.mockAccounts[0].id;
-    // `_queueRunning` parks the queue so a due check cannot start a real backup
-    // against the mock server — the queue contents are what is being asserted.
-    const dueCheck = (id) => {
-      const s = window.__BACKUP_SCHEDULER__;
-      s._queue = [];
-      s._queueRunning = true;
-      s.checkAndQueueDue();
-      const queued = [...s._queue];
-      s._queue = [];
-      s._queueRunning = false;
-      return {
-        queued,
-        paused: s._isPaused(),
-        scheduleEnabled: !!window.__SETTINGS_STORE__.getState().backupSchedules?.[id]?.enabled,
-      };
-    };
+    // Observe the daemon's current policy projection without starting work.
+    const dueCheck = () => browser.executeAsync(done => {
+      window.__BACKUP_SCHEDULER__.status().then(done,e=>done({__error:String(e?.message||e)}));
+    });
 
     await browser.execute((id) => {
       window.__SETTINGS_STORE__.getState().setBackupSchedule(id, { enabled: true, interval: 'hourly', hourlyInterval: 1 });
     }, accountId);
 
-    // Control: with the live subscription still signed in, this account is due
-    // and does get queued. Without this the assertion below passes vacuously.
+    // The live subscription first makes this durable schedule eligible.
     await setBillingMode('premium');
     await openBillingSignedInOn(PREMIUM_CUSTOMER);
-    const live = await browser.execute(dueCheck, accountId);
-    expect(live.paused).toBe(false);   // a paused scheduler queues nothing either
-    expect(live.queued).toContain(accountId);
+    await browser.waitUntil(async () => (await dueCheck()).automaticEligibility?.[accountId] === true, {timeout:15000,interval:250,timeoutMsg:'Native eligible control never observed the durable Premium schedule'});
+    const live = await dueCheck();
+    expect(live.config.backupSchedules[accountId].enabled).toBe(true);
+    expect(live.automaticEligibility[accountId]).toBe(true);
 
     await setBillingMode('lapsed');
     await openBillingSignedInOn(LAPSED_CUSTOMER);
@@ -133,9 +121,10 @@ describe('Billing — premium that stops applying to this device', function () {
       timeout: 30_000, interval: 500, timeoutMsg: 'the drop never landed, so this asserts nothing',
     });
 
-    const lapsed = await browser.execute(dueCheck, accountId);
-    expect(lapsed.queued).toEqual([]);
+    await browser.waitUntil(async () => (await dueCheck()).automaticEligibility?.[accountId] === false, {timeout:15000,interval:250,timeoutMsg:'Native policy did not observe the durable Premium lapse'});
+    const lapsed = await dueCheck();
+    expect(lapsed.automaticEligibility[accountId]).toBe(false);
     // The schedule is kept, not deleted: resubscribing restores it untouched.
-    expect(lapsed.scheduleEnabled).toBe(true);
+    expect(lapsed.config.backupSchedules[accountId].enabled).toBe(true);
   });
 });

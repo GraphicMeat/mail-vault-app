@@ -2411,3 +2411,33 @@ async fn backup_worker_pause_after_real_success_does_not_repeat_completed_run() 
     finish(r).await;
     assert!(completed,"a successfully drained backup was discarded merely because a pause raced its return");
 }
+
+#[tokio::test]
+async fn backup_worker_foreign_authorization_channel_cannot_retire_surface_facts() {
+    let r = rig();
+    rpc(&r.state,"backup.context",observation("surface-owner:main","live",1,"attach",NOW,true)).await;
+    let foreign = channel_owner(&r.state,Some("foreign-authorizer")).unwrap(); drop(foreign);
+    let (done,rx) = oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap();
+    let still_loading = r.state.backup_worker.facts.lock().unwrap().loading;
+    finish(r).await;
+    assert!(still_loading,"an unrelated mirror authorizer erased live surface loading");
+}
+#[tokio::test]
+async fn backup_worker_surface_channel_retires_only_its_generation_and_reconnects_fresh() {
+    let r = rig();
+    rpc(&r.state,"backup.context",observation("shell-a:main","a",1,"attach",NOW,true)).await;
+    rpc(&r.state,"backup.context",observation("shell-b:settings","b",1,"attach",NOW,false)).await;
+    // This is the existing coupled seam for the RED. The final surface hook
+    // must be independent of this authorization owner while retaining RAII.
+    let owner = channel_owner(&r.state,Some("shell-a")).unwrap();drop(owner);
+    let (done,rx) = oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap();
+    let own_old = rpc(&r.state,"backup.context",observation("shell-a:main","a",2,"update",NOW,true)).await;
+    let other = rpc(&r.state,"backup.context",observation("shell-b:settings","b",2,"update",NOW,false)).await;
+    let delayed = rpc(&r.state,"backup.context",observation("shell-a:main","unseen-before-loss",1,"attach",NOW,true)).await;
+    let fresh = rpc(&r.state,"backup.context",observation("shell-a-new:main","fresh",1,"attach",NOW,true)).await;
+    finish(r).await;
+    assert_eq!(own_old["accepted"],false);
+    assert_eq!(other["accepted"],true,"the owning drop retired a different surface generation");
+    assert_eq!(delayed["accepted"],false,"a delayed old-generation attach resurrected loading");
+    assert_eq!(fresh["accepted"],true,"same-process reconnect could not establish fresh facts");
+}

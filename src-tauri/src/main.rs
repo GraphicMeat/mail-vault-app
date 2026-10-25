@@ -3454,9 +3454,7 @@ async fn daemon_rpc(
     method: String,
     mut params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    if method == "backup.context" {
-        if let Some(object) = params.as_object_mut() { object.insert("surfaceId".into(), serde_json::json!(backup::surface_id(window.label()))); }
-    }
+    if method == "backup.context" { params = backup::surface_params(window.label(), params)?; }
     let fast_token = webview_rpc_token(
         &method,
         daemon_channel::is_connected(),
@@ -3542,8 +3540,12 @@ async fn daemon_rpc(
 
 /// The daemon bridge: send one fire-and-forget notification on the channel.
 #[tauri::command]
-fn daemon_channel_notify(method: String, params: serde_json::Value) {
+fn daemon_channel_notify(window: tauri::WebviewWindow, method: String, mut params: serde_json::Value) {
     if webview_rpc_token(&method, false, 0, None).is_ok() {
+        if method == "backup.context" {
+            let Ok(native) = backup::surface_params(window.label(), params) else { return; };
+            params = native;
+        }
         daemon_channel::notify(&method, params);
     }
 }

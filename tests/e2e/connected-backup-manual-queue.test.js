@@ -1,315 +1,62 @@
-/**
- * E2E: "Back up now" and "Back up all accounts now" run, in the compiled app.
- *
- * Nightly 8e5f6af, 2026-09-12: after a restart the user was idle three minutes,
- * the schedule queued thirteen accounts, and every automatic run was cancelled
- * the moment the user touched the app. The coordinator sat in PAUSED_USER_ACTIVE
- * and for three hours "Back up now" only spun while "Back up all accounts now"
- * did nothing at all. Three separate defects, each one enough on its own:
- *
- *   - a click went through queueBackup, which returns early for an id already
- *     queued, so its promise never resolved and the spinner never stopped;
- *   - "Back up all" pushed its manual ids to the BACK of the queue, and the
- *     loop only ever looked at the head, which was automatic and gated;
- *   - tick(), the one thing that could have restarted the loop, refused to
- *     touch a paused queue at all.
- *
- * The unit specs cover the coordinator. This covers the thing the user does:
- * the state that used to freeze is seeded, the real button is clicked, and the
- * assertions are the run's files on disk and the card's own controls.
- *
- * Every wait is `browser.waitUntil(() => browser.execute(...))`. `$(sel)` and
- * `waitForDisplayed` die on tauri-wd, and a page callback cannot close over a
- * host variable - everything it needs is passed as an argument.
- */
-
+/** Real backup buttons and exact native request receipts in the rebuilt app. */
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+const wait = (predicate, timeout, message) => browser.waitUntil(predicate,{timeout,interval:200,timeoutMsg:message});
+const invoke = (command,args={}) => browser.executeAsync((c,a,done) => { window.__TAURI__.core.invoke(c,a).then(done,e=>done({__error:String(e?.message||e)})); },command,args);
+const rpc = (method,params={}) => invoke('daemon_rpc',{method,params});
+const card = id => browser.execute(account => {
+  const button = document.querySelector(`[data-testid="backup-account-card"][data-account-id="${account}"] [data-testid="backup-now-button"]`);
+  return button ? {disabled:button.disabled,label:button.textContent.trim()} : null;
+},id);
+const lastStatus = id => browser.execute(account => window.__SETTINGS_STORE__.getState().backupState?.[account]?.lastStatus,id);
+const click = selector => browser.execute(sel => { const button=document.querySelector(sel); if(!button||button.disabled)return false;button.scrollIntoView({block:'center',behavior:'instant'});button.click();return true; },selector);
 
-const LUKE = 'luke@mock.test';
-const VADER = 'vader@mock.test';
-
-const wait = (predicate, timeout, message) =>
-  browser.waitUntil(predicate, { timeout, interval: 200, timeoutMsg: message });
-
-/** `browser.execute` does not await a Promise; `executeAsync` does. */
-function invoke(cmd, args) {
-  return browser.executeAsync((c, a, done) => {
-    window.__TAURI__.core.invoke(c, a).then(done).catch((e) => done({ __error: String((e && e.message) || e) }));
-  }, cmd, args);
-}
-
-/**
- * Click a backup sub-tab. "Backup & Restore" names both the sidebar tab and the
- * first sub-tab, and the sub-tab bar renders after the sidebar - so the last
- * match is the sub-tab, the first would be the sidebar entry.
- */
-async function clickBackupSubTab(label) {
-  const clicked = await browser.execute((wanted) => {
-    const matches = [...document.querySelectorAll('button')]
-      .filter((b) => b.offsetHeight > 0 && b.textContent.trim() === wanted);
-    if (!matches.length) return false;
-    matches[matches.length - 1].click();
-    return true;
-  }, label);
-  await browser.pause(400);
-  return clicked;
-}
-
-/** The "Back up now" control on one account's card, as the DOM reports it. */
-const cardButton = (accountId) => browser.execute((id) => {
-  const button = document.querySelector(
-    `[data-testid="backup-account-card"][data-account-id="${id}"] [data-testid="backup-now-button"]`);
-  if (!button) return null;
-  const card = button.closest('[data-testid="backup-account-card"]');
-  const block = card.querySelector('[data-testid="backup-card-progress"]');
-  return {
-    label: button.textContent.trim(),
-    disabled: button.disabled,
-    progress: !!block,
-    bar: !!(block && block.querySelector('[data-testid="backup-card-bar"]')),
-  };
-}, accountId);
-
-const allButton = () => browser.execute(() => {
-  const button = document.querySelector('[data-testid="backup-all-button"]');
-  if (!button) return null;
-  const panel = document.querySelector('[data-testid="backup-all-progress"]');
-  return {
-    label: button.textContent.trim(),
-    disabled: button.disabled,
-    progress: !!panel,
-    bar: !!(panel && panel.querySelector('[data-testid="backup-all-bar"]')),
-  };
-});
-
-const queueState = () => browser.execute(() => {
-  const s = window.__BACKUP_SCHEDULER__;
-  return { queue: [...s._queue], state: s.state, running: s._queueRunning };
-});
-
-/**
- * Put the coordinator back where the next case expects it.
- *
- * `_showNextOrDone` is the only route to the store's activeBackup from here, and
- * it has to run: an empty queue is not enough, because a run that ends with work
- * still queued parks activeBackup on the next id and nothing else clears it.
- */
-async function resetCoordinator() {
-  await browser.execute(() => {
-    const s = window.__BACKUP_SCHEDULER__;
-    s._state = 'idle';
-    s._queue = [];
-    s._manualIds.clear();
-    s._publishQueue();
-    s._showNextOrDone();
+describe('Backup buttons use the native queue and retained results',function(){
+  this.timeout(360000);
+  let luke,vader,root;
+  before(async function(){
+    await waitForApp();await waitForEmails();
+    await wait(()=>browser.execute(()=>!!window.__BACKUP_SCHEDULER__&&!!window.__SETTINGS_STORE__),20000,'Native backup probe unavailable');
+    luke=browser.mockAccounts.find(a=>a.email==='luke@mock.test');vader=browser.mockAccounts.find(a=>a.email==='vader@mock.test');
+    root=mkdtempSync(join(tmpdir(),'mv-native-manual-'));const saved=await invoke('backup_save_external_location',{path:root});assert.equal(saved?.__error,undefined);
+    await browser.execute(()=>window.__SETTINGS_STORE__.setState({language:'en',billingProfile:{hasSubscription:true,premiumAccess:true,status:'active',clientAccessGranted:true},backupGlobalEnabled:false,backupSchedules:{},hiddenAccounts:{},snapshotAutoEnabled:false,backupNotifyOnSuccess:false,backupNotifyOnFailure:false}));
+    await wait(async()=>{const s=await rpc('settings.get');return s.values?.['mailvault-settings']?.state?.billingProfile?.hasSubscription===true;},15000,'Premium settings were not durable');
+    await openSettings();assert.equal(await clickSettingsNav('Backup & Restore'),true);
+    await browser.execute(()=>{const buttons=[...document.querySelectorAll('button')].filter(b=>b.offsetHeight>0&&b.textContent.trim()==='Backup Schedule');buttons.at(-1)?.click();});
+    await wait(async()=>!!(await card(luke.id))&&!!(await card(vader.id)),15000,'Backup cards unavailable');
   });
-  await wait(async () => !(await allButton()).progress, 15_000, 'The Back up all panel never cleared');
-}
-
-const lastStatus = (accountId) => browser.execute((id) =>
-  window.__SETTINGS_STORE__.getState().backupState?.[id]?.lastStatus || null, accountId);
-
-/** Message files the mirror holds for one account's INBOX. */
-function mirrorFiles(root, email) {
-  const cur = join(root, email, 'INBOX', 'cur');
-  return existsSync(cur) ? readdirSync(cur) : [];
-}
-
-describe('Backup - a manual run jumps the queue and finishes, in the app', function () {
-  this.timeout(300_000);
-
-  let lukeId = null;
-  let vaderId = null;
-  let mirrorRoot = null;
-
-  before(async function () {
-    assert.equal(await waitForApp(), 'ready');
-    await waitForEmails();
-    await wait(() => browser.execute(() => !!window.__BACKUP_SCHEDULER__ && !!window.__SETTINGS_STORE__),
-      20_000, 'The build must enable VITE_E2E');
-
-    lukeId = browser.mockAccounts.find((a) => a.email === LUKE).id;
-    vaderId = browser.mockAccounts.find((a) => a.email === VADER).id;
-
-    // This spec's own mirror. connected-backup-orphan-restore points the app at
-    // a temp dir it then deletes, so inheriting whatever location is stored
-    // would test that spec's teardown instead of this one's subject.
-    mirrorRoot = mkdtempSync(join(tmpdir(), 'mv-manual-queue-mirror-'));
-    const saved = await invoke('backup_save_external_location', { path: mirrorRoot });
-    assert.equal(saved?.__error, undefined, `backup_save_external_location threw: ${saved?.__error}`);
-
-    // Premium, with every schedule off: the card renders its real controls
-    // instead of the paywall blur, and checkAndQueueDue still has nothing it is
-    // allowed to queue, so the only ids in the queue are the ones a case puts
-    // there. Snapshots and notifications off - neither is this spec's subject.
-    await browser.execute(() => {
-      window.__SETTINGS_STORE__.setState({
-        language: 'en',
-        billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active', clientAccessGranted: true },
-        backupGlobalEnabled: false,
-        backupSchedules: {},
-        hiddenAccounts: {},
-        snapshotAutoEnabled: false,
-        backupNotifyOnSuccess: false,
-        backupNotifyOnFailure: false,
-      });
-    });
-
-    await openSettings();
-    assert.equal(await clickSettingsNav('Backup & Restore'), true);
-    assert.equal(await clickBackupSubTab('Backup Schedule'), true);
-    await wait(async () => (await allButton()) !== null, 15_000, 'The Backup Schedule sub-tab never rendered');
-    await wait(async () => (await cardButton(lukeId)) !== null && (await cardButton(vaderId)) !== null,
-      15_000, 'Both account cards must render their own Back up now control');
+  after(async function(){
+    await rpc('backup.stop');await wait(async()=>{const s=await rpc('backup.schedule.status');return !s.active&&!s.queue.length;},30000,'Native backup did not drain');
+    await closeSettings();if(root)rmSync(root,{recursive:true,force:true});
   });
-
-  after(async function () {
-    await invoke('backup_clear_external_location', {});
-    if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
-    await closeSettings();
+  it('exposes native controls and daemon ownership',async function(){
+    const status=await rpc('backup.schedule.get');assert.equal(status.owner,'daemon');assert.equal(status.automaticOwner,'daemon');
+    assert.deepEqual(await browser.execute(()=>Object.keys(window.__BACKUP_SCHEDULER__).sort()),['status','stopAll','triggerManualBackup']);
   });
-
-  it('has no user-activity pause left to fall into', async function () {
-    const contract = await browser.execute(() => {
-      const s = window.__BACKUP_SCHEDULER__;
-      const gone = typeof s.onUserActive === 'undefined' && typeof s.onUserIdle === 'undefined';
-      // The state itself is gone, so even a coordinator somehow holding the old
-      // string is not paused by it - nothing can strand the queue there again.
-      s._state = 'paused_user_active';
-      const paused = s._isPaused();
-      s._state = 'idle';
-      return { gone, paused };
-    });
-
-    assert.equal(contract.gone, true, 'onUserActive / onUserIdle are back - user activity can cancel a run again');
-    assert.equal(contract.paused, false, 'paused_user_active still gates the queue');
-    await resetCoordinator();
+  it('runs the real manual button during an offline pause without clearing that pause',async function(){
+    await browser.execute(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>false});window.dispatchEvent(new Event('offline'));});
+    await wait(async()=>(await rpc('backup.schedule.status')).context?.paused===true,10000,'Offline observation did not reach native worker');
+    assert.equal(await click(`[data-testid="backup-account-card"][data-account-id="${luke.id}"] [data-testid="backup-now-button"]`),true);
+    await wait(async()=>!(await card(luke.id)).disabled&&['success','degraded'].includes(await lastStatus(luke.id)),180000,'Manual button did not settle its native receipt');
+    assert.equal((await rpc('backup.schedule.status')).context.paused,true);
+    const cur=join(root,luke.email,'INBOX','cur');assert.ok(existsSync(cur)&&readdirSync(cur).length>0,'No real mirrored messages');
+    await browser.execute(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>true});window.dispatchEvent(new Event('online'));});
   });
-
-  it('runs a click on one account past a sleep pause holding another account', async function () {
-    // The 2026-09-12 shape: the coordinator is paused, somebody else's id is
-    // parked in the queue, and the user clicks Back up now.
-    await browser.execute((id) => {
-      const s = window.__BACKUP_SCHEDULER__;
-      s._state = 'paused_sleep';
-      s._queue = [id];
-      s._publishQueue();
-    }, vaderId);
-
-    await wait(async () => {
-      const vader = await cardButton(vaderId);
-      return !!vader && vader.disabled && vader.label.includes('Queued...');
-    }, 15_000, 'The parked account never said Queued...');
-
-    assert.equal(await browser.execute((id) => {
-      const button = document.querySelector(
-        `[data-testid="backup-account-card"][data-account-id="${id}"] [data-testid="backup-now-button"]`);
-      if (!button || button.disabled) return false;
-      button.scrollIntoView({ block: 'center', behavior: 'instant' });
-      button.click();
-      return true;
-    }, lukeId), true, 'Luke\'s Back up now was missing or disabled while only Vader was queued');
-
-    await wait(async () => {
-      const luke = await cardButton(lukeId);
-      return !!luke && luke.progress && luke.bar;
-    }, 15_000, 'The clicked card never showed a progress bar - this is the three-hour spinner');
-
-    await wait(async () => !(await cardButton(lukeId)).disabled, 180_000, 'The clicked run never finished');
-
-    assert.ok(['success', 'degraded'].includes(await lastStatus(lukeId)),
-      `Luke's run did not record a completed status (got ${await lastStatus(lukeId)})`);
-    assert.ok(mirrorFiles(mirrorRoot, LUKE).length > 0, 'The run wrote nothing to the external mirror');
-
-    const after = await queueState();
-    assert.deepEqual(after.queue, [vaderId], 'The parked automatic id must survive the manual run, in place');
-    assert.equal(after.state, 'paused_sleep', 'The pause the manual run borrowed must be handed back');
-
-    await resetCoordinator();
+  it('joins duplicate local manual clicks into one native request',async function(){
+    const before=await rpc('backup.schedule.status');const count=Object.keys(before.requests).length;
+    await browser.execute(id=>{window.__MANUAL_JOIN_RESULTS__=null;Promise.all([window.__BACKUP_SCHEDULER__.triggerManualBackup(id),window.__BACKUP_SCHEDULER__.triggerManualBackup(id)]).then(results=>{window.__MANUAL_JOIN_RESULTS__=results;});},luke.id);
+    await wait(()=>browser.execute(()=>window.__MANUAL_JOIN_RESULTS__?.length===2),180000,'Joined manual promises did not settle');
+    const outcomes=await browser.execute(()=>window.__MANUAL_JOIN_RESULTS__);assert.ok(outcomes.every(r=>['success','degraded'].includes(r.status)));
+    const after=await rpc('backup.schedule.status');assert.equal(Object.keys(after.requests).length,count+1,'Duplicate local clicks created two requests');
   });
-
-  it('runs an account the schedule had already queued', async function () {
-    // A queued card is deliberately not clickable - it already has a place in
-    // line. This is the same id reaching triggerManualBackup the way "Back up
-    // all" reaches it, which is the call that used to return early and resolve
-    // nothing because the id was already in the queue.
-    await browser.execute((id) => {
-      const s = window.__BACKUP_SCHEDULER__;
-      s._state = 'paused_sleep';
-      s._queue = [id];
-      s._publishQueue();
-    }, lukeId);
-
-    await wait(async () => {
-      const luke = await cardButton(lukeId);
-      return !!luke && luke.disabled && luke.label.includes('Queued...');
-    }, 15_000, 'The queued card never said Queued...');
-
-    await browser.execute((id) => { window.__BACKUP_SCHEDULER__.triggerManualBackup(id); }, lukeId);
-
-    await wait(async () => {
-      const luke = await cardButton(lukeId);
-      return !!luke && luke.progress && luke.bar;
-    }, 15_000, 'An id already in the queue never started when it was triggered manually');
-
-    await wait(async () => !(await cardButton(lukeId)).disabled, 180_000, 'The re-triggered run never finished');
-    assert.deepEqual((await queueState()).queue, [], 'The id must leave the queue, not be run twice');
-
-    await resetCoordinator();
-  });
-
-  it('backs up every account from one button, and user activity does not stop it', async function () {
-    const before = { [LUKE]: mirrorFiles(mirrorRoot, LUKE).length, [VADER]: mirrorFiles(mirrorRoot, VADER).length };
-
-    assert.equal(await browser.execute(() => {
-      const button = document.querySelector('[data-testid="backup-all-button"]');
-      if (!button || button.disabled) return false;
-      button.scrollIntoView({ block: 'center', behavior: 'instant' });
-      button.click();
-      return true;
-    }), true, 'Back up all accounts now was missing or already disabled');
-
-    await wait(async () => {
-      const all = await allButton();
-      return !!all && all.progress && all.bar;
-    }, 3_000, 'Back up all showed no progress panel - this is the button that did nothing for three hours');
-
-    await wait(async () => {
-      const cards = await Promise.all([cardButton(lukeId), cardButton(vaderId)]);
-      return cards.some((c) => c && (c.progress || c.label.includes('Queued...')));
-    }, 3_000, 'No account card owned up to the work Back up all had just queued');
-
-    // The activity that used to cancel the run. `useBackupScheduler` still
-    // listens to all of it - it just no longer has a pause to put the
-    // coordinator into.
-    for (let i = 0; i < 5; i++) {
-      await browser.execute(() => {
-        document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
-        const page = document.querySelector('[data-testid="settings-page"]');
-        if (page) page.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      });
-      await browser.pause(700);
-    }
-
-    await wait(async () => {
-      const all = await allButton();
-      return !!all && !all.disabled && (await queueState()).queue.length === 0;
-    }, 240_000, 'Back up all never finished - the queue still holds work nobody is draining');
-
-    for (const [id, email] of [[lukeId, LUKE], [vaderId, VADER]]) {
-      assert.ok(['success', 'degraded'].includes(await lastStatus(id)),
-        `${email} did not record a completed status (got ${await lastStatus(id)})`);
-      assert.ok(mirrorFiles(mirrorRoot, email).length >= before[email] && mirrorFiles(mirrorRoot, email).length > 0,
-        `${email} has no messages in the external mirror`);
-    }
-
-    assert.equal(await browser.execute(() => document.body.innerText.includes('Cancelled')), false,
-      'Something was cancelled - user activity is stopping backups again');
-
-    await resetCoordinator();
+  it('backs up all accounts from the real button while user interaction continues',async function(){
+    assert.equal(await click('[data-testid="backup-all-button"]'),true);
+    for(let i=0;i<3;i++){await browser.execute(()=>{document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true}));document.dispatchEvent(new Event('click',{bubbles:true}));});await browser.pause(700);}
+    await wait(async()=>{const s=await rpc('backup.schedule.status');return !s.active&&!s.queue.length&&['success','degraded'].includes(await lastStatus(vader.id));},240000,'Back up all did not drain');
+    await wait(()=>browser.execute(()=>{const button=document.querySelector('[data-testid="backup-all-button"]');return button&&!button.disabled;}),15000,'Back up all button stayed disabled');
+    for(const account of [luke,vader]){const cur=join(root,account.email,'INBOX','cur');assert.ok(existsSync(cur)&&readdirSync(cur).length>0,`${account.email} has no mirrored mail`);}
   });
 });

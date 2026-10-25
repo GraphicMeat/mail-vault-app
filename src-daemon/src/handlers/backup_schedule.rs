@@ -104,6 +104,7 @@ fn view(snapshot: &Snapshot, ids: &[String], now: i64) -> Result<Value, &'static
     let zone = policy::local_zone()?;
     let mut next = Map::new();
     let mut invalid = Vec::new();
+    let eligibility = ids.iter().map(|id|(id.clone(),json!(policy::scheduled(settings,id,now)))).collect::<Map<_,_>>();
     for id in ids {
         let config = policy::schedule_for(settings, id);
         if config["enabled"] != true {
@@ -122,7 +123,7 @@ fn view(snapshot: &Snapshot, ids: &[String], now: i64) -> Result<Value, &'static
     Ok(
         json!({"version":snapshot.version,"config":policy::config_view(settings),
         "state":{"backupState":settings["backupState"],"backupHistory":settings["backupHistory"],"snapshotLastTimes":settings["snapshotLastTimes"]},
-        "nextEligibleTimes":next,"invalidSchedules":invalid,
+        "nextEligibleTimes":next,"invalidSchedules":invalid,"automaticEligibility":eligibility,
         "owner":"daemon","queue":[],"active":null,"pendingAccess":[],"lastOutcomes":[]}),
     )
 }

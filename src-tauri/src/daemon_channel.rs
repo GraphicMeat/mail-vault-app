@@ -100,6 +100,7 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 crate::abd::release_all(&app, "the daemon channel reconnected");
                 crate::bulk::reconcile_after_channel_change(&app);
                 crate::backup::access_connected(&app, owner.clone());
+                crate::backup::reconcile_surface_retirement();
                 // And the drive held for a cleanup run (Run All Now).
                 crate::cleanup::release_all(&app, "the daemon channel reconnected");
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).

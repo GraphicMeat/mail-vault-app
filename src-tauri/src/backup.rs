@@ -407,7 +407,41 @@ pub(crate) fn surface_id(label: &str) -> String {
     static SHELL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     format!("{}:{label}", SHELL.get_or_init(|| uuid::Uuid::new_v4().to_string()))
 }
+fn retired_surfaces() -> &'static Mutex<std::collections::BTreeSet<String>> {
+    static RETIRED: std::sync::OnceLock<Mutex<std::collections::BTreeSet<String>>> = std::sync::OnceLock::new();
+    RETIRED.get_or_init(Default::default)
+}
+pub(crate) fn surface_params(label: &str, mut params: Value) -> Result<Value,String> {
+    let id = surface_id(label);
+    if retired_surfaces().lock().unwrap_or_else(|p|p.into_inner()).contains(&id) { return Err("errors.settingsInvalid".into()); }
+    let object = params.as_object_mut().ok_or("errors.settingsInvalid")?;
+    object.insert("surfaceId".into(), json!(id));
+    Ok(params)
+}
 pub(crate) fn retire_surface(label: &str) {
     let id = surface_id(label);
+    retired_surfaces().lock().unwrap_or_else(|p|p.into_inner()).insert(id.clone());
     crate::daemon_channel::notify("backup.surface_retire", json!({"surfaceId":id}));
+}
+fn replay_retired_surfaces(mut send: impl FnMut(Value)) {
+    let retired = retired_surfaces().lock().unwrap_or_else(|p|p.into_inner()).clone();
+    for id in retired { send(json!({"surfaceId":id})); }
+}
+pub(crate) fn reconcile_surface_retirement() {
+    replay_retired_surfaces(|params|crate::daemon_channel::notify("backup.surface_retire",params));
+}
+#[cfg(test)]
+mod surface_tests {
+    use super::*;
+    #[test]
+    fn backup_surface_identity_is_native_and_destroyed_generation_is_terminal() {
+        let label = format!("surface-{}",uuid::Uuid::new_v4());
+        let native = surface_params(&label,json!({"surfaceId":"another-window","sessionId":"session"})).unwrap();
+        assert_eq!(native["surfaceId"],surface_id(&label));
+        retire_surface(&label);
+        assert!(surface_params(&label,json!({"surfaceId":"another-window"})).is_err());
+        let mut replayed = vec![]; replay_retired_surfaces(|p|replayed.push(p));
+        assert!(replayed.iter().any(|p|p["surfaceId"] == native["surfaceId"]),"disconnected destruction was lost before reconnect");
+        assert!(surface_params(&format!("{label}-new"),json!({})).is_ok());
+    }
 }
