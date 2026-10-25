@@ -51,7 +51,7 @@ beforeEach(() => {
   h.listeners.clear();
   h.accounts = [{ id: 'g1', email: 'me@gmail.test', authType: 'oauth2', oauth2AccessToken: 'old', oauth2RefreshToken: 'old-rt' }];
   h.send = vi.fn(async (method) => (method === 'oauth2.take_refreshed' ? { tokens: [PAIR] } : { ok: true }));
-  h.update = vi.fn(async (id) => ({ id }));
+  h.update = vi.fn(async (id, pair) => ({ ...h.stored[id], id, oauth2AccessToken: pair.accessToken, oauth2RefreshToken: pair.refreshToken || h.stored[id]?.oauth2RefreshToken, oauth2ExpiresAt: pair.expiresAt }));
   h.stored = { g1: { id: 'g1', oauth2AccessToken: 'old', oauth2ExpiresAt: 1, ...GRANT_A } };
   sync.__resetForTests();
 });

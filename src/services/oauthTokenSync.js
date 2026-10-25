@@ -71,7 +71,7 @@ async function takeAndSave() {
       saved += 1;
       useMailStore.setState(state => ({
         accounts: state.accounts.map(a => (a.id === accountId
-          ? { ...a, oauth2AccessToken: accessToken, oauth2RefreshToken: refreshToken || a.oauth2RefreshToken, oauth2ExpiresAt: expiresAt }
+          ? { ...a, oauth2AccessToken: stored.oauth2AccessToken, oauth2RefreshToken: stored.oauth2RefreshToken, oauth2ExpiresAt: stored.oauth2ExpiresAt }
           : a)),
       }));
     } catch (error) {

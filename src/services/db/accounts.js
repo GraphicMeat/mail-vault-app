@@ -17,7 +17,8 @@
 import { exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
-import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, markNativeMutationUncertain, assertLegacyWriteAllowed, assertNativeWriteAllowed } from './keychain.js';
+import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, readCurrentCredentials, markNativeMutationUncertain, assertLegacyWriteAllowed, beginNativeWrite } from './keychain.js';
+import { grantFingerprint } from '../oauthTokenSync.js';
 import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
 
@@ -103,7 +104,7 @@ function withBudget(promise, ms) {
 
 async function accountsCall(method, params = {}) {
   const read = method === 'accounts.list' || method === 'accounts.get';
-  if (!read) assertNativeWriteAllowed();
+  const release = read ? () => {} : beginNativeWrite();
   listenForReconnect();
   {
     try {
@@ -120,10 +121,10 @@ async function accountsCall(method, params = {}) {
           if (!['errors.accountsConflict', 'errors.accountsInvalid'].includes(error?.message ?? error)) markNativeMutationUncertain();
           throw new Error(errText(error));
         }
-        assertLegacyWriteAllowed();
       }
-    }
+    } finally { release(); }
   }
+  if (!read) assertLegacyWriteAllowed();
   try {
     const reply = await invoke('accounts_fallback', { method, params });
     if (!isReply(method, reply)) throw new Error('errors.accountsWriteFailed');
@@ -488,8 +489,17 @@ export async function updateOAuth2Tokens(accountId, tokens) {
     // only while it is still this pair's grant (`chain`, checked by the
     // daemon against what it holds, not against this window's copy).
     if (!(await updateCredentials(accountId, fields, { chain: tokens.chain }))) return;
+    const currentData = await readCurrentCredentials();
+    const current = currentData?.[accountId] ? JSON.parse(currentData[accountId]) : null;
+    const expected = { ...stored, ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) };
+    if (!current || current.oauth2AccessToken !== expected.oauth2AccessToken
+      || Number(current.oauth2ExpiresAt) !== Number(expected.oauth2ExpiresAt)
+      || await grantFingerprint(current) !== await grantFingerprint(expected)) {
+      console.warn('[db.js] Refreshed pair is not confirmed current for account:', accountId);
+      return;
+    }
     console.log('[db.js] OAuth2 tokens updated for account:', accountId);
-    return { ...stored, ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) };
+    return current;
   } catch (error) {
     console.error('[db.js] Failed to update OAuth2 tokens:', errText(error));
     throw error;

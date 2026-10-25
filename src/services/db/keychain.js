@@ -31,20 +31,29 @@ transportSend('get_app_data_dir', {})
   })
   .catch(() => console.error('[db.js] Transport init check failed'));
 
-let lastVersion = null;
 // Bumped by every change this window made, so a refresh read that started
 // before one never replaces the copy with what it read.
 let localWrites = 0;
 let connectionEpoch = 0;
+let cacheRevision = 0;
+let activeNativeWrites = 0;
+let activeLegacyIntents = 0;
 // Read/reset/reconnect cannot establish the outcome of a lost mutation.
 let nativeOutcomeUnknown = false;
 let legacyOutcomeUnknown = false;
 export function markNativeMutationUncertain() { nativeOutcomeUnknown = true; }
 export function assertNativeWriteAllowed() {
-  if (legacyOutcomeUnknown) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainWriteFailed`);
+  if (legacyOutcomeUnknown || activeLegacyIntents > 0) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainWriteFailed`);
 }
 export function assertLegacyWriteAllowed() {
-  if (nativeOutcomeUnknown || legacyOutcomeUnknown) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainWriteFailed`);
+  if (nativeOutcomeUnknown || legacyOutcomeUnknown || activeNativeWrites > 0) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainWriteFailed`);
+}
+// Admission only, not a store lock: keep native/legacy operations from racing
+// within this window. Native calls may still run together under native exclusion.
+export function beginNativeWrite() {
+  assertNativeWriteAllowed();
+  activeNativeWrites += 1;
+  return () => { activeNativeWrites -= 1; };
 }
 
 const errText = e => (typeof e === 'string' ? e : e?.message || String(e));
@@ -67,7 +76,6 @@ const E_INVALID = 'errors.credentialsInvalid';
 // never answered with the shell's whole-blob write, which the parked write
 // could land on top of.
 const E_BUSY = 'errors.keychainBusy';
-const noteVersion = v => { if (Number.isInteger(v)) lastVersion = lastVersion == null ? v : Math.max(lastVersion, v); };
 
 const readOk = r => r?.status === 'granted' || r?.status === 'empty';
 
@@ -123,7 +131,7 @@ async function loadKeychain() {
     return keychainCache;
   }
 
-  // Single attempt - no retry loop. The Rust side has its own timeout+retry.
+  // Read failures are not retried; a read overtaken by a local write is replaced.
   const epoch = connectionEpoch;
   _keychainLoadPromise = (async () => {
     try {
@@ -149,6 +157,7 @@ async function loadKeychain() {
 
       if (status === 'granted' || status === 'empty') {
         keychainCache = credentials;
+        cacheRevision += 1;
         keychainLoaded = true;
         console.log('[db.js] Keychain loaded:', status, `(${count} account(s))`);
       } else {
@@ -201,9 +210,13 @@ async function _processKeychainQueue() {
 
       try {
         assertLegacyWriteAllowed();
-        await invoke('store_credentials', { credentials: latest.data });
+        activeLegacyIntents += 1;
+        try {
+          await invoke('store_credentials', { credentials: latest.data });
+        } finally { activeLegacyIntents -= 1; }
         localWrites += 1;
         keychainCache = { ...latest.data };
+        cacheRevision += 1;
         // The daemon reads the store again before trusting a token it holds
         // (a new sign-in, a removed account, the pair it refreshed now saved).
         credentialsChanged();
@@ -227,23 +240,24 @@ async function _processKeychainQueue() {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // A change through the daemon: its reply, or null when this one must go
-// through the shell (no credentials.* there, or no daemon). Throws when the
+// through the shell after a trusted unsupported-method refusal. Throws when the
 // daemon refused or failed it.
 async function changeThroughDaemon(method, params) {
-  assertNativeWriteAllowed();
   listenForChanges();
   for (let attempt = 1; ; attempt++) {
+    const release = beginNativeWrite();
+    const epoch = connectionEpoch;
+    const revision = cacheRevision;
     try {
       const reply = await invoke(method, params);
       if (isWriteReply(method, reply)) {
-        noteVersion(reply.version);
         listenForChanges();
-        return reply;
+        return { ...reply, cacheEpoch: epoch, cacheRevision: revision };
       }
       markNativeMutationUncertain();
       throw new Error(E_WRITE);
     } catch (error) {
-      if (outdated(error)) { assertLegacyWriteAllowed(); return null; }
+      if (outdated(error)) return null;
       const text = errText(error);
       if (text === E_UNAVAILABLE) {
         throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
@@ -255,7 +269,7 @@ async function changeThroughDaemon(method, params) {
       }
       console.warn(`[db.js] Credentials change failed (attempt ${attempt}/3)`);
       await sleep(1000 * attempt);
-    }
+    } finally { release(); }
   }
 }
 
@@ -265,24 +279,34 @@ let legacyTail = Promise.resolve();
 function changeThroughShell(apply) {
   const run = async () => {
     assertLegacyWriteAllowed();
-    let reply;
-    try { reply = await invoke('get_credentials'); } catch { /* Refuse below. */ }
-    if (!isReadReply(reply) || !readOk(reply)) throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
-    const data = { ...reply.credentials };
-    const result = apply(data);
-    if (result === false) return false;
-    assertLegacyWriteAllowed();
-    await saveKeychain(data);
-    return result;
+    activeLegacyIntents += 1;
+    try {
+      let reply;
+      try { reply = await invoke('get_credentials'); } catch { /* Refuse below. */ }
+      if (!isReadReply(reply) || !readOk(reply)) throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
+      const data = { ...reply.credentials };
+      const result = apply(data);
+      if (result === false) return false;
+      assertLegacyWriteAllowed();
+      await saveKeychain(data);
+      return result;
+    } finally { activeLegacyIntents -= 1; }
   };
   const result = legacyTail.then(run, run);
   legacyTail = result.catch(() => {});
   return result;
 }
 
-function withCache(apply) {
+async function withCache(reply, apply) {
   localWrites += 1;
-  if (keychainCache) apply(keychainCache);
+  if (reply.cacheEpoch === connectionEpoch && reply.cacheRevision === cacheRevision) {
+    if (keychainCache) apply(keychainCache);
+    cacheRevision += 1;
+  } else {
+    // The mutation succeeded. Read the current state without replaying that
+    // historical operation into a newer cache or connection.
+    await refreshCache();
+  }
 }
 
 const defined = fields => Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
@@ -293,8 +317,9 @@ const defined = fields => Object.fromEntries(Object.entries(fields).filter(([, v
  */
 export async function saveCredentials(records) {
   if (!Object.keys(records).length) return;
-  if (await changeThroughDaemon('credentials.save', { records })) {
-    withCache(cache => Object.assign(cache, records));
+  const reply = await changeThroughDaemon('credentials.save', { records });
+  if (reply) {
+    await withCache(reply, cache => Object.assign(cache, records));
     return;
   }
   await changeThroughShell(data => { Object.assign(data, records); });
@@ -313,7 +338,7 @@ export async function updateCredentials(accountId, fields, { chain } = {}) {
   if (reply) {
     if (reply.staleGrant) return false;
     if (reply.updated) {
-      withCache(cache => {
+      await withCache(reply, cache => {
         if (!cache[accountId]) return;
         try { cache[accountId] = JSON.stringify({ ...JSON.parse(cache[accountId]), ...changes }); } catch { /* a legacy value */ }
       });
@@ -332,8 +357,9 @@ export async function updateCredentials(accountId, fields, { chain } = {}) {
 /** Remove the stored records of these ids. */
 export async function deleteCredentials(ids) {
   if (!ids.length) return;
-  if (await changeThroughDaemon('credentials.delete', { ids })) {
-    withCache(cache => ids.forEach(id => delete cache[id]));
+  const reply = await changeThroughDaemon('credentials.delete', { ids });
+  if (reply) {
+    await withCache(reply, cache => ids.forEach(id => delete cache[id]));
     return;
   }
   await changeThroughShell(data => ids.forEach(id => delete data[id]));
@@ -353,20 +379,28 @@ async function refreshCache() {
     do {
       refreshAgain = false;
       const status = keychainSession.getStatus();
-      if (epoch !== connectionEpoch || !keychainLoaded || (status !== 'granted' && status !== 'empty')) return;
+      if (epoch !== connectionEpoch || !keychainLoaded || (status !== 'granted' && status !== 'empty')) return null;
       const writes = localWrites;
       let reply;
-      try { reply = await invoke('credentials.get', {}); } catch { return; }
-      if (epoch !== connectionEpoch || !isReadReply(reply) || !readOk(reply)) return;
+      try { reply = await invoke('credentials.get', {}); } catch { return null; }
+      if (epoch !== connectionEpoch || !isReadReply(reply) || !readOk(reply)) return null;
       if (writes !== localWrites) { refreshAgain = true; continue; }
       const next = reply.credentials || {};
       const cache = keychainCache || (keychainCache = {});
       for (const id of Object.keys(cache)) if (!(id in next)) delete cache[id];
       Object.assign(cache, next);
+      cacheRevision += 1;
     } while (refreshAgain);
+    return keychainCache;
   })();
   refreshing = task;
-  try { await task; } finally { if (refreshing === task) refreshing = null; }
+  try { return await task; } finally { if (refreshing === task) refreshing = null; }
+}
+
+// A refresh pair can be published only after a current successful native read.
+// Read failure returns null, never stale presentation data as confirmation.
+export async function readCurrentCredentials() {
+  return refreshCache();
 }
 
 let listening = false;
@@ -375,15 +409,13 @@ function listenForChanges() {
   if (listening || typeof listen !== 'function') return;
   listening = true;
   const on = (name, cb) => Promise.resolve().then(() => listen(name, cb)).catch(() => {});
-  on('credentials-changed', ({ payload } = {}) => {
-    // This window's own change, or one it has already taken in.
-    if (Number.isInteger(payload?.version) && lastVersion != null && payload.version <= lastVersion) return;
-    noteVersion(payload?.version);
+  on('credentials-changed', () => {
+    // A per-record acknowledgement does not prove the rest of this cache
+    // contains earlier foreign changes. Coalesce reads, including own events.
     void refreshCache();
   });
   on('daemon-reconnected', () => {
     connectionEpoch += 1;
-    lastVersion = null;
     refreshing = null;
     refreshAgain = false;
     keychainLoaded = false;
@@ -394,10 +426,12 @@ function listenForChanges() {
 
 /** For tests: forget the transport mode and what the listeners set up. */
 export function __resetKeychainForTests() {
-  lastVersion = null;
   localWrites = 0;
+  cacheRevision = 0;
   nativeOutcomeUnknown = false;
   legacyOutcomeUnknown = false;
+  activeNativeWrites = 0;
+  activeLegacyIntents = 0;
   legacyTail = Promise.resolve();
   listening = false;
   refreshing = null;

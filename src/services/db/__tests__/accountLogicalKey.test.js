@@ -16,6 +16,8 @@ vi.mock('../keychain.js', () => ({
   deleteCredentials: vi.fn(async () => {}),
   updateCredentials: vi.fn(async () => true),
   assertNativeWriteAllowed: vi.fn(),
+  beginNativeWrite: () => () => {},
+  readCurrentCredentials: vi.fn(async () => ({})),
   assertLegacyWriteAllowed: vi.fn(),
   markNativeMutationUncertain: vi.fn(),
 }));

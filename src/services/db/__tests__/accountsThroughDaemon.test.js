@@ -288,18 +288,18 @@ describe('the credentials go through the daemon', () => {
 });
 
 describe('other windows', () => {
-  it('a change another window made refreshes the copy; this window\'s own does not', async () => {
+  it('foreign and own events refresh the complete copy without assuming per-record freshness', async () => {
     await keychain.loadKeychain();
     await keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' });
     const reads = sent('credentials.get').length;
     h.listeners.get('credentials-changed')({ payload: { ids: ['a'], version: credVersion } });
-    await Promise.resolve();
-    expect(sent('credentials.get')).toHaveLength(reads);
+    await vi.waitFor(() => expect(sent('credentials.get').length).toBeGreaterThan(reads));
+    const afterOwn = sent('credentials.get').length;
 
     blob.w2 = '{"id":"w2","email":"w2@x.test","password":"p"}';
     credVersion += 1;
     h.listeners.get('credentials-changed')({ payload: { ids: ['w2'], version: credVersion } });
-    await vi.waitFor(() => expect(sent('credentials.get')).toHaveLength(reads + 1));
+    await vi.waitFor(() => expect(sent('credentials.get').length).toBeGreaterThan(afterOwn));
     await vi.waitFor(async () => expect(Object.keys(await keychain.loadKeychain()).sort()).toEqual(['a', 'old', 'w2']));
   });
 
@@ -760,4 +760,33 @@ describe('round1 reviewed cache and writer interleavings', () => {
     expect(sent('credentials.update')).toHaveLength(1);
     noShellMutation();
   });
+});
+
+
+describe('round1 refreshed-pair current-read confirmation', () => {
+  for (const condition of ['unavailable', 'newer-grant']) {
+    it(`does not publish a historically saved pair when current confirmation is ${condition}`, async () => {
+      const original = { id: 'g', email: 'g@x.test', oauth2RefreshToken: 'synthetic-original', oauth2ClientId: 'c', oauth2ExpiresAt: 1 };
+      blob.g = JSON.stringify(original);
+      const pair = { accountId: 'g', accessToken: 'synthetic-pair', refreshToken: 'synthetic-rotated', expiresAt: 50, chain: [await sync.grantFingerprint(original)] };
+      const newer = { ...original, oauth2RefreshToken: 'synthetic-new', oauth2AccessToken: 'synthetic-new-access', oauth2ExpiresAt: 5 };
+      h.mailAccounts = [original];
+      let changed = false;
+      useDaemon((cmd, args) => {
+        if (cmd === 'oauth2.take_refreshed') return () => ({ tokens: [pair] });
+        if (cmd === 'credentials.get' && changed && condition === 'unavailable') return () => ({ status: 'unavailable' });
+        if (cmd === 'credentials.update') return () => {
+          changed = true;
+          blob.g = JSON.stringify(condition === 'newer-grant' ? newer : { ...original, ...args.fields });
+          if (condition === 'newer-grant') h.mailAccounts = [newer];
+          return { updated: true, version: 11 };
+        };
+        return undefined;
+      });
+      expect(await sync.saveRefreshedTokens()).toBe(0);
+      expect(h.mailAccounts[0]).toEqual(condition === 'newer-grant' ? newer : original);
+      expect(sent('credentials.update')).toHaveLength(1);
+      noShellMutation();
+    });
+  }
 });
