@@ -565,17 +565,33 @@ pub(crate) fn follow_settings_log_level(payload: &serde_json::Value) {
 /// and supported lock file. Application adapter activation is pending.
 /// Unknown daemon outcomes do not authorize invoking this second writer.
 #[tauri::command]
-async fn accounts_fallback(method: String, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let dir = mailvault_core::paths::app_data_dir().map_err(|_| "errors.accountsWriteFailed".to_string())?;
+async fn accounts_fallback(
+    method: String,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let dir = mailvault_core::paths::app_data_dir()
+        .map_err(|_| "errors.accountsWriteFailed".to_string())?;
     accounts_fallback_at(dir, method, params).await
 }
 
-async fn accounts_fallback_at(dir: std::path::PathBuf, method: String, params: serde_json::Value) -> Result<serde_json::Value, String> {
+async fn accounts_fallback_at(
+    dir: std::path::PathBuf,
+    method: String,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || {
         let doc = mailvault_core::accounts_doc::shared(&dir);
-        mailvault_core::accounts_doc::run(&doc, &method, &params, mailvault_core::accounts_doc::LiveScrub::Preserve)
-            .map(|out| out.reply).map_err(|e| e.catalog_key().to_string())
-    }).await.map_err(|_| "errors.accountsWriteFailed".to_string())?
+        mailvault_core::accounts_doc::run(
+            &doc,
+            &method,
+            &params,
+            mailvault_core::accounts_doc::LiveScrub::Preserve,
+        )
+        .map(|out| out.reply)
+        .map_err(|e| e.catalog_key().to_string())
+    })
+    .await
+    .map_err(|_| "errors.accountsWriteFailed".to_string())?
 }
 
 // Use a more specific service name with bundle ID for persistence across builds
@@ -5301,31 +5317,78 @@ mod accounts_fallback_tests {
     use serde_json::json;
     #[test]
     fn reply_timeout_bounds_the_account_rpcs() {
-        for (method, seconds) in [("accounts.list",30),("accounts.get",30),("accounts.put",50),("accounts.remove",50),("accounts.reorder",50),("accounts.replace_all",50)] {
-            assert_eq!(reply_timeout(method), Some(std::time::Duration::from_secs(seconds)));
+        for (method, seconds) in [
+            ("accounts.list", 30),
+            ("accounts.get", 30),
+            ("accounts.put", 50),
+            ("accounts.remove", 50),
+            ("accounts.reorder", 50),
+            ("accounts.replace_all", 50),
+        ] {
+            assert_eq!(
+                reply_timeout(method),
+                Some(std::time::Duration::from_secs(seconds))
+            );
         }
     }
     #[tokio::test]
     async fn actual_delegate_retains_live_secrets_and_cleans_new_backups() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("accounts.json");
-        fs::write(&path, json!([{"id":"a", "password":"legacy-only"}]).to_string()).unwrap();
+        fs::write(
+            &path,
+            json!([{"id":"a", "password":"legacy-only"}]).to_string(),
+        )
+        .unwrap();
         let credentials = dir.path().join("credentials.json");
         fs::write(&credentials, "synthetic-unreadable").unwrap();
-        let call = |method: &str, params| accounts_fallback_at(dir.path().to_path_buf(), method.to_owned(), params);
+        let call = |method: &str, params| {
+            accounts_fallback_at(dir.path().to_path_buf(), method.to_owned(), params)
+        };
         let list = call("accounts.list", json!({})).await.unwrap();
         let base = list["version"].as_u64().unwrap();
-        assert_eq!(call("accounts.get", json!({"id":"a"})).await.unwrap()["account"]["password"], "legacy-only");
-        call("accounts.put", json!({"entry":{"id":"b", "password":"incoming"}})).await.unwrap();
+        assert_eq!(
+            call("accounts.get", json!({"id":"a"})).await.unwrap()["account"]["password"],
+            "legacy-only"
+        );
+        call(
+            "accounts.put",
+            json!({"entry":{"id":"b", "password":"incoming"}}),
+        )
+        .await
+        .unwrap();
         assert!(fs::read_to_string(&path).unwrap().contains("legacy-only"));
-        assert!(!fs::read_to_string(dir.path().join("accounts.json.bak1")).unwrap().contains("legacy-only"));
+        assert!(!fs::read_to_string(dir.path().join("accounts.json.bak1"))
+            .unwrap()
+            .contains("legacy-only"));
         assert!(!fs::read_to_string(&path).unwrap().contains("incoming"));
-        assert_eq!(call("accounts.remove", json!({"id":"a", "baseVersion":base})).await.unwrap_err(), "errors.accountsConflict");
-        call("accounts.reorder", json!({"ids":["b","a"]})).await.unwrap();
+        assert_eq!(
+            call("accounts.remove", json!({"id":"a", "baseVersion":base}))
+                .await
+                .unwrap_err(),
+            "errors.accountsConflict"
+        );
+        call("accounts.reorder", json!({"ids":["b","a"]}))
+            .await
+            .unwrap();
         call("accounts.remove", json!({"id":"b"})).await.unwrap();
-        call("accounts.replace_all", json!({"entries":[{"id":"c", "password":"incoming"}]})).await.unwrap();
-        assert_eq!(call("accounts.list", json!({})).await.unwrap()["accounts"], json!([{"id":"c"}]));
-        assert_eq!(call("accounts.put", json!({"entry":{}})).await.unwrap_err(), "errors.accountsInvalid");
-        assert_eq!(fs::read_to_string(credentials).unwrap(), "synthetic-unreadable");
+        call(
+            "accounts.replace_all",
+            json!({"entries":[{"id":"c", "password":"incoming"}]}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            call("accounts.list", json!({})).await.unwrap()["accounts"],
+            json!([{"id":"c"}])
+        );
+        assert_eq!(
+            call("accounts.put", json!({"entry":{}})).await.unwrap_err(),
+            "errors.accountsInvalid"
+        );
+        assert_eq!(
+            fs::read_to_string(credentials).unwrap(),
+            "synthetic-unreadable"
+        );
     }
 }

@@ -258,11 +258,19 @@ async fn reopen_vault(state: &Arc<DaemonState>) {
 /// and the index are checkpointed and nothing writes under the copier. The
 /// host is only touched after `portable::create` verified the drive copy and
 /// marked it; on removal the vault stays closed, since the app quits next.
-pub(crate) async fn run_create(state: &Arc<DaemonState>, req: CreateRequest, payload: Vec<std::path::PathBuf>) -> Result<Value, String> {
+pub(crate) async fn run_create(
+    state: &Arc<DaemonState>,
+    req: CreateRequest,
+    payload: Vec<std::path::PathBuf>,
+) -> Result<Value, String> {
     if req.copy_mail && !state.mail_dir_ok {
         return Err("The current mail storage folder is unreachable, so there is no mail to copy right now.".to_string());
     }
-    let secrets = if req.copy_config { credentials::read_host_secrets().await? } else { Default::default() };
+    let secrets = if req.copy_config {
+        credentials::read_host_secrets().await?
+    } else {
+        Default::default()
+    };
 
     crate::handlers::search_index::route(state, "vault_close", &json!({}), Value::Null).await;
     let st = Arc::clone(state);
@@ -271,7 +279,10 @@ pub(crate) async fn run_create(state: &Arc<DaemonState>, req: CreateRequest, pay
     let created = blocking(move || {
         let events = st.events.clone();
         let progress = move |phase: &str, done: usize, total: usize| {
-            events.emit("portable-create-progress", json!({"phase": phase, "done": done, "total": total}));
+            events.emit(
+                "portable-create-progress",
+                json!({"phase": phase, "done": done, "total": total}),
+            );
         };
         let opts = mailvault_core::portable::CreateOptions {
             dest: &dest,
@@ -303,13 +314,19 @@ pub(crate) async fn run_create(state: &Arc<DaemonState>, req: CreateRequest, pay
             let mail = mailvault_core::vault_ops::remove_sources(&st.data_dir, &dirs);
             let accounts = std::fs::remove_file(st.app_dir.join("accounts.json"));
             // Best effort companion cleanup after successful copy only.
-            for extra in mailvault_core::json_doc::companion_files(&st.app_dir, mailvault_core::accounts_doc::SPEC) {
+            for extra in mailvault_core::json_doc::companion_files(
+                &st.app_dir,
+                mailvault_core::accounts_doc::SPEC,
+            ) {
                 let _ = std::fs::remove_file(extra);
             }
             mail && accounts.map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true)
         })
         .await?;
-        let secrets = credentials::delete_host_secrets_guarded().await.map_err(|e| tracing::warn!("[portable] {e}")).is_ok();
+        let secrets = credentials::delete_host_secrets_guarded()
+            .await
+            .map_err(|e| tracing::warn!("[portable] {e}"))
+            .is_ok();
         mail && secrets
     } else {
         reopen_vault(state).await;
@@ -440,11 +457,21 @@ mod tests {
 
     #[tokio::test]
     async fn create_seals_the_keychain_accounts_onto_the_drive_and_keeps_the_host() {
-        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _restore = credentials::TestEnvRestore::capture();
         let h = host();
-        let companions = ["accounts.json.lock", "accounts.version.json", "accounts.json.corrupt", "accounts.json.bak1", ".accounts.json.tmp-synthetic"];
-        for name in companions { std::fs::write(h.state.app_dir.join(name), b"synthetic").unwrap(); }
+        let companions = [
+            "accounts.json.lock",
+            "accounts.version.json",
+            "accounts.json.corrupt",
+            "accounts.json.bak1",
+            ".accounts.json.tmp-synthetic",
+        ];
+        for name in companions {
+            std::fs::write(h.state.app_dir.join(name), b"synthetic").unwrap();
+        }
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
         // Never the runner's real keychain for the AI key.
         std::env::set_var("MAILVAULT_TEST_AI_KEY", h.creds.with_file_name("ai_key"));
@@ -456,21 +483,53 @@ mod tests {
         let reply = reply.expect("created");
         assert_eq!(reply["removedFromHost"], json!(false));
         let data = h.dest.join("MailVault Data/data");
-        let sealed = mailvault_core::portable::read_sealed(&data.join("credentials.sealed"), "drive passphrase").unwrap();
+        let sealed = mailvault_core::portable::read_sealed(
+            &data.join("credentials.sealed"),
+            "drive passphrase",
+        )
+        .unwrap();
         assert!(sealed.credentials.contains_key("acct-1"));
-        assert!(data.join(format!("Maildir/acct/INBOX/cur/1.eml{}S", mailvault_core::maildir::INFO_PREFIX)).exists());
-        assert!(h.eml.exists() && h.creds.exists(), "nothing removed unless asked");
-        for name in companions { assert!(h.state.app_dir.join(name).exists(), "keep-host removed {name}"); }
-        assert!(!h.state.vault_closed.load(std::sync::atomic::Ordering::SeqCst), "the vault is open again");
+        assert!(data
+            .join(format!(
+                "Maildir/acct/INBOX/cur/1.eml{}S",
+                mailvault_core::maildir::INFO_PREFIX
+            ))
+            .exists());
+        assert!(
+            h.eml.exists() && h.creds.exists(),
+            "nothing removed unless asked"
+        );
+        for name in companions {
+            assert!(
+                h.state.app_dir.join(name).exists(),
+                "keep-host removed {name}"
+            );
+        }
+        assert!(
+            !h.state
+                .vault_closed
+                .load(std::sync::atomic::Ordering::SeqCst),
+            "the vault is open again"
+        );
     }
 
     #[tokio::test]
     async fn removal_from_the_host_happens_only_after_a_verified_copy() {
-        let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _restore = credentials::TestEnvRestore::capture();
         let h = host();
-        let companions = ["accounts.json.lock", "accounts.version.json", "accounts.json.corrupt", "accounts.json.bak1", ".accounts.json.tmp-synthetic"];
-        for name in companions { std::fs::write(h.state.app_dir.join(name), b"synthetic").unwrap(); }
+        let companions = [
+            "accounts.json.lock",
+            "accounts.version.json",
+            "accounts.json.corrupt",
+            "accounts.json.bak1",
+            ".accounts.json.tmp-synthetic",
+        ];
+        for name in companions {
+            std::fs::write(h.state.app_dir.join(name), b"synthetic").unwrap();
+        }
         std::fs::write(h.state.app_dir.join("settings.json.bak1"), b"unrelated").unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
         // Never the runner's real keychain for the AI key.
@@ -479,12 +538,24 @@ mod tests {
         // A finished portable copy is already there: create refuses, so
         // nothing may leave the host.
         std::fs::create_dir_all(h.dest.join("MailVault Data")).unwrap();
-        std::fs::write(h.dest.join("MailVault Data/portable.json"), br#"{"version":1}"#).unwrap();
+        std::fs::write(
+            h.dest.join("MailVault Data/portable.json"),
+            br#"{"version":1}"#,
+        )
+        .unwrap();
         let refused = run_create(&h.state, request(&h, true), h.payload.clone()).await;
         assert!(refused.is_err());
-        assert!(h.eml.exists() && h.creds.exists(), "a failed copy removes nothing");
+        assert!(
+            h.eml.exists() && h.creds.exists(),
+            "a failed copy removes nothing"
+        );
 
-        for name in companions { assert!(h.state.app_dir.join(name).exists(), "failed copy removed {name}"); }
+        for name in companions {
+            assert!(
+                h.state.app_dir.join(name).exists(),
+                "failed copy removed {name}"
+            );
+        }
         std::fs::remove_dir_all(h.dest.join("MailVault Data")).unwrap();
         let reply = run_create(&h.state, request(&h, true), h.payload.clone()).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
@@ -492,10 +563,24 @@ mod tests {
 
         assert_eq!(reply.expect("created")["removedFromHost"], json!(true));
         assert!(!h.eml.exists(), "host mail removed after the verified copy");
-        assert!(!h.creds.exists(), "host credentials removed after the verified copy");
-        for name in companions { assert!(!h.state.app_dir.join(name).exists(), "successful removal left {name}"); }
+        assert!(
+            !h.creds.exists(),
+            "host credentials removed after the verified copy"
+        );
+        for name in companions {
+            assert!(
+                !h.state.app_dir.join(name).exists(),
+                "successful removal left {name}"
+            );
+        }
         assert!(h.state.app_dir.join("settings.json.bak1").exists());
-        assert!(h.dest.join(format!("MailVault Data/data/Maildir/acct/INBOX/cur/1.eml{}S", mailvault_core::maildir::INFO_PREFIX)).exists());
+        assert!(h
+            .dest
+            .join(format!(
+                "MailVault Data/data/Maildir/acct/INBOX/cur/1.eml{}S",
+                mailvault_core::maildir::INFO_PREFIX
+            ))
+            .exists());
     }
 
     #[tokio::test]

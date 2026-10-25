@@ -22,7 +22,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 pub const FILE_NAME: &str = "accounts.json";
-pub const SPEC: Spec = Spec { file: FILE_NAME, kind: Kind::Array, pretty: true, persistence: Persistence::PrivateDurable };
+pub const SPEC: Spec = Spec {
+    file: FILE_NAME,
+    kind: Kind::Array,
+    pretty: true,
+    persistence: Persistence::PrivateDurable,
+};
 /// Stripped from incoming records and newly made good backups.
 pub const SECRET_FIELDS: [&str; 3] = ["password", "oauth2AccessToken", "oauth2RefreshToken"];
 
@@ -62,9 +67,17 @@ impl From<DocError> for AccountsError {
 /// The app's `accountLogicalKey`: same address and same server (or OAuth
 /// provider) is the same account. `email@server`, both lowercased.
 pub fn logical_key(entry: &Value) -> String {
-    let text = |k: &str| entry.get(k).and_then(Value::as_str).filter(|s| !s.is_empty());
+    let text = |k: &str| {
+        entry
+            .get(k)
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+    };
     let email = text("email").unwrap_or("").to_lowercase();
-    let server = text("imapHost").or_else(|| text("oauth2Provider")).unwrap_or("").to_lowercase();
+    let server = text("imapHost")
+        .or_else(|| text("oauth2Provider"))
+        .unwrap_or("")
+        .to_lowercase();
     format!("{email}@{server}")
 }
 
@@ -75,8 +88,14 @@ fn id_of(entry: &Value) -> Option<&str> {
 /// An entry the app asked to write: an object with a non-empty string id,
 /// its secrets dropped.
 fn writable(entry: &Value) -> Result<Map<String, Value>, AccountsError> {
-    let Value::Object(map) = entry else { return Err(AccountsError::Invalid) };
-    if !map.get("id").and_then(Value::as_str).is_some_and(|id| !id.is_empty()) {
+    let Value::Object(map) = entry else {
+        return Err(AccountsError::Invalid);
+    };
+    if !map
+        .get("id")
+        .and_then(Value::as_str)
+        .is_some_and(|id| !id.is_empty())
+    {
         return Err(AccountsError::Invalid);
     }
     let mut map = map.clone();
@@ -109,7 +128,10 @@ pub fn scrub_secrets(list: &mut Value) -> Vec<String> {
             hit |= map.remove(field).is_some();
         }
         if hit {
-            push_unique(&mut cleaned, map.get("id").and_then(Value::as_str).unwrap_or_default());
+            push_unique(
+                &mut cleaned,
+                map.get("id").and_then(Value::as_str).unwrap_or_default(),
+            );
         }
     }
     cleaned
@@ -120,8 +142,17 @@ pub fn scrub_secrets(list: &mut Value) -> Vec<String> {
 /// never logged.
 pub fn legacy_secrets(list: &[Value]) -> Vec<(String, String)> {
     list.iter()
-        .filter(|e| SECRET_FIELDS.iter().any(|f| e.get(f).is_some_and(|v| !v.is_null())))
-        .filter_map(|e| Some((id_of(e).filter(|id| !id.is_empty())?.to_string(), e.to_string())))
+        .filter(|e| {
+            SECRET_FIELDS
+                .iter()
+                .any(|f| e.get(f).is_some_and(|v| !v.is_null()))
+        })
+        .filter_map(|e| {
+            Some((
+                id_of(e).filter(|id| !id.is_empty())?.to_string(),
+                e.to_string(),
+            ))
+        })
         .collect()
 }
 
@@ -129,13 +160,27 @@ pub fn legacy_secrets(list: &[Value]) -> Vec<(String, String)> {
 /// Duplicates anywhere in the list make a secret-bearing ID ambiguous.
 pub fn legacy_secrets_representable(list: &[Value]) -> bool {
     let mut counts = std::collections::HashMap::new();
-    for id in list.iter().filter_map(id_of) { *counts.entry(id).or_insert(0usize) += 1; }
-    list.iter().filter(|entry| SECRET_FIELDS.iter().any(|field| entry.get(field).is_some_and(|v| !v.is_null())))
-        .all(|entry| id_of(entry).filter(|id| !id.is_empty()).is_some_and(|id| counts.get(id) == Some(&1)))
+    for id in list.iter().filter_map(id_of) {
+        *counts.entry(id).or_insert(0usize) += 1;
+    }
+    list.iter()
+        .filter(|entry| {
+            SECRET_FIELDS
+                .iter()
+                .any(|field| entry.get(field).is_some_and(|v| !v.is_null()))
+        })
+        .all(|entry| {
+            id_of(entry)
+                .filter(|id| !id.is_empty())
+                .is_some_and(|id| counts.get(id) == Some(&1))
+        })
 }
 
 fn scrub(live: bool) -> Scrub<'static> {
-    Scrub { clean: &scrub_secrets, live }
+    Scrub {
+        clean: &scrub_secrets,
+        live,
+    }
 }
 
 /// What `list` answers.
@@ -152,7 +197,11 @@ pub fn list(doc: &JsonDoc) -> Result<Listing, AccountsError> {
         Value::Array(a) => a,
         _ => Vec::new(),
     };
-    Ok(Listing { accounts, version: snap.version, recovered: snap.recovered })
+    Ok(Listing {
+        accounts,
+        version: snap.version,
+        recovered: snap.recovered,
+    })
 }
 
 /// Ephemeral authorization for live cleanup. The daemon constructs the proof
@@ -164,14 +213,21 @@ pub enum LiveScrub<'a> {
 }
 
 fn mutate(
-    doc: &JsonDoc, base: Option<u64>, policy: LiveScrub<'_>,
+    doc: &JsonDoc,
+    base: Option<u64>,
+    policy: LiveScrub<'_>,
     apply: impl FnOnce(&mut Value) -> Result<Vec<String>, DocError>,
 ) -> Result<Change, AccountsError> {
-    let proof = match policy { LiveScrub::Preserve => None, LiveScrub::Preserved(listing) => Some(listing) };
+    let proof = match policy {
+        LiveScrub::Preserve => None,
+        LiveScrub::Preserved(listing) => Some(listing),
+    };
     let base = match proof {
         Some(proof) => {
             if base.is_some_and(|caller| caller != proof.version) {
-                return Err(AccountsError::Conflict { current: proof.version });
+                return Err(AccountsError::Conflict {
+                    current: proof.version,
+                });
             }
             Some(proof.version)
         }
@@ -182,23 +238,41 @@ fn mutate(
     Ok(doc.write_op_scrubbed(base, Some(scrub(false)), |value| {
         if let Some(proof) = proof {
             if value.as_array() != Some(&proof.accounts) {
-                return Err(DocError::Conflict { current: proof.version });
+                return Err(DocError::Conflict {
+                    current: proof.version,
+                });
             }
         }
-        let mut cleaned = if proof.is_some() { scrub_secrets(value) } else { Vec::new() };
+        let mut cleaned = if proof.is_some() {
+            scrub_secrets(value)
+        } else {
+            Vec::new()
+        };
         let mut changed = apply(value)?;
-        for id in cleaned.drain(..) { push_unique(&mut changed, &id); }
+        for id in cleaned.drain(..) {
+            push_unique(&mut changed, &id);
+        }
         Ok(changed)
     })?)
 }
 
-pub fn put(doc: &JsonDoc, incoming: &[Value], if_absent: bool, base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
-    let incoming = incoming.iter().map(writable).collect::<Result<Vec<_>, _>>()?;
+pub fn put(
+    doc: &JsonDoc,
+    incoming: &[Value],
+    if_absent: bool,
+    base: Option<u64>,
+    live: LiveScrub<'_>,
+) -> Result<Change, AccountsError> {
+    let incoming = incoming
+        .iter()
+        .map(writable)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(mutate(doc, base, live, move |list| {
         let list = entries(list)?;
         let mut changed = Vec::new();
         if if_absent {
-            let ids: std::collections::HashSet<String> = list.iter().filter_map(id_of).map(str::to_owned).collect();
+            let ids: std::collections::HashSet<String> =
+                list.iter().filter_map(id_of).map(str::to_owned).collect();
             let keys: std::collections::HashSet<String> = list.iter().map(logical_key).collect();
             for entry in incoming {
                 let entry = Value::Object(entry);
@@ -212,7 +286,11 @@ pub fn put(doc: &JsonDoc, incoming: &[Value], if_absent: bool, base: Option<u64>
             return Ok(changed);
         }
         for entry in incoming {
-            let id = entry.get("id").and_then(Value::as_str).unwrap_or_default().to_string();
+            let id = entry
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
             match list.iter_mut().find(|e| id_of(e) == Some(id.as_str())) {
                 Some(existing) => {
                     let before = existing.clone();
@@ -237,7 +315,12 @@ pub fn put(doc: &JsonDoc, incoming: &[Value], if_absent: bool, base: Option<u64>
     })?)
 }
 
-pub fn remove(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
+pub fn remove(
+    doc: &JsonDoc,
+    ids: &[String],
+    base: Option<u64>,
+    live: LiveScrub<'_>,
+) -> Result<Change, AccountsError> {
     Ok(mutate(doc, base, live, |list| {
         let list = entries(list)?;
         let mut changed = Vec::new();
@@ -252,7 +335,12 @@ pub fn remove(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: LiveScrub<
     })?)
 }
 
-pub fn reorder(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
+pub fn reorder(
+    doc: &JsonDoc,
+    ids: &[String],
+    base: Option<u64>,
+    live: LiveScrub<'_>,
+) -> Result<Change, AccountsError> {
     Ok(mutate(doc, base, live, |list| {
         let list = entries(list)?;
         let before: Vec<Value> = list.clone();
@@ -287,8 +375,19 @@ pub fn reorder(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: LiveScrub
     })?)
 }
 
-pub fn replace_all(doc: &JsonDoc, incoming: &[Value], base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
-    let incoming: Vec<Value> = incoming.iter().map(writable).collect::<Result<Vec<_>, _>>()?.into_iter().map(Value::Object).collect();
+pub fn replace_all(
+    doc: &JsonDoc,
+    incoming: &[Value],
+    base: Option<u64>,
+    live: LiveScrub<'_>,
+) -> Result<Change, AccountsError> {
+    let incoming: Vec<Value> = incoming
+        .iter()
+        .map(writable)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(Value::Object)
+        .collect();
     Ok(mutate(doc, base, live, move |list| {
         let list = entries(list)?;
         if *list == incoming {
@@ -327,8 +426,13 @@ fn base(params: &Value) -> Option<u64> {
 }
 
 fn strings(v: Option<&Value>) -> Result<Vec<String>, AccountsError> {
-    let Some(Value::Array(items)) = v else { return Err(AccountsError::Invalid) };
-    items.iter().map(|i| i.as_str().map(str::to_owned).ok_or(AccountsError::Invalid)).collect()
+    let Some(Value::Array(items)) = v else {
+        return Err(AccountsError::Invalid);
+    };
+    items
+        .iter()
+        .map(|i| i.as_str().map(str::to_owned).ok_or(AccountsError::Invalid))
+        .collect()
 }
 
 /// `entries` (an array) or `entry` (one object).
@@ -347,18 +451,32 @@ fn wrote(change: Change) -> Outcome {
 }
 
 /// The methods both the daemon and the shell's fallback answer.
-pub const METHODS: [&str; 6] =
-    ["accounts.list", "accounts.get", "accounts.put", "accounts.remove", "accounts.reorder", "accounts.replace_all"];
+pub const METHODS: [&str; 6] = [
+    "accounts.list",
+    "accounts.get",
+    "accounts.put",
+    "accounts.remove",
+    "accounts.reorder",
+    "accounts.replace_all",
+];
 
 /// The methods that write.
 pub fn writes(method: &str) -> bool {
-    matches!(method, "accounts.put" | "accounts.remove" | "accounts.reorder" | "accounts.replace_all")
+    matches!(
+        method,
+        "accounts.put" | "accounts.remove" | "accounts.reorder" | "accounts.replace_all"
+    )
 }
 
 /// One `accounts.*` operation on `doc`. Blocking file IO: call it off the
 /// async workers. A preserved proof authorizes live cleanup only while its
 /// complete values and version still match. Newly made good backups are clean.
-pub fn run(doc: &JsonDoc, method: &str, params: &Value, scrub_live: LiveScrub<'_>) -> Result<Outcome, AccountsError> {
+pub fn run(
+    doc: &JsonDoc,
+    method: &str,
+    params: &Value,
+    scrub_live: LiveScrub<'_>,
+) -> Result<Outcome, AccountsError> {
     let live = scrub_live;
     match method {
         "accounts.list" => {
@@ -367,17 +485,39 @@ pub fn run(doc: &JsonDoc, method: &str, params: &Value, scrub_live: LiveScrub<'_
             if let Some(from) = l.recovered {
                 reply["recovered"] = Value::String(from);
             }
-            Ok(Outcome { reply, changed: None })
+            Ok(Outcome {
+                reply,
+                changed: None,
+            })
         }
         "accounts.get" => {
-            let id = params.get("id").and_then(Value::as_str).ok_or(AccountsError::Invalid)?;
+            let id = params
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or(AccountsError::Invalid)?;
             let l = list(doc)?;
-            let account = l.accounts.into_iter().find(|e| id_of(e) == Some(id)).unwrap_or(Value::Null);
-            Ok(Outcome { reply: json!({"account": account, "version": l.version}), changed: None })
+            let account = l
+                .accounts
+                .into_iter()
+                .find(|e| id_of(e) == Some(id))
+                .unwrap_or(Value::Null);
+            Ok(Outcome {
+                reply: json!({"account": account, "version": l.version}),
+                changed: None,
+            })
         }
         "accounts.put" => {
-            let if_absent = params.get("ifAbsent").and_then(Value::as_bool).unwrap_or(false);
-            Ok(wrote(put(doc, &incoming(params)?, if_absent, base(params), live)?))
+            let if_absent = params
+                .get("ifAbsent")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            Ok(wrote(put(
+                doc,
+                &incoming(params)?,
+                if_absent,
+                base(params),
+                live,
+            )?))
         }
         "accounts.remove" => {
             let ids = match params.get("id").and_then(Value::as_str) {
@@ -386,9 +526,16 @@ pub fn run(doc: &JsonDoc, method: &str, params: &Value, scrub_live: LiveScrub<'_
             };
             Ok(wrote(remove(doc, &ids, base(params), live)?))
         }
-        "accounts.reorder" => Ok(wrote(reorder(doc, &strings(params.get("ids"))?, base(params), live)?)),
+        "accounts.reorder" => Ok(wrote(reorder(
+            doc,
+            &strings(params.get("ids"))?,
+            base(params),
+            live,
+        )?)),
         "accounts.replace_all" => {
-            let Some(Value::Array(items)) = params.get("entries") else { return Err(AccountsError::Invalid) };
+            let Some(Value::Array(items)) = params.get("entries") else {
+                return Err(AccountsError::Invalid);
+            };
             Ok(wrote(replace_all(doc, items, base(params), live)?))
         }
         _ => Err(AccountsError::Invalid),
