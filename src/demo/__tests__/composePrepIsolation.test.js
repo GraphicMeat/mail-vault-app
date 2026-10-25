@@ -47,3 +47,32 @@ it.each([
   const result = await backend.invoke('daemon_rpc', { method: 'compose.check', params: { requestId: 'policy', accountId: backend.accounts[0].id, fromAddress: '', mode: 'new', to: 'friend@example.test', authoredBodyText: 'attached', attachmentCount: 0, timeZone: 'UTC' } });
   expect(result).toMatchObject({ kind: 'ready', route: { delay: null } });
 });
+
+it('matches the immutable check policy and route cases through the actual isolated backend', async () => {
+  const { readFileSync } = await import('node:fs');
+  const fixture = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-cases.json', 'utf8'));
+  const now = 1792886400000;
+  const settings = { attachmentReminder: true, billingProfile: { hasSubscription: true, status: 'active' } };
+  const backend = createDemoBackend({ now: () => now, initialSettings: { 'mailvault-settings': { state: settings } } });
+  const base = { requestId: 'fixture-check', accountId: backend.accounts[0].id, fromAddress: '', mode: 'new', to: 'friend@example.test', authoredBodyText: '', attachmentCount: 0, timeZone: 'UTC' };
+  for (const c of fixture.cases) {
+    const call = p => backend.invoke('daemon_rpc', { method: 'compose.check', params: { ...base, ...p } });
+    if (c.category === 'invalid') {
+      const out = await call({ to: c.input });
+      if (!c.input.trim()) expect(out.key, c.name).toBe('compose.pleaseEnterLeastOneRecipient');
+      else if (c.output.length) expect(out.args.address, c.name).toBe(c.output[0]);
+      else expect(out.kind, c.name).toBe('ready');
+    } else if (c.category === 'attachment' || c.category === 'authored') {
+      const out = await call({ mode: c.input.mode, subject: c.input.subject, authoredBodyText: c.input.bodyText, attachmentCount: c.input.attachmentCount });
+      expect(out.kind === 'confirm_attachment', c.name).toBe(c.category === 'authored' ? c.output.missing : c.output);
+    } else if (c.category === 'route') {
+      const routed = createDemoBackend({ now: () => c.input.now });
+      const out = await routed.invoke('daemon_rpc', { method: 'compose.check', params: { ...base, sendPlan: c.input.plan, scheduleDraft: c.input.scheduleDraft, timeZone: c.input.timeZone } });
+      expect(out.route, c.name).toEqual(c.output);
+    } else if (c.category === 'premium') {
+      const entitled = createDemoBackend({ now: () => c.input.now, initialSettings: { 'mailvault-settings': { state: c.input.state } } });
+      const out = await entitled.invoke('daemon_rpc', { method: 'compose.check', params: { ...base, authoredBodyText: 'attached' } });
+      expect(out.kind === 'confirm_attachment', c.name).toBe(c.output);
+    }
+  }
+});

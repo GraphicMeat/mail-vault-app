@@ -54,3 +54,55 @@ export const prepareMessage = (input, options) => prepareCompose(messagePreparat
 export const prepareMailto = (href, accountId, options) => prepareCompose({ kind: 'mailto', href, ...(accountId && { accountId }) }, options);
 
 export const preparationIdentity = ({ accountId, fromAddress, accounts, aliases, sendAsAddresses }) => JSON.stringify({ accountId, from: fromAddress, accounts: accounts.map(a => [a.id, a.email]), aliases, sendAs: sendAsAddresses });
+
+// A final owner check supplies settingsVersion explicitly: it must refuse a
+// conflict against that captured authority, never acknowledge a newer version.
+export async function checkCompose(input, options = {}) {
+  const frozen = copy(checkInput(input));
+  const finalVersion = Object.prototype.hasOwnProperty.call(options, 'settingsVersion');
+  const { acknowledge = () => flushSafeStorage({ acknowledge: true, purpose: 'send-check' }), isCurrent = () => true } = options;
+  for (let attempt = 0; attempt < (finalVersion ? 1 : 2); attempt++) {
+    if (!isCurrent()) throw unavailable();
+    const version = finalVersion ? options.settingsVersion : await acknowledge();
+    if (!isCurrent() || !Number.isSafeInteger(version) || version < 0) throw unavailable();
+    const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    let result;
+    try { result = await send('compose.check', { ...frozen, requestId, expectedSettingsVersion: version }); }
+    catch (error) {
+      if (!finalVersion && attempt === 0 && (error?.message || error) === 'errors.settingsConflict' && isCurrent()) continue;
+      throw error;
+    }
+    if (!isCurrent()) throw unavailable();
+    validateCheck(result, frozen, requestId, version);
+    return result;
+  }
+  throw unavailable();
+}
+function checkInput(input) {
+  const keys = ['mode', 'inReplyTo', 'forward', 'to', 'cc', 'bcc', 'subject', 'authoredBodyText', 'attachmentCount', 'timeZone', 'sendAnyway'];
+  const plan = input.sendPlan;
+  const draft = input.scheduleDraft;
+  return { ...Object.fromEntries(keys.filter(k => input[k] !== undefined).map(k => [k, input[k]])),
+    accountId: input.accountId ?? '', fromAddress: input.fromAddress ?? '',
+    ...(input.draftId != null && { draftId: input.draftId }), ...(input.revision != null && { revision: input.revision }),
+    sendPlan: plan && typeof plan === 'object' && !Array.isArray(plan) ? { kind: plan.kind, ...(plan.kind === 'in' && { minutes: plan.minutes }) } : plan ?? null,
+    scheduleDraft: draft && typeof draft === 'object' && !Array.isArray(draft) ? { localTime: draft.localTime, tz: draft.tz } : draft ?? null };
+}
+const object = value => !!value && typeof value === 'object' && !Array.isArray(value);
+const only = (value, keys) => object(value) && Object.keys(value).every(key => keys.includes(key));
+function validateCheck(result, input, requestId, version) {
+  const base = ['requestId', 'settingsVersion', 'kind', ...['draftId', 'revision'].filter(key => input[key] !== undefined)];
+  if (!object(result) || result.requestId !== requestId || result.settingsVersion !== version
+    || ['draftId', 'revision'].some(key => result[key] !== input[key] || Object.hasOwn(result, key) !== Object.hasOwn(input, key))) throw unavailable();
+  if (result.kind === 'confirm_attachment' && only(result, base)) return;
+  if (result.kind === 'invalid' && only(result, [...base, 'key', 'args'])) {
+    if (result.key === 'compose.invalidRecipient' && only(result.args, ['address']) && typeof result.args.address === 'string') return;
+    if (['compose.pleaseEnterLeastOneRecipient', 'compose.noAccountSelected', 'scheduled.picker.pastTime'].includes(result.key) && !Object.hasOwn(result, 'args')) return;
+  }
+  if (result.kind === 'ready' && only(result, [...base, 'route'])) {
+    const route = result.route;
+    if (only(route, ['delay']) && Object.hasOwn(route, 'delay') && (route.delay === null || Number.isInteger(route.delay) && route.delay >= 60 && route.delay <= 300 && route.delay % 60 === 0)) return;
+    if (only(route, ['draft']) && only(route.draft, ['localTime', 'tz']) && typeof route.draft.localTime === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(route.draft.localTime) && typeof route.draft.tz === 'string' && route.draft.tz.length) return;
+  }
+  throw unavailable();
+}

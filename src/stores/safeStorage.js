@@ -427,7 +427,7 @@ export function setSafeStorageWriteEnabled(enabled) {
 // whose writes are disabled (detached compose/settings). REJECTS when the
 // write fails, so the caller can tell the user their settings did not land;
 // the change stays queued and is retried.
-export async function flushSafeStorage({ acknowledge = false } = {}) {
+export async function flushSafeStorage({ acknowledge = false, purpose } = {}) {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   await ensureLoaded(); // never write a cache that is missing on-disk keys
   await writeQueued();
@@ -437,14 +437,24 @@ export async function flushSafeStorage({ acknowledge = false } = {}) {
   // The bounded loop does not retry an ordinary preparation timeout.
   for (let attempt = 0; attempt < 3; attempt++) {
     await writeQueued();
-    const expected = identityValues(parse(cache.get('mailvault-settings')));
+    const expected = preparationValues(parse(cache.get('mailvault-settings')), purpose);
     const reply = await rpc('settings.get', {});
     if (!isSnapshot(reply) || reply.version < 0 || reply.recovered != null) throw new Error('compose.preparationUnavailable');
-    const current = identityValues(parse(cache.get('mailvault-settings')));
-    if (deepEqual(expected, current) && deepEqual(current, identityValues(reply.values['mailvault-settings']))
+    const current = preparationValues(parse(cache.get('mailvault-settings')), purpose);
+    if (deepEqual(expected, current) && deepEqual(current, preparationValues(reply.values['mailvault-settings'], purpose))
       && !dirty.has('mailvault-settings') && !inflight.has('mailvault-settings')) return reply.version;
   }
   throw new Error('errors.settingsConflict');
+}
+
+// Reply preparation retains its identity-only numeric acknowledgement. Send
+// checking opts into the exact additional policy/sender values it consumes.
+function preparationValues(document, purpose) {
+  const identities = identityValues(document);
+  if (purpose !== 'send-check') return identities;
+  const state = document?.state || {};
+  const keys = ['displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'];
+  return { ...identities, ...Object.fromEntries(keys.map(key => [key, state[key]])) };
 }
 
 function identityValues(document) {

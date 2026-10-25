@@ -654,7 +654,6 @@ fn mentions(text: &str) -> bool {
     MENTION.is_match(&lines.join("\n"))
 }
 pub fn check(params: &Value, ctx: &Context, now: i64) -> Result<Value> {
-    bound(params)?;
     let p: Check = serde_json::from_value(params.clone()).map_err(|_| INVALID)?;
     fence(&p.request_id, p.expected_settings_version, ctx)?;
     // Validate explicit zone even for immediate plans; unknown zones cannot authorize a send.

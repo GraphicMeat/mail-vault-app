@@ -12,7 +12,7 @@ const ACCOUNT_IDS = [
   '7f7d5d80-4bd3-4f67-9a1a-1d1c00100002',
   '7f7d5d80-4bd3-4f67-9a1a-1d1c00100003',
 ];
-import { prepareDemoCompose } from './composePrep.js';
+import { prepareDemoCompose, checkDemoCompose } from './composePrep.js';
 import { buildEnrichmentMessages } from './enrichmentFixtures.js';
 
 const clone = value => typeof structuredClone === 'function'
@@ -331,8 +331,8 @@ const reviveMessage = stored => {
   return row;
 };
 
-export function createDemoBackend({ initialSettings = {}, initialPendingOperation = null } = {}) {
-  const sessionNow = Date.now();
+export function createDemoBackend({ initialSettings = {}, initialPendingOperation = null, now = () => Date.now() } = {}) {
+  const sessionNow = now();
   let messages = seedMessages(sessionNow);
   let mailboxList = clone(MAILBOXES);
   const accountMailboxAdds = new Map();
@@ -834,12 +834,8 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // Compose's send (the daemon's handlers/compose.rs): stage the copy in
         // the vault, then send it and drop the copy once "the server" holds
         // its own, as the daemon does. Built from the demo's own commands.
-        // Slice 1 is read-only and has no demo caller yet. Fail closed until
-        // the reviewed UI adapter supplies demo preparation at its own seam.
         if (method === 'compose.reply_context') return prepareDemoCompose(args.params || {}, { accounts: ACCOUNTS, values: settings, version: settingsVersion });
-        if (method === 'compose.check') {
-          throw new Error('compose.preparationUnavailable');
-        }
+        if (method === 'compose.check') return checkDemoCompose(args.params || {}, { accounts: ACCOUNTS, values: settings, version: settingsVersion, now: now() });
         if (method === 'compose.receipts.remove_account') return { removed: 0, simulated: true };
         if (method === 'compose.stage' || method === 'compose.send') {
           const p = args.params || {};

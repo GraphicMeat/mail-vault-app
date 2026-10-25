@@ -11,6 +11,8 @@ beforeEach(() => { vi.resetAllMocks(); flush.mockResolvedValue(4); send.mockImpl
 it('projects full actual authored text and supported schedule fields without private send data', async () => {
   expect(prep.checkCompose).toBeTypeOf('function');
   const authoredBodyText = htmlToText(`<p>${'界\\"'.repeat(400000)} attached</p>`);
+  expect(authoredBodyText).toBe('界\\"'.repeat(400000) + ' attached');
+  expect(new TextEncoder().encode(authoredBodyText).length).toBe(2000009);
   const p = { ...input(), authoredBodyText, body: '<p>private body</p>', attachments: [{ bytes: 'private' }], account: { password: 'secret' }, requestId: 'caller-id', expectedSettingsVersion: 99, sendPlan: { kind: 'at', presentation: true }, scheduleDraft: { localTime: '2030-01-01T09:00', tz: 'Europe/Vilnius', tzPicked: true } };
   await prep.checkCompose(p);
   const [method, wire] = send.mock.calls[0];

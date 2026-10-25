@@ -351,6 +351,7 @@ fn complete_large_check_keeps_keyword_order_and_same_snapshot_override() {
     let mut ctx = context(&fixture());
     ctx.settings = json!({"attachmentReminder":true,"billingProfile":{"hasSubscription":true,"status":"active"}});
     for text in ["x".repeat(compose_prep::MAX_REQUEST_BYTES + 1) + " attached", "界\\\"".repeat(400000) + " attached"] {
+        if text.starts_with("界") { assert_eq!(text.len(), 2000009); }
         let mut p = check_request();
         p["authoredBodyText"] = json!(text);
         assert!(serde_json::to_vec(&p).unwrap().len() > compose_prep::MAX_REQUEST_BYTES);

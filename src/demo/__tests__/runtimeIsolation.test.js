@@ -67,11 +67,13 @@ it('runs the actual preparation and mailto callers against backend-owned setting
   await useSettingsStore.persist.rehydrate();
   const account = demoBackend.accounts[0];
   useSettingsStore.setState({ aliases: { [account.id]: [{ address: 'alias@example.test' }] } });
-  const { prepareMessage } = await import('../../services/composePrep');
+  const { prepareMessage, checkCompose } = await import('../../services/composePrep');
   const result = await prepareMessage({ mode: 'replyAll', accountId: account.id, pickedFrom: 'removed@example.test', replyTo: {
     from: { address: 'writer@example.test' }, to: [{ address: account.email }, { address: 'alias@example.test' }, { address: 'removed@example.test' }, { address: 'friend@example.test' }], subject: 'demo', html: '<b>complete</b>', bcc: [{ address: 'original-private@example.test' }],
   } });
   expect(result.to).toBe('writer@example.test, friend@example.test'); expect(result.bcc).toBe('');
+  const checked = await checkCompose({ accountId: account.id, fromAddress: account.email, mode: 'new', to: 'friend@example.test', authoredBodyText: 'attached', attachmentCount: 0, timeZone: 'UTC' });
+  expect(checked.kind).toBe('confirm_attachment');
   const { version } = await demoBackend.invoke('daemon_rpc', { method: 'settings.get', params: {} });
   expect(result.settingsVersion).toBe(version);
   const { openMailtoCompose, setMailtoComposeOpener, retryMailtoCompose } = await import('../../utils/mailto');
