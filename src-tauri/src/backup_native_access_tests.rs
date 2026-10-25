@@ -415,7 +415,7 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         stream: UnixStream,
         reader: Option<std::thread::JoinHandle<()>>,
         pings: std::sync::Arc<AtomicUsize>,
-        access_events:std::sync::Arc<AtomicUsize>,
+        access_events: std::sync::Arc<AtomicUsize>,
     }
     impl Drop for Channel {
         fn drop(&mut self) {
@@ -446,7 +446,8 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         assert_eq!(ack["result"]["channel"], true);
         let pings = std::sync::Arc::new(AtomicUsize::new(0));
         let observed = pings.clone();
-        let access_events=std::sync::Arc::new(AtomicUsize::new(0));let triggered=access_events.clone();
+        let access_events = std::sync::Arc::new(AtomicUsize::new(0));
+        let triggered = access_events.clone();
         let task = std::thread::spawn(move || {
             let mut line = String::new();
             loop {
@@ -454,9 +455,15 @@ fn backup_access_fresh_shell_daemon_reconnect() {
                 match reader.read_line(&mut line) {
                     Ok(0) => break,
                     Ok(_) => {
-                        if let Ok(event)=serde_json::from_str::<Value>(&line) {
-                            if event["params"]["name"]=="daemon-ping" {observed.fetch_add(1,SeqCst);}
-                            if let Some(name)=event["params"]["name"].as_str() {crate::daemon_channel::schedule_backup_access_event(name,|| {triggered.fetch_add(1,SeqCst);});}
+                        if let Ok(event) = serde_json::from_str::<Value>(&line) {
+                            if event["params"]["name"] == "daemon-ping" {
+                                observed.fetch_add(1, SeqCst);
+                            }
+                            if let Some(name) = event["params"]["name"].as_str() {
+                                crate::daemon_channel::schedule_backup_access_event(name, || {
+                                    triggered.fetch_add(1, SeqCst);
+                                });
+                            }
                         }
                     }
                     Err(e)
@@ -495,8 +502,8 @@ fn backup_access_fresh_shell_daemon_reconnect() {
             )
             .map_err(|_| "native RPC unavailable".into());
             if m == "backup.schedule.status" {
-                if let Ok(value)=&result {
-                    *self.last_status.lock().unwrap()=json!({"ready":value["ready"],"incarnation":value["accessIncarnation"],"pendingStages":value["pendingAccess"].as_array().map(|items|items.iter().map(|i|i["stage"].clone()).collect::<Vec<_>>()),"activeStage":value["active"]["stage"]});
+                if let Ok(value) = &result {
+                    *self.last_status.lock().unwrap() = json!({"ready":value["ready"],"incarnation":value["accessIncarnation"],"pendingStages":value["pendingAccess"].as_array().map(|items|items.iter().map(|i|i["stage"].clone()).collect::<Vec<_>>()),"activeStage":value["active"]["stage"]});
                 }
             }
             if m == "backup.attach_access"
@@ -741,19 +748,30 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         "recovered pending intent",
     );
     reconcile(&held, &native, "shell-c");
-    if native.acquired.load(SeqCst)!=3 {
-        println!("NATIVE_RESTART_FIRST_RECONCILE: {}",native.last_status.lock().unwrap());
+    if native.acquired.load(SeqCst) != 3 {
+        println!(
+            "NATIVE_RESTART_FIRST_RECONCILE: {}",
+            native.last_status.lock().unwrap()
+        );
     }
     // Follow-up work requires the same actual native event hook as the pump.
     // No polling of status can manufacture a missing access-needed trigger.
-    until(|| {
-        let events=channel.access_events.swap(0,SeqCst);
-        if events>0 {
-            reconcile(&held,&native,"shell-c");
-            println!("NATIVE_RESTART_EVENT_RECONCILE: triggers={} acquired={} status={}",events,native.acquired.load(SeqCst),native.last_status.lock().unwrap());
-        }
-        native.acquired.load(SeqCst)==3
-    },"event-triggered third actual native acquisition after replacement");
+    until(
+        || {
+            let events = channel.access_events.swap(0, SeqCst);
+            if events > 0 {
+                reconcile(&held, &native, "shell-c");
+                println!(
+                    "NATIVE_RESTART_EVENT_RECONCILE: triggers={} acquired={} status={}",
+                    events,
+                    native.acquired.load(SeqCst),
+                    native.last_status.lock().unwrap()
+                );
+            }
+            native.acquired.load(SeqCst) == 3
+        },
+        "event-triggered third actual native acquisition after replacement",
+    );
     assert_eq!(native.acquired.load(SeqCst), 3);
     until(
         || {

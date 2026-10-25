@@ -230,17 +230,28 @@ async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<DaemonRead>>
 
 /// The same event hook drives the real pump and the connected native fixture.
 /// Scheduling remains asynchronous; this callback never awaits reconciliation.
-pub(crate) fn schedule_backup_access_event(name:&str,schedule:impl FnOnce()) {
-    if matches!(name,"backup-access-needed"|"backup-access-release"|"daemon-events-lagged") {schedule();}
+pub(crate) fn schedule_backup_access_event(name: &str, schedule: impl FnOnce()) {
+    if matches!(
+        name,
+        "backup-access-needed" | "backup-access-release" | "daemon-events-lagged"
+    ) {
+        schedule();
+    }
 }
 #[cfg(test)]
 #[test]
 fn backup_access_event_hook_schedules_only_native_reconciliation_triggers() {
-    let count=std::cell::Cell::new(0);
-    for name in ["backup-access-needed","backup-access-release","daemon-events-lagged","backup-progress","settings-changed"] {
-        schedule_backup_access_event(name,||count.set(count.get()+1));
+    let count = std::cell::Cell::new(0);
+    for name in [
+        "backup-access-needed",
+        "backup-access-release",
+        "daemon-events-lagged",
+        "backup-progress",
+        "settings-changed",
+    ] {
+        schedule_backup_access_event(name, || count.set(count.get() + 1));
     }
-    assert_eq!(count.get(),3);
+    assert_eq!(count.get(), 3);
 }
 
 /// Reads daemon events and re-emits them to the frontend. Never writes —
@@ -289,7 +300,7 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         if let Some(event) = cleanup_event {
                             crate::cleanup::release_after_event(app, &event);
                         }
-                        schedule_backup_access_event(&name,||crate::backup::reconcile_native_access(app));
+                        schedule_backup_access_event(&name, || crate::backup::reconcile_native_access(app));
                         if lagged {
                             crate::bulk::reconcile_after_channel_change(app);
                             crate::export_folder::release_all(app, "the daemon event stream lagged");
