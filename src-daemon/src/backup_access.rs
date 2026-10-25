@@ -91,3 +91,15 @@ pub(super) async fn route(state:&Arc<DaemonState>,method:&str,params:&Value,id:V
     let result=if state.backup_worker.tx.get().unwrap().send(Cmd::Access{request,reply:tx}).is_ok() {rx.await.unwrap_or_else(|_|Err("errors.settingsNotLoaded".into()))} else {Err("errors.settingsNotLoaded".into())};
     Some(match result {Ok(v)=>RpcResponse::success(id,v),Err(e)=>RpcResponse::error(id,ipc::INTERNAL_ERROR,e)})
 }
+pub(super) async fn root(state:&Arc<DaemonState>,intent:&Intent)->Result<Option<String>,()> {
+    let path=state.app_dir.clone();
+    let stamp=common::blocking(move||wire::slot_stamp(&path)).await.map_err(|_|())?.map_err(|_|())?;
+    let access=&state.backup_worker.access;
+    let records=access.records.lock().unwrap();
+    let authority=records.values().find(|r|r.attempt.execution_id==intent.execution_id && r.root.is_some());
+    if let Some(r)=authority {
+        if !r.lost && r.slot==stamp && access.owners.lock().unwrap().contains(&r.attempt.owner_id) {return Ok(r.root.clone());}
+        return Err(());
+    }
+    if stamp.is_none() {Ok(None)} else {Err(())}
+}

@@ -150,6 +150,7 @@ fn take_backup_path(app: &tauri::AppHandle, account_id: &str) -> Option<String> 
 /// over: release it. Called for every `backup-progress` event, so anything
 /// that is not terminal, or names no account we hold a scope for, is a no-op.
 fn release_legacy_frame(held: &HeldBackupPaths, payload: &Value, release: impl FnOnce(&str)) {
+    if payload.get("runId").is_some() || payload.get("executionId").is_some() { return; }
     if payload.get("active").and_then(Value::as_bool) != Some(false) { return; }
     let Some(account) = payload.get("account_id").and_then(Value::as_str) else { return; };
     let path = held.0.lock().unwrap_or_else(|p| p.into_inner()).remove(account);

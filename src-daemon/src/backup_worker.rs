@@ -853,14 +853,14 @@ async fn admission_facts(state: &Arc<DaemonState>) -> Result<(Value, Vec<String>
     .map_err(|_| "pending_settings".to_string())?
 }
 async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Services) -> RunExit {
-    let (settings, ids, absent) = match admission_facts(state).await {
+    let (settings, ids, _absent) = match admission_facts(state).await {
         Ok(f) => f,
         Err(stage) => return RunExit::Pending(stage),
     };
     if !ids.contains(&intent.account_id) {
         return RunExit::Missing;
     }
-    if !absent {
+    if access::root(state, intent).await.is_err() {
         return RunExit::Pending("pending_access".into());
     }
     let now = state.clock.now_ms();
@@ -900,21 +900,18 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
                 return match admission_facts(state).await {
                     Err(stage) => RunExit::Pending(stage),
                     Ok((_, ids, _)) if !ids.contains(&intent.account_id) => RunExit::Missing,
-                    Ok((_, _, false)) => RunExit::Pending("pending_access".into()),
-                    Ok(_) => RunExit::Credentials(error),
+                    Ok(_) => if access::root(state,intent).await.is_err() {RunExit::Pending("pending_access".into())} else {RunExit::Credentials(error)},
                 }
             }
         };
-    let (fresh, ids, absent) = match admission_facts(state).await {
+    let (fresh, ids, _absent) = match admission_facts(state).await {
         Ok(f) => f,
         Err(stage) => return RunExit::Pending(stage),
     };
     if !ids.contains(&intent.account_id) {
         return RunExit::Missing;
     }
-    if !absent {
-        return RunExit::Pending("pending_access".into());
-    }
+    let mirror_root = match access::root(state,intent).await { Ok(root)=>root, Err(())=>return RunExit::Pending("pending_access".into()) };
     let facts = state.backup_worker.facts.lock().unwrap().clone();
     if !intent.manual
         && (!facts.automatic
@@ -969,7 +966,7 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
             intent.account_id.clone(),
             account,
             None,
-            None,
+            mirror_root,
             0,
             policy::mailbox_concurrency(&fresh, state.clock.now_ms()),
             Some((intent.run_id.clone(), intent.execution_id.clone())),

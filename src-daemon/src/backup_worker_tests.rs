@@ -1288,3 +1288,87 @@ async fn backup_access_fence_before_attach_prevents_start() {
     assert_eq!(late["state"],"fenced"); assert!(r.calls.try_recv().is_err());
     finish(r).await;
 }
+async fn access_query(r:&Rig, attempt:&Value, fence:bool)->Value {
+    rpc(&r.state,"backup.access_status",json!({"attempt":attempt,"fenceUnstarted":fence})).await
+}
+#[tokio::test]
+async fn backup_access_terminal_and_cancel_ack_are_not_drain() {
+    let mut r=rig(); let stamp=access_slot(&r);
+    let ack=manual(&r.state,"one","joined-scope").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");
+    assert_eq!(access_attach(&r,&attempt,&stamp,"/native-authorized").await["state"],"accepted");
+    let c=call(&mut r).await;
+    (c.ctx.on_progress)(frame(&c.ctx));
+    rpc(&r.state,"backup.cancel",json!({"runId":ack["runId"]})).await;
+    let status=access_query(&r,&attempt,true).await;
+    assert_eq!(status["safeRelease"],false);
+    assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));
+    c.reply.send(Ok(result(2))).ok().unwrap();
+    wait(&r.state,|s|s["active"].is_null()).await;
+    assert_eq!(access_query(&r,&attempt,true).await["state"],"drained");
+    assert_eq!(access_query(&r,&attempt,false).await["safeRelease"],true);
+    finish(r).await;
+}
+#[tokio::test]
+async fn backup_access_stale_slot_and_foreign_identity_cannot_start() {
+    let mut r=rig(); let old=access_slot(&r);
+    let ack=manual(&r.state,"one","slot-change").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");
+    app_db::with(&r.state.app_dir,|c|app_db::locations::save_meta(c,"external-backup","/replacement","native",2,false)).unwrap();
+    assert_eq!(access_attach(&r,&attempt,&old,"/old-root").await["state"],"rejected");
+    let mut foreign=attempt.clone(); foreign["incarnation"]=json!("old-daemon");
+    assert_eq!(access_query(&r,&foreign,true).await["safeRelease"],false);
+    let mut stale=attempt.clone();stale["executionId"]=json!("previous-execution");
+    assert_eq!(access_attach(&r,&stale,&old,"/old-root").await["state"],"rejected");
+    assert!(r.calls.try_recv().is_err());
+    assert!(settings(&r.state)["backupHistory"]["one"].is_null());
+    finish(r).await;
+}
+#[tokio::test]
+async fn backup_access_owner_loss_waits_for_join_then_needs_fresh_scope() {
+    let mut r=rig(); let stamp=access_slot(&r);
+    let ack=manual(&r.state,"one","owner-loss").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");
+    access_attach(&r,&attempt,&stamp,"/native-authorized").await;
+    let c=call(&mut r).await;
+    access::owner_lost(&r.state,"shell-a");
+    assert!(c.ctx.cancel.load(SeqCst));
+    assert_eq!(access_query(&r,&attempt,true).await["safeRelease"],false);
+    assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    let s=wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty() && s["pendingAccess"][0]["executionId"]!=ack["executionId"]).await;
+    let fresh=s["pendingAccess"][0].clone();
+    assert_eq!(fresh["runId"],ack["runId"]);
+    assert_eq!(access_query(&r,&attempt,false).await["safeRelease"],true);
+    assert!(r.calls.try_recv().is_err());
+    assert!(settings(&r.state)["backupHistory"]["one"].is_null());
+    let replacement=access_attempt(&r,&fresh,"shell-b");
+    access_attach(&r,&replacement,&stamp,"/native-authorized").await;
+    let c=call(&mut r).await;
+    assert!(!c.ctx.cancel.load(SeqCst));
+    let late=access_attach(&r,&attempt,&stamp,"/redirect").await;
+    assert_eq!(late["state"],"drained");
+    assert_eq!(access_query(&r,&replacement,true).await["safeRelease"],false);
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["owner-loss"]["status"]=="success").await;
+    finish(r).await;
+}
+#[tokio::test]
+async fn backup_access_provider_panic_retains_authority_and_guard() {
+    let mut r=rig();let stamp=access_slot(&r);
+    let ack=manual(&r.state,"one","uncertain-scope").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    let attempt=access_attempt(&r,&ack,"shell-a");
+    access_attach(&r,&attempt,&stamp,"/native-authorized").await;
+    let c=call(&mut r).await;
+    drop(c.reply); // Actual provider future panics on its oneshot, adapter joins it.
+    wait(&r.state,|s|s["active"]["stage"]=="uncertain").await;
+    access::owner_lost(&r.state,"shell-a");
+    assert_eq!(access_query(&r,&attempt,true).await["state"],"uncertain");
+    assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));
+    assert!(settings(&r.state)["backupHistory"]["one"].is_null());
+    finish(r).await;
+}
