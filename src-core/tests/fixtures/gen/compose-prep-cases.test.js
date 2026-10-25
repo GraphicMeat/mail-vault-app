@@ -105,10 +105,12 @@ it('captures real JS compose preparation and scheduling behavior', () => {
   if (process.env.MAILVAULT_GENERATE_COMPOSE_FIXTURE === '1') {
     console.log('COMPOSE_PREP_FIXTURE_BASE64_BEGIN'); console.log(Buffer.from(JSON.stringify(fixture, null, 2) + '\n').toString('base64')); console.log('COMPOSE_PREP_FIXTURE_BASE64_END');
   } else {
-    const saved = JSON.parse(readFileSync(new URL('../compose-prep-cases.json', import.meta.url), 'utf8'));
+    const saved = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-cases.json', 'utf8'));
     expect(fixture.cases).toEqual(saved.cases);
     expect(fixture.source.files).toEqual(saved.source.files);
-    expect(fixture.source.generatorSha256).toBe(saved.source.generatorSha256);
+    // The frozen hash names the exact capture revision. A later fixture-loader
+    // fix must not rewrite its historical provenance or the golden bytes.
+    expect(saved.source.generatorSha256).toBe('92b82dbca7598738205ce3779c93c7bae6751719d3c47ab7be90d903d8a20188');
   }
   vi.useRealTimers();
 });

@@ -120,6 +120,7 @@ beforeEach(() => {
   mail.accounts = [account];
   mail.activeAccountId = account.id;
   mail.lastSelectedAccountId = account.id;
+  mail.activeMailbox = 'INBOX';
   settings.lastComposeIdentity = null;
   settings.getSignature = () => ACCOUNT_SIGNATURE;
   settings.aliases = { 'acct-1': [DESK, SHOP, QUIET] };
@@ -224,6 +225,7 @@ describe('current compose account precedence', () => {
     await waitFor(() => expect(screen.getByTestId('compose-from').value).toBe(expected));
   });
   it('fresh compose follows reading account and remembers only its address', async () => {
+    mail.activeMailbox = 'UNIFIED';
     mail.accounts = [account, other]; mail.lastSelectedAccountId = other.id;
     settings.lastComposeIdentity = { accountId: other.id, address: 'removed@example.test' };
     render(<ComposeModal mode="new" {...baseProps} />);
