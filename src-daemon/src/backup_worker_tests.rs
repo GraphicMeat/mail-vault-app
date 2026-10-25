@@ -1619,13 +1619,25 @@ async fn backup_access_slot_changed_during_credentials_blocks_provider() {
 #[tokio::test]
 async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal() {
     use mailvault_core::mirror_mutation::MirrorRoot;
-    async fn wait_stage(state: &Arc<DaemonState>, stage: &str, predicate: impl Fn(&Value)->bool) {
-        let reached = tokio::time::timeout(Duration::from_secs(3),async {
-            loop { let view=state.backup_worker.status(); if predicate(&view) { return; } tokio::task::yield_now().await; }
-        }).await;
+    // This fixture alone logs its loopback provider position, never user data.
+    let _provider_trace = tracing::subscriber::set_default(tracing_subscriber::fmt()
+        .with_env_filter("mailvault_core::imap=info")
+        .with_test_writer().finish());
+
+    async fn wait_stage(state: &Arc<DaemonState>, stage: &str, predicate: impl Fn(&Value) -> bool) {
+        let reached = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let view = state.backup_worker.status();
+                if predicate(&view) {
+                    return;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await;
         if reached.is_err() {
-            let view=state.backup_worker.status();
-            let summary=json!({"stage":stage,"activeStage":view["active"]["stage"],"activeRun":view["active"]["runId"],"activeExecution":view["active"]["executionId"],"cancelRequested":view["active"]["cancelRequested"],"pendingCount":view["pendingAccess"].as_array().map(Vec::len),"requestStatus":view["requests"]["real-blocking-scope"]["status"],"ownsAccount":state.backup_runs.lock().unwrap().contains_key("one"),"revision":view["revision"]});
+            let view = state.backup_worker.status();
+            let summary = json!({"stage":stage,"activeStage":view["active"]["stage"],"activeRun":view["active"]["runId"],"activeExecution":view["active"]["executionId"],"cancelRequested":view["active"]["cancelRequested"],"pendingCount":view["pendingAccess"].as_array().map(Vec::len),"requestStatus":view["requests"]["real-blocking-scope"]["status"],"ownsAccount":state.backup_runs.lock().unwrap().contains_key("one"),"revision":view["revision"]});
             panic!("real mirror drain stage timed out: {summary}");
         }
     }
@@ -1683,7 +1695,10 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
     let file_remains = cur.join("7.eml").exists();
     release_tx.send(()).unwrap();
     holding.await.unwrap().unwrap();
-    wait_stage(&r.state, "joined drain after mirror release", |s| s["active"].is_null()).await;
+    wait_stage(&r.state, "joined drain after mirror release", |s| {
+        s["active"].is_null()
+    })
+    .await;
     assert_eq!(before["safeRelease"], false);
     assert!(claimed);
     assert!(file_remains);
