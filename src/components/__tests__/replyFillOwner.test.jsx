@@ -79,3 +79,29 @@ it('keeps one transient receipt out of session, draft and native wire content', 
   expect(saved).not.toContain('_replyFillReceipt');
   expect(JSON.parse(saved)[0].initialData._draftContent).toEqual(original[0].snapshot._draftContent);
 });
+it('commits latest B through the real owner after superseded A learns the original Message-ID', async () => {
+  const fullA = { ...full, messageId: '<learned-original@example.test>', html: '<p>older A</p>' };
+  const fullB = { ...fullA, html: '<p>latest B</p>', _threadContext: [{ ...header, html: '<p>latest B context</p>' }] };
+  let controller; let committed; let resolveGate; let blocked = true; let suspended = 0;
+  const gate = new Promise(resolve => { resolveGate = resolve; });
+  function Owner({ suspend }) {
+    const [windows, setWindows] = useState(original);
+    const transitioningSet = useCallback(update => startTransition(() => setWindows(update)), []);
+    const current = useReplyFillController({ windows, setWindows: transitioningSet, getContext: () => context, onError: error => { throw error; } });
+    useLayoutEffect(() => { controller = current; committed = windows; });
+    if (suspend && blocked && windows[0].replyTo === fullA) { suspended++; throw gate; }
+    return <span data-testid="latest-body">{windows[0].replyTo === fullB ? 'B' : windows[0].replyTo === fullA ? 'A' : 'header'}</span>;
+  }
+  const view = render(<StrictMode><Suspense fallback={<span>Waiting</span>}><Owner suspend /></Suspense></StrictMode>);
+  let first; let second;
+  await act(async () => { first = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: fullA }); });
+  await waitFor(() => expect(suspended).toBeGreaterThan(0));
+  await act(async () => { second = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: fullB }); });
+  expect(committed[0].replyTo === header).toBe(true);
+  await act(async () => { blocked = false; resolveGate(); view.rerender(<StrictMode><Suspense fallback={<span>Waiting</span>}><Owner suspend={false} /></Suspense></StrictMode>); });
+  await Promise.all([first, second]);
+  await waitFor(() => expect(screen.getByTestId('latest-body').textContent).toBe('B'));
+  expect(committed[0].snapshot._quotedHtml).toContain('latest B'); expect(committed[0].snapshot._contextHtml).toContain('latest B context');
+  expect(committed[0].snapshot.to).toBe(original[0].snapshot.to); expect(committed[0].snapshot.body).toBe(original[0].snapshot.body);
+  expect(committed[0].snapshot._draftContent).toBe(original[0].snapshot._draftContent);
+});

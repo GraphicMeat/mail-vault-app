@@ -106,3 +106,40 @@ it('does not acknowledge a discarded updater evaluation and replays after an asy
   windows = replayed; commit?.(windows); await filling;
   expect(windows[0].snapshot._quotedHtml).toContain('full body'); expect(h.onError).not.toHaveBeenCalled();
 });
+it('keeps newest B associated with H when queued A commits a learned Message-ID first', async () => {
+  const h = make(); let windows = h.windows; const queued = [];
+  const fullA = { ...h.full, messageId: '<learned@example.test>', html: '<p>older A body</p>' };
+  const fullB = { ...fullA, html: '<p>' + '界'.repeat(750000) + 'FINAL_B</p>',
+    _threadContext: Array.from({ length: 70 }, (_, i) => ({ ...header, date: `stamp-${i}`, html: `<p>B-context-${i}:` + 'x'.repeat(35000) + `:END-${i}</p>` })) };
+  const controller = createReplyFillController({ getWindows: () => windows, commitWindows: apply => new Promise(resolve => queued.push({ apply, resolve })), getContext: () => io.context, onError: h.onError });
+  const first = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: fullA });
+  await vi.waitFor(() => expect(queued).toHaveLength(1));
+  const latest = { ...h.data, to: 'newest-authored@example.test', subject: 'Newest subject', body: '<p>Newest template edit</p>', _accountId: 'two', _fromAddress: two.email };
+  windows = windows.map(w => ({ ...w, snapshot: latest, initialData: latest })); io.context.version = 2;
+  const second = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: fullB });
+  { const item = queued.shift(); windows = item.apply(windows); item.resolve(windows); }
+  expect(windows[0].replyTo === fullA).toBe(true);
+  await vi.waitFor(() => expect(queued).toHaveLength(1));
+  { const item = queued.shift(); windows = item.apply(windows); item.resolve(windows); }
+  await Promise.all([first, second]);
+  expect(windows[0].replyTo === fullB).toBe(true); expect(windows[0].snapshot._quotedHtml.endsWith(fullB.html)).toBe(true);
+  expect(windows[0].snapshot._contextHtml).toContain(':END-69</p>');
+  expect(windows[0].snapshot).toMatchObject({ to: latest.to, bcc: latest.bcc, subject: latest.subject, body: latest.body, _accountId: 'two', _fromAddress: two.email, _draftRevision: 9 });
+  expect(windows[0].snapshot._draftContent).toBe(h.issued); expect(windows[0].snapshot._baseline).toBe(latest._baseline);
+  expect(io.calls).toHaveLength(2); expect(io.calls[1].original.html).toBe(fullB.html); expect(io.calls[1].threadContext).toHaveLength(70);
+  expect(h.onError).not.toHaveBeenCalled();
+});
+it.each(['closed', 'terminal', 'detached', 'replaced'])('refuses the queued A/newest B sequence after the window is %s', async state => {
+  const h = make(); let windows = h.windows; const queued = [];
+  const fullA = { ...h.full, messageId: '<learned@example.test>' }; const fullB = { ...fullA, html: '<p>newest B</p>' };
+  const controller = createReplyFillController({ getWindows: () => windows, commitWindows: apply => new Promise(resolve => queued.push({ apply, resolve })), getContext: () => io.context, onError: h.onError });
+  const first = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: fullA });
+  await vi.waitFor(() => expect(queued).toHaveLength(1));
+  const second = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: fullB });
+  windows = state === 'closed' ? [] : windows.map(w => state === 'terminal' ? { ...w, snapshot: { ...w.snapshot, _draftTerminal: 'sent' } }
+    : state === 'detached' ? { ...w, detached: true } : { ...w, id: 99, replyTo: fullA });
+  const refused = windows;
+  { const item = queued.shift(); windows = item.apply(windows); item.resolve(windows); }
+  await Promise.all([first, second]);
+  expect(windows).toBe(refused); expect(io.calls).toHaveLength(1); expect(queued).toHaveLength(0); expect(h.onError).not.toHaveBeenCalled();
+});
