@@ -35,13 +35,13 @@ vi.mock('lucide-react', () => {
     has: () => true,
   });
 });
-vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, {
-    get: () => React.forwardRef(({ children, initial, animate, exit, ...props }, ref) =>
-      React.createElement('div', { ...props, ref }, children)),
-  }),
-  AnimatePresence: ({ children }) => children,
-}));
+vi.mock('framer-motion', () => {
+  const cache = new Map();
+  return { motion: new Proxy({}, { get: (_target, tag) => {
+    if (!cache.has(tag)) cache.set(tag, React.forwardRef(({ children, initial, animate, exit, ...props }, ref) => React.createElement(tag, { ...props, ref }, children)));
+    return cache.get(tag);
+  } }), AnimatePresence: ({ children }) => children };
+});
 // Only the editor itself is stubbed: textToHtml and htmlToText are what build
 // the quote and its text part, so they stay real.
 vi.mock('../RichTextEditor', async (importOriginal) => ({
@@ -172,6 +172,7 @@ async function expandQuote() {
 /** Send the reply untouched; resolves with the message handed to the MIME builder. */
 async function sendReplyTo(replyTo) {
   openReply(replyTo);
+  await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
   (await screen.findByTestId('compose-send')).click();
   await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
   return stageOutgoing.mock.calls[0][1];
@@ -210,6 +211,7 @@ describe('the quoted original in a reply', () => {
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onQueueSend={onQueueSend} />);
 
     fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(screen.getByTestId('compose-send'));
 
     await waitFor(() => expect(onQueueSend).toHaveBeenCalled());
@@ -226,6 +228,7 @@ describe('the quoted original in a reply', () => {
     await screen.findByTestId('compose-from');
     expect(screen.getByRole('option', { name: 'Front Desk <desk@example.test>' })).not.toBeNull();
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(screen.getByTestId('compose-send'));
     await waitFor(() => expect(stageOutgoing).toHaveBeenCalledTimes(1));
     expect(stageOutgoing.mock.calls[0][0]).toMatchObject({ name: 'Front Desk', fromEmail: 'desk@example.test' });
@@ -235,6 +238,7 @@ describe('the quoted original in a reply', () => {
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
     fireEvent.change(await screen.findByTestId('compose-from'), { target: { value: 'acct-1 me@example.test' } });
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(screen.getByTestId('compose-send'));
     await waitFor(() => expect(stageOutgoing).toHaveBeenCalledTimes(1));
     expect(stageOutgoing.mock.calls[0][0].name).toBe('Me');
@@ -778,6 +782,7 @@ describe('the quoted original in a reply', () => {
     await screen.findByText('b.pdf');
 
     fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'recipient@example.test' } });
+    await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(screen.getByTestId('compose-send'));
     await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
 
@@ -975,6 +980,7 @@ describe('a forwarded HTML email', () => {
   async function forward(message) {
     render(<ComposeModal mode="forward" replyTo={message} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
     fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'friend@example.test' } });
+    await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(screen.getByTestId('compose-send'));
     await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
     return stageOutgoing.mock.calls[0][1];
@@ -1007,6 +1013,7 @@ describe('a forwarded HTML email', () => {
       to: 'friend@example.test', subject: 'Fwd: Weekly digest', body: '<p>FYI</p>',
       _quotedHtml: '<p><strong>Original Message</strong></p>' + newsletter.html, _forward: true, _baseline: null,
     }} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     fireEvent.click(await screen.findByTestId('compose-send'));
     await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
     const sent = stageOutgoing.mock.calls[0][1];

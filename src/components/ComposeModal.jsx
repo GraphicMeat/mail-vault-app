@@ -581,9 +581,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     preparationReadyRef.current = false;
     setPreparationReady(false);
     setPreparationFailed(false);
+    const canUsePrepared = (preparedQuote?.source === preparationSource || preparedQuote?.source === replyToProp) && preparedQuote.identityGeneration === identityGeneration;
     request.run = async () => {
       try {
-        const result = preparedQuote?.source === preparationSource && preparedQuote.identityGeneration === identityGeneration
+        const result = canUsePrepared
           ? preparedQuote.result
           : await prepareMessage({ replyTo: preparationSource, mode, accountId: selectedAccountId, pickedFrom: composeFrom },
             { ...(acknowledgePreparation && { acknowledge: acknowledgePreparation }), isCurrent: current });
@@ -621,9 +622,14 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           if (next.accountId !== selectedAccountId) { setSelectedAccountId(next.accountId); setPickedFrom(next.address); return; }
         }
         setPreparationFailed(true);
+        setAutoDetach(false);
         setError(t('compose.preparationUnavailable'));
       }
     };
+    if (canUsePrepared) {
+      void request.run();
+      return () => { request.cancelled = true; };
+    }
     state.desired = request;
     if (!state.running) {
       state.running = true;
@@ -1104,7 +1110,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     selectedAccountId !== initialIdentity.accountId || pickedFrom !== initialIdentity.address
   );
   const sessionSignature = JSON.stringify([
-    formData.to, formData.cc, formData.bcc, formData.subject, formData.body,
+    formData.to, formData.cc, formData.bcc, formData.subject, formData.body, preparationReady,
     attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, selectedAccountId, pickedFrom, sendPlan, composeSize, scheduleDraft, remindDays,
   ]);
 
@@ -1330,10 +1336,10 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // form state, so the handoff below snapshots the initialized draft.
   useEffect(() => { if (autoDetach) setAutoDetachTick(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (autoDetachTick !== 1) return;
+    if (!autoDetach || autoDetachTick !== 1 || !preparationReady) return;
     setAutoDetachTick(2);
     handleDetach().then(ok => { if (!ok && aliveRef.current) setAutoDetach(false); });
-  }, [autoDetachTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoDetachTick, autoDetach, preparationReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const contextCollapsed = Boolean(contextHtml && showContext && contentWidth < 564);
   const layoutWidth = Number.isFinite(contentWidth) ? contentWidth : 896;
@@ -1867,7 +1873,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                 type="submit"
                 data-testid="compose-send"
                 data-plan={sendPlan?.kind || ''}
-                disabled={sending}
+                disabled={sending || !preparationReady}
                 title={t('compose.sendShiftEnter')}
                 className="flex items-center gap-2 px-4 py-2 bg-mail-accent-fill
                           hover:bg-mail-accent-hover disabled:opacity-50

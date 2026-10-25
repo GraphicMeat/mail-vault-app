@@ -59,3 +59,25 @@ describe('browser demo isolation', () => {
     expect(nativeOpen).toHaveBeenCalledExactlyOnceWith('/get-started.html?plan=free', '_blank');
   });
 });
+
+it('runs the actual preparation and mailto callers against backend-owned settings without live stores at backend import', async () => {
+  const { installDemoGlobals, demoBackend } = await import('../runtime.js');
+  installDemoGlobals();
+  const { useSettingsStore } = await import('../../stores/settingsStore');
+  await useSettingsStore.persist.rehydrate();
+  const account = demoBackend.accounts[0];
+  useSettingsStore.setState({ aliases: { [account.id]: [{ address: 'alias@example.test' }] } });
+  const { prepareMessage } = await import('../../services/composePrep');
+  const result = await prepareMessage({ mode: 'replyAll', accountId: account.id, pickedFrom: 'removed@example.test', replyTo: {
+    from: { address: 'writer@example.test' }, to: [{ address: account.email }, { address: 'alias@example.test' }, { address: 'removed@example.test' }, { address: 'friend@example.test' }], subject: 'demo', html: '<b>complete</b>', bcc: [{ address: 'original-private@example.test' }],
+  } });
+  expect(result.to).toBe('writer@example.test, friend@example.test'); expect(result.bcc).toBe('');
+  const { version } = await demoBackend.invoke('daemon_rpc', { method: 'settings.get', params: {} });
+  expect(result.settingsVersion).toBe(version);
+  const { openMailtoCompose, setMailtoComposeOpener, retryMailtoCompose } = await import('../../utils/mailto');
+  const opened = []; setMailtoComposeOpener(d => opened.push(d));
+  expect(openMailtoCompose(' MAILTO:tag+literal@example.test?bcc=authored@example.test&body=%3Cb%3E', account.id)).toBe(true);
+  await retryMailtoCompose();
+  expect(opened).toMatchObject([{ to: 'tag+literal@example.test', bcc: 'authored@example.test', body: '&lt;b&gt;', _accountId: account.id, _prefill: true }]);
+  setMailtoComposeOpener(null);
+});

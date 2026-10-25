@@ -1,6 +1,6 @@
 // Demo-only policy adapter. The backend supplies every account and setting;
 // production callers never import this module or use it as an RPC fallback.
-import { computeReplyRecipients, buildReplyHeaders } from '../utils/emailParser';
+import { computeReplyRecipients, buildReplyHeaders } from '../utils/replyPolicy';
 import { composeIdentities } from '../utils/sendAsSuggestions';
 import { parseMailto } from '../utils/mailtoPolicy';
 import { textToHtml } from '../utils/textToHtml';

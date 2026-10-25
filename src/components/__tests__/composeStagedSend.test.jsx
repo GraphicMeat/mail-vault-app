@@ -39,13 +39,13 @@ vi.mock('lucide-react', () => {
     has: () => true,
   });
 });
-vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, {
-    get: () => React.forwardRef(({ children, initial, animate, exit, ...props }, ref) =>
-      React.createElement('div', { ...props, ref }, children)),
-  }),
-  AnimatePresence: ({ children }) => children,
-}));
+vi.mock('framer-motion', () => {
+  const cache = new Map();
+  return { motion: new Proxy({}, { get: (_target, tag) => {
+    if (!cache.has(tag)) cache.set(tag, React.forwardRef(({ children, initial, animate, exit, ...props }, ref) => React.createElement(tag, { ...props, ref }, children)));
+    return cache.get(tag);
+  } }), AnimatePresence: ({ children }) => children };
+});
 vi.mock('../RichTextEditor', () => ({
   RichTextEditor: ({ placeholder }) => React.createElement('div', { className: 'ProseMirror', 'data-testid': 'editor-stub' }, placeholder),
   insertImages: vi.fn(),
@@ -162,6 +162,7 @@ afterEach(() => { cleanup(); delete window.__TAURI__; });
 /** Open a reply and hit Send. Resolves once the send attempt has settled. */
 async function sendReply() {
   render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+  await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
   (await screen.findByTestId('compose-send')).click();
   await waitFor(() => expect(sendStaged).toHaveBeenCalled());
   await mail._inFlight;
@@ -254,6 +255,7 @@ describe('onSend', () => {
     sendStaged.mockRejectedValue(new Error('Connection refused'));
     const onSend = vi.fn();
     render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onSend={onSend} />);
+    await waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true'));
     (await screen.findByTestId('compose-send')).click();
     // handleSend awaits the draft save chain before queueing, so onSend lands
     // a tick after the click, not synchronously with it.

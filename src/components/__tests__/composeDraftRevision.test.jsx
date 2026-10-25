@@ -166,10 +166,13 @@ describe('complete draft revisions at the actual component boundary', () => {
     const onSaveState = vi.fn();
     const header = { uid: 8, messageId: '<parent@example.test>', from: { address: 'them@example.test' }, to: [{ address: 'me@example.test' }], subject: 'Original', _selectedQuoteHtml: '<p>AAAA</p>' };
     const view = render(<ComposeModal {...props} mode="reply" replyTo={header} onSaveState={onSaveState} />);
+    await act(async () => { await vi.waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true')); });
     fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>typed</p>' } }); await tick();
     const oldQuote = onSaveState.mock.calls.at(-1)[0]._quotedHtml;
     expect(oldQuote).toContain('AAAA');
-    view.rerender(<ComposeModal {...props} mode="reply" replyTo={{ ...header, html: '<p>BBBB</p>', _selectedQuoteHtml: '<p>BBBB</p>' }} onSaveState={onSaveState} />); await tick();
+    view.rerender(<ComposeModal {...props} mode="reply" replyTo={{ ...header, html: '<p>BBBB</p>', _selectedQuoteHtml: '<p>BBBB</p>' }} onSaveState={onSaveState} />);
+    await act(async () => { await vi.waitFor(() => expect(screen.getByTestId('compose-send').closest('form').dataset.preparationReady).toBe('true')); });
+    await tick();
     const newQuote = onSaveState.mock.calls.at(-1)[0]._quotedHtml;
     expect(newQuote).toContain('BBBB'); expect(newQuote.length).toBe(oldQuote.length);
     expect(saveLocalDraft).toHaveBeenCalledTimes(2);
