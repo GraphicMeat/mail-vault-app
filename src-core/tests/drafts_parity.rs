@@ -178,3 +178,12 @@ fn local_editable_draft_attachments_preserve_empty_tiny_trailing_crlf_and_cid_by
         }
     }
 }
+
+#[test]
+fn editable_draft_purpose_requires_provenance_and_archived_draft_not_seen_state() {
+    assert!(drafts::editable(&json!({"source":"local_draft","flags":["archived","draft"]})));
+    assert!(!drafts::editable(&json!({"source":"local_draft","flags":["seen","draft"]})));
+    for source in ["local_sent", "server"] {
+        assert!(!drafts::editable(&json!({"source":source,"flags":["archived","seen","draft"]})));
+    }
+}

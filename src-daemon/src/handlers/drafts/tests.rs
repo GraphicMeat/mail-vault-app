@@ -707,6 +707,10 @@ async fn drafts_staged_receipt_remains_protected_after_archived_flag_patch() {
         entries::upsert(c, "one", "CustomSent", &[entry]).map(|_| ())
     })
     .unwrap();
+    let metadata = rpc(&h.s, "drafts.list", json!({"accountId":"one"})).await.unwrap();
+    assert!(metadata["drafts"].as_array().unwrap().is_empty());
+    let metadata = rpc(&h.s, "drafts.list", json!({"accountId":"one"})).await.unwrap();
+    assert!(metadata["drafts"].as_array().unwrap().is_empty());
     let raw = vault_files::read_eml(&h.s.vault_registry, &h.s.data_dir, "one", "CustomSent", uid)
         .unwrap();
     let scope = Scope::new(
@@ -729,4 +733,254 @@ async fn drafts_staged_receipt_remains_protected_after_archived_flag_patch() {
         app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &scope)).unwrap(),
         history
     );
+}
+
+#[tokio::test]
+async fn drafts_real_custody_write_error_retains_exact_repairable_intent() {
+    let h = Harness::new();
+    saved(&h.s, req("sql-custody", 1, "old")).await;
+    custody::with_conn(&h.s, |c| c.execute_batch("CREATE TRIGGER reject_draft_row BEFORE INSERT ON vault_entries BEGIN SELECT RAISE(FAIL,'injected custody write failure'); END;").map_err(|e| e.to_string())).unwrap();
+    assert!(rpc(&h.s, "drafts.save", req("sql-custody", 2, "new")).await.is_err());
+    let pending = row(&h.s, "sql-custody").pending.unwrap();
+    assert!(read_copy(&h.s, &pending.prepared, false).unwrap().is_some());
+    custody::with_conn(&h.s, |c| c.execute_batch("DROP TRIGGER reject_draft_row").map_err(|e| e.to_string())).unwrap();
+    saved(&h.s, req("sql-custody", 2, "new")).await;
+    assert_eq!(row(&h.s, "sql-custody").current.unwrap().identity, pending.copy.identity);
+}
+
+#[tokio::test]
+async fn drafts_real_metadata_accept_error_keeps_last_good_and_exact_pending_copy() {
+    let h = Harness::new();
+    let first = saved(&h.s, req("sql-meta", 1, "old")).await;
+    app_db::with(&h.s.app_dir, |c| c.execute_batch("CREATE TRIGGER reject_draft_accept BEFORE UPDATE ON local_drafts WHEN json_extract(NEW.state_json,'$.revision')=2 BEGIN SELECT RAISE(FAIL,'injected app.db write failure'); END;").map_err(|e| e.to_string())).unwrap();
+    assert!(rpc(&h.s, "drafts.save", req("sql-meta", 2, "new")).await.is_err());
+    let record = row(&h.s, "sql-meta");
+    assert_eq!(record.current.as_ref().unwrap().identity.scope.uid, first["uid"].as_u64().unwrap() as u32);
+    let pending = record.pending.unwrap();
+    app_db::with(&h.s.app_dir, |c| c.execute_batch("DROP TRIGGER reject_draft_accept").map_err(|e| e.to_string())).unwrap();
+    saved(&h.s, req("sql-meta", 2, "new")).await;
+    assert_eq!(row(&h.s, "sql-meta").current.unwrap().identity, pending.copy.identity);
+}
+
+#[tokio::test]
+async fn drafts_default_legacy_listing_does_not_require_body_bytes() {
+    let h = Harness::new();
+    let result = saved(&h.s, req("legacy-missing", 1, "indexed words")).await;
+    let copy = row(&h.s, "legacy-missing").current.unwrap();
+    let location = copy.location();
+    with_mailbox_write(&h.s, &location.account_id, &location.mailbox, |root| vault_files::delete(&h.s.vault_registry, root, &location.account_id, &location.mailbox, location.uid)).unwrap();
+    app_db::with(&h.s.app_dir, |c| { c.execute_batch("DELETE FROM local_draft_locations; DELETE FROM local_drafts;").map_err(|e| e.to_string()) }).unwrap();
+    let metadata = rpc(&h.s, "drafts.list", json!({"accountId":"one"})).await.unwrap();
+    assert_eq!(metadata["drafts"][0]["disposition"], "unadopted");
+    assert!(app_db::with(&h.s.app_dir, db::all).unwrap().is_empty());
+    let opened = rpc(&h.s, "drafts.list", json!({"identity":loc(&result),"includeContent":true})).await.unwrap();
+    assert_eq!(opened["missingBody"], true);
+    assert!(opened["drafts"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn drafts_actual_scheduled_and_staged_bytes_keep_bcc_send_policy() {
+    let h = Harness::new();
+    let account = json!({"email":"one@example.test","imapHost":"offline.invalid"});
+    let email = json!({"to":"next@example.test","bcc":"blind@example.test","subject":"frozen","text":"frozen words"});
+    let staged = rpc(&h.s, "compose.stage", json!({"accountId":"one","mailbox":"CustomSent","account":account,"email":email})).await.unwrap();
+    let scheduled = rpc(&h.s, "scheduled.create", json!({"accountId":"one","account":account,"email":email,"localTime":"2030-01-01T12:00","tz":"UTC","fireAt":1893499200000u64})).await.unwrap();
+    for (mailbox, uid) in [("CustomSent", staged["uid"].as_u64().unwrap() as u32), ("Scheduled", scheduled["uid"].as_u64().unwrap() as u32)] {
+        let raw = vault_files::read_eml(&h.s.vault_registry, &h.s.data_dir, "one", mailbox, uid).unwrap();
+        assert!(mailvault_core::vault_eml::parse_eml_bytes(&raw, uid, vec![]).unwrap().bcc.is_empty());
+        let mut request = req("not-frozen", 1, "cannot adopt");
+        request["previousIdentity"] = json!({"accountId":"one","mailbox":mailbox,"uid":uid});
+        assert!(rpc(&h.s, "drafts.save", request).await.is_err());
+        assert_eq!(vault_files::read_eml(&h.s.vault_registry, &h.s.data_dir, "one", mailbox, uid).unwrap(), raw);
+    }
+}
+
+#[tokio::test]
+async fn drafts_preinstall_first_transfer_survives_failure_and_conditional_db_error() {
+    let h = Harness::new();
+    h.hook(|point| if point == "before_prepared_store" { Err("stage write failed".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", req("abort-gap", 1, "words")).await.is_err());
+    let original = row(&h.s, "abort-gap").pending.unwrap();
+    h.hook(|point| if point == "abort_stage_checked" { Err("crash between absence transfers".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", req("abort-gap", 1, "words")).await.is_err());
+    let retained = row(&h.s, "abort-gap");
+    assert_eq!(retained.pending.as_ref().unwrap().attempt_id, original.attempt_id);
+    assert!(retained.cleanup.iter().any(|copy| copy.identity == original.prepared.identity));
+    h.clear();
+    app_db::with(&h.s.app_dir, |c| c.execute_batch("CREATE TRIGGER reject_abort BEFORE UPDATE ON local_drafts WHEN json_extract(NEW.state_json,'$.epoch')>json_extract(OLD.state_json,'$.epoch') BEGIN SELECT RAISE(FAIL,'conditional abort write failure'); END;").map_err(|e| e.to_string())).unwrap();
+    assert!(rpc(&h.s, "drafts.save", req("abort-gap", 1, "words")).await.is_err());
+    assert_eq!(row(&h.s, "abort-gap").pending.as_ref().unwrap().attempt_id, original.attempt_id);
+    app_db::with(&h.s.app_dir, |c| c.execute_batch("DROP TRIGGER reject_abort").map_err(|e| e.to_string())).unwrap();
+    crate::custody::close(&h.s);
+    let reopened = DaemonState::for_test(h.s.data_dir.clone(), h.s.app_dir.clone(), true);
+    assert!(rpc(&reopened, "drafts.save", req("abort-gap", 1, "words")).await.is_err());
+    assert_eq!(row(&reopened, "abort-gap").epoch, 1);
+    assert!(row(&reopened, "abort-gap").pending.is_none());
+    assert!(rpc(&reopened, "drafts.save", req("abort-gap", 1, "changed")).await.unwrap_err().contains("conflict"));
+    saved(&reopened, req("abort-gap", 1, "words")).await;
+}
+
+#[tokio::test]
+async fn drafts_preinstall_publication_after_first_absence_keeps_all_evidence() {
+    let h = Harness::new();
+    saved(&h.s, req("absence-race", 1, "last good")).await;
+    h.hook(|point| if point == "before_prepared_store" { Err("stage absent".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", req("absence-race", 2, "new")).await.is_err());
+    let old = row(&h.s, "absence-race");
+    let pending = old.pending.as_ref().unwrap().clone();
+    let state = h.s.clone();
+    h.hook(move |point| {
+        if point == "abort_stage_checked" {
+            let prepared = row(&state, "absence-race").pending.unwrap().prepared;
+            let location = prepared.location();
+            with_mailbox_write(&state, &location.account_id, &location.mailbox, |root| {
+                vault_files::store(&state.vault_registry, root, &location.account_id, &location.mailbox, location.uid, b"Message-ID: <foreign@example.test>\r\n\r\nforeign", &["seen".into()], true)
+            })?;
+            custody::with_conn(&state, |c| entries::upsert(c, &location.account_id, &location.mailbox, &[json!({"uid":location.uid,"source":"server","message_id":"foreign@example.test","flags":["seen"]})]).map(|_| ()))?;
+        }
+        Ok(())
+    });
+    assert!(rpc(&h.s, "drafts.save", req("absence-race", 2, "new")).await.is_err());
+    let after = row(&h.s, "absence-race");
+    assert_eq!(after.pending.unwrap().attempt_id, pending.attempt_id);
+    assert!(after.cleanup.iter().any(|copy| copy.identity == pending.prepared.identity));
+    assert_eq!(after.current.unwrap().identity, old.current.unwrap().identity);
+    assert_eq!(after.epoch, old.epoch);
+    let location = pending.prepared.location();
+    assert!(message_store::read_raw(&h.s.data_dir, &location.account_id, &location.mailbox, location.uid).unwrap().unwrap().ends_with(b"foreign"));
+}
+
+#[tokio::test]
+async fn drafts_unreadable_or_changed_root_never_aborts_uninstalled_intent() {
+    let h = Harness::new();
+    h.hook(|point| if point == "before_prepared_store" { Err("stage absent".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", req("unknown", 1, "words")).await.is_err());
+    let before = row(&h.s, "unknown").pending.unwrap();
+    h.clear();
+    let stage = before.prepared.location();
+    let directory = message_store::mailbox_dir(&h.s.data_dir, &stage.account_id, &stage.mailbox);
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("jmap"), b"not a readable message directory").unwrap();
+    assert!(rpc(&h.s, "drafts.save", req("unknown", 1, "words")).await.is_err());
+    assert_eq!(row(&h.s, "unknown").pending.as_ref().unwrap().attempt_id, before.attempt_id);
+    let different_root = h._dir.path().join("different-vault");
+    std::fs::create_dir_all(&different_root).unwrap();
+    let reopened = DaemonState::for_test(different_root, h.s.app_dir.clone(), true);
+    assert!(rpc(&reopened, "drafts.save", req("unknown", 1, "words")).await.is_err());
+    assert_eq!(row(&reopened, "unknown").pending.as_ref().unwrap().attempt_id, before.attempt_id);
+}
+
+#[tokio::test]
+async fn drafts_jmap_backing_blob_recovers_exact_mime_without_repreparing_revision() {
+    let h = Harness::new();
+    message_store::set_vault_format(&h.s.data_dir, message_store::Format::Jmap).unwrap();
+    h.hook(|point| if point == "before_prepared_store" { Err("record install failed".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", req("backing", 1, "exact blob words")).await.is_err());
+    let pending = row(&h.s, "backing").pending.unwrap();
+    h.clear();
+    saved(&h.s, req("backing", 1, "exact blob words")).await;
+    let after = row(&h.s, "backing");
+    assert_eq!(after.epoch, 0);
+    assert_eq!(after.current.unwrap().identity, pending.copy.identity);
+}
+
+#[tokio::test]
+async fn drafts_preinstall_abort_retires_only_exact_receipt_and_keeps_failure_evidence() {
+    let h = Harness::new();
+    h.hook(|point| if point == "before_prepared_store" { Err("stage absent".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", req("receipt-abort", 1, "words")).await.is_err());
+    let pending = row(&h.s, "receipt-abort").pending.unwrap();
+    let proof = Receipt::present(pending.prepared.identity.clone());
+    app_db::with(&h.s.app_dir, |c| { compose_receipts::save(c, &proof)?; c.execute_batch("CREATE TRIGGER reject_retire BEFORE DELETE ON meta WHEN OLD.key LIKE 'compose_receipt:%' BEGIN SELECT RAISE(FAIL,'receipt retirement failure'); END;").map_err(|e| e.to_string()) }).unwrap();
+    h.clear();
+    assert!(rpc(&h.s, "drafts.save", req("receipt-abort", 1, "words")).await.is_err());
+    assert_eq!(row(&h.s, "receipt-abort").pending.as_ref().unwrap().attempt_id, pending.attempt_id);
+    assert_eq!(app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &proof.identity.scope)).unwrap(), vec![proof.clone()]);
+    app_db::with(&h.s.app_dir, |c| c.execute_batch("DROP TRIGGER reject_retire").map_err(|e| e.to_string())).unwrap();
+    assert!(rpc(&h.s, "drafts.save", req("receipt-abort", 1, "words")).await.is_err());
+    saved(&h.s, req("receipt-abort", 1, "words")).await;
+    assert!(app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &proof.identity.scope)).unwrap().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drafts_old_preparation_epoch_cannot_publish_after_abort_or_discard() {
+    for terminal in [false, true] {
+        let h = Harness::new();
+        let (started, gate) = wait_preparation(&h);
+        let original_hook = HOOKS.lock().unwrap().get(&h.s.app_dir).unwrap().clone();
+        let fail_once = std::sync::atomic::AtomicBool::new(true);
+        h.hook(move |point| {
+            original_hook(point)?;
+            if point == "before_prepared_store" && fail_once.swap(false, std::sync::atomic::Ordering::SeqCst) { return Err("drained pre-install writer failed".into()); }
+            Ok(())
+        });
+        let state = h.s.clone();
+        let old = tokio::spawn(async move { rpc(&state, "drafts.save", req("attempt-epoch", 1, "same words")).await });
+        tokio::time::timeout(std::time::Duration::from_secs(10), started).await.unwrap().unwrap();
+        assert!(rpc(&h.s, "drafts.save", req("attempt-epoch", 1, "same words")).await.is_err());
+        let aborted = rpc(&h.s, "drafts.save", req("attempt-epoch", 1, "same words")).await;
+        assert!(aborted.is_err());
+        let epoch = row(&h.s, "attempt-epoch").epoch;
+        if terminal { rpc(&h.s, "drafts.discard", json!({"draftId":"attempt-epoch"})).await.unwrap(); }
+        release(gate);
+        assert!(old.await.unwrap().is_err());
+        assert_eq!(epoch, 1);
+        assert!(row(&h.s, "attempt-epoch").current.is_none());
+        h.clear();
+        if terminal { assert!(rpc(&h.s, "drafts.save", req("attempt-epoch", 1, "same words")).await.is_err()); }
+        else { saved(&h.s, req("attempt-epoch", 1, "same words")).await; }
+    }
+}
+
+#[tokio::test]
+async fn drafts_aborted_source_revision_rejects_changed_or_missing_bytes_then_accepts_exact_retry() {
+    let h = Harness::new();
+    let mut source_request = req("mutable-source", 1, "original source");
+    source_request["snapshot"]["attachments"] = json!([{"filename":"source.bin","contentType":"application/octet-stream","content":"AAEC"}]);
+    let source = saved(&h.s, source_request).await;
+    let source_copy = row(&h.s, "mutable-source").current.unwrap();
+    let source_location = source_copy.location();
+    let original_raw = read_copy(&h.s, &source_copy, true).unwrap().unwrap();
+    let first = saved(&h.s, req("source-retry", 1, "last good")).await;
+    let mut target = req("source-retry", 2, "with source");
+    target["snapshot"]["attachments"] = json!([{"filename":"copy.bin","contentType":"application/octet-stream","source":{"accountId":"one","mailbox":source["mailbox"],"uid":source["uid"],"attachmentIndex":0}}]);
+    h.hook(|point| if point == "before_prepared_store" { Err("stage absent".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", target.clone()).await.is_err());
+    h.clear();
+    assert!(rpc(&h.s, "drafts.save", target.clone()).await.is_err());
+    assert!(row(&h.s, "source-retry").retry.is_some());
+    let mut changed = req("mutable-source", 2, "changed source");
+    changed["snapshot"]["attachments"] = json!([{"filename":"source.bin","contentType":"application/octet-stream","content":"AwIB"}]);
+    let config = account(&h.s, "one", "alias@example.test", "Alias").unwrap();
+    let changed = Save::parse(changed).unwrap();
+    let changed_raw = smtp::build_local_draft_mime(&config, &changed.outgoing().unwrap()).unwrap();
+    with_mailbox_write(&h.s, &source_location.account_id, &source_location.mailbox, |root| vault_files::store(&h.s.vault_registry, root, &source_location.account_id, &source_location.mailbox, source_location.uid, &changed_raw, &drafts::FLAGS.map(String::from), true)).unwrap();
+    assert!(rpc(&h.s, "drafts.save", target.clone()).await.unwrap_err().contains("conflict"));
+    with_mailbox_write(&h.s, &source_location.account_id, &source_location.mailbox, |root| vault_files::delete(&h.s.vault_registry, root, &source_location.account_id, &source_location.mailbox, source_location.uid)).unwrap();
+    assert!(rpc(&h.s, "drafts.save", target.clone()).await.is_err());
+    assert_eq!(row(&h.s, "source-retry").current.unwrap().identity.scope.uid, first["uid"].as_u64().unwrap() as u32);
+    with_mailbox_write(&h.s, &source_location.account_id, &source_location.mailbox, |root| vault_files::store(&h.s.vault_registry, root, &source_location.account_id, &source_location.mailbox, source_location.uid, &original_raw, &drafts::FLAGS.map(String::from), true)).unwrap();
+    saved(&h.s, target).await;
+}
+
+#[tokio::test]
+async fn drafts_malformed_or_absent_native_account_never_replaces_last_good_content() {
+    let h = Harness::new();
+    let first = saved(&h.s, req("native-account", 1, "last good")).await;
+    for document in ["{broken", "[]"] {
+        std::fs::write(h.s.app_dir.join("accounts.json"), document).unwrap();
+        assert!(rpc(&h.s, "drafts.save", req("native-account", 2, "new")).await.is_err());
+        let state = row(&h.s, "native-account");
+        assert!(state.pending.is_none());
+        assert_eq!(state.current.unwrap().identity.scope.uid, first["uid"].as_u64().unwrap() as u32);
+    }
+}
+
+#[tokio::test]
+async fn drafts_current_mailbox_stays_fixed_when_native_cached_role_changes() {
+    let h = Harness::new();
+    let first = saved(&h.s, req("fixed-mailbox", 1, "first")).await;
+    custody::with_conn(&h.s, |c| cache::save_mailboxes(c, "one", &json!([{"path":"NewDrafts","specialUse":"\\Drafts"}]).to_string())).unwrap();
+    let second = saved(&h.s, req("fixed-mailbox", 2, "second")).await;
+    assert_eq!(second["mailbox"], first["mailbox"]);
 }

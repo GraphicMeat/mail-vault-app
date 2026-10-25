@@ -81,7 +81,9 @@ impl Save {
         Ok(request)
     }
     pub fn request_hash(&self) -> String {
-        bytes_hash(&serde_json::to_vec(self).expect("typed draft request"))
+        let mut content = self.clone();
+        content.draft_id.clear(); content.revision = 1; content.previous_identity = None;
+        bytes_hash(&serde_json::to_vec(&content).expect("typed draft request"))
     }
     pub fn content_hash(&self) -> String {
         // Resolved descriptors carry canonical bytes, no mutable source hint.
@@ -210,7 +212,7 @@ pub fn drafts_mailbox(boxes: &Value) -> String {
 }
 pub fn editable(row: &Value) -> bool {
     row["source"] == "local_draft"
-        && FLAGS.iter().all(|f| {
+        && ["archived", "draft"].iter().all(|f| {
             row["flags"]
                 .as_array()
                 .is_some_and(|a| a.iter().any(|v| v == f))

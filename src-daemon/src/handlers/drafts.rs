@@ -85,6 +85,7 @@ struct Inventory {
 }
 fn inventory(s: &Arc<DaemonState>, l: &Location) -> Result<Inventory, String> {
     let (root, fence) = with_mailbox_write(s, &l.account_id, &l.mailbox, |root| {
+        if !root.is_dir() { return Err("draft vault unavailable".into()); }
         Ok((
             root.to_path_buf(),
             s.vault_registry
@@ -112,7 +113,7 @@ fn checked_bytes(
     l: &Location,
     i: &Inventory,
 ) -> Result<Option<Vec<u8>>, String> {
-    if root != i.root
+    if !root.is_dir() || root != i.root
         || s.vault_registry
             .target_fence(root, &l.account_id, &l.mailbox, l.uid)
             .as_ref()
@@ -164,7 +165,7 @@ fn read_copy(
     with_mailbox_write(s, &l.account_id, &l.mailbox, |root| {
         custody::with_conn(s, |c| {
             let raw = checked_bytes(s, root, &l, &i)?;
-            if require_owner {
+            if require_owner || entries::get(c, &l.account_id, &l.mailbox, l.uid)?.is_some() {
                 draft_owner(c, &l, copy)?;
             }
             if let Some(raw) = &raw {
@@ -185,7 +186,7 @@ fn adopt(s: &Arc<DaemonState>, r: &mut Record, l: &Location) -> Result<(), Strin
         return Err("draft location already managed".into());
     }
     let i = inventory(s, l)?;
-    let copy = with_mailbox_write(s, &l.account_id, &l.mailbox, |root| {
+    with_mailbox_write(s, &l.account_id, &l.mailbox, |root| {
         custody::with_conn(s, |c| {
             let row =
                 entries::get(c, &l.account_id, &l.mailbox, l.uid)?.ok_or("legacy draft missing")?;
@@ -199,16 +200,13 @@ fn adopt(s: &Arc<DaemonState>, r: &mut Record, l: &Location) -> Result<(), Strin
             let proof = Scope::new(&l.account_id, &l.mailbox, l.uid, mid)
                 .and_then(|scope| Identity::from_bytes(scope, &raw))
                 .ok_or("draft identity mismatch")?;
-            let copy = Copy {
-                identity: proof,
-                entry: row,
-            };
-            receipt_history(s, &copy, false)?;
-            Ok(copy)
+            let copy = Copy { identity: proof, entry: row };
+            let history = app_db::with(&s.app_dir, |c| compose_receipts::load(c, &copy.identity.scope))?;
+            if !history.is_empty() { return Err("staged compose ownership is not editable".into()); }
+            r.current = Some(copy);
+            persist(s, r)
         })
-    })?;
-    r.current = Some(copy);
-    persist(s, r)
+    })
 }
 fn allocate(s: &Arc<DaemonState>, account: &str, mailbox: &str) -> Result<u32, String> {
     with_mailbox_write(s, account, mailbox, |root| {
@@ -221,6 +219,7 @@ fn allocate(s: &Arc<DaemonState>, account: &str, mailbox: &str) -> Result<u32, S
             };
             if app_db::with(&s.app_dir, |c| db::owner(c, &loc))?.is_none()
                 && !vault_files::exists(root, account, mailbox, uid)
+                && !scheduled(s, &loc)?
             {
                 return Ok(uid);
             }
@@ -342,7 +341,7 @@ fn retire(s: &Arc<DaemonState>, copy: &Copy, prepared: bool) -> Result<(), Strin
 fn cleanup(s: &Arc<DaemonState>, r: &mut Record) -> Result<(), String> {
     let copies = r.cleanup.clone();
     for copy in copies {
-        let is_prepared = copy.identity.scope.mailbox == PREPARED;
+        let is_prepared = copy.entry.is_null() && copy.identity.scope.mailbox == PREPARED;
         if retire(s, &copy, is_prepared).is_ok() {
             r.cleanup.retain(|c| c.identity != copy.identity);
             persist(s, r)?;
@@ -407,20 +406,118 @@ fn finish(
             if !p.copy.identity.matches_bytes(&raw) {
                 return Err("draft destination changed before acceptance".into());
             }
-            if let Some(old) = r.current.take() {
-                r.cleanup.push(old);
-            }
-            r.cleanup.push(p.prepared);
+            let expected = r.clone();
+            if !same_attempt(&expected, &p) { return Err("draft attempt changed".into()); }
+            if let Some(old) = r.current.take() { add_cleanup(r, old); }
+            add_cleanup(r, p.prepared);
             r.current = Some(p.copy);
             r.revision = p.revision;
             r.request_hash = Some(p.request_hash);
             r.fingerprint = Some(p.fingerprint);
             r.pending = None;
-            persist(s, r)
+            r.retry = None;
+            app_db::with(&s.app_dir, |c| db::save_if(c, &expected, r))
         })
     })?;
     cleanup(s, r)
 }
+fn same_attempt(record: &Record, pending: &Intent) -> bool {
+    !record.discarded
+        && record.epoch == pending.epoch
+        && record.revision < pending.revision
+        && record.pending.as_ref().is_some_and(|now| {
+            now.attempt_id == pending.attempt_id
+                && now.epoch == pending.epoch
+                && now.revision == pending.revision
+                && now.request_hash == pending.request_hash
+                && now.fingerprint == pending.fingerprint
+                && now.copy.identity == pending.copy.identity
+                && now.prepared.identity == pending.prepared.identity
+                && now.root == pending.root
+        })
+}
+
+fn add_cleanup(record: &mut Record, copy: Copy) {
+    if !record.cleanup.iter().any(|old| old.identity == copy.identity) {
+        record.cleanup.push(copy);
+    }
+}
+
+// A named prepared message or the exact known JMAP backing blob can recover
+// the original randomized MIME. Unreadable/foreign content never means absent.
+fn pending_raw(s: &Arc<DaemonState>, pending: &Intent) -> Result<Option<Vec<u8>>, String> {
+    if common::vault_root(s)? != pending.root {
+        return Err("pending draft vault moved".into());
+    }
+    for copy in [&pending.prepared, &pending.copy] {
+        if let Some(raw) = read_copy(s, copy, false)? {
+            return Ok(Some(raw));
+        }
+    }
+    common::with_vault_write(s, |root| {
+        if root != pending.root { return Err("pending draft vault moved".into()); }
+        let id = format!("sha256-{}", pending.prepared.identity.sha256);
+        match mailvault_core::jmap_store::blobs::get(root, &id) {
+            Ok(raw) if pending.prepared.identity.matches_bytes(&raw) => Ok(Some(raw)),
+            Ok(_) => Err("prepared draft backing bytes changed".into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.to_string()),
+        }
+    })
+}
+
+// Both inventories are made outside draft/mailbox locks. Each absence proof
+// transfers to durable cleanup while that scope's mailbox/gate/custody is held.
+// The first transfer never clears pending. The second uses a full-attempt CAS.
+fn abort_uninstalled(s: &Arc<DaemonState>, id: &str, pending: &Intent) -> Result<(), String> {
+    let stage = pending.prepared.location();
+    let destination = pending.copy.location();
+    let stage_inventory = inventory(s, &stage)?;
+    let destination_inventory = inventory(s, &destination)?;
+    let lock = draft_lock(s, id);
+    let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
+    with_mailbox_write(s, &stage.account_id, &stage.mailbox, |root| {
+        custody::with_conn(s, |c| {
+            if root != pending.root || checked_bytes(s, root, &stage, &stage_inventory)?.is_some()
+                || entries::get(c, &stage.account_id, &stage.mailbox, stage.uid)?.is_some() {
+                return Err("draft stage absence unresolved".into());
+            }
+            let expected = load(s, id)?;
+            if !same_attempt(&expected, pending) { return Err("draft attempt changed".into()); }
+            let mut next = expected.clone();
+            add_cleanup(&mut next, pending.prepared.clone());
+            receipt_history(s, &pending.prepared, true)?;
+            app_db::with(&s.app_dir, |c| db::save_if(c, &expected, &next))
+        })
+    })?;
+    probe(s, "abort_stage_checked")?;
+    with_mailbox_write(s, &destination.account_id, &destination.mailbox, |root| {
+        custody::with_conn(s, |c| {
+            if root != pending.root
+                || s.vault_registry.target_fence(root, &stage.account_id, &stage.mailbox, stage.uid).as_ref() != Some(&stage_inventory.fence)
+                || entries::get(c, &stage.account_id, &stage.mailbox, stage.uid)?.is_some()
+                || checked_bytes(s, root, &destination, &destination_inventory)?.is_some()
+                || entries::get(c, &destination.account_id, &destination.mailbox, destination.uid)?.is_some() {
+                return Err("draft destination absence unresolved".into());
+            }
+            let expected = load(s, id)?;
+            if !same_attempt(&expected, pending) { return Err("draft attempt changed".into()); }
+            let mut next = expected.clone();
+            add_cleanup(&mut next, pending.copy.clone());
+            next.retry = Some(drafts::RetryConstraint {
+                revision: pending.revision,
+                request_hash: pending.request_hash.clone(),
+                fingerprint: pending.fingerprint.clone(),
+            });
+            next.epoch = next.epoch.checked_add(1).ok_or("draft attempt exhausted")?;
+            next.pending = None;
+            receipt_history(s, &pending.copy, true)?;
+            app_db::with(&s.app_dir, |c| db::save_if(c, &expected, &next))
+        })
+    })?;
+    Err("draft pre-install attempt aborted; retry complete snapshot".into())
+}
+
 fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
     let pending = {
         let lock = draft_lock(s, id);
@@ -433,7 +530,9 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
     };
     let Some(p) = pending else { return Ok(()) };
     // Restart/retry preparation uses retained vault bytes, outside draft locks.
-    let raw = read_copy(s, &p.prepared, false)?.ok_or("prepared draft body unavailable")?;
+    let Some(raw) = pending_raw(s, &p)? else { return abort_uninstalled(s, id, &p); };
+    let stage = p.prepared.location();
+    let stage_ready = prepare_copy(s, &stage.account_id, &stage.mailbox, stage.uid, raw.clone(), &["seen".into()])?;
     let l = p.copy.location();
     let ready = prepare_copy(
         s,
@@ -449,28 +548,41 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
     if r.discarded {
         return cleanup(s, &mut r);
     }
-    if r.pending
-        .as_ref()
-        .is_some_and(|now| now.revision == p.revision && now.copy.identity == p.copy.identity)
-    {
+    if same_attempt(&r, &p) {
+        install(s, &p.prepared, &stage_ready, &["seen".into()])?;
         finish(s, &mut r, &ready)?;
     }
     Ok(())
 }
 
-fn response(r: &Record, disposition: &str) -> Value {
-    let mut v = json!({"draftId":r.draft_id,"revision":r.revision,"disposition":disposition,"cleanup":if r.cleanup.is_empty(){"complete"}else{"pending"},"current":r.current,"pending":r.pending.as_ref().map(|p|json!({"revision":p.revision,"identity":p.copy.identity,"preparedIdentity":p.prepared.identity})),"cleanupIdentities":r.cleanup.iter().map(|c|&c.identity).collect::<Vec<_>>(),"discarded":r.discarded});
-    if let Some(copy) = &r.current {
-        let l = copy.location();
-        v["accountId"] = json!(l.account_id);
-        v["mailbox"] = json!(l.mailbox);
-        v["uid"] = json!(l.uid);
-        v["entry"] = copy.entry.clone();
-        v["entry"]["draftId"] = json!(r.draft_id);
-        v["entry"]["revision"] = json!(r.revision);
+fn response(record: &Record, disposition: &str) -> Value {
+    let pending = record.pending.as_ref().map(|intent| json!({
+        "revision": intent.revision,
+        "identity": intent.copy.identity,
+        "preparedIdentity": intent.prepared.identity,
+    }));
+    let mut value = json!({
+        "draftId": record.draft_id,
+        "revision": record.revision,
+        "disposition": disposition,
+        "cleanup": if record.cleanup.is_empty() { "complete" } else { "pending" },
+        "current": record.current,
+        "pending": pending,
+        "cleanupIdentities": record.cleanup.iter().map(|copy| &copy.identity).collect::<Vec<_>>(),
+        "discarded": record.discarded,
+    });
+    if let Some(copy) = &record.current {
+        let location = copy.location();
+        value["accountId"] = json!(location.account_id);
+        value["mailbox"] = json!(location.mailbox);
+        value["uid"] = json!(location.uid);
+        value["entry"] = copy.entry.clone();
+        value["entry"]["draftId"] = json!(record.draft_id);
+        value["entry"]["revision"] = json!(record.revision);
     }
-    v
+    value
 }
+
 fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save) -> Result<(), String> {
     let mut sources: HashMap<(String, String, u32), Vec<usize>> = HashMap::new();
     for (index, a) in r.snapshot.attachments.iter_mut().enumerate() {
@@ -544,6 +656,8 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
             return Err("draft cleanup pending".into());
         }
     }
+    let initial = load(s, &request.draft_id)?;
+    let preparation_epoch = initial.epoch;
     let config = account(
         s,
         &request.account_id,
@@ -556,7 +670,6 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     resolve_attachments(s, &mut request)?;
     let fingerprint = request.content_hash();
     let raw = smtp::build_local_draft_mime(&config, &request.outgoing()?)?;
-    let initial = load(s, &request.draft_id)?;
     let prepared_mailbox = match &initial.current {
         Some(c) if c.identity.scope.account_id == request.account_id => {
             c.identity.scope.mailbox.clone()
@@ -590,8 +703,11 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     let lock = draft_lock(s, &request.draft_id);
     let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
     let mut r = load(s, &request.draft_id)?;
-    if r.discarded {
-        return Err("draft discarded".into());
+    if r.discarded { return Err("draft discarded".into()); }
+    if r.epoch != preparation_epoch { return Err("draft preparation attempt changed; retry".into()); }
+    if r.retry.as_ref().is_some_and(|retry| retry.revision == request.revision &&
+        (retry.request_hash != request_hash || retry.fingerprint != fingerprint)) {
+        return Err("draft revision conflict".into());
     }
     if request.revision < r.revision {
         return Ok(response(&r, "superseded"));
@@ -635,12 +751,15 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
         }
         _ => mailbox(s, &request.account_id)?,
     };
+    if target_mailbox == PREPARED { return Err("reserved draft preparation mailbox".into()); }
     if target_mailbox != prepared_mailbox {
         return Err("draft mailbox changed during preparation".into());
     }
     let uid = allocate(s, &request.account_id, &target_mailbox)?;
     let stage_uid = allocate(s, &request.account_id, PREPARED)?;
-    let mid = mailvault_core::maildir::message_id_in(&raw).ok_or("draft Message-ID missing")?;
+    let mid = mailvault_core::maildir::message_id_in(&raw)
+        .and_then(|mid| mailvault_core::compose::normalize_message_id(&mid))
+        .ok_or("draft Message-ID missing")?;
     let proof = |mailbox: &str, uid| {
         Identity::from_bytes(
             Scope::new(&request.account_id, mailbox, uid, &mid).unwrap(),
@@ -726,14 +845,25 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
             if scheduled(s, &l)? || app_db::with(&s.app_dir, |c| db::owner(c, &l))?.is_some() {
                 continue;
             }
+            if let Some(scope) = row["message_id"].as_str().and_then(|mid| Scope::new(&l.account_id, &l.mailbox, l.uid, mid)) {
+                if !app_db::with(&s.app_dir, |c| compose_receipts::load(c, &scope))?.is_empty() { continue; }
+            }
             if content && exact.as_ref() == Some(&l) {
                 let id = uuid::Uuid::new_v4().to_string();
                 let lock = draft_lock(s, &id);
                 let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
                 let mut r = Record::new(&id);
-                let _ = adopt(s, &mut r, &l);
+                match adopt(s, &mut r, &l) {
+                    Ok(()) => {},
+                    Err(error) if error == "draft body missing" => return Ok(json!({"drafts":[],"missingBody":true})),
+                    Err(error) => return Err(error),
+                }
             } else {
-                legacy.push(json!({"draftId":Value::Null,"revision":0,"accountId":l.account_id,"mailbox":l.mailbox,"uid":l.uid,"entry":row,"legacy":true,"disposition":"unadopted"}));
+                legacy.push(json!({
+                    "draftId": Value::Null, "revision": 0,
+                    "accountId": l.account_id, "mailbox": l.mailbox, "uid": l.uid,
+                    "entry": row, "legacy": true, "disposition": "unadopted",
+                }));
             }
         }
     }
@@ -747,13 +877,16 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
                 .current
                 .iter()
                 .chain(&r.cleanup)
-                .find(|c| c.location() == *loc);
+                .find(|c| c.location() == *loc && drafts::editable(&c.entry));
             if let Some(copy) = actual {
-                if read_copy(s, copy, true)?.is_none() {
-                    return Ok(json!({"drafts":[],"missingBody":true}));
-                }
+                let raw = read_copy(s, copy, false)?;
+                if r.discarded { return Ok(json!({"drafts":[],"managed":[response(&r,"unchanged")],"terminal":true,"missingBody":false})); }
+                if raw.is_none() { return Ok(json!({"drafts":[],"missingBody":true})); }
+            } else if let Some(pending) = r.pending.as_ref().filter(|p| p.copy.location() == *loc) {
+                let _ = read_copy(s, &pending.copy, false)?;
+                return Ok(json!({"drafts":[],"managed":[response(&r,"unchanged")],"pending":true,"missingBody":false}));
             } else {
-                return Ok(json!({"drafts":[],"missingBody":true}));
+                return Err("draft identity is not editable".into());
             }
         }
     }
