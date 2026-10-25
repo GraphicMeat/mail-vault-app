@@ -27,6 +27,7 @@
 
 ### Fixed
 - **You can see what you type in To, Cc and Bcc with many recipients.** The typing space used to shrink to a sliver after a long row of chips; it now moves to its own line.
+- **Security updates for the TLS and DNS libraries.** The helper now uses rustls 0.23.46 and hickory-resolver 0.26.3, which close a TLS 1.3 handshake acceptance flaw and three DNS lookup flaws (an endless retry loop, CNAME records that did not belong, and DNSSEC failures that went unreported).
 - **Banners and toasts no longer cover each other.** The selection bar, the undo toast, backup and restore chips and the progress panels now stack along the bottom edge instead of drawing at the same spot.
 - **Backup paths reject unsafe account and folder names.** A name that could escape its folder or alias another path is refused before backup files are read, copied, verified or purged. Invalid old queued purges stay pending while valid work continues.
 - **Searching again and again no longer freezes the app.** A new search now stops the one still running in the background helper, and a folder scan stops within one message instead of finishing the whole folder first. Several quick searches used to leave many scans reading whole folders at once, which could take gigabytes of memory.
