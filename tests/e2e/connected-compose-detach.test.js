@@ -23,7 +23,7 @@ const readinessProbe = () => browser.execute(() => {
     hasTo: Boolean(document.querySelector('[data-recipient-field="to"] [data-testid="recipient-chip"]') || document.querySelector('[data-testid="compose-to"]')?.value),
     hasSubject: Boolean(document.querySelector('[data-testid="compose-subject"]')?.value),
     hasContext: Boolean(document.querySelector('[data-testid="compose-context-panel"]')),
-    error: error.includes('prepare this message') ? 'preparation' : error.includes('recipient') ? 'recipient' : error ? 'other' : null };
+    errorCategory: error.includes('prepare this message') ? 'preparation' : error.includes('recipient') ? 'recipient' : error ? 'other' : null };
 });
 
 describe('Connected Compose Detach', function () {
@@ -55,6 +55,13 @@ describe('Connected Compose Detach', function () {
       await browser.closeWindow();
     }
     await browser.switchToWindow(mainHandle);
+    await browser.execute(() => {
+      const fixture = window.__DETACH_PREPARATION_TEST__;
+      if (!fixture) return;
+      if (window.__TAURI__ === fixture.bridge) window.__TAURI__ = fixture.original;
+      fixture.release();
+      delete window.__DETACH_PREPARATION_TEST__;
+    });
     await settingsCall('setSendDelay', 0);
     // A pop-out makes every later compose open in its own window.
     await settingsCall('setComposeOpenMode', 'app');
@@ -197,12 +204,35 @@ describe('Connected Compose Detach', function () {
     };
 
     await closeComposeHard();
+    // Keep the real main response pending through immediate handoff. The new
+    // child must obtain its settings ACK from App and prepare independently.
+    await browser.execute(() => {
+      const original = window.__TAURI__;
+      const fixture = { original, calls: 0 };
+      const gate = new Promise(resolve => { fixture.release = resolve; });
+      const invoke = (command, args) => {
+        const response = original.core.invoke(command, args);
+        if (command === 'daemon_rpc' && args?.method === 'compose.reply_context' && args?.params?.kind === 'message') {
+          fixture.calls++;
+          return Promise.resolve(response).then(async result => { await gate; return result; });
+        }
+        return response;
+      };
+      fixture.bridge = { ...original, core: { ...original.core, invoke } };
+      window.__TAURI__ = fixture.bridge;
+      window.__DETACH_PREPARATION_TEST__ = fixture;
+      if (window.__TAURI__.core.invoke !== invoke) throw new Error('Cannot install pending preparation fixture');
+    });
     const selection = { selectedEmail: source, selectedEmailId: source.uid, selectedThread: null };
     await mailStoreSet(selection);
     await browser.execute(() => document.activeElement?.blur());
     await mailStoreSet(selection);
     await browser.keys('r');
     await browser.waitUntil(modalOpen, { timeout: 15_000, timeoutMsg: 'Reply compose did not open' });
+    await browser.waitUntil(() => browser.execute(() => window.__DETACH_PREPARATION_TEST__?.calls > 0), {
+      timeout: 15_000, timeoutMsg: 'Main did not issue the deliberately pending native preparation',
+    });
+    expect((await readinessProbe()).ready).toBe('false');
     await browser.$('[data-testid="compose-detach"]').click();
 
     await browser.waitUntil(async () => (await browser.getWindowHandles()).length === 2, {
@@ -215,7 +245,11 @@ describe('Connected Compose Detach', function () {
       await browser.waitUntil(() => testidPresent('compose-context-panel'), {
         timeout: 15_000, timeoutMsg: 'Detached reply did not restore its reading context',
       });
-    } catch (error) { console.log('[detach-context-readiness]', await readinessProbe()); throw error; }
+    } catch (error) {
+      try { console.log('[detach-context-readiness]', await readinessProbe()); }
+      catch { console.log('[detach-context-readiness-probe-failed]', true); }
+      throw error;
+    }
 
     const contextWideSize = await setNativeSize(1050, 760);
     if (contextWideSize.error) throw new Error(contextWideSize.error);
@@ -289,10 +323,12 @@ describe('Connected Compose Detach', function () {
         timeout: 15_000, timeoutMsg: 'Detached compose stayed open after confirmed main queue admission',
       });
     } catch (error) {
-      console.log('[detach-main-queue-admitted]', await browser.execute(() => Boolean(window.__MAIL_STORE__?.getState?.().pendingSend)));
-      if ((await browser.getWindowHandles()).includes(detached)) {
-        await browser.switchToWindow(detached); console.log('[detach-send-after-click]', await readinessProbe());
-      }
+      try {
+        console.log('[detach-main-queue-admitted]', await browser.execute(() => Boolean(window.__MAIL_STORE__?.getState?.().pendingSend)));
+        if ((await browser.getWindowHandles()).includes(detached)) {
+          await browser.switchToWindow(detached); console.log('[detach-send-after-click]', await readinessProbe());
+        }
+      } catch { console.log('[detach-send-readiness-probe-failed]', true); }
       throw error;
     }
     // The pop-out is remembered; this case pins Undo restoring over the mail.
@@ -336,6 +372,25 @@ describe('Connected Compose Detach', function () {
       _accountId: account.id,
     };
     await closeComposeHard();
+    // Keep the real main response pending through immediate handoff. The new
+    // child must obtain its settings ACK from App and prepare independently.
+    await browser.execute(() => {
+      const original = window.__TAURI__;
+      const fixture = { original, calls: 0 };
+      const gate = new Promise(resolve => { fixture.release = resolve; });
+      const invoke = (command, args) => {
+        const response = original.core.invoke(command, args);
+        if (command === 'daemon_rpc' && args?.method === 'compose.reply_context' && args?.params?.kind === 'message') {
+          fixture.calls++;
+          return Promise.resolve(response).then(async result => { await gate; return result; });
+        }
+        return response;
+      };
+      fixture.bridge = { ...original, core: { ...original.core, invoke } };
+      window.__TAURI__ = fixture.bridge;
+      window.__DETACH_PREPARATION_TEST__ = fixture;
+      if (window.__TAURI__.core.invoke !== invoke) throw new Error('Cannot install pending preparation fixture');
+    });
     const selection = { selectedEmail: source, selectedEmailId: source.uid, selectedThread: null };
     await mailStoreSet(selection);
     await browser.execute(() => document.activeElement?.blur());

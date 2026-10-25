@@ -21,7 +21,7 @@ export function createReplyFillController({ getWindows, commitWindows, getContex
   };
   const targetFor = (windows, slot, intent) => windows.find(window => window.id === slot.id && !window.detached
     && !isTerminalCompose(composeSessionData(window)) && (sameReply(window, { mode: intent.state.mode, replyTo: intent.state._fillFrom })
-      || window.mode === intent.state.mode && window.replyTo === intent.state.replyTo));
+      || window.mode === intent.state.mode && (window.replyTo === intent.state.replyTo || window.replyTo === slot.acceptedSource)));
 
   const commit = (slot, intent, identity, result) => {
     const original = targetFor(getWindows(), slot, intent)?.replyTo || intent.state._fillFrom;
@@ -64,6 +64,11 @@ export function createReplyFillController({ getWindows, commitWindows, getContex
         }
         if (!current()) continue;
         await commit(slot, intent, identity, result);
+        // Keep this window's association across an older accepted proposal,
+        // even when a newer intent arrived before its actual owner commit.
+        const committed = getWindows().find(window => window.id === slot.id && window.mode === intent.state.mode
+          && !window.detached && !isTerminalCompose(composeSessionData(window)) && window.replyTo === intent.state.replyTo);
+        if (committed) slot.acceptedSource = committed.replyTo;
         if (slot.intent !== intent) continue;
         const accepted = targetFor(getWindows(), slot, intent);
         if (!accepted) { slot.intent = null; continue; }
@@ -86,7 +91,7 @@ export function createReplyFillController({ getWindows, commitWindows, getContex
     let request;
     try { request = messagePreparation({ replyTo: state.replyTo, mode: state.mode }); }
     catch (error) { onError?.(error); return Promise.resolve(); }
-    const slot = slots.get(target.id) || { id: target.id, running: null, intent: null };
+    const slot = slots.get(target.id) || { id: target.id, running: null, intent: null, acceptedSource: target.replyTo };
     slots.set(target.id, slot);
     slot.intent = { state, request };
     if (!slot.running) slot.running = run(slot);

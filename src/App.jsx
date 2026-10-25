@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { bootstrapTags } from './services/tagMigration';
+import { flushSafeStorage } from './stores/safeStorage';
 import { initTagEvents } from './stores/tagStore';
 import { initScheduledSend } from './stores/scheduledStore';
 import { initSnooze } from './stores/snoozeStore';
