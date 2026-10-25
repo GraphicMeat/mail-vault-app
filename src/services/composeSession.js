@@ -173,7 +173,7 @@ function recoveredWindow(window, provenance, draftId) {
   const data = { ...clone(source), ...clone(content) };
   for (const field of ['_draftId', '_draftRevision', '_draftAcceptedRevision', '_draftAccountId', '_draftMailbox', '_draftUid',
     '_draftContent', '_draftUiSignature', '_draftAcceptanceUnknown', '_draftNativeContent', '_draftPreviousIdentity', 'previousIdentity', '_composeWindowId',
-    '_draftCleanupOnly', '_draftTerminal', '_draftCleanupState', '_draftCleanupThroughRevision', '_draftCleanupPersistError', '_draftCleanupContender']) delete data[field];
+    '_draftCleanupOnly', '_draftTerminal', '_draftCleanupState', '_draftCleanupThroughRevision', '_draftCleanupPersistError', '_draftCleanupContender', '_draftCleanupContenderState']) delete data[field];
   Object.assign(data, { _draftId: draftId, _draftRevision: 0, _draftAcceptedRevision: 0, _draftRecovery: provenance,
     ...(request ? { _draftRecoveredContent: clone(request) } : {}),
     ...(Object.keys(nativeKnowledge(source)).length ? { _draftRecoveredKnown: clone(nativeKnowledge(source)) } : {}) });
@@ -256,6 +256,12 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
   discard = discardSessionDraft, discardThrough = cleanupSessionDraft, flush = flushSafeStorage, reconcile = reconcileSessionDraft }) {
   const [ready, setReady] = useState(false);
   const readyRef = useRef(false);
+  const hydrationCommit = useRef(null);
+  if (!hydrationCommit.current) {
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    hydrationCommit.current = { promise, resolve };
+  }
   const windowsRef = useRef(windows);
   windowsRef.current = windows;
   const terminalOperations = useRef(new Map());
@@ -323,15 +329,18 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
         let next = prev.filter(window => window.id !== ownerId);
         if (keep) {
           const retainedData = { ...data, _draftId: result.draftId || captured._draftId, _draftCleanupState: result.cleanup };
-          if (settled) delete retainedData._draftCleanupContender;
+          if (settled) {
+            delete retainedData._draftCleanupContender;
+            delete retainedData._draftCleanupContenderState;
+          }
           next.push({ ...owner, initialData: retainedData, snapshot: retainedData, minimized: true, _terminalActive: false });
         }
         if (contender && settled) {
           recoveryId ||= ++idRef.current;
-          if (result.skipped) next.push({ id: recoveryId, initialData: contender, snapshot: contender, minimized: false });
+          if (result.skipped) next.push({ ...data._draftCleanupContenderState, id: recoveryId, initialData: contender, snapshot: contender, minimized: false });
           else {
             recoveryDraftId ||= newDraftId();
-            next.push({ ...recoveredWindow({ id: recoveryId, initialData: contender },
+            next.push({ ...recoveredWindow({ ...data._draftCleanupContenderState, id: recoveryId, initialData: contender },
               JSON.stringify([captured._draftId, captured._draftCleanupThroughRevision, 'terminal-recovery']), recoveryDraftId), id: recoveryId });
           }
         }
@@ -339,6 +348,10 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
       });
       if (!result.skipped && result.cleanup !== 'complete') {
         try {
+          // A flush before initial hydration can acknowledge an empty dirty set:
+          // safeStorage correctly gives the loaded document precedence over an
+          // early cache write. Wait for the merged React array to commit first.
+          await hydrationCommit.current.promise;
           await persist(windowsRef.current);
           await flush();
         } catch {
@@ -379,14 +392,16 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
     return () => { alive = false; };
   }, [loader, setWindows, idRef]);
   useEffect(() => { if (ready) persist(windows); }, [ready, windows, persist]);
-  const openDraft = useCallback(initialData => {
+  useEffect(() => { if (ready) hydrationCommit.current.resolve(); }, [ready]);
+  const openDraft = useCallback((initialData, context = {}) => {
     const id = ++idRef.current;
     setWindows(prev => {
       const already = prev.find(w => sameComposeDraft(dataFor(w), initialData));
       if (already) {
         if (isTerminalCompose(dataFor(already))) {
           if (!conditionalCleanup(dataFor(already))) return prev;
-          const data = { ...dataFor(already), _draftCleanupContender: mergeComposeSnapshot(dataFor(already)._draftCleanupContender, initialData) };
+          const data = { ...dataFor(already), _draftCleanupContender: mergeComposeSnapshot(dataFor(already)._draftCleanupContender, initialData),
+            _draftCleanupContenderState: { ...dataFor(already)._draftCleanupContenderState, ...context } };
           return prev.map(window => window.id === already.id ? { ...window, snapshot: data, initialData: data } : window);
         }
         if (already.detached && already.nativeLabel) void Promise.resolve(focus?.(already.nativeLabel)).catch(() => {});
@@ -397,15 +412,16 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
           return { ...w, initialData: canonical, snapshot: canonical, minimized: false };
         });
       }
-      return [...prev, { id, minimized: false, initialData, ...(!readyRef.current ? { _awaitDraftHydration: true } : {}) }];
+      return [...prev, { ...context, id, minimized: false, initialData, ...(!readyRef.current ? { _awaitDraftHydration: true } : {}) }];
     });
   }, [focus, idRef, setWindows]);
-  // App's existing identity-bearing Outbox/Undo restore branch, extracted
-  // unchanged so its admission behavior is exercised without the mail shell.
+  // Outbox Cancel/Dismiss, Undo and draft-row reopen share one admission gate.
+  // Window placement is local; the captured mode/reply context stays with the
+  // supplied complete snapshot while a conditional cleanup owns its old ID.
   const restoreCompose = useCallback(state => {
-    const id = ++idRef.current;
-    setWindows(prev => [...prev, { id, minimized: false, ...state }]);
-  }, [idRef, setWindows]);
+    const { initialData, snapshot, id: _id, minimized: _minimized, detached: _detached, nativeLabel: _nativeLabel, ...context } = state;
+    openDraft(snapshot || initialData, context);
+  }, [openDraft]);
   const saveState = useCallback((id, savedData) => {
     setWindows(prev => prev.map(w => {
       if (w.id !== id || JSON.stringify(w.snapshot) === JSON.stringify(savedData)) return w;
