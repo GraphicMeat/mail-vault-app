@@ -994,6 +994,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         : await checkCompose(composeCheckInput({ snapshot, mode, authoredBodyText: htmlToText(snapshot.body), timeZone, sendAnyway: !!confirmed }), { isCurrent: current });
       if (!current()) return;
       if (!outcome(result)) return;
+      // Preserve moved-schedule failure recovery through detached finalization.
+      draft = result.route.draft;
       if (finalizeSendCheck) {
         const final = await finalizeSendCheck({ attempt, editorGeneration: generation }, !!result.route.draft);
         if (!current()) return;
@@ -1003,7 +1005,6 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       // No await between current authority comparison and entering the existing owner.
       if (useMailStore.getState().accounts?.find(a => a.id === snapshot._accountId) !== accountSource
         || senderNameFor(accountSource, snapshot._fromAddress) !== senderSettings.displayName) throw new Error('compose.preparationUnavailable');
-      draft = result.route.draft;
       const handoff = composeSnapshotForTransfer(snapshot);
       handoff._composeDelay = result.route.delay;
       if (draft) handoff._scheduleDraft = draft;
