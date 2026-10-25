@@ -22,6 +22,13 @@ let running = null;
 let again = false;
 
 const code = (error) => error?.code || error?.name || 'error';
+// Keep the presentation target through the asynchronous native save and grant
+// checks. Compare these values synchronously inside the final state updater.
+const publicationSnapshot = account => JSON.stringify([
+  account.authType || '', account.oauth2RefreshToken || '', account.oauth2ClientId || '',
+  account.oauth2Transport === 'graph' ? 'graph' : '', account.oauth2TenantId || '',
+  account.oauth2CustomClientId || '', account.oauth2AccessToken || '', account.oauth2ExpiresAt ?? null,
+]);
 
 /**
  * A stored record's grant, named the way the daemon names the grants of a
@@ -56,6 +63,8 @@ async function takeAndSave() {
   for (const { accountId, accessToken, refreshToken, expiresAt, chain } of pairs) {
     if (!accountId || !accessToken) continue;
     try {
+      const target = useMailStore.getState().accounts.find(a => a.id === accountId);
+      const snapshot = target ? publicationSnapshot(target) : null;
       // A sign-in saved since the daemon refreshed (Reconnect, a switch of
       // the Google sign-in app or of transport) is another grant: its record
       // is never written over with this one's pair, whatever the expiries.
@@ -68,12 +77,16 @@ async function takeAndSave() {
       // Undefined: the keychain holds no such account any more.
       const stored = await updateOAuth2Tokens(accountId, { accessToken, refreshToken, expiresAt, chain });
       if (!stored) continue;
-      saved += 1;
-      useMailStore.setState(state => ({
-        accounts: state.accounts.map(a => (a.id === accountId
-          ? { ...a, oauth2AccessToken: stored.oauth2AccessToken, oauth2RefreshToken: stored.oauth2RefreshToken, oauth2ExpiresAt: stored.oauth2ExpiresAt }
-          : a)),
-      }));
+      let published = false;
+      useMailStore.setState(state => {
+        const accounts = state.accounts.map(a => {
+          if (a.id !== accountId || snapshot === null || publicationSnapshot(a) !== snapshot) return a;
+          published = true;
+          return { ...a, oauth2AccessToken: stored.oauth2AccessToken, oauth2RefreshToken: stored.oauth2RefreshToken, oauth2ExpiresAt: stored.oauth2ExpiresAt };
+        });
+        return published ? { accounts } : state;
+      });
+      if (published) saved += 1;
     } catch (error) {
       console.warn('[oauthTokenSync] could not save the refreshed token of', accountId, code(error));
     }
