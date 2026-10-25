@@ -344,6 +344,7 @@ describe('qualified U outcome policy', () => {
       wire.reject(UNAVAILABLE());
       expect((await result).error).toBeInstanceOf(Error);
       expect(cache).toEqual(before);
+      expect(keychainSession.getStatus()).toBe('granted'); // read outcome, not a saved claim
       noShellMutation();
       expect(sent(method)).toHaveLength(1);
       expect(sent('oauth2.credentials_changed')).toHaveLength(0);
@@ -356,6 +357,7 @@ describe('qualified U outcome policy', () => {
         : method.endsWith('delete') ? keychain.deleteCredentials(['old']) : keychain.updateCredentials('old', { password: 'new' });
       expect((await attempt(operation)).error).toBeInstanceOf(Error);
       expect(cache).toEqual(before);
+      expect(keychainSession.getStatus()).toBe('granted'); // read outcome, not a saved claim
       noShellMutation();
     });
   }

@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fakeAccountsDaemon } from '../../db/__tests__/fakeAccountsDaemon.js';
 
-const h = vi.hoisted(() => ({ status: 'granted', cache: {}, file: null }));
+const h = vi.hoisted(() => ({ status: 'granted', cache: {}, file: null, stored: {} }));
 const mockLoadKeychain = vi.fn(async () => h.cache);
 const mockSaveCredentials = vi.fn(async () => {});
 
@@ -50,7 +50,8 @@ const puts = () => mockAccountsCall.mock.calls.filter(([cmd]) => cmd === 'accoun
 beforeEach(() => {
   h.file = JSON.stringify([{ id: 'old', email: 'old@x.test' }]);
   mockSaveCredentials.mockReset();
-  mockSaveCredentials.mockImplementation(async () => {});
+  h.stored = { old: JSON.stringify({ id: 'old', email: 'old@x.test', password: 'keep' }) };
+  mockSaveCredentials.mockImplementation(async records => { Object.assign(h.stored, records); });
   mockAccountsCall.mockClear();
   mockLoadKeychain.mockReset();
   mockLoadKeychain.mockImplementation(async () => h.cache);
@@ -76,6 +77,8 @@ describe('saveAccounts', () => {
     const records = mockSaveCredentials.mock.calls[0][0];
     expect(Object.keys(records).sort()).toEqual(['a', 'b']); // only the new ones: the daemon keeps `old`
     expect(JSON.parse(records.b).oauth2RefreshToken).toBe('rt');
+    expect(Object.keys(h.stored).sort()).toEqual(['a', 'b', 'old']);
+    expect(JSON.parse(h.stored.old).password).toBe('keep');
 
     expect(puts()).toHaveLength(1);
     expect(JSON.stringify(puts()[0][1])).not.toMatch(/password|oauth2AccessToken|oauth2RefreshToken/);
@@ -111,10 +114,12 @@ describe('saveAccounts', () => {
 
   it('wraps a failed keychain write as E_KEYCHAIN_WRITE and writes no metadata', async () => {
     h.status = 'granted';
-    h.cache = {};
+    const before = { old: h.stored.old };
+    h.cache = { ...before };
     mockSaveCredentials.mockRejectedValueOnce('Failed to store credentials: errSecInteractionNotAllowed');
     await expect(saveAccounts(incoming)).rejects.toThrow(/^E_KEYCHAIN_WRITE: errors\.keychainWriteFailed/);
-    expect(h.cache).toEqual({}); // presentation cache only, no disk rollback claim
+    expect(h.cache).toEqual(before); // presentation cache only, no disk rollback claim
+    expect(h.stored).toEqual(before);
     expect(puts()).toHaveLength(0);
   });
 
@@ -129,5 +134,8 @@ describe('saveAccounts', () => {
     h.cache = {};
     mockAccountsCall.mockImplementationOnce(() => { throw new Error('errors.accountsWriteFailed'); });
     await expect(saveAccounts(incoming)).rejects.toThrow(/^E_KEYCHAIN_WRITE: errors\.accountsWriteFailed$/);
+    expect(Object.keys(h.stored).sort()).toEqual(['a', 'b', 'old']); // credential step already committed
+    expect(h.cache).toEqual({});
+    expect(JSON.parse(h.file).map(a => a.id)).toEqual(['old']);
   });
 });

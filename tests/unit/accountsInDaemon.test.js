@@ -62,8 +62,10 @@ describe('the account list and the credentials live in the daemon', () => {
   });
 
   it('token injection skips both namespaces, so no token rides into the list or a stored record', () => {
-    expect(tokens).toMatch(/fn is_store_method\(method: &str\) -> bool \{\s*method\.starts_with\("accounts\."\) \|\| method\.starts_with\("credentials\."\)/);
-    expect(tokens).toMatch(/if is_store_method\(method\) \{\s*return Injection/);
+    const inject = tokens.slice(tokens.indexOf('pub(crate) async fn inject('));
+    const beforeParams = inject.slice(0, inject.indexOf('params.as_object_mut()'));
+    expect(beforeParams).toMatch(/if method\.starts_with\("accounts\."\) \|\| method\.starts_with\("credentials\."\) \{\s*return Injection/);
+    expect(beforeParams).not.toMatch(/access_token\(|resolve_account_credentials\(/);
   });
 
   it('the app never reads or writes accounts.json itself', () => {
