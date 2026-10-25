@@ -17,6 +17,9 @@ vi.mock('../../db/keychain.js', () => ({
   saveCredentials: (...a) => mockSaveCredentials(...a),
   deleteCredentials: vi.fn(async () => {}),
   updateCredentials: vi.fn(async () => true),
+  assertNativeWriteAllowed: vi.fn(),
+  assertLegacyWriteAllowed: vi.fn(),
+  markNativeMutationUncertain: vi.fn(),
 }));
 vi.mock('../../keychainSession.js', () => ({ getStatus: () => h.status, E_KEYCHAIN_UNAVAILABLE: 'E_KEYCHAIN_UNAVAILABLE', E_KEYCHAIN_WRITE: 'E_KEYCHAIN_WRITE' }));
 const daemon = fakeAccountsDaemon({ read: () => h.file, write: (text) => { h.file = text; } });
@@ -110,7 +113,8 @@ describe('saveAccounts', () => {
     h.status = 'granted';
     h.cache = {};
     mockSaveCredentials.mockRejectedValueOnce('Failed to store credentials: errSecInteractionNotAllowed');
-    await expect(saveAccounts(incoming)).rejects.toThrow(/^E_KEYCHAIN_WRITE: Failed to store credentials/);
+    await expect(saveAccounts(incoming)).rejects.toThrow(/^E_KEYCHAIN_WRITE: errors\.keychainWriteFailed/);
+    expect(h.cache).toEqual({}); // presentation cache only, no disk rollback claim
     expect(puts()).toHaveLength(0);
   });
 

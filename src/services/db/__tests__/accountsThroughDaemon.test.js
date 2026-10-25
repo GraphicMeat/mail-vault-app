@@ -125,12 +125,12 @@ describe('the account list goes through the daemon', () => {
     expect(sent('accounts_fallback')).toHaveLength(1);
   });
 
-  it('a daemon without accounts.* sends every later call to the shell', async () => {
+  it('a daemon without accounts.* revalidates each actual mutation before compatibility fallback', async () => {
     useDaemon((cmd) => (cmd.startsWith('accounts.') ? () => Promise.reject(OUTDATED()) : undefined));
     await accounts.getAccountsWithoutPasswords();
     await accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }]);
     expect(sent('accounts.list')).toHaveLength(1);
-    expect(sent('accounts.put')).toHaveLength(0);
+    expect(sent('accounts.put')).toHaveLength(1);
     expect(sent('accounts_fallback').map(([, a]) => a.method)).toEqual(['accounts.list', 'accounts.put']);
     expect(JSON.parse(file).map(a => a.id)).toEqual(['old', 'b']);
   });
@@ -243,16 +243,13 @@ describe('the credentials go through the daemon', () => {
     expect(sent('accounts.put')).toHaveLength(0);
   });
 
-  it('retries a failed keychain write, then writes the whole blob from the shell only from a complete copy', async () => {
-    vi.useFakeTimers();
-    useDaemon((cmd) => (cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainWriteFailed')) : undefined));
-    await keychain.loadKeychain();
-    const saving = keychain.saveCredentials({ a: JSON.stringify({ id: 'a', email: 'a@x.test' }) });
-    await vi.advanceTimersByTimeAsync(3500);
-    await saving;
-    expect(sent('credentials.save')).toHaveLength(3);
-    expect(sent('store_credentials')).toHaveLength(1);
-    expect(Object.keys(sent('store_credentials')[0][1].credentials).sort()).toEqual(['a', 'old']);
+  it('an uncertain native write rejects once with a complete cache and no shell replay', async () => {
+    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainWriteFailed')) : undefined);
+    const cache = await keychain.loadKeychain();
+    await expect(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' })).rejects.toThrow('E_KEYCHAIN_WRITE');
+    expect(sent('credentials.save')).toHaveLength(1);
+    expect(sent('store_credentials')).toHaveLength(0);
+    expect(cache.a).toBeUndefined();
   });
 
   it('a failed keychain write without a complete copy is an error, never a partial whole-blob write', async () => {
@@ -269,24 +266,24 @@ describe('the credentials go through the daemon', () => {
   // macOS: the daemon's gate is blocked (its prompt was refused) while the
   // app, the item's creator, still reads it quietly. That read is kept, and
   // a change the daemon then refuses is written by the shell from it.
-  it('a failed daemon read falls back to the shell\'s quiet read, and its copy may write through the shell', async () => {
+  it('a quiet shell read does not authorize a refused native mutation', async () => {
     useDaemon((cmd) => (cmd === 'credentials.get' ? () => ({ status: 'unavailable', message: 'The keychain could not be read' })
       : cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainUnavailable')) : undefined));
     const data = await keychain.loadKeychain();
     expect(Object.keys(data)).toEqual(['old']);
     expect(keychainSession.getStatus()).toBe('granted');
-    await keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' });
+    await expect(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' })).rejects.toThrow('E_KEYCHAIN_UNAVAILABLE');
     expect(sent('credentials.save')).toHaveLength(1);
-    expect(Object.keys(sent('store_credentials')[0][1].credentials).sort()).toEqual(['a', 'old']);
+    expect(sent('store_credentials')).toHaveLength(0);
   });
 
   it('a daemon without credentials.* uses the shell commands, as before', async () => {
     useDaemon((cmd) => (cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined));
     await keychain.loadKeychain();
     await keychain.saveCredentials({ a: JSON.stringify({ id: 'a', email: 'a@x.test' }) });
-    expect(sent('get_credentials')).toHaveLength(1);
+    expect(sent('get_credentials')).toHaveLength(2);
     expect(Object.keys(sent('store_credentials')[0][1].credentials).sort()).toEqual(['a', 'old']);
-    expect(sent('credentials.save')).toHaveLength(0);
+    expect(sent('credentials.save')).toHaveLength(1);
   });
 });
 
@@ -518,7 +515,7 @@ describe('qualified U deletion sequencing and outcomes', () => {
   it('receipt, metadata, credential order prevents native legacy preservation resurrection', async () => {
     preserveLegacy = true;
     file = JSON.stringify([{ id: 'old', email: 'old@x.test', password: 'legacy-A' }, { id: 'b', email: 'b@x.test' }]);
-    blob.b = '{"id":"b","password":"keep-B"}';
+    blob.b = '{"id":"b","email":"b@x.test","password":"keep-B"}';
     await accounts.deleteAccount('old');
     const effects = names().filter(n => ['compose.receipts.remove_account', 'accounts.remove', 'credentials.delete'].includes(n));
     expect(effects).toEqual(['compose.receipts.remove_account', 'accounts.remove', 'credentials.delete']);
@@ -559,5 +556,57 @@ describe('qualified U deletion sequencing and outcomes', () => {
     await accounts.deleteAccount('old'); // explicit caller retry uses idempotent native intents
     expect(blob.old).toBeUndefined();
     expect(sent('clear_email_cache')).toHaveLength(1);
+  });
+});
+
+
+describe('late backend completion is not cancelled by a read', () => {
+  it('a lost native credential reply remains parked, excludes another intent, and later keeps both records', async () => {
+    vi.useFakeTimers();
+    const backend = deferred();
+    let parked = true;
+    let first = true;
+    const late = backend.promise.then(() => { blob.a = '{"id":"a","email":"a@x.test"}'; parked = false; });
+    useDaemon((cmd, args) => cmd === 'credentials.save' ? () => {
+      if (first) { first = false; return Promise.reject(UNAVAILABLE()); }
+      if (parked) return Promise.reject(coded('RPC_ERROR', 'errors.keychainBusy'));
+      Object.assign(blob, args.records);
+      return { saved: Object.keys(args.records), version: ++credVersion };
+    } : undefined);
+    const cache = await keychain.loadKeychain();
+    expect((await attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }))).error).toBeInstanceOf(Error);
+    keychain.clearCredentialsCache();
+    expect((await keychain.loadKeychain()).a).toBeUndefined();
+    expect(cache.a).toBeUndefined();
+    const second = attempt(keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' }));
+    await vi.advanceTimersByTimeAsync(3500);
+    expect((await second).error?.message).toContain('errors.keychainBusy');
+    expect(blob.a).toBeUndefined();
+    backend.resolve(); await late;
+    expect(blob.a).toBeDefined();
+    await keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' });
+    expect(Object.keys(blob).sort()).toEqual(['a', 'b', 'old']);
+    expect(sent('credentials.save')).toHaveLength(5); // first + bounded Busy + new intent
+    noShellMutation();
+  });
+  it('a lost metadata reply can complete after a read; only a new named native intent continues', async () => {
+    const backend = deferred();
+    let parked = true;
+    let first = true;
+    const late = backend.promise.then(() => { daemon.call('accounts.put', { entries: [{ id: 'a', email: 'a@x.test' }] }); parked = false; });
+    useDaemon((cmd, args) => cmd === 'accounts.put' ? () => {
+      if (first) { first = false; return Promise.reject(UNAVAILABLE()); }
+      if (parked) return Promise.reject(coded('RPC_ERROR', 'errors.accountsWriteFailed'));
+      return daemon.call(cmd, args);
+    } : undefined);
+    expect((await attempt(accounts.ensureAccountsInFile([{ id: 'a', email: 'a@x.test' }]))).error).toBeInstanceOf(Error);
+    expect((await accounts.getAccountsWithoutPasswords()).map(a => a.id)).toEqual(['old']);
+    expect((await attempt(accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }]))).error).toBeInstanceOf(Error);
+    backend.resolve(); await late;
+    await accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }]);
+    expect(JSON.parse(file).map(a => a.id)).toEqual(['old', 'a', 'b']);
+    useDaemon(cmd => cmd === 'accounts.put' ? () => Promise.reject(OUTDATED()) : undefined);
+    expect((await attempt(accounts.ensureAccountsInFile([{ id: 'c', email: 'c@x.test' }]))).error).toBeInstanceOf(Error);
+    noShellMutation();
   });
 });

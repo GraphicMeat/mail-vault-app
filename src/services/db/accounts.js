@@ -5,10 +5,10 @@
 // itself. It asks the daemon for the list and sends each change (a merge by
 // id, an add-if-absent, a removal), and the daemon writes atomically, keeps
 // a version and backups, and emits `accounts-changed {ids, version}`. A
-// daemon without `accounts.*` (errors.daemonOutdated, or a reply of another
-// shape: this window uses the shell from then on) or one that cannot be
-// reached (this call only; a first read waits at most READ_BUDGET_MS) gets
-// the same operation through the shell (`accounts_fallback`, one release),
+// daemon without `accounts.*` can use the one-release `accounts_fallback`
+// after a trusted unsupported mutation refusal. Read failures alone permit
+// only shell reads (a first read waits at most READ_BUDGET_MS). Unknown
+// mutations reject without replay and retain a window-local fallback barrier,
 // which runs the same core code under the same lock file. Nothing here builds
 // a whole list from a read that failed: the one whole-list write (the
 // duplicate cleanup) carries the version of the read it came from.
@@ -17,7 +17,7 @@
 import { exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
-import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials } from './keychain.js';
+import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, markNativeMutationUncertain, assertLegacyWriteAllowed, assertNativeWriteAllowed } from './keychain.js';
 import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
 
@@ -79,8 +79,21 @@ const SECRET_FIELDS = ['password', 'oauth2AccessToken', 'oauth2RefreshToken'];
 // 'daemon' once accounts.* answered, 'shell' for a daemon without it.
 let listMode = 'unknown';
 
-const errText = e => (typeof e === 'string' ? e : e?.message || String(e));
-const isReply = r => !!r && typeof r === 'object' && Number.isInteger(r.version);
+const errText = e => ACCOUNTS_ERRORS.includes(e?.message ?? e) ? (e?.message ?? e) : 'errors.accountsWriteFailed';
+const object = r => !!r && typeof r === 'object' && !Array.isArray(r);
+function isReply(method, r) {
+  if (!object(r) || !Number.isInteger(r.version) || r.version < 0) return false;
+  if (method === 'accounts.list') return Array.isArray(r.accounts);
+  if (method === 'accounts.get') return r.account === null || object(r.account);
+  return Array.isArray(r.changed) && r.changed.every(id => typeof id === 'string');
+}
+let listListening = false;
+function listenForReconnect() {
+  const listen = globalThis.window?.__TAURI__?.event?.listen;
+  if (listListening || typeof listen !== 'function') return;
+  listListening = true;
+  Promise.resolve(listen('daemon-reconnected', () => { listMode = 'unknown'; })).catch(() => {});
+}
 
 function withBudget(promise, ms) {
   let timer;
@@ -89,27 +102,34 @@ function withBudget(promise, ms) {
 }
 
 async function accountsCall(method, params = {}) {
-  if (listMode !== 'shell') {
+  const read = method === 'accounts.list' || method === 'accounts.get';
+  if (!read) assertNativeWriteAllowed();
+  listenForReconnect();
+  {
     try {
       const call = Promise.resolve().then(() => invoke(method, params));
-      const read = method === 'accounts.list' || method === 'accounts.get';
       const reply = await (read && listMode !== 'daemon' ? withBudget(call, READ_BUDGET_MS) : call);
-      if (isReply(reply)) {
+      if (isReply(method, reply)) {
         listMode = 'daemon';
         return reply;
       }
-      listMode = 'shell';
+      throw new Error('errors.accountsWriteFailed');
     } catch (error) {
-      if (error?.code === 'DAEMON_OUTDATED') listMode = 'shell';
-      else if (ACCOUNTS_ERRORS.includes(errText(error))) throw new Error(errText(error));
-      // Unreachable, or not an answer of the daemon's own: the shell this time.
+      if (!read) {
+        if (error?.code !== 'DAEMON_OUTDATED') {
+          if (!['errors.accountsConflict', 'errors.accountsInvalid'].includes(error?.message ?? error)) markNativeMutationUncertain();
+          throw new Error(errText(error));
+        }
+        assertLegacyWriteAllowed();
+      }
     }
   }
   try {
     const reply = await invoke('accounts_fallback', { method, params });
-    if (!isReply(reply)) throw new Error('errors.accountsWriteFailed');
+    if (!isReply(method, reply)) throw new Error('errors.accountsWriteFailed');
     return reply;
   } catch (error) {
+    if (!read) markNativeMutationUncertain();
     throw new Error(errText(error));
   }
 }
@@ -121,7 +141,7 @@ const stripSecrets = (account) => Object.fromEntries(Object.entries(account).fil
 async function listAccounts() {
   const reply = await accountsCall('accounts.list');
   if (!Array.isArray(reply.accounts)) throw new Error('errors.accountsWriteFailed');
-  if (reply.recovered) console.warn('[db.js] accounts.json did not parse; listed from', reply.recovered);
+  if (reply.recovered) console.warn('[db.js] accounts.json did not parse; recovered list used');
   return { accounts: reply.accounts, version: reply.version };
 }
 
@@ -138,6 +158,7 @@ async function readAccountsFile() {
 /** For tests: forget which way the list was reached. */
 export function __resetAccountsForTests() {
   listMode = 'unknown';
+  listListening = false;
   initialized = false;
   basicInitDone = false;
 }
@@ -177,7 +198,7 @@ export async function initDB() {
       const result = await invoke('maildir_migrate_json_to_eml');
       console.log('[db.js] Migration:', result);
     } catch (e) {
-      console.warn('[db.js] Migration failed (non-fatal):', e);
+      console.warn('[db.js] Migration failed (non-fatal)');
     }
   }
 
@@ -201,7 +222,7 @@ export async function initDB() {
         console.log('[db.js] Legacy keychain cleanup complete');
       }
     } catch (e) {
-      console.warn('[db.js] Legacy keychain cleanup failed (non-fatal):', e);
+      console.warn('[db.js] Legacy keychain cleanup failed (non-fatal)');
     }
   }
 
@@ -258,9 +279,8 @@ export async function saveAccounts(accounts) {
   if (!accounts.length) return;
   await initDB();
 
-  // One change for every record. On the shell path it is laid onto the
-  // shared cache and taken back out if the write fails, so a later write
-  // built from that cache (token refresh) never persists these accounts.
+  // No optimistic failed data enters the cache. Earlier confirmed steps may
+  // remain changed when a later step fails; this is not a disk rollback.
   await loadKeychain();
   const status = keychainSession.getStatus();
   if (status !== 'granted' && status !== 'empty') throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
@@ -281,8 +301,10 @@ export async function saveAccounts(accounts) {
 // The shell's keychain queue rejects with store_credentials' raw Rust string,
 // the account list with its catalog key; callers map on an E_* prefix.
 function accountsWriteError(error) {
-  const message = String(error?.message ?? error);
-  return new Error(message.startsWith('E_') ? message : `${keychainSession.E_KEYCHAIN_WRITE}: ${message}`);
+  const message = error?.message ?? error;
+  if (message === keychainSession.E_KEYCHAIN_UNAVAILABLE) return new Error(message);
+  const key = ACCOUNTS_ERRORS.includes(message) ? message : 'errors.keychainWriteFailed';
+  return new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${key}`);
 }
 
 export async function getAccountsWithoutPasswords() {
@@ -479,18 +501,11 @@ export async function deleteAccount(id) {
   await invoke('compose.receipts.remove_account', { accountId: id });
   await initDB();
 
-  // Remove from keychain
-  if (invoke) {
-    try {
-      await deleteCredentials([id]);
-      console.log('[db.js] Account removed from keychain:', id);
-    } catch (error) {
-      console.error('[db.js] Failed to remove account from keychain:', errText(error));
-    }
-  }
-
-  // Remove from accounts.json
+  // Native metadata writes preserve legacy credentials first. Removing the
+  // list row before its credential prevents preservation from recreating it.
+  // A refused/unknown step rejects before local cleanup; prior effects may remain.
   await accountsCall('accounts.remove', { ids: [id] });
+  await deleteCredentials([id]);
 
   // Remove Maildir/{accountId}/ directory
   try {
@@ -500,7 +515,7 @@ export async function deleteAccount(id) {
       await remove(dirPath, { recursive: true });
     }
   } catch (error) {
-    console.warn('[db.js] Failed to remove account Maildir:', error);
+    console.warn('[db.js] Failed to remove account Maildir');
   }
 
   // Clear email headers cache for this account
@@ -508,14 +523,14 @@ export async function deleteAccount(id) {
     try {
       await invoke('clear_email_cache', { accountId: id });
     } catch (error) {
-      console.warn('[db.js] Failed to clear email cache:', error);
+      console.warn('[db.js] Failed to clear email cache');
     }
 
     // Clear mailbox cache
     try {
       await invoke('delete_mailbox_cache', { accountId: id });
     } catch (error) {
-      console.warn('[db.js] Failed to clear mailbox cache:', error);
+      console.warn('[db.js] Failed to clear mailbox cache');
     }
   }
 }

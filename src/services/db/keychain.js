@@ -4,16 +4,11 @@
 // src-daemon/src/handlers/credentials.rs): `credentials.get` answers what the
 // shell's `get_credentials` did, and `credentials.save` / `.update` /
 // `.delete` change one account at a time on a fresh read of the store, so a
-// stale cache here can never drop another window's account. The shell's own
-// commands stay for one release, for a daemon without `credentials.*`
-// (errors.daemonOutdated, or a reply of another shape: this window uses the
-// shell from then on) and for a daemon that cannot be reached (this call
-// only). A daemon that answered with an error of its own is not bypassed:
-// `errors.keychainUnavailable` means nothing was written and is the same
-// E_KEYCHAIN_UNAVAILABLE a failed read gave; a keychain write the daemon
-// could not make falls back to the shell's whole-blob write only when this
-// window holds a complete copy (a read that succeeded). `credentials-changed
-// {ids, version}` from another writer refreshes the copy. No secret is logged.
+// stale cache here cannot replace another window's records. The one-release
+// shell writer requires a trusted unsupported mutation refusal, no unresolved
+// write, and a fresh complete quiet read. Unknown outcomes reject without replay.
+// `credentials-changed {ids, version}` refreshes the presentation copy; reconnect
+// starts a new in-memory read epoch. Neither reads nor reconnect cancel writes.
 
 import { parseKeychainValue, getAccountsFromKeychain } from '../keychainUtils.js';
 import * as keychainSession from '../keychainSession.js';
@@ -34,26 +29,37 @@ transportSend('get_app_data_dir', {})
     console.log('[db.js] Transport working. App data dir:', result);
     _isSnap = typeof result === 'string' && result.includes('/snap/');
   })
-  .catch(error => console.error('[db.js] Transport init check failed:', error));
+  .catch(() => console.error('[db.js] Transport init check failed'));
 
-// How this window reaches the blob: 'daemon' once credentials.* answered,
-// 'shell' for a daemon without it, 'unknown' until then (and while the
-// daemon cannot be reached: every call tries it first).
-let mode = 'unknown';
 let lastVersion = null;
 // Bumped by every change this window made, so a refresh read that started
 // before one never replaces the copy with what it read.
 let localWrites = 0;
-// Which read the cached copy came from: 'shell' when the daemon's read
-// failed and this window's own quiet read succeeded (on macOS the app is the
-// item's creator and may read it while the daemon's gate is blocked).
-let copySource = null;
+let connectionEpoch = 0;
+// Read/reset/reconnect cannot establish the outcome of a lost mutation.
+let nativeOutcomeUnknown = false;
+let legacyOutcomeUnknown = false;
+export function markNativeMutationUncertain() { nativeOutcomeUnknown = true; }
+export function assertNativeWriteAllowed() {
+  if (legacyOutcomeUnknown) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainWriteFailed`);
+}
+export function assertLegacyWriteAllowed() {
+  if (nativeOutcomeUnknown || legacyOutcomeUnknown) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainWriteFailed`);
+}
 
 const errText = e => (typeof e === 'string' ? e : e?.message || String(e));
 const outdated = e => e?.code === 'DAEMON_OUTDATED';
 const unreachable = e => e?.code === 'DAEMON_UNAVAILABLE' || e?.code === 'NO_TAURI';
-const isReadReply = r => !!r && typeof r === 'object' && typeof r.status === 'string';
-const isWriteReply = r => !!r && typeof r === 'object' && Number.isInteger(r.version);
+const object = r => !!r && typeof r === 'object' && !Array.isArray(r);
+const strings = r => Array.isArray(r) && r.every(id => typeof id === 'string');
+const isReadReply = r => object(r) && ['granted', 'empty', 'denied', 'cancelled', 'timed_out', 'unavailable'].includes(r.status)
+  && (!['granted', 'empty'].includes(r.status) || (object(r.credentials) && Object.values(r.credentials).every(v => typeof v === 'string')));
+function isWriteReply(method, r) {
+  if (!object(r) || !Number.isInteger(r.version) || r.version < 0) return false;
+  if (method === 'credentials.save') return strings(r.saved);
+  if (method === 'credentials.delete') return strings(r.deleted);
+  return typeof r.updated === 'boolean' && (r.staleGrant === undefined || typeof r.staleGrant === 'boolean') && !(r.staleGrant && r.updated);
+}
 const E_UNAVAILABLE = 'errors.keychainUnavailable';
 const E_WRITE = 'errors.keychainWriteFailed';
 const E_INVALID = 'errors.credentialsInvalid';
@@ -70,31 +76,27 @@ const readOk = r => r?.status === 'granted' || r?.status === 'empty';
 // through the shell, which reads quietly and never prompts: a read cannot
 // lose anything, and whichever succeeded is kept.
 async function readCredentials() {
-  if (mode !== 'shell') {
+  listenForChanges();
+  {
     try {
       const reply = await invoke('credentials.get', {});
       if (isReadReply(reply)) {
-        mode = 'daemon';
         listenForChanges();
         if (readOk(reply)) {
-          copySource = 'daemon';
           return reply;
         }
         const own = await Promise.resolve().then(() => invoke('get_credentials')).catch(() => null);
-        if (readOk(own)) {
-          copySource = 'shell';
+        if (isReadReply(own) && readOk(own)) {
           return own;
         }
         return reply;
       }
-      mode = 'shell';
     } catch (error) {
-      if (outdated(error)) mode = 'shell';
-      else if (!unreachable(error)) console.warn('[db.js] The daemon could not read the credentials:', error?.code || 'error');
+      if (!outdated(error) && !unreachable(error)) console.warn('[db.js] The daemon could not read the credentials');
     }
   }
-  copySource = 'shell';
-  return invoke('get_credentials');
+  const reply = await invoke('get_credentials');
+  return isReadReply(reply) ? reply : { status: 'unavailable' };
 }
 
 // Keychain cache - stores full account objects (id, email, servers, password)
@@ -122,16 +124,19 @@ async function loadKeychain() {
   }
 
   // Single attempt - no retry loop. The Rust side has its own timeout+retry.
+  const epoch = connectionEpoch;
+  const writes = localWrites;
   _keychainLoadPromise = (async () => {
     try {
       console.log('[db.js] Loading accounts from keychain...');
       keychainSession.recordOutcome('requesting');
       const result = await readCredentials();
+      if (epoch !== connectionEpoch || writes !== localWrites) return;
 
       // Structured response: { status, credentials?, message? }
       const status = result?.status || 'unavailable';
       const credentials = result?.credentials || {};
-      const message = result?.message || null;
+      const message = null; // Arbitrary native/provider messages can contain secrets.
       const count = Object.keys(credentials).length;
 
       keychainSession.recordOutcome(status, message);
@@ -150,8 +155,9 @@ async function loadKeychain() {
         keychainLoaded = true;
       }
     } catch (error) {
-      console.warn('[db.js] Keychain read threw:', error);
-      keychainSession.recordOutcome('unavailable', String(error));
+      if (epoch !== connectionEpoch) return;
+      console.warn('[db.js] Keychain read failed');
+      keychainSession.recordOutcome('unavailable');
       keychainCache = {};
       keychainLoaded = true;
     }
@@ -166,15 +172,6 @@ let _keychainWriteRunning = false;
 
 async function saveKeychain(data) {
   if (!invoke) return;
-
-  // Safety: if new data has fewer entries than cached, merge with cache to prevent data loss.
-  // This handles the case where loadKeychain() returned partial/empty data due to timeout.
-  const newCount = Object.keys(data).length;
-  const cachedCount = Object.keys(keychainCache || {}).length;
-  if (newCount < cachedCount && cachedCount > 0) {
-    console.warn(`[db.js] saveKeychain: merging - new data has ${newCount} entries but cache has ${cachedCount}, preserving existing`);
-    data = { ...keychainCache, ...data };
-  }
 
   // Queue writes to prevent concurrent overwrites
   return new Promise((resolve, reject) => {
@@ -196,31 +193,23 @@ async function _processKeychainQueue() {
     // (a caller may reload the window next): settle them with the latest.
     const collapsed = pending.slice(0, -1);
 
-    let retries = 0;
-    const maxRetries = 3;
-    while (retries < maxRetries) {
       try {
+        assertLegacyWriteAllowed();
         await invoke('store_credentials', { credentials: latest.data });
-        keychainCache = latest.data;
+        localWrites += 1;
+        keychainCache = { ...latest.data };
         // The daemon reads the store again before trusting a token it holds
         // (a new sign-in, a removed account, the pair it refreshed now saved).
         credentialsChanged();
         console.log('[db.js] Keychain saved for', Object.keys(latest.data).length, 'account(s)');
         latest.resolve();
         collapsed.forEach(w => w.resolve());
-        break;
-      } catch (error) {
-        retries++;
-        console.warn(`[db.js] Keychain write failed (attempt ${retries}/${maxRetries}):`, error);
-        if (retries < maxRetries) {
-          await new Promise(r => setTimeout(r, 1000 * retries)); // 1s, 2s, 3s backoff
-        } else {
-          console.error('[db.js] Keychain write failed after all retries:', error);
-          latest.reject(error);
-          collapsed.forEach(w => w.reject(error));
-        }
+      } catch {
+        legacyOutcomeUnknown = true;
+        const error = new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${E_WRITE}`);
+        latest.reject(error);
+        collapsed.forEach(w => w.reject(error));
       }
-    }
   }
 
   _keychainWriteRunning = false;
@@ -235,41 +224,28 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // through the shell (no credentials.* there, or no daemon). Throws when the
 // daemon refused or failed it.
 async function changeThroughDaemon(method, params) {
-  if (mode === 'shell') return null;
+  assertNativeWriteAllowed();
+  listenForChanges();
   for (let attempt = 1; ; attempt++) {
     try {
       const reply = await invoke(method, params);
-      if (isWriteReply(reply)) {
-        mode = 'daemon';
+      if (isWriteReply(method, reply)) {
         noteVersion(reply.version);
         listenForChanges();
         return reply;
       }
-      mode = 'shell';
-      return null;
+      markNativeMutationUncertain();
+      throw new Error(E_WRITE);
     } catch (error) {
-      if (outdated(error)) { mode = 'shell'; return null; }
-      if (unreachable(error)) return null;
+      if (outdated(error)) { assertLegacyWriteAllowed(); return null; }
       const text = errText(error);
       if (text === E_UNAVAILABLE) {
-        // The daemon could not read the blob, but this window's own read
-        // did (the copy came from it): the shell writes, as before step 0b.
-        if (copySource === 'shell' && keychainLoaded && readOk({ status: keychainSession.getStatus() })) {
-          console.warn('[db.js] The daemon could not read the keychain; writing it from this window');
-          return null;
-        }
         throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
       }
       if (text === E_INVALID) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${E_INVALID}`);
-      if (attempt >= 3) {
-        // The daemon could not write the keychain (on macOS, an item it may
-        // not change): the shell's own write, from a complete copy only.
-        const status = keychainSession.getStatus();
-        if (text === E_WRITE && keychainLoaded && (status === 'granted' || status === 'empty')) {
-          console.warn('[db.js] The daemon could not write the keychain; writing it from this window');
-          return null;
-        }
-        throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${text === E_WRITE || text === E_BUSY ? text : 'error'}`);
+      if (text !== E_BUSY || attempt >= 3) {
+        if (text !== E_BUSY) markNativeMutationUncertain();
+        throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${text === E_BUSY ? E_BUSY : E_WRITE}`);
       }
       console.warn(`[db.js] Credentials change failed (attempt ${attempt}/3)`);
       await sleep(1000 * attempt);
@@ -277,20 +253,24 @@ async function changeThroughDaemon(method, params) {
   }
 }
 
-// The shell path for one change, as every write went before: the change on
-// the cached blob, the whole blob written. Taken back out of the cache when
-// the write fails, so a later write built from it does not persist it.
-async function changeThroughShell(apply) {
-  const data = await loadKeychain();
-  const before = { ...data };
-  const result = apply(data);
-  try {
+// Local compatibility serializer only: another legacy window can still race.
+// Each intent uses a fresh complete quiet read, never the presentation cache.
+let legacyTail = Promise.resolve();
+function changeThroughShell(apply) {
+  const run = async () => {
+    assertLegacyWriteAllowed();
+    let reply;
+    try { reply = await invoke('get_credentials'); } catch { /* Refuse below. */ }
+    if (!isReadReply(reply) || !readOk(reply)) throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
+    const data = { ...reply.credentials };
+    const result = apply(data);
+    if (result === false) return false;
+    assertLegacyWriteAllowed();
     await saveKeychain(data);
-  } catch (error) {
-    for (const key of Object.keys(data)) if (!(key in before)) delete data[key];
-    Object.assign(data, before);
-    throw error;
-  }
+    return result;
+  };
+  const result = legacyTail.then(run, run);
+  legacyTail = result.catch(() => {});
   return result;
 }
 
@@ -334,10 +314,13 @@ export async function updateCredentials(accountId, fields, { chain } = {}) {
     }
     return reply.updated === true;
   }
-  const data = await loadKeychain();
-  if (!data[accountId]) return false;
-  await changeThroughShell(blob => { blob[accountId] = JSON.stringify({ ...JSON.parse(blob[accountId]), ...changes }); });
-  return true;
+  // A JS read/check cannot exclude a newer sign-in in another legacy window.
+  if (Array.isArray(chain)) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.daemonOutdated`);
+  return changeThroughShell(blob => {
+    if (!blob[accountId]) return false;
+    blob[accountId] = JSON.stringify({ ...JSON.parse(blob[accountId]), ...changes });
+    return true;
+  });
 }
 
 /** Remove the stored records of these ids. */
@@ -358,24 +341,26 @@ let refreshing = null;
 let refreshAgain = false;
 async function refreshCache() {
   if (refreshing) { refreshAgain = true; return refreshing; }
-  refreshing = (async () => {
+  const epoch = connectionEpoch;
+  const task = (async () => {
+    if (!keychainLoaded) await loadKeychain();
     do {
       refreshAgain = false;
       const status = keychainSession.getStatus();
-      if (!keychainLoaded || mode !== 'daemon' || (status !== 'granted' && status !== 'empty')) return;
+      if (epoch !== connectionEpoch || !keychainLoaded || (status !== 'granted' && status !== 'empty')) return;
       const writes = localWrites;
       let reply;
       try { reply = await invoke('credentials.get', {}); } catch { return; }
-      if (!isReadReply(reply) || (reply.status !== 'granted' && reply.status !== 'empty')) return;
+      if (epoch !== connectionEpoch || !isReadReply(reply) || !readOk(reply)) return;
       if (writes !== localWrites) { refreshAgain = true; continue; }
       const next = reply.credentials || {};
-      copySource = 'daemon';
       const cache = keychainCache || (keychainCache = {});
       for (const id of Object.keys(cache)) if (!(id in next)) delete cache[id];
       Object.assign(cache, next);
     } while (refreshAgain);
-  })().finally(() => { refreshing = null; });
-  return refreshing;
+  })();
+  refreshing = task;
+  try { await task; } finally { if (refreshing === task) refreshing = null; }
 }
 
 let listening = false;
@@ -390,17 +375,27 @@ function listenForChanges() {
     noteVersion(payload?.version);
     void refreshCache();
   });
-  on('daemon-reconnected', () => { void refreshCache(); });
+  on('daemon-reconnected', () => {
+    connectionEpoch += 1;
+    lastVersion = null;
+    refreshing = null;
+    refreshAgain = false;
+    keychainLoaded = false;
+    _keychainLoadPromise = null;
+    void loadKeychain();
+  });
 }
 
 /** For tests: forget the transport mode and what the listeners set up. */
 export function __resetKeychainForTests() {
-  mode = 'unknown';
   lastVersion = null;
   localWrites = 0;
-  copySource = null;
+  nativeOutcomeUnknown = false;
+  legacyOutcomeUnknown = false;
+  legacyTail = Promise.resolve();
   listening = false;
   refreshing = null;
+  refreshAgain = false;
   clearCredentialsCache();
 }
 
@@ -411,6 +406,7 @@ function isSnap() {
 }
 
 export function clearCredentialsCache() {
+  connectionEpoch += 1;
   keychainCache = null;
   keychainLoaded = false;
   _keychainResolved = false;

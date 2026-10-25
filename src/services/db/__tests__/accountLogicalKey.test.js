@@ -15,6 +15,9 @@ vi.mock('../keychain.js', () => ({
   saveCredentials: vi.fn(async () => {}),
   deleteCredentials: vi.fn(async () => {}),
   updateCredentials: vi.fn(async () => true),
+  assertNativeWriteAllowed: vi.fn(),
+  assertLegacyWriteAllowed: vi.fn(),
+  markNativeMutationUncertain: vi.fn(),
 }));
 vi.mock('../../keychainSession.js', () => ({ getStatus: () => 'granted', E_KEYCHAIN_UNAVAILABLE: 'E_KEYCHAIN_UNAVAILABLE', E_KEYCHAIN_WRITE: 'E_KEYCHAIN_WRITE' }));
 vi.mock('../../transport.js', () => ({ send: vi.fn(async () => ({})) }));

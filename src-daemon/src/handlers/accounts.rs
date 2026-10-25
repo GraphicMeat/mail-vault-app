@@ -424,6 +424,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ui_deletion_order_crosschecks_legacy_credential_preservation() {
+        let (dir, state) = rig();
+        let path = dir.path().join("accounts.json");
+        let creds = dir.path().join("credentials.json");
+        let a = json!({"id":"a","email":"a@x.test","password":"synthetic-A"});
+        let b = json!({"id":"b","email":"b@x.test","password":"synthetic-B"});
+        let initial = json!({"a":a.to_string(),"b":b.to_string()});
+        let read = || -> Value {
+            serde_json::from_slice(&std::fs::read(&creds).unwrap()).unwrap()
+        };
+
+        std::fs::write(&path, json!([a.clone(), b.clone()]).to_string()).unwrap();
+        std::fs::write(&creds, initial.to_string()).unwrap();
+        call(&state, "credentials.delete", json!({"ids":["a"]})).await.unwrap();
+        assert!(read().get("a").is_none());
+        call(&state, "accounts.remove", json!({"ids":["a"]})).await.unwrap();
+        assert_eq!(read()["a"], a.to_string(), "old UI order resurrects A");
+        assert_eq!(read()["b"], b.to_string());
+        assert_eq!(on_disk(&dir), json!([{"id":"b","email":"b@x.test"}]));
+
+        std::fs::write(&path, json!([a.clone(), b.clone()]).to_string()).unwrap();
+        std::fs::write(&creds, initial.to_string()).unwrap();
+        call(&state, "accounts.remove", json!({"ids":["a"]})).await.unwrap();
+        assert_eq!(read()["a"], a.to_string(), "metadata removal preserves before deleting");
+        call(&state, "credentials.delete", json!({"ids":["a"]})).await.unwrap();
+        assert!(read().get("a").is_none(), "new UI order leaves A absent");
+        assert_eq!(read()["b"], b.to_string());
+        assert_eq!(on_disk(&dir), json!([{"id":"b","email":"b@x.test"}]));
+        // Both awaited credential routes have drained before TestScope restores env.
+    }
+
+    #[tokio::test]
     async fn put_list_remove_round_trip_and_keep_the_file_format() {
         let (dir, state) = rig();
         std::fs::write(
