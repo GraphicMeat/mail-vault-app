@@ -518,9 +518,12 @@ fn backup_access_fresh_shell_daemon_reconnect() {
             }
         }
         fn resolve(&self) -> AttachResolution {
-            self.resolutions.fetch_add(1,SeqCst);
+            self.resolutions.fetch_add(1, SeqCst);
             if self.unavailable.load(SeqCst) {
-                return AttachResolution{stamp:wire::slot_stamp(self.app).unwrap(),result:Resolution::Unavailable};
+                return AttachResolution {
+                    stamp: wire::slot_stamp(self.app).unwrap(),
+                    result: Resolution::Unavailable,
+                };
             }
             let r = resolve_native(self.app);
             assert!(
@@ -567,31 +570,52 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     );
     // A configured disconnected drive yields no authority. Follow only actual
     // socket events through the same production hook, with a finite test cap.
-    let unavailable_channel=owner(&endpoint,&token,"shell-unavailable");
-    *held.session.lock().unwrap()=Some("shell-unavailable".into());
-    reconcile(&held,&native,"shell-unavailable");
-    let mut quiet_since=Instant::now();let feedback_deadline=Instant::now()+Duration::from_secs(2);
+    let unavailable_channel = owner(&endpoint, &token, "shell-unavailable");
+    *held.session.lock().unwrap() = Some("shell-unavailable".into());
+    reconcile(&held, &native, "shell-unavailable");
+    let mut quiet_since = Instant::now();
+    let feedback_deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        let events=unavailable_channel.access_events.swap(0,SeqCst);
-        if events>0 {
-            if native.resolutions.load(SeqCst)>=8 {break;}
-            reconcile(&held,&native,"shell-unavailable");quiet_since=Instant::now();
+        let events = unavailable_channel.access_events.swap(0, SeqCst);
+        if events > 0 {
+            if native.resolutions.load(SeqCst) >= 8 {
+                break;
+            }
+            reconcile(&held, &native, "shell-unavailable");
+            quiet_since = Instant::now();
         }
-        if quiet_since.elapsed()>=Duration::from_millis(200) || Instant::now()>=feedback_deadline {break;}
+        if quiet_since.elapsed() >= Duration::from_millis(200)
+            || Instant::now() >= feedback_deadline
+        {
+            break;
+        }
         std::thread::sleep(Duration::from_millis(10));
     }
-    let unavailable_status=rpc("backup.schedule.status",json!({}));
-    let unavailable_attempts=native.resolutions.load(SeqCst);
-    let unavailable_receipts=unavailable_status["accessReceipts"].as_array().unwrap().len();
-    let unavailable_bounded=unavailable_attempts<=3 && unavailable_receipts<=3;
-    let unchanged_intent=unavailable_status["pendingAccess"].as_array().is_some_and(|items|items.iter().any(|i|i["runId"]==first["runId"] && i["executionId"]==first["executionId"]));
-    let unavailable_no_work=mock.commands().is_empty() && unavailable_status["lastOutcomes"].as_array().unwrap().is_empty();
+    let unavailable_status = rpc("backup.schedule.status", json!({}));
+    let unavailable_attempts = native.resolutions.load(SeqCst);
+    let unavailable_receipts = unavailable_status["accessReceipts"]
+        .as_array()
+        .unwrap()
+        .len();
+    let unavailable_bounded = unavailable_attempts <= 3 && unavailable_receipts <= 3;
+    let unchanged_intent = unavailable_status["pendingAccess"]
+        .as_array()
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|i| i["runId"] == first["runId"] && i["executionId"] == first["executionId"])
+        });
+    let unavailable_no_work = mock.commands().is_empty()
+        && unavailable_status["lastOutcomes"]
+            .as_array()
+            .unwrap()
+            .is_empty();
     println!("NATIVE_UNAVAILABLE_FEEDBACK: resolutions={} receipts={} bounded={} sameIntent={} noProvider={}",unavailable_attempts,unavailable_receipts,unavailable_bounded,unchanged_intent,unavailable_no_work);
     drop(unavailable_channel);
     // A genuine availability change and new native connection must recover the
     // same pending intent, through the actual saved bookmark resolver.
-    native.unavailable.store(false,SeqCst);
-    *held.session.lock().unwrap()=Some("shell-a".into());
+    native.unavailable.store(false, SeqCst);
+    *held.session.lock().unwrap() = Some("shell-a".into());
     let mut channel = owner(&endpoint, &token, "shell-a");
     struct Paused<'a, 'b> {
         base: &'a Native<'b>,
@@ -843,7 +867,10 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     reconcile(&held, &native, "shell-c");
     assert_eq!(native.released.load(SeqCst), 3);
     drop(channel);
-    assert!(unavailable_bounded,"unchanged unavailable resolver sustained its own delivered-event feedback loop");
+    assert!(
+        unavailable_bounded,
+        "unchanged unavailable resolver sustained its own delivered-event feedback loop"
+    );
     assert!(unchanged_intent && unavailable_no_work);
     println!("NATIVE_ACCESS_CONNECTED: real resolver, pending/manual/attach with lost accepted ACK, live owner disconnect, joined drain, same-daemon replacement shell, fresh acquisition, persisted pending daemon replacement, byte-exact mirror, responsive ping+event channel during paused resolver, independent actual same-path consumer");
 }

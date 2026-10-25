@@ -7,8 +7,8 @@ use crate::{
 };
 use mailvault_core::{
     app_db::{self, db},
-    backup_schedule as policy,
     backup_access::Resolution as AccessResolution,
+    backup_schedule as policy,
     settings_doc::{SettingsDoc, SettingsError},
 };
 use rusqlite::OptionalExtension;
@@ -538,7 +538,11 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 let wake = match &request {
                     access::Request::Attach(a) => {
                         a.attempt.incarnation == state.backup_worker.access.incarnation
-                            && matches!(&a.resolution,AccessResolution::Authorized{..}|AccessResolution::NotConfigured)
+                            && matches!(
+                                &a.resolution,
+                                AccessResolution::Authorized { .. }
+                                    | AccessResolution::NotConfigured
+                            )
                     }
                     access::Request::Status(q) => {
                         q.fence_unstarted
