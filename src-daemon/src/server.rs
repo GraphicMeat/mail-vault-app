@@ -461,7 +461,8 @@ where
                 // Subscribe before answering: no event emitted after the client
                 // sees this response can be missed.
                 let rx = state.events.subscribe();
-                let _backup_owner = crate::backup_worker::channel_owner(&state,req.params["backupOwner"].as_str());
+                let _backup_owner =
+                    crate::backup_worker::channel_owner(&state, req.params["backupOwner"].as_str());
                 let mut buf = serde_json::to_vec(&RpcResponse::success(
                     req.id.unwrap_or(Value::Null),
                     serde_json::json!({"channel": true}),

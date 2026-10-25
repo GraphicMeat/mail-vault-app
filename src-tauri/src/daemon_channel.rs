@@ -99,7 +99,7 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 // app re-attaches through `abd_attach` once it is connected.
                 crate::abd::release_all(&app, "the daemon channel reconnected");
                 crate::bulk::reconcile_after_channel_change(&app);
-                crate::backup::access_connected(&app,owner.clone());
+                crate::backup::access_connected(&app, owner.clone());
                 // And the drive held for a cleanup run (Run All Now).
                 crate::cleanup::release_all(&app, "the daemon channel reconnected");
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
@@ -138,7 +138,7 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                     }
                 };
                 CONNECTED.store(false, SeqCst);
-                crate::backup::access_disconnected(&app,&owner);
+                crate::backup::access_disconnected(&app, &owner);
                 info!("daemon channel closed");
                 if connected_at.elapsed() >= MIN_LIVE_TO_RESET_BACKOFF {
                     backoff = None;
@@ -255,7 +255,10 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         // And a cleanup run's: its done event lets go.
                         let cleanup_event = (name == crate::cleanup::CLEANUP_RUN).then(|| payload.clone());
                         let lagged = name == "daemon-events-lagged";
-                        let backup_access = matches!(name.as_str(),"backup-access-needed"|"backup-access-release");
+                        let backup_access = matches!(
+                            name.as_str(),
+                            "backup-access-needed" | "backup-access-release"
+                        );
                         if name == "settings-changed" {
                             crate::follow_settings_log_level(&payload);
                         }
@@ -275,7 +278,9 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         if let Some(event) = cleanup_event {
                             crate::cleanup::release_after_event(app, &event);
                         }
-                        if backup_access || lagged {crate::backup::reconcile_native_access(app);}
+                        if backup_access || lagged {
+                            crate::backup::reconcile_native_access(app);
+                        }
                         if lagged {
                             crate::bulk::reconcile_after_channel_change(app);
                             crate::export_folder::release_all(app, "the daemon event stream lagged");

@@ -1,132 +1,285 @@
 use super::*;
 use std::sync::atomic::AtomicUsize;
-fn attempt(execution:&str,generation:&str)->Attempt {
-    Attempt{incarnation:"daemon-a".into(),run_id:"logical-run".into(),execution_id:execution.into(),owner_id:"shell-a".into(),acquisition_id:generation.into()}
+fn attempt(execution: &str, generation: &str) -> Attempt {
+    Attempt {
+        incarnation: "daemon-a".into(),
+        run_id: "logical-run".into(),
+        execution_id: execution.into(),
+        owner_id: "shell-a".into(),
+        acquisition_id: generation.into(),
+    }
 }
-fn holder()->NativeBackupAccess {
-    let held=NativeBackupAccess::default();*held.session.lock().unwrap()=Some("shell-a".into());held
+fn holder() -> NativeBackupAccess {
+    let held = NativeBackupAccess::default();
+    *held.session.lock().unwrap() = Some("shell-a".into());
+    held
 }
 struct Fake<'a> {
-    held:&'a NativeBackupAccess,
-    pending:Mutex<Vec<Value>>,
-    receipts:Mutex<HashMap<Attempt,(&'static str,bool)>>,
-    acquired:AtomicUsize,
-    released:Mutex<Vec<String>>,
-    attached:Mutex<Vec<Attempt>>,
+    held: &'a NativeBackupAccess,
+    pending: Mutex<Vec<Value>>,
+    receipts: Mutex<HashMap<Attempt, (&'static str, bool)>>,
+    acquired: AtomicUsize,
+    released: Mutex<Vec<String>>,
+    attached: Mutex<Vec<Attempt>>,
 }
 impl<'a> Fake<'a> {
-    fn new(held:&'a NativeBackupAccess)->Self {Self{held,pending:Mutex::new(vec![json!({"runId":"logical-run","executionId":"execution-a"})]),receipts:Mutex::default(),acquired:AtomicUsize::new(0),released:Mutex::default(),attached:Mutex::default()}}
-}
-impl Ports for Fake<'_> {
-    fn call(&self,method:&str,params:Value)->Result<Value,String> {
-        match method {
-            "backup.schedule.status"=>Ok(json!({"accessIncarnation":"daemon-a","pendingAccess":*self.pending.lock().unwrap()})),
-            "backup.attach_access"=>{
-                let a:Attach=serde_json::from_value(params).unwrap();
-                assert!(self.held.holds.lock().unwrap().contains_key(&a.attempt),"attach raced before native scope registration");
-                self.attached.lock().unwrap().push(a.attempt.clone());
-                self.receipts.lock().unwrap().insert(a.attempt,("running",false));
-                Err("reply timed out after acceptance".into())
-            },
-            "backup.access_status"=>{
-                let q:Query=serde_json::from_value(params).unwrap();
-                let (phase,safe)=self.receipts.lock().unwrap().get(&q.attempt).copied().unwrap_or(("foreign_incarnation",false));
-                Ok(json!({"attempt":q.attempt,"state":phase,"safeRelease":safe}))
-            },
-            _=>panic!("unexpected method"),
+    fn new(held: &'a NativeBackupAccess) -> Self {
+        Self {
+            held,
+            pending: Mutex::new(vec![
+                json!({"runId":"logical-run","executionId":"execution-a"}),
+            ]),
+            receipts: Mutex::default(),
+            acquired: AtomicUsize::new(0),
+            released: Mutex::default(),
+            attached: Mutex::default(),
         }
     }
-    fn resolve(&self)->AttachResolution {self.acquired.fetch_add(1,SeqCst);AttachResolution{stamp:Some("native-stamp".into()),result:Resolution::Authorized{root:"/shared-drive".into()}}}
-    fn release(&self,path:&str) {self.released.lock().unwrap().push(path.into());}
+}
+impl Ports for Fake<'_> {
+    fn call(&self, method: &str, params: Value) -> Result<Value, String> {
+        match method {
+            "backup.schedule.status" => Ok(
+                json!({"accessIncarnation":"daemon-a","pendingAccess":*self.pending.lock().unwrap()}),
+            ),
+            "backup.attach_access" => {
+                let a: Attach = serde_json::from_value(params).unwrap();
+                assert!(
+                    self.held.holds.lock().unwrap().contains_key(&a.attempt),
+                    "attach raced before native scope registration"
+                );
+                self.attached.lock().unwrap().push(a.attempt.clone());
+                self.receipts
+                    .lock()
+                    .unwrap()
+                    .insert(a.attempt, ("running", false));
+                Err("reply timed out after acceptance".into())
+            }
+            "backup.access_status" => {
+                let q: Query = serde_json::from_value(params).unwrap();
+                let (phase, safe) = self
+                    .receipts
+                    .lock()
+                    .unwrap()
+                    .get(&q.attempt)
+                    .copied()
+                    .unwrap_or(("foreign_incarnation", false));
+                Ok(json!({"attempt":q.attempt,"state":phase,"safeRelease":safe}))
+            }
+            _ => panic!("unexpected method"),
+        }
+    }
+    fn resolve(&self) -> AttachResolution {
+        self.acquired.fetch_add(1, SeqCst);
+        AttachResolution {
+            stamp: Some("native-stamp".into()),
+            result: Resolution::Authorized {
+                root: "/shared-drive".into(),
+            },
+        }
+    }
+    fn release(&self, path: &str) {
+        self.released.lock().unwrap().push(path.into());
+    }
 }
 #[test]
 fn backup_access_lost_ack_and_terminal_event_wait_for_exact_joined_receipt() {
-    let held=holder();let ports=Fake::new(&held);
-    reconcile(&held,&ports,"shell-a");
-    let a=ports.attached.lock().unwrap()[0].clone();
-    assert_eq!(held.holds.lock().unwrap().len(),1);
-    assert_eq!(ports.released.lock().unwrap().len(),0);
-    reconcile(&held,&ports,"shell-a"); // Same-daemon reconnect, still running.
-    assert_eq!(ports.acquired.load(SeqCst),1);
-    assert_eq!(ports.released.lock().unwrap().len(),0);
-    release_receipt(&held,&ports,&a,&json!({"attempt":a,"state":"stopping","safeRelease":false}));
-    assert_eq!(held.holds.lock().unwrap().len(),1);
+    let held = holder();
+    let ports = Fake::new(&held);
+    reconcile(&held, &ports, "shell-a");
+    let a = ports.attached.lock().unwrap()[0].clone();
+    assert_eq!(held.holds.lock().unwrap().len(), 1);
+    assert_eq!(ports.released.lock().unwrap().len(), 0);
+    reconcile(&held, &ports, "shell-a"); // Same-daemon reconnect, still running.
+    assert_eq!(ports.acquired.load(SeqCst), 1);
+    assert_eq!(ports.released.lock().unwrap().len(), 0);
+    release_receipt(
+        &held,
+        &ports,
+        &a,
+        &json!({"attempt":a,"state":"stopping","safeRelease":false}),
+    );
+    assert_eq!(held.holds.lock().unwrap().len(), 1);
     ports.pending.lock().unwrap().clear();
-    ports.receipts.lock().unwrap().insert(a.clone(),("drained",true));
-    reconcile(&held,&ports,"shell-a");
-    reconcile(&held,&ports,"shell-a");
-    assert_eq!(ports.released.lock().unwrap().len(),1);
+    ports
+        .receipts
+        .lock()
+        .unwrap()
+        .insert(a.clone(), ("drained", true));
+    reconcile(&held, &ports, "shell-a");
+    reconcile(&held, &ports, "shell-a");
+    assert_eq!(ports.released.lock().unwrap().len(), 1);
     assert!(held.holds.lock().unwrap().is_empty());
 }
 #[test]
 fn backup_access_same_path_acquisitions_and_same_run_retry_are_independent() {
-    let held=holder();let ports=Fake::new(&held);
-    ports.pending.lock().unwrap().push(json!({"runId":"other-run","executionId":"execution-b"}));
-    reconcile(&held,&ports,"shell-a");
-    let attached=ports.attached.lock().unwrap().clone();
-    assert_eq!(attached.len(),2);assert_eq!(ports.acquired.load(SeqCst),2);
+    let held = holder();
+    let ports = Fake::new(&held);
+    ports
+        .pending
+        .lock()
+        .unwrap()
+        .push(json!({"runId":"other-run","executionId":"execution-b"}));
+    reconcile(&held, &ports, "shell-a");
+    let attached = ports.attached.lock().unwrap().clone();
+    assert_eq!(attached.len(), 2);
+    assert_eq!(ports.acquired.load(SeqCst), 2);
     ports.pending.lock().unwrap().clear();
-    ports.receipts.lock().unwrap().insert(attached[0].clone(),("drained",true));
-    reconcile(&held,&ports,"shell-a");
-    assert_eq!(ports.released.lock().unwrap().len(),1);assert_eq!(held.holds.lock().unwrap().len(),1);
-    ports.pending.lock().unwrap().push(json!({"runId":"logical-run","executionId":"execution-retry"}));
-    reconcile(&held,&ports,"shell-a");
-    assert_eq!(ports.acquired.load(SeqCst),3);assert_eq!(held.holds.lock().unwrap().len(),2);
-    release_receipt(&held,&ports,&attached[0],&json!({"attempt":attached[0],"state":"drained","safeRelease":true}));
-    assert_eq!(ports.released.lock().unwrap().len(),1);
+    ports
+        .receipts
+        .lock()
+        .unwrap()
+        .insert(attached[0].clone(), ("drained", true));
+    reconcile(&held, &ports, "shell-a");
+    assert_eq!(ports.released.lock().unwrap().len(), 1);
+    assert_eq!(held.holds.lock().unwrap().len(), 1);
+    ports
+        .pending
+        .lock()
+        .unwrap()
+        .push(json!({"runId":"logical-run","executionId":"execution-retry"}));
+    reconcile(&held, &ports, "shell-a");
+    assert_eq!(ports.acquired.load(SeqCst), 3);
+    assert_eq!(held.holds.lock().unwrap().len(), 2);
+    release_receipt(
+        &held,
+        &ports,
+        &attached[0],
+        &json!({"attempt":attached[0],"state":"drained","safeRelease":true}),
+    );
+    assert_eq!(ports.released.lock().unwrap().len(), 1);
 }
 #[test]
 fn backup_access_old_status_reply_cannot_release_replacement_generation() {
-    let held=holder();let ports=Fake::new(&held);ports.pending.lock().unwrap().clear();
-    let old=attempt("execution-a","old");let fresh=attempt("execution-a","fresh");
-    held.holds.lock().unwrap().insert(old.clone(),"/shared-drive".into());
-    struct Race<'a>{base:&'a Fake<'a>,old:Attempt,fresh:Attempt}
+    let held = holder();
+    let ports = Fake::new(&held);
+    ports.pending.lock().unwrap().clear();
+    let old = attempt("execution-a", "old");
+    let fresh = attempt("execution-a", "fresh");
+    held.holds
+        .lock()
+        .unwrap()
+        .insert(old.clone(), "/shared-drive".into());
+    struct Race<'a> {
+        base: &'a Fake<'a>,
+        old: Attempt,
+        fresh: Attempt,
+    }
     impl Ports for Race<'_> {
-        fn call(&self,method:&str,params:Value)->Result<Value,String> {
-            if method=="backup.access_status" {
-                let old=self.base.held.holds.lock().unwrap().remove(&self.old).unwrap();self.base.release(&old);
-                self.base.held.holds.lock().unwrap().insert(self.fresh.clone(),"/shared-drive".into());
+        fn call(&self, method: &str, params: Value) -> Result<Value, String> {
+            if method == "backup.access_status" {
+                let old = self
+                    .base
+                    .held
+                    .holds
+                    .lock()
+                    .unwrap()
+                    .remove(&self.old)
+                    .unwrap();
+                self.base.release(&old);
+                self.base
+                    .held
+                    .holds
+                    .lock()
+                    .unwrap()
+                    .insert(self.fresh.clone(), "/shared-drive".into());
                 return Ok(json!({"attempt":self.old,"state":"drained","safeRelease":true}));
             }
-            self.base.call(method,params)
+            self.base.call(method, params)
         }
-        fn resolve(&self)->AttachResolution {self.base.resolve()}
-        fn release(&self,path:&str) {self.base.release(path)}
+        fn resolve(&self) -> AttachResolution {
+            self.base.resolve()
+        }
+        fn release(&self, path: &str) {
+            self.base.release(path)
+        }
     }
-    reconcile(&held,&Race{base:&ports,old:old.clone(),fresh:fresh.clone()},"shell-a");
-    assert!(held.holds.lock().unwrap().contains_key(&fresh));assert_eq!(ports.released.lock().unwrap().len(),1);
+    reconcile(
+        &held,
+        &Race {
+            base: &ports,
+            old: old.clone(),
+            fresh: fresh.clone(),
+        },
+        "shell-a",
+    );
+    assert!(held.holds.lock().unwrap().contains_key(&fresh));
+    assert_eq!(ports.released.lock().unwrap().len(), 1);
 }
 #[test]
 fn backup_access_replacement_shell_requires_fresh_acquisition_and_keeps_unknown_old_hold() {
-    let held=holder();let ports=Fake::new(&held);
-    let old=attempt("old-execution","old");held.holds.lock().unwrap().insert(old,"/shared-drive".into());
-    *held.session.lock().unwrap()=Some("shell-b".into());
-    reconcile(&held,&ports,"shell-a");assert_eq!(ports.acquired.load(SeqCst),0);
-    reconcile(&held,&ports,"shell-b");
-    assert_eq!(ports.attached.lock().unwrap()[0].owner_id,"shell-b");
-    assert_eq!(ports.acquired.load(SeqCst),1);assert_eq!(ports.released.lock().unwrap().len(),0);
-    assert_eq!(held.holds.lock().unwrap().len(),2);
+    let held = holder();
+    let ports = Fake::new(&held);
+    let old = attempt("old-execution", "old");
+    held.holds
+        .lock()
+        .unwrap()
+        .insert(old, "/shared-drive".into());
+    *held.session.lock().unwrap() = Some("shell-b".into());
+    reconcile(&held, &ports, "shell-a");
+    assert_eq!(ports.acquired.load(SeqCst), 0);
+    reconcile(&held, &ports, "shell-b");
+    assert_eq!(ports.attached.lock().unwrap()[0].owner_id, "shell-b");
+    assert_eq!(ports.acquired.load(SeqCst), 1);
+    assert_eq!(ports.released.lock().unwrap().len(), 0);
+    assert_eq!(held.holds.lock().unwrap().len(), 2);
 }
 #[test]
 fn backup_access_slot_change_during_resolution_never_relabels_old_root() {
-    let dir=tempfile::tempdir().unwrap();
-    let save=|at| mailvault_core::app_db::with(dir.path(),|c|mailvault_core::app_db::locations::save_meta(c,"external-backup","/chosen","native",at,false)).unwrap();
-    save(1);let old=wire::slot_stamp(dir.path()).unwrap().unwrap();
-    let acquired=AtomicUsize::new(0);let released=Mutex::new(Vec::<String>::new());
-    let resolved=resolve_saved(||wire::slot_stamp(dir.path()),|| {
-        if acquired.fetch_add(1,SeqCst)==0 {save(2);Ok("/old-root".into())} else {Ok("/fresh-root".into())}
-    },|path|released.lock().unwrap().push(path.into()));
+    let dir = tempfile::tempdir().unwrap();
+    let save = |at| {
+        mailvault_core::app_db::with(dir.path(), |c| {
+            mailvault_core::app_db::locations::save_meta(
+                c,
+                "external-backup",
+                "/chosen",
+                "native",
+                at,
+                false,
+            )
+        })
+        .unwrap()
+    };
+    save(1);
+    let old = wire::slot_stamp(dir.path()).unwrap().unwrap();
+    let acquired = AtomicUsize::new(0);
+    let released = Mutex::new(Vec::<String>::new());
+    let resolved = resolve_saved(
+        || wire::slot_stamp(dir.path()),
+        || {
+            if acquired.fetch_add(1, SeqCst) == 0 {
+                save(2);
+                Ok("/old-root".into())
+            } else {
+                Ok("/fresh-root".into())
+            }
+        },
+        |path| released.lock().unwrap().push(path.into()),
+    );
     assert!(matches!(resolved.result,Resolution::Authorized{root} if root=="/fresh-root"));
-    assert_ne!(resolved.stamp.as_deref(),Some(old.as_str()));
-    assert_eq!(*released.lock().unwrap(),vec!["/old-root"]);assert_eq!(acquired.load(SeqCst),2);
+    assert_ne!(resolved.stamp.as_deref(), Some(old.as_str()));
+    assert_eq!(*released.lock().unwrap(), vec!["/old-root"]);
+    assert_eq!(acquired.load(SeqCst), 2);
 }
 #[test]
 fn backup_access_unknown_slot_is_not_absent_and_never_resolves_a_raw_path() {
-    let called=AtomicUsize::new(0);
-    let result=resolve_saved(||Err("unreadable".into()),||{called.fetch_add(1,SeqCst);Ok("/caller-path".into())},|_|panic!("nothing acquired"));
-    assert!(matches!(result.result,Resolution::Unknown));assert_eq!(called.load(SeqCst),0);
-    let result=resolve_saved(||Ok(None),||panic!("known absent needs no scope"),|_|panic!("nothing acquired"));
-    assert!(matches!(result.result,Resolution::NotConfigured));
+    let called = AtomicUsize::new(0);
+    let result = resolve_saved(
+        || Err("unreadable".into()),
+        || {
+            called.fetch_add(1, SeqCst);
+            Ok("/caller-path".into())
+        },
+        |_| panic!("nothing acquired"),
+    );
+    assert!(matches!(result.result, Resolution::Unknown));
+    assert_eq!(called.load(SeqCst), 0);
+    let result = resolve_saved(
+        || Ok(None),
+        || panic!("known absent needs no scope"),
+        |_| panic!("nothing acquired"),
+    );
+    assert!(matches!(result.result, Resolution::NotConfigured));
 }
 
 /// Actual shell resolver and direct native RPC against a freshly built daemon.
@@ -137,128 +290,480 @@ fn backup_access_unknown_slot_is_not_absent_and_never_resolves_a_raw_path() {
 #[test]
 #[ignore = "requires a freshly built daemon, selected explicitly by the mini gate"]
 fn backup_access_fresh_shell_daemon_reconnect() {
-    use std::{io::{BufRead,BufReader,Write},process::{Child,Command,Stdio},time::{Duration,Instant},os::unix::net::UnixStream};
-    use mailvault_core::{paths,portable,settings_doc::SettingsDoc};
-    struct Daemon {child:Option<Child>,ipc:std::path::PathBuf}
-    impl Drop for Daemon {fn drop(&mut self) {if let Some(mut c)=self.child.take(){let _=c.kill();let _=c.wait();}let _=std::fs::remove_dir_all(&self.ipc);}}
-    let binary=std::env::var_os("MAILVAULT_NATIVE_BACKUP_DAEMON").expect("fresh daemon binary required");
-    let dir=tempfile::Builder::new().prefix("mv-native-access-").tempdir().unwrap();
-    let root=dir.path();std::fs::write(root.join("portable.json"),br#"{"version":1}"#).unwrap();
-    let app=paths::portable_data_dir(root);std::fs::create_dir_all(&app).unwrap();
-    let ipc=paths::portable_ipc_dir(&paths::home_dir().unwrap(),root);
-    let endpoint=mailvault_core::transport::endpoint(&ipc);
+    use mailvault_core::{paths, portable, settings_doc::SettingsDoc};
+    use std::{
+        io::{BufRead, BufReader, Write},
+        os::unix::net::UnixStream,
+        process::{Child, Command, Stdio},
+        time::{Duration, Instant},
+    };
+    struct Daemon {
+        child: Option<Child>,
+        ipc: std::path::PathBuf,
+    }
+    impl Drop for Daemon {
+        fn drop(&mut self) {
+            if let Some(mut c) = self.child.take() {
+                let _ = c.kill();
+                let _ = c.wait();
+            }
+            let _ = std::fs::remove_dir_all(&self.ipc);
+        }
+    }
+    let binary =
+        std::env::var_os("MAILVAULT_NATIVE_BACKUP_DAEMON").expect("fresh daemon binary required");
+    let dir = tempfile::Builder::new()
+        .prefix("mv-native-access-")
+        .tempdir()
+        .unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("portable.json"), br#"{"version":1}"#).unwrap();
+    let app = paths::portable_data_dir(root);
+    std::fs::create_dir_all(&app).unwrap();
+    let ipc = paths::portable_ipc_dir(&paths::home_dir().unwrap(), root);
+    let endpoint = mailvault_core::transport::endpoint(&ipc);
     let raw=b"From: sender@test\r\nTo: native@test\r\nSubject: native handoff\r\nMessage-ID: <native-access@test>\r\nDate: Thu, 01 Jan 2026 12:00:00 +0000\r\n\r\nNative mirror body.\r\n";
-    let mut mailbox=mock_imap::Mailbox::new("INBOX");
-    mailbox.messages.push(mock_imap::Message{uid:1,raw:raw.to_vec(),..Default::default()});mailbox.uid_next=2;
-    let mock=mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(mailbox).fault(mock_imap::Trigger::with("FETCH","BODY.PEEK[]"),mock_imap::Action::Delay(Duration::from_secs(3))));
-    let account=json!({"id":"native","email":"native@test","password":"fixture-password","imapHost":"127.0.0.1","imapPort":mock.port(),"imapSecure":false,"authType":"password"});
-    let mut secrets=portable::Secrets::default();secrets.credentials.insert("native".into(),account.to_string());
-    portable::write_sealed(&app.join(portable::SEALED_FILE),"native fixture passphrase",&secrets,mailvault_core::transfer::crypto::Params{m_kib:1024,t:1,p:1}).unwrap();
-    std::fs::write(app.join("accounts.json"),br#"[{"id":"native","email":"native@test"}]"#).unwrap();
-    SettingsDoc::shared(&app).replace(&json!({"mailvault-settings":{"version":3,"state":{"backupState":{},"backupHistory":{}}}}),None).unwrap();
-    let mirror=root.join("mirror");std::fs::create_dir(&mirror).unwrap();
-    external_location::save_external_location(&app,external_location::SLOT_EXTERNAL_BACKUP,mirror.to_str().unwrap()).unwrap();
-    let spawn=||Command::new(&binary).env(paths::PORTABLE_ENV,root).env("MAILVAULT_IMAP_PLAINTEXT","1").stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
-    let mut daemon=Daemon{child:Some(spawn()),ipc:ipc.clone()};
-    fn until(mut check:impl FnMut()->bool,label:&str) {
-        let deadline=Instant::now()+Duration::from_secs(30);
-        while !check() {assert!(Instant::now()<deadline,"native integration timed out: {label}");std::thread::sleep(Duration::from_millis(10));}
-    }
-    let mut token=String::new();
-    until(|| {token=std::fs::read_to_string(ipc.join("mv.token")).unwrap_or_default();!token.is_empty() && mailvault_core::daemon_ipc::call(&endpoint,&token,"ping",json!({}),Duration::from_secs(1)).is_ok()},"daemon ready");
-    let rpc=|method:&str,params:Value| mailvault_core::daemon_ipc::call(&endpoint,&token,method,params,Duration::from_secs(30)).expect("native RPC");
-    rpc("portable.unlock",json!({"passphrase":"native fixture passphrase"}));
-    struct Channel {stream:UnixStream,reader:Option<std::thread::JoinHandle<()>>,pings:std::sync::Arc<AtomicUsize>}
-    impl Drop for Channel {fn drop(&mut self){let _=self.stream.shutdown(std::net::Shutdown::Both);if let Some(reader)=self.reader.take(){let _=reader.join();}}}
-    fn owner(endpoint:&std::path::Path,token:&str,id:&str)->Channel {
-        let mut stream=UnixStream::connect(endpoint).unwrap();stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-        let mut reader=BufReader::new(stream.try_clone().unwrap());
-        writeln!(stream,"{}",json!({"token":token.trim()})).unwrap();let mut line=String::new();reader.read_line(&mut line).unwrap();
-        writeln!(stream,"{}",json!({"jsonrpc":"2.0","method":"channel.open","params":{"backupOwner":id},"id":1})).unwrap();line.clear();reader.read_line(&mut line).unwrap();
-        let ack:Value=serde_json::from_str(&line).unwrap();assert_eq!(ack["result"]["channel"],true);
-        let pings=std::sync::Arc::new(AtomicUsize::new(0));let observed=pings.clone();
-        let task=std::thread::spawn(move|| {let mut line=String::new();loop {line.clear();match reader.read_line(&mut line) {Ok(0)=>break,Ok(_)=>{if serde_json::from_str::<Value>(&line).is_ok_and(|v|v["params"]["name"]=="daemon-ping") {observed.fetch_add(1,SeqCst);}},Err(e) if matches!(e.kind(),std::io::ErrorKind::WouldBlock|std::io::ErrorKind::TimedOut)=>{},Err(_)=>break}}});
-        Channel{stream,reader:Some(task),pings}
-    }
-    struct Native<'a> {app:&'a std::path::Path,endpoint:&'a std::path::Path,token:&'a str,acquired:AtomicUsize,released:AtomicUsize}
-    impl Ports for Native<'_> {
-        fn call(&self,m:&str,p:Value)->Result<Value,String> {mailvault_core::daemon_ipc::call(self.endpoint,self.token,m,p,Duration::from_secs(30)).map_err(|_|"native RPC unavailable".into())}
-        fn resolve(&self)->AttachResolution {let r=resolve_native(self.app);if matches!(r.result,Resolution::Authorized{..}) {self.acquired.fetch_add(1,SeqCst);}r}
-        fn release(&self,path:&str) {self.released.fetch_add(1,SeqCst);release_backup_path(path);}
-    }
-    let native=Native{app:&app,endpoint:&endpoint,token:&token,acquired:AtomicUsize::new(0),released:AtomicUsize::new(0)};
-    let held=holder();
-    let first=rpc("backup.run_now",json!({"accountId":"native","requestId":"native-manual"}));
-    until(||rpc("backup.schedule.status",json!({}))["pendingAccess"].as_array().is_some_and(|a|!a.is_empty()),"pending without shell");
-    assert!(mock.commands().is_empty(),"configured backup started without an authorizing shell");
-    let mut channel=owner(&endpoint,&token,"shell-a");
-    struct Paused<'a,'b> {base:&'a Native<'b>,entered:Mutex<Option<std::sync::mpsc::Sender<()>>>,release:Mutex<std::sync::mpsc::Receiver<()>>}
-    impl Ports for Paused<'_,'_> {
-        fn call(&self,m:&str,p:Value)->Result<Value,String>{self.base.call(m,p)}
-        fn resolve(&self)->AttachResolution {self.entered.lock().unwrap().take().unwrap().send(()).unwrap();self.release.lock().unwrap().recv().unwrap();self.base.resolve()}
-        fn release(&self,path:&str){self.base.release(path)}
-    }
-    let (entered_tx,entered_rx)=std::sync::mpsc::channel();let (release_tx,release_rx)=std::sync::mpsc::channel();
-    let paused=Paused{base:&native,entered:Mutex::new(Some(entered_tx)),release:Mutex::new(release_rx)};
-    std::thread::scope(|scope| {
-        let task=scope.spawn(||reconcile(&held,&paused,"shell-a"));entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
-        let started=Instant::now();let ping=native.call("ping",json!({}));let responsive=started.elapsed()<Duration::from_secs(1);
-        writeln!(channel.stream,"{}",json!({"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"paused-native-resolver"}})).unwrap();
-        let deadline=Instant::now()+Duration::from_secs(1);while channel.pings.load(SeqCst)==0 && Instant::now()<deadline {std::thread::sleep(Duration::from_millis(10));}
-        let pumped=channel.pings.load(SeqCst)>0;
-        release_tx.send(()).unwrap();task.join().unwrap();
-        assert!(ping.is_ok() && responsive,"pending native resolver blocked unrelated RPC");assert!(pumped,"pending native resolver blocked native event channel");
+    let mut mailbox = mock_imap::Mailbox::new("INBOX");
+    mailbox.messages.push(mock_imap::Message {
+        uid: 1,
+        raw: raw.to_vec(),
+        ..Default::default()
     });
-    until(||mock.commands().iter().any(|c|c.to_uppercase().contains("BODY.PEEK[]")),"actual body fetch entered");
-    let old=held.holds.lock().unwrap().keys().next().unwrap().clone();
-    let started=Instant::now();rpc("ping",json!({}));assert!(started.elapsed()<Duration::from_secs(1),"paused body blocked unrelated RPC");
-    assert_eq!(rpc("backup.access_status",serde_json::to_value(Query{attempt:old.clone(),fence_unstarted:true}).unwrap())["safeRelease"],false);
+    mailbox.uid_next = 2;
+    let mock = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(mailbox).fault(
+        mock_imap::Trigger::with("FETCH", "BODY.PEEK[]"),
+        mock_imap::Action::Delay(Duration::from_secs(3)),
+    ));
+    let account = json!({"id":"native","email":"native@test","password":"fixture-password","imapHost":"127.0.0.1","imapPort":mock.port(),"imapSecure":false,"authType":"password"});
+    let mut secrets = portable::Secrets::default();
+    secrets
+        .credentials
+        .insert("native".into(), account.to_string());
+    portable::write_sealed(
+        &app.join(portable::SEALED_FILE),
+        "native fixture passphrase",
+        &secrets,
+        mailvault_core::transfer::crypto::Params {
+            m_kib: 1024,
+            t: 1,
+            p: 1,
+        },
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("accounts.json"),
+        br#"[{"id":"native","email":"native@test"}]"#,
+    )
+    .unwrap();
+    SettingsDoc::shared(&app).replace(&json!({"mailvault-settings":{"version":3,"state":{"backupState":{},"backupHistory":{}}}}),None).unwrap();
+    let mirror = root.join("mirror");
+    std::fs::create_dir(&mirror).unwrap();
+    external_location::save_external_location(
+        &app,
+        external_location::SLOT_EXTERNAL_BACKUP,
+        mirror.to_str().unwrap(),
+    )
+    .unwrap();
+    let spawn = || {
+        Command::new(&binary)
+            .env(paths::PORTABLE_ENV, root)
+            .env("MAILVAULT_IMAP_PLAINTEXT", "1")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap()
+    };
+    let mut daemon = Daemon {
+        child: Some(spawn()),
+        ipc: ipc.clone(),
+    };
+    fn until(mut check: impl FnMut() -> bool, label: &str) {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !check() {
+            assert!(
+                Instant::now() < deadline,
+                "native integration timed out: {label}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    let mut token = String::new();
+    until(
+        || {
+            token = std::fs::read_to_string(ipc.join("mv.token")).unwrap_or_default();
+            !token.is_empty()
+                && mailvault_core::daemon_ipc::call(
+                    &endpoint,
+                    &token,
+                    "ping",
+                    json!({}),
+                    Duration::from_secs(1),
+                )
+                .is_ok()
+        },
+        "daemon ready",
+    );
+    let rpc = |method: &str, params: Value| {
+        mailvault_core::daemon_ipc::call(&endpoint, &token, method, params, Duration::from_secs(30))
+            .expect("native RPC")
+    };
+    rpc(
+        "portable.unlock",
+        json!({"passphrase":"native fixture passphrase"}),
+    );
+    struct Channel {
+        stream: UnixStream,
+        reader: Option<std::thread::JoinHandle<()>>,
+        pings: std::sync::Arc<AtomicUsize>,
+    }
+    impl Drop for Channel {
+        fn drop(&mut self) {
+            let _ = self.stream.shutdown(std::net::Shutdown::Both);
+            if let Some(reader) = self.reader.take() {
+                let _ = reader.join();
+            }
+        }
+    }
+    fn owner(endpoint: &std::path::Path, token: &str, id: &str) -> Channel {
+        let mut stream = UnixStream::connect(endpoint).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        writeln!(stream, "{}", json!({"token":token.trim()})).unwrap();
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        writeln!(
+            stream,
+            "{}",
+            json!({"jsonrpc":"2.0","method":"channel.open","params":{"backupOwner":id},"id":1})
+        )
+        .unwrap();
+        line.clear();
+        reader.read_line(&mut line).unwrap();
+        let ack: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(ack["result"]["channel"], true);
+        let pings = std::sync::Arc::new(AtomicUsize::new(0));
+        let observed = pings.clone();
+        let task = std::thread::spawn(move || {
+            let mut line = String::new();
+            loop {
+                line.clear();
+                match reader.read_line(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        if serde_json::from_str::<Value>(&line)
+                            .is_ok_and(|v| v["params"]["name"] == "daemon-ping")
+                        {
+                            observed.fetch_add(1, SeqCst);
+                        }
+                    }
+                    Err(e)
+                        if matches!(
+                            e.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) => {}
+                    Err(_) => break,
+                }
+            }
+        });
+        Channel {
+            stream,
+            reader: Some(task),
+            pings,
+        }
+    }
+    struct Native<'a> {
+        app: &'a std::path::Path,
+        endpoint: &'a std::path::Path,
+        token: &'a str,
+        acquired: AtomicUsize,
+        released: AtomicUsize,
+    }
+    impl Ports for Native<'_> {
+        fn call(&self, m: &str, p: Value) -> Result<Value, String> {
+            mailvault_core::daemon_ipc::call(
+                self.endpoint,
+                self.token,
+                m,
+                p,
+                Duration::from_secs(30),
+            )
+            .map_err(|_| "native RPC unavailable".into())
+        }
+        fn resolve(&self) -> AttachResolution {
+            let r = resolve_native(self.app);
+            if matches!(r.result, Resolution::Authorized { .. }) {
+                self.acquired.fetch_add(1, SeqCst);
+            }
+            r
+        }
+        fn release(&self, path: &str) {
+            self.released.fetch_add(1, SeqCst);
+            release_backup_path(path);
+        }
+    }
+    let native = Native {
+        app: &app,
+        endpoint: &endpoint,
+        token: &token,
+        acquired: AtomicUsize::new(0),
+        released: AtomicUsize::new(0),
+    };
+    let held = holder();
+    let first = rpc(
+        "backup.run_now",
+        json!({"accountId":"native","requestId":"native-manual"}),
+    );
+    until(
+        || {
+            rpc("backup.schedule.status", json!({}))["pendingAccess"]
+                .as_array()
+                .is_some_and(|a| !a.is_empty())
+        },
+        "pending without shell",
+    );
+    assert!(
+        mock.commands().is_empty(),
+        "configured backup started without an authorizing shell"
+    );
+    let mut channel = owner(&endpoint, &token, "shell-a");
+    struct Paused<'a, 'b> {
+        base: &'a Native<'b>,
+        entered: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+    impl Ports for Paused<'_, '_> {
+        fn call(&self, m: &str, p: Value) -> Result<Value, String> {
+            self.base.call(m, p)
+        }
+        fn resolve(&self) -> AttachResolution {
+            self.entered
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap()
+                .send(())
+                .unwrap();
+            self.release.lock().unwrap().recv().unwrap();
+            self.base.resolve()
+        }
+        fn release(&self, path: &str) {
+            self.base.release(path)
+        }
+    }
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let paused = Paused {
+        base: &native,
+        entered: Mutex::new(Some(entered_tx)),
+        release: Mutex::new(release_rx),
+    };
+    std::thread::scope(|scope| {
+        let task = scope.spawn(|| reconcile(&held, &paused, "shell-a"));
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let started = Instant::now();
+        let ping = native.call("ping", json!({}));
+        let responsive = started.elapsed() < Duration::from_secs(1);
+        writeln!(channel.stream,"{}",json!({"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"paused-native-resolver"}})).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while channel.pings.load(SeqCst) == 0 && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let pumped = channel.pings.load(SeqCst) > 0;
+        release_tx.send(()).unwrap();
+        task.join().unwrap();
+        assert!(
+            ping.is_ok() && responsive,
+            "pending native resolver blocked unrelated RPC"
+        );
+        assert!(
+            pumped,
+            "pending native resolver blocked native event channel"
+        );
+    });
+    until(
+        || {
+            mock.commands()
+                .iter()
+                .any(|c| c.to_uppercase().contains("BODY.PEEK[]"))
+        },
+        "actual body fetch entered",
+    );
+    let old = held.holds.lock().unwrap().keys().next().unwrap().clone();
+    let started = Instant::now();
+    rpc("ping", json!({}));
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "paused body blocked unrelated RPC"
+    );
+    assert_eq!(
+        rpc(
+            "backup.access_status",
+            serde_json::to_value(Query {
+                attempt: old.clone(),
+                fence_unstarted: true
+            })
+            .unwrap()
+        )["safeRelease"],
+        false
+    );
     // An unrelated consumer acquires the very same saved native location.
     // Its one release cannot consume the scheduler's independent acquisition.
-    let other=resolve_native(&app);let Resolution::Authorized{root:other_root}=other.result else {panic!("second actual native acquisition unavailable");};
-    assert_eq!(std::path::Path::new(&other_root),mirror.as_path());release_backup_path(&other_root);
-    assert_eq!(held.holds.lock().unwrap().len(),1);
+    let other = resolve_native(&app);
+    let Resolution::Authorized { root: other_root } = other.result else {
+        panic!("second actual native acquisition unavailable");
+    };
+    assert_eq!(std::path::Path::new(&other_root), mirror.as_path());
+    release_backup_path(&other_root);
+    assert_eq!(held.holds.lock().unwrap().len(), 1);
     // Lose the actual authorizing channel while the real provider is paused.
     drop(channel);
-    let channel=owner(&endpoint,&token,"shell-b");*held.session.lock().unwrap()=Some("shell-b".into());
-    reconcile(&held,&native,"shell-b");assert_eq!(native.released.load(SeqCst),0);
-    until(||rpc("backup.schedule.status",json!({}))["pendingAccess"].as_array().is_some_and(|a|a.iter().any(|i|i["executionId"]!=first["executionId"])),"old provider joined and fresh execution pending");
-    reconcile(&held,&native,"shell-b");assert_eq!(native.acquired.load(SeqCst),2);assert_eq!(native.released.load(SeqCst),1);
-    until(||rpc("backup.schedule.status",json!({}))["requests"]["native-manual"]["status"]=="success","fresh authorized mirror completes");
-    reconcile(&held,&native,"shell-b");assert_eq!(native.released.load(SeqCst),2);assert!(held.holds.lock().unwrap().is_empty());
-    let cur=mailvault_core::maildir::mirror_cur(&mirror,"native@test","INBOX").unwrap();
-    let files=std::fs::read_dir(cur).unwrap().filter_map(Result::ok).filter(|e|e.path().extension().is_some_and(|s|s=="eml")).collect::<Vec<_>>();
-    assert_eq!(files.len(),1);assert_eq!(std::fs::read(files[0].path()).unwrap(),raw);
+    let channel = owner(&endpoint, &token, "shell-b");
+    *held.session.lock().unwrap() = Some("shell-b".into());
+    reconcile(&held, &native, "shell-b");
+    assert_eq!(native.released.load(SeqCst), 0);
+    until(
+        || {
+            rpc("backup.schedule.status", json!({}))["pendingAccess"]
+                .as_array()
+                .is_some_and(|a| a.iter().any(|i| i["executionId"] != first["executionId"]))
+        },
+        "old provider joined and fresh execution pending",
+    );
+    reconcile(&held, &native, "shell-b");
+    assert_eq!(native.acquired.load(SeqCst), 2);
+    assert_eq!(native.released.load(SeqCst), 1);
+    until(
+        || {
+            rpc("backup.schedule.status", json!({}))["requests"]["native-manual"]["status"]
+                == "success"
+        },
+        "fresh authorized mirror completes",
+    );
+    reconcile(&held, &native, "shell-b");
+    assert_eq!(native.released.load(SeqCst), 2);
+    assert!(held.holds.lock().unwrap().is_empty());
+    let cur = mailvault_core::maildir::mirror_cur(&mirror, "native@test", "INBOX").unwrap();
+    let files = std::fs::read_dir(cur)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|s| s == "eml"))
+        .collect::<Vec<_>>();
+    assert_eq!(files.len(), 1);
+    assert_eq!(std::fs::read(files[0].path()).unwrap(), raw);
     // Persist a pending request, then replace the real daemon. Neither the
     // native session nor the resolved root survives as reusable authority.
-    drop(channel);*held.session.lock().unwrap()=None;
-    rpc("backup.run_now",json!({"accountId":"native","requestId":"daemon-restart"}));
-    until(||rpc("backup.schedule.status",json!({}))["pendingAccess"].as_array().is_some_and(|a|!a.is_empty()),"pending intent before daemon replacement");
-    let mut child=daemon.child.take().unwrap();child.kill().unwrap();child.wait().unwrap();
-    daemon.child=Some(spawn());
-    until(||mailvault_core::daemon_ipc::call(&endpoint,&token,"ping",json!({}),Duration::from_secs(1)).is_ok(),"replacement daemon ready");
-    rpc("portable.unlock",json!({"passphrase":"native fixture passphrase"}));
-    assert_eq!(rpc("backup.access_status",serde_json::to_value(Query{attempt:old,fence_unstarted:true}).unwrap())["safeRelease"],false);
-    let channel=owner(&endpoint,&token,"shell-c");*held.session.lock().unwrap()=Some("shell-c".into());
-    until(||rpc("backup.schedule.status",json!({}))["pendingAccess"].as_array().is_some_and(|a|!a.is_empty()),"recovered pending intent");
-    reconcile(&held,&native,"shell-c");assert_eq!(native.acquired.load(SeqCst),3);
-    until(||rpc("backup.schedule.status",json!({}))["requests"]["daemon-restart"]["status"]=="success","replacement daemon requires fresh native scope");
-    reconcile(&held,&native,"shell-c");assert_eq!(native.released.load(SeqCst),3);
+    drop(channel);
+    *held.session.lock().unwrap() = None;
+    rpc(
+        "backup.run_now",
+        json!({"accountId":"native","requestId":"daemon-restart"}),
+    );
+    until(
+        || {
+            rpc("backup.schedule.status", json!({}))["pendingAccess"]
+                .as_array()
+                .is_some_and(|a| !a.is_empty())
+        },
+        "pending intent before daemon replacement",
+    );
+    let mut child = daemon.child.take().unwrap();
+    child.kill().unwrap();
+    child.wait().unwrap();
+    daemon.child = Some(spawn());
+    until(
+        || {
+            mailvault_core::daemon_ipc::call(
+                &endpoint,
+                &token,
+                "ping",
+                json!({}),
+                Duration::from_secs(1),
+            )
+            .is_ok()
+        },
+        "replacement daemon ready",
+    );
+    rpc(
+        "portable.unlock",
+        json!({"passphrase":"native fixture passphrase"}),
+    );
+    assert_eq!(
+        rpc(
+            "backup.access_status",
+            serde_json::to_value(Query {
+                attempt: old,
+                fence_unstarted: true
+            })
+            .unwrap()
+        )["safeRelease"],
+        false
+    );
+    let channel = owner(&endpoint, &token, "shell-c");
+    *held.session.lock().unwrap() = Some("shell-c".into());
+    until(
+        || {
+            rpc("backup.schedule.status", json!({}))["pendingAccess"]
+                .as_array()
+                .is_some_and(|a| !a.is_empty())
+        },
+        "recovered pending intent",
+    );
+    reconcile(&held, &native, "shell-c");
+    assert_eq!(native.acquired.load(SeqCst), 3);
+    until(
+        || {
+            rpc("backup.schedule.status", json!({}))["requests"]["daemon-restart"]["status"]
+                == "success"
+        },
+        "replacement daemon requires fresh native scope",
+    );
+    reconcile(&held, &native, "shell-c");
+    assert_eq!(native.released.load(SeqCst), 3);
     drop(channel);
     println!("NATIVE_ACCESS_CONNECTED: real resolver, pending/manual/attach, live owner disconnect, joined drain, same-daemon replacement shell, fresh acquisition, persisted pending daemon replacement, byte-exact mirror, responsive ping+event channel during paused resolver, independent actual same-path consumer");
 }
 #[test]
 fn backup_access_bookmark_refresh_reacquires_against_renewed_record() {
-    let dir=tempfile::tempdir().unwrap();
-    mailvault_core::app_db::with(dir.path(),|c| {
-        mailvault_core::app_db::locations::save_meta(c,"external-backup","/same-selection","macos",1,false)?;
-        mailvault_core::app_db::locations::save_bookmark(c,"external-backup",b"old-bookmark")
-    }).unwrap();
-    let old=wire::slot_stamp(dir.path()).unwrap().unwrap();let count=AtomicUsize::new(0);let released=AtomicUsize::new(0);
-    let resolved=resolve_saved(||wire::slot_stamp(dir.path()),|| {
-        if count.fetch_add(1,SeqCst)==0 {mailvault_core::app_db::with(dir.path(),|c|mailvault_core::app_db::locations::save_bookmark(c,"external-backup",b"renewed-bookmark")).unwrap();}
-        Ok("/same-root".into())
-    },|path| {assert_eq!(path,"/same-root");released.fetch_add(1,SeqCst);});
+    let dir = tempfile::tempdir().unwrap();
+    mailvault_core::app_db::with(dir.path(), |c| {
+        mailvault_core::app_db::locations::save_meta(
+            c,
+            "external-backup",
+            "/same-selection",
+            "macos",
+            1,
+            false,
+        )?;
+        mailvault_core::app_db::locations::save_bookmark(c, "external-backup", b"old-bookmark")
+    })
+    .unwrap();
+    let old = wire::slot_stamp(dir.path()).unwrap().unwrap();
+    let count = AtomicUsize::new(0);
+    let released = AtomicUsize::new(0);
+    let resolved = resolve_saved(
+        || wire::slot_stamp(dir.path()),
+        || {
+            if count.fetch_add(1, SeqCst) == 0 {
+                mailvault_core::app_db::with(dir.path(), |c| {
+                    mailvault_core::app_db::locations::save_bookmark(
+                        c,
+                        "external-backup",
+                        b"renewed-bookmark",
+                    )
+                })
+                .unwrap();
+            }
+            Ok("/same-root".into())
+        },
+        |path| {
+            assert_eq!(path, "/same-root");
+            released.fetch_add(1, SeqCst);
+        },
+    );
     assert!(matches!(resolved.result,Resolution::Authorized{root} if root=="/same-root"));
-    assert_ne!(resolved.stamp.as_deref(),Some(old.as_str()));assert_eq!(count.load(SeqCst),2);assert_eq!(released.load(SeqCst),1);
+    assert_ne!(resolved.stamp.as_deref(), Some(old.as_str()));
+    assert_eq!(count.load(SeqCst), 2);
+    assert_eq!(released.load(SeqCst), 1);
 }

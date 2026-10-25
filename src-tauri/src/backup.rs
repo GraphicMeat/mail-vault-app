@@ -32,7 +32,10 @@ use tracing::{info, warn};
 use crate::external_location;
 #[path = "backup_native_access.rs"]
 mod native_access;
-pub(crate) use native_access::{NativeBackupAccess, connected as access_connected, disconnected as access_disconnected, schedule as reconcile_native_access};
+pub(crate) use native_access::{
+    connected as access_connected, disconnected as access_disconnected,
+    schedule as reconcile_native_access, NativeBackupAccess,
+};
 
 /// Every mirror-touching daemon call shares this budget, same value and same
 /// reasoning as `vault_flags.rs`'s (`reply_timeout`'s 600 s family): a
@@ -153,14 +156,28 @@ fn take_backup_path(app: &tauri::AppHandle, account_id: &str) -> Option<String> 
 /// over: release it. Called for every `backup-progress` event, so anything
 /// that is not terminal, or names no account we hold a scope for, is a no-op.
 fn release_legacy_frame(held: &HeldBackupPaths, payload: &Value, release: impl FnOnce(&str)) {
-    if payload.get("runId").is_some() || payload.get("executionId").is_some() { return; }
-    if payload.get("active").and_then(Value::as_bool) != Some(false) { return; }
-    let Some(account) = payload.get("account_id").and_then(Value::as_str) else { return; };
-    let path = held.0.lock().unwrap_or_else(|p| p.into_inner()).remove(account);
-    if let Some(path) = path { release(&path); }
+    if payload.get("runId").is_some() || payload.get("executionId").is_some() {
+        return;
+    }
+    if payload.get("active").and_then(Value::as_bool) != Some(false) {
+        return;
+    }
+    let Some(account) = payload.get("account_id").and_then(Value::as_str) else {
+        return;
+    };
+    let path = held
+        .0
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(account);
+    if let Some(path) = path {
+        release(&path);
+    }
 }
 pub(crate) fn release_after_terminal_progress(app: &tauri::AppHandle, payload: &Value) {
-    if let Some(held) = held(app) { release_legacy_frame(&held, payload, release_backup_path); }
+    if let Some(held) = held(app) {
+        release_legacy_frame(&held, payload, release_backup_path);
+    }
 }
 
 #[cfg(test)]
@@ -169,11 +186,24 @@ mod native_access_tests {
     #[test]
     fn backup_access_correlated_terminal_cannot_release_legacy_hold() {
         let held = HeldBackupPaths::default();
-        held.0.lock().unwrap().insert("one".into(), "/same-drive".into());
+        held.0
+            .lock()
+            .unwrap()
+            .insert("one".into(), "/same-drive".into());
         let releases = std::cell::Cell::new(0);
-        release_legacy_frame(&held, &json!({"account_id":"one","active":false,"runId":"native-run","executionId":"native-execution"}), |_| releases.set(releases.get()+1));
-        assert_eq!(releases.get(), 0, "native progress released the independent legacy acquisition");
-        release_legacy_frame(&held, &json!({"account_id":"one","active":false}), |_| releases.set(releases.get()+1));
+        release_legacy_frame(
+            &held,
+            &json!({"account_id":"one","active":false,"runId":"native-run","executionId":"native-execution"}),
+            |_| releases.set(releases.get() + 1),
+        );
+        assert_eq!(
+            releases.get(),
+            0,
+            "native progress released the independent legacy acquisition"
+        );
+        release_legacy_frame(&held, &json!({"account_id":"one","active":false}), |_| {
+            releases.set(releases.get() + 1)
+        });
         assert_eq!(releases.get(), 1);
     }
 }

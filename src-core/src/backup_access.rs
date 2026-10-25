@@ -17,8 +17,15 @@ pub struct Attempt {
 }
 impl Attempt {
     pub fn valid(&self) -> bool {
-        [&self.incarnation, &self.run_id, &self.execution_id, &self.owner_id, &self.acquisition_id]
-            .iter().all(|s| !s.is_empty() && s.len() <= 256)
+        [
+            &self.incarnation,
+            &self.run_id,
+            &self.execution_id,
+            &self.owner_id,
+            &self.acquisition_id,
+        ]
+        .iter()
+        .all(|s| !s.is_empty() && s.len() <= 256)
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -51,6 +58,11 @@ pub fn slot_stamp(path: &Path) -> Result<Option<String>, String> {
             "SELECT display_path, platform, saved_at, legacy, bookmark FROM external_locations WHERE slot='external-backup'",
             [], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,i64>(3)?,r.get::<_,Option<Vec<u8>>>(4)?)),
         ).optional().map_err(|e| e.to_string())?;
-        row.map(|row| serde_json::to_vec(&row).map(|bytes| format!("{:x}",Sha256::digest(bytes))).map_err(|e|e.to_string())).transpose()
+        row.map(|row| {
+            serde_json::to_vec(&row)
+                .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+                .map_err(|e| e.to_string())
+        })
+        .transpose()
     })
 }
