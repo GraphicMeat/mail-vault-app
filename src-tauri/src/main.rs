@@ -3027,7 +3027,9 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         "compose.reply_context" | "compose.check" => Some(Duration::from_secs(30)),
         // list can recover one selected body; discard validates exact local IO.
         "drafts.list" | "drafts.discard" => Some(Duration::from_secs(120)),
-        "bulk.start" | "bulk.resume" | "bulk.status" | "bulk.cancel" | "bulk.discard" => Some(Duration::from_secs(30)),
+        "bulk.start" | "bulk.resume" | "bulk.status" | "bulk.cancel" | "bulk.discard" => {
+            Some(Duration::from_secs(30))
+        }
         "search_index_destroy" => Some(Duration::from_secs(150)),
 
         // The helper card's own probe (`isDaemonAvailable` -> `ping`).
@@ -3037,20 +3039,51 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // unbounded, like every other legacy dotted name.
         "ping" => Some(Duration::from_secs(10)),
 
-        "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild"
-        | "maildir_read" | "maildir_read_light" | "maildir_exists" | "maildir_store" | "maildir_delete"
-        | "maildir_delete_many" | "maildir_set_flags" | "cached_attachment_path"
-        | "save_email_cache" | "load_email_cache_partial" | "load_email_cache_meta" | "load_email_cache_by_uids"
-        | "list_cached_uids" | "header_cache_month_histogram" | "save_mailbox_cache" | "load_mailbox_cache" | "delete_mailbox_cache"
-        | "load_graph_id_map" | "op_journal_queue" | "op_journal_clear" | "op_journal_read"
-        | "read_pending_operation" | "save_pending_operation" | "clear_pending_operation" | "local_index_read"
-        | "local_index_append" | "local_index_remove" | "custody_status" | "maildir_repair_generation"
-        | "maildir_orphan_stats" | "mail_search_start" | "mail_search_cancel" | "vault_rebind_uids" => Some(Duration::from_secs(30)),
+        "vault_search"
+        | "vault_rows"
+        | "search_index_status"
+        | "search_index_configure"
+        | "search_index_rebuild"
+        | "maildir_read"
+        | "maildir_read_light"
+        | "maildir_exists"
+        | "maildir_store"
+        | "maildir_delete"
+        | "maildir_delete_many"
+        | "maildir_set_flags"
+        | "cached_attachment_path"
+        | "save_email_cache"
+        | "load_email_cache_partial"
+        | "load_email_cache_meta"
+        | "load_email_cache_by_uids"
+        | "list_cached_uids"
+        | "header_cache_month_histogram"
+        | "save_mailbox_cache"
+        | "load_mailbox_cache"
+        | "delete_mailbox_cache"
+        | "load_graph_id_map"
+        | "op_journal_queue"
+        | "op_journal_clear"
+        | "op_journal_read"
+        | "read_pending_operation"
+        | "save_pending_operation"
+        | "clear_pending_operation"
+        | "local_index_read"
+        | "local_index_append"
+        | "local_index_remove"
+        | "custody_status"
+        | "maildir_repair_generation"
+        | "maildir_orphan_stats"
+        | "mail_search_start"
+        | "mail_search_cancel"
+        | "vault_rebind_uids" => Some(Duration::from_secs(30)),
 
         // A message is framed only once its body scan answers: unbounded, a
         // hung daemon left every reader blank. Bounded, the app frames the
         // body unscanned, with remote images refused (services/bodyScan.js).
-        "body.scan" | "body.verdicts" | "body.classify_links" | "body.info" => Some(Duration::from_secs(30)),
+        "body.scan" | "body.verdicts" | "body.classify_links" | "body.info" => {
+            Some(Duration::from_secs(30))
+        }
 
         // H3c: a message the vault has no copy of is downloaded by these
         // (`raw_message`). The daemon bounds its whole fallback at 60s
@@ -3060,9 +3093,10 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // A vault hit answers in milliseconds, so the width is only ever
         // spent on a real download. `cached_attachment_path` never
         // downloads and stays in the 30s family above.
-        "maildir_read_attachment" | "maildir_read_attachments" | "maildir_read_raw_source" | "cache_attachment" => {
-            Some(Duration::from_secs(75))
-        }
+        "maildir_read_attachment"
+        | "maildir_read_attachments"
+        | "maildir_read_raw_source"
+        | "cache_attachment" => Some(Duration::from_secs(75)),
 
         // I3 (2.6 review): `maildir_read_light_batch` and `maildir_list` can
         // be sent for a whole mailbox's uids in one call (`getLocalEmails`,
@@ -3074,10 +3108,14 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // `vault_uid_sets` replaces `maildir_list` and lists a mailbox once
         // per session; `vault_light_rows` parses every never-parsed file of
         // a mailbox on its first call.
-        "load_email_cache" | "graph_allocate_uids" | "maildir_storage_stats" | "clear_email_cache"
-        | "maildir_read_light_batch" | "maildir_list" | "vault_uid_sets" | "vault_light_rows" => {
-            Some(Duration::from_secs(120))
-        }
+        "load_email_cache"
+        | "graph_allocate_uids"
+        | "maildir_storage_stats"
+        | "clear_email_cache"
+        | "maildir_read_light_batch"
+        | "maildir_list"
+        | "vault_uid_sets"
+        | "vault_light_rows" => Some(Duration::from_secs(120)),
 
         // Final fix wave I-2: a `vault_close` can outlast 120s when the
         // search index worker is mid-batch/compaction — the app's budget
@@ -3090,10 +3128,14 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // pinned by a test, matching every call site.
         "vault_close" => Some(Duration::from_secs(300)),
 
-        "maildir_clear_cache" | "maildir_migrate_json_to_eml" | "maildir_migrate_email_dirs" | "maildir_purge_orphans"
-        | "prefetch_attachments" | "vault_apply_flags" | "vault_rename_mailbox" | "vault_adopt_mailbox_dirs" => {
-            Some(Duration::from_secs(600))
-        }
+        "maildir_clear_cache"
+        | "maildir_migrate_json_to_eml"
+        | "maildir_migrate_email_dirs"
+        | "maildir_purge_orphans"
+        | "prefetch_attachments"
+        | "vault_apply_flags"
+        | "vault_rename_mailbox"
+        | "vault_adopt_mailbox_dirs" => Some(Duration::from_secs(600)),
 
         // Task 3.5 decision 3: no budget. A 40k-uid archive or a large bulk
         // delete runs far past every other family's budget in this table:
@@ -3135,7 +3177,15 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // The settings document (`handlers/settings.rs`): one small file read,
         // or one write and fsync. Every window hydrates through `settings.get`,
         // so a daemon that accepts and never answers must not hang the UI.
-        "settings.get" | "settings.patch" | "settings.replace" | "backup.schedule.get" | "backup.schedule.set" | "backup.run_now" | "backup.cancel" | "backup.stop" | "backup.schedule.status" => Some(Duration::from_secs(30)),
+        "settings.get"
+        | "settings.patch"
+        | "settings.replace"
+        | "backup.schedule.get"
+        | "backup.schedule.set"
+        | "backup.run_now"
+        | "backup.cancel"
+        | "backup.stop"
+        | "backup.schedule.status" => Some(Duration::from_secs(30)),
 
         // Task 4.4 / decision 8: inline-blocking, same reasoning as
         // archive_emails/bulk_delete_emails above, the whole ZIP
@@ -3157,8 +3207,14 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // the upload job's routes read or steer a job that runs on its own
         // thread (a resume's keychain read is bounded at 20s by the daemon);
         // `vault_gap_save` starts its run and answers at once.
-        "mbox_probe" | "list_local_folders" | "mbox_upload_status" | "mbox_upload_pause" | "mbox_upload_resume"
-        | "mbox_upload_cancel" | "mbox_upload_discard" | "vault_gap_save" => Some(Duration::from_secs(30)),
+        "mbox_probe"
+        | "list_local_folders"
+        | "mbox_upload_status"
+        | "mbox_upload_pause"
+        | "mbox_upload_resume"
+        | "mbox_upload_cancel"
+        | "mbox_upload_discard"
+        | "vault_gap_save" => Some(Duration::from_secs(30)),
 
         // Reads every cached header row of the account against the vault
         // before it answers: the first count of a very large folder is slow.
@@ -3178,9 +3234,16 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // Written as its own arm, not left to the `_ => None` catch-all, so
         // a later edit to that default cannot silently take a budget these
         // never had a reason to lose.
-        "start_migration" | "resume_migration" | "count_migration_folders" | "start_restore"
-        | "cancel_migration" | "pause_migration" | "cancel_restore" | "clear_migration_state_cmd"
-        | "get_migration_state" | "count_local_folder" => Some(Duration::from_secs(30)),
+        "start_migration"
+        | "resume_migration"
+        | "count_migration_folders"
+        | "start_restore"
+        | "cancel_migration"
+        | "pause_migration"
+        | "cancel_restore"
+        | "clear_migration_state_cmd"
+        | "get_migration_state"
+        | "count_local_folder" => Some(Duration::from_secs(30)),
 
         // Task 4.8 / decision 8: a live IMAP LIST plus, when either side is
         // Graph, an HTTP list_folders call, bounded but genuinely
@@ -4636,8 +4699,22 @@ mod tests {
     /// Every window's hydration waits on `settings.get`: bounded by name.
     #[test]
     fn reply_timeout_bounds_the_settings_rpcs() {
-        for method in ["settings.get", "settings.patch", "settings.replace", "backup.schedule.get", "backup.schedule.set", "backup.run_now", "backup.cancel", "backup.stop", "backup.schedule.status"] {
-            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        for method in [
+            "settings.get",
+            "settings.patch",
+            "settings.replace",
+            "backup.schedule.get",
+            "backup.schedule.set",
+            "backup.run_now",
+            "backup.cancel",
+            "backup.stop",
+            "backup.schedule.status",
+        ] {
+            assert_eq!(
+                crate::reply_timeout(method),
+                Some(std::time::Duration::from_secs(30)),
+                "method={method}"
+            );
         }
     }
 

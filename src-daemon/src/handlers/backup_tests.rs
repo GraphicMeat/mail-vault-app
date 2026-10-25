@@ -556,40 +556,101 @@ async fn backup_legacy_kickoff_cannot_replace_an_existing_claim() {
     let (_v, s) = st();
     let held = claim_run(&s, "acct1").unwrap();
     let token = held.cancel();
-    let result = backup_run_account(&s, json!({"accountId":"acct1","accountJson":account_json()})).await;
+    let result = backup_run_account(
+        &s,
+        json!({"accountId":"acct1","accountJson":account_json()}),
+    )
+    .await;
     assert!(result.is_err(), "legacy kickoff admitted overlapping work");
-    assert!(Arc::ptr_eq(s.backup_runs.lock().unwrap().get("acct1").unwrap(), &token));
+    assert!(Arc::ptr_eq(
+        s.backup_runs.lock().unwrap().get("acct1").unwrap(),
+        &token
+    ));
     assert!(!token.load(Ordering::SeqCst));
 }
 
 #[tokio::test]
 async fn backup_native_manual_ack_is_idempotent_and_not_completion() {
     let (_v, s) = st();
-    let first = handle_request_for_test(&s, "backup.run_now", json!({"accountId":"acct1","requestId":"lost-ack"})).await;
-    assert!(first.error.is_none(), "native manual admission unavailable: {:?}", first.error);
+    let first = handle_request_for_test(
+        &s,
+        "backup.run_now",
+        json!({"accountId":"acct1","requestId":"lost-ack"}),
+    )
+    .await;
+    assert!(
+        first.error.is_none(),
+        "native manual admission unavailable: {:?}",
+        first.error
+    );
     let first = first.result.unwrap();
     assert_eq!(first["status"], "queued");
-    let replay = handle_request_for_test(&s, "backup.run_now", json!({"accountId":"acct1","requestId":"lost-ack"})).await;
+    let replay = handle_request_for_test(
+        &s,
+        "backup.run_now",
+        json!({"accountId":"acct1","requestId":"lost-ack"}),
+    )
+    .await;
     assert_eq!(replay.result.unwrap()["runId"], first["runId"]);
-    let conflict = handle_request_for_test(&s, "backup.run_now", json!({"accountId":"other","requestId":"lost-ack"})).await;
-    assert!(conflict.error.is_some(), "request identity must not redirect work");
+    let conflict = handle_request_for_test(
+        &s,
+        "backup.run_now",
+        json!({"accountId":"other","requestId":"lost-ack"}),
+    )
+    .await;
+    assert!(
+        conflict.error.is_some(),
+        "request identity must not redirect work"
+    );
 }
 
 #[tokio::test(flavor="multi_thread", worker_threads=2)]
 async fn backup_real_mirror_drain_retains_claim_after_cancel_ack() {
-    use mailvault_core::{app_db,mirror_mutation::MirrorRoot};
-    let (_vault,s)=st();let mirror=tempfile::tempdir().unwrap();
-    let cur=mailvault_core::maildir::mirror_cur(mirror.path(),"user@example.com","INBOX").unwrap();
-    std::fs::create_dir_all(&cur).unwrap();std::fs::write(cur.join("7.eml"),b"legacy queued copy").unwrap();
-    let scope="user@example.com|INBOX".to_string();
-    app_db::with(&s.app_dir,|c|app_db::ops::purge_append_legacy(c,&std::collections::BTreeMap::from([(scope,vec![7])]))).unwrap();
-    let root=MirrorRoot::resolve(mirror.path()).unwrap();let(entered,ready)=tokio::sync::oneshot::channel();let(release,held)=std::sync::mpsc::channel();
-    let holding=tokio::task::spawn_blocking(move ||root.mutate(|_|{entered.send(()).ok();held.recv().unwrap();Ok(())}));ready.await.unwrap();
-    backup_run_account(&s,json!({"accountId":"acct1","accountJson":account_json(),"mirrorRoot":mirror.path()})).await.unwrap();
-    backup_cancel(&s,json!({"accountId":"acct1"})).await.unwrap();
+    use mailvault_core::{app_db, mirror_mutation::MirrorRoot};
+    let (_vault, s) = st();
+    let mirror = tempfile::tempdir().unwrap();
+    let cur =
+        mailvault_core::maildir::mirror_cur(mirror.path(), "user@example.com", "INBOX").unwrap();
+    std::fs::create_dir_all(&cur).unwrap();
+    std::fs::write(cur.join("7.eml"), b"legacy queued copy").unwrap();
+    let scope = "user@example.com|INBOX".to_string();
+    app_db::with(&s.app_dir, |c| {
+        app_db::ops::purge_append_legacy(c, &std::collections::BTreeMap::from([(scope, vec![7])]))
+    })
+    .unwrap();
+    let root = MirrorRoot::resolve(mirror.path()).unwrap();
+    let (entered, ready) = tokio::sync::oneshot::channel();
+    let (release, held) = std::sync::mpsc::channel();
+    let holding = tokio::task::spawn_blocking(move || {
+        root.mutate(|_| {
+            entered.send(()).ok();
+            held.recv().unwrap();
+            Ok(())
+        })
+    });
+    ready.await.unwrap();
+    backup_run_account(
+        &s,
+        json!({"accountId":"acct1","accountJson":account_json(),"mirrorRoot":mirror.path()}),
+    )
+    .await
+    .unwrap();
+    backup_cancel(&s, json!({"accountId":"acct1"}))
+        .await
+        .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(40)).await;
-    assert!(s.backup_runs.lock().unwrap().contains_key("acct1"),"cancel ACK released admission while actual mirror drain was blocked");
-    assert!(claim_run(&s,"acct1").is_none());
-    release.send(()).unwrap();holding.await.unwrap().unwrap();
-    tokio::time::timeout(std::time::Duration::from_secs(5),async {while s.backup_runs.lock().unwrap().contains_key("acct1"){tokio::task::yield_now().await;}}).await.unwrap();
+    assert!(
+        s.backup_runs.lock().unwrap().contains_key("acct1"),
+        "cancel ACK released admission while actual mirror drain was blocked"
+    );
+    assert!(claim_run(&s, "acct1").is_none());
+    release.send(()).unwrap();
+    holding.await.unwrap().unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while s.backup_runs.lock().unwrap().contains_key("acct1") {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
 }

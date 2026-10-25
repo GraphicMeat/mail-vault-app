@@ -81,11 +81,21 @@ pub(crate) fn claim_run(state: &Arc<DaemonState>, account_id: &str) -> Option<Ba
     claim_controlled(state, account_id, Arc::new(AtomicBool::new(false)))
 }
 
-pub(crate) fn claim_controlled(state: &Arc<DaemonState>, account_id: &str, cancel: Arc<AtomicBool>) -> Option<BackupRunGuard> {
+pub(crate) fn claim_controlled(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    cancel: Arc<AtomicBool>,
+) -> Option<BackupRunGuard> {
     let mut runs = state.backup_runs.lock().unwrap_or_else(|p| p.into_inner());
-    if runs.contains_key(account_id) { return None; }
+    if runs.contains_key(account_id) {
+        return None;
+    }
     runs.insert(account_id.to_string(), cancel.clone());
-    Some(BackupRunGuard { state: state.clone(), account_id: account_id.to_string(), cancel })
+    Some(BackupRunGuard {
+        state: state.clone(),
+        account_id: account_id.to_string(),
+        cancel,
+    })
 }
 
 /// The one terminal frame for a run that ended before its own terminal emit
@@ -136,11 +146,28 @@ impl Drop for BackupRunGuard {
 /// `{"runId": accountId}`. Callable directly (as this module's own tests do)
 /// as well as through `route`, same split `handlers::vault_flags::apply_flags`
 /// uses.
-pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
-    let account_id = params.get("accountId").and_then(Value::as_str).ok_or("Missing accountId")?.to_string();
-    let account_json = params.get("accountJson").and_then(Value::as_str).ok_or("Missing accountJson")?.to_string();
-    let mirror_root = params.get("mirrorRoot").and_then(Value::as_str).map(str::to_string);
-    let skip_folders = params.get("skipFolders").and_then(Value::as_u64).unwrap_or(0) as usize;
+pub(crate) async fn backup_run_account(
+    state: &Arc<DaemonState>,
+    params: Value,
+) -> Result<Value, String> {
+    let account_id = params
+        .get("accountId")
+        .and_then(Value::as_str)
+        .ok_or("Missing accountId")?
+        .to_string();
+    let account_json = params
+        .get("accountJson")
+        .and_then(Value::as_str)
+        .ok_or("Missing accountJson")?
+        .to_string();
+    let mirror_root = params
+        .get("mirrorRoot")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let skip_folders = params
+        .get("skipFolders")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
     let mailbox_concurrency = mailbox_concurrency(&params);
 
     let account: mailvault_core::imap::ImapConfig =
@@ -151,8 +178,19 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
     let state2 = state.clone();
     let id = account_id.clone();
     tokio::spawn(async move {
-        let _ = run_claimed(state2, guard, id, account, Some(account_json), mirror_root,
-            skip_folders, mailbox_concurrency, None, provider()).await;
+        let _ = run_claimed(
+            state2,
+            guard,
+            id,
+            account,
+            Some(account_json),
+            mirror_root,
+            skip_folders,
+            mailbox_concurrency,
+            None,
+            provider(),
+        )
+        .await;
     });
 
     Ok(serde_json::json!({"runId": account_id}))
@@ -163,9 +201,14 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
 /// Authorization remains the shell's concern; native lifecycle passes no path
 /// until a native slot has been proved absent (slice 3 supplies scoped access).
 fn run_context(
-    state: &Arc<DaemonState>, account_id: String,
-    account: mailvault_core::imap::ImapConfig, account_json: Option<String>, mirror_root: Option<String>,
-    skip_folders: usize, mailbox_concurrency: usize, cancel: Arc<AtomicBool>,
+    state: &Arc<DaemonState>,
+    account_id: String,
+    account: mailvault_core::imap::ImapConfig,
+    account_json: Option<String>,
+    mirror_root: Option<String>,
+    skip_folders: usize,
+    mailbox_concurrency: usize,
+    cancel: Arc<AtomicBool>,
     on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync>,
 ) -> Result<BackupRunContext, String> {
     // Core's two archive calls now consume this already-resolved typed config.
@@ -180,7 +223,15 @@ fn run_context(
         let account_email = account.email.clone();
         let mirror_root = mirror_root.clone();
         Arc::new(move |mailbox: &str, changes: &[FlagChange]| {
-            vault_flags_handler::apply_flags(&state, &account_id, mailbox, Some(&account_email), mirror_root.as_deref(), changes, false)
+            vault_flags_handler::apply_flags(
+                &state,
+                &account_id,
+                mailbox,
+                Some(&account_email),
+                mirror_root.as_deref(),
+                changes,
+                false,
+            )
         })
     };
 
@@ -191,7 +242,12 @@ fn run_context(
     let is_jmap = account.uses_jmap();
     let is_graph = account.oauth2_transport.as_deref() == Some("graph");
     let limit = (!is_graph && !is_jmap).then(|| {
-        BackgroundLimit::for_account(state.app_dir.clone(), account_id.clone(), account.host.clone(), state.clock.clone())
+        BackgroundLimit::for_account(
+            state.app_dir.clone(),
+            account_id.clone(),
+            account.host.clone(),
+            state.clock.clone(),
+        )
     });
 
     Ok(BackupRunContext {
@@ -208,8 +264,6 @@ fn run_context(
         apply_flags,
         limit,
     })
-
-
 }
 
 #[derive(Default)]
@@ -220,68 +274,132 @@ pub(crate) struct JoinedBackup {
     pub uncertain: bool,
 }
 
-pub(crate) type Provider = Arc<dyn Fn(BackupRunContext) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<backup::BackupResult, String>> + Send>> + Send + Sync>;
+pub(crate) type Provider = Arc<
+    dyn Fn(
+            BackupRunContext,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<backup::BackupResult, String>> + Send>,
+        > + Send
+        + Sync,
+>;
 
 pub(crate) fn provider() -> Provider {
-    Arc::new(|ctx| Box::pin(async move {
-        if ctx.account.uses_jmap() { backup::run_jmap_account(ctx).await }
-        else if ctx.account.oauth2_transport.as_deref() == Some("graph") { backup::run_graph_account(ctx).await }
-        else { backup::run_imap_account(ctx).await }
-    }))
+    Arc::new(|ctx| {
+        Box::pin(async move {
+            if ctx.account.uses_jmap() {
+                backup::run_jmap_account(ctx).await
+            } else if ctx.account.oauth2_transport.as_deref() == Some("graph") {
+                backup::run_graph_account(ctx).await
+            } else {
+                backup::run_imap_account(ctx).await
+            }
+        })
+    })
 }
 
 // A dropped/unwinding supervisor cannot claim its provider and nested blocking
 // IO drained. Only a normal joined task result explicitly releases admission.
-struct DrainClaim { state: Arc<DaemonState>, guard: Option<BackupRunGuard> }
+struct DrainClaim {
+    state: Arc<DaemonState>,
+    guard: Option<BackupRunGuard>,
+}
 impl Drop for DrainClaim {
     fn drop(&mut self) {
-        if let Some(guard) = self.guard.take() { self.state.backup_worker.retain_uncertain(guard); }
+        if let Some(guard) = self.guard.take() {
+            self.state.backup_worker.retain_uncertain(guard);
+        }
     }
 }
 
 pub(crate) async fn run_claimed(
-    state: Arc<DaemonState>, guard: BackupRunGuard, account_id: String,
-    account: mailvault_core::imap::ImapConfig, account_json: Option<String>, mirror_root: Option<String>,
-    skip_folders: usize, mailbox_concurrency: usize, correlation: Option<(String,String)>, runner: Provider,
+    state: Arc<DaemonState>,
+    guard: BackupRunGuard,
+    account_id: String,
+    account: mailvault_core::imap::ImapConfig,
+    account_json: Option<String>,
+    mirror_root: Option<String>,
+    skip_folders: usize,
+    mailbox_concurrency: usize,
+    correlation: Option<(String, String)>,
+    runner: Provider,
 ) -> JoinedBackup {
     let terminal = Arc::new(std::sync::Mutex::new(None));
     let on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync> = {
-        let captured = terminal.clone(); let state = state.clone(); let account_id = account_id.clone();
+        let captured = terminal.clone();
+        let state = state.clone();
+        let account_id = account_id.clone();
         Arc::new(move |progress| {
-            if progress.account_id != account_id { return; }
-            if let Some((_,execution))=&correlation {if !state.backup_worker.observe_execution(execution,state.clock.now_ms()){return;}}
-            if let Ok(mut value) = serde_json::to_value(&progress) {
-                if !progress.active { *captured.lock().unwrap_or_else(|p|p.into_inner())=Some(value.clone()); }
-                if let Some((run, execution)) = &correlation {
-                    value["runId"]=Value::String(run.clone());value["executionId"]=Value::String(execution.clone());
+            if progress.account_id != account_id {
+                return;
+            }
+            if let Some((_, execution)) = &correlation {
+                if !state
+                    .backup_worker
+                    .observe_execution(execution, state.clock.now_ms())
+                {
+                    return;
                 }
-                state.events.emit("backup-progress",value);
+            }
+            if let Ok(mut value) = serde_json::to_value(&progress) {
+                if !progress.active {
+                    *captured.lock().unwrap_or_else(|p| p.into_inner()) = Some(value.clone());
+                }
+                if let Some((run, execution)) = &correlation {
+                    value["runId"] = Value::String(run.clone());
+                    value["executionId"] = Value::String(execution.clone());
+                }
+                state.events.emit("backup-progress", value);
             }
         })
     };
-    let ctx = match run_context(&state,account_id.clone(),account,account_json,mirror_root,skip_folders,mailbox_concurrency,guard.cancel(),on_progress.clone()) {
-        Ok(ctx)=>ctx,
-        Err(error)=>{on_progress(failed_frame(&account_id,error.clone()));return JoinedBackup{error:Some(error),terminal:terminal.lock().unwrap_or_else(|p|p.into_inner()).clone(),..Default::default()};}
+    let ctx = match run_context(
+        &state,
+        account_id.clone(),
+        account,
+        account_json,
+        mirror_root,
+        skip_folders,
+        mailbox_concurrency,
+        guard.cancel(),
+        on_progress.clone(),
+    ) {
+        Ok(ctx) => ctx,
+        Err(error) => {
+            on_progress(failed_frame(&account_id, error.clone()));
+            return JoinedBackup {
+                error: Some(error),
+                terminal: terminal.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+                ..Default::default()
+            };
+        }
     };
-    let mut claim=DrainClaim{state:state.clone(),guard:Some(guard)};
-    let joined=tokio::spawn(async move { runner(ctx).await }).await;
-    let mut outcome=JoinedBackup::default();
+    let mut claim = DrainClaim {
+        state: state.clone(),
+        guard: Some(guard),
+    };
+    let joined = tokio::spawn(async move { runner(ctx).await }).await;
+    let mut outcome = JoinedBackup::default();
     match joined {
-        Ok(result)=>{
+        Ok(result) => {
             // The reused runners join their folder batches and each folder's
             // blocking IO. A terminal callback alone never reaches this line.
             drop(claim.guard.take());
             match result {
-                Ok(result)=>outcome.result=serde_json::to_value(result).ok(),
-                Err(error)=>{
-                    if terminal.lock().unwrap_or_else(|p|p.into_inner()).is_none() {on_progress(failed_frame(&account_id,error.clone()));}
-                    outcome.error=Some(error);
+                Ok(result) => outcome.result = serde_json::to_value(result).ok(),
+                Err(error) => {
+                    if terminal.lock().unwrap_or_else(|p| p.into_inner()).is_none() {
+                        on_progress(failed_frame(&account_id, error.clone()));
+                    }
+                    outcome.error = Some(error);
                 }
             }
         }
-        Err(_)=>{outcome.uncertain=true;outcome.error=Some("errors.backupRunUncertain".into());}
+        Err(_) => {
+            outcome.uncertain = true;
+            outcome.error = Some("errors.backupRunUncertain".into());
+        }
     }
-    outcome.terminal=terminal.lock().unwrap_or_else(|p|p.into_inner()).clone();
+    outcome.terminal = terminal.lock().unwrap_or_else(|p| p.into_inner()).clone();
     outcome
 }
 
@@ -293,9 +411,21 @@ pub(crate) async fn run_claimed(
 /// (no entry in the map) is just a no-op — not an error — and the entry is
 /// left in place either way; the run itself (or `BackupRunGuard`, on exit)
 /// owns removing it, never this route.
-pub(crate) async fn backup_cancel(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
-    let account_id = params.get("accountId").and_then(Value::as_str).ok_or("Missing accountId")?.to_string();
-    if let Some(cancel) = state.backup_runs.lock().unwrap_or_else(|p| p.into_inner()).get(&account_id) {
+pub(crate) async fn backup_cancel(
+    state: &Arc<DaemonState>,
+    params: Value,
+) -> Result<Value, String> {
+    let account_id = params
+        .get("accountId")
+        .and_then(Value::as_str)
+        .ok_or("Missing accountId")?
+        .to_string();
+    if let Some(cancel) = state
+        .backup_runs
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(&account_id)
+    {
         if !state.backup_worker.owns_token(cancel) {
             cancel.store(true, Ordering::SeqCst);
         }

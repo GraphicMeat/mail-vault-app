@@ -1385,17 +1385,39 @@ mod tests {
     }
     #[tokio::test]
     async fn backup_controls_reject_account_payloads_before_credentials() {
-        let _env=credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
-        let _mock=test_token_mock((0..20).map(|_|granted("at-backup-control-trap",None)).collect());
-        let dir=tempfile::tempdir().unwrap();let s=DaemonState::for_test(dir.path().join("vault"),dir.path().join("app"),true);
+        let _env = credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock(
+            (0..20)
+                .map(|_| granted("at-backup-control-trap", None))
+                .collect(),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(dir.path().join("vault"), dir.path().join("app"), true);
         std::fs::create_dir_all(&s.app_dir).unwrap();
-        let account=gmail(json!({"id":"backup-control-trap","email":"fake@gmail.test"}));store(&s,&[("backup-control-trap",&account)]);
-        for method in ["backup.run_now","backup.cancel","backup.stop","backup.schedule.status"] {
-            let (_trap,lookups)=lookup_trap("backup-control-trap");let before=test_token_posts().len();
+        let account = gmail(json!({"id":"backup-control-trap","email":"fake@gmail.test"}));
+        store(&s, &[("backup-control-trap", &account)]);
+        for method in [
+            "backup.run_now",
+            "backup.cancel",
+            "backup.stop",
+            "backup.schedule.status",
+        ] {
+            let (_trap, lookups) = lookup_trap("backup-control-trap");
+            let before = test_token_posts().len();
             let response=crate::server::handle_request_for_test(&s,method,json!({"accountId":"backup-control-trap","requestId":"control","accountJson":account.to_string()})).await;
-            assert_eq!(response.error.unwrap().message,"errors.settingsInvalid");
-            assert_eq!(lookups.load(std::sync::atomic::Ordering::SeqCst),0,"{method} resolved rejected credentials");
-            assert_eq!(test_token_posts().len(),before,"{method} refreshed rejected credentials");
+            assert_eq!(response.error.unwrap().message, "errors.settingsInvalid");
+            assert_eq!(
+                lookups.load(std::sync::atomic::Ordering::SeqCst),
+                0,
+                "{method} resolved rejected credentials"
+            );
+            assert_eq!(
+                test_token_posts().len(),
+                before,
+                "{method} refreshed rejected credentials"
+            );
         }
     }
 
