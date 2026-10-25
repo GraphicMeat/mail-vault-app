@@ -3997,5 +3997,6 @@
   "errors.bulkWorkerUnavailable": "无法启动批量处理。",
   "errors.bulkAccountUnavailable": "所选账户不可用。",
   "errors.bulkLocalFoldersRead": "无法验证本地文件夹信息。",
-  "errors.bulkOperationFailed": "无法完成批量操作。请先查看进度，再重试。"
+  "errors.bulkOperationFailed": "无法完成批量操作。请先查看进度，再重试。",
+  "errors.bulkDownloadLimited": "已达到服务提供商的下载上限。请在上限重置后重试。已归档的邮件会保留。"
 }

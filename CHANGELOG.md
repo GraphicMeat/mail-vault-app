@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep the provider download-limit explanation when a manual bulk archive stops, including after recovery. Already archived messages remain saved.
+
 - Add read-only native compose preparation and preflight contracts, characterized against the current JavaScript behavior, including complete long threads and large originals. Preparation bypasses credential lookup and preserves source recipient identity rules. Replies, forwards and mailto links now use acknowledged native preparation, preserving edits and sender identity while replies load. Failed preparation keeps the draft editable with Retry, and retains accepted mailto links for retry. The native check preserves complete authored text without an aggregate size cutoff, and the browser demo supports the same ordered checks. Pre-send validation stays on its existing path during migration.
 
 - Add daemon workers for the four ordinary bulk mail actions, with exact identity checkpoints, verified backup copies, operation cancellation, and native backup-access lifetime. The existing bulk UI remains active during migration.

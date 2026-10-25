@@ -3997,5 +3997,6 @@
   "errors.bulkWorkerUnavailable": "Impossibile avviare l’elaborazione collettiva.",
   "errors.bulkAccountUnavailable": "L’account selezionato non è disponibile.",
   "errors.bulkLocalFoldersRead": "Impossibile verificare le informazioni sulle cartelle locali.",
-  "errors.bulkOperationFailed": "Impossibile completare l’operazione in blocco. Controlla l’avanzamento prima di riprovare."
+  "errors.bulkOperationFailed": "Impossibile completare l’operazione in blocco. Controlla l’avanzamento prima di riprovare.",
+  "errors.bulkDownloadLimited": "È stato raggiunto il limite di download del provider. Riprova dopo il ripristino del limite. I messaggi già archiviati vengono conservati."
 }

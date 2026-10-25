@@ -567,7 +567,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       }
       if (record?.discarded) throw new Error('Draft discarded');
       const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
-        ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+        ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
       const fingerprint = canonical({ accountId: p.accountId, fromAddress: p.fromAddress, displayName: p.displayName, snapshot: p.snapshot, snippet: p.snippet });
       if (record && p.revision < record.revision) return draftView(record, 'superseded');
       if (record && p.revision === record.revision) {

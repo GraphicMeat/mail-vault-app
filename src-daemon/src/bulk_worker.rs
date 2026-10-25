@@ -575,7 +575,11 @@ impl Ports for MailPorts {
             ArchiveOutcome {
                 stored,
                 errors: progress.errors,
-                last_error: progress.last_error.as_deref().map(service_error),
+                last_error: if progress.bandwidth_limited {
+                    Some("errors.bulkDownloadLimited".into())
+                } else {
+                    progress.last_error.as_deref().map(service_error)
+                },
             }
         })
     }

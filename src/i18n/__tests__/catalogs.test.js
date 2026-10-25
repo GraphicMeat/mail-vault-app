@@ -43,6 +43,16 @@ const CATEGORIES = {
   ja: ['other'], ko: ['other'], 'zh-Hans': ['other'],
 };
 
+it('provides a translated argument-free manual bulk download-limit diagnostic in all nine locales', () => {
+  for (const [locale, catalog] of Object.entries({ en, ...catalogs })) {
+    const message = catalog['errors.bulkDownloadLimited'];
+    expect(typeof message, locale).toBe('string');
+    expect(message.trim(), locale).not.toBe('');
+    expect(placeholders(message), locale).toEqual([]);
+    if (locale !== 'en') expect(message, locale).not.toBe(en['errors.bulkDownloadLimited']);
+  }
+});
+
 describe('daemon search copy and Premium catalog', () => {
   it('defines every search key in each app locale', () => {
     for (const [locale, catalog] of Object.entries({ en, ...catalogs })) {
