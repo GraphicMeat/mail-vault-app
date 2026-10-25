@@ -20,13 +20,17 @@ vi.mock('lucide-react', () => {
     has: () => true,
   });
 });
-vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, {
-    get: () => React.forwardRef(({ children, initial, animate, exit, ...props }, ref) =>
-      React.createElement('div', { ...props, ref }, children)),
-  }),
-  AnimatePresence: ({ children }) => children,
-}));
+vi.mock('framer-motion', () => {
+  const components = new Map();
+  return {
+    motion: new Proxy({}, { get: (_target, tag) => {
+      if (!components.has(tag)) components.set(tag, React.forwardRef(({ children, initial, animate, exit, ...props }, ref) =>
+        React.createElement(tag, { ...props, ref }, children)));
+      return components.get(tag);
+    } }),
+    AnimatePresence: ({ children }) => children,
+  };
+});
 vi.mock('../RichTextEditor', () => ({
   RichTextEditor: ({ placeholder }) => React.createElement('div', { 'data-testid': 'editor-stub' }, placeholder),
   insertImages: vi.fn(),
@@ -116,13 +120,16 @@ describe('recipient chips in compose', () => {
     open({ to: '', body: '' });
     const to = await screen.findByTestId('compose-to');
     fireEvent.change(to, { target: { value: 'recipient@example.test' } });
-    const before = to.dataset.value;
+    const liveTo = screen.getByTestId('compose-to');
+    const before = liveTo.dataset.value;
+    expect(before).toBe('recipient@example.test');
+    expect(liveTo.value).toBe('recipient@example.test');
     await act(async () => {
       fireEvent.click(screen.getByTestId('compose-send'));
       // Setting sending/inert blurs the live recipient field in WebKit.
-      fireEvent.blur(to);
+      fireEvent.blur(screen.getByTestId('compose-to'));
     });
-    expect(to.dataset.value).toBe(before);
+    expect(screen.getByTestId('compose-to').dataset.value).toBe(before);
     await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
     expect(sentSnapshot().to).toBe('recipient@example.test');
   });
