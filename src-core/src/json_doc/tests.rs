@@ -3,8 +3,8 @@ use serde_json::json;
 use std::fs;
 use std::sync::atomic::Ordering;
 
-const OBJ: Spec = Spec { file: "doc.json", kind: Kind::Object, pretty: false };
-const ARR: Spec = Spec { file: "list.json", kind: Kind::Array, pretty: true };
+const OBJ: Spec = Spec { file: "doc.json", kind: Kind::Object, pretty: false, persistence: Persistence::PrivateDurable };
+const ARR: Spec = Spec { file: "list.json", kind: Kind::Array, pretty: true, persistence: Persistence::PrivateDurable };
 
 fn dir() -> tempfile::TempDir {
     tempfile::tempdir().unwrap()
@@ -46,13 +46,13 @@ fn set(doc: &JsonDoc, key: &str, value: Value, base: Option<u64>) -> Result<Chan
 
 #[test]
 fn companion_names_follow_the_document_name() {
-    let accounts = Spec { file: "accounts.json", kind: Kind::Array, pretty: true };
+    let accounts = Spec { file: "accounts.json", kind: Kind::Array, pretty: true, persistence: Persistence::PrivateDurable };
     assert_eq!(accounts.lock_name(), "accounts.json.lock");
     assert_eq!(accounts.version_name(), "accounts.version.json");
     assert_eq!(accounts.corrupt_name(), "accounts.json.corrupt");
     assert_eq!(accounts.backup_name(3), "accounts.json.bak3");
     // The same names the settings document (step 0a) uses for its file.
-    let settings = Spec { file: "frontend-settings.json", kind: Kind::Object, pretty: false };
+    let settings = Spec { file: "frontend-settings.json", kind: Kind::Object, pretty: false, persistence: Persistence::PrivateDurable };
     assert_eq!(settings.version_name(), "frontend-settings.version.json");
     assert_eq!(settings.lock_name(), "frontend-settings.json.lock");
 }
@@ -464,11 +464,11 @@ fn a_held_lock_makes_a_writer_give_up_in_time() {
     let held = fs::OpenOptions::new().create(true).truncate(false).write(true).open(d.path().join(OBJ.lock_name())).unwrap();
     held.lock().unwrap();
     let started = std::time::Instant::now();
-    let err = lock_file(d.path(), &OBJ.lock_name(), Duration::from_millis(200)).unwrap_err();
+    let err = lock_file(d.path(), &OBJ.lock_name(), Duration::from_millis(200), OBJ.persistence).unwrap_err();
     assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
     assert!(started.elapsed() < Duration::from_secs(5));
     drop(held);
-    assert!(lock_file(d.path(), &OBJ.lock_name(), Duration::from_millis(200)).unwrap().is_some());
+    assert!(lock_file(d.path(), &OBJ.lock_name(), Duration::from_millis(200), OBJ.persistence).unwrap().is_some());
 }
 
 fn array_replace(doc: &JsonDoc, next: Value, base: Option<u64>) -> Result<Change, DocError> {
@@ -604,7 +604,7 @@ fn private_document_companions_are_private_on_unix() {
 #[test]
 fn separate_document_specs_do_not_share_state_or_backups() {
     let d = dir();
-    let settings_spec = Spec {file:"frontend-settings.json",..OBJ};
+    let settings_spec = Spec {file:"frontend-settings.json",persistence:Persistence::SettingsCompatible,..OBJ};
     let accounts_spec = Spec {file:"accounts.json",..ARR};
     let settings = JsonDoc::shared(d.path(),settings_spec);
     let array = JsonDoc::shared(d.path(),accounts_spec);
@@ -635,4 +635,23 @@ fn separate_document_specs_do_not_share_state_or_backups() {
     let shared_again = JsonDoc::shared(d.path(),settings_spec);
     assert!(matches!(set(&shared_again,"three",json!(4),None),Err(DocError::Io(_))));
     assert!(array_replace(&array,json!(["C"]),None).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn settings_compatible_files_preserve_default_creation_mode_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = dir();
+    let control = d.path().join("ordinary-control");
+    fs::File::create(&control).unwrap();
+    let mode = fs::metadata(control).unwrap().permissions().mode() & 0o777;
+    let spec = Spec {persistence:Persistence::SettingsCompatible,..OBJ};
+    let doc = JsonDoc::open_with(d.path(),spec,Duration::ZERO);
+    set(&doc,"one",json!(1),None).unwrap();
+    set(&doc,"one",json!(2),None).unwrap();
+    fs::write(doc.path(),"synthetic corrupt bytes").unwrap();
+    set(&doc,"two",json!(3),None).unwrap();
+    for name in [spec.file.to_string(),spec.lock_name(),spec.version_name(),spec.backup_name(1),spec.corrupt_name()] {
+        assert_eq!(fs::metadata(d.path().join(name)).unwrap().permissions().mode() & 0o777,mode);
+    }
 }

@@ -1,9 +1,8 @@
 //! A JSON document one process owns on disk: atomic, versioned, backed up.
 //!
-//! The core of the settings document (step 0a, `settings_doc.rs` on
-//! `feature/daemon-settings`, not on main yet), made generic so the account
-//! list (`accounts_doc`) follows the same rules. When both branches merge,
-//! `settings_doc` should be rebuilt on this module and its copy dropped.
+//! Shared storage engine for the settings facade and typed JSON documents.
+//! Callers own validation and mutation policy; this module owns persistence.
+//! Array and scrub primitives are available for separately reviewed consumers.
 //!
 //! For a document `<name>` in `dir`:
 //! - writes are atomic: a temp file `.<name>.tmp-<pid>-<n>` in the same
@@ -69,6 +68,15 @@ impl Kind {
     }
 }
 
+/// The two existing persistence contracts, selected by the document owner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Persistence {
+    /// Ordinary creation mode; atomic version sidecars without fsync.
+    SettingsCompatible,
+    /// Private file creation and durable version sidecars.
+    PrivateDurable,
+}
+
 /// What a document is called on disk and how it is written.
 #[derive(Debug, Clone, Copy)]
 pub struct Spec {
@@ -76,6 +84,7 @@ pub struct Spec {
     pub kind: Kind,
     /// Two-space indented, as `JSON.stringify(v, null, 2)` wrote it.
     pub pretty: bool,
+    pub persistence: Persistence,
 }
 
 impl Spec {
@@ -189,18 +198,21 @@ fn read_disk_settled(path: &Path, kind: Kind) -> Disk {
 /// and never part of either: a temp file in the same directory, fsync'd,
 /// renamed over the target, then the directory fsync'd (unix). Any failure
 /// removes the temp and leaves `path` as it was.
-pub fn write_durable(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    write_durable_inner(path, bytes, false)
+pub(crate) fn write_durable(path: &Path, bytes: &[u8], persistence: Persistence) -> std::io::Result<()> {
+    write_durable_inner(path, bytes, false, persistence)
 }
 
-fn write_durable_inner(path: &Path, bytes: &[u8], fail_before_rename: bool) -> std::io::Result<()> {
+fn write_durable_inner(path: &Path, bytes: &[u8], fail_before_rename: bool, persistence: Persistence) -> std::io::Result<()> {
     use std::io::Write;
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp = path.with_file_name(format!(".{name}.tmp-{}-{seq}", std::process::id()));
     let result = (|| {
-        let mut file = create_private(&tmp)?;
+        let mut file = match persistence {
+            Persistence::SettingsCompatible => std::fs::File::create(&tmp)?,
+            Persistence::PrivateDurable => create_private(&tmp)?,
+        };
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
@@ -222,8 +234,8 @@ fn write_durable_inner(path: &Path, bytes: &[u8], fail_before_rename: bool) -> s
     Ok(())
 }
 
-/// A new file only this user may read: mode 0600 on unix, whatever the
-/// umask. On Windows a file under the user's profile (the app data dir)
+/// A new file with mode 0600 on unix, subject to the process umask. On
+/// Windows a file under the user's profile (the app data dir)
 /// inherits its folder's per-user ACL; the repo has no stricter helper.
 fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
     let mut options = std::fs::OpenOptions::new();
@@ -255,16 +267,21 @@ fn rename_over(from: &Path, to: &Path) -> std::io::Result<()> {
 /// interleave. `Err` only when another writer holds it past `wait`. A lock
 /// the filesystem cannot take (FAT/exFAT on a portable drive, some network
 /// homes) is not a reason to stop saving: `Ok(None)`, and the write goes
-/// ahead under the process's own lock, as every write did before this one.
-pub(crate) fn lock_file(dir: &Path, name: &str, wait: Duration) -> std::io::Result<Option<std::fs::File>> {
+/// ahead. JsonDoc retains its process writer lock; a raw fallback has no
+/// shared process lock when the filesystem lock is unavailable.
+pub(crate) fn lock_file(dir: &Path, name: &str, wait: Duration, persistence: Persistence) -> std::io::Result<Option<std::fs::File>> {
     std::fs::create_dir_all(dir)?;
     let mut options = std::fs::OpenOptions::new();
     options.create(true).truncate(false).write(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+        if persistence == Persistence::PrivateDurable {
+            options.mode(0o600);
+        }
     }
+    #[cfg(not(unix))]
+    let _ = persistence;
     let file = match options.open(dir.join(name)) {
         Ok(f) => f,
         Err(e) => {
@@ -292,7 +309,7 @@ pub(crate) fn lock_file(dir: &Path, name: &str, wait: Duration) -> std::io::Resu
 
 fn lock_unsupported(name: &str, e: &std::io::Error) {
     static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| warn!("json doc: no file lock for {name} here ({e}); writing under the process lock only"));
+    ONCE.call_once(|| warn!("json doc: no file lock for {name} here ({e}); continuing without an OS file lock"));
 }
 
 /// Two locks, so a reader never waits on a write's IO (CLAUDE.md, Process
@@ -424,12 +441,9 @@ impl JsonDoc {
     /// so every such process answers the same version for the same document
     /// and a base version is a fence across them; otherwise (a writer that
     /// keeps no sidecar) the version goes up by one. Never backwards. Memory
-    /// only: the caller records the version after letting go.
+    /// only: the caller records the version after letting go. Matching newer
+    /// records are adopted even when unseen writes returned to cached bytes.
     fn observe_good(inner: &mut Inner, bytes: Vec<u8>, value: Value, sidecar: Option<&Sidecar>) {
-        if inner.bytes.as_deref() == Some(&bytes[..]) && inner.doc.is_some() {
-            inner.observed = true;
-            return;
-        }
         let hash = sha_hex(&bytes);
         let changed = match &inner.doc {
             Some(doc) if inner.observed => **doc != value,
@@ -488,8 +502,13 @@ impl JsonDoc {
             (inner.version, inner.sidecar_hash.clone().unwrap_or_default())
         };
         let sidecar = serde_json::to_vec(&Sidecar { version, sha256: hash }).unwrap_or_default();
-        // Small and atomic, private like every file of the document.
-        if let Err(e) = write_durable(&self.dir.join(self.spec.version_name()), &sidecar) {
+        let path = self.dir.join(self.spec.version_name());
+        let result = match self.spec.persistence {
+            // Preserve settings metadata cost: atomic, without fsync.
+            Persistence::SettingsCompatible => crate::fsx::write_atomic(&path, &sidecar),
+            Persistence::PrivateDurable => write_durable(&path, &sidecar, self.spec.persistence),
+        };
+        if let Err(e) = result {
             warn!("{}: could not record version {version}: {e}", self.spec.file);
             self.lock().unrecorded = true;
         }
@@ -611,8 +630,9 @@ impl JsonDoc {
 
     /// `write_op` with a scrub of the document as it is on disk (`scrub.clean`
     /// answers what it changed, in the caller's names). The backup taken
-    /// before the write is always of the scrubbed document, so no backup ever
-    /// holds what the scrub removes. With `scrub.live` the document written
+    /// before the write is of the scrubbed document. This cleans newly made
+    /// good-file backups; historical backups and corrupt copies are unchanged.
+    /// With `scrub.live` the document written
     /// is scrubbed too (and written even when `apply` changes nothing);
     /// without it the live document keeps what it holds.
     pub fn write_op_scrubbed(
@@ -622,7 +642,7 @@ impl JsonDoc {
         apply: impl FnOnce(&mut Value) -> Result<Vec<String>, DocError>,
     ) -> Result<Change, DocError> {
         let _writer = self.writer.lock().unwrap_or_else(|p| p.into_inner());
-        let _file_lock = lock_file(&self.dir, &self.spec.lock_name(), LOCK_WAIT).map_err(|e| DocError::Io(e.to_string()))?;
+        let _file_lock = lock_file(&self.dir, &self.spec.lock_name(), LOCK_WAIT, self.spec.persistence).map_err(|e| DocError::Io(e.to_string()))?;
         let Current { value: mut before, version, mut good, broken } = self.current()?;
         let mut scrubbed = Vec::new();
         if let Some(scrub) = &scrub {
@@ -664,7 +684,7 @@ impl JsonDoc {
             self.maybe_backup(bytes);
         }
         if let Some((bytes, _)) = &broken {
-            if let Err(e) = write_durable(&self.dir.join(self.spec.corrupt_name()), bytes) {
+            if let Err(e) = write_durable(&self.dir.join(self.spec.corrupt_name()), bytes, self.spec.persistence) {
                 warn!("{}: could not keep the broken file aside: {e}", self.spec.file);
             }
         }
@@ -678,7 +698,7 @@ impl JsonDoc {
         }
         #[cfg(not(test))]
         let fail = false;
-        write_durable_inner(&self.path(), &bytes, fail).map_err(|e| {
+        write_durable_inner(&self.path(), &bytes, fail, self.spec.persistence).map_err(|e| {
             warn!("{}: write of {} change(s) failed, the file is unchanged: {e}", self.spec.file, changed.len());
             DocError::Io(e.to_string())
         })?;
@@ -734,7 +754,7 @@ impl JsonDoc {
                 }
             }
         }
-        if let Err(e) = write_durable(&bak1, current) {
+        if let Err(e) = write_durable(&bak1, current, self.spec.persistence) {
             warn!("{}: could not write the backup: {e}", self.spec.file);
         }
         self.drop_extra_backups();

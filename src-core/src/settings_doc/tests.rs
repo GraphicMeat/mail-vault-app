@@ -3,6 +3,11 @@ use serde_json::json;
 use std::fs;
 use std::sync::atomic::Ordering;
 
+fn sha_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
 fn dir() -> tempfile::TempDir {
     tempfile::tempdir().unwrap()
 }
@@ -372,12 +377,12 @@ fn a_slow_write_never_holds_up_readers() {
     seed(d.path(), json!({"a": 1}));
     let doc = Arc::new(SettingsDoc::open(d.path()));
     let v0 = doc.get(None).unwrap().version;
-    *doc.slow_write.lock().unwrap() = Some(Duration::from_millis(1500));
+    *doc.doc.slow_write.lock().unwrap() = Some(Duration::from_millis(1500));
     let writer = {
         let doc = Arc::clone(&doc);
         std::thread::spawn(move || doc.patch(&json!({"b": 2}), None).unwrap())
     };
-    while !doc.in_write.load(Ordering::SeqCst) {
+    while !doc.doc.in_write.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(1));
     }
     // The write is parked inside its IO, holding its locks.
@@ -402,12 +407,12 @@ fn a_crash_between_the_temp_write_and_the_rename_leaves_the_old_file() {
     seed(d.path(), json!({"keep": "me"}));
     let doc = SettingsDoc::open(d.path());
     let before = doc.get(None).unwrap().version;
-    doc.fail_before_rename.store(true, Ordering::SeqCst);
+    doc.doc.fail_before_rename.store(true, Ordering::SeqCst);
     let err = doc.patch(&json!({"keep": "lost", "new": 1}), None).unwrap_err();
     assert!(matches!(err, SettingsError::Io(_)), "{err:?}");
     assert_eq!(disk(d.path()), json!({"keep": "me"}), "the old file is intact");
     // The failed write left nothing behind in memory either.
-    doc.fail_before_rename.store(false, Ordering::SeqCst);
+    doc.doc.fail_before_rename.store(false, Ordering::SeqCst);
     let snap = doc.get(None).unwrap();
     assert_eq!(Value::Object(snap.values), json!({"keep": "me"}));
     assert_eq!(snap.version, before);
@@ -713,4 +718,17 @@ fn changed_keys_are_sorted_unique_and_noop_keeps_all_document_bytes() {
     assert_eq!(noop,Change {version:change.version,changed:vec![]});
     assert_eq!(fs::read(doc.path()).unwrap(),before);
     assert_eq!(fs::read(d.path().join(VERSION_NAME)).unwrap(),sidecar);
+}
+
+#[test]
+fn shared_settings_facade_uses_the_shared_engine() {
+    let d = dir();
+    let facade = SettingsDoc::shared(d.path());
+    let engine = JsonDoc::shared(d.path(),SPEC);
+    assert!(Arc::ptr_eq(&facade,&SettingsDoc::shared(d.path())));
+    assert!(Arc::ptr_eq(&facade.doc,&engine));
+    facade.patch(&json!({"one":1}),None).unwrap();
+    engine.fail_before_rename.store(true,Ordering::SeqCst);
+    assert!(matches!(facade.patch(&json!({"one":2}),None),Err(SettingsError::Io(_))));
+    assert_eq!(engine.get().unwrap().value,json!({"one":1}));
 }
