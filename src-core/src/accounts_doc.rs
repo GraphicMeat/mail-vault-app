@@ -212,12 +212,19 @@ pub enum LiveScrub<'a> {
     Preserved(&'a Listing),
 }
 
+// Persistence and affected IDs are separate: a real replacement can remove
+// only legacy rows that have no valid account ID.
+struct Mutation {
+    change: Change,
+    committed: bool,
+}
+
 fn mutate(
     doc: &JsonDoc,
     base: Option<u64>,
     policy: LiveScrub<'_>,
     apply: impl FnOnce(&mut Value) -> Result<Vec<String>, DocError>,
-) -> Result<Change, AccountsError> {
+) -> Result<Mutation, AccountsError> {
     let proof = match policy {
         LiveScrub::Preserve => None,
         LiveScrub::Preserved(listing) => Some(listing),
@@ -235,7 +242,8 @@ fn mutate(
     };
     // The generic engine prepares a clean backup but leaves live values
     // untouched for this comparison under its writer and supported OS lock.
-    Ok(doc.write_op_scrubbed(base, Some(scrub(false)), |value| {
+    let mut committed = false;
+    let mut change = doc.write_op_scrubbed(base, Some(scrub(false)), |value| {
         if let Some(proof) = proof {
             if value.as_array() != Some(&proof.accounts) {
                 return Err(DocError::Conflict {
@@ -243,6 +251,7 @@ fn mutate(
                 });
             }
         }
+        let before = value.clone();
         let mut cleaned = if proof.is_some() {
             scrub_secrets(value)
         } else {
@@ -252,17 +261,28 @@ fn mutate(
         for id in cleaned.drain(..) {
             push_unique(&mut changed, &id);
         }
+        committed = *value != before;
+        changed.retain(|id| !id.is_empty());
+        if !committed {
+            changed.clear();
+        } else if changed.is_empty() {
+            // Engine-only dirty signal. Incoming IDs cannot be empty, and
+            // this signal is removed before any public Change or outcome.
+            changed.push(String::new());
+        }
         Ok(changed)
-    })?)
+    })?;
+    change.changed.retain(|id| !id.is_empty());
+    Ok(Mutation { change, committed })
 }
 
-pub fn put(
+fn put(
     doc: &JsonDoc,
     incoming: &[Value],
     if_absent: bool,
     base: Option<u64>,
     live: LiveScrub<'_>,
-) -> Result<Change, AccountsError> {
+) -> Result<Mutation, AccountsError> {
     let incoming = incoming
         .iter()
         .map(writable)
@@ -271,15 +291,18 @@ pub fn put(
         let list = entries(list)?;
         let mut changed = Vec::new();
         if if_absent {
-            let ids: std::collections::HashSet<String> =
+            let mut ids: std::collections::HashSet<String> =
                 list.iter().filter_map(id_of).map(str::to_owned).collect();
-            let keys: std::collections::HashSet<String> = list.iter().map(logical_key).collect();
+            let mut keys: std::collections::HashSet<String> = list.iter().map(logical_key).collect();
             for entry in incoming {
                 let entry = Value::Object(entry);
                 let id = id_of(&entry).unwrap_or_default().to_string();
-                if ids.contains(&id) || keys.contains(&logical_key(&entry)) {
+                let key = logical_key(&entry);
+                if ids.contains(&id) || keys.contains(&key) {
                     continue;
                 }
+                ids.insert(id.clone());
+                keys.insert(key);
                 push_unique(&mut changed, &id);
                 list.push(entry);
             }
@@ -315,12 +338,12 @@ pub fn put(
     })?)
 }
 
-pub fn remove(
+fn remove(
     doc: &JsonDoc,
     ids: &[String],
     base: Option<u64>,
     live: LiveScrub<'_>,
-) -> Result<Change, AccountsError> {
+) -> Result<Mutation, AccountsError> {
     Ok(mutate(doc, base, live, |list| {
         let list = entries(list)?;
         let mut changed = Vec::new();
@@ -335,12 +358,12 @@ pub fn remove(
     })?)
 }
 
-pub fn reorder(
+fn reorder(
     doc: &JsonDoc,
     ids: &[String],
     base: Option<u64>,
     live: LiveScrub<'_>,
-) -> Result<Change, AccountsError> {
+) -> Result<Mutation, AccountsError> {
     Ok(mutate(doc, base, live, |list| {
         let list = entries(list)?;
         let before: Vec<Value> = list.clone();
@@ -375,12 +398,12 @@ pub fn reorder(
     })?)
 }
 
-pub fn replace_all(
+fn replace_all(
     doc: &JsonDoc,
     incoming: &[Value],
     base: Option<u64>,
     live: LiveScrub<'_>,
-) -> Result<Change, AccountsError> {
+) -> Result<Mutation, AccountsError> {
     let incoming: Vec<Value> = incoming
         .iter()
         .map(writable)
@@ -444,9 +467,10 @@ fn incoming(params: &Value) -> Result<Vec<Value>, AccountsError> {
     }
 }
 
-fn wrote(change: Change) -> Outcome {
+fn wrote(mutation: Mutation) -> Outcome {
+    let Mutation { change, committed } = mutation;
     let reply = json!({"version": change.version, "changed": change.changed});
-    let changed = (!change.changed.is_empty()).then_some(change);
+    let changed = committed.then_some(change);
     Outcome { reply, changed }
 }
 
