@@ -19,7 +19,10 @@ fn drafts_complete_fields_clearing_and_bytes_are_content(){
 fn drafts_mime_roundtrip_retains_envelope_threading_and_bytes(){
     let r=Save::parse(request("complete-alias-threaded-attachment")).unwrap();
     let account:ImapConfig=serde_json::from_value(json!({"email":"one@example.test","imapHost":"offline.invalid","name":"Alias","fromEmail":"alias@example.test"})).unwrap();
-    let raw=smtp::build_draft_mime(&account,&r.outgoing().unwrap()).unwrap().raw_rfc2822;
+    let outgoing=r.outgoing().unwrap();
+    let shared=smtp::build_draft_mime(&account,&outgoing).unwrap().raw_rfc2822;
+    assert!(vault_eml::parse_eml_bytes(&shared,42,vec![]).unwrap().bcc.is_empty(), "scheduled/shared builder remains Bcc-free");
+    let raw=smtp::build_local_draft_mime(&account,&outgoing).unwrap();
     let parsed=vault_eml::parse_eml_bytes(&raw,42,vec![]).unwrap();
     let mime=mailparse::parse_mail(&raw).unwrap();
     use mailparse::MailHeaderMap;
@@ -34,7 +37,15 @@ fn drafts_mime_roundtrip_retains_envelope_threading_and_bytes(){
     println!("ROW12_FIXED_HEADER raw={:?} header_aware={:?}",header.get_value_raw(),mailparse::addrparse_header(header));
     println!("ROW12_FIXED_RECIPIENT_DIAGNOSTIC outgoing={} to_header={:?} addrparse={:?} parsed={:?}",r.snapshot.to,to,mailparse::addrparse(&to),parsed.to);
 
-    assert_eq!(parsed.from.address,"alias@example.test");assert_eq!(parsed.to.iter().map(|a|a.address.as_str()).collect::<Vec<_>>(),vec!["jane@example.test","next@example.test"]);assert_eq!(parsed.cc[0].address,"copy@example.test");assert_eq!(parsed.bcc[0].address,"blind@example.test");
+    assert_eq!(parsed.from.address,"alias@example.test");assert_eq!(parsed.to.iter().map(|a|a.address.as_str()).collect::<Vec<_>>(),vec!["jane@example.test","next@example.test"]);assert_eq!(parsed.cc[0].address,"copy@example.test");assert_eq!(parsed.bcc.iter().map(|a|a.address.as_str()).collect::<Vec<_>>(),vec!["blind@example.test"]);
     assert!(parsed.html.unwrap().contains("Words"));assert_eq!(parsed.attachments[0].content,"AAEC");
     let headers=String::from_utf8_lossy(&raw);assert!(headers.contains("In-Reply-To: <parent@example.test>"));assert!(headers.contains("<root@example.test>"));
+}
+#[test]
+fn local_editable_draft_attachments_preserve_empty_tiny_trailing_crlf_and_cid_bytes(){
+ let account:ImapConfig=serde_json::from_value(json!({"email":"one@example.test","imapHost":"offline.invalid"})).unwrap();
+ for (content,cid) in [("",None),("AAEC",None),("QQ0K",None),("AAEC",Some("logo"))] {
+  let mut value=request("no-recipients");value["snapshot"]["html"]=json!("<p><img src=\"cid:logo\"></p>");value["snapshot"]["attachments"]=json!([{"filename":"bytes.png","contentType":"image/png","content":content,"cid":cid}]);
+  let request=Save::parse(value).unwrap();let raw=smtp::build_local_draft_mime(&account,&request.outgoing().unwrap()).unwrap();let parsed=vault_eml::parse_eml_bytes(&raw,1,vec![]).unwrap();assert_eq!(parsed.attachments.len(),1);assert_eq!(parsed.attachments[0].content,content);assert_eq!(mailvault_core::vault_files::attachments_of(&raw,&[0]).unwrap(),vec![Some(content.into())]);if cid.is_some(){assert_eq!(parsed.attachments[0].content_id.as_deref(),Some("<logo>"));}
+ }
 }

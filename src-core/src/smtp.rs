@@ -140,7 +140,7 @@ fn parse_address_list(raw: &str) -> Result<Vec<Mailbox>, String> {
 /// Build the MIME message without sending. Lets callers stage raw bytes in
 /// Drafts via IMAP APPEND before the SMTP submission.
 pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMime, String> {
-    build_mime_opts(account, email, false)
+    build_mime_opts(account, email, false, false)
 }
 
 /// Same bytes, for a message that is not going anywhere yet.
@@ -153,13 +153,23 @@ pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMi
 /// with no recipients there is simply no `To:` header — an honest draft rather
 /// than one addressed to a placeholder.
 pub fn build_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMime, String> {
-    build_mime_opts(account, email, true)
+    build_mime_opts(account, email, true, false)
+}
+
+/// Editable local drafts reopen their envelope from these bytes. Unlike a
+/// frozen scheduled/send message, this local-only copy retains Bcc. Callers
+/// must prepare a fresh outgoing message through the existing send owner.
+pub fn build_local_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<Vec<u8>, String> {
+    let built = build_mime_opts(account, email, true, true)?;
+    let bcc = email.bcc.as_deref().and_then(|raw| parse_address_list(raw).ok()).unwrap_or_default();
+    Ok(with_bcc_header(built.raw_rfc2822, &bcc))
 }
 
 fn build_mime_opts(
     account: &ImapConfig,
     email: &OutgoingEmail,
     allow_no_recipients: bool,
+    local_attachment_bytes: bool,
 ) -> Result<BuiltMime, String> {
     // Identity, not credentials: `from_address()` honours the per-account
     // send-as override. Authentication still uses `account.email`.
@@ -285,6 +295,13 @@ fn build_mime_opts(
         Ok((bytes, ct))
     };
 
+    let attachment_body = |bytes: Vec<u8>| -> Result<lettre::message::Body, String> {
+        if local_attachment_bytes {
+            lettre::message::Body::new_with_encoding(bytes, lettre::message::header::ContentTransferEncoding::Base64)
+                .map_err(|_| "local draft attachment encoding failed".into())
+        } else { Ok(lettre::message::Body::new(bytes)) }
+    };
+
     // Helper: assemble the body-only section (what the reader sees as the message).
     let body_multipart = if email.html.is_some() && email.text.is_some() {
         Some(
@@ -353,7 +370,7 @@ fn build_mime_opts(
                 let (bytes, ct) = decoded(att)?;
                 let cid = att.cid.as_deref().unwrap_or_default().trim().to_string();
                 related = related.singlepart(
-                    Attachment::new_inline_with_name(cid, att.filename.clone()).body(bytes, ct),
+                    Attachment::new_inline_with_name(cid, att.filename.clone()).body(attachment_body(bytes)?, ct),
                 );
             }
             body = Body::Multi(related);
@@ -368,7 +385,7 @@ fn build_mime_opts(
             };
             for att in &regular {
                 let (bytes, ct) = decoded(att)?;
-                mixed = mixed.singlepart(Attachment::new(att.filename.clone()).body(bytes, ct));
+                mixed = mixed.singlepart(Attachment::new(att.filename.clone()).body(attachment_body(bytes)?, ct));
             }
             body = Body::Multi(mixed);
         }

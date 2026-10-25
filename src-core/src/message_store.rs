@@ -919,6 +919,25 @@ impl Prepared {
         if self.record.is_some() { Format::Jmap } else { Format::Maildir }
     }
 
+    /// Bind already prepared local content to its allocated native UID without
+    /// parsing, hashing, or writing a blob under the caller's commit lock.
+    /// Preparation still belongs to the actual destination mailbox.
+    pub fn with_local_uid(mut self, uid: u32) -> Result<Self, String> {
+        if uid == 0 || self.server.is_some() || self.record.as_ref().is_some_and(|r| r.server.is_some()) {
+            return Err("local UID binding requires local prepared content".into());
+        }
+        if let Some(record) = self.record.as_mut() {
+            let digest = blobs::digest_of(&record.blob);
+            if record.email["id"].as_str() != Some(format!("L{}-{}", record.uid, &digest[..12]).as_str()) {
+                return Err("prepared content has a nonlocal email id".into());
+            }
+            record.uid = uid;
+            record.email["id"] = Value::String(format!("L{uid}-{}", &digest[..12]));
+        }
+        self.uid = uid;
+        Ok(self)
+    }
+
     /// The same message with the server's ids (a JMAP account's `emailId`,
     /// `blobId`, `threadId`; Plan A Task 14): in JMAP format the record
     /// `commit` writes carries them (`put_server_ids`), in that one write.

@@ -59,14 +59,17 @@ pub struct Copy {pub identity:Identity,pub entry:Value}
 impl Copy {pub fn location(&self)->Location {let s=&self.identity.scope;Location{account_id:s.account_id.clone(),mailbox:s.mailbox.clone(),uid:s.uid}}}
 #[derive(Debug,Clone,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-pub struct Intent {pub revision:u64,pub request_hash:String,pub fingerprint:String,pub copy:Copy,pub prepared:Copy,pub root:std::path::PathBuf}
+pub struct Intent {pub attempt_id:String,pub epoch:u64,pub revision:u64,pub request_hash:String,pub fingerprint:String,pub copy:Copy,pub prepared:Copy,pub root:std::path::PathBuf}
+#[derive(Debug,Clone,Serialize,Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct RetryConstraint {pub revision:u64,pub request_hash:String,pub fingerprint:String}
 #[derive(Debug,Clone,Serialize,Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub struct Record {
-    pub version:u32,pub draft_id:String,pub revision:u64,pub request_hash:Option<String>,pub fingerprint:Option<String>,pub current:Option<Copy>,
+    pub version:u32,pub draft_id:String,#[serde(default)] pub epoch:u64,#[serde(default)] pub retry:Option<RetryConstraint>,pub revision:u64,pub request_hash:Option<String>,pub fingerprint:Option<String>,pub current:Option<Copy>,
     pub pending:Option<Intent>,pub cleanup:Vec<Copy>,pub discarded:bool,
 }
-impl Record {pub fn new(id:&str)->Self {Self{version:1,draft_id:id.into(),revision:0,request_hash:None,fingerprint:None,current:None,pending:None,cleanup:vec![],discarded:false}}}
+impl Record {pub fn new(id:&str)->Self {Self{version:1,draft_id:id.into(),epoch:0,retry:None,revision:0,request_hash:None,fingerprint:None,current:None,pending:None,cleanup:vec![],discarded:false}}}
 /// Entire nested SPECIAL-USE search precedes the case-insensitive name search.
 pub fn drafts_mailbox(boxes:&Value)->String {
     fn find(boxes:&Value,role:bool)->Option<String>{for b in boxes.as_array()? {let matched=if role {b["specialUse"]=="\\Drafts"||b["special_use"]=="\\Drafts"}else{["name","path"].iter().any(|k|b[k].as_str().is_some_and(|s|s.eq_ignore_ascii_case("Drafts")))};if matched {if let Some(path)=b["path"].as_str(){return Some(path.into());}}if let Some(p)=find(&b["children"],role){return Some(p);}}None}
