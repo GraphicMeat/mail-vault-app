@@ -7,6 +7,7 @@ mod abd_local;
 mod abd_worker;
 mod bulk_worker;
 mod cleanup_worker;
+mod backup_worker;
 mod ai_gate;
 mod attachment_extract;
 mod auth;
@@ -563,6 +564,7 @@ async fn daemon_main() {
         net_log,
         abd: Default::default(),
         cleanup: Default::default(),
+        backup_worker: Default::default(),
         jmap: Default::default(),
     });
     // An IDLE arrival's body is stored through the daemon's own vault write.
@@ -667,6 +669,7 @@ async fn daemon_main() {
     // Auto-cleanup rules (Premium): the daily run and `cleanup.run_now`, on
     // their own background thread, through the abd engine.
     cleanup_worker::start(Arc::clone(&state));
+    backup_worker::start(Arc::clone(&state));
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));

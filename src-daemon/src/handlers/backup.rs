@@ -76,10 +76,8 @@ impl BackupRunGuard {
 }
 
 /// Registers a run for `account_id` unless one is already in flight (`None`
-/// then): the check and the insert under one lock, so two callers can never
-/// both start one. `vault_gap_save` uses it; `backup_run_account` does not,
-/// it replaces a running entry, and the app's stall watchdog retry relies on
-/// that.
+/// then): the check and insert share one lock. Legacy, gap-save and native
+/// scheduler entrypoints all use it; none can replace a live owner.
 pub(crate) fn claim_run(state: &Arc<DaemonState>, account_id: &str) -> Option<BackupRunGuard> {
     let mut runs = state.backup_runs.lock().unwrap_or_else(|p| p.into_inner());
     if runs.contains_key(account_id) {
@@ -148,22 +146,57 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
     let account: mailvault_core::imap::ImapConfig =
         serde_json::from_str(&account_json).map_err(|e| format!("Bad account JSON: {}", e))?;
 
-    let root = common::vault_root(state)?;
-    let archive_ctx = crate::handlers::archive::archive_ctx(state, root);
-
-    let cancel = Arc::new(AtomicBool::new(false));
-    state.backup_runs.lock().unwrap_or_else(|p| p.into_inner()).insert(account_id.clone(), Arc::clone(&cancel));
-    let guard = BackupRunGuard { state: Arc::clone(state), account_id: account_id.clone(), cancel: Arc::clone(&cancel) };
-
+    common::vault_root(state)?;
+    let guard = claim_run(state, &account_id).ok_or("Backup already running")?;
+    let cancel = guard.cancel();
     let on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync> = {
         let bus = state.events.clone();
-        Arc::new(move |progress: BackupProgress| {
-            if let Ok(v) = serde_json::to_value(&progress) {
-                bus.emit("backup-progress", v);
-            }
+        Arc::new(move |progress| {
+            if let Ok(v) = serde_json::to_value(progress) { bus.emit("backup-progress", v); }
         })
     };
+    let ctx = run_context(state, account_id.clone(), account, mirror_root, skip_folders,
+        mailbox_concurrency, cancel, on_progress)?;
+    let state2 = Arc::clone(state);
+    let run_account_id = account_id.clone();
+    tokio::spawn(async move {
+        // Held for this whole block: dropped at the end, on every exit path
+        // (normal return, `result` holding an `Err`, or a panic unwinding
+        // through this async block), which removes this run's own
+        // `backup_runs` entry — never a newer run's for the same account,
+        // since `BackupRunGuard::drop` only removes by `Arc::ptr_eq`.
+        let _guard = guard;
 
+        let result = provider()(ctx).await;
+
+        // `run_imap_account` emits its own terminal `backup-progress` frame
+        // (`active: false`) on every path that reaches the end of its folder
+        // loop. It only does NOT reach that when it `?`-returns early (LIST
+        // or UID FETCH failing outright) — that's the one case this task
+        // must still tell JS about, and the only one: emitting here
+        // unconditionally would give JS two `active:false` frames per run.
+        if let Err(e) = result {
+            warn!("backup_run_account: {} failed before its own terminal event: {}", run_account_id, e);
+            if let Ok(v) = serde_json::to_value(failed_frame(&run_account_id, e)) {
+                state2.events.emit("backup-progress", v);
+            }
+        }
+    });
+
+    Ok(serde_json::json!({"runId": account_id}))
+}
+
+
+/// One context builder and provider dispatch for legacy and scheduled work.
+/// Authorization remains the shell's concern; native lifecycle passes no path
+/// until a native slot has been proved absent (slice 3 supplies scoped access).
+fn run_context(
+    state: &Arc<DaemonState>, account_id: String,
+    account: mailvault_core::imap::ImapConfig, mirror_root: Option<String>,
+    skip_folders: usize, mailbox_concurrency: usize, cancel: Arc<AtomicBool>,
+    on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync>,
+) -> Result<BackupRunContext, String> {
+    let account_json = serde_json::to_string(&account).map_err(|e| e.to_string())?;
     // Mailbox + changes only — account id/email, mirror root and
     // `sidecars: false` are all fixed for the whole run, so the closure
     // closes over them instead of the caller threading five args through
@@ -188,7 +221,7 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         BackgroundLimit::for_account(state.app_dir.clone(), account_id.clone(), account.host.clone(), state.clock.clone())
     });
 
-    let ctx = BackupRunContext {
+    Ok(BackupRunContext {
         account_id: account_id.clone(),
         account_json,
         account,
@@ -197,45 +230,31 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         cancel: Arc::clone(&cancel),
         skip_folders,
         mailbox_concurrency,
-        archive_ctx,
+        archive_ctx: crate::handlers::archive::archive_ctx(state, common::vault_root(state)?),
         on_progress,
         apply_flags,
         limit,
-    };
+    })
 
-    let state2 = Arc::clone(state);
-    let run_account_id = account_id.clone();
-    tokio::spawn(async move {
-        // Held for this whole block: dropped at the end, on every exit path
-        // (normal return, `result` holding an `Err`, or a panic unwinding
-        // through this async block), which removes this run's own
-        // `backup_runs` entry — never a newer run's for the same account,
-        // since `BackupRunGuard::drop` only removes by `Arc::ptr_eq`.
-        let _guard = guard;
 
-        let result = if is_jmap {
-            backup::run_jmap_account(ctx).await
-        } else if is_graph {
-            backup::run_graph_account(ctx).await
-        } else {
-            backup::run_imap_account(ctx).await
-        };
+}
 
-        // `run_imap_account` emits its own terminal `backup-progress` frame
-        // (`active: false`) on every path that reaches the end of its folder
-        // loop. It only does NOT reach that when it `?`-returns early (LIST
-        // or UID FETCH failing outright) — that's the one case this task
-        // must still tell JS about, and the only one: emitting here
-        // unconditionally would give JS two `active:false` frames per run.
-        if let Err(e) = result {
-            warn!("backup_run_account: {} failed before its own terminal event: {}", run_account_id, e);
-            if let Ok(v) = serde_json::to_value(failed_frame(&run_account_id, e)) {
-                state2.events.emit("backup-progress", v);
-            }
-        }
-    });
+#[derive(Default)]
+pub(crate) struct JoinedBackup {
+    pub result: Option<Value>,
+    pub terminal: Option<Value>,
+    pub error: Option<String>,
+    pub uncertain: bool,
+}
 
-    Ok(serde_json::json!({"runId": account_id}))
+pub(crate) type Provider = Arc<dyn Fn(BackupRunContext) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<backup::BackupResult, String>> + Send>> + Send + Sync>;
+
+pub(crate) fn provider() -> Provider {
+    Arc::new(|ctx| Box::pin(async move {
+        if ctx.account.uses_jmap() { backup::run_jmap_account(ctx).await }
+        else if ctx.account.oauth2_transport.as_deref() == Some("graph") { backup::run_graph_account(ctx).await }
+        else { backup::run_imap_account(ctx).await }
+    }))
 }
 
 /// Cancels one account's in-flight backup run by setting its `AtomicBool` in
@@ -249,7 +268,9 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
 pub(crate) async fn backup_cancel(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
     let account_id = params.get("accountId").and_then(Value::as_str).ok_or("Missing accountId")?.to_string();
     if let Some(cancel) = state.backup_runs.lock().unwrap_or_else(|p| p.into_inner()).get(&account_id) {
-        cancel.store(true, Ordering::SeqCst);
+        if !state.backup_worker.owns_token(cancel) {
+            cancel.store(true, Ordering::SeqCst);
+        }
     }
     Ok(serde_json::json!({}))
 }

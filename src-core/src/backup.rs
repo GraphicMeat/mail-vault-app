@@ -4973,9 +4973,7 @@ mod backup_batch_drain_tests {
     // Err and JoinError must both wait for an already-running blocking mirror
     // unit and preserve its successful folder accounting. Dropping JoinSet
     // aborts its async owner but cannot stop that blocking unit.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn backup_batch_error_and_panic_wait_for_blocking_sibling() {
-        for panic in [false, true] {
+    async fn held_sibling(panic: bool) {
             let cancel = Arc::new(AtomicBool::new(false));
             let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
             let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -5006,6 +5004,9 @@ mod backup_batch_drain_tests {
             assert!(cancel.load(Ordering::SeqCst), "error did not cancel owned sibling work");
             assert!(result.is_err());
             assert_eq!(accounted, 7, "successful sibling accounting was discarded");
-        }
     }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn backup_batch_error_waits_for_blocking_sibling() { held_sibling(false).await; }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn backup_batch_panic_waits_for_blocking_sibling() { held_sibling(true).await; }
 }

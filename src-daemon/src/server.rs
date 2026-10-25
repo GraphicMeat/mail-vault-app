@@ -232,6 +232,7 @@ pub struct DaemonState {
     pub abd: crate::abd_worker::AbdState,
     /// Auto-cleanup runs: the one-run slot and the `cleanup-worker` channel.
     pub(crate) cleanup: crate::cleanup_worker::CleanupState,
+    pub(crate) backup_worker: crate::backup_worker::BackupState,
     /// Connected JMAP accounts (`jmap_sessions`), shared by the JMAP bridge
     /// (`handlers::jmap_bridge`) and the JMAP sync.
     pub(crate) jmap: crate::jmap_sessions::JmapSessions,
@@ -583,6 +584,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         return resp;
     }
 
+    if let Some(resp) = crate::backup_worker::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
     if let Some(resp) = crate::handlers::backup_schedule::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -1001,6 +1005,7 @@ impl DaemonState {
             net_log: Arc::new(mailvault_core::net_log::NetLog::start(&app_dir_for_index)),
             abd: Default::default(),
             cleanup: Default::default(),
+            backup_worker: Default::default(),
             jmap: Default::default(),
         });
         state.idle.set_daemon(&state);
