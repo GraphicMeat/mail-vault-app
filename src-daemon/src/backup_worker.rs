@@ -165,7 +165,11 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         if interrupted.cancel_requested {
             let out=Outcome{intent:interrupted,status:"cancelled".into(),at:state.clock.now_ms(),result:None,terminal:None,error:None,applied:true};
             settle_requests(&mut ledger.requests,&out);ledger.outcomes.push(out);
-        } else {interrupted.stage="queued".into(); ledger.queue.insert(0,interrupted);}
+        } else {
+            interrupted.stage="queued".into();
+            for request in &interrupted.requests {ledger.requests.insert(request.clone(),response(&interrupted));}
+            ledger.queue.insert(0,interrupted);
+        }
         if publish(&state,&mut ledger).await.is_err() { return; }
     }
     for intent in &ledger.queue { state.backup_worker.controls.lock().unwrap().insert(intent.run_id.clone(),Arc::new(AtomicBool::new(false))); }

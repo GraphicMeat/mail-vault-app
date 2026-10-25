@@ -88,7 +88,8 @@ async fn backup_worker_stop_cancels_owned_work_but_keeps_drain_truth() {
     let mut out=result(0);out.cancelled=true;c.reply.send(Ok(out)).ok().unwrap();
     wait(&r.state,|s|s["active"].is_null() && s["requests"]["queued"]["status"]=="cancelled").await;
     r.state.clock.set(NOW+1_000_000);r.state.backup_worker.tx.get().unwrap().send(Cmd::Wake).unwrap();
-    tokio::time::sleep(Duration::from_millis(30)).await;assert!(r.calls.try_recv().is_err());finish(r).await;
+    tokio::time::sleep(Duration::from_millis(30)).await;assert!(r.calls.try_recv().is_err());
+    assert!(r.state.backup_worker.controls.lock().unwrap().is_empty(),"drained stop leaked cancellation controls");finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_configured_and_unknown_slot_stay_pending_without_provider() {
@@ -145,7 +146,8 @@ async fn backup_worker_success_degraded_and_history_consume_isolated_oracle() {
     for n in 0..7 {r.state.clock.set(NOW+n*1000);let request=format!("history-{n}");manual(&r.state,"one",&request).await;let c=call(&mut r).await;let mut out=result(7);out.duration_secs=0.0;c.reply.send(Ok(out)).ok().unwrap();wait(&r.state,|s|s["requests"][&request]["status"]=="success").await;}
     let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["name"]=="history-newest-five-cumulative").unwrap();
     assert_history(&settings(&r.state)["backupHistory"]["one"],&expected["output"]["history"]["one"]);
-    assert_eq!(settings(&r.state)["backupState"]["one"]["emailsBackedUp"],49);finish(r).await;
+    assert_eq!(settings(&r.state)["backupState"]["one"]["emailsBackedUp"],49);
+    assert_eq!(r.state.backup_worker.status()["lastOutcomes"].as_array().unwrap().len(),5,"retained applied outcomes must remain bounded");finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_credentials_failure_history_never_advances_last_time() {

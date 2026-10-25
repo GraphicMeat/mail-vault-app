@@ -3135,7 +3135,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // The settings document (`handlers/settings.rs`): one small file read,
         // or one write and fsync. Every window hydrates through `settings.get`,
         // so a daemon that accepts and never answers must not hang the UI.
-        "settings.get" | "settings.patch" | "settings.replace" | "backup.schedule.get" | "backup.schedule.set" => Some(Duration::from_secs(30)),
+        "settings.get" | "settings.patch" | "settings.replace" | "backup.schedule.get" | "backup.schedule.set" | "backup.run_now" | "backup.cancel" | "backup.stop" | "backup.schedule.status" => Some(Duration::from_secs(30)),
 
         // Task 4.4 / decision 8: inline-blocking, same reasoning as
         // archive_emails/bulk_delete_emails above, the whole ZIP
