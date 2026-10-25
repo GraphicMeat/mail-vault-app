@@ -52,7 +52,8 @@ async fn route_with_view(
             "errors.settingsInvalid",
         ));
     }
-    let rearm = params["patch"]["backupGlobalEnabled"] == true || params["patch"]["backupSchedules"].is_object();
+    let rearm = params["patch"]["backupGlobalEnabled"] == true
+        || params["patch"]["backupSchedules"].is_object();
     let params = params.clone();
     let app_dir = state.app_dir.clone();
     let now = state.clock.now_ms();

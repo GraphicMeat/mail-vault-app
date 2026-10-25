@@ -35,11 +35,20 @@ pub(crate) async fn route(
     ) {
         return None;
     }
-    let backup_keys = ["transferLimits", "billingProfile", "shareGrant", "hiddenAccounts"];
-    let wake_backup = method != "settings.get" && backup_keys.iter().any(|key| {
-        params["patch"]["mailvault-settings"]["state"].get(*key).is_some()
-            || params["values"]["mailvault-settings"]["state"][*key] != params["bases"]["mailvault-settings"]["state"][*key]
-    });
+    let backup_keys = [
+        "transferLimits",
+        "billingProfile",
+        "shareGrant",
+        "hiddenAccounts",
+    ];
+    let wake_backup = method != "settings.get"
+        && backup_keys.iter().any(|key| {
+            params["patch"]["mailvault-settings"]["state"]
+                .get(*key)
+                .is_some()
+                || params["values"]["mailvault-settings"]["state"][*key]
+                    != params["bases"]["mailvault-settings"]["state"][*key]
+        });
     let doc = SettingsDoc::shared(&state.app_dir);
     let method = method.to_string();
     let params = params.clone();
@@ -50,7 +59,9 @@ pub(crate) async fn route(
     Some(match outcome {
         Ok(Outcome::Read(v)) => RpcResponse::success(id, v),
         Ok(Outcome::Wrote(change)) => {
-            if wake_backup && !change.changed.is_empty() { crate::backup_worker::configuration_changed(state, false); }
+            if wake_backup && !change.changed.is_empty() {
+                crate::backup_worker::configuration_changed(state, false);
+            }
             if !change.changed.is_empty() {
                 state.events.emit(
                     CHANGED_EVENT,
@@ -63,7 +74,9 @@ pub(crate) async fn route(
             )
         }
         Ok(Outcome::Rebased(change, snapshot)) => {
-            if wake_backup && !change.changed.is_empty() { crate::backup_worker::configuration_changed(state, false); }
+            if wake_backup && !change.changed.is_empty() {
+                crate::backup_worker::configuration_changed(state, false);
+            }
             if !change.changed.is_empty() {
                 state.events.emit(
                     CHANGED_EVENT,
@@ -142,7 +155,8 @@ mod tests {
     }
 
     fn on_disk(dir: &tempfile::TempDir) -> Value {
-        serde_json::from_slice(&std::fs::read(dir.path().join("frontend-settings.json")).unwrap()).unwrap()
+        serde_json::from_slice(&std::fs::read(dir.path().join("frontend-settings.json")).unwrap())
+            .unwrap()
     }
 
     async fn call(state: &Arc<DaemonState>, method: &str, params: Value) -> Result<Value, String> {
@@ -156,22 +170,50 @@ mod tests {
     #[tokio::test]
     async fn get_patch_and_replace_round_trip_through_the_route_chain() {
         let (dir, state) = rig();
-        std::fs::write(dir.path().join("frontend-settings.json"), json!({"mailvault-theme": {"state": {"theme": "dark"}}}).to_string()).unwrap();
+        std::fs::write(
+            dir.path().join("frontend-settings.json"),
+            json!({"mailvault-theme": {"state": {"theme": "dark"}}}).to_string(),
+        )
+        .unwrap();
 
         let got = call(&state, "settings.get", json!({})).await.unwrap();
-        assert_eq!(got["values"], json!({"mailvault-theme": {"state": {"theme": "dark"}}}));
+        assert_eq!(
+            got["values"],
+            json!({"mailvault-theme": {"state": {"theme": "dark"}}})
+        );
         let v0 = got["version"].as_u64().unwrap();
 
-        let patched = call(&state, "settings.patch", json!({"patch": {"mailvault-theme": {"state": {"palette": "teal"}}}})).await.unwrap();
+        let patched = call(
+            &state,
+            "settings.patch",
+            json!({"patch": {"mailvault-theme": {"state": {"palette": "teal"}}}}),
+        )
+        .await
+        .unwrap();
         assert_eq!(patched["changed"], json!(["mailvault-theme"]));
         assert!(patched["version"].as_u64().unwrap() > v0);
-        assert_eq!(on_disk(&dir), json!({"mailvault-theme": {"state": {"theme": "dark", "palette": "teal"}}}));
+        assert_eq!(
+            on_disk(&dir),
+            json!({"mailvault-theme": {"state": {"theme": "dark", "palette": "teal"}}})
+        );
 
         let replaced = call(&state, "settings.replace", json!({"values": {"mailvault-theme": {"state": {"theme": "light"}}, "mailvault-focus": {"state": {}}}})).await.unwrap();
-        assert_eq!(replaced["changed"], json!(["mailvault-focus", "mailvault-theme"]));
-        assert_eq!(on_disk(&dir), json!({"mailvault-theme": {"state": {"theme": "light"}}, "mailvault-focus": {"state": {}}}));
+        assert_eq!(
+            replaced["changed"],
+            json!(["mailvault-focus", "mailvault-theme"])
+        );
+        assert_eq!(
+            on_disk(&dir),
+            json!({"mailvault-theme": {"state": {"theme": "light"}}, "mailvault-focus": {"state": {}}})
+        );
 
-        let some = call(&state, "settings.get", json!({"keys": ["mailvault-focus", "nope"]})).await.unwrap();
+        let some = call(
+            &state,
+            "settings.get",
+            json!({"keys": ["mailvault-focus", "nope"]}),
+        )
+        .await
+        .unwrap();
         assert_eq!(some["values"], json!({"mailvault-focus": {"state": {}}}));
         assert_eq!(some["version"], replaced["version"]);
     }
@@ -179,13 +221,31 @@ mod tests {
     #[tokio::test]
     async fn a_stale_base_version_and_a_non_object_are_refused_with_catalog_keys() {
         let (dir, state) = rig();
-        let first = call(&state, "settings.patch", json!({"patch": {"a": 1}})).await.unwrap();
-        call(&state, "settings.patch", json!({"patch": {"a": 2}})).await.unwrap();
-        let stale = call(&state, "settings.patch", json!({"patch": {"a": 3}, "baseVersion": first["version"]})).await;
+        let first = call(&state, "settings.patch", json!({"patch": {"a": 1}}))
+            .await
+            .unwrap();
+        call(&state, "settings.patch", json!({"patch": {"a": 2}}))
+            .await
+            .unwrap();
+        let stale = call(
+            &state,
+            "settings.patch",
+            json!({"patch": {"a": 3}, "baseVersion": first["version"]}),
+        )
+        .await;
         assert_eq!(stale, Err("errors.settingsConflict".to_string()));
-        assert_eq!(call(&state, "settings.patch", json!({"patch": [1]})).await, Err("errors.settingsInvalid".to_string()));
-        assert_eq!(call(&state, "settings.replace", json!({"values": "x"})).await, Err("errors.settingsInvalid".to_string()));
-        assert_eq!(call(&state, "settings.patch", json!({})).await, Err("errors.settingsInvalid".to_string()));
+        assert_eq!(
+            call(&state, "settings.patch", json!({"patch": [1]})).await,
+            Err("errors.settingsInvalid".to_string())
+        );
+        assert_eq!(
+            call(&state, "settings.replace", json!({"values": "x"})).await,
+            Err("errors.settingsInvalid".to_string())
+        );
+        assert_eq!(
+            call(&state, "settings.patch", json!({})).await,
+            Err("errors.settingsInvalid".to_string())
+        );
         assert_eq!(on_disk(&dir), json!({"a": 2}));
     }
 
@@ -194,14 +254,32 @@ mod tests {
         let (_dir, state) = rig();
         let mut rx = state.events.subscribe();
         let secret = "alice@example.test Folder/Private";
-        let change = call(&state, "settings.replace", json!({"values": {"mailvault-settings": {"state": {"lastMailbox": secret}}}})).await.unwrap();
+        let change = call(
+            &state,
+            "settings.replace",
+            json!({"values": {"mailvault-settings": {"state": {"lastMailbox": secret}}}}),
+        )
+        .await
+        .unwrap();
         let line = rx.try_recv().expect("an event");
-        assert!(!line.contains("alice"), "the event carries no value: {line}");
+        assert!(
+            !line.contains("alice"),
+            "the event carries no value: {line}"
+        );
         let (name, payload) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
         assert_eq!(name, CHANGED_EVENT);
-        assert_eq!(payload, json!({"keys": ["mailvault-settings"], "version": change["version"]}));
+        assert_eq!(
+            payload,
+            json!({"keys": ["mailvault-settings"], "version": change["version"]})
+        );
         // A write that changes nothing is silent.
-        call(&state, "settings.replace", json!({"values": {"mailvault-settings": {"state": {"lastMailbox": secret}}}})).await.unwrap();
+        call(
+            &state,
+            "settings.replace",
+            json!({"values": {"mailvault-settings": {"state": {"lastMailbox": secret}}}}),
+        )
+        .await
+        .unwrap();
         assert!(rx.try_recv().is_err());
     }
 
@@ -209,17 +287,43 @@ mod tests {
     async fn stale_ui_delta_preserves_concurrent_scheduler_fields_and_explicit_removal() {
         let (dir, state) = rig();
         let original = json!({"state":{"language":"en","obsolete":null,"backupHistory":{},"backupState":{},"snapshotLastTimes":{}},"version":3});
-        call(&state, "settings.replace", json!({"values":{"mailvault-settings":original}})).await.unwrap();
+        call(
+            &state,
+            "settings.replace",
+            json!({"values":{"mailvault-settings":original}}),
+        )
+        .await
+        .unwrap();
         call(&state, "settings.patch", json!({"patch":{"mailvault-settings":{"state":{"backupHistory":{"one":[{"success":true}]},"backupState":{"one":{"lastBackupTime":42}},"snapshotLastTimes":{"one":42}}}}})).await.unwrap();
         let edited = json!({"state":{"language":"de","backupHistory":{},"backupState":{},"snapshotLastTimes":{},"literalNull":null},"version":3});
-        let result = call(&state, "settings.replace", json!({"values":{"mailvault-settings":edited},"bases":{"mailvault-settings":original}})).await.unwrap();
+        let result = call(
+            &state,
+            "settings.replace",
+            json!({"values":{"mailvault-settings":edited},"bases":{"mailvault-settings":original}}),
+        )
+        .await
+        .unwrap();
         let disk = on_disk(&dir);
-        assert_eq!(disk["mailvault-settings"]["state"]["backupHistory"]["one"], json!([{"success":true}]));
-        assert_eq!(disk["mailvault-settings"]["state"]["backupState"]["one"]["lastBackupTime"], 42);
-        assert_eq!(disk["mailvault-settings"]["state"]["snapshotLastTimes"]["one"], 42);
+        assert_eq!(
+            disk["mailvault-settings"]["state"]["backupHistory"]["one"],
+            json!([{"success":true}])
+        );
+        assert_eq!(
+            disk["mailvault-settings"]["state"]["backupState"]["one"]["lastBackupTime"],
+            42
+        );
+        assert_eq!(
+            disk["mailvault-settings"]["state"]["snapshotLastTimes"]["one"],
+            42
+        );
         assert_eq!(disk["mailvault-settings"]["state"]["language"], "de");
-        assert!(disk["mailvault-settings"]["state"].get("obsolete").is_none());
-        assert_eq!(disk["mailvault-settings"]["state"].get("literalNull"), Some(&Value::Null));
+        assert!(disk["mailvault-settings"]["state"]
+            .get("obsolete")
+            .is_none());
+        assert_eq!(
+            disk["mailvault-settings"]["state"].get("literalNull"),
+            Some(&Value::Null)
+        );
         assert_eq!(disk["mailvault-settings"]["version"], 3);
         assert_eq!(result["values"], disk);
     }
@@ -228,8 +332,14 @@ mod tests {
     fn the_route_logs_no_values() {
         let src = include_str!("settings.rs");
         let code = &src[..src.find("#[cfg(test)]").unwrap()];
-        for line in code.lines().filter(|l| l.contains("info!") || l.contains("warn!") || l.contains("error!")) {
-            assert!(!line.contains("params") && !line.contains("values") && !line.contains("patch)"), "{line}");
+        for line in code
+            .lines()
+            .filter(|l| l.contains("info!") || l.contains("warn!") || l.contains("error!"))
+        {
+            assert!(
+                !line.contains("params") && !line.contains("values") && !line.contains("patch)"),
+                "{line}"
+            );
         }
     }
 }

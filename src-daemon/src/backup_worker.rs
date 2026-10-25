@@ -178,8 +178,20 @@ impl Ledger {
 fn outcome_view(out: &Outcome) -> Value {
     let mut value = serde_json::to_value(out).expect("serializable backup outcome");
     let result = out.result.as_ref();
-    let degraded = result.is_some_and(|r| r["errors"].as_u64().unwrap_or(0) > 0 || r["external_copy_ok"] == false || r["external_copy_failed_count"].as_u64().unwrap_or(0) > 0);
-    let title = if out.status == "success" { if degraded { "svc.backupScheduler.partialTitle" } else { "svc.backupScheduler.completedTitle" } } else { "svc.backupScheduler.failedTitle" };
+    let degraded = result.is_some_and(|r| {
+        r["errors"].as_u64().unwrap_or(0) > 0
+            || r["external_copy_ok"] == false
+            || r["external_copy_failed_count"].as_u64().unwrap_or(0) > 0
+    });
+    let title = if out.status == "success" {
+        if degraded {
+            "svc.backupScheduler.partialTitle"
+        } else {
+            "svc.backupScheduler.completedTitle"
+        }
+    } else {
+        "svc.backupScheduler.failedTitle"
+    };
     value["presentation"] = json!({"titleKey":title,"countKey":"svc.backupScheduler.completedCount","count":result.and_then(|r|r["emails_backed_up"].as_u64()).unwrap_or(0),"accountId":out.intent.account_id});
     value
 }
@@ -191,13 +203,30 @@ struct Facts {
     last_activity: i64,
 }
 impl Default for Facts {
-    fn default() -> Self { Self { automatic: true, paused: false, loading: false, last_activity: 0 } }
+    fn default() -> Self {
+        Self {
+            automatic: true,
+            paused: false,
+            loading: false,
+            last_activity: 0,
+        }
+    }
 }
 enum Cmd {
-    SnapshotFinished { run: String, execution: String, result: Result<Value, String>, at: i64 },
-    Context { observation: context::Observation, reply: oneshot::Sender<Value> },
+    SnapshotFinished {
+        run: String,
+        execution: String,
+        result: Result<Value, String>,
+        at: i64,
+    },
+    Context {
+        observation: context::Observation,
+        reply: oneshot::Sender<Value>,
+    },
     RetireSurface(String),
-    ConfigChanged { rearm: bool },
+    ConfigChanged {
+        rearm: bool,
+    },
     #[cfg(test)]
     Probe {
         done: oneshot::Sender<()>,
@@ -401,34 +430,70 @@ pub(crate) fn start(state: Arc<DaemonState>) {
 fn refresh_context(state: &Arc<DaemonState>) {
     let c = state.backup_worker.context.lock().unwrap();
     // Tests may inject the accepted legacy Facts seam directly.
-    if !c.observed() { return; }
+    if !c.observed() {
+        return;
+    }
     let mut facts = state.backup_worker.facts.lock().unwrap();
-    facts.loading = c.loading(); facts.paused = c.paused(state.clock.now_ms());
+    facts.loading = c.loading();
+    facts.paused = c.paused(state.clock.now_ms());
     facts.last_activity = facts.last_activity.max(c.last_activity);
 }
 fn automatic_ready(state: &Arc<DaemonState>) -> bool {
     let f = state.backup_worker.facts.lock().unwrap();
-    f.automatic && !f.paused && !f.loading && state.clock.now_ms().saturating_sub(f.last_activity) >= 180_000
+    f.automatic
+        && !f.paused
+        && !f.loading
+        && state.clock.now_ms().saturating_sub(f.last_activity) >= 180_000
 }
 async fn interrupt_paused(state: &Arc<DaemonState>, ledger: &mut Ledger) {
-    if !state.backup_worker.context.lock().unwrap().interrupted(state.clock.now_ms()) { return; }
-    if let Some(i) = ledger.active.as_mut().filter(|i| !i.manual && !i.cancel_requested && i.stage != "uncertain") {
-        i.pause_requested = true; i.stage = "pausing".into();
-        if let Some(token) = state.backup_worker.controls.lock().unwrap().get(&i.run_id) { token.store(true, SeqCst); }
+    if !state
+        .backup_worker
+        .context
+        .lock()
+        .unwrap()
+        .interrupted(state.clock.now_ms())
+    {
+        return;
+    }
+    if let Some(i) = ledger
+        .active
+        .as_mut()
+        .filter(|i| !i.manual && !i.cancel_requested && i.stage != "uncertain")
+    {
+        i.pause_requested = true;
+        i.stage = "pausing".into();
+        if let Some(token) = state.backup_worker.controls.lock().unwrap().get(&i.run_id) {
+            token.store(true, SeqCst);
+        }
         let _ = publish(state, ledger).await;
     }
 }
 fn next_queued_deadline(state: &Arc<DaemonState>, ledger: &Ledger) -> Option<tokio::time::Instant> {
     let now = state.clock.now_ms();
     let f = state.backup_worker.facts.lock().unwrap().clone();
-    if !f.automatic { return None; }
-    let mut deadlines = vec![];
-    if let Some(at) = state.backup_worker.context.lock().unwrap().deadline(now) { deadlines.push(at); }
-    if !f.loading && !f.paused && f.last_activity.saturating_add(180_000) > now { deadlines.push(f.last_activity.saturating_add(180_000)); }
-    if ledger.active.is_none() && automatic_ready(state) {
-        deadlines.extend(ledger.queue.iter().filter(|i| !i.cancel_requested && i.not_before > now).map(|i| i.not_before));
+    if !f.automatic {
+        return None;
     }
-    deadlines.into_iter().min().and_then(|at| tokio::time::Instant::now().checked_add(Duration::from_millis(at.saturating_sub(now) as u64)))
+    let mut deadlines = vec![];
+    if let Some(at) = state.backup_worker.context.lock().unwrap().deadline(now) {
+        deadlines.push(at);
+    }
+    if !f.loading && !f.paused && f.last_activity.saturating_add(180_000) > now {
+        deadlines.push(f.last_activity.saturating_add(180_000));
+    }
+    if ledger.active.is_none() && automatic_ready(state) {
+        deadlines.extend(
+            ledger
+                .queue
+                .iter()
+                .filter(|i| !i.cancel_requested && i.not_before > now)
+                .map(|i| i.not_before),
+        );
+    }
+    deadlines.into_iter().min().and_then(|at| {
+        tokio::time::Instant::now()
+            .checked_add(Duration::from_millis(at.saturating_sub(now) as u64))
+    })
 }
 
 async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, services: Services) {
@@ -442,7 +507,11 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         }
     };
     state.backup_worker.epoch.store(ledger.epoch, SeqCst);
-    if snapshots::recover(&mut ledger) { if publish(&state, &mut ledger).await.is_err() { return; } }
+    if snapshots::recover(&mut ledger) {
+        if publish(&state, &mut ledger).await.is_err() {
+            return;
+        }
+    }
     // A fresh daemon has no surviving in-process execution. An ordinal alone
     // does not prove folder ordering; restart always resumes incrementally at 0.
     if let Some(mut interrupted) = ledger.active.take() {
@@ -513,21 +582,40 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         };
         let mut scan = scan;
         match cmd {
-            Cmd::SnapshotFinished { run, execution, result, at } => { pending_snapshot = Some((run, execution, result, at)); }
+            Cmd::SnapshotFinished {
+                run,
+                execution,
+                result,
+                at,
+            } => {
+                pending_snapshot = Some((run, execution, result, at));
+            }
             Cmd::Context { observation, reply } => {
-                let result = state.backup_worker.context.lock().unwrap().observe(observation, state.clock.now_ms());
+                let result = state
+                    .backup_worker
+                    .context
+                    .lock()
+                    .unwrap()
+                    .observe(observation, state.clock.now_ms());
                 refresh_context(&state);
                 let _ = reply.send(result);
                 interrupt_paused(&state, &mut ledger).await;
                 scan = true;
             }
             Cmd::RetireSurface(surface) => {
-                state.backup_worker.context.lock().unwrap().retire_surface(Some(&surface));
+                state
+                    .backup_worker
+                    .context
+                    .lock()
+                    .unwrap()
+                    .retire_surface(Some(&surface));
                 refresh_context(&state);
                 scan = true;
             }
             Cmd::ConfigChanged { rearm } => {
-                if rearm { state.backup_worker.facts.lock().unwrap().automatic = true; }
+                if rearm {
+                    state.backup_worker.facts.lock().unwrap().automatic = true;
+                }
                 scan = true;
             }
             #[cfg(test)]
@@ -607,7 +695,12 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 scan |= wake;
             }
             Cmd::OwnerLost(owner) => {
-                state.backup_worker.context.lock().unwrap().retire_surface(None);
+                state
+                    .backup_worker
+                    .context
+                    .lock()
+                    .unwrap()
+                    .retire_surface(None);
                 refresh_context(&state);
                 access::interrupt_owner(&state, &mut ledger, &owner);
                 scan = true;
@@ -712,9 +805,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 pending_finish = Some((run, execution, exit));
             }
             Cmd::Due { epoch, ids } => {
-                if epoch != state.backup_worker.epoch.load(SeqCst)
-                    || !automatic_ready(&state)
-                {
+                if epoch != state.backup_worker.epoch.load(SeqCst) || !automatic_ready(&state) {
                     continue;
                 }
                 for id in ids {
@@ -760,7 +851,12 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             continue;
         }
         if let Some((run, execution, result, at)) = pending_snapshot.take() {
-            if snapshots::completed(&state, &mut ledger, &run, &execution, &result, at).await.is_err() { pending_snapshot = Some((run, execution, result, at)); }
+            if snapshots::completed(&state, &mut ledger, &run, &execution, &result, at)
+                .await
+                .is_err()
+            {
+                pending_snapshot = Some((run, execution, result, at));
+            }
         }
         if settle_cancelled(&state, &mut ledger).await.is_err() {
             continue;
@@ -768,7 +864,9 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         if apply_retained(&state, &mut ledger).await.is_err() {
             continue;
         }
-        if pending_snapshot.is_none() { let _ = snapshots::drive(&state, &mut ledger).await; }
+        if pending_snapshot.is_none() {
+            let _ = snapshots::drive(&state, &mut ledger).await;
+        }
         if scan {
             check_stall(&state, &mut ledger).await;
             scan_automatic(&state);
@@ -1023,12 +1121,16 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     if !ids.contains(&intent.account_id) {
         return RunExit::Missing;
     }
-    if !intent.manual && !automatic_ready(state) { return RunExit::Pending("pending_policy".into()); }
+    if !intent.manual && !automatic_ready(state) {
+        return RunExit::Pending("pending_policy".into());
+    }
     if let Err(observed) = access::root(state, intent).await {
         return RunExit::PendingAccess { observed };
     }
     let now = state.clock.now_ms();
-    if !intent.manual && !automatic_ready(state) { return RunExit::Pending("pending_policy".into()); }
+    if !intent.manual && !automatic_ready(state) {
+        return RunExit::Pending("pending_policy".into());
+    }
     if !intent.manual && !policy::scheduled(&settings, &intent.account_id, now) {
         return RunExit::Pending("pending_policy".into());
     }
@@ -1079,7 +1181,9 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
     if !ids.contains(&intent.account_id) {
         return RunExit::Missing;
     }
-    if !intent.manual && !automatic_ready(state) { return RunExit::Pending("pending_policy".into()); }
+    if !intent.manual && !automatic_ready(state) {
+        return RunExit::Pending("pending_policy".into());
+    }
     let mirror_root = match access::root(state, intent).await {
         Ok(root) => root,
         Err(observed) => return RunExit::PendingAccess { observed },
@@ -1193,8 +1297,15 @@ async fn finish_run(
         intent.pause_requested = false;
         intent.checkpoint = 0;
         access::renew(state, &mut intent);
-        state.backup_worker.controls.lock().unwrap().insert(intent.run_id.clone(), Arc::new(AtomicBool::new(false)));
-        for request in &intent.requests { next.requests.insert(request.clone(), response(&intent)); }
+        state
+            .backup_worker
+            .controls
+            .lock()
+            .unwrap()
+            .insert(intent.run_id.clone(), Arc::new(AtomicBool::new(false)));
+        for request in &intent.requests {
+            next.requests.insert(request.clone(), response(&intent));
+        }
         next.queue.insert(0, intent);
         publish(state, &mut next).await?;
         return Ok(next);
@@ -1546,7 +1657,12 @@ pub(crate) async fn route(
         };
         start(state.clone());
         let (reply, rx) = oneshot::channel();
-        let _ = state.backup_worker.tx.get().unwrap().send(Cmd::Context { observation, reply });
+        let _ = state
+            .backup_worker
+            .tx
+            .get()
+            .unwrap()
+            .send(Cmd::Context { observation, reply });
         return Some(match rx.await {
             Ok(v) => RpcResponse::success(id, v),
             Err(_) => RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.settingsNotLoaded"),
@@ -1555,10 +1671,19 @@ pub(crate) async fn route(
     if method == "backup.surface_retire" {
         if let Some(surface) = params["surfaceId"].as_str() {
             start(state.clone());
-            let _ = state.backup_worker.tx.get().unwrap().send(Cmd::RetireSurface(surface.into()));
+            let _ = state
+                .backup_worker
+                .tx
+                .get()
+                .unwrap()
+                .send(Cmd::RetireSurface(surface.into()));
             return Some(RpcResponse::success(id, json!({"accepted":true})));
         }
-        return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.settingsInvalid"));
+        return Some(RpcResponse::error(
+            id,
+            ipc::INVALID_PARAMS,
+            "errors.settingsInvalid",
+        ));
     }
     if !matches!(
         method,
@@ -1675,5 +1800,10 @@ pub(crate) fn channel_owner(state: &Arc<DaemonState>, owner: Option<&str>) -> Op
 
 pub(crate) fn configuration_changed(state: &Arc<DaemonState>, rearm: bool) {
     start(state.clone());
-    let _ = state.backup_worker.tx.get().unwrap().send(Cmd::ConfigChanged { rearm });
+    let _ = state
+        .backup_worker
+        .tx
+        .get()
+        .unwrap()
+        .send(Cmd::ConfigChanged { rearm });
 }
