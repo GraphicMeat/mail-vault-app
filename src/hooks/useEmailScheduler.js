@@ -15,6 +15,7 @@ import { hasValidCredentials } from '../services/authUtils';
 import { isGraphAccount } from '../services/graphConfig';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { isOwnAddress } from '../utils/ownAddresses';
+import { isOutgoingMailboxName, sentMailboxPathFor } from '../utils/sentFolder';
 import { offerCodeFromArrival } from '../services/codeBubble';
 
 // Tauri invoke for notifications and badge
@@ -88,7 +89,13 @@ const dispatchNotifications = (perAccountResults) => {
 /// The change feed and a local snooze's wake (stores/snoozeStore.js) both
 /// announce through it.
 export function notifyArrival(accountId, folder, count, header, code = null) {
-  const account = useMailStore.getState().accounts.find(a => a.id === accountId);
+  const state = useMailStore.getState();
+  const account = state.accounts.find(a => a.id === accountId);
+  // Mail filed in Sent is mail the user sent, whoever the From says: a copy
+  // arriving there is not an arrival, however many land at once.
+  if (isOutgoingMailboxName(folder)
+    || (account?.sentFolderOverride && folder === account.sentFolderOverride)
+    || folder === sentMailboxPathFor(state, accountId, null)) return;
   const fromAddress = typeof header?.from === 'string' ? header.from : (header?.from?.address || '');
   // The user's own reply lands in the inbox thread too (Gmail files it under
   // INBOX as well as Sent): mail the user wrote is not an arrival. Only a lone

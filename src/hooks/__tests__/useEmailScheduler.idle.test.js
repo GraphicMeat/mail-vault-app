@@ -344,6 +344,44 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await run({ name: 'Ada', address: 'ada@lovelace.org' });
       expect(mockNotify).toHaveBeenCalledTimes(1);
     });
+
+    // The copy of a message you just sent lands in Sent: nothing arrived. The
+    // sender can be anyone (a send-as the account does not list, a bounce-back
+    // copy), so the folder decides, not the From address.
+    describe('landing in the Sent folder', () => {
+      const runIn = async (mailbox, newEmails, account = IMAP_A, extra = {}) => {
+        mailStore.setState({ accounts: [account], activeAccountId: account.id, activeMailbox: 'INBOX', ...extra });
+        mockGetHeaders.mockResolvedValue({ emails: [{ uid: 9, from: { name: 'Ada', address: 'ada@lovelace.org' }, subject: 'Sent copy' }] });
+        eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: account.id, mailbox, newEmails, updatedFlags: 0, at: 1 }] })];
+        renderHook(() => useEmailScheduler());
+        await flush();
+      };
+
+      it.each(['Sent', 'INBOX.Sent', '[Gmail]/Sent Mail', 'Gesendete Elemente'])('stays silent for %s', async (mailbox) => {
+        await runIn(mailbox, 1);
+        expect(mockNotify).not.toHaveBeenCalled();
+      });
+
+      it('stays silent for several at once', async () => {
+        await runIn('Sent', 3);
+        expect(mockNotify).not.toHaveBeenCalled();
+      });
+
+      it("stays silent for the account's chosen Sent folder", async () => {
+        await runIn('Mine/Out', 1, { ...IMAP_A, sentFolderOverride: 'Mine/Out' });
+        expect(mockNotify).not.toHaveBeenCalled();
+      });
+
+      it('stays silent for a Sent folder only SPECIAL-USE names', async () => {
+        await runIn('Skickat-ish', 1, IMAP_A, { mailboxes: [{ path: 'INBOX', name: 'INBOX' }, { path: 'Skickat-ish', name: 'Skickat-ish', specialUse: '\\Sent' }] });
+        expect(mockNotify).not.toHaveBeenCalled();
+      });
+
+      it('still notifies for the inbox and other folders', async () => {
+        await runIn('Sentinel', 1);
+        expect(mockNotify).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   it('notifies for an account that is not on screen without repainting the list', async () => {
