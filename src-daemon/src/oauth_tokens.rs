@@ -406,6 +406,8 @@ impl TokenStore {
 }
 
 async fn read_record(account_id: &str, read: Read) -> Result<(ImapConfig, Value), String> {
+    #[cfg(test)]
+    tests::record_credential_lookup(account_id);
     match read {
         Read::Guarded => credentials::resolve_account_with_record_guarded(account_id).await,
         Read::Quiet => credentials::resolve_account_with_record_quiet(account_id).await,
@@ -741,6 +743,24 @@ mod tests {
     use super::*;
     use crate::handlers::oauth2::{test_token_mock, test_token_posts};
     use mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID;
+
+    // A trap at the actual credential-resolution entry, before either guarded
+    // or quiet read. Registered only for the unique fake account under test.
+    static CREDENTIAL_LOOKUPS: std::sync::LazyLock<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicUsize>>>> = std::sync::LazyLock::new(Default::default);
+    pub(super) fn record_credential_lookup(account_id: &str) {
+        if let Some(count) = CREDENTIAL_LOOKUPS.lock().unwrap().get(account_id) {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    struct LookupTrap(String);
+    impl Drop for LookupTrap {
+        fn drop(&mut self) { CREDENTIAL_LOOKUPS.lock().unwrap().remove(&self.0); }
+    }
+    fn lookup_trap(id: &str) -> (LookupTrap, Arc<std::sync::atomic::AtomicUsize>) {
+        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        CREDENTIAL_LOOKUPS.lock().unwrap().insert(id.into(), count.clone());
+        (LookupTrap(id.into()), count)
+    }
 
     // Every test here takes `credentials::test_env_lock` first and the token
     // mock's lock second, the order every other test that takes both uses.
@@ -1356,4 +1376,43 @@ mod tests {
         assert!(chain.contains(&json!("7cb5dadde1643c0110dc129996d0d6278fb0844eb6b2e801d1db96af59d65734")), "{chain:?}");
         assert!(!offered[0].to_string().contains("cid-x"), "no client id is handed over");
     }
+    async fn compose_prep_rejected_fields(method: &str) {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _mock = test_token_mock((0..20).map(|_|granted("at-prep-trap", None)).collect());
+        let logs = crate::events::captured_logs();
+        let mut observed = Vec::new();
+        for kind in if method == "compose.check" { vec!["check"] } else { vec!["message", "mailto"] } {
+            for field in ["account", "accountJson", "sourceAccount", "destAccount", "targets"] {
+                let dir = tempfile::tempdir().unwrap();
+                std::fs::create_dir_all(dir.path().join("app")).unwrap();
+                std::fs::create_dir_all(dir.path().join("vault")).unwrap();
+                let s = DaemonState::for_test(dir.path().join("vault"), dir.path().join("app"), true);
+                let record = gmail(json!({"id":"compose-prep-oauth-trap","email":"me@gmail.test"}));
+                store(&s, &[("compose-prep-oauth-trap", &record)]);
+                std::fs::write(s.app_dir.join("accounts.json"),json!([{"id":"compose-prep-oauth-trap","email":"me@gmail.test"}]).to_string()).unwrap();
+                std::fs::write(s.app_dir.join("frontend-settings.json"),json!({"mailvault-settings":{"version":1,"state":{}}}).to_string()).unwrap();
+                let mut params = match kind {
+                    "check" => json!({"requestId":"check","accountId":"compose-prep-oauth-trap","fromAddress":"me@gmail.test","mode":"new","to":"friend@example.test","bcc":"bcc-prep-trap-sentinel@example.test","authoredBodyText":"body-prep-trap-sentinel","attachmentCount":0,"timeZone":"UTC"}),
+                    "mailto" => json!({"kind":"mailto","requestId":"mailto","href":"mailto:friend@example.test?bcc=bcc-prep-trap-sentinel@example.test&body=body-prep-trap-sentinel"}),
+                    _ => json!({"kind":"message","requestId":"message","mode":"reply","original":{"header":{"from":{"address":"friend@example.test"},"bcc":[{"address":"bcc-prep-trap-sentinel@example.test"}]},"html":"<p>body-prep-trap-sentinel</p>"},"presentation":{"originalLabel":"Original","dateLabel":"","subjectCandidate":"Re: "}}),
+                };
+                let oauth = json!({"id":"compose-prep-oauth-trap","authType":"oauth2","email":"me@gmail.test"});
+                params[field] = match field { "accountJson" => json!(oauth.to_string()), "targets" => json!([{"accountId":"compose-prep-oauth-trap","account":oauth}]), _ => oauth };
+                let (_trap, lookups) = lookup_trap("compose-prep-oauth-trap");
+                let before_posts = test_token_posts().len();
+                let response = crate::server::handle_request_for_test(&s,method,params).await;
+                observed.push((kind,field,lookups.load(std::sync::atomic::Ordering::SeqCst),test_token_posts().len()-before_posts,s.tokens.unsaved().len()));
+                assert_eq!(response.error.unwrap().message,"compose.preparationUnavailable");
+            }
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let logged=String::from_utf8_lossy(&logs.lock().unwrap()).to_string();
+        for sentinel in ["body-prep-trap-sentinel","bcc-prep-trap-sentinel","at-prep-trap","rt-stored-0001"] { assert!(!logged.contains(sentinel),"sentinel reached the log"); }
+        assert!(observed.iter().all(|(_,_,reads,posts,offered)|*reads==0&&*posts==0&&*offered==0),"credential/refresh side effects before schema rejection: {observed:?}");
+    }
+    #[tokio::test]
+    async fn compose_prep_check_rejects_oauth_fields_before_credentials() { compose_prep_rejected_fields("compose.check").await; }
+    #[tokio::test]
+    async fn compose_prep_reply_rejects_oauth_fields_before_credentials() { compose_prep_rejected_fields("compose.reply_context").await; }
+
 }

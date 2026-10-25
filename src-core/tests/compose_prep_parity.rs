@@ -257,3 +257,32 @@ fn settings_and_entitlement_are_native_inputs() {
     p["authoredBodyText"] = json!("attached");
     assert_eq!(compose_prep::check(&p, &ctx, 0).unwrap()["kind"], "ready");
 }
+
+#[path="support/compose_prep_supplement.rs"]
+mod supplement;
+#[test]
+fn actual_js_whitespace_identity_paths_match() {
+    let f=supplement::fixture();
+    for c in f["identityCases"].as_array().unwrap() {
+        let i=&c["input"];
+        let ctx=Context{accounts:serde_json::from_value(i["accounts"].clone()).unwrap(),settings:i["settings"].clone(),settings_version:7};
+        let p=json!({"kind":"message","requestId":c["name"],"accountId":"one","pickedFrom":i["picked"],"mode":i["mode"],"original":{"header":i["message"]},"presentation":{"originalLabel":"Original","dateLabel":"","subjectCandidate":"Re: Topic"}});
+        let out=compose_prep::reply_context(&p,&ctx).unwrap();
+        assert_eq!(out["to"],c["output"]["to"],"{} To",c["name"]);
+        assert_eq!(out["cc"],c["output"]["cc"],"{} Cc",c["name"]);
+        assert_eq!(out["bcc"],"");
+    }
+}
+#[test]
+fn actual_js_complete_large_quote_bytes_match() {
+    for case in supplement::fixture()["largeCases"].as_array().unwrap() {
+        supplement::assert_digests(case,&supplement::prepare(case));
+    }
+}
+#[test]
+fn shared_identity_wrapper_keeps_its_existing_trim_contract() {
+    use mailvault_core::notes_to_self::normalize_identity;
+    assert_eq!(normalize_identity("\u{feff}OWNER@example.test\u{feff}"),"\u{feff}owner@example.test\u{feff}");
+    assert_eq!(normalize_identity("\u{85}OWNER@example.test\u{85}"),"owner@example.test");
+    assert_eq!(normalize_identity("  J.ohn+tag@googlemail.com  "),"john@gmail.com");
+}
