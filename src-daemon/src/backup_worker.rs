@@ -46,6 +46,7 @@ pub(crate) struct BackupState {
     progress: AtomicI64,
     execution: Mutex<Option<String>>,
     facts: Mutex<Facts>,
+    #[cfg(test)] scans_in_flight: std::sync::atomic::AtomicUsize,
 }
 impl BackupState {
     pub(crate) fn retain_uncertain(&self, guard: adapter::BackupRunGuard) {
@@ -160,6 +161,7 @@ struct Facts {
     last_activity: i64,
 }
 enum Cmd {
+    #[cfg(test)] Probe { done: oneshot::Sender<()> },
     #[cfg(test)]
     PauseManual { armed: oneshot::Sender<()>, entered: oneshot::Sender<()>, release: oneshot::Receiver<()> },
     #[cfg(test)]
@@ -377,6 +379,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         let (cmd, scan) = tokio::select! { cmd=rx.recv()=>match cmd {Some(cmd)=>(cmd,false),None=>return}, _=tick.tick()=>(Cmd::Wake,true) };
         let mut scan = scan;
         match cmd {
+            #[cfg(test)] Cmd::Probe { done } => {let _ = done.send(());}
             #[cfg(test)] Cmd::PauseManual { armed, entered, release } => {manual_barrier = Some((entered, release)); let _ = armed.send(());}
             #[cfg(test)] Cmd::PauseFinished { armed, entered, release } => {finished_barrier = Some((entered, release)); let _ = armed.send(());}
             Cmd::Manual {
@@ -392,11 +395,14 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             Cmd::Wake => scan = true,
             Cmd::Cancel { run, reply } => {
                 let mut next = ledger.clone();
-                if let Some(i) = next.active.as_mut().filter(|i| i.run_id == run) {
+                // Sideband cancellation may have seen an older execution's
+                // token. The serialized command owns the current logical run.
+                if let Some(token) = state.backup_worker.controls.lock().unwrap().get(&run) {
+                    token.store(true, SeqCst);
+                }
+                for i in next.active.iter_mut().chain(next.queue.iter_mut()).filter(|i| i.run_id == run) {
                     i.cancel_requested = true;
-                    if i.stage != "uncertain" {
-                        i.stage = "stopping".into();
-                    }
+                    if i.stage != "uncertain" {i.stage = "stopping".into();}
                 }
                 let result = async {
                     settle_cancelled(&state, &mut next).await?;
@@ -411,13 +417,15 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 scan = true;
             }
             Cmd::Stop { reply } => {
+                // Fence every admission preceding this command, including a
+                // Manual consumed after the RPC's immediate sideband epoch.
+                state.backup_worker.epoch.fetch_add(1, SeqCst);
                 state.backup_worker.facts.lock().unwrap().automatic = false;
+                for token in state.backup_worker.controls.lock().unwrap().values() {token.store(true, SeqCst);}
                 let mut next = ledger.clone();
-                if let Some(i) = next.active.as_mut() {
+                for i in next.active.iter_mut().chain(next.queue.iter_mut()) {
                     i.cancel_requested = true;
-                    if i.stage != "uncertain" {
-                        i.stage = "stopping".into();
-                    }
+                    if i.stage != "uncertain" {i.stage = "stopping".into();}
                 }
                 let result = async {
                     settle_cancelled(&state, &mut next).await?;
@@ -631,6 +639,7 @@ fn scan_automatic(state: &Arc<DaemonState>) {
         return;
     }
     let epoch = state.backup_worker.epoch.load(SeqCst);
+    #[cfg(test)] state.backup_worker.scans_in_flight.fetch_add(1, SeqCst);
     let state = state.clone();
     tokio::spawn(async move {
         let path = state.app_dir.clone();
@@ -662,6 +671,7 @@ fn scan_automatic(state: &Arc<DaemonState>) {
                 .unwrap()
                 .send(Cmd::Due { epoch, ids });
         }
+        #[cfg(test)] state.backup_worker.scans_in_flight.fetch_sub(1, SeqCst);
     });
 }
 async fn pump(state: &Arc<DaemonState>, ledger: &mut Ledger, services: &Services, scan: bool) {

@@ -1073,32 +1073,46 @@ async fn paused_call(rig: &mut Rig) -> Call {
     let until = std::time::Instant::now() + Duration::from_secs(2);
     loop { if let Ok(call)=rig.calls.try_recv() {return call;} assert!(std::time::Instant::now()<until,"retry deadline did not autonomously invoke the provider");tokio::task::yield_now().await; }
 }
-#[tokio::test]
-async fn backup_fix1_retry_timer_wakes_real_loop_at_each_captured_deadline() {
+// First consume all earlier loop iterations, then wait for their real scan
+// tasks to post results, then consume those FIFO results. No hidden scan
+// completion can act as an unrelated command at the measured deadline.
+async fn paused_quiescent(state: &Arc<DaemonState>) {
+    async fn probe(state: &Arc<DaemonState>) {
+        let (done, mut observed) = oneshot::channel();
+        state.backup_worker.tx.get().unwrap().send(Cmd::Probe { done }).ok().unwrap();
+        let until = std::time::Instant::now() + Duration::from_secs(3);
+        loop {if observed.try_recv().is_ok() {return;} assert!(std::time::Instant::now()<until,"paused FIFO probe did not finish");tokio::task::yield_now().await;}
+    }
+    probe(state).await;
+    let until = std::time::Instant::now() + Duration::from_secs(3);
+    while state.backup_worker.scans_in_flight.load(SeqCst) != 0 {
+        assert!(std::time::Instant::now()<until,"automatic scan did not drain");tokio::task::yield_now().await;
+    }
+    probe(state).await;
+}
+#[tokio::test(start_paused = true)]
+async fn backup_fix1_retry_timer_wakes_real_loop_without_deadline_command() {
+    let began = tokio::time::Instant::now();
     let mut r = rig(); enabled(&r.state); automatic(&r.state,false);
-    let first = call(&mut r).await;
-    tokio::time::pause(); let began = tokio::time::Instant::now();
+    let first = paused_call(&mut r).await;
+    // The first actual provider starts only after worker startup consumed the
+    // interval's immediate initial tick. Keep time fixed until that traffic drains.
+    paused_quiescent(&r.state).await;
+    assert_eq!(tokio::time::Instant::now()-began,Duration::ZERO);
+    r.state.clock.set(NOW+17_000);tokio::time::advance(Duration::from_secs(17)).await;
     first.reply.send(Err("timer retry".into())).ok().unwrap();
     paused_state(&r.state,|s|s["active"].is_null() && s["queue"][0]["retries"]==1).await;
-    for (attempt, deadline, delay) in [(1,30_000,30_000),(2,150_000,120_000),(3,450_000,300_000)] {
-        for _ in 0..8 {tokio::task::yield_now().await;}
-        r.state.clock.set(NOW+deadline-1);
-        tokio::time::advance(Duration::from_millis(delay-1)).await;
-        for _ in 0..8 {tokio::task::yield_now().await;}
-        assert!(r.calls.try_recv().is_err(),"retry began before its deadline");
-        r.state.clock.set(NOW+deadline);
-        tokio::time::advance(Duration::from_millis(1)).await;
-        // No Cmd::Wake, Facts update or RPC at the deadline: the production
-        // worker select must be awakened by its own retry/hold deadline timer.
-        let retry=paused_call(&mut r).await;
-        assert_eq!(tokio::time::Instant::now()-began,Duration::from_millis(deadline as u64));
-        if attempt<3 {
-            retry.reply.send(Err("timer retry".into())).ok().unwrap();
-            paused_state(&r.state,|s|s["active"].is_null() && s["queue"][0]["retries"]==attempt+1).await;
-        } else {
-            retry.reply.send(Ok(result(1))).ok().unwrap();
-            paused_state(&r.state,|s|s["active"].is_null() && s["queue"].as_array().unwrap().is_empty()).await;
-        }
-    }
+    paused_quiescent(&r.state).await;
+    assert_eq!(r.state.backup_worker.status()["queue"][0]["notBefore"],NOW+47_000);
+    r.state.clock.set(NOW+46_999);tokio::time::advance(Duration::from_millis(29_999)).await;
+    paused_quiescent(&r.state).await;
+    assert!(r.calls.try_recv().is_err(),"retry began before its deadline");
+    r.state.clock.set(NOW+47_000);tokio::time::advance(Duration::from_millis(1)).await;
+    // No Wake, Facts, Probe or RPC is issued at47s. The next maintenance tick
+    // is60s, so only a production deadline timer can initiate this retry.
+    let retry=paused_call(&mut r).await;
+    assert_eq!(tokio::time::Instant::now()-began,Duration::from_secs(47));
+    retry.reply.send(Ok(result(1))).ok().unwrap();
+    paused_state(&r.state,|s|s["active"].is_null() && s["queue"].as_array().unwrap().is_empty() && s["lastOutcomes"][0]["applied"]==true).await;
     tokio::time::resume(); finish(r).await;
 }
