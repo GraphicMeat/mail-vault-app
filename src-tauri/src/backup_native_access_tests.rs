@@ -843,8 +843,8 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     reconcile(&held, &native, "shell-c");
     assert_eq!(native.released.load(SeqCst), 3);
     drop(channel);
-    assert!(unchanged_intent && unavailable_no_work);
     assert!(unavailable_bounded,"unchanged unavailable resolver sustained its own delivered-event feedback loop");
+    assert!(unchanged_intent && unavailable_no_work);
     println!("NATIVE_ACCESS_CONNECTED: real resolver, pending/manual/attach with lost accepted ACK, live owner disconnect, joined drain, same-daemon replacement shell, fresh acquisition, persisted pending daemon replacement, byte-exact mirror, responsive ping+event channel during paused resolver, independent actual same-path consumer");
 }
 #[test]
