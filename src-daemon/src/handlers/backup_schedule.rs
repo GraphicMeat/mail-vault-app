@@ -3,7 +3,7 @@ use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::{
     backup_schedule as policy,
-    settings_doc::{SettingsDoc, SettingsError},
+    settings_doc::{SettingsDoc, SettingsError, Snapshot},
 };
 use serde_json::{json, Map, Value};
 use std::{path::Path, sync::Arc};
@@ -15,6 +15,17 @@ pub(crate) async fn route(
     method: &str,
     params: &Value,
     id: Value,
+) -> Option<RpcResponse> {
+    route_with_view(state, method, params, id, view).await
+}
+
+// Narrow preparation seam: settings writes and the event bus remain real.
+async fn route_with_view(
+    state: &Arc<DaemonState>,
+    method: &str,
+    params: &Value,
+    id: Value,
+    prepare: impl Fn(&Snapshot, &[String], i64) -> Result<Value, &'static str> + Send + 'static,
 ) -> Option<RpcResponse> {
     if !matches!(method, "backup.schedule.get" | "backup.schedule.set") {
         return None;
@@ -38,7 +49,7 @@ pub(crate) async fn route(
     let params = params.clone();
     let app_dir = state.app_dir.clone();
     let now = state.clock.now_ms();
-    let joined = tokio::task::spawn_blocking(move || run(&app_dir, set, &params, now)).await;
+    let joined = tokio::task::spawn_blocking(move || run(&app_dir, set, &params, now, prepare)).await;
     Some(match joined.unwrap_or(Err("errors.settingsWriteFailed")) {
         Ok((snapshot, change)) => {
             if let Some(change) = change.filter(|c| !c.changed.is_empty()) {
@@ -75,8 +86,7 @@ fn loaded(doc: &SettingsDoc) -> Result<mailvault_core::settings_doc::Snapshot, &
     }
     Ok(snapshot)
 }
-fn view(doc: &SettingsDoc, ids: &[String], now: i64) -> Result<Value, &'static str> {
-    let snapshot = loaded(doc)?;
+fn view(snapshot: &Snapshot, ids: &[String], now: i64) -> Result<Value, &'static str> {
     let settings = &snapshot.values[STORE]["state"];
     // Fresh system lookup per call. Never persist an offset or assume UTC.
     let zone = policy::local_zone()?;
@@ -109,6 +119,7 @@ fn run(
     set: bool,
     params: &Value,
     now: i64,
+    prepare: impl Fn(&Snapshot, &[String], i64) -> Result<Value, &'static str>,
 ) -> Result<(Value, Option<mailvault_core::settings_doc::Change>), &'static str> {
     let ids =
         super::insights::configured_account_ids(path).map_err(|_| "errors.settingsNotLoaded")?;
@@ -141,7 +152,7 @@ fn run(
     } else {
         None
     };
-    Ok((view(&doc, &ids, now)?, change))
+    Ok((prepare(&loaded(&doc)?, &ids, now)?, change))
 }
 
 #[cfg(test)]
@@ -227,4 +238,51 @@ mod tests {
             "errors.settingsNotLoaded"
         );
     }
+    #[tokio::test]
+    async fn unavailable_view_refuses_set_without_mutation_or_event() {
+        let (dir, state) = rig();
+        let doc = SettingsDoc::shared(dir.path());
+        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}),None).unwrap();
+        let before = doc.get(None).unwrap();
+        let bytes = std::fs::read(dir.path().join("frontend-settings.json")).unwrap();
+        let mut events = state.events.subscribe();
+        let response = route_with_view(&state,"backup.schedule.set",&json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}}),json!(1),|_,_,_|Err("errors.settingsInvalid")).await.unwrap();
+        assert_eq!(response.error.unwrap().message,"errors.settingsInvalid");
+        let after = doc.get(None).unwrap();
+        assert_eq!(after.version,before.version,"failed timezone/view preparation must not commit");
+        assert_eq!(after.values,before.values);
+        assert_eq!(std::fs::read(dir.path().join("frontend-settings.json")).unwrap(),bytes);
+        assert!(events.try_recv().is_err(),"a refusal emits no settings change");
+        // The same captured version remains valid after the refusal.
+        let accepted = call(&state,"backup.schedule.set",json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}})).await.unwrap();
+        let (name,payload) = mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(name,super::super::settings::CHANGED_EVENT);
+        assert_eq!(payload,json!({"keys":[STORE],"version":accepted["version"]}));
+        assert!(events.try_recv().is_err());
+    }
+    #[tokio::test]
+    async fn set_prepares_applied_view_before_write_and_notifies_once() {
+        let (dir,state) = rig();let doc = SettingsDoc::shared(dir.path());
+        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}),None).unwrap();
+        let before=doc.get(None).unwrap();let path=dir.path().to_path_buf();
+        let mut events=state.events.subscribe();
+        let response=route_with_view(&state,"backup.schedule.set",&json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}}),json!(2),move |snapshot,ids,now| {
+            let observed=SettingsDoc::shared(&path).get(None).map_err(|_|"errors.settingsWriteFailed")?;
+            if observed.version!=before.version || observed.values[STORE]["state"]["backupGlobalEnabled"]!=true {
+                return Err("errors.settingsWriteFailed");
+            }
+            if snapshot.values[STORE]["state"]["backupGlobalEnabled"]!=false {return Err("errors.settingsInvalid");}
+            view(snapshot,ids,now)
+        }).await.unwrap();
+        assert!(response.error.is_none(),"{:?}",response.error);
+        let accepted=response.result.unwrap();let after=doc.get(None).unwrap();
+        assert_eq!(accepted["version"],after.version);assert!(after.version>before.version);
+        assert_eq!(accepted["config"]["backupGlobalEnabled"],false);
+        assert_eq!(accepted["state"]["backupHistory"],after.values[STORE]["state"]["backupHistory"]);
+        let (name,payload)=mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(name,super::super::settings::CHANGED_EVENT);
+        assert_eq!(payload,json!({"keys":[STORE],"version":after.version}));
+        assert!(events.try_recv().is_err(),"committed write emits exactly once");
+    }
+
 }
