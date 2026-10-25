@@ -90,14 +90,14 @@ const { ComposeModal } = await import('../ComposeModal');
 
 function open(body, extra = {}) {
   const onClose = vi.fn();
-  render(
+  const view = render(
     <ComposeModal
       mode="new"
       initialData={{ to: 'them@example.test', subject: 'Hi', body, ...extra }}
       onClose={onClose} onMinimize={() => {}} onSaveState={() => {}}
     />,
   );
-  return { onClose };
+  return { onClose, replaceSource: source => view.rerender(<ComposeModal mode="new" initialData={{ to: 'them@example.test', subject: 'Hi', body, ...extra, _replyTo: source }} onClose={onClose} onMinimize={() => {}} onSaveState={() => {}} />) };
 }
 
 beforeEach(() => {
@@ -362,4 +362,15 @@ it('checks expiry only after the pending save settles, with the original issued 
   expect(await screen.findByText(t('scheduled.picker.pastTime'))).toBeTruthy();
   expect(queueSend).not.toHaveBeenCalled();
   expect(checkCompose.mock.calls[0][0]).toMatchObject({ scheduleDraft: { localTime, tz: 'UTC', tzPicked: true }, sendPlan: { kind: 'at' } });
+});
+
+it('invalidates a pending check on a parent-owned source fill before native preparation returns', async () => {
+  let finish;
+  checkCompose.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { replaceSource } = open('<p>Complete body</p>');
+  fireEvent.click(screen.getByTestId('compose-send'));
+  await waitFor(() => expect(finish).toBeTypeOf('function'));
+  replaceSource({ uid: 1, text: 'Complete late source' });
+  await act(async () => finish({ kind: 'ready', route: { delay: null } }));
+  expect(queueSend).not.toHaveBeenCalled();
 });

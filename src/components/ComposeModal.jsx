@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useId, useMemo, lazy, Suspense, memo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useId, useMemo, lazy, Suspense, memo } from 'react';
 import { useDialogA11y, hasOpenPopover } from '../hooks/useDialogA11y';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
@@ -115,6 +115,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     invalidateCallback.current?.(sendGeneration.current);
   }, []);
   if (sendInvalidationRef) sendInvalidationRef.current = invalidate;
+  // Parent-owned quote/fill changes commit before any pending check can resume.
+  useLayoutEffect(() => { invalidate(); }, [invalidate, replyToProp, preparedQuote, initialData?._replyTo, mode]);
   const t = useT();
   const pa = usePrivateAttr();
   const privateInput = usePrivateInputClass();
