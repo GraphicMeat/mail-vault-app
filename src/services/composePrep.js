@@ -102,7 +102,21 @@ function validateCheck(result, input, requestId, version) {
   if (result.kind === 'ready' && only(result, [...base, 'route'])) {
     const route = result.route;
     if (only(route, ['delay']) && Object.hasOwn(route, 'delay') && (route.delay === null || Number.isInteger(route.delay) && route.delay >= 60 && route.delay <= 300 && route.delay % 60 === 0)) return;
-    if (only(route, ['draft']) && only(route.draft, ['localTime', 'tz']) && typeof route.draft.localTime === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(route.draft.localTime) && typeof route.draft.tz === 'string' && route.draft.tz.length) return;
+    if (only(route, ['draft']) && validCheckDraft(route.draft)) return;
   }
   throw unavailable();
+}
+
+function validCheckDraft(draft) {
+  if (!only(draft, ['localTime', 'tz']) || typeof draft.localTime !== 'string' || typeof draft.tz !== 'string') return false;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(draft.localTime);
+  if (!parts) return false;
+  const [year, month, day, hour, minute] = parts.slice(1).map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59) return false;
+  // Validate zone support only. Wall-time conversion would normalize invalid
+  // dates and could change legitimate DST gap/fold times owned by native policy.
+  try { new Intl.DateTimeFormat('en-US', { timeZone: draft.tz }); return true; }
+  catch { return false; }
 }
