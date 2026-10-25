@@ -441,7 +441,10 @@ mod tests {
     #[tokio::test]
     async fn create_seals_the_keychain_accounts_onto_the_drive_and_keeps_the_host() {
         let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = credentials::TestEnvRestore::capture();
         let h = host();
+        let companions = ["accounts.json.lock", "accounts.version.json", "accounts.json.corrupt", "accounts.json.bak1", ".accounts.json.tmp-synthetic"];
+        for name in companions { std::fs::write(h.state.app_dir.join(name), b"synthetic").unwrap(); }
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
         // Never the runner's real keychain for the AI key.
         std::env::set_var("MAILVAULT_TEST_AI_KEY", h.creds.with_file_name("ai_key"));
@@ -457,6 +460,7 @@ mod tests {
         assert!(sealed.credentials.contains_key("acct-1"));
         assert!(data.join(format!("Maildir/acct/INBOX/cur/1.eml{}S", mailvault_core::maildir::INFO_PREFIX)).exists());
         assert!(h.eml.exists() && h.creds.exists(), "nothing removed unless asked");
+        for name in companions { assert!(h.state.app_dir.join(name).exists(), "keep-host removed {name}"); }
         assert!(!h.state.vault_closed.load(std::sync::atomic::Ordering::SeqCst), "the vault is open again");
     }
 

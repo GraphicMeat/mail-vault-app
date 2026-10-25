@@ -573,7 +573,7 @@ async fn accounts_fallback(method: String, params: serde_json::Value) -> Result<
 async fn accounts_fallback_at(dir: std::path::PathBuf, method: String, params: serde_json::Value) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || {
         let doc = mailvault_core::accounts_doc::shared(&dir);
-        mailvault_core::accounts_doc::run(&doc, &method, &params, false)
+        mailvault_core::accounts_doc::run(&doc, &method, &params, mailvault_core::accounts_doc::LiveScrub::Preserve)
             .map(|out| out.reply).map_err(|e| e.catalog_key().to_string())
     }).await.map_err(|_| "errors.accountsWriteFailed".to_string())?
 }

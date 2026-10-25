@@ -1,31 +1,20 @@
-//! The account list, `<app_data_dir>/accounts.json`, behind one owner.
+//! Native account document capability; application adapter cutover is pending.
 //!
-//! The daemon serves it (`accounts.*`, `src-daemon/src/handlers/accounts.rs`);
-//! the shell runs the same operations in its own process only as the app's
-//! fallback for a daemon that lacks them (`accounts_fallback`, kept for one
-//! release). Both go through `json_doc`, so a write is atomic, versioned,
-//! backed up and serialised across the two processes by `accounts.json.lock`.
+//! Both daemon and callable shell fallback use the shared JsonDoc engine,
+//! supported lock file, version fences, atomic replacement and backups.
+//! Existing plugin-fs writers do not participate in its lock. A completed
+//! intervening write is detected; no universal cross-process CAS is claimed.
 //!
-//! The format is what the app wrote for years: one JSON array of account
-//! objects, two-space indented, each with a string `id`, never a password or
-//! a token (those live in the keychain blob). Reads are lenient: any array is
-//! taken as it is (an entry without an id, a duplicate id), because the old
-//! app and the daemon's readers keep reading the same file. Writes are
-//! strict: every entry written must be an object with a non-empty string
-//! `id`, and `password`, `oauth2AccessToken` and `oauth2RefreshToken` are
-//! dropped from what is written (they are never logged).
+//! Legacy arrays remain readable, including old secret fields. Incoming
+//! records have password and OAuth tokens stripped. Retained live secrets
+//! are scrubbed only with an exact preserved-list and version proof checked
+//! under the account writer. Preserve mode still permits explicit removal
+//! or replacement. Newly created good backups are clean; historical backups
+//! and raw corrupt copies are not retroactively scrubbed.
 //!
-//! Operations, each answering the version after it and the ids it changed:
-//! - `put`: shallow merge onto the first entry with the same id
-//!   (`{...old, ...new}`, as `saveAccount` did), or append; with `ifAbsent`,
-//!   append only the entries whose id and logical identity (`logical_key`)
-//!   the list does not hold yet (`ensureAccountsInFile`).
-//! - `remove`: every entry with one of the ids.
-//! - `reorder`: the listed ids first, in that order, the rest after as they were.
-//! - `replace_all`: the whole list (the app's duplicate cleanup), with the
-//!   base version it was computed from.
-//!
-//! Nothing here logs an account field. Ids and counts only.
+//! put merges matching IDs or appends; ifAbsent also checks logical identity.
+//! remove removes every matching entry, reorder keeps unspecified order,
+//! replace_all accepts an optional base version. No account field is logged.
 
 use crate::json_doc::{Change, DocError, JsonDoc, Kind, Persistence, Scrub, Spec};
 use serde_json::{json, Map, Value};
@@ -34,7 +23,7 @@ use std::sync::Arc;
 
 pub const FILE_NAME: &str = "accounts.json";
 pub const SPEC: Spec = Spec { file: FILE_NAME, kind: Kind::Array, pretty: true, persistence: Persistence::PrivateDurable };
-/// Never written to the list: the keychain blob holds them.
+/// Stripped from incoming records and newly made good backups.
 pub const SECRET_FIELDS: [&str; 3] = ["password", "oauth2AccessToken", "oauth2RefreshToken"];
 
 /// The one instance for `app_dir` in this process.
@@ -136,6 +125,15 @@ pub fn legacy_secrets(list: &[Value]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Every non-null legacy secret needs one unambiguous credential-map key.
+/// Duplicates anywhere in the list make a secret-bearing ID ambiguous.
+pub fn legacy_secrets_representable(list: &[Value]) -> bool {
+    let mut counts = std::collections::HashMap::new();
+    for id in list.iter().filter_map(id_of) { *counts.entry(id).or_insert(0usize) += 1; }
+    list.iter().filter(|entry| SECRET_FIELDS.iter().any(|field| entry.get(field).is_some_and(|v| !v.is_null())))
+        .all(|entry| id_of(entry).filter(|id| !id.is_empty()).is_some_and(|id| counts.get(id) == Some(&1)))
+}
+
 fn scrub(live: bool) -> Scrub<'static> {
     Scrub { clean: &scrub_secrets, live }
 }
@@ -157,9 +155,46 @@ pub fn list(doc: &JsonDoc) -> Result<Listing, AccountsError> {
     Ok(Listing { accounts, version: snap.version, recovered: snap.recovered })
 }
 
-pub fn put(doc: &JsonDoc, incoming: &[Value], if_absent: bool, base: Option<u64>, live: bool) -> Result<Change, AccountsError> {
+/// Ephemeral authorization for live cleanup. The daemon constructs the proof
+/// only after preserving the exact listing; the shell always uses Preserve.
+#[derive(Clone, Copy)]
+pub enum LiveScrub<'a> {
+    Preserve,
+    Preserved(&'a Listing),
+}
+
+fn mutate(
+    doc: &JsonDoc, base: Option<u64>, policy: LiveScrub<'_>,
+    apply: impl FnOnce(&mut Value) -> Result<Vec<String>, DocError>,
+) -> Result<Change, AccountsError> {
+    let proof = match policy { LiveScrub::Preserve => None, LiveScrub::Preserved(listing) => Some(listing) };
+    let base = match proof {
+        Some(proof) => {
+            if base.is_some_and(|caller| caller != proof.version) {
+                return Err(AccountsError::Conflict { current: proof.version });
+            }
+            Some(proof.version)
+        }
+        None => base,
+    };
+    // The generic engine prepares a clean backup but leaves live values
+    // untouched for this comparison under its writer and supported OS lock.
+    Ok(doc.write_op_scrubbed(base, Some(scrub(false)), |value| {
+        if let Some(proof) = proof {
+            if value.as_array() != Some(&proof.accounts) {
+                return Err(DocError::Conflict { current: proof.version });
+            }
+        }
+        let mut cleaned = if proof.is_some() { scrub_secrets(value) } else { Vec::new() };
+        let mut changed = apply(value)?;
+        for id in cleaned.drain(..) { push_unique(&mut changed, &id); }
+        Ok(changed)
+    })?)
+}
+
+pub fn put(doc: &JsonDoc, incoming: &[Value], if_absent: bool, base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
     let incoming = incoming.iter().map(writable).collect::<Result<Vec<_>, _>>()?;
-    Ok(doc.write_op_scrubbed(base, Some(scrub(live)), move |list| {
+    Ok(mutate(doc, base, live, move |list| {
         let list = entries(list)?;
         let mut changed = Vec::new();
         if if_absent {
@@ -202,8 +237,8 @@ pub fn put(doc: &JsonDoc, incoming: &[Value], if_absent: bool, base: Option<u64>
     })?)
 }
 
-pub fn remove(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: bool) -> Result<Change, AccountsError> {
-    Ok(doc.write_op_scrubbed(base, Some(scrub(live)), |list| {
+pub fn remove(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
+    Ok(mutate(doc, base, live, |list| {
         let list = entries(list)?;
         let mut changed = Vec::new();
         list.retain(|e| match id_of(e) {
@@ -217,8 +252,8 @@ pub fn remove(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: bool) -> R
     })?)
 }
 
-pub fn reorder(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: bool) -> Result<Change, AccountsError> {
-    Ok(doc.write_op_scrubbed(base, Some(scrub(live)), |list| {
+pub fn reorder(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
+    Ok(mutate(doc, base, live, |list| {
         let list = entries(list)?;
         let before: Vec<Value> = list.clone();
         let mut ordered: Vec<Value> = Vec::with_capacity(list.len());
@@ -252,9 +287,9 @@ pub fn reorder(doc: &JsonDoc, ids: &[String], base: Option<u64>, live: bool) -> 
     })?)
 }
 
-pub fn replace_all(doc: &JsonDoc, incoming: &[Value], base: Option<u64>, live: bool) -> Result<Change, AccountsError> {
+pub fn replace_all(doc: &JsonDoc, incoming: &[Value], base: Option<u64>, live: LiveScrub<'_>) -> Result<Change, AccountsError> {
     let incoming: Vec<Value> = incoming.iter().map(writable).collect::<Result<Vec<_>, _>>()?.into_iter().map(Value::Object).collect();
-    Ok(doc.write_op_scrubbed(base, Some(scrub(live)), move |list| {
+    Ok(mutate(doc, base, live, move |list| {
         let list = entries(list)?;
         if *list == incoming {
             return Ok(Vec::new());
@@ -321,10 +356,9 @@ pub fn writes(method: &str) -> bool {
 }
 
 /// One `accounts.*` operation on `doc`. Blocking file IO: call it off the
-/// async workers. `scrub_live`: a write also drops every legacy secret from
-/// the list (only once the keychain holds those accounts); either way no
-/// backup it takes holds one.
-pub fn run(doc: &JsonDoc, method: &str, params: &Value, scrub_live: bool) -> Result<Outcome, AccountsError> {
+/// async workers. A preserved proof authorizes live cleanup only while its
+/// complete values and version still match. Newly made good backups are clean.
+pub fn run(doc: &JsonDoc, method: &str, params: &Value, scrub_live: LiveScrub<'_>) -> Result<Outcome, AccountsError> {
     let live = scrub_live;
     match method {
         "accounts.list" => {

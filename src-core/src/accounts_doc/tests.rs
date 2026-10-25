@@ -24,7 +24,7 @@ fn doc(d: &Path) -> JsonDoc {
 }
 
 fn call(doc: &JsonDoc, method: &str, params: Value) -> Result<Outcome, AccountsError> {
-    run(doc, method, &params, false)
+    run(doc, method, &params, LiveScrub::Preserve)
 }
 
 #[test]
@@ -147,12 +147,12 @@ fn the_first_write_with_a_live_scrub_leaves_no_secret_in_the_list_or_any_backup(
     legacy_file(d.path());
     let doc = JsonDoc::open_with(d.path(), SPEC, Duration::ZERO);
     assert_eq!(legacy_secrets(&list(&doc).unwrap().accounts).iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
-    let out = run(&doc, "accounts.put", &json!({"entry": {"id": "d"}}), true).unwrap();
+    let out = run(&doc, "accounts.put", &json!({"entry": {"id": "d"}}), LiveScrub::Preserved(&list(&doc).unwrap())).unwrap();
     let mut changed = out.changed.unwrap().changed;
     changed.sort();
     assert_eq!(changed, vec!["a", "b", "d"]);
     // A second write takes another backup: of the clean list, too.
-    run(&doc, "accounts.put", &json!({"entry": {"id": "e"}}), true).unwrap();
+    run(&doc, "accounts.put", &json!({"entry": {"id": "e"}}), LiveScrub::Preserved(&list(&doc).unwrap())).unwrap();
     let copies = all_copies(d.path());
     assert!(copies.iter().any(|(n, _)| n == &SPEC.backup_name(1)), "{copies:?}");
     for (name, text) in &copies {
@@ -161,7 +161,7 @@ fn the_first_write_with_a_live_scrub_leaves_no_secret_in_the_list_or_any_backup(
     assert_eq!(ids(&disk(d.path())), vec!["a", "b", "c", "d", "e"]);
     // Even a write that changes nothing else removes them.
     legacy_file(d.path());
-    let out = run(&doc, "accounts.reorder", &json!({"ids": ["a", "b", "c"]}), true).unwrap();
+    let out = run(&doc, "accounts.reorder", &json!({"ids": ["a", "b", "c"]}), LiveScrub::Preserved(&list(&doc).unwrap())).unwrap();
     assert!(out.changed.is_some());
     assert!(!fs::read_to_string(d.path().join(FILE_NAME)).unwrap().contains(LEGACY));
 }
@@ -171,7 +171,7 @@ fn without_a_live_scrub_the_list_keeps_its_secrets_but_no_backup_takes_them() {
     let d = dir();
     legacy_file(d.path());
     let doc = JsonDoc::open_with(d.path(), SPEC, Duration::ZERO);
-    run(&doc, "accounts.put", &json!({"entry": {"id": "d"}}), false).unwrap();
+    run(&doc, "accounts.put", &json!({"entry": {"id": "d"}}), LiveScrub::Preserve).unwrap();
     assert!(fs::read_to_string(d.path().join(FILE_NAME)).unwrap().contains(LEGACY), "nothing is lost while the keychain may lack it");
     let bak = fs::read_to_string(d.path().join(SPEC.backup_name(1))).unwrap();
     assert!(!bak.contains(LEGACY), "the backup holds no secret");
@@ -186,9 +186,9 @@ fn every_file_of_the_list_is_private_to_this_user() {
     legacy_file(d.path());
     fs::set_permissions(d.path().join(FILE_NAME), fs::Permissions::from_mode(0o644)).unwrap();
     let doc = JsonDoc::open_with(d.path(), SPEC, Duration::ZERO);
-    run(&doc, "accounts.put", &json!({"entry": {"id": "d"}}), true).unwrap();
+    run(&doc, "accounts.put", &json!({"entry": {"id": "d"}}), LiveScrub::Preserved(&list(&doc).unwrap())).unwrap();
     fs::write(d.path().join(FILE_NAME), "garbage").unwrap();
-    run(&doc, "accounts.put", &json!({"entry": {"id": "e"}}), true).unwrap();
+    run(&doc, "accounts.put", &json!({"entry": {"id": "e"}}), LiveScrub::Preserved(&list(&doc).unwrap())).unwrap();
     for name in [FILE_NAME.to_string(), SPEC.backup_name(1), SPEC.corrupt_name(), SPEC.lock_name(), SPEC.version_name()] {
         let mode = fs::metadata(d.path().join(&name)).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "{name} is {mode:o}");
@@ -244,7 +244,7 @@ fn fifty_parallel_puts_to_different_ids_all_survive() {
         .map(|i| {
             let doc = Arc::clone(&doc);
             std::thread::spawn(move || {
-                run(&doc, "accounts.put", &json!({"entry": {"id": format!("acct-{i}"), "email": format!("u{i}@x.test")}}), false)
+                run(&doc, "accounts.put", &json!({"entry": {"id": format!("acct-{i}"), "email": format!("u{i}@x.test")}}), LiveScrub::Preserve)
                     .unwrap()
                     .changed
                     .unwrap()
@@ -272,7 +272,7 @@ fn parallel_puts_to_one_id_end_on_the_writer_with_the_highest_version() {
         .map(|i| {
             let doc = Arc::clone(&doc);
             std::thread::spawn(move || {
-                let v = run(&doc, "accounts.put", &json!({"entry": {"id": "same", "n": i}}), false).unwrap().changed.map(|c| c.version);
+                let v = run(&doc, "accounts.put", &json!({"entry": {"id": "same", "n": i}}), LiveScrub::Preserve).unwrap().changed.map(|c| c.version);
                 (i, v)
             })
         })
@@ -314,7 +314,7 @@ fn reorder_puts_the_listed_ids_first_and_keeps_the_rest_in_order() {
 }
 
 #[test]
-fn replace_all_needs_the_current_version_and_strips_secrets() {
+fn replace_all_checks_a_supplied_version_and_strips_secrets() {
     let d = dir();
     seed(d.path(), json!([{"id": "a", "email": "a@x.test"}, {"id": "a2", "email": "a@x.test"}]));
     let doc = doc(d.path());
@@ -423,10 +423,63 @@ fn changed_recovery_at_the_same_version_is_refused() {
     let proof = list(&doc).unwrap();
     seed_backup(d.path(), json!([{"id":"b", "password":"only-B"}]));
     assert_eq!(list(&doc).unwrap().version, proof.version, "actual recovery keeps version");
-    let result = run(&doc, "accounts.put", &json!({"entry":{"id":"x"}}), true);
+    let result = run(&doc, "accounts.put", &json!({"entry":{"id":"x"}}), LiveScrub::Preserved(&proof));
     assert!(matches!(result, Err(AccountsError::Conflict { .. })));
     assert_eq!(fs::read(d.path().join(FILE_NAME)).unwrap(), b"broken");
 }
 fn seed_backup(d: &Path, value: Value) {
     fs::write(d.join(SPEC.backup_name(1)), value.to_string()).unwrap();
+}
+
+#[test]
+fn proof_checks_full_values_even_when_the_version_matches() {
+    let d = dir(); seed(d.path(), json!([{"id":"a", "password":"only-A"}]));
+    let doc = doc(d.path()); let mut proof = list(&doc).unwrap();
+    proof.accounts[0]["extra"] = json!("not-preserved");
+    assert!(matches!(run(&doc, "accounts.put", &json!({"entry":{"id":"x"}}), LiveScrub::Preserved(&proof)), Err(AccountsError::Conflict{..})));
+    assert!(disk(d.path())[0].get("password").is_some());
+    assert!(!d.path().join(SPEC.backup_name(1)).exists());
+}
+#[test]
+fn proof_rejects_stale_caller_base_without_substitution() {
+    let d = dir(); let doc = doc(d.path());
+    call(&doc, "accounts.put", json!({"entry":{"id":"a"}})).unwrap();
+    let old = list(&doc).unwrap();
+    call(&doc, "accounts.put", json!({"entry":{"id":"b"}})).unwrap();
+    let fresh = list(&doc).unwrap();
+    assert!(matches!(run(&doc, "accounts.put", &json!({"entry":{"id":"x"}, "baseVersion":old.version}), LiveScrub::Preserved(&fresh)), Err(AccountsError::Conflict{..})));
+    let out = run(&doc, "accounts.put", &json!({"entry":{"id":"x"}, "baseVersion":fresh.version}), LiveScrub::Preserved(&fresh)).unwrap();
+    assert_eq!(out.reply["changed"], json!(["x"]));
+}
+#[test]
+fn proof_detects_missed_good_writes_and_same_byte_aba_sidecars() {
+    let d = dir(); let first = doc(d.path());
+    call(&first, "accounts.put", json!({"entry":{"id":"a"}})).unwrap();
+    let proof = list(&first).unwrap(); let bytes = fs::read(d.path().join(FILE_NAME)).unwrap();
+    let other = doc(d.path());
+    call(&other, "accounts.put", json!({"entry":{"id":"b"}})).unwrap();
+    assert!(matches!(run(&first, "accounts.put", &json!({"entry":{"id":"x"}}), LiveScrub::Preserved(&proof)), Err(AccountsError::Conflict{..})));
+    let proof_b = list(&first).unwrap();
+    call(&other, "accounts.remove", json!({"id":"b"})).unwrap();
+    assert_eq!(fs::read(d.path().join(FILE_NAME)).unwrap(), bytes);
+    assert!(matches!(run(&first, "accounts.put", &json!({"entry":{"id":"x"}}), LiveScrub::Preserved(&proof)), Err(AccountsError::Conflict{..})));
+    assert!(matches!(run(&first, "accounts.put", &json!({"entry":{"id":"x"}}), LiveScrub::Preserved(&proof_b)), Err(AccountsError::Conflict{..})));
+    assert_eq!(ids(&disk(d.path())), vec!["a"]);
+}
+#[test]
+fn replace_all_accepts_omitted_base_and_preserve_allows_explicit_removal() {
+    let d = dir(); seed(d.path(), json!([{"id":"a", "password":"old"}])); let doc = doc(d.path());
+    call(&doc, "accounts.replace_all", json!({"entries":[{"id":"b", "password":"incoming"}]})).unwrap();
+    assert_eq!(disk(d.path()), json!([{"id":"b"}]));
+    call(&doc, "accounts.remove", json!({"id":"b"})).unwrap();
+    assert_eq!(disk(d.path()), json!([]));
+}
+
+#[test]
+fn legacy_map_representability_requires_unique_nonempty_ids_only_for_secrets() {
+    for bad in [json!([{"password":"secret"}]),json!([{"id":"", "password":"secret"}]),json!([{"id":7, "password":"secret"}]),json!([{"id":"a","password":"secret"},{"id":"a"}])] {
+        assert!(!legacy_secrets_representable(bad.as_array().unwrap()));
+    }
+    assert!(legacy_secrets_representable(json!([{"id":"a","password":"secret"},{"id":"b"}]).as_array().unwrap()));
+    assert!(legacy_secrets_representable(json!([{"id":"a"},{"id":"a"},{"password":null}]).as_array().unwrap()));
 }

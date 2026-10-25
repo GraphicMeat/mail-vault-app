@@ -411,7 +411,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
   const classificationOverrides = new Map();
   let externalBackupPath = null;
 
-  // accounts.json as the daemon serves it (`accounts.*`); no secrets in it.
+  // Approximate isolated account capability; no native concurrency claim.
   const seedAccountList = () => ACCOUNTS.map(({ password, oauth2AccessToken, oauth2RefreshToken, ...rest }) => clone(rest));
   let accountList = seedAccountList();
   let accountsVersion = 1;
@@ -720,7 +720,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // Daemon-owned commands (search index, vault rows/search — spec
         // 2026-09-14 §5) keep their Tauri names, not a dotted daemon method.
         if (method && !method.includes('.')) return invoke(method, args.params || {});
-        if ((method?.startsWith('accounts.') || method?.startsWith('credentials.'))) return invoke(method, args.params || {});
+        if (method?.startsWith('accounts.') || method?.startsWith('credentials.')) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
         // Insights: the daemon's insights.build / aggregate / messages

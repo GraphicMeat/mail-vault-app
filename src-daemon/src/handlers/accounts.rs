@@ -28,13 +28,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         return None;
     }
     let doc = accounts_doc::shared(&state.app_dir);
-    let live = !accounts_doc::writes(method) || legacy_secrets_kept(state, &doc).await;
+    let preserved = if accounts_doc::writes(method) { legacy_secrets_kept(state, &doc).await } else { None };
     #[cfg(test)]
     pause_after_preservation(&state.app_dir).await;
     let method = method.to_string();
     let params = params.clone();
     // File IO and an fsync: off the async workers.
-    let joined = tokio::task::spawn_blocking(move || accounts_doc::run(&doc, &method, &params, live)).await;
+    let joined = tokio::task::spawn_blocking(move || {
+        let policy = preserved.as_ref().map(accounts_doc::LiveScrub::Preserved).unwrap_or(accounts_doc::LiveScrub::Preserve);
+        accounts_doc::run(&doc, &method, &params, policy)
+    }).await;
     let outcome = joined.unwrap_or_else(|_| Err(AccountsError::Io("accounts task failed".to_string())));
     Some(match outcome {
         Ok(out) => {
@@ -54,16 +57,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// password or token for (an older release wrote them there) is in the
 /// keychain blob. One the blob lacks is copied in first, as the old app
 /// used it (its own entry, secrets included); one the blob already holds
-/// keeps the blob's record, which the old app trusted over the file. `false`
-/// when that cannot be made sure (the blob unreadable): the list keeps its
-/// secrets this time, so nothing is lost. Ids and counts only in the log.
-async fn legacy_secrets_kept(state: &Arc<DaemonState>, doc: &Arc<mailvault_core::json_doc::JsonDoc>) -> bool {
+/// keeps the blob's record. The original listing is returned as ephemeral
+/// proof, including on the no-legacy path. Failure cannot authorize blanket
+/// live cleanup of retained records. No document lock crosses credential IO.
+async fn legacy_secrets_kept(state: &Arc<DaemonState>, doc: &Arc<mailvault_core::json_doc::JsonDoc>) -> Option<accounts_doc::Listing> {
     let read = Arc::clone(doc);
     let listed = tokio::task::spawn_blocking(move || accounts_doc::list(&read)).await;
-    let Ok(Ok(listed)) = listed else { return false };
+    let Ok(Ok(listed)) = listed else { return None };
+    // A per-ID map cannot preserve ambiguous legacy rows. Skip credential
+    // IO entirely and retain their live fields for this requested mutation.
+    if !accounts_doc::legacy_secrets_representable(&listed.accounts) { return None; }
     let legacy = accounts_doc::legacy_secrets(&listed.accounts);
     if legacy.is_empty() {
-        return true;
+        return Some(listed);
     }
     let records: std::collections::HashMap<String, String> = legacy.into_iter().collect();
     let count = records.len();
@@ -72,11 +78,11 @@ async fn legacy_secrets_kept(state: &Arc<DaemonState>, doc: &Arc<mailvault_core:
             if !ids.is_empty() {
                 tracing::info!("accounts: {} legacy account record(s) copied into the keychain before the list is scrubbed", ids.len());
             }
-            true
+            Some(listed)
         }
         Err(e) => {
             tracing::warn!("accounts: {count} entr(ies) still hold secrets and the keychain could not take them ({}); left in place", e.catalog_key());
-            false
+            None
         }
     }
 }
@@ -156,7 +162,7 @@ mod tests {
             let bytes = serde_json::to_vec(&json!([a, {"id":"b", "password":"only-B"}])).unwrap();
             std::fs::write(&path, &bytes).unwrap();
             // A core read can also finish while the route is paused.
-            accounts_doc::run(&accounts_doc::shared(dir.path()), "accounts.reorder", &json!({"ids":[]}), false).unwrap();
+            accounts_doc::run(&accounts_doc::shared(dir.path()), "accounts.reorder", &json!({"ids":[]}), accounts_doc::LiveScrub::Preserve).unwrap();
             pause.1.notify_one();
             bytes
         };
@@ -322,6 +328,40 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&creds).unwrap(), "{\"broken");
     }
 
+    #[tokio::test]
+    async fn six_native_routes_complete_successfully() {
+        let (_dir, state) = rig();
+        assert_eq!(call(&state, "accounts.list", json!({})).await.unwrap()["accounts"], json!([]));
+        call(&state, "accounts.put", json!({"entries":[{"id":"a"},{"id":"b"}]})).await.unwrap();
+        assert_eq!(call(&state, "accounts.get", json!({"id":"a"})).await.unwrap()["account"], json!({"id":"a"}));
+        call(&state, "accounts.reorder", json!({"ids":["b"]})).await.unwrap();
+        assert_eq!(call(&state, "accounts.list", json!({})).await.unwrap()["accounts"][0]["id"], "b");
+        call(&state, "accounts.remove", json!({"id":"b"})).await.unwrap();
+        call(&state, "accounts.replace_all", json!({"entries":[{"id":"c", "password":"incoming"}]})).await.unwrap();
+        assert_eq!(call(&state, "accounts.list", json!({})).await.unwrap()["accounts"], json!([{"id":"c"}]));
+    }
+    #[tokio::test]
+    async fn scrub_only_emits_once_then_clean_noop_is_stable() {
+        let (dir, state) = rig();
+        std::fs::write(dir.path().join("accounts.json"), json!([{"id":"a", "password":"only-A"}]).to_string()).unwrap();
+        let mut rx = state.events.subscribe();
+        let first = call(&state, "accounts.reorder", json!({"ids":["a"]})).await.unwrap();
+        assert_eq!(first["changed"], json!(["a"]));
+        let mut account_events = 0; let mut credential_events = 0;
+        while let Ok(line) = rx.try_recv() {
+            let (name, payload) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
+            if name == CHANGED_EVENT { account_events += 1; assert_eq!(payload["ids"], json!(["a"])); }
+            if name == crate::handlers::credentials::CHANGED_EVENT { credential_events += 1; }
+        }
+        assert_eq!(account_events, 1); assert_eq!(credential_events, 1, "N1 finalizer owns one preservation notification");
+        let bytes = std::fs::read(dir.path().join("accounts.json")).unwrap();
+        let second = call(&state, "accounts.reorder", json!({"ids":["a"]})).await.unwrap();
+        assert_eq!(second, json!({"version":first["version"], "changed":[]}));
+        assert_eq!(std::fs::read(dir.path().join("accounts.json")).unwrap(), bytes);
+        assert!(rx.try_recv().is_err());
+        assert_eq!(call(&state, "accounts.put", json!({"entry":{}})).await.unwrap_err(), "errors.accountsInvalid");
+        assert!(rx.try_recv().is_err());
+    }
     #[test]
     fn the_route_logs_counts_and_keys_only() {
         let src = include_str!("accounts.rs");

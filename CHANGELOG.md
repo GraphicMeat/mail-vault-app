@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Prepare native account-list operations with version conflicts, private durable document writes and legacy-secret preservation checks. Existing account workflows remain active while application cutover is pending.
+
 - Move automatic backup scheduling, retry/limit recovery and automatic Time Capsule manifests into the background helper. Backups continue when a window closes, manual controls reconcile retained results after reconnect, and unavailable backup locations remain pending. Interrupted snapshot creation is reported as uncertain instead of repeated blindly.
 
 - Keep native backup folder access bound to its exact execution through reconnects and cancellation, releasing it only after verified rejection or joined completion.
