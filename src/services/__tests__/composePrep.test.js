@@ -36,3 +36,26 @@ describe('native compose preparation adapter', () => {
     await expect(prepareCompose(input, { acknowledge: async () => 2 })).rejects.toThrow('compose.preparationUnavailable');
   });
 });
+
+it('preserves every frozen supplemental large-input digest through the actual adapter and demo route', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  const saved = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-supplement.json', 'utf8'));
+  const make = (spec, index = null) => {
+    const tag = index === null ? 'original' : `context-${index}`;
+    const words = `START-${tag}:` + spec.unit.repeat(index === null ? spec.originalRepeat : spec.contextRepeat) + `:END-${tag}`;
+    return { from: { name: '<From & Name>', address: `${tag}@example.test` }, to: [{ address: 'owner@example.test' }], subject: `Subject <&> ${tag}`, date: `stamp-${tag}`, bcc: [{ address: 'bcc-large-sentinel@example.test' }],
+      ...(spec.text ? { text: words } : { html: `<table style="color:red"><tr><td>${words}<img src="cid:logo"></td></tr></table>` }) };
+  };
+  send.mockImplementation(async (_, p) => prepareDemoCompose(p, { accounts, values: {}, version: 4 }));
+  for (const { spec, digests } of saved.largeCases) {
+    const replyTo = make(spec); replyTo._threadContext = Array.from({ length: spec.count }, (_, i) => make(spec, i));
+    if (spec.selected !== undefined) replyTo._selectedQuoteHtml = spec.selected;
+    const input = messagePreparation({ replyTo, mode: spec.mode, accountId: 'one' });
+    input.presentation.originalLabel = 'Original message';
+    const result = await prepareCompose(input, { acknowledge: async () => 4 });
+    for (const [field, digest] of Object.entries(digests)) {
+      expect({ bytes: Buffer.byteLength(result[field]), sha256: createHash('sha256').update(result[field]).digest('hex') }).toEqual(digest);
+    }
+  }
+});

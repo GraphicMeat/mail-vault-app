@@ -1,5 +1,5 @@
-const { preparationIO } = vi.hoisted(() => ({ preparationIO: { failure: false, gate: null, calls: [] } }));
-vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
+const { preparationIO } = vi.hoisted(() => ({ preparationIO: { failure: false, gate: null, calls: [], ackGate: null, ackCalls: 0 } }));
+vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => { preparationIO.ackCalls++; if (preparationIO.ackGate) await preparationIO.ackGate; return 0; }) }));
 vi.mock('../../services/transport', () => ({ send: async (_method, p) => {
   preparationIO.calls.push(p);
   if (preparationIO.gate) await preparationIO.gate;
@@ -18,7 +18,7 @@ import { startMailtoBridge, setMailtoComposeOpener, retryMailtoCompose } from '.
 let opened;
 
 beforeEach(() => {
-  preparationIO.failure = false; preparationIO.gate = null; preparationIO.calls = [];
+  preparationIO.failure = false; preparationIO.gate = null; preparationIO.calls = []; preparationIO.ackGate = null; preparationIO.ackCalls = 0;
   opened = [];
   setMailtoComposeOpener(d => opened.push(d));
 });
@@ -145,4 +145,33 @@ it('fences a native reply when the opener changes and delivers on explicit retry
   await retryMailtoCompose();
   expect(opened.map(d => d.to)).toEqual(['fenced@example.test']);
   bridge.stop();
+});
+
+it('retains accepted mailto when stopped during main settings ACK and never calls native from the stopped generation', async () => {
+  let release; preparationIO.ackGate = new Promise(r => { release = r; });
+  const invoke = vi.fn().mockResolvedValue(['mailto:ack-fenced@example.test']);
+  const bridge = startMailtoBridge({ invoke, listen: async () => () => {} });
+  await vi.waitFor(() => expect(preparationIO.ackCalls).toBe(1));
+  bridge.stop(); release(); await bridge.ready;
+  expect(preparationIO.calls).toEqual([]); expect(opened).toEqual([]);
+  preparationIO.ackGate = null;
+  const replacement = startMailtoBridge({ invoke: vi.fn().mockResolvedValue([]), listen: async () => () => {} });
+  await replacement.ready; expect(opened.map(d => d.to)).toEqual(['ack-fenced@example.test']); replacement.stop();
+});
+it('serializes a cold drain and overlapping wake while preserving repeated occurrence order', async () => {
+  let release; preparationIO.gate = new Promise(r => { release = r; });
+  const { listen, settle, fire } = fakeListen(); settle();
+  const invoke = vi.fn().mockResolvedValueOnce(['mailto:same@example.test', 'mailto:same@example.test']).mockResolvedValueOnce(['mailto:last@example.test']);
+  const bridge = startMailtoBridge({ invoke, listen });
+  await vi.waitFor(() => expect(preparationIO.calls).toHaveLength(1));
+  const waking = fire('mailto-open'); expect(invoke).toHaveBeenCalledTimes(1);
+  release(); await Promise.all([bridge.ready, waking]);
+  expect(opened.map(d => d.to)).toEqual(['same@example.test', 'same@example.test', 'last@example.test']);
+  expect(invoke).toHaveBeenCalledTimes(2); bridge.stop();
+});
+it('leaves the shell queue untouched when no compose surface is mounted', async () => {
+  setMailtoComposeOpener(null);
+  const invoke = vi.fn().mockResolvedValue(['mailto:unclaimed@example.test']);
+  const bridge = startMailtoBridge({ invoke, listen: async () => () => {} }); await bridge.ready;
+  expect(invoke).not.toHaveBeenCalled(); expect(opened).toEqual([]); bridge.stop();
 });
