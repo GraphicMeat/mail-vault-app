@@ -586,16 +586,15 @@ fn enabled(state: &Arc<DaemonState>) {
     );
 }
 #[tokio::test]
-async fn backup_worker_automatic_owner_is_inactive_in_production_stage() {
+async fn backup_worker_empty_surfaces_preserve_native_admission() {
     let mut r = rig();
     enabled(&r.state);
     wake(&r.state);
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    assert!(r.calls.try_recv().is_err());
-    assert_eq!(
-        r.state.backup_worker.status()["automaticOwner"],
-        "javascript"
-    );
+    let c = call(&mut r).await;
+    assert_eq!(c.ctx.account_id, "one");
+    assert_eq!(r.state.backup_worker.status()["automaticOwner"], "daemon");
+    c.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state, |s| s["active"].is_null() && s["queue"].as_array().unwrap().is_empty()).await;
     finish(r).await;
 }
 #[tokio::test]

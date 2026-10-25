@@ -94,12 +94,12 @@ it('rechecks actual activity after the visibility settle delay', () => {
   expect(scheduler.checkAndQueueDue).not.toHaveBeenCalled();
   unmount(); vi.useRealTimers();
 });
-it('characterizes the old delayed-wake callback surviving unmount as a later-cutover gap', () => {
+it('retirement fences the old delayed wake without stopping native work', () => {
   vi.useFakeTimers(); Object.values(scheduler).forEach(fn => fn.mockClear());
   const { unmount } = renderHook(() => useBackupScheduler());
   tickAfter(151000); unmount();
-  expect(scheduler.stopAll).toHaveBeenCalledTimes(1);
+  expect(scheduler.stopAll).not.toHaveBeenCalled();
   vi.advanceTimersByTime(10000);
-  expect(scheduler.onWake).toHaveBeenCalledTimes(1);
+  expect(scheduler.onWake).not.toHaveBeenCalled();
   vi.useRealTimers();
 });
