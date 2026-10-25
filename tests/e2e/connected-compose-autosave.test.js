@@ -20,6 +20,8 @@
 
 import { waitForApp, reloadApp, waitForEmails, switchToFolder, visibleRowSubjects } from './helpers.js';
 import { SEND_REFUSED_TO } from './mockImap.js';
+import mailparser from 'mailparser';
+const { simpleParser } = mailparser;
 import {
   openComposeFresh,
   closeComposeHard,
@@ -275,13 +277,14 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
 
     // Waited on the FILE, not the subject: the subject is saved a pause earlier,
     // so a wait on it can return the pre-attachment version of the same draft.
-    const raw = flatten(await waitForLocalDraft(account.id, 'notes.pdf'));
+    const raw = await waitForLocalDraft(account.id, 'notes.pdf');
     // The file is IN the saved message — a draft that lists an attachment it
     // cannot produce is the same lie as a row with no body behind it.
-    expect(raw).toContain('Draft with an attachment');
-    // The bytes themselves, not a base64 prefix: this stub is pure ASCII, so
-    // lettre files it as 7bit rather than base64.
-    expect(raw).toContain('%PDF-1.4');
+    expect(flatten(raw)).toContain('Draft with an attachment');
+    const parsed = await simpleParser(raw);
+    const attachment = parsed.attachments.find(file => file.filename === 'notes.pdf');
+    expect(attachment?.contentType).toBe('application/pdf');
+    expect(attachment?.content.equals(Buffer.from(pdfFile().base64, 'base64'))).toBe(true);
     const entry = (await localIndex(account.id, 'Drafts')).find((e) => e.subject === 'Draft with an attachment');
     expect(entry?.has_attachments).toBe(true);
   });

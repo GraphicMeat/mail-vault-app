@@ -400,6 +400,12 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
       return [...prev, { id, minimized: false, initialData, ...(!readyRef.current ? { _awaitDraftHydration: true } : {}) }];
     });
   }, [focus, idRef, setWindows]);
+  // App's existing identity-bearing Outbox/Undo restore branch, extracted
+  // unchanged so its admission behavior is exercised without the mail shell.
+  const restoreCompose = useCallback(state => {
+    const id = ++idRef.current;
+    setWindows(prev => [...prev, { id, minimized: false, ...state }]);
+  }, [idRef, setWindows]);
   const saveState = useCallback((id, savedData) => {
     setWindows(prev => prev.map(w => {
       if (w.id !== id || JSON.stringify(w.snapshot) === JSON.stringify(savedData)) return w;
@@ -435,5 +441,5 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
   }, [windows, reconcile]);
   const canMount = useCallback(window => !window._awaitDraftHydration
     && (!isTerminalCompose(dataFor(window)) || Boolean(window._terminalActive)), []);
-  return { ready, openDraft, saveState, canMount, terminalCleanup, retryCleanup, removeSource };
+  return { ready, openDraft, restoreCompose, saveState, canMount, terminalCleanup, retryCleanup, removeSource };
 }

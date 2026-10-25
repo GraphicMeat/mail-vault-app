@@ -137,6 +137,7 @@ vi.mock('../../stores/settingsStore', () => {
 });
 
 const { ComposeModal } = await import('../ComposeModal');
+const { OutboxTray } = await import('../OutboxTray');
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const accepted = (request, uid = 42) => ({ draftId: request.draftId, revision: request.revision, disposition: 'saved', cleanup: 'complete', discarded: false, pending: null, cleanupIdentities: [], current: { identity: { accountId: request.accountId, mailbox: 'LegacyDrafts', uid }, entry: { uid, draftId: request.draftId, revision: request.revision } }, accountId: request.accountId, mailbox: 'LegacyDrafts', uid });
@@ -299,14 +300,14 @@ it('retains accepted location and offers the same revision retry while native cl
 });
 
 const { useComposeSessionHydration, mergeComposeSession } = await import('../../services/composeSession');
-function HydrationHarness({ loader, persist, controls, initial = [], focus, terminalOptions = {} }) {
+function HydrationHarness({ loader, persist, controls, initial = [], focus, terminalOptions = {}, showOutbox = false }) {
   const [windows, setWindows] = React.useState(initial);
   const idRef = React.useRef(20);
   const owner = useComposeSessionHydration({ windows, setWindows, idRef, loader, persist, focus, ...terminalOptions });
   controls.current = { ...owner, windows, fresh: (mode = 'new') => setWindows(prev => [...prev, { id: ++idRef.current, mode,
     ...(mode === 'reply' ? { replyTo: { uid: 9, from: { address: 'them@example.test' }, subject: 'Question', html: '<p>Q</p>' } } : {}) }]) };
-  return windows.filter(w => !w.minimized && !w.detached && owner.canMount(w)).map(w => <ComposeModal {...props} key={w.id}
-    mode={w.mode || 'new'} replyTo={w.replyTo} initialData={w.initialData} onSaveState={data => owner.saveState(w.id, data)} onDiscard={data => owner.terminalCleanup(data, 'discard', w.id)} />);
+  return <>{showOutbox && <OutboxTray onRestoreDraft={owner.restoreCompose} />}{windows.filter(w => !w.minimized && !w.detached && owner.canMount(w)).map(w => <ComposeModal {...props} key={w.id}
+    mode={w.mode || 'new'} replyTo={w.replyTo} initialData={w.initialData} onSaveState={data => owner.saveState(w.id, data)} onDiscard={data => owner.terminalCleanup(data, 'discard', w.id)} />)}</>;
 }
 const nativeDraft = { ...seed, _draftId: 'managed', _draftRevision: 2, _draftAcceptedRevision: 2, _draftUid: 22, _draftAccountId: 'acct-1' };
 describe('App production hydration owner with the real editor', () => {
@@ -612,4 +613,45 @@ it('translates native draft save failures without exposing identity proof fields
   const alert = screen.getByRole('alert').textContent;
   expect(alert).toContain('The draft could not be saved. Please retry.');
   expect(alert).not.toContain('sha256'); expect(alert).not.toContain('uid=42');
+});
+
+
+describe('App-used Outbox restore admission after accepted SMTP', () => {
+  it.each(['complete', 'skipped', 'unknown'])('gates actual Cancel restoration during %s cleanup and preserves full compose context', async outcome => {
+    const loader = () => Promise.resolve([]); const controls = { current: null }; const rpc = deferred();
+    const discardThrough = vi.fn(() => rpc.promise); const { createComposeSlice } = await import('../../stores/slices/composeSlice');
+    const oldQueue = mail.queueSend;
+    const original = { uid: 9, messageId: '<reply-parent>', from: { address: 'them@example.test' }, subject: 'Parent' };
+    const data = { ...nativeDraft, _draftId: 'cancel-admission', to: 'to@example.test', body: '<p>captured complete reply</p>', _replyTo: original };
+    const composeState = { mode: 'reply', replyTo: original, initialData: data };
+    const slice = createComposeSlice(update => Object.assign(mail, typeof update === 'function' ? update(mail) : update), () => mail);
+    Object.assign(mail, slice);
+    const api = await import('../../services/api'); api.sendStaged.mockClear();
+    try {
+      render(<HydrationHarness {...{ loader, controls }} persist={vi.fn()} showOutbox terminalOptions={{ discardThrough, flush: vi.fn() }} />);
+      await act(async () => {});
+      const { createComposeSend } = await import('../../services/composeSend');
+      await act(async () => { mail.queueSend(composeState, createComposeSend({ snapshot: data, account, mode: 'reply', cleanupDraft: controls.current.terminalCleanup }), 0); });
+      expect(discardThrough).toHaveBeenCalledTimes(1); expect(api.sendStaged).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByTestId('outbox-bubble-sending').querySelector('button'));
+      await act(async () => {});
+      expect(mail.outboxItems).toEqual([]);
+      expect(screen.queryByTestId('editor-stub')).toBeNull();
+      if (outcome === 'unknown') {
+        await act(async () => { rpc.reject(Error('lost cleanup ACK')); });
+        expect(screen.queryByTestId('editor-stub')).toBeNull();
+        const owner = controls.current.windows.find(window => window.snapshot?._draftCleanupOnly);
+        expect(owner.snapshot._draftCleanupContender.body).toBe('<p>captured complete reply</p>');
+        discardThrough.mockResolvedValueOnce({ draftId: 'cancel-admission', discarded: true, cleanup: 'complete' });
+        await act(async () => { await controls.current.retryCleanup(owner.id); });
+      } else await act(async () => { rpc.resolve(outcome === 'skipped'
+        ? { draftId: 'cancel-admission', discarded: false, skipped: true, reason: 'newer_revision', newerRevision: 3 }
+        : { draftId: 'cancel-admission', discarded: true, cleanup: 'complete' }); });
+      const recovered = controls.current.windows.find(window => !window.snapshot?._draftCleanupOnly);
+      expect(recovered.mode).toBe('reply'); expect(recovered.replyTo).toEqual(original);
+      expect((recovered.snapshot || recovered.initialData).body).toBe('<p>captured complete reply</p>');
+      expect((recovered.snapshot || recovered.initialData)._draftId === 'cancel-admission').toBe(outcome === 'skipped');
+      expect(api.sendStaged).toHaveBeenCalledTimes(1);
+    } finally { mail.queueSend = oldQueue; mail.outboxItems = []; mail.pendingSends = []; mail.pendingSend = null; }
+  });
 });

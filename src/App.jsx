@@ -366,7 +366,7 @@ function App() {
     await native.setFocus();
   }, []);
 
-  const { openDraft: openDraftCompose, saveState: saveComposeState, canMount: canMountCompose, terminalCleanup: cleanupComposeDraft, retryCleanup: retryComposeCleanup, removeSource: removeComposeSource } = useComposeSessionHydration({
+  const { openDraft: openDraftCompose, saveState: saveComposeState, canMount: canMountCompose, terminalCleanup: cleanupComposeDraft, retryCleanup: retryComposeCleanup, removeSource: removeComposeSource, restoreCompose: restoreOwnedCompose } = useComposeSessionHydration({
     windows: composeWindows, setWindows: setComposeWindows, idRef: composeIdRef, focus: focusNativeCompose,
   });
 
@@ -393,6 +393,11 @@ function App() {
       });
       return;
     }
+    const restoredData = state.snapshot || state.initialData;
+    if (restoredData?._draftId || restoredData?._draftUid) {
+      restoreOwnedCompose(state);
+      return;
+    }
     setComposeWindows(prev => {
       const already = prev.find(w => !isTerminalCompose(composeSessionData(w)) && sameReply(w, state));
       if (already) {
@@ -402,7 +407,7 @@ function App() {
       composeIdRef.current += 1;
       return [...prev, { id: composeIdRef.current, minimized: false, ...state }];
     });
-  }, [focusNativeCompose]);
+  }, [focusNativeCompose, restoreOwnedCompose]);
 
   const closeCompose = removeComposeSource;
 
