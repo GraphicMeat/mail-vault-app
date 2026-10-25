@@ -153,9 +153,9 @@ async fn compose_prep_bounds_input_and_does_not_wait_on_vault_locks() {
     .unwrap()
     .unwrap();
     assert_eq!(out["bodyAvailable"], true);
-    let mut p = msg();
-    p["original"]["html"] = json!("x".repeat(compose_prep::MAX_REQUEST_BYTES + 1));
-    assert!(rpc(&s, "compose.reply_context", p).await.is_err());
+    let mut p = chk();
+    p["authoredBodyText"] = json!("x".repeat(compose_prep::MAX_REQUEST_BYTES + 1));
+    assert!(rpc(&s, "compose.check", p).await.is_err());
     let mut p = chk();
     p["premium"] = json!(true);
     assert!(rpc(&s, "compose.check", p).await.is_err());
@@ -246,4 +246,40 @@ async fn compose_prep_distinguishes_empty_accounts_from_unreadable_records() {
         rpc(&s, "compose.check", chk()).await.unwrap_err(),
         "compose.preparationUnavailable"
     );
+}
+
+#[path="../../../src-core/tests/support/compose_prep_supplement.rs"]
+mod supplement;
+#[tokio::test]
+async fn compose_prep_routes_preserve_complete_large_message_bytes() {
+    let (_dir,s)=seed();
+    let mut refusals=Vec::new();
+    for case in supplement::fixture()["largeCases"].as_array().unwrap() {
+        match rpc(&s,"compose.reply_context",supplement::request(case)).await {Ok(out)=>supplement::assert_digests(case,&out),Err(error)=>refusals.push((case["spec"]["name"].clone(),error))}
+    }
+    assert!(refusals.is_empty(),"source-supported complete route requests refused: {refusals:?}");
+}
+#[tokio::test]
+async fn compose_prep_large_worker_does_not_block_an_unrelated_runtime_request() {
+    let (_dir,s)=seed();
+    let fixture=supplement::fixture();let case=fixture["largeCases"].as_array().unwrap().iter().find(|c|c["spec"]["name"]=="aggregate-over-2MiB").unwrap();
+    let started=Arc::new(tokio::sync::Notify::new());
+    let (release,wait)=std::sync::mpsc::channel();let wait=std::sync::Mutex::new(wait);let notify=started.clone();
+    HOOKS.lock().unwrap().insert(s.app_dir.clone(),Arc::new(move||{notify.notify_one();let _=wait.lock().unwrap().recv_timeout(std::time::Duration::from_secs(5));}));
+    let state=s.clone();let p=supplement::request(case);let mut pending=tokio::spawn(async move{rpc(&state,"compose.reply_context",p).await});
+    tokio::select! {
+        _=started.notified()=>{},
+        result=&mut pending=>panic!("large preparation rejected before worker progress control: {:?}",result.unwrap().err()),
+    }
+    let was_pending=!pending.is_finished();
+    let other=tokio::time::timeout(std::time::Duration::from_secs(2),crate::server::handle_request_for_test(&s,"ping",json!({}))).await;
+    release.send(()).unwrap();HOOKS.lock().unwrap().remove(&s.app_dir);
+    let out=pending.await.unwrap().unwrap();
+    assert!(was_pending);assert!(other.unwrap().result.is_some());supplement::assert_digests(case,&out);
+}
+#[tokio::test]
+async fn compose_prep_account_file_bound_remains_independent() {
+    let (_dir,s)=seed();
+    std::fs::write(s.app_dir.join("accounts.json")," ".repeat(compose_prep::MAX_REQUEST_BYTES+1)+"[]").unwrap();
+    assert_eq!(rpc(&s,"compose.reply_context",msg()).await.unwrap_err(),"compose.preparationUnavailable");
 }

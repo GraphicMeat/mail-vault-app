@@ -263,21 +263,25 @@ mod supplement;
 #[test]
 fn actual_js_whitespace_identity_paths_match() {
     let f=supplement::fixture();
+    let mut mismatches=Vec::new();
     for c in f["identityCases"].as_array().unwrap() {
         let i=&c["input"];
         let ctx=Context{accounts:serde_json::from_value(i["accounts"].clone()).unwrap(),settings:i["settings"].clone(),settings_version:7};
         let p=json!({"kind":"message","requestId":c["name"],"accountId":"one","pickedFrom":i["picked"],"mode":i["mode"],"original":{"header":i["message"]},"presentation":{"originalLabel":"Original","dateLabel":"","subjectCandidate":"Re: Topic"}});
         let out=compose_prep::reply_context(&p,&ctx).unwrap();
-        assert_eq!(out["to"],c["output"]["to"],"{} To",c["name"]);
-        assert_eq!(out["cc"],c["output"]["cc"],"{} Cc",c["name"]);
+        if out["to"]!=c["output"]["to"]||out["cc"]!=c["output"]["cc"] {mismatches.push(c["name"].clone());}
         assert_eq!(out["bcc"],"");
     }
+    assert!(mismatches.is_empty(),"source-derived whitespace recipient mismatches: {mismatches:?}");
 }
 #[test]
 fn actual_js_complete_large_quote_bytes_match() {
+    let ctx=Context{accounts:serde_json::from_value(json!([{"id":"one","email":"owner@example.test"}])).unwrap(),settings:json!({}),settings_version:7};
+    let mut refusals=Vec::new();
     for case in supplement::fixture()["largeCases"].as_array().unwrap() {
-        supplement::assert_digests(case,&supplement::prepare(case));
+        match compose_prep::reply_context(&supplement::request(case),&ctx) {Ok(out)=>supplement::assert_digests(case,&out),Err(error)=>refusals.push((case["spec"]["name"].clone(),error))}
     }
+    assert!(refusals.is_empty(),"source-supported complete messages refused: {refusals:?}");
 }
 #[test]
 fn shared_identity_wrapper_keeps_its_existing_trim_contract() {
