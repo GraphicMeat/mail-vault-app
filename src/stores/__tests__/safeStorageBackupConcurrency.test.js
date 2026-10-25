@@ -77,3 +77,10 @@ it.each([false, true])('rejects failed durability and preserves the queued edit,
   host.fail = false; complete(host); await flushSafeStorage();
   expect(host.disk[name].state.language).toBe('fr'); expect(host.disk[name].state.backupHistory.one).toEqual([{ success: true, timestamp: 42 }]);
 });
+it('adopts a coherent native completion returned during another store write', async () => {
+  const { safeStorage, flushSafeStorage, host } = await rig();
+  safeStorage.setItem('mailvault-theme', JSON.stringify({ version: 0, state: { theme: 'dark' } }));
+  host.beforeWrite = () => { host.beforeWrite = null; complete(host); };
+  await flushSafeStorage();
+  expect(JSON.parse(await safeStorage.getItem(name)).state.backupState.one).toEqual({ lastBackupTime: 42 });
+});

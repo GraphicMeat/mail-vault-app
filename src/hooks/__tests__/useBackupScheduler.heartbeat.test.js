@@ -64,3 +64,42 @@ describe('useBackupScheduler heartbeat', () => {
     expect(scheduler.onWake).toHaveBeenCalledTimes(1);
   });
 });
+
+// Real hook, fake browser events/clock only. Visibility's delayed idle probe
+// makes the throttle's boundary observable between the minute interval ticks.
+for (const [first, second, gap] of [['keydown', 'click', 500], ['mousemove', 'mousemove', 4000]]) {
+  it(`keeps the first ${first} activity timestamp inside its throttle`, () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-25T12:00:00Z'));
+    Object.values(scheduler).forEach(fn => fn.mockClear());
+    const { unmount } = renderHook(() => useBackupScheduler());
+    vi.advanceTimersByTime(1000); document.dispatchEvent(new Event(first));
+    vi.advanceTimersByTime(gap); document.dispatchEvent(new Event(second));
+    vi.advanceTimersByTime(165000-gap);
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    vi.advanceTimersByTime(15000);
+    expect(scheduler.checkAndQueueDue).toHaveBeenCalledTimes(1);
+    unmount(); vi.useRealTimers();
+  });
+}
+it('rechecks actual activity after the visibility settle delay', () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-25T12:00:00Z'));
+  Object.values(scheduler).forEach(fn => fn.mockClear());
+  const { unmount } = renderHook(() => useBackupScheduler());
+  vi.advanceTimersByTime(180000); scheduler.checkAndQueueDue.mockClear();
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  document.dispatchEvent(new Event('visibilitychange'));
+  vi.advanceTimersByTime(14000); document.dispatchEvent(new Event('click'));
+  vi.advanceTimersByTime(1000);
+  expect(scheduler.checkAndQueueDue).not.toHaveBeenCalled();
+  unmount(); vi.useRealTimers();
+});
+it('characterizes the old delayed-wake callback surviving unmount as a later-cutover gap', () => {
+  vi.useFakeTimers(); Object.values(scheduler).forEach(fn => fn.mockClear());
+  const { unmount } = renderHook(() => useBackupScheduler());
+  tickAfter(151000); unmount();
+  expect(scheduler.stopAll).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(10000);
+  expect(scheduler.onWake).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
+});

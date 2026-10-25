@@ -5,8 +5,11 @@
 //
 // One top-level key per persisted store. Reads come from `settings.get` once
 // per window; a change is written 500ms later with `settings.replace`, which
-// replaces just the stores that changed (whole, so a key a store dropped is
-// gone). The daemon writes atomically, keeps a version and backups, and emits
+// replaces just the stores that changed. For mailvault-settings it includes
+// the last accepted store as `bases`: the native writer applies only the local
+// field delta, preserving concurrent backup history/state/snapshot times.
+// Explicit removals remain removals and nested null remains a value.
+// The daemon writes atomically, keeps a version and backups, and emits
 // `settings-changed {keys, version}`, which every window takes in.
 //
 // Fallbacks (one release, for an update that pairs this app with an older
@@ -16,7 +19,8 @@
 // at startup gets the file read through the shell once, and the window keeps
 // asking the daemon (backoff, every write, every reconnect). A write while it
 // is unreachable goes through the shell. A shell write lays only the changed
-// keys over what is on disk now, so it never undoes another writer's keys.
+// keys over what is on disk now; the current shell applies the same nested
+// field delta under the existing native document lock.
 //
 // Nothing is written before this window has seen the document: a store that
 // hydrated from nothing holds its defaults, and those must never replace the

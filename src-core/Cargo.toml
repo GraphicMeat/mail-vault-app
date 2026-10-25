@@ -51,7 +51,7 @@ pgp = "0.20"
 maxminddb = "0.32"
 # Insights day buckets in the viewer's IANA time zone (src/insights_model.rs).
 # The tz database is bundled so the sandboxed and snap daemons never read /usr/share/zoneinfo.
-jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always", "tz-system"] }
 
 
 # Snap keyring (src/snap_keyring.rs): the Secret portal through oo7, plugged
