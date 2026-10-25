@@ -62,6 +62,8 @@ pub(crate) struct BackupState {
     #[cfg(test)]
     pending_limit_exit: Mutex<Option<(oneshot::Sender<()>, oneshot::Receiver<()>)>>,
     #[cfg(test)]
+    foreground_wait_entered: Mutex<Option<oneshot::Sender<()>>>,
+    #[cfg(test)]
     scans_in_flight: std::sync::atomic::AtomicUsize,
 }
 impl BackupState {
@@ -1227,6 +1229,8 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
             ..Default::default()
         });
     }
+    #[cfg(test)]
+    if let Some(entered) = state.backup_worker.foreground_wait_entered.lock().unwrap().take() { let _ = entered.send(()); }
     crate::search_index::wait_foreground_quiet(&state.search_index).await;
     if cancelled(state, intent) {
         return RunExit::Completed(adapter::JoinedBackup {

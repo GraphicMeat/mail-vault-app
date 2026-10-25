@@ -20,7 +20,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
 // The card's own progress listener. Captured so a spec can fire Rust's events.
 const eventHandlers = {};
@@ -230,5 +230,22 @@ describe('BackupAccountCard - the not-in-vault row', () => {
     render(<BackupAccountCard account={ACCOUNT} isPaidUser globalEnabled={globalEnabled} />);
     expect(stubs()).toHaveLength(1);
     expect(stubs()[0].dataset.accountId).toBe(ACCOUNT.id);
+  });
+});
+
+describe('BackupAccountCard exact execution projection', () => {
+  it('ignores an old nonterminal frame after another execution starts', async () => {
+    useBackupStore.setState({activeBackup:activeRun({runId:'run-b',executionId:'exec-b',folder:'CURRENT',totalFolders:10,completedFolders:4,completedEmails:40})});
+    renderCard(); await waitFor(()=>expect(typeof eventHandlers['archive-progress']).toBe('function'));
+    await act(async()=>{eventHandlers['backup-progress']?.({payload:{account_id:ACCOUNT.id,runId:'run-a',executionId:'exec-a',active:true,folder:'STALE',total_folders:10,completed_folders:1,completed_emails:1}});});
+    expect(progress().textContent).toContain('CURRENT');expect(progress().textContent).not.toContain('STALE');
+  });
+  it('ignores an old terminal frame without clearing the current execution display', async () => {
+    useBackupStore.setState({activeBackup:activeRun({runId:'run-b',executionId:'exec-b',folder:'CURRENT',totalFolders:10,completedFolders:4,completedEmails:40})});
+    renderCard();await waitFor(()=>expect(typeof eventHandlers['archive-progress']).toBe('function'));
+    await act(async()=>{eventHandlers['archive-progress']({payload:{operation:'backup',accountId:ACCOUNT.id,active:true,slowDriveMs:4500,total:10,completed:4}});});
+    expect(screen.getByText(/Backup drive is slow/)).toBeTruthy();
+    await act(async()=>{eventHandlers['backup-progress']?.({payload:{account_id:ACCOUNT.id,runId:'run-a',executionId:'exec-a',active:false}});});
+    expect(screen.getByText(/Backup drive is slow/)).toBeTruthy();expect(progress().textContent).toContain('CURRENT');
   });
 });

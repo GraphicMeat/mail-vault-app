@@ -129,7 +129,9 @@ it('refreshes native next-eligible display after a configuration event', async (
   const dispose=scheduler.observe({present:false});await flush();
   host.view={...host.view,version:2,nextEligibleTimes:{one:42000}};
   emit('settings-changed',{keys:['mailvault-settings'],version:2});await flush();
-  expect(store.nativeStatus.nextEligibleTimes.one).toBe(42000);dispose();
+  expect(store.nativeStatus.nextEligibleTimes.one).toBe(42000);
+  emit('backup-schedule-changed',{accessIncarnation:'inc',revision:2,queue:[],active:null,pendingAccess:[],lastOutcomes:[],requests:{},ready:true});await flush();
+  expect(store.nativeStatus.nextEligibleTimes?.one).toBe(42000);expect(store.nativeStatus.version).toBe(2);dispose();
 });
 it('keeps hydration history quiet across incarnation changes but presents a missed new completion once', async () => {
   const historical={intent:{accountId:'one',runId:'baseline-run',executionId:'baseline-execution',manual:true},at:42,status:'success',result:{success:true,emails_backed_up:3,errors:0,external_copy_ok:true},applied:true};
@@ -143,4 +145,14 @@ it('keeps hydration history quiet across incarnation changes but presents a miss
   emit('daemon-reconnected',{});await flush();emit('daemon-events-lagged',{});await flush();
   const unseenNotices=host.notify.mock.calls.length-baselineNotices;dispose();
   expect(unseenNotices).toBe(1);expect(baselineNotices).toBe(0);
+});
+
+it('reobserves coherently when an old generation query finishes after remount', async () => {
+  let release; host.query=()=>new Promise(done=>{release=done;}); store.nativeStatus=null;
+  const first=scheduler.observe({present:false}); await flush(); first();
+  host.query=null; host.view={...host.view,revision:9,context:{automaticEnabled:false},nextEligibleTimes:{one:42000}};
+  const second=scheduler.observe({present:false}); await flush();
+  release({...host.view,revision:1}); await flush();
+  const current=store.nativeStatus; const queries=send.mock.calls.filter(([method])=>method==='backup.schedule.get').length;
+  second(); expect(queries).toBe(2); expect(current?.revision).toBe(9); expect(current?.nextEligibleTimes.one).toBe(42000);
 });
