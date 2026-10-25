@@ -195,6 +195,62 @@ describe('compose editing a scheduled email', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('retains a detached moved-account edit after real cancel succeeds and replacement create fails', async () => {
+    const { createComposeWindowOwner } = await import('../../services/composeWindow');
+    const { scheduleCompose } = await import('../../services/composeSend');
+    const { useScheduledStore } = await import('../../stores/scheduledStore');
+    const { saveLocalDraft } = await import('../../services/localDrafts');
+    const onClose = vi.fn(), onMinimize = vi.fn(), onDiscard = vi.fn().mockResolvedValue({ discarded: true, cleanup: 'complete' });
+    const moved = { ...initialData, _editScheduledRow: { ...initialData._editScheduledRow, accountId: 'acct-other' } };
+    expect(moved._draftRevision).toBeUndefined();
+    const order = [];
+    const original = { cancel: useScheduledStore.getState().cancel, create: useScheduledStore.getState().create };
+    useScheduledStore.setState({ cancel: vi.fn(async () => { order.push('cancel'); }), create: vi.fn(async () => { order.push('create'); throw new Error('daemon unavailable'); }) });
+    const pending = new Map();
+    const open = vi.fn().mockResolvedValue('detached-edit');
+    const owner = createComposeWindowOwner({ open, close: vi.fn(), update: vi.fn(), remove: vi.fn(),
+      emitTo: async (_label, _channel, message) => {
+        const waiter = pending.get(message.requestId);
+        if (!waiter) return;
+        pending.delete(message.requestId);
+        if (message.type === 'error') waiter.reject(new Error(message.payload));
+        else waiter.resolve(message.payload);
+      },
+      acknowledgePreparation: async () => 4,
+      checkPreparation: async () => ({ kind: 'ready', settingsVersion: 4, route: { draft: moved._scheduleDraft } }),
+      sendContext: () => ({ account, senderSettings: { displayName: 'Me' }, remindAllowed: true }),
+      queueSend: (snapshot, _delay, _session, scheduled, context) => {
+        expect(scheduled).toBe(true);
+        return scheduleCompose({ snapshot, account: context.account, settings: context.settings });
+      },
+    });
+    const handoff = owner.detach({ id: 501, mode: 'new', snapshot: moved });
+    await waitFor(() => expect(open).toHaveBeenCalled());
+    const token = open.mock.calls[0][0].token;
+    const receive = (type, payload, requestId) => owner.receive({ composeId: '501', token, requestId, type, payload });
+    receive('ready', null, 'ready'); receive('initialized', null, 'init'); await handoff;
+    const request = (type, payload) => new Promise((resolve, reject) => {
+      const requestId = crypto.randomUUID(); pending.set(requestId, { resolve, reject }); receive(type, payload, requestId);
+    });
+    saveLocalDraft.mockClear();
+    try {
+      render(<ComposeModal detached initialData={moved} onClose={onClose} onMinimize={onMinimize} onDiscard={onDiscard} onSaveState={() => {}}
+        prepareSendCheck={payload => request('prepare-settings', { purpose: 'send-check', ...payload }).then(result => result.outcome)}
+        finalizeSendCheck={reference => request('schedule', reference).then(result => result?.outcome)} />);
+      fireEvent.click(await screen.findByTestId('compose-send'));
+      await screen.findByTestId('compose-error');
+      expect(order).toEqual(['cancel', 'create']);
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      await act(async () => {});
+      expect(onDiscard).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      await waitFor(() => expect(onMinimize).toHaveBeenCalled());
+      await waitFor(() => expect(saveLocalDraft).toHaveBeenCalled());
+    } finally {
+      useScheduledStore.setState(original); owner.recover(501);
+    }
+  });
+
   // Sent now while its row is due inside the send delay: the row, and its
   // frozen copy, go at hand-off (composeSend.js). Undo and outbox Dismiss
   // reopen compose from that same snapshot, which is then the only copy: it

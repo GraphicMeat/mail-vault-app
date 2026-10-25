@@ -97,6 +97,30 @@ describe('Connected Compose From Identities', function () {
    * a parameter rather than a fixed step.
    */
   async function sendAndStage({ account, from = null, subject }) {
+    // Status-only diagnostics: no request payloads, mail, account or setting values.
+    await browser.execute(() => {
+      const original = window.__TAURI__;
+      const trace = { events: [], settingsChanges: 0, accountChanges: 0, original };
+      const began = performance.now();
+      const note = (operation, status) => trace.events.push({ operation, status, elapsedMs: Math.round(performance.now() - began) });
+      const relevant = ['aliases', 'sendAsAddresses', 'displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'];
+      trace.stopSettings = window.__SETTINGS_STORE__.subscribe((state, previous) => {
+        if (relevant.some(key => state[key] !== previous[key])) { trace.settingsChanges++; note('settings-generation', 'changed'); }
+      });
+      trace.stopAccounts = window.__MAIL_STORE__.subscribe((state, previous) => {
+        if (state.accounts !== previous.accounts) { trace.accountChanges++; note('account-generation', 'changed'); }
+      });
+      const methods = ['compose.check', 'compose.stage', 'drafts.save', 'settings.get', 'settings.set'];
+      window.__TAURI__ = { ...original, core: { ...original.core, invoke: (command, args) => {
+        const method = command === 'daemon_rpc' && methods.includes(args?.method) ? args.method : null;
+        if (method) note(method, 'start');
+        const response = original.core.invoke(command, args);
+        if (method) Promise.resolve(response).then(result => note(method, method === 'compose.check' ? result.kind : 'resolved'), () => note(method, 'rejected'));
+        return response;
+      } } };
+      window.__COMPOSE_CHECK_STATUS__ = trace;
+    });
+    try {
     const before = new Set(listSent(account.id));
     await openComposeFresh();
 
@@ -130,6 +154,25 @@ describe('Connected Compose From Identities', function () {
     const raw = flatten(await readStagedEml(account.id, before, subject));
     await waitForOutboxError(subject);
     return raw;
+    } catch (error) {
+      const diagnostic = await browser.execute(() => {
+        const trace = window.__COMPOSE_CHECK_STATUS__;
+        return { events: trace?.events, settingsChanges: trace?.settingsChanges, accountChanges: trace?.accountChanges,
+          composeOpen: !!document.querySelector('[data-testid="compose-modal"]'),
+          sendDisabled: document.querySelector('[data-testid="compose-send"]')?.disabled,
+          hasError: !!document.querySelector('[data-testid="compose-error"]'),
+          pendingCount: window.__MAIL_STORE__.getState().pendingSends?.length || 0,
+          outboxCount: window.__MAIL_STORE__.getState().outboxItems?.length || 0 };
+      });
+      console.info('[checked-send-status]', JSON.stringify(diagnostic));
+      throw error;
+    } finally {
+      await browser.execute(() => {
+        const trace = window.__COMPOSE_CHECK_STATUS__;
+        if (!trace) return;
+        window.__TAURI__ = trace.original; trace.stopSettings?.(); trace.stopAccounts?.(); delete window.__COMPOSE_CHECK_STATUS__;
+      });
+    }
   }
 
   // ── the list ─────────────────────────────────────────────────────────────
