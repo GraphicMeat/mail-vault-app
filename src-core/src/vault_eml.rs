@@ -117,6 +117,19 @@ pub fn parse_flags_from_filename(filename: &str) -> Vec<String> {
 
 pub use crate::maildir::find_by_uid as find_file_by_uid;
 
+// Parse address structure before decoding encoded words: a decoded display
+// name may contain a comma that is not a recipient separator.
+fn address_header(headers: &[mailparse::MailHeader<'_>], name: &str) -> Vec<MaildirAddress> {
+    let Some(header) = headers.iter().find(|h| h.get_key().eq_ignore_ascii_case(name)) else { return Vec::new() };
+    match mailparse::addrparse_header(header) {
+        Ok(addresses) => addresses.iter().flat_map(|address| match address {
+            mailparse::MailAddr::Single(info) => vec![MaildirAddress { name: info.display_name.clone(), address: info.addr.clone() }],
+            mailparse::MailAddr::Group(group) => group.addrs.iter().map(|info| MaildirAddress { name: info.display_name.clone(), address: info.addr.clone() }).collect(),
+        }).collect(),
+        Err(_) => parse_address_str(&header.get_value()),
+    }
+}
+
 pub fn parse_address_str(header_value: &str) -> Vec<MaildirAddress> {
     match mailparse::addrparse(header_value) {
         Ok(addrs) => {
@@ -259,25 +272,16 @@ pub fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result
     let message_id = get_header("Message-ID");
     let date = get_header("Date");
 
-    let from_str = get_header("From").unwrap_or_default();
-    let from_addrs = parse_address_str(&from_str);
+    let from_addrs = address_header(headers, "From");
     let from = from_addrs.into_iter().next().unwrap_or(MaildirAddress {
         name: Some("Unknown".to_string()),
         address: "unknown@unknown.com".to_string(),
     });
 
-    let to = get_header("To")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let cc = get_header("Cc")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let bcc = get_header("Bcc")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let reply_to = get_header("Reply-To")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
+    let to = address_header(headers, "To");
+    let cc = address_header(headers, "Cc");
+    let bcc = address_header(headers, "Bcc");
+    let reply_to = address_header(headers, "Reply-To");
 
     let mut text_body: Option<String> = None;
     let mut html_body: Option<String> = None;
@@ -466,25 +470,16 @@ pub fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<Parse
     let message_id = get_header("Message-ID");
     let date = get_header("Date");
 
-    let from_str = get_header("From").unwrap_or_default();
-    let from_addrs = parse_address_str(&from_str);
+    let from_addrs = address_header(headers, "From");
     let from = from_addrs.into_iter().next().unwrap_or(MaildirAddress {
         name: Some("Unknown".to_string()),
         address: "unknown@unknown.com".to_string(),
     });
 
-    let to = get_header("To")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let cc = get_header("Cc")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let bcc = get_header("Bcc")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let reply_to = get_header("Reply-To")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
+    let to = address_header(headers, "To");
+    let cc = address_header(headers, "Cc");
+    let bcc = address_header(headers, "Bcc");
+    let reply_to = address_header(headers, "Reply-To");
 
     let mut text_body: Option<String> = None;
     let mut html_body: Option<String> = None;
