@@ -48,7 +48,9 @@ fn local_prepared_uid_binding_commits_both_formats_without_changing_content() {
             let mut new: Value =
                 serde_json::from_slice(&std::fs::read(dir.join("42.json")).unwrap()).unwrap();
             assert_eq!(new["uid"], 42);
-            assert!(new["email"]["id"].as_str().unwrap().starts_with("L42-"));
+            let blob = old["blob"].as_str().unwrap();
+            let digest = blob.strip_prefix("sha256-").unwrap();
+            assert_eq!(new["email"]["id"], format!("L42-{}", &digest[..12]));
             new["uid"] = old["uid"].clone();
             new["email"]["id"] = old["email"]["id"].clone();
             assert_eq!(
