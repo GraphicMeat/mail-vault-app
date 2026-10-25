@@ -1094,8 +1094,8 @@ pub async fn update_pgp_keys(
 
 // ── The app's credentials, read and written here (Phase 1, step 0b) ────────
 //
-// The app no longer reads or writes the blob itself: `credentials.get` hands
-// it the blob with the status its own `get_credentials` answered, and
+// Native preparation: the existing app adapters still use the shell path.
+// `credentials.get` explicitly returns the blob with the existing status, and
 // `credentials.save` / `.update` / `.delete` change it one account at a
 // time. Each change reads the blob fresh (never a read that started before
 // the last write), applies only the ids it names, and writes the whole blob
@@ -1109,8 +1109,8 @@ pub async fn update_pgp_keys(
 // On the keychain the primary item is updated in place, never deleted and
 // recreated, so on macOS it keeps the access list it was created with.
 //
-// Nothing here logs or answers a record, a password or a token: ids, counts
-// and catalog keys only.
+// Mutation replies, events and logs carry only ids, counts and catalog keys.
+// The explicit credentials.get read intentionally returns stored records.
 
 /// Why a change was refused or failed; the RPC answers the catalog key.
 #[derive(Debug, Clone, PartialEq)]
@@ -1118,7 +1118,8 @@ pub(crate) enum CredError {
     /// The blob could not be read (locked, refused, no answer, unparseable,
     /// a locked portable store): nothing was written.
     Unavailable,
-    /// The blob could not be written: the stored one is unchanged.
+    /// The write failed or outlived its reply clock. A timed-out blocking
+    /// write may still complete; this does not prove storage is unchanged.
     WriteFailed,
     /// A write is parked (a keychain prompt nobody answered) or the one
     /// ahead took too long: nothing was written, try again later.
