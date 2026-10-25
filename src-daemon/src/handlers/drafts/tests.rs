@@ -1,59 +1,732 @@
 use super::*;
 use std::sync::Condvar;
-type Hook=Arc<dyn Fn(&str)->Result<(),String>+Send+Sync>;
-static HOOKS:LazyLock<Mutex<HashMap<PathBuf,Hook>>>=LazyLock::new(Default::default);
-pub(super) fn probe(s:&DaemonState,point:&str)->Result<(),String>{let hook=HOOKS.lock().unwrap().get(&s.app_dir).cloned();hook.map(|h|h(point)).unwrap_or(Ok(()))}
-struct Harness {_dir:tempfile::TempDir,s:Arc<DaemonState>}
-impl Harness {
- fn new()->Self{let dir=tempfile::tempdir().unwrap();let root=dir.path().join("vault");let app=dir.path().join("app");std::fs::create_dir_all(&root).unwrap();std::fs::create_dir_all(&app).unwrap();std::fs::write(app.join("accounts.json"),json!([{"id":"one","email":"one@example.test","imapHost":"offline.invalid"},{"id":"two","email":"two@example.test","imapHost":"offline.invalid"}]).to_string()).unwrap();let s=DaemonState::for_test(root,app,true);Self{_dir:dir,s}}
- fn hook(&self,h:impl Fn(&str)->Result<(),String>+Send+Sync+'static){HOOKS.lock().unwrap().insert(self.s.app_dir.clone(),Arc::new(h));}
- fn clear(&self){HOOKS.lock().unwrap().remove(&self.s.app_dir);}
+type Hook = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+static HOOKS: LazyLock<Mutex<HashMap<PathBuf, Hook>>> = LazyLock::new(Default::default);
+pub(super) fn probe(s: &DaemonState, point: &str) -> Result<(), String> {
+    let hook = HOOKS.lock().unwrap().get(&s.app_dir).cloned();
+    hook.map(|h| h(point)).unwrap_or(Ok(()))
 }
-impl Drop for Harness {fn drop(&mut self){self.clear();}}
-fn req(id:&str,revision:u64,text:&str)->Value{json!({"draftId":id,"revision":revision,"accountId":"one","fromAddress":"alias@example.test","displayName":"Alias","snippet":text,"snapshot":{"to":"next@example.test","cc":"copy@example.test","bcc":"blind@example.test","subject":"Draft","html":format!("<p>{text}</p>"),"text":text,"inReplyTo":"<parent@example.test>","references":"<root@example.test> <parent@example.test>","attachments":[]}})}
-async fn rpc(s:&Arc<DaemonState>,method:&str,p:Value)->Result<Value,String>{let r=crate::server::handle_request_for_test(s,method,p).await;r.result.ok_or_else(||r.error.unwrap().message)}
-async fn saved(s:&Arc<DaemonState>,p:Value)->Value{rpc(s,"drafts.save",p).await.unwrap()}
-fn loc(v:&Value)->Value{json!({"accountId":v["accountId"],"mailbox":v["mailbox"],"uid":v["uid"]})}
-fn row(s:&DaemonState,id:&str)->Record{load(s,id).unwrap()}
-fn wait_preparation(h:&Harness)->(tokio::sync::oneshot::Receiver<()>,Arc<(Mutex<bool>,Condvar)>){let (tx,rx)=tokio::sync::oneshot::channel();let tx=Mutex::new(Some(tx));let release=Arc::new((Mutex::new(false),Condvar::new()));let copy=release.clone();h.hook(move|point|{if point=="prepared" {let notify={tx.lock().unwrap().take()};if let Some(tx)=notify{let _=tx.send(());let (lock,cv)=&*copy;let mut ready=lock.lock().unwrap();while !*ready {let (next,timeout)=cv.wait_timeout(ready,std::time::Duration::from_secs(10)).unwrap();ready=next;if timeout.timed_out(){return Err("preparation test gate timed out".into());}}}}Ok(())});(rx,release)}
-fn release(gate:Arc<(Mutex<bool>,Condvar)>){*gate.0.lock().unwrap()=true;gate.1.notify_all();}
+struct Harness {
+    _dir: tempfile::TempDir,
+    s: Arc<DaemonState>,
+}
+impl Harness {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        let app = dir.path().join("app");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(app.join("accounts.json"),json!([{"id":"one","email":"one@example.test","imapHost":"offline.invalid"},{"id":"two","email":"two@example.test","imapHost":"offline.invalid"}]).to_string()).unwrap();
+        let s = DaemonState::for_test(root, app, true);
+        Self { _dir: dir, s }
+    }
+    fn hook(&self, h: impl Fn(&str) -> Result<(), String> + Send + Sync + 'static) {
+        HOOKS
+            .lock()
+            .unwrap()
+            .insert(self.s.app_dir.clone(), Arc::new(h));
+    }
+    fn clear(&self) {
+        HOOKS.lock().unwrap().remove(&self.s.app_dir);
+    }
+}
+impl Drop for Harness {
+    fn drop(&mut self) {
+        self.clear();
+    }
+}
+fn req(id: &str, revision: u64, text: &str) -> Value {
+    json!({"draftId":id,"revision":revision,"accountId":"one","fromAddress":"alias@example.test","displayName":"Alias","snippet":text,"snapshot":{"to":"next@example.test","cc":"copy@example.test","bcc":"blind@example.test","subject":"Draft","html":format!("<p>{text}</p>"),"text":text,"inReplyTo":"<parent@example.test>","references":"<root@example.test> <parent@example.test>","attachments":[]}})
+}
+async fn rpc(s: &Arc<DaemonState>, method: &str, p: Value) -> Result<Value, String> {
+    let r = crate::server::handle_request_for_test(s, method, p).await;
+    r.result.ok_or_else(|| r.error.unwrap().message)
+}
+async fn saved(s: &Arc<DaemonState>, p: Value) -> Value {
+    rpc(s, "drafts.save", p).await.unwrap()
+}
+fn loc(v: &Value) -> Value {
+    json!({"accountId":v["accountId"],"mailbox":v["mailbox"],"uid":v["uid"]})
+}
+fn row(s: &DaemonState, id: &str) -> Record {
+    load(s, id).unwrap()
+}
+fn wait_preparation(
+    h: &Harness,
+) -> (
+    tokio::sync::oneshot::Receiver<()>,
+    Arc<(Mutex<bool>, Condvar)>,
+) {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let tx = Mutex::new(Some(tx));
+    let release = Arc::new((Mutex::new(false), Condvar::new()));
+    let copy = release.clone();
+    h.hook(move |point| {
+        if point == "prepared" {
+            let notify = { tx.lock().unwrap().take() };
+            if let Some(tx) = notify {
+                let _ = tx.send(());
+                let (lock, cv) = &*copy;
+                let mut ready = lock.lock().unwrap();
+                while !*ready {
+                    let (next, timeout) = cv
+                        .wait_timeout(ready, std::time::Duration::from_secs(10))
+                        .unwrap();
+                    ready = next;
+                    if timeout.timed_out() {
+                        return Err("preparation test gate timed out".into());
+                    }
+                }
+            }
+        }
+        Ok(())
+    });
+    (rx, release)
+}
+fn release(gate: Arc<(Mutex<bool>, Condvar)>) {
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+}
 #[tokio::test]
-async fn drafts_real_save_readback_and_provenance_in_both_formats(){for format in [message_store::Format::Maildir,message_store::Format::Jmap]{let h=Harness::new();message_store::set_vault_format(&h.s.data_dir,format).unwrap();let v=saved(&h.s,req("roundtrip",1,"offline words")).await;assert_eq!(v["entry"]["source"],"local_draft");assert_eq!(v["cleanup"],"complete");let list=rpc(&h.s,"drafts.list",json!({"accountId":"one","identity":loc(&v),"includeContent":true})).await.unwrap();assert!(list["drafts"][0]["eml"]["html"].as_str().unwrap().contains("offline words"));assert_eq!(list["drafts"][0]["eml"]["bcc"][0]["address"],"blind@example.test");assert_eq!(list["drafts"][0]["entry"]["references"],"<root@example.test> <parent@example.test>");}}
+async fn drafts_real_save_readback_and_provenance_in_both_formats() {
+    for format in [message_store::Format::Maildir, message_store::Format::Jmap] {
+        let h = Harness::new();
+        message_store::set_vault_format(&h.s.data_dir, format).unwrap();
+        let v = saved(&h.s, req("roundtrip", 1, "offline words")).await;
+        assert_eq!(v["entry"]["source"], "local_draft");
+        assert_eq!(v["cleanup"], "complete");
+        let list = rpc(
+            &h.s,
+            "drafts.list",
+            json!({"accountId":"one","identity":loc(&v),"includeContent":true}),
+        )
+        .await
+        .unwrap();
+        assert!(list["drafts"][0]["eml"]["html"]
+            .as_str()
+            .unwrap()
+            .contains("offline words"));
+        assert_eq!(
+            list["drafts"][0]["eml"]["bcc"][0]["address"],
+            "blind@example.test"
+        );
+        assert_eq!(
+            list["drafts"][0]["entry"]["references"],
+            "<root@example.test> <parent@example.test>"
+        );
+    }
+}
 #[tokio::test]
-async fn drafts_duplicate_revision_conflict_clear_and_zero_bytes(){let h=Harness::new();let p=req("edit",1,"first");let first=saved(&h.s,p.clone()).await;let duplicate=saved(&h.s,p).await;assert_eq!(first["uid"],duplicate["uid"]);assert_eq!(duplicate["disposition"],"unchanged");assert!(rpc(&h.s,"drafts.save",req("edit",1,"other")).await.unwrap_err().contains("conflict"));let mut p=req("edit",2,"");p["snapshot"]["html"]=json!("");for f in ["to","cc","bcc","inReplyTo","references"]{p["snapshot"][f]=json!("");}p["snapshot"]["attachments"]=json!([{"filename":"empty","contentType":"application/octet-stream","content":""}]);let second=saved(&h.s,p).await;assert_ne!(first["uid"],second["uid"]);let raw=read_copy(&h.s,row(&h.s,"edit").current.as_ref().unwrap(),true).unwrap().unwrap();let parsed=mailvault_core::vault_eml::parse_eml_bytes(&raw,1,vec![]).unwrap();assert!(parsed.to.is_empty());assert_eq!(parsed.attachments[0].content,"");}
-#[tokio::test(flavor="multi_thread",worker_threads=2)]
-async fn drafts_slow_old_preparation_cannot_replace_new_revision(){let h=Harness::new();let (started,gate)=wait_preparation(&h);let s=h.s.clone();let old=tokio::spawn(async move{rpc(&s,"drafts.save",req("race",1,"old")).await});tokio::time::timeout(std::time::Duration::from_secs(10),started).await.unwrap().unwrap();let latest=tokio::time::timeout(std::time::Duration::from_secs(3),saved(&h.s,req("race",2,"new"))).await;release(gate);let latest=latest.unwrap();let old=old.await.unwrap().unwrap();assert_eq!(old["disposition"],"superseded");assert_eq!(row(&h.s,"race").revision,2);assert_eq!(row(&h.s,"race").current.unwrap().identity.scope.uid,latest["uid"].as_u64().unwrap() as u32);}
-#[tokio::test(flavor="multi_thread",worker_threads=2)]
-async fn drafts_discard_during_first_preparation_survives_restart(){let h=Harness::new();let (started,gate)=wait_preparation(&h);let s=h.s.clone();let old=tokio::spawn(async move{rpc(&s,"drafts.save",req("terminal",1,"must not appear")).await});tokio::time::timeout(std::time::Duration::from_secs(10),started).await.unwrap().unwrap();let discarded=rpc(&h.s,"drafts.discard",json!({"draftId":"terminal"})).await.unwrap();assert_eq!(discarded["cleanup"],"complete");release(gate);assert!(old.await.unwrap().is_err());h.clear();let reopened=DaemonState::for_test(h.s.data_dir.clone(),h.s.app_dir.clone(),true);assert!(rpc(&reopened,"drafts.save",req("terminal",99,"later")).await.is_err());assert!(row(&reopened,"terminal").current.is_none());}
+async fn drafts_duplicate_revision_conflict_clear_and_zero_bytes() {
+    let h = Harness::new();
+    let p = req("edit", 1, "first");
+    let first = saved(&h.s, p.clone()).await;
+    let duplicate = saved(&h.s, p).await;
+    assert_eq!(first["uid"], duplicate["uid"]);
+    assert_eq!(duplicate["disposition"], "unchanged");
+    assert!(rpc(&h.s, "drafts.save", req("edit", 1, "other"))
+        .await
+        .unwrap_err()
+        .contains("conflict"));
+    let mut p = req("edit", 2, "");
+    p["snapshot"]["html"] = json!("");
+    for f in ["to", "cc", "bcc", "inReplyTo", "references"] {
+        p["snapshot"][f] = json!("");
+    }
+    p["snapshot"]["attachments"] =
+        json!([{"filename":"empty","contentType":"application/octet-stream","content":""}]);
+    let second = saved(&h.s, p).await;
+    assert_ne!(first["uid"], second["uid"]);
+    let raw = read_copy(&h.s, row(&h.s, "edit").current.as_ref().unwrap(), true)
+        .unwrap()
+        .unwrap();
+    let parsed = mailvault_core::vault_eml::parse_eml_bytes(&raw, 1, vec![]).unwrap();
+    assert!(parsed.to.is_empty());
+    assert_eq!(parsed.attachments[0].content, "");
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drafts_slow_old_preparation_cannot_replace_new_revision() {
+    let h = Harness::new();
+    let (started, gate) = wait_preparation(&h);
+    let s = h.s.clone();
+    let old = tokio::spawn(async move { rpc(&s, "drafts.save", req("race", 1, "old")).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), started)
+        .await
+        .unwrap()
+        .unwrap();
+    let latest = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        saved(&h.s, req("race", 2, "new")),
+    )
+    .await;
+    release(gate);
+    let latest = latest.unwrap();
+    let old = old.await.unwrap().unwrap();
+    assert_eq!(old["disposition"], "superseded");
+    assert_eq!(row(&h.s, "race").revision, 2);
+    assert_eq!(
+        row(&h.s, "race").current.unwrap().identity.scope.uid,
+        latest["uid"].as_u64().unwrap() as u32
+    );
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drafts_discard_during_first_preparation_survives_restart() {
+    let h = Harness::new();
+    let (started, gate) = wait_preparation(&h);
+    let s = h.s.clone();
+    let old =
+        tokio::spawn(
+            async move { rpc(&s, "drafts.save", req("terminal", 1, "must not appear")).await },
+        );
+    tokio::time::timeout(std::time::Duration::from_secs(10), started)
+        .await
+        .unwrap()
+        .unwrap();
+    let discarded = rpc(&h.s, "drafts.discard", json!({"draftId":"terminal"}))
+        .await
+        .unwrap();
+    assert_eq!(discarded["cleanup"], "complete");
+    release(gate);
+    assert!(old.await.unwrap().is_err());
+    h.clear();
+    let reopened = DaemonState::for_test(h.s.data_dir.clone(), h.s.app_dir.clone(), true);
+    assert!(rpc(&reopened, "drafts.save", req("terminal", 99, "later"))
+        .await
+        .is_err());
+    assert!(row(&reopened, "terminal").current.is_none());
+}
 #[tokio::test]
-async fn drafts_custody_failure_keeps_recoverable_prepared_bytes_and_reuses_destination(){let h=Harness::new();let first=saved(&h.s,req("repair",1,"old")).await;h.hook(|p|if p=="after_bytes"{Err("injected custody unavailable".into())}else{Ok(())});assert!(rpc(&h.s,"drafts.save",req("repair",2,"new")).await.is_err());let pending=row(&h.s,"repair");assert_eq!(pending.current.as_ref().unwrap().identity.scope.uid,first["uid"].as_u64().unwrap() as u32);let target=pending.pending.as_ref().unwrap().copy.identity.scope.uid;assert!(read_copy(&h.s,&pending.pending.as_ref().unwrap().prepared,false).unwrap().is_some());h.clear();let repaired=saved(&h.s,req("repair",2,"new")).await;assert_eq!(repaired["uid"],target);assert_eq!(repaired["cleanup"],"complete");}
+async fn drafts_custody_failure_keeps_recoverable_prepared_bytes_and_reuses_destination() {
+    let h = Harness::new();
+    let first = saved(&h.s, req("repair", 1, "old")).await;
+    h.hook(|p| {
+        if p == "after_bytes" {
+            Err("injected custody unavailable".into())
+        } else {
+            Ok(())
+        }
+    });
+    assert!(rpc(&h.s, "drafts.save", req("repair", 2, "new"))
+        .await
+        .is_err());
+    let pending = row(&h.s, "repair");
+    assert_eq!(
+        pending.current.as_ref().unwrap().identity.scope.uid,
+        first["uid"].as_u64().unwrap() as u32
+    );
+    let target = pending.pending.as_ref().unwrap().copy.identity.scope.uid;
+    assert!(
+        read_copy(&h.s, &pending.pending.as_ref().unwrap().prepared, false)
+            .unwrap()
+            .is_some()
+    );
+    h.clear();
+    let repaired = saved(&h.s, req("repair", 2, "new")).await;
+    assert_eq!(repaired["uid"], target);
+    assert_eq!(repaired["cleanup"], "complete");
+}
 #[tokio::test]
-async fn drafts_failed_account_destination_preserves_old_and_retry_reuses_one_target(){let h=Harness::new();let first=saved(&h.s,req("move",1,"old")).await;h.hook(|p|if p=="before_destination"{Err("destination unavailable".into())}else{Ok(())});let mut p=req("move",2,"new");p["accountId"]=json!("two");assert!(rpc(&h.s,"drafts.save",p.clone()).await.is_err());let r=row(&h.s,"move");let uid=r.pending.as_ref().unwrap().copy.identity.scope.uid;assert!(read_copy(&h.s,r.current.as_ref().unwrap(),true).unwrap().is_some());assert_eq!(r.current.unwrap().identity.scope.uid,first["uid"].as_u64().unwrap() as u32);h.clear();let second=saved(&h.s,p).await;assert_eq!(second["uid"],uid);assert_eq!(second["accountId"],"two");}
+async fn drafts_failed_account_destination_preserves_old_and_retry_reuses_one_target() {
+    let h = Harness::new();
+    let first = saved(&h.s, req("move", 1, "old")).await;
+    h.hook(|p| {
+        if p == "before_destination" {
+            Err("destination unavailable".into())
+        } else {
+            Ok(())
+        }
+    });
+    let mut p = req("move", 2, "new");
+    p["accountId"] = json!("two");
+    assert!(rpc(&h.s, "drafts.save", p.clone()).await.is_err());
+    let r = row(&h.s, "move");
+    let uid = r.pending.as_ref().unwrap().copy.identity.scope.uid;
+    assert!(read_copy(&h.s, r.current.as_ref().unwrap(), true)
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        r.current.unwrap().identity.scope.uid,
+        first["uid"].as_u64().unwrap() as u32
+    );
+    h.clear();
+    let second = saved(&h.s, p).await;
+    assert_eq!(second["uid"], uid);
+    assert_eq!(second["accountId"], "two");
+}
 #[tokio::test]
-async fn drafts_failed_retirement_blocks_further_copy_growth_and_keeps_every_proof(){let h=Harness::new();saved(&h.s,req("bound",1,"a")).await;h.hook(|p|if p=="retire"{Err("retirement blocked".into())}else{Ok(())});let mut p=req("bound",2,"b");p["accountId"]=json!("two");let current=saved(&h.s,p).await;assert_eq!(current["cleanup"],"pending");let before=row(&h.s,"bound");let obligations:Vec<_>=before.cleanup.iter().map(|c|c.identity.clone()).collect();assert_eq!(obligations.len(),1);for rev in [3,4,5]{assert!(rpc(&h.s,"drafts.save",req("bound",rev,"c")).await.unwrap_err().contains("cleanup pending"));}let after=row(&h.s,"bound");assert!(after.pending.is_none());assert_eq!(after.current.unwrap().identity.scope,before.current.unwrap().identity.scope);assert_eq!(after.cleanup.iter().map(|c|c.identity.clone()).collect::<Vec<_>>(),obligations);h.clear();saved(&h.s,req("bound",6,"finally")).await;}
+async fn drafts_failed_retirement_blocks_further_copy_growth_and_keeps_every_proof() {
+    let h = Harness::new();
+    saved(&h.s, req("bound", 1, "a")).await;
+    h.hook(|p| {
+        if p == "retire" {
+            Err("retirement blocked".into())
+        } else {
+            Ok(())
+        }
+    });
+    let mut p = req("bound", 2, "b");
+    p["accountId"] = json!("two");
+    let current = saved(&h.s, p).await;
+    assert_eq!(current["cleanup"], "pending");
+    let before = row(&h.s, "bound");
+    let obligations: Vec<_> = before.cleanup.iter().map(|c| c.identity.clone()).collect();
+    assert_eq!(obligations.len(), 1);
+    for rev in [3, 4, 5] {
+        assert!(rpc(&h.s, "drafts.save", req("bound", rev, "c"))
+            .await
+            .unwrap_err()
+            .contains("cleanup pending"));
+    }
+    let after = row(&h.s, "bound");
+    assert!(after.pending.is_none());
+    assert_eq!(
+        after.current.unwrap().identity.scope,
+        before.current.unwrap().identity.scope
+    );
+    assert_eq!(
+        after
+            .cleanup
+            .iter()
+            .map(|c| c.identity.clone())
+            .collect::<Vec<_>>(),
+        obligations
+    );
+    h.clear();
+    saved(&h.s, req("bound", 6, "finally")).await;
+}
 #[tokio::test]
-async fn drafts_exact_replacement_is_never_deleted_or_overwritten(){let h=Harness::new();let saved=saved(&h.s,req("replace",1,"original")).await;let copy=row(&h.s,"replace").current.unwrap();let l=copy.location();with_mailbox_write(&h.s,&l.account_id,&l.mailbox,|root|vault_files::store(&h.s.vault_registry,root,&l.account_id,&l.mailbox,l.uid,b"Message-ID: <foreign@example.test>\r\n\r\nforeign",&drafts::FLAGS.map(String::from),true)).unwrap();let result=rpc(&h.s,"drafts.discard",json!({"draftId":"replace"})).await.unwrap();assert_eq!(result["cleanup"],"pending");let raw=vault_files::read_eml(&h.s.vault_registry,&h.s.data_dir,"one",saved["mailbox"].as_str().unwrap(),l.uid).unwrap();assert!(raw.ends_with(b"foreign"));assert!(rpc(&h.s,"drafts.save",req("replace",2,"no resurrection")).await.is_err());}
+async fn drafts_exact_replacement_is_never_deleted_or_overwritten() {
+    let h = Harness::new();
+    let saved = saved(&h.s, req("replace", 1, "original")).await;
+    let copy = row(&h.s, "replace").current.unwrap();
+    let l = copy.location();
+    with_mailbox_write(&h.s, &l.account_id, &l.mailbox, |root| {
+        vault_files::store(
+            &h.s.vault_registry,
+            root,
+            &l.account_id,
+            &l.mailbox,
+            l.uid,
+            b"Message-ID: <foreign@example.test>\r\n\r\nforeign",
+            &drafts::FLAGS.map(String::from),
+            true,
+        )
+    })
+    .unwrap();
+    let result = rpc(&h.s, "drafts.discard", json!({"draftId":"replace"}))
+        .await
+        .unwrap();
+    assert_eq!(result["cleanup"], "pending");
+    let raw = vault_files::read_eml(
+        &h.s.vault_registry,
+        &h.s.data_dir,
+        "one",
+        saved["mailbox"].as_str().unwrap(),
+        l.uid,
+    )
+    .unwrap();
+    assert!(raw.ends_with(b"foreign"));
+    assert!(
+        rpc(&h.s, "drafts.save", req("replace", 2, "no resurrection"))
+            .await
+            .is_err()
+    );
+}
 #[tokio::test]
-async fn drafts_source_attachments_are_pinned_for_retry_and_missing_source_keeps_current(){let h=Harness::new();let mut original=req("source",1,"source");original["snapshot"]["attachments"]=json!([{"filename":"source.bin","contentType":"application/octet-stream","content":"AAEC"}]);let source=saved(&h.s,original).await;saved(&h.s,req("target",1,"old")).await;let mut target=req("target",2,"with file");target["snapshot"]["attachments"]=json!([{"filename":"copy.bin","contentType":"application/octet-stream","source":{"accountId":"one","mailbox":source["mailbox"],"uid":source["uid"],"attachmentIndex":0}}]);h.hook(|p|if p=="before_destination"{Err("offline disk".into())}else{Ok(())});assert!(rpc(&h.s,"drafts.save",target.clone()).await.is_err());h.clear();rpc(&h.s,"drafts.discard",json!({"draftId":"source"})).await.unwrap();let result=saved(&h.s,target).await;let current=row(&h.s,"target").current.unwrap();let raw=read_copy(&h.s,&current,true).unwrap().unwrap();assert_eq!(vault_files::attachments_of(&raw,&[0]).unwrap(),vec![Some("AAEC".into())]);let mut missing=req("target",3,"missing");missing["snapshot"]["attachments"]=json!([{"filename":"gone","contentType":"application/octet-stream","source":{"accountId":"one","mailbox":"missing","uid":7,"attachmentIndex":0}}]);assert!(rpc(&h.s,"drafts.save",missing).await.is_err());assert_eq!(row(&h.s,"target").current.unwrap().identity.scope.uid,result["uid"].as_u64().unwrap() as u32);}
+async fn drafts_source_attachments_are_pinned_for_retry_and_missing_source_keeps_current() {
+    let h = Harness::new();
+    let mut original = req("source", 1, "source");
+    original["snapshot"]["attachments"] = json!([{"filename":"source.bin","contentType":"application/octet-stream","content":"AAEC"}]);
+    let source = saved(&h.s, original).await;
+    saved(&h.s, req("target", 1, "old")).await;
+    let mut target = req("target", 2, "with file");
+    target["snapshot"]["attachments"] = json!([{"filename":"copy.bin","contentType":"application/octet-stream","source":{"accountId":"one","mailbox":source["mailbox"],"uid":source["uid"],"attachmentIndex":0}}]);
+    h.hook(|p| {
+        if p == "before_destination" {
+            Err("offline disk".into())
+        } else {
+            Ok(())
+        }
+    });
+    assert!(rpc(&h.s, "drafts.save", target.clone()).await.is_err());
+    h.clear();
+    rpc(&h.s, "drafts.discard", json!({"draftId":"source"}))
+        .await
+        .unwrap();
+    let result = saved(&h.s, target).await;
+    let current = row(&h.s, "target").current.unwrap();
+    let raw = read_copy(&h.s, &current, true).unwrap().unwrap();
+    assert_eq!(
+        vault_files::attachments_of(&raw, &[0]).unwrap(),
+        vec![Some("AAEC".into())]
+    );
+    let mut missing = req("target", 3, "missing");
+    missing["snapshot"]["attachments"] = json!([{"filename":"gone","contentType":"application/octet-stream","source":{"accountId":"one","mailbox":"missing","uid":7,"attachmentIndex":0}}]);
+    assert!(rpc(&h.s, "drafts.save", missing).await.is_err());
+    assert_eq!(
+        row(&h.s, "target").current.unwrap().identity.scope.uid,
+        result["uid"].as_u64().unwrap() as u32
+    );
+}
 #[tokio::test]
-async fn drafts_legacy_adoption_is_exclusive_and_purpose_checked(){let h=Harness::new();let v=saved(&h.s,req("legacy-writer",1,"legacy")).await;let original=row(&h.s,"legacy-writer").current.unwrap();app_db::with(&h.s.app_dir,|c|{c.execute("DELETE FROM local_draft_locations",[]).unwrap();c.execute("DELETE FROM local_drafts",[]).unwrap();Ok(())}).unwrap();let list=rpc(&h.s,"drafts.list",json!({"accountId":"one"})).await.unwrap();assert_eq!(list["drafts"].as_array().unwrap().len(),1);assert_eq!(list["drafts"][0]["disposition"],"unadopted");assert!(app_db::with(&h.s.app_dir,db::all).unwrap().is_empty());rpc(&h.s,"drafts.list",json!({"identity":loc(&v),"includeContent":true})).await.unwrap();let mut p=req("competing-adopter",1,"other");p["previousIdentity"]=loc(&v);assert!(rpc(&h.s,"drafts.save",p).await.is_err());for source in ["local_sent","server"]{custody::with_conn(&h.s,|c|{let mut entry=original.entry.clone();entry["source"]=json!(source);entries::upsert(c,"one","Drafts",&[entry]).map(|_|())}).unwrap();assert!(rpc(&h.s,"drafts.list",json!({"identity":loc(&v),"includeContent":true})).await.is_err());}}
+async fn drafts_legacy_adoption_is_exclusive_and_purpose_checked() {
+    let h = Harness::new();
+    let v = saved(&h.s, req("legacy-writer", 1, "legacy")).await;
+    let original = row(&h.s, "legacy-writer").current.unwrap();
+    app_db::with(&h.s.app_dir, |c| {
+        c.execute("DELETE FROM local_draft_locations", []).unwrap();
+        c.execute("DELETE FROM local_drafts", []).unwrap();
+        Ok(())
+    })
+    .unwrap();
+    let list = rpc(&h.s, "drafts.list", json!({"accountId":"one"}))
+        .await
+        .unwrap();
+    assert_eq!(list["drafts"].as_array().unwrap().len(), 1);
+    assert_eq!(list["drafts"][0]["disposition"], "unadopted");
+    assert!(app_db::with(&h.s.app_dir, db::all).unwrap().is_empty());
+    rpc(
+        &h.s,
+        "drafts.list",
+        json!({"identity":loc(&v),"includeContent":true}),
+    )
+    .await
+    .unwrap();
+    let mut p = req("competing-adopter", 1, "other");
+    p["previousIdentity"] = loc(&v);
+    assert!(rpc(&h.s, "drafts.save", p).await.is_err());
+    for source in ["local_sent", "server"] {
+        custody::with_conn(&h.s, |c| {
+            let mut entry = original.entry.clone();
+            entry["source"] = json!(source);
+            entries::upsert(c, "one", "Drafts", &[entry]).map(|_| ())
+        })
+        .unwrap();
+        assert!(rpc(
+            &h.s,
+            "drafts.list",
+            json!({"identity":loc(&v),"includeContent":true})
+        )
+        .await
+        .is_err());
+    }
+}
 #[tokio::test]
-async fn drafts_actual_staged_send_and_scheduled_ownership_are_refused(){let h=Harness::new();let staged=rpc(&h.s,"compose.stage",json!({"accountId":"one","mailbox":"CustomSent","account":{"email":"one@example.test","imapHost":"offline.invalid"},"email":{"to":"next@example.test","subject":"staged","text":"staged"}})).await.unwrap();let l=json!({"accountId":"one","mailbox":"CustomSent","uid":staged["uid"]});let mut p=req("not-send",1,"steal");p["previousIdentity"]=l;assert!(rpc(&h.s,"drafts.save",p).await.unwrap_err().contains("not an editable"));let actual=saved(&h.s,req("schedule-shape",1,"frozen")).await;app_db::with(&h.s.app_dir,|c|{c.execute("DELETE FROM local_draft_locations",[]).unwrap();c.execute("DELETE FROM local_drafts",[]).unwrap();mailvault_core::app_db::scheduled::insert(c,"frozen","one",actual["mailbox"].as_str().unwrap(),actual["uid"].as_u64().unwrap() as u32,"{}","2026-10-26T12:00","UTC",0).map(|_|())}).unwrap();let mut p=req("not-scheduled",1,"steal");p["previousIdentity"]=loc(&actual);assert!(rpc(&h.s,"drafts.save",p).await.unwrap_err().contains("scheduled"));}
+async fn drafts_actual_staged_send_and_scheduled_ownership_are_refused() {
+    let h = Harness::new();
+    let staged=rpc(&h.s,"compose.stage",json!({"accountId":"one","mailbox":"CustomSent","account":{"email":"one@example.test","imapHost":"offline.invalid"},"email":{"to":"next@example.test","subject":"staged","text":"staged"}})).await.unwrap();
+    let l = json!({"accountId":"one","mailbox":"CustomSent","uid":staged["uid"]});
+    let mut p = req("not-send", 1, "steal");
+    p["previousIdentity"] = l;
+    assert!(rpc(&h.s, "drafts.save", p)
+        .await
+        .unwrap_err()
+        .contains("not an editable"));
+    let actual = saved(&h.s, req("schedule-shape", 1, "frozen")).await;
+    app_db::with(&h.s.app_dir, |c| {
+        c.execute("DELETE FROM local_draft_locations", []).unwrap();
+        c.execute("DELETE FROM local_drafts", []).unwrap();
+        mailvault_core::app_db::scheduled::insert(
+            c,
+            "frozen",
+            "one",
+            actual["mailbox"].as_str().unwrap(),
+            actual["uid"].as_u64().unwrap() as u32,
+            "{}",
+            "2026-10-26T12:00",
+            "UTC",
+            0,
+        )
+        .map(|_| ())
+    })
+    .unwrap();
+    let mut p = req("not-scheduled", 1, "steal");
+    p["previousIdentity"] = loc(&actual);
+    assert!(rpc(&h.s, "drafts.save", p)
+        .await
+        .unwrap_err()
+        .contains("scheduled"));
+}
 #[tokio::test]
-async fn drafts_destination_publication_cannot_accept_replaced_custody(){let h=Harness::new();let s=h.s.clone();h.hook(move|point|{if point=="before_accept"{let pending=row(&s,"custody-race").pending.unwrap();let l=pending.copy.location();custody::with_conn(&s,|c|{let mut foreign=pending.copy.entry;foreign["source"]=json!("server");entries::upsert(c,&l.account_id,&l.mailbox,&[foreign]).map(|_|())})?;}Ok(())});assert!(rpc(&h.s,"drafts.save",req("custody-race",1,"user text")).await.is_err());assert!(row(&h.s,"custody-race").current.is_none());}
-#[tokio::test(flavor="multi_thread",worker_threads=2)]
-async fn drafts_equal_revision_divergent_preparation_conflicts(){let h=Harness::new();let (started,gate)=wait_preparation(&h);let s=h.s.clone();let old=tokio::spawn(async move{rpc(&s,"drafts.save",req("equal-race",1,"first")).await});tokio::time::timeout(std::time::Duration::from_secs(10),started).await.unwrap().unwrap();let accepted=tokio::time::timeout(std::time::Duration::from_secs(3),saved(&h.s,req("equal-race",1,"different"))).await;release(gate);accepted.unwrap();assert!(old.await.unwrap().unwrap_err().contains("conflict"));}
+async fn drafts_destination_publication_cannot_accept_replaced_custody() {
+    let h = Harness::new();
+    let s = h.s.clone();
+    h.hook(move |point| {
+        if point == "before_accept" {
+            let pending = row(&s, "custody-race").pending.unwrap();
+            let l = pending.copy.location();
+            custody::with_conn(&s, |c| {
+                let mut foreign = pending.copy.entry;
+                foreign["source"] = json!("server");
+                entries::upsert(c, &l.account_id, &l.mailbox, &[foreign]).map(|_| ())
+            })?;
+        }
+        Ok(())
+    });
+    assert!(
+        rpc(&h.s, "drafts.save", req("custody-race", 1, "user text"))
+            .await
+            .is_err()
+    );
+    assert!(row(&h.s, "custody-race").current.is_none());
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drafts_equal_revision_divergent_preparation_conflicts() {
+    let h = Harness::new();
+    let (started, gate) = wait_preparation(&h);
+    let s = h.s.clone();
+    let old =
+        tokio::spawn(async move { rpc(&s, "drafts.save", req("equal-race", 1, "first")).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), started)
+        .await
+        .unwrap()
+        .unwrap();
+    let accepted = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        saved(&h.s, req("equal-race", 1, "different")),
+    )
+    .await;
+    release(gate);
+    accepted.unwrap();
+    assert!(old.await.unwrap().unwrap_err().contains("conflict"));
+}
 #[tokio::test]
-async fn drafts_pending_publication_recovers_from_disk_after_state_reopen(){let h=Harness::new();saved(&h.s,req("restart",1,"last good")).await;h.hook(|p|if p=="before_accept"{Err("acceptance interrupted".into())}else{Ok(())});assert!(rpc(&h.s,"drafts.save",req("restart",2,"prepared words")).await.is_err());let pending=row(&h.s,"restart").pending.unwrap();let uid=pending.copy.identity.scope.uid;h.clear();crate::custody::close(&h.s);let reopened=DaemonState::for_test(h.s.data_dir.clone(),h.s.app_dir.clone(),true);let result=saved(&reopened,req("restart",2,"prepared words")).await;assert_eq!(result["uid"],uid);let raw=read_copy(&reopened,row(&reopened,"restart").current.as_ref().unwrap(),true).unwrap().unwrap();assert!(String::from_utf8_lossy(&raw).contains("prepared words"));}
+async fn drafts_pending_publication_recovers_from_disk_after_state_reopen() {
+    let h = Harness::new();
+    saved(&h.s, req("restart", 1, "last good")).await;
+    h.hook(|p| {
+        if p == "before_accept" {
+            Err("acceptance interrupted".into())
+        } else {
+            Ok(())
+        }
+    });
+    assert!(
+        rpc(&h.s, "drafts.save", req("restart", 2, "prepared words"))
+            .await
+            .is_err()
+    );
+    let pending = row(&h.s, "restart").pending.unwrap();
+    let uid = pending.copy.identity.scope.uid;
+    h.clear();
+    crate::custody::close(&h.s);
+    let reopened = DaemonState::for_test(h.s.data_dir.clone(), h.s.app_dir.clone(), true);
+    let result = saved(&reopened, req("restart", 2, "prepared words")).await;
+    assert_eq!(result["uid"], uid);
+    let raw = read_copy(
+        &reopened,
+        row(&reopened, "restart").current.as_ref().unwrap(),
+        true,
+    )
+    .unwrap()
+    .unwrap();
+    assert!(String::from_utf8_lossy(&raw).contains("prepared words"));
+}
 #[tokio::test]
-async fn drafts_discard_cleans_pending_installed_copies_and_stays_terminal_after_reopen(){let h=Harness::new();saved(&h.s,req("discard-pending",1,"old")).await;h.hook(|p|if p=="after_bytes"{Err("custody unavailable".into())}else{Ok(())});assert!(rpc(&h.s,"drafts.save",req("discard-pending",2,"new")).await.is_err());let before=row(&h.s,"discard-pending");let copies=vec![before.current.unwrap(),before.pending.as_ref().unwrap().copy.clone(),before.pending.unwrap().prepared];h.clear();let discarded=rpc(&h.s,"drafts.discard",json!({"draftId":"discard-pending"})).await.unwrap();assert_eq!(discarded["cleanup"],"complete");for copy in copies {assert!(read_copy(&h.s,&copy,false).unwrap().is_none());}crate::custody::close(&h.s);let reopened=DaemonState::for_test(h.s.data_dir.clone(),h.s.app_dir.clone(),true);assert!(rpc(&reopened,"drafts.save",req("discard-pending",100,"late")).await.unwrap_err().contains("discarded"));assert!(row(&reopened,"discard-pending").discarded);}
-#[tokio::test(flavor="multi_thread",worker_threads=2)]
-async fn drafts_preparation_leaves_foreground_heartbeat_and_metadata_reads_responsive(){let h=Harness::new();let (started,gate)=wait_preparation(&h);let s=h.s.clone();let pending=tokio::spawn(async move{rpc(&s,"drafts.save",req("foreground",1,"slow")).await});tokio::time::timeout(std::time::Duration::from_secs(10),started).await.unwrap().unwrap();let heartbeat=tokio::time::timeout(std::time::Duration::from_secs(2),rpc(&h.s,"daemon.heartbeat",json!({}))).await;let listing=tokio::time::timeout(std::time::Duration::from_secs(2),rpc(&h.s,"drafts.list",json!({"accountId":"one"}))).await;release(gate);heartbeat.unwrap().unwrap();listing.unwrap().unwrap();pending.await.unwrap().unwrap();}
+async fn drafts_discard_cleans_pending_installed_copies_and_stays_terminal_after_reopen() {
+    let h = Harness::new();
+    saved(&h.s, req("discard-pending", 1, "old")).await;
+    h.hook(|p| {
+        if p == "after_bytes" {
+            Err("custody unavailable".into())
+        } else {
+            Ok(())
+        }
+    });
+    assert!(rpc(&h.s, "drafts.save", req("discard-pending", 2, "new"))
+        .await
+        .is_err());
+    let before = row(&h.s, "discard-pending");
+    let copies = vec![
+        before.current.unwrap(),
+        before.pending.as_ref().unwrap().copy.clone(),
+        before.pending.unwrap().prepared,
+    ];
+    h.clear();
+    let discarded = rpc(&h.s, "drafts.discard", json!({"draftId":"discard-pending"}))
+        .await
+        .unwrap();
+    assert_eq!(discarded["cleanup"], "complete");
+    for copy in copies {
+        assert!(read_copy(&h.s, &copy, false).unwrap().is_none());
+    }
+    crate::custody::close(&h.s);
+    let reopened = DaemonState::for_test(h.s.data_dir.clone(), h.s.app_dir.clone(), true);
+    assert!(rpc(
+        &reopened,
+        "drafts.save",
+        req("discard-pending", 100, "late")
+    )
+    .await
+    .unwrap_err()
+    .contains("discarded"));
+    assert!(row(&reopened, "discard-pending").discarded);
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drafts_preparation_leaves_foreground_heartbeat_and_metadata_reads_responsive() {
+    let h = Harness::new();
+    let (started, gate) = wait_preparation(&h);
+    let s = h.s.clone();
+    let pending =
+        tokio::spawn(async move { rpc(&s, "drafts.save", req("foreground", 1, "slow")).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), started)
+        .await
+        .unwrap()
+        .unwrap();
+    let heartbeat = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        rpc(&h.s, "daemon.heartbeat", json!({})),
+    )
+    .await;
+    let listing = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        rpc(&h.s, "drafts.list", json!({"accountId":"one"})),
+    )
+    .await;
+    release(gate);
+    heartbeat.unwrap().unwrap();
+    listing.unwrap().unwrap();
+    pending.await.unwrap().unwrap();
+}
 #[tokio::test]
-async fn drafts_partial_requests_have_no_draft_local_effects(){let h=Harness::new();for field in ["to","cc","bcc","subject","html","text","inReplyTo","references","attachments"]{let mut value=req("partial",1,"words");value["snapshot"].as_object_mut().unwrap().remove(field);let result=crate::server::handle_request_for_test(&h.s,"drafts.save",value).await;assert_eq!(result.error.unwrap().code,ipc::INVALID_PARAMS);}assert!(app_db::with(&h.s.app_dir,db::all).unwrap().is_empty());assert!(message_store::list(&h.s.data_dir,"one",PREPARED).unwrap().is_empty());assert!(message_store::list(&h.s.data_dir,"one","Drafts").unwrap().is_empty());}
+async fn drafts_partial_requests_have_no_draft_local_effects() {
+    let h = Harness::new();
+    for field in [
+        "to",
+        "cc",
+        "bcc",
+        "subject",
+        "html",
+        "text",
+        "inReplyTo",
+        "references",
+        "attachments",
+    ] {
+        let mut value = req("partial", 1, "words");
+        value["snapshot"].as_object_mut().unwrap().remove(field);
+        let result = crate::server::handle_request_for_test(&h.s, "drafts.save", value).await;
+        assert_eq!(result.error.unwrap().code, ipc::INVALID_PARAMS);
+    }
+    assert!(app_db::with(&h.s.app_dir, db::all).unwrap().is_empty());
+    assert!(message_store::list(&h.s.data_dir, "one", PREPARED)
+        .unwrap()
+        .is_empty());
+    assert!(message_store::list(&h.s.data_dir, "one", "Drafts")
+        .unwrap()
+        .is_empty());
+}
 #[tokio::test]
-async fn drafts_never_installed_stage_failure_allows_same_revision_retry(){let h=Harness::new();let first=saved(&h.s,req("preinstall",1,"last good")).await;h.hook(|p|if p=="before_prepared_store"{Err("stage write unavailable".into())}else{Ok(())});assert!(rpc(&h.s,"drafts.save",req("preinstall",2,"same complete revision")).await.is_err());let before=row(&h.s,"preinstall");assert_eq!(before.current.as_ref().unwrap().identity.scope.uid,first["uid"].as_u64().unwrap() as u32);assert!(read_copy(&h.s,&before.pending.as_ref().unwrap().prepared,false).unwrap().is_none());h.clear();let _=rpc(&h.s,"drafts.save",req("preinstall",2,"same complete revision")).await;let result=saved(&h.s,req("preinstall",2,"same complete revision")).await;assert_eq!(result["revision"],2);assert!(row(&h.s,"preinstall").epoch>before.epoch);}
+async fn drafts_never_installed_stage_failure_allows_same_revision_retry() {
+    let h = Harness::new();
+    let first = saved(&h.s, req("preinstall", 1, "last good")).await;
+    h.hook(|p| {
+        if p == "before_prepared_store" {
+            Err("stage write unavailable".into())
+        } else {
+            Ok(())
+        }
+    });
+    assert!(rpc(
+        &h.s,
+        "drafts.save",
+        req("preinstall", 2, "same complete revision")
+    )
+    .await
+    .is_err());
+    let before = row(&h.s, "preinstall");
+    assert_eq!(
+        before.current.as_ref().unwrap().identity.scope.uid,
+        first["uid"].as_u64().unwrap() as u32
+    );
+    assert!(
+        read_copy(&h.s, &before.pending.as_ref().unwrap().prepared, false)
+            .unwrap()
+            .is_none()
+    );
+    h.clear();
+    let _ = rpc(
+        &h.s,
+        "drafts.save",
+        req("preinstall", 2, "same complete revision"),
+    )
+    .await;
+    let result = saved(&h.s, req("preinstall", 2, "same complete revision")).await;
+    assert_eq!(result["revision"], 2);
+    assert!(row(&h.s, "preinstall").epoch > before.epoch);
+}
 #[tokio::test]
-async fn drafts_preinstall_intent_reopen_keeps_same_revision_content_constraint(){let h=Harness::new();h.hook(|p|if p=="before_prepared_store"{Err("stage absent".into())}else{Ok(())});assert!(rpc(&h.s,"drafts.save",req("preinstall-restart",1,"original")).await.is_err());h.clear();crate::custody::close(&h.s);let reopened=DaemonState::for_test(h.s.data_dir.clone(),h.s.app_dir.clone(),true);let _=rpc(&reopened,"drafts.save",req("preinstall-restart",1,"changed")).await;assert!(rpc(&reopened,"drafts.save",req("preinstall-restart",1,"changed")).await.is_err());let _=rpc(&reopened,"drafts.save",req("preinstall-restart",1,"original")).await;saved(&reopened,req("preinstall-restart",1,"original")).await;}
+async fn drafts_preinstall_intent_reopen_keeps_same_revision_content_constraint() {
+    let h = Harness::new();
+    h.hook(|p| {
+        if p == "before_prepared_store" {
+            Err("stage absent".into())
+        } else {
+            Ok(())
+        }
+    });
+    assert!(rpc(
+        &h.s,
+        "drafts.save",
+        req("preinstall-restart", 1, "original")
+    )
+    .await
+    .is_err());
+    h.clear();
+    crate::custody::close(&h.s);
+    let reopened = DaemonState::for_test(h.s.data_dir.clone(), h.s.app_dir.clone(), true);
+    let _ = rpc(
+        &reopened,
+        "drafts.save",
+        req("preinstall-restart", 1, "changed"),
+    )
+    .await;
+    assert!(rpc(
+        &reopened,
+        "drafts.save",
+        req("preinstall-restart", 1, "changed")
+    )
+    .await
+    .is_err());
+    let _ = rpc(
+        &reopened,
+        "drafts.save",
+        req("preinstall-restart", 1, "original"),
+    )
+    .await;
+    saved(&reopened, req("preinstall-restart", 1, "original")).await;
+}
 #[tokio::test]
-async fn drafts_staged_receipt_remains_protected_after_archived_flag_patch(){let h=Harness::new();let staged=rpc(&h.s,"compose.stage",json!({"accountId":"one","mailbox":"CustomSent","account":{"email":"one@example.test","imapHost":"offline.invalid"},"email":{"to":"next@example.test","subject":"active staged send","text":"must stay"}})).await.unwrap();let uid=staged["uid"].as_u64().unwrap() as u32;let mut entry=staged["entry"].clone();entry["flags"]=json!(["archived","seen","draft"]);custody::with_conn(&h.s,|c|entries::upsert(c,"one","CustomSent",&[entry]).map(|_|())).unwrap();let raw=vault_files::read_eml(&h.s.vault_registry,&h.s.data_dir,"one","CustomSent",uid).unwrap();let scope=Scope::new("one","CustomSent",uid,staged["messageId"].as_str().unwrap()).unwrap();let history=app_db::with(&h.s.app_dir,|c|compose_receipts::load(c,&scope)).unwrap();let mut p=req("not-an-editor",1,"overwrite");p["previousIdentity"]=json!({"accountId":"one","mailbox":"CustomSent","uid":uid});assert!(rpc(&h.s,"drafts.save",p).await.is_err());assert_eq!(vault_files::read_eml(&h.s.vault_registry,&h.s.data_dir,"one","CustomSent",uid).unwrap(),raw);assert_eq!(app_db::with(&h.s.app_dir,|c|compose_receipts::load(c,&scope)).unwrap(),history);}
+async fn drafts_staged_receipt_remains_protected_after_archived_flag_patch() {
+    let h = Harness::new();
+    let staged=rpc(&h.s,"compose.stage",json!({"accountId":"one","mailbox":"CustomSent","account":{"email":"one@example.test","imapHost":"offline.invalid"},"email":{"to":"next@example.test","subject":"active staged send","text":"must stay"}})).await.unwrap();
+    let uid = staged["uid"].as_u64().unwrap() as u32;
+    let mut entry = staged["entry"].clone();
+    entry["flags"] = json!(["archived", "seen", "draft"]);
+    custody::with_conn(&h.s, |c| {
+        entries::upsert(c, "one", "CustomSent", &[entry]).map(|_| ())
+    })
+    .unwrap();
+    let raw = vault_files::read_eml(&h.s.vault_registry, &h.s.data_dir, "one", "CustomSent", uid)
+        .unwrap();
+    let scope = Scope::new(
+        "one",
+        "CustomSent",
+        uid,
+        staged["messageId"].as_str().unwrap(),
+    )
+    .unwrap();
+    let history = app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &scope)).unwrap();
+    let mut p = req("not-an-editor", 1, "overwrite");
+    p["previousIdentity"] = json!({"accountId":"one","mailbox":"CustomSent","uid":uid});
+    assert!(rpc(&h.s, "drafts.save", p).await.is_err());
+    assert_eq!(
+        vault_files::read_eml(&h.s.vault_registry, &h.s.data_dir, "one", "CustomSent", uid)
+            .unwrap(),
+        raw
+    );
+    assert_eq!(
+        app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &scope)).unwrap(),
+        history
+    );
+}
