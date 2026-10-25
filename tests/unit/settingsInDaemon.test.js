@@ -80,6 +80,6 @@ describe('the daemon owns the settings document', () => {
   });
 
   it('the event names keys and a version, never values', () => {
-    expect(handler).toMatch(/CHANGED_EVENT, json!\(\{"keys": change\.changed, "version": change\.version\}\)/);
+    expect(handler).toMatch(/CHANGED_EVENT,\s*json!\(\{"keys": change\.changed, "version": change\.version\}\),?\s*\)/);
   });
 });

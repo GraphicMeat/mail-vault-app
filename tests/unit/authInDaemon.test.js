@@ -94,12 +94,16 @@ describe('the daemon owns the token', () => {
   const oauth2 = read('src-daemon/src/handlers/oauth2.rs');
   const tokens = read('src-daemon/src/oauth_tokens.rs');
 
-  it('routes only the two read-only compose contracts before credential injection', () => {
+  it('routes only credential-free compose and backup controls before injection', () => {
     const handle = server.slice(server.indexOf('async fn handle_request('), server.indexOf('fn jmap_refusal_log_line')).replace(/\/\/[^\n]*/g, '');
-    const exempt = /if matches!\(method\.as_str\(\), ([^)]*)\) \{\s*return route_request\(state, req\)\.await;\s*\}/.exec(handle);
+    const exempt = /if matches!\(\s*method\.as_str\(\),\s*([^)]*)\s*\) \{\s*return route_request\(state, req\)\.await;\s*\}/.exec(handle);
     expect(exempt).not.toBeNull();
-    expect([...exempt[1].matchAll(/"([^"]+)"/g)].map(match => match[1])).toEqual(['compose.reply_context', 'compose.check']);
-    expect(exempt[1]).toBe('"compose.reply_context" | "compose.check"');
+    expect([...exempt[1].matchAll(/"([^"]+)"/g)].map(match => match[1])).toEqual([
+      'compose.reply_context', 'compose.check',
+      'backup.schedule.get', 'backup.schedule.set', 'backup.run_now',
+      'backup.cancel', 'backup.stop', 'backup.schedule.status',
+      'backup.attach_access', 'backup.access_status', 'backup.context', 'backup.surface_retire',
+    ]);
     expect([...handle.matchAll(/route_request\(state, req\)/g)]).toHaveLength(3);
     const ordinary = handle.slice(exempt.index + exempt[0].length);
     const injection = ordinary.indexOf('oauth_tokens::inject(');

@@ -14,9 +14,11 @@ it('registers implemented bulk controls in daemon transport and router', () => {
   }
   const shell = readFileSync('src-tauri/src/main.rs', 'utf8');
   const forwarding = shell.indexOf('bulk::forward(');
-  const fastPath = shell.indexOf('let fast_token', shell.indexOf('async fn daemon_rpc('));
+  const fastPath = shell.indexOf('if let Some(token) = fast_token', shell.indexOf('async fn daemon_rpc('));
   expect(forwarding).toBeGreaterThan(shell.indexOf('async fn daemon_rpc('));
-  expect(forwarding).toBeLessThan(fastPath);
+  expect(fastPath).toBeGreaterThan(forwarding);
+  const slowPath = shell.indexOf('ensure_daemon_running(&app, &sock)', forwarding);
+  expect(slowPath).toBeGreaterThan(forwarding);
   const native = readFileSync('src-tauri/src/bulk.rs', 'utf8');
   expect(native).toMatch(/set_root\(&mut params,\s*None\)/);
   expect(native).toContain('reconcile_after_channel_change');

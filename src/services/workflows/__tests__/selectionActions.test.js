@@ -5,7 +5,7 @@
 // fingerprints that ignore flags unless the flag counter is bumped. Marking a
 // selection as read used to update `emails` alone, so the rows kept showing the
 // old unread state until something else forced a re-derive.
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey, selectionKey } from '../../../stores/slices/unifiedHelpers';
 
@@ -1960,4 +1960,22 @@ describe('a delete takes the row out of the open search results', () => {
 
     expect(useSearchStore.getState().searchResults.map(r => r.subject)).toEqual(['Hit 1']);
   });
+});
+
+// Diagnose exact detached recount failures across mock-history clearing.
+const recountWarnings = [];
+let recountWarningSpy;
+beforeAll(() => {
+  const originalWarn = console.warn;
+  recountWarningSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+    if (args[0] === '[messageMutations] Could not count the saved views again:') recountWarnings.push(args);
+    originalWarn(...args);
+  });
+});
+afterAll(async () => {
+  await vi.dynamicImportSettled();
+  const { __resetViewCountsForTests } = await import('../../../stores/viewStore');
+  __resetViewCountsForTests();
+  recountWarningSpy.mockRestore();
+  expect(recountWarnings).toEqual([]);
 });

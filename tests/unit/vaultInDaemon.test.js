@@ -157,14 +157,11 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
     expect(sources.length).toBeGreaterThan(10);
   });
 
-  // Task 3.7 deleted `insights.rs` and `insights_tests.rs`, the app's only
-  // pair using this declaration, so nothing in `src-tauri/src` is exempt any
-  // more. The mechanism stays: it is what stops a future `*_tests.rs` from
-  // being exempt by its name alone.
-  it('exemption needs a real #[cfg(test)] module declaration, and no app source claims one now', () => {
-    expect(sources.filter(([f]) => isCfgTestModuleFile(f)).map(([f]) => f)).toEqual([]);
-    // Not vacuous: the matcher still recognises the declaration shape, it
-    // just has nothing left in the app to match against.
+  // Native backup access has one actual cfg(test)-only module. File names
+  // alone never grant an exemption to code shipped in the application.
+  it('exemption needs the real #[cfg(test)] backup module declaration', () => {
+    expect(sources.filter(([f]) => isCfgTestModuleFile(f)).map(([f]) => f)).toEqual(['backup_native_access_tests.rs']);
+    // A planted name still needs the declaration shape.
     expect(declFor('planted_tests.rs').test('#[cfg(test)]\n#[path = "planted_tests.rs"]\nmod tests;')).toBe(true);
     // A bare path declaration without the cfg(test) attribute is not one.
     expect(declFor('planted_tests.rs').test('#[path = "planted_tests.rs"]\nmod tests;')).toBe(false);
@@ -187,9 +184,8 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
   // Borrowing a connection from core is what would actually take the
   // EXCLUSIVE lock, so it is forbidden in everything the shipped binary runs.
   // A file is exempt only when `isCfgTestModuleFile` proves it is loaded
-  // through a `#[cfg(test)]` module declaration (M4). Since Task 3.7 no app
-  // file claims that exemption, so this now covers every source in the
-  // directory.
+  // through a `#[cfg(test)]` module declaration (M4). Every shipped source
+  // remains checked, including arbitrary files named *_tests.rs.
   it.each([
     ['custody::db::open', /custody::db::open\b/],
     ['custody::entries::', /custody::entries::/],
