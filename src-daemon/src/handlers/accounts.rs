@@ -459,13 +459,10 @@ mod tests {
         .await
         .unwrap();
         assert!(rx.try_recv().is_err());
-        let token = crate::oauth_tokens::access_token(
-            &state,
-            "g",
-            crate::oauth_tokens::Read::Quiet,
-        )
-        .await
-        .unwrap();
+        let token =
+            crate::oauth_tokens::access_token(&state, "g", crate::oauth_tokens::Read::Quiet)
+                .await
+                .unwrap();
         assert_eq!(token.as_deref(), Some(native_token));
         assert!(state.tokens.has_trusted_token_for_test("g"));
         assert!(crate::handlers::oauth2::test_token_posts().is_empty());

@@ -5346,11 +5346,7 @@ mod accounts_fallback_tests {
         let credentials = dir.path().join("credentials.json");
         fs::write(&credentials, "synthetic-unreadable").unwrap();
         let call = |method: &str, params| {
-            accounts_fallback_at(
-                Some(dir.path().to_path_buf()),
-                method.to_owned(),
-                params,
-            )
+            accounts_fallback_at(Some(dir.path().to_path_buf()), method.to_owned(), params)
         };
         let list = call("accounts.list", json!({})).await.unwrap();
         let base = list["version"].as_u64().unwrap();
