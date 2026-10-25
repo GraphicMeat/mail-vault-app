@@ -124,35 +124,41 @@ fn run(
     let ids =
         super::insights::configured_account_ids(path).map_err(|_| "errors.settingsNotLoaded")?;
     let doc = SettingsDoc::shared(path);
-    let change = if set {
-        let patch = &params["patch"];
-        policy::validate_patch(patch)?;
-        let mut result = None;
-        // Bounded optimistic retry; an explicitly captured version never upgrades.
-        for attempt in 0..3 {
-            let snapshot = loaded(&doc)?;
-            let base = params
-                .get("baseVersion")
-                .and_then(Value::as_u64)
-                .unwrap_or(snapshot.version);
-            match doc.patch(&json!({STORE:{"state":patch}}), Some(base)) {
-                Ok(change) => {
-                    result = Some(change);
-                    break;
-                }
-                Err(SettingsError::Conflict { .. })
-                    if params.get("baseVersion").is_none() && attempt < 2 =>
-                {
-                    continue
-                }
-                Err(e) => return Err(e.catalog_key()),
-            }
+    if !set {
+        return Ok((prepare(&loaded(&doc)?, &ids, now)?, None));
+    }
+    let patch = &params["patch"];
+    policy::validate_patch(patch)?;
+    let document_patch = json!({STORE:{"state":patch}});
+    // Prepare the exact applied view before mutation, including its immutable
+    // timezone. The version fence proves the same document is patched. Once
+    // patch succeeds there is no fallible read/view work that can hide Change.
+    for attempt in 0..3 {
+        let snapshot = loaded(&doc)?;
+        let base = snapshot.version;
+        if params.get("baseVersion").and_then(Value::as_u64).is_some_and(|v| v != base) {
+            return Err("errors.settingsConflict");
         }
-        result
-    } else {
-        None
-    };
-    Ok((prepare(&loaded(&doc)?, &ids, now)?, change))
+        let mut applied = Value::Object(snapshot.values);
+        mailvault_core::settings_doc::merge_patch(&mut applied, &document_patch);
+        let Value::Object(values) = applied else { unreachable!("object document patch") };
+        let applied = Snapshot { values, version:base, recovered:None };
+        let Value::Object(mut response) = prepare(&applied, &ids, now)? else {
+            return Err("errors.settingsInvalid");
+        };
+        match doc.patch(&document_patch, Some(base)) {
+            Ok(change) => {
+                // This is the known applied snapshot, even if a later writer
+                // has already advanced the file. No postcommit IO is needed.
+                response.insert("version".into(), json!(change.version));
+                return Ok((Value::Object(response), Some(change)));
+            }
+            Err(SettingsError::Conflict { .. })
+                if params.get("baseVersion").is_none() && attempt < 2 => continue,
+            Err(e) => return Err(e.catalog_key()),
+        }
+    }
+    unreachable!("bounded patch attempts return a result")
 }
 
 #[cfg(test)]
