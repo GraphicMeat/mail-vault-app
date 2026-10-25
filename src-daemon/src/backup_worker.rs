@@ -53,7 +53,7 @@ pub(crate) struct BackupState {
     #[cfg(test)]
     pending_access_exit: Mutex<Option<(oneshot::Sender<()>, oneshot::Receiver<()>)>>,
     #[cfg(test)]
-    pending_limit_exit: Mutex<Option<(oneshot::Sender<()>,oneshot::Receiver<()>)>>,
+    pending_limit_exit: Mutex<Option<(oneshot::Sender<()>, oneshot::Receiver<()>)>>,
     #[cfg(test)]
     scans_in_flight: std::sync::atomic::AtomicUsize,
 }
@@ -509,11 +509,11 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 scan = true;
             }
             Cmd::Wake => {
-                scan=true;
-                if let Some(active)=ledger.active.as_ref().filter(|i|i.stage=="preparing") {
-                    deferred_probe_scan=Some(active.execution_id.clone());
+                scan = true;
+                if let Some(active) = ledger.active.as_ref().filter(|i| i.stage == "preparing") {
+                    deferred_probe_scan = Some(active.execution_id.clone());
                 }
-            },
+            }
             Cmd::Access { request, reply } => {
                 // Reconciliation of an old hold must not repeatedly move an
                 // unrelated pending execution into preparing before its next
@@ -596,8 +596,8 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             Cmd::Facts(facts) => {
                 *state.backup_worker.facts.lock().unwrap() = facts;
                 scan = true;
-                if let Some(active)=ledger.active.as_ref().filter(|i|i.stage=="preparing") {
-                    deferred_probe_scan=Some(active.execution_id.clone());
+                if let Some(active) = ledger.active.as_ref().filter(|i| i.stage == "preparing") {
+                    deferred_probe_scan = Some(active.execution_id.clone());
                 }
             }
             Cmd::Running {
@@ -670,12 +670,12 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                     // Only a joined no-start Pending needs its deferred wake.
                     // Publication failure keeps the flag with pending_finish;
                     // ordinary status and provider IO never create a re-probe.
-                    if deferred_probe_scan.as_deref()==Some(execution.as_str()) {
+                    if deferred_probe_scan.as_deref() == Some(execution.as_str()) {
                         scan |= exit.pending_stage().is_some();
-                        deferred_probe_scan=None;
+                        deferred_probe_scan = None;
                     }
-                    ledger=next;
-                },
+                    ledger = next;
+                }
                 Err(_) => pending_finish = Some((run, execution, exit)),
             }
         }
@@ -896,9 +896,12 @@ async fn pump(state: &Arc<DaemonState>, ledger: &mut Ledger, services: &Services
             }
         }
         #[cfg(test)]
-        if exit.pending_stage()==Some("limit") {
-            let barrier=st.backup_worker.pending_limit_exit.lock().unwrap().take();
-            if let Some((entered,release))=barrier {let _=entered.send(());let _=release.await;}
+        if exit.pending_stage() == Some("limit") {
+            let barrier = st.backup_worker.pending_limit_exit.lock().unwrap().take();
+            if let Some((entered, release)) = barrier {
+                let _ = entered.send(());
+                let _ = release.await;
+            }
         }
         let _ = st.backup_worker.tx.get().unwrap().send(Cmd::Finished {
             run,
