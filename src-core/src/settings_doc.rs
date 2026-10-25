@@ -72,7 +72,9 @@ pub fn merge_patch(target: &mut Value, patch: &Value) {
     if !target.is_object() {
         *target = Value::Object(Map::new());
     }
-    let Value::Object(map) = target else { unreachable!() };
+    let Value::Object(map) = target else {
+        unreachable!()
+    };
     for (key, value) in entries {
         if value.is_null() {
             map.remove(key);
@@ -114,8 +116,15 @@ impl SettingsDoc {
     /// Preserve the facade's Arc identity while sharing the production engine.
     pub fn shared(app_dir: &Path) -> Arc<SettingsDoc> {
         static REGISTRY: OnceLock<Mutex<HashMap<PathBuf, Arc<SettingsDoc>>>> = OnceLock::new();
-        let mut map = REGISTRY.get_or_init(Default::default).lock().unwrap_or_else(|p| p.into_inner());
-        Arc::clone(map.entry(app_dir.to_path_buf()).or_insert_with(|| Arc::new(SettingsDoc { doc: JsonDoc::shared(app_dir, SPEC) })))
+        let mut map = REGISTRY
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        Arc::clone(map.entry(app_dir.to_path_buf()).or_insert_with(|| {
+            Arc::new(SettingsDoc {
+                doc: JsonDoc::shared(app_dir, SPEC),
+            })
+        }))
     }
 
     /// A private instance (tests; `shared` is what production uses).
@@ -124,7 +133,9 @@ impl SettingsDoc {
     }
 
     pub fn open_with(app_dir: &Path, backup_interval: Duration) -> SettingsDoc {
-        SettingsDoc { doc: Arc::new(JsonDoc::open_with(app_dir, SPEC, backup_interval)) }
+        SettingsDoc {
+            doc: Arc::new(JsonDoc::open_with(app_dir, SPEC, backup_interval)),
+        }
     }
 
     pub fn path(&self) -> PathBuf {
@@ -144,7 +155,11 @@ impl SettingsDoc {
         if let Some(keys) = keys {
             values.retain(|key, _| keys.contains(key));
         }
-        Ok(Snapshot { values, version: snapshot.version, recovered: snapshot.recovered })
+        Ok(Snapshot {
+            values,
+            version: snapshot.version,
+            recovered: snapshot.recovered,
+        })
     }
 
     /// Applies a merge patch (see [`merge_patch`]) to the document.
@@ -158,7 +173,11 @@ impl SettingsDoc {
     /// Replaces the listed top-level keys wholesale; `null` deletes one. What
     /// the app's persisted stores need: each key holds a whole serialized
     /// store, and a merge patch cannot drop a nested key the store removed.
-    pub fn replace(&self, values: &Value, base_version: Option<u64>) -> Result<Change, SettingsError> {
+    pub fn replace(
+        &self,
+        values: &Value,
+        base_version: Option<u64>,
+    ) -> Result<Change, SettingsError> {
         let Value::Object(entries) = values else {
             return Err(SettingsError::NotAnObject);
         };
@@ -205,13 +224,19 @@ impl SettingsDoc {
         })
     }
 
-    fn write_op(&self, base_version: Option<u64>, apply: impl FnOnce(&mut Value)) -> Result<Change, SettingsError> {
-        self.doc.write_op(base_version, |doc| {
-            let before = doc.as_object().ok_or(DocError::Invalid)?.clone();
-            apply(doc);
-            let after = doc.as_object().ok_or(DocError::Invalid)?;
-            Ok(changed_keys(&before, after))
-        }).map_err(Into::into)
+    fn write_op(
+        &self,
+        base_version: Option<u64>,
+        apply: impl FnOnce(&mut Value),
+    ) -> Result<Change, SettingsError> {
+        self.doc
+            .write_op(base_version, |doc| {
+                let before = doc.as_object().ok_or(DocError::Invalid)?.clone();
+                apply(doc);
+                let after = doc.as_object().ok_or(DocError::Invalid)?;
+                Ok(changed_keys(&before, after))
+            })
+            .map_err(Into::into)
     }
 }
 
@@ -262,12 +287,16 @@ fn write_document_waiting(app_dir: &Path, data: &str, wait: Duration) -> Result<
     match serde_json::from_str::<Value>(data) {
         Ok(v) if v.is_object() => {}
         _ => {
-            warn!("settings: refused a fallback write that is not a JSON object ({} bytes)", data.len());
+            warn!(
+                "settings: refused a fallback write that is not a JSON object ({} bytes)",
+                data.len()
+            );
             return Err(SettingsError::NotAnObject.catalog_key().to_string());
         }
     }
-    let result = lock_file(app_dir, LOCK_NAME, wait, SPEC.persistence)
-        .and_then(|_lock| write_durable(&app_dir.join(FILE_NAME), data.as_bytes(), SPEC.persistence));
+    let result = lock_file(app_dir, LOCK_NAME, wait, SPEC.persistence).and_then(|_lock| {
+        write_durable(&app_dir.join(FILE_NAME), data.as_bytes(), SPEC.persistence)
+    });
     result.map_err(|e| {
         warn!("settings: fallback write failed, the file is unchanged: {e}");
         SettingsError::Io(e.to_string()).catalog_key().to_string()

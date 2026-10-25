@@ -684,7 +684,10 @@ fn raw_fallback_preserves_bytes_without_metadata_and_rejects_nonobjects() {
     assert!(!d.path().join(VERSION_NAME).exists());
     assert!(backups(d.path()).is_empty());
     for invalid in ["[]", "null", "broken"] {
-        assert_eq!(write_document(d.path(), invalid), Err("errors.settingsInvalid".into()));
+        assert_eq!(
+            write_document(d.path(), invalid),
+            Err("errors.settingsInvalid".into())
+        );
         assert_eq!(fs::read(d.path().join(FILE_NAME)).unwrap(), raw.as_bytes());
     }
     assert!(!d.path().join(VERSION_NAME).exists());
@@ -695,40 +698,59 @@ fn raw_fallback_preserves_bytes_without_metadata_and_rejects_nonobjects() {
 fn rebased_store_keeps_native_fields_and_other_stores_replace_whole() {
     let d = dir();
     let doc = SettingsDoc::open(d.path());
-    let base = json!({"version":3,"state":{"language":"en","remove":true,"nested":{"remove":true}}});
-    doc.replace(&json!({"mailvault-settings":base,"other":{"kept":true,"remove":true}}),None).unwrap();
+    let base =
+        json!({"version":3,"state":{"language":"en","remove":true,"nested":{"remove":true}}});
+    doc.replace(
+        &json!({"mailvault-settings":base,"other":{"kept":true,"remove":true}}),
+        None,
+    )
+    .unwrap();
     doc.patch(&json!({"mailvault-settings":{"state":{"backupHistory":{"one":[1]},"backupState":{"one":"done"},"snapshotLastTimes":{"one":42}}}}),None).unwrap();
     doc.replace_rebased(&json!({"mailvault-settings":{"version":4,"state":{"language":"de","nested":{"literalNull":null}}},"other":{"kept":false}}),&json!({"mailvault-settings":base,"other":{"kept":true,"remove":true}}),None).unwrap();
     let got = doc.get(None).unwrap().values;
-    assert_eq!(got["mailvault-settings"],json!({"version":4,"state":{"language":"de","nested":{"literalNull":null},"backupHistory":{"one":[1]},"backupState":{"one":"done"},"snapshotLastTimes":{"one":42}}}));
-    assert_eq!(got["other"],json!({"kept":false}));
+    assert_eq!(
+        got["mailvault-settings"],
+        json!({"version":4,"state":{"language":"de","nested":{"literalNull":null},"backupHistory":{"one":[1]},"backupState":{"one":"done"},"snapshotLastTimes":{"one":42}}})
+    );
+    assert_eq!(got["other"], json!({"kept":false}));
 }
 
 #[test]
 fn changed_keys_are_sorted_unique_and_noop_keeps_all_document_bytes() {
     let d = dir();
     let doc = SettingsDoc::open(d.path());
-    let first = doc.patch(&json!({"z":0,"a":0}),None).unwrap();
-    assert_eq!(first.changed,vec!["a","z"]);
-    let change = doc.patch(&json!({"z":1,"a":1}),None).unwrap();
-    assert_eq!(change.changed,vec!["a","z"]);
+    let first = doc.patch(&json!({"z":0,"a":0}), None).unwrap();
+    assert_eq!(first.changed, vec!["a", "z"]);
+    let change = doc.patch(&json!({"z":1,"a":1}), None).unwrap();
+    assert_eq!(change.changed, vec!["a", "z"]);
     let before = fs::read(doc.path()).unwrap();
     let sidecar = fs::read(d.path().join(VERSION_NAME)).unwrap();
-    let noop = doc.patch(&json!({"z":1,"a":1}),Some(change.version)).unwrap();
-    assert_eq!(noop,Change {version:change.version,changed:vec![]});
-    assert_eq!(fs::read(doc.path()).unwrap(),before);
-    assert_eq!(fs::read(d.path().join(VERSION_NAME)).unwrap(),sidecar);
+    let noop = doc
+        .patch(&json!({"z":1,"a":1}), Some(change.version))
+        .unwrap();
+    assert_eq!(
+        noop,
+        Change {
+            version: change.version,
+            changed: vec![]
+        }
+    );
+    assert_eq!(fs::read(doc.path()).unwrap(), before);
+    assert_eq!(fs::read(d.path().join(VERSION_NAME)).unwrap(), sidecar);
 }
 
 #[test]
 fn shared_settings_facade_uses_the_shared_engine() {
     let d = dir();
     let facade = SettingsDoc::shared(d.path());
-    let engine = JsonDoc::shared(d.path(),SPEC);
-    assert!(Arc::ptr_eq(&facade,&SettingsDoc::shared(d.path())));
-    assert!(Arc::ptr_eq(&facade.doc,&engine));
-    facade.patch(&json!({"one":1}),None).unwrap();
-    engine.fail_before_rename.store(true,Ordering::SeqCst);
-    assert!(matches!(facade.patch(&json!({"one":2}),None),Err(SettingsError::Io(_))));
-    assert_eq!(engine.get().unwrap().value,json!({"one":1}));
+    let engine = JsonDoc::shared(d.path(), SPEC);
+    assert!(Arc::ptr_eq(&facade, &SettingsDoc::shared(d.path())));
+    assert!(Arc::ptr_eq(&facade.doc, &engine));
+    facade.patch(&json!({"one":1}), None).unwrap();
+    engine.fail_before_rename.store(true, Ordering::SeqCst);
+    assert!(matches!(
+        facade.patch(&json!({"one":2}), None),
+        Err(SettingsError::Io(_))
+    ));
+    assert_eq!(engine.get().unwrap().value, json!({"one":1}));
 }

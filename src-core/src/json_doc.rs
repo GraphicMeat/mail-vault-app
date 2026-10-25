@@ -156,7 +156,10 @@ pub enum DocError {
 
 fn sha_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
-    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// What is on disk at the moment it was read.
@@ -198,14 +201,26 @@ fn read_disk_settled(path: &Path, kind: Kind) -> Disk {
 /// and never part of either: a temp file in the same directory, fsync'd,
 /// renamed over the target, then the directory fsync'd (unix). Any failure
 /// removes the temp and leaves `path` as it was.
-pub(crate) fn write_durable(path: &Path, bytes: &[u8], persistence: Persistence) -> std::io::Result<()> {
+pub(crate) fn write_durable(
+    path: &Path,
+    bytes: &[u8],
+    persistence: Persistence,
+) -> std::io::Result<()> {
     write_durable_inner(path, bytes, false, persistence)
 }
 
-fn write_durable_inner(path: &Path, bytes: &[u8], fail_before_rename: bool, persistence: Persistence) -> std::io::Result<()> {
+fn write_durable_inner(
+    path: &Path,
+    bytes: &[u8],
+    fail_before_rename: bool,
+    persistence: Persistence,
+) -> std::io::Result<()> {
     use std::io::Write;
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp = path.with_file_name(format!(".{name}.tmp-{}-{seq}", std::process::id()));
     let result = (|| {
@@ -254,7 +269,11 @@ fn rename_over(from: &Path, to: &Path) -> std::io::Result<()> {
     let mut attempt = 0;
     loop {
         match std::fs::rename(from, to) {
-            Err(e) if cfg!(windows) && e.kind() == std::io::ErrorKind::PermissionDenied && attempt < 10 => {
+            Err(e)
+                if cfg!(windows)
+                    && e.kind() == std::io::ErrorKind::PermissionDenied
+                    && attempt < 10 =>
+            {
                 attempt += 1;
                 std::thread::sleep(Duration::from_millis(20));
             }
@@ -269,7 +288,12 @@ fn rename_over(from: &Path, to: &Path) -> std::io::Result<()> {
 /// homes) is not a reason to stop saving: `Ok(None)`, and the write goes
 /// ahead. JsonDoc retains its process writer lock; a raw fallback has no
 /// shared process lock when the filesystem lock is unavailable.
-pub(crate) fn lock_file(dir: &Path, name: &str, wait: Duration, persistence: Persistence) -> std::io::Result<Option<std::fs::File>> {
+pub(crate) fn lock_file(
+    dir: &Path,
+    name: &str,
+    wait: Duration,
+    persistence: Persistence,
+) -> std::io::Result<Option<std::fs::File>> {
     std::fs::create_dir_all(dir)?;
     let mut options = std::fs::OpenOptions::new();
     options.create(true).truncate(false).write(true);
@@ -297,7 +321,10 @@ pub(crate) fn lock_file(dir: &Path, name: &str, wait: Duration, persistence: Per
                 std::thread::sleep(Duration::from_millis(10));
             }
             Err(std::fs::TryLockError::WouldBlock) => {
-                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, format!("another writer holds {name}")));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!("another writer holds {name}"),
+                ));
             }
             Err(std::fs::TryLockError::Error(e)) => {
                 lock_unsupported(name, &e);
@@ -309,7 +336,9 @@ pub(crate) fn lock_file(dir: &Path, name: &str, wait: Duration, persistence: Per
 
 fn lock_unsupported(name: &str, e: &std::io::Error) {
     static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| warn!("json doc: no file lock for {name} here ({e}); continuing without an OS file lock"));
+    ONCE.call_once(|| {
+        warn!("json doc: no file lock for {name} here ({e}); continuing without an OS file lock")
+    });
 }
 
 /// Two locks, so a reader never waits on a write's IO (CLAUDE.md, Process
@@ -372,8 +401,14 @@ impl JsonDoc {
     pub fn shared(dir: &Path, spec: Spec) -> Arc<JsonDoc> {
         type Registry = Mutex<HashMap<(PathBuf, &'static str), Arc<JsonDoc>>>;
         static REGISTRY: OnceLock<Registry> = OnceLock::new();
-        let mut map = REGISTRY.get_or_init(Default::default).lock().unwrap_or_else(|p| p.into_inner());
-        Arc::clone(map.entry((dir.to_path_buf(), spec.file)).or_insert_with(|| Arc::new(JsonDoc::open(dir, spec))))
+        let mut map = REGISTRY
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        Arc::clone(
+            map.entry((dir.to_path_buf(), spec.file))
+                .or_insert_with(|| Arc::new(JsonDoc::open(dir, spec))),
+        )
     }
 
     /// A private instance (tests; `shared` is what production uses).
@@ -431,7 +466,9 @@ impl JsonDoc {
 
     /// The sidecar as it is on disk now (IO: never under `inner`).
     fn read_sidecar(&self) -> Option<Sidecar> {
-        std::fs::read(self.dir.join(self.spec.version_name())).ok().and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok())
+        std::fs::read(self.dir.join(self.spec.version_name()))
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Sidecar>(&b).ok())
     }
 
     /// Takes in a good file read from disk; a change since this process last
@@ -468,7 +505,11 @@ impl JsonDoc {
     }
 
     fn observe_missing(inner: &mut Inner) {
-        let had = if inner.observed { inner.doc.is_some() } else { inner.sidecar_hash.is_some() };
+        let had = if inner.observed {
+            inner.doc.is_some()
+        } else {
+            inner.sidecar_hash.is_some()
+        };
         if had {
             inner.version += 1;
             inner.unrecorded = true;
@@ -499,9 +540,16 @@ impl JsonDoc {
                 return;
             }
             inner.unrecorded = false;
-            (inner.version, inner.sidecar_hash.clone().unwrap_or_default())
+            (
+                inner.version,
+                inner.sidecar_hash.clone().unwrap_or_default(),
+            )
         };
-        let sidecar = serde_json::to_vec(&Sidecar { version, sha256: hash }).unwrap_or_default();
+        let sidecar = serde_json::to_vec(&Sidecar {
+            version,
+            sha256: hash,
+        })
+        .unwrap_or_default();
         let path = self.dir.join(self.spec.version_name());
         let result = match self.spec.persistence {
             // Preserve settings metadata cost: atomic, without fsync.
@@ -509,7 +557,10 @@ impl JsonDoc {
             Persistence::PrivateDurable => write_durable(&path, &sidecar, self.spec.persistence),
         };
         if let Err(e) = result {
-            warn!("{}: could not record version {version}: {e}", self.spec.file);
+            warn!(
+                "{}: could not record version {version}: {e}",
+                self.spec.file
+            );
             self.lock().unrecorded = true;
         }
     }
@@ -533,8 +584,13 @@ impl JsonDoc {
             }
         }
         // serde's message can quote the content: line and column only.
-        let value: Value = serde_json::from_slice(&bytes)
-            .map_err(|e| format!("{file} unparseable at line {}, column {}", e.line(), e.column()))?;
+        let value: Value = serde_json::from_slice(&bytes).map_err(|e| {
+            format!(
+                "{file} unparseable at line {}, column {}",
+                e.line(),
+                e.column()
+            )
+        })?;
         if !self.spec.kind.accepts(&value) {
             return Err(format!("{file} has the wrong shape"));
         }
@@ -567,19 +623,35 @@ impl JsonDoc {
         self.load_version();
         let kind = self.spec.kind;
         let disk = read_disk_settled(&self.path(), kind);
-        let sidecar = matches!(disk, Disk::Good(..)).then(|| self.read_sidecar()).flatten();
+        let sidecar = matches!(disk, Disk::Good(..))
+            .then(|| self.read_sidecar())
+            .flatten();
         let mut current = {
             let mut inner = self.lock();
             match disk {
                 Disk::Missing => {
                     Self::observe_missing(&mut inner);
-                    Current { value: kind.empty(), version: inner.version, good: None, broken: None }
+                    Current {
+                        value: kind.empty(),
+                        version: inner.version,
+                        good: None,
+                        broken: None,
+                    }
                 }
                 Disk::Good(bytes, value) => {
                     let good = bytes.clone();
                     Self::observe_good(&mut inner, bytes, value, sidecar.as_ref());
-                    let value = inner.doc.as_deref().cloned().unwrap_or_else(|| kind.empty());
-                    Current { value, version: inner.version, good: Some(good), broken: None }
+                    let value = inner
+                        .doc
+                        .as_deref()
+                        .cloned()
+                        .unwrap_or_else(|| kind.empty());
+                    Current {
+                        value,
+                        version: inner.version,
+                        good: Some(good),
+                        broken: None,
+                    }
                 }
                 Disk::Broken(bytes) => {
                     inner.observed = true;
@@ -591,7 +663,12 @@ impl JsonDoc {
                             good: None,
                             broken: Some((bytes, "memory".to_string())),
                         },
-                        None => Current { value: kind.empty(), version: inner.version, good: None, broken: Some((bytes, String::new())) },
+                        None => Current {
+                            value: kind.empty(),
+                            version: inner.version,
+                            good: None,
+                            broken: Some((bytes, String::new())),
+                        },
                     }
                 }
                 Disk::Unreadable(e) => return Err(DocError::Io(e)),
@@ -600,11 +677,17 @@ impl JsonDoc {
         self.record_version(false);
         if let Some((bytes, from)) = &mut current.broken {
             if from.is_empty() {
-                let (value, name) = self.newest_backup().unwrap_or_else(|| (kind.empty(), "empty".to_string()));
+                let (value, name) = self
+                    .newest_backup()
+                    .unwrap_or_else(|| (kind.empty(), "empty".to_string()));
                 current.value = value;
                 *from = name;
             }
-            warn!("{}: does not parse or has the wrong shape ({} bytes); working from {from}", self.spec.file, bytes.len());
+            warn!(
+                "{}: does not parse or has the wrong shape ({} bytes); working from {from}",
+                self.spec.file,
+                bytes.len()
+            );
         }
         Ok(current)
     }
@@ -612,8 +695,17 @@ impl JsonDoc {
     /// The whole document and its version. A missing file is the empty
     /// document. Never writes the document.
     pub fn get(&self) -> Result<Snapshot, DocError> {
-        let Current { value, version, broken, .. } = self.current()?;
-        Ok(Snapshot { value, version, recovered: broken.map(|(_, from)| from) })
+        let Current {
+            value,
+            version,
+            broken,
+            ..
+        } = self.current()?;
+        Ok(Snapshot {
+            value,
+            version,
+            recovered: broken.map(|(_, from)| from),
+        })
     }
 
     /// Reads the current document, lets `apply` change it, and writes the
@@ -642,15 +734,29 @@ impl JsonDoc {
         apply: impl FnOnce(&mut Value) -> Result<Vec<String>, DocError>,
     ) -> Result<Change, DocError> {
         let _writer = self.writer.lock().unwrap_or_else(|p| p.into_inner());
-        let _file_lock = lock_file(&self.dir, &self.spec.lock_name(), LOCK_WAIT, self.spec.persistence).map_err(|e| DocError::Io(e.to_string()))?;
-        let Current { value: mut before, version, mut good, broken } = self.current()?;
+        let _file_lock = lock_file(
+            &self.dir,
+            &self.spec.lock_name(),
+            LOCK_WAIT,
+            self.spec.persistence,
+        )
+        .map_err(|e| DocError::Io(e.to_string()))?;
+        let Current {
+            value: mut before,
+            version,
+            mut good,
+            broken,
+        } = self.current()?;
         let mut scrubbed = Vec::new();
         if let Some(scrub) = &scrub {
             let mut clean = before.clone();
             let removed = (scrub.clean)(&mut clean);
             if !removed.is_empty() {
                 if let Some(bytes) = &mut good {
-                    *bytes = self.spec.encode(&clean).map_err(|e| DocError::Io(e.to_string()))?;
+                    *bytes = self
+                        .spec
+                        .encode(&clean)
+                        .map_err(|e| DocError::Io(e.to_string()))?;
                 }
                 if scrub.live {
                     before = clean;
@@ -684,22 +790,39 @@ impl JsonDoc {
             self.maybe_backup(bytes);
         }
         if let Some((bytes, _)) = &broken {
-            if let Err(e) = write_durable(&self.dir.join(self.spec.corrupt_name()), bytes, self.spec.persistence) {
-                warn!("{}: could not keep the broken file aside: {e}", self.spec.file);
+            if let Err(e) = write_durable(
+                &self.dir.join(self.spec.corrupt_name()),
+                bytes,
+                self.spec.persistence,
+            ) {
+                warn!(
+                    "{}: could not keep the broken file aside: {e}",
+                    self.spec.file
+                );
             }
         }
-        let bytes = self.spec.encode(&next).map_err(|e| DocError::Io(e.to_string()))?;
+        let bytes = self
+            .spec
+            .encode(&next)
+            .map_err(|e| DocError::Io(e.to_string()))?;
         #[cfg(test)]
-        let fail = self.fail_before_rename.load(std::sync::atomic::Ordering::SeqCst);
+        let fail = self
+            .fail_before_rename
+            .load(std::sync::atomic::Ordering::SeqCst);
         #[cfg(test)]
         if let Some(pause) = *self.slow_write.lock().unwrap_or_else(|p| p.into_inner()) {
-            self.in_write.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.in_write
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             std::thread::sleep(pause);
         }
         #[cfg(not(test))]
         let fail = false;
         write_durable_inner(&self.path(), &bytes, fail, self.spec.persistence).map_err(|e| {
-            warn!("{}: write of {} change(s) failed, the file is unchanged: {e}", self.spec.file, changed.len());
+            warn!(
+                "{}: write of {} change(s) failed, the file is unchanged: {e}",
+                self.spec.file,
+                changed.len()
+            );
             DocError::Io(e.to_string())
         })?;
 
@@ -718,7 +841,11 @@ impl JsonDoc {
             inner.version
         };
         self.record_version(true);
-        info!("{}: wrote {} change(s), version {version}", self.spec.file, changed.len());
+        info!(
+            "{}: wrote {} change(s), version {version}",
+            self.spec.file,
+            changed.len()
+        );
         Ok(Change { version, changed })
     }
 
@@ -730,13 +857,20 @@ impl JsonDoc {
     fn maybe_backup(&self, current: &[u8]) {
         use std::sync::atomic::Ordering::SeqCst;
         let bak1 = self.dir.join(self.spec.backup_name(1));
-        let age = std::fs::metadata(&bak1).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+        let age = std::fs::metadata(&bak1)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok());
         let exists = bak1.exists();
         // A newest backup dated in the future (the clock went back, a network
         // filesystem's clock) has no age: not due, or every write would
         // rotate and push every older copy out.
         let spacing = BACKUP_MIN_SPACING.min(self.backup_interval);
-        let wait = if self.backed_up.load(SeqCst) { self.backup_interval } else { spacing };
+        let wait = if self.backed_up.load(SeqCst) {
+            self.backup_interval
+        } else {
+            spacing
+        };
         let due = !exists || age.is_some_and(|a| a >= wait);
         if !due {
             return;
@@ -749,7 +883,8 @@ impl JsonDoc {
         for n in (1..BACKUP_KEEP).rev() {
             let from = self.dir.join(self.spec.backup_name(n));
             if from.exists() {
-                if let Err(e) = std::fs::rename(&from, self.dir.join(self.spec.backup_name(n + 1))) {
+                if let Err(e) = std::fs::rename(&from, self.dir.join(self.spec.backup_name(n + 1)))
+                {
                     warn!("{}: could not rotate backup {n}: {e}", self.spec.file);
                 }
             }
@@ -763,7 +898,9 @@ impl JsonDoc {
     /// Any `.bakN` past the fifth (an interrupted rotation, an older scheme).
     fn drop_extra_backups(&self) {
         let prefix = format!("{}.bak", self.spec.file);
-        let Ok(entries) = std::fs::read_dir(&self.dir) else { return };
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
             let extra = name
@@ -780,7 +917,9 @@ impl JsonDoc {
     /// minute: that may be another process mid-write).
     fn sweep_temps(&self) {
         let prefix = self.spec.temp_prefix();
-        let Ok(entries) = std::fs::read_dir(&self.dir) else { return };
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             if !entry.file_name().to_string_lossy().starts_with(&prefix) {
                 continue;
@@ -802,7 +941,11 @@ impl JsonDoc {
 /// backups, a dead writer's temps), for a caller that removes the document
 /// from a host. The document itself is not in the list.
 pub fn companion_files(dir: &Path, spec: Spec) -> Vec<PathBuf> {
-    let mut out = vec![dir.join(spec.lock_name()), dir.join(spec.version_name()), dir.join(spec.corrupt_name())];
+    let mut out = vec![
+        dir.join(spec.lock_name()),
+        dir.join(spec.version_name()),
+        dir.join(spec.corrupt_name()),
+    ];
     let backups = format!("{}.bak", spec.file);
     let temps = spec.temp_prefix();
     if let Ok(entries) = std::fs::read_dir(dir) {
