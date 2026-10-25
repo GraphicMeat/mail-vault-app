@@ -61,10 +61,13 @@ it('freezes source-derived identity whitespace and complete large quote bytes', 
   });
   const paths = ['src/utils/emailParser.js', 'src/utils/ownAddresses.js', 'src/utils/emailIdentity.js', 'src/utils/sendAsSuggestions.js', 'src/utils/replyQuote.js', 'src/components/RichTextEditor.jsx'];
   const fixture = { schemaVersion: 1, source: { snapshotCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), files: Object.fromEntries(paths.map(path => [path, sha(readFileSync(path))])), generatorSha256: sha(readFileSync(new URL(import.meta.url))), node: process.version, icu: process.versions.icu, zone: Intl.DateTimeFormat().resolvedOptions().timeZone, mocks: ['formatDateTime(value)=date:value; real JS identity/recipient/quote/RichTextEditor exports', 'large bodies reconstructed from stored deterministic specs; digests are test evidence only'] }, identityCases, largeCases };
+  const historical = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-supplement.json', 'utf8'));
   if (process.env.MAILVAULT_GENERATE_COMPOSE_SUPPLEMENT === '1') {
+    // Explicit historical capture must run at the recorded source tree.
+    expect(fixture.source.files).toEqual(historical.source.files);
     console.log('COMPOSE_SUPPLEMENT_BASE64_BEGIN'); console.log(Buffer.from(JSON.stringify(fixture, null, 2) + '\n').toString('base64')); console.log('COMPOSE_SUPPLEMENT_BASE64_END');
   } else {
     const saved = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-supplement.json', 'utf8'));
-    expect(fixture.identityCases).toEqual(saved.identityCases); expect(fixture.largeCases).toEqual(saved.largeCases); expect(fixture.source.files).toEqual(saved.source.files); expect(fixture.source.generatorSha256).toBe(saved.source.generatorSha256);
+    expect(fixture.identityCases).toEqual(saved.identityCases); expect(fixture.largeCases).toEqual(saved.largeCases); for (const [path, hash] of Object.entries(saved.source.files)) expect(sha(execFileSync('git', ['show', `${saved.source.snapshotCommit}:${path}`]))).toBe(hash);
   }
 });

@@ -25,6 +25,7 @@ const { stageOutgoing, saveLocalDraft, readAttachments } = vi.hoisted(() => ({
   readAttachments: vi.fn(),
 }));
 
+vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('lucide-react', () => {
@@ -99,7 +100,9 @@ vi.mock('../../services/db', () => ({
 vi.mock('../../services/authUtils', () => ({ ensureFreshToken: vi.fn(async (a) => a) }));
 vi.mock('../../services/transport', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, send: (cmd, args) => (cmd === 'maildir_read_attachments' ? readAttachments(args) : actual.send(cmd, args)) };
+  const { preparationTransport } = await import('../../test/composePrep');
+  const prepared = preparationTransport(actual);
+  return { ...prepared, send: (cmd, args) => (cmd === 'maildir_read_attachments' ? readAttachments(args) : prepared.send(cmd, args)) };
 });
 
 const account = { id: 'acct-1', email: 'me@example.test', name: 'Me' };

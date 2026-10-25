@@ -11,6 +11,8 @@ import { render, screen, cleanup } from '@testing-library/react';
 
 const { invoke, captured } = vi.hoisted(() => ({ invoke: vi.fn(), captured: { props: null } }));
 
+vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
+vi.mock('../../services/transport', async original => (await import('../../test/composePrep')).preparationTransport(await original()));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invoke(...a) }));
 vi.mock('../ai/AiComposeActions', () => ({ AiComposeActions: (props) => { captured.props = props; return null; } }));

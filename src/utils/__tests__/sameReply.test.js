@@ -80,3 +80,9 @@ describe('applyReplyFill', () => {
     expect(build).not.toHaveBeenCalled();
   });
 });
+
+it('refuses a replaced fill window even if its original header still matches', () => {
+  const header = { uid: 7, _accountId: 'acct-1', _mailbox: 'INBOX' };
+  const windows = [{ id: 2, mode: 'reply', replyTo: header, minimized: true, snapshot: { body: 'new draft' } }];
+  expect(applyReplyFill(windows, { mode: 'reply', replyTo: { ...header, html: 'late' }, _fillFrom: header, _fillWindowId: 1 }, () => ({ quotedHtml: 'late', contextHtml: 'late' }))).toBe(windows);
+});

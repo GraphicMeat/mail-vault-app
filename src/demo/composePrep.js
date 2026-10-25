@@ -8,14 +8,14 @@ import { textToHtml } from '../utils/textToHtml';
 const escapeHtml = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const original = ({ header: m, html, text }, label, dateLabel) => {
   const header = `<p><strong>${label}</strong><br>From: ${escapeHtml(m.from?.name || '')} &lt;${escapeHtml(m.from?.address || '')}&gt;<br>Date: ${escapeHtml(dateLabel)}<br>Subject: ${escapeHtml(m.subject || '')}<br>To: ${escapeHtml(m.to?.map(r => r.address).join(', ') || '')}</p>`;
-  return { header, body: m._bodyLoading ? '' : html || textToHtml(text || '') };
+  return { header, body: html || textToHtml(m._bodyLoading ? '' : text || '') };
 };
 export function prepareDemoCompose(p, { accounts, values, version }) {
   if (typeof p.requestId !== 'string' || !p.requestId.trim()) throw new Error('compose.preparationUnavailable');
   if (p.expectedSettingsVersion != null && p.expectedSettingsVersion !== version) throw new Error('errors.settingsConflict');
   const accountId = accounts.find(a => a.id === p.accountId)?.id || accounts[0]?.id || null;
   const base = { requestId: p.requestId, settingsVersion: version };
-  if (p.kind === 'mailto') return { ...base, initialData: parseMailto(p.href, accountId) };
+  if (p.kind === 'mailto') return { ...base, initialData: parseMailto(p.href, p.accountId) };
   if (p.kind !== 'message' || !p.original?.header || !['reply', 'replyAll', 'forward'].includes(p.mode) || !p.presentation) throw new Error('compose.preparationUnavailable');
   const settings = values['mailvault-settings']?.state || {};
   const own = composeIdentities(accounts, settings.sendAsAddresses, settings.aliases).map(i => i.address);
@@ -32,6 +32,6 @@ export function prepareDemoCompose(p, { accounts, values, version }) {
     quotedHeaderHtml: pieces.header, fullQuotedBodyHtml: pieces.body, fullOriginalHtml,
     quotedHtml: pieces.header + (!forward && p.selectedQuoteHtml || pieces.body),
     contextHtml: p.threadContext?.length ? p.threadContext.map(item => { const x = original(item.original, p.presentation.originalLabel, item.dateLabel); return x.header + x.body; }).join('<hr>') : fullOriginalHtml,
-    bodyAvailable: !m._bodyLoading && Boolean(p.original.html || p.original.text),
+    bodyAvailable: Boolean(p.original.html || !m._bodyLoading && p.original.text),
   };
 }

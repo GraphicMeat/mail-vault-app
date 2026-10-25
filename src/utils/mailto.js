@@ -26,10 +26,11 @@ async function deliver(owner = bridgeOwner) {
   while (pendingIntents.length && current()) {
     const intent = pendingIntents[0];
     if (intent.shell && !owner) return;
-    const result = await prepareMailto(intent.href, intent.accountId, { isCurrent: current });
+    let result;
+    try { result = await prepareMailto(intent.href, intent.accountId, { isCurrent: current }); }
+    catch (error) { if (!current()) return; throw error; }
     if (!current()) return;
-    if (result.initialData) await opener(result.initialData);
-    if (!current()) return;
+    if (result.initialData) opener(result.initialData);
     pendingIntents.shift();
   }
 }
@@ -138,7 +139,7 @@ export function startMailtoBridge({ invoke, listen, onError: reportError }) {
   let unlisten = null;
   const current = () => owner.active && bridgeOwner === owner;
   const drain = () => serialized(async () => {
-    if (!current()) return;
+    if (!current() || !_opener) return;
     const urls = await invoke('take_pending_mailto');
     // take is destructive: retain accepted occurrences even if stop raced it.
     for (const href of urls || []) if (isMailto(href)) pendingIntents.push({ href, shell: true });

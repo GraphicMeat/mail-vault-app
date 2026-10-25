@@ -13,7 +13,7 @@ import { RecipientField } from './RecipientField';
 import { addRecipients, invalidRecipients, removeRecipientToken } from '../utils/recipientTokens';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
-import { buildReplyHeaders, computeReplyRecipients } from '../utils/emailParser';
+import { prepareMessage } from '../services/composePrep';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import { withoutSnippet } from '../utils/withoutSnippet';
@@ -38,7 +38,7 @@ import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
-import { buildQuoteBlocks, replyWireHtml } from '../utils/replyQuote';
+import { replyWireHtml } from '../utils/quoteWire';
 import { clampComposeSize } from '../utils/composeSize';
 import { missingAttachment } from '../utils/missingAttachment';
 
@@ -99,7 +99,7 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 const NO_ALIASES = {};
 
-export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup, acknowledgePreparation, preparedQuote = null }) {
   const t = useT();
   const pa = usePrivateAttr();
   const privateInput = usePrivateInputClass();
@@ -421,7 +421,21 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // A radial reply opens on the header alone, before resolveMessageBody has
   // run (RowQuickActions.jsx) — true here already means the body was there
   // from the start, so the fill-in effect below never has anything to do.
-  const quotedBodyReadyRef = useRef(Boolean(replyTo?.html || replyTo?.text));
+  const quotedBodyReadyRef = useRef(Boolean(initialData?._quotedHtml));
+  const needsPreparation = Boolean(replyTo || initialData?._preparationPending);
+  const [preparationReady, setPreparationReady] = useState(!needsPreparation);
+  const preparationReadyRef = useRef(!needsPreparation);
+  const [preparationFailed, setPreparationFailed] = useState(false);
+  const [preparationRetry, setPreparationRetry] = useState(0);
+  const editRevision = useRef({ to: 0, cc: 0, bcc: 0, subject: 0, ...initialData?._preparationEdits });
+  const generatedOnce = useRef(false);
+  const preparationWork = useRef({ running: false, desired: null });
+  const preparationSource = replyTo || (initialData?._preparationPending ? initialData._replyTo : null);
+  const identityGeneration = JSON.stringify({ accountId: selectedAccountId, from: composeFrom,
+    accounts: accounts.map(a => [a.id, a.email]), aliases: aliasesByAccount, sendAs: sendAsAddresses });
+  const currentPreparation = useRef(null);
+  currentPreparation.current = { source: preparationSource, mode, identityGeneration };
+
   const publishedSnapshotRef = useRef(false);
   const aliveRef = useRef(true);
   useEffect(() => {
@@ -503,55 +517,18 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       return;
     }
 
-    const originalSubject = replyTo.subject || '';
-    const { quotedHeaderHtml, fullQuotedBodyHtml, quotedHtml: replyQuotedHtml, contextHtml: fullContextHtml } =
-      buildQuoteBlocks(replyTo, t('compose.originalMessage'));
-
-    // The original never goes through the editor: TipTap keeps only what its
-    // schema knows, so a forwarded table, inline style or <style> block was
-    // gone before Send. It rides beside the body and is appended at send
-    // (replyWireHtml). A forward carries the whole original, never a selection.
-    // ponytail: the forwarded original is not editable; an editor that keeps
-    // arbitrary HTML is the upgrade if people ask to trim it.
-    setQuotedHtml(mode === 'forward' ? quotedHeaderHtml + fullQuotedBodyHtml : replyQuotedHtml);
-    setContextHtml(fullContextHtml);
-    // The panel is the only place a forward's original shows while editing.
+    // Authored body/template/signature is initialized synchronously and never
+    // replaced by a late preparation result. Generated fields arrive below.
+    const replyBody = mode !== 'forward' && templateBody != null
+      ? replyTemplateApplied.current ? replyTemplateCurrentBody.current : replyTemplateHtml(templateBody) + signatureHtml
+      : signatureHtml;
+    initForm({ ...formData, body: replyBody });
     setShowContext(mode === 'forward' || composeContextVisible);
-
-    const replyBody = templateBody == null
-      ? signatureHtml
-      : replyTemplateApplied.current ? replyTemplateCurrentBody.current : replyTemplateHtml(templateBody) + signatureHtml;
-
-    // Every identity of every account: replying to a message *I* sent (from
-    // any account or alias) must target its recipients, not me — and
-    // reply-all must never re-add one of my own aliases.
-    const ownAddresses = identities.map(i => i.address);
-
-    if (mode === 'reply' || mode === 'replyAll') {
-      const recipients = computeReplyRecipients(replyTo, mode, ownAddresses);
-      initForm({
-        to: recipients.to,
-        cc: recipients.cc,
-        bcc: '',
-        subject: originalSubject.startsWith('Re:') ? originalSubject : t('compose.re', { originalSubject }),
-        body: replyBody,
-        ...buildReplyHeaders(replyTo)
-      }, { preserveSnapshot: templateBody != null && replyTemplateApplied.current });
-      if (templateBody != null && !replyTemplateApplied.current) {
-        replyTemplateCurrentBody.current = replyBody;
-        replyTemplateApplied.current = true;
-      }
-    } else if (mode === 'forward') {
-      initForm({
-        to: '',
-        cc: '',
-        bcc: '',
-        subject: originalSubject.startsWith('Fwd:') ? originalSubject : t('compose.fwd', { originalSubject }),
-        body: signatureHtml,
-        inReplyTo: '',
-        references: ''
-      });
-
+    if (templateBody != null && !replyTemplateApplied.current) {
+      replyTemplateCurrentBody.current = replyBody;
+      replyTemplateApplied.current = true;
+    }
+    if (mode === 'forward') {
       if (replyTo.attachments?.length > 0) {
         // The light fetch that loaded the original carries no attachment
         // bytes. Native autosave resolves `_source`; the outgoing-send helper
@@ -581,19 +558,72 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // the text the person is currently writing.
   }, [mode, replyTo, initialData, templateBody, selectedAccountId]);
 
-  // A radial reply/reply-all opens immediately on the header so the wheel
-  // never stalls on a slow fetch, then App patches in the resolved `replyTo`
-  // once resolveMessageBody lands. Fill the quote and context panel in at
-  // that point — recipients, subject and headers are already correct from
-  // the header alone, so nothing else here needs a second pass.
+  // One preparation in flight per editor. Superseded full-thread work is
+  // coalesced; a timeout does not cancel the daemon's blocking worker.
   useEffect(() => {
-    if (quotedBodyReadyRef.current || (mode !== 'reply' && mode !== 'replyAll')) return;
-    if (!replyTo || !(replyTo.html || replyTo.text)) return;
-    quotedBodyReadyRef.current = true;
-    const { quotedHtml: nextQuotedHtml, contextHtml: nextContextHtml } = buildQuoteBlocks(replyTo, t('compose.originalMessage'));
-    setQuotedHtml(nextQuotedHtml);
-    setContextHtml(nextContextHtml);
-  }, [replyTo, mode, t]);
+    if (!preparationSource || !['reply', 'replyAll', 'forward'].includes(mode)) return;
+    const state = preparationWork.current;
+    const captured = { source: preparationSource, mode, identityGeneration };
+    const request = { cancelled: false };
+    const current = () => !request.cancelled && aliveRef.current
+      && currentPreparation.current.source === captured.source
+      && currentPreparation.current.mode === captured.mode
+      && currentPreparation.current.identityGeneration === captured.identityGeneration;
+    preparationReadyRef.current = false;
+    setPreparationReady(false);
+    setPreparationFailed(false);
+    request.run = async () => {
+      try {
+        const result = preparedQuote?.source === preparationSource && preparedQuote.identityGeneration === identityGeneration
+          ? preparedQuote.result
+          : await prepareMessage({ replyTo: preparationSource, mode, accountId: selectedAccountId, pickedFrom: composeFrom },
+            { ...(acknowledgePreparation && { acknowledge: acknowledgePreparation }), isCurrent: current });
+        if (!current()) return;
+        // A header-only response never erases a complete accepted quote.
+        if (result.bodyAvailable || !quotedBodyReadyRef.current) {
+          setQuotedHtml(result.quotedHtml);
+          setContextHtml(result.contextHtml);
+          if (result.bodyAvailable) quotedBodyReadyRef.current = true;
+        }
+        if (!generatedOnce.current) {
+          setFormData(previous => {
+            const next = { ...previous, inReplyTo: result.inReplyTo, references: result.references };
+            for (const field of ['to', 'cc', 'bcc', 'subject']) {
+              if (editRevision.current[field] === 0) next[field] = result[field];
+            }
+            // Move only untouched generated baseline fields. Typed body,
+            // template and identity edits keep their original dirty baseline.
+            if (initialSnapshot.current) initialSnapshot.current = { ...initialSnapshot.current,
+              ...(editRevision.current.to === 0 && { to: next.to }),
+              ...(editRevision.current.subject === 0 && { subject: next.subject }) };
+            return next;
+          });
+          generatedOnce.current = true;
+        }
+        preparationReadyRef.current = true;
+        setPreparationReady(true);
+        setPreparationFailed(false);
+      } catch (error) {
+        if (!current()) return;
+        if (error?.accountMismatch) {
+          const next = resolveInitialComposeIdentity({ replyTo: preparationSource, initialData,
+            accounts, activeAccountId, selectedAccountId: readingAccountId });
+          if (next.accountId !== selectedAccountId) { setSelectedAccountId(next.accountId); setPickedFrom(next.address); return; }
+        }
+        setPreparationFailed(true);
+        setError(t('compose.preparationUnavailable'));
+      }
+    };
+    state.desired = request;
+    if (!state.running) {
+      state.running = true;
+      void (async () => {
+        try { while (state.desired) { const next = state.desired; state.desired = null; await next.run(); } }
+        finally { state.running = false; }
+      })();
+    }
+    return () => { request.cancelled = true; if (state.desired === request) state.desired = null; };
+  }, [preparationSource, mode, identityGeneration, preparationRetry, preparedQuote]);
 
   // The initializer runs once, so a draft being written is never rebuilt.
   // Changing From swaps the signature in place instead, and an untouched body
@@ -619,6 +649,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // A recipient chip field hands over its whole comma-joined string.
   const setRecipients = (field) => (value) => {
     if (detaching) return;
+    editRevision.current[field]++;
     setFormData(prev => ({ ...prev, [field]: value }));
     setError(null);
   };
@@ -626,6 +657,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // A pasted mailto: link's ?cc= / ?bcc= land in those fields.
   const routeRecipients = (field, text) => {
     if (detaching) return;
+    editRevision.current[field]++;
     setFormData(prev => ({ ...prev, [field]: addRecipients(prev[field] || '', text) }));
     setError(null);
   };
@@ -633,6 +665,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // A chip dragged from one recipient field to another.
   const moveRecipient = (from, to, token) => {
     if (detaching) return;
+    editRevision.current[from]++; editRevision.current[to]++;
     setFormData(prev => ({
       ...prev,
       [from]: removeRecipientToken(prev[from] || '', token),
@@ -644,6 +677,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const handleChange = (e) => {
     if (detaching) return;
     const { name, value } = e.target;
+    if (name in editRevision.current) editRevision.current[name]++;
     setFormData(prev => ({ ...prev, [name]: value }));
     setError(null);
   };
@@ -860,6 +894,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const handleSend = async (event, sendAnyway = false) => {
     event?.preventDefault();
     if (detaching) return;
+    if (!preparationReadyRef.current) { setError(t('compose.preparationUnavailable')); return; }
     if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
     // A chip outlined red is not an address: say which, instead of letting
     // the server bounce the whole message.
@@ -897,7 +932,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       if (draft) {
         if (onSchedule) await onSchedule(snapshot);
         else {
-          await scheduleCompose({ snapshot, account: selectedAccount, settings, cleanupDraft: onDraftCleanup });
+          await scheduleCompose({ snapshot, account: selectedAccount, settings, cleanupDraft: onDraftCleanup, acknowledgePreparation, preparedQuote = null });
           onSend?.();
           onClose();
         }
@@ -907,7 +942,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         const composeState = { mode, replyTo: snapshot._replyTo || actionReplyTo, initialData: snapshot };
         useMailStore.getState().queueSend(
           composeState,
-          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings, cleanupDraft: onDraftCleanup }),
+          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings, cleanupDraft: onDraftCleanup, acknowledgePreparation, preparedQuote = null }),
           delay,
         );
         onSend?.();
@@ -1003,6 +1038,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       references: formData.references,
       attachments: [...attachments],
       _quotedHtml: quotedHtml,
+      _preparationPending: !preparationReadyRef.current,
+      _preparationEdits: { ...editRevision.current },
       _forward: isForward,
       _contextHtml: contextHtml,
       _showContext: showContext,
@@ -1038,7 +1075,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         _editScheduledRow: initialData._editScheduledRow,
       }),
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft, remindDays, isForward, draftSignature, maySaveDraft]);
+  }, [formData, preparationReady, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft, remindDays, isForward, draftSignature, maySaveDraft]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
@@ -1434,6 +1471,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         </div>}
         {/* Form */}
         <form inert={terminalState ? '' : undefined}
+          data-preparation-ready={preparationReady}
           onSubmit={handleSend}
           onKeyDown={(e) => {
             if (detaching) {
@@ -1700,6 +1738,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                  className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20
                            text-mail-danger text-sm">
               {terminalState === 'working' ? t('compose.draftCleanupWorking') : error || draftSaveError}
+              {!terminalState && preparationFailed && <button type="button" className="ml-3 underline" onClick={() => { setError(null); setPreparationRetry(value => value + 1); }}>{t('common.retry')}</button>}
               {!terminalState && draftSaveError && <button type="button" className="ml-3 underline" onClick={() => setDraftRetry(value => value + 1)}>{t('common.retry')}</button>}
             </div>
           )}

@@ -439,7 +439,7 @@ export async function flushSafeStorage({ acknowledge = false } = {}) {
     await writeQueued();
     const expected = identityValues(parse(cache.get('mailvault-settings')));
     const reply = await rpc('settings.get', {});
-    if (!isSnapshot(reply) || reply.version < 0 || reply.recovered) throw new Error('compose.preparationUnavailable');
+    if (!isSnapshot(reply) || reply.version < 0 || reply.recovered != null) throw new Error('compose.preparationUnavailable');
     const current = identityValues(parse(cache.get('mailvault-settings')));
     if (deepEqual(expected, current) && deepEqual(current, identityValues(reply.values['mailvault-settings']))
       && !dirty.has('mailvault-settings') && !inflight.has('mailvault-settings')) return reply.version;
@@ -449,6 +449,8 @@ export async function flushSafeStorage({ acknowledge = false } = {}) {
 
 function identityValues(document) {
   const state = document?.state || {};
+  if (document != null && (!document || typeof document !== 'object' || Array.isArray(document) || !document.state || typeof document.state !== 'object' || Array.isArray(document.state))) throw new Error('compose.preparationUnavailable');
+  for (const value of [state.aliases, state.sendAsAddresses]) { if (value != null && (typeof value !== 'object' || Array.isArray(value))) throw new Error('compose.preparationUnavailable'); }
   return { aliases: state.aliases || {}, sendAsAddresses: state.sendAsAddresses || {} };
 }
 

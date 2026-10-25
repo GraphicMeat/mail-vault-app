@@ -102,12 +102,15 @@ it('captures real JS compose preparation and scheduling behavior', () => {
     const body = '<p>typed</p>'; const wire = replyWireHtml(body, quotedHtml, forward); record('wire', `${forward}-${quotedHtml}`, { body, quotedHtml, forward }, { wire, split: splitWireHtml(wire) });
   }
   const fixture = { schemaVersion: 1, source: { snapshotCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), files: Object.fromEntries(sourceFiles.map(path => [path, sha(path)])), generatorSha256: sha(new URL(import.meta.url)), node: process.version, icu: process.versions.icu, zone: Intl.DateTimeFormat().resolvedOptions().timeZone, locale: 'en-US', clock: '2026-10-25T00:00:00.000Z', mocks: ['formatDateTime(value) = date:value; other date display helpers empty', 'fake UTC clock; real jsdom DOMParser and real RichTextEditor exports; no dev premium override'] }, accounts, settings, cases };
+  const historical = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-cases.json', 'utf8'));
   if (process.env.MAILVAULT_GENERATE_COMPOSE_FIXTURE === '1') {
+    // Explicit historical capture must run at the recorded source tree.
+    expect(fixture.source.files).toEqual(historical.source.files);
     console.log('COMPOSE_PREP_FIXTURE_BASE64_BEGIN'); console.log(Buffer.from(JSON.stringify(fixture, null, 2) + '\n').toString('base64')); console.log('COMPOSE_PREP_FIXTURE_BASE64_END');
   } else {
     const saved = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-cases.json', 'utf8'));
     expect(fixture.cases).toEqual(saved.cases);
-    expect(fixture.source.files).toEqual(saved.source.files);
+    for (const [path, hash] of Object.entries(saved.source.files)) expect(createHash('sha256').update(execFileSync('git', ['show', `${saved.source.snapshotCommit}:${path}`])).digest('hex')).toBe(hash);
     // The frozen hash names the exact capture revision. A later fixture-loader
     // fix must not rewrite its historical provenance or the golden bytes.
     expect(saved.source.generatorSha256).toBe('92b82dbca7598738205ce3779c93c7bae6751719d3c47ab7be90d903d8a20188');

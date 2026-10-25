@@ -24,13 +24,14 @@ const { invoke, sendStaged, stageOutgoing, listen } = vi.hoisted(() => ({
   listen: vi.fn(async () => () => {}),
 }));
 
+vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: (...a) => listen(...a) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invoke(...a) }));
 vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'main' }) }));
 // maildir_store/maildir_delete/local_index_remove now route through
 // transport.js (Task 2.1); delegate to the same `invoke` mock so
 // storedUids() and every existing assertion below still see them.
-vi.mock('../../services/transport', () => ({ send: (...a) => invoke(...a) }));
+vi.mock('../../services/transport', async () => (await import('../../test/composePrep')).preparationTransport({ send: (...a) => invoke(...a) }));
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
   return new Proxy({}, {

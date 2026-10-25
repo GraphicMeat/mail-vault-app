@@ -1,4 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
+vi.mock('../../services/transport', () => ({ send: async (_method, p) => {
+  const { prepareDemoCompose } = await import('../../demo/composePrep');
+  return prepareDemoCompose(p, { accounts: [], values: {}, version: 0 });
+} }));
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { parseMailto, openMailtoCompose, setMailtoComposeOpener, splitAddresses, addressesToHtml, firstRecipient } from '../mailto';
 
 // The rule this file protects: a mailto: link in someone else's email is data,
@@ -86,11 +91,11 @@ describe('openMailtoCompose', () => {
     expect(opened).toBeNull();
   });
 
-  it('hands the parsed prefill to the registered opener', () => {
+  it('hands the parsed prefill to the registered opener', async () => {
     let opened = null;
     setMailtoComposeOpener(d => { opened = d; });
     expect(openMailtoCompose('mailto:a@b.com?subject=Hi', 'acct-2')).toBe(true);
-    expect(opened).toMatchObject({ to: 'a@b.com', subject: 'Hi', _accountId: 'acct-2', _prefill: true });
+    await vi.waitFor(() => expect(opened).toMatchObject({ to: 'a@b.com', subject: 'Hi', _accountId: 'acct-2', _prefill: true }));
   });
 });
 

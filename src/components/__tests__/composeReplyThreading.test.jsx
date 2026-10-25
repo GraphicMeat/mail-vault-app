@@ -343,7 +343,7 @@ it('keeps authored fields while native reply defaults are pending', async () => 
   fireEvent.submit(to.closest('form'));
   expect(stageOutgoing).not.toHaveBeenCalled();
   await act(async () => { release(); });
-  await waitFor(() => expect(screen.queryByText('Could not prepare this message. Please try again.')).toBeNull());
+  await waitFor(() => expect(screen.getByTestId('compose-subject').closest('form').dataset.preparationReady).toBe('true'));
   expect(to.value).toBe('typed@example.test');
   expect(subject.value).toBe('Authored subject');
   expect(screen.getByTestId('editor-stub').value).toBe('<p>Authored body</p>');
