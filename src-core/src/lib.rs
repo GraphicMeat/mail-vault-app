@@ -88,3 +88,5 @@ mod build_id_tests {
 pub mod mirror_mutation;
 
 pub mod drafts;
+
+pub mod compose_prep;
