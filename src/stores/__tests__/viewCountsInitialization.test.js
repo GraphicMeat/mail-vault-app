@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Keep the production store/dependency graph. Only native I/O is replaced.
-const native = vi.hoisted(() => ({ send: vi.fn(), daemonCall: vi.fn() }));
+const native = vi.hoisted(() => ({
+  send: vi.fn(async command => {
+    if (command === 'get_app_data_dir') return '/test/app-data';
+    throw new Error(`Unexpected startup command: ${command}`);
+  }),
+  daemonCall: vi.fn(),
+}));
 vi.mock('../../services/transport', () => ({
   send: (...args) => native.send(...args),
   getDaemonHealth: () => ({ alive: true }),
