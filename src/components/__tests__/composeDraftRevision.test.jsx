@@ -298,14 +298,14 @@ it('retains accepted location and offers the same revision retry while native cl
 });
 
 const { useComposeSessionHydration, mergeComposeSession } = await import('../../services/composeSession');
-function HydrationHarness({ loader, persist, controls, initial = [], focus }) {
+function HydrationHarness({ loader, persist, controls, initial = [], focus, terminalOptions = {} }) {
   const [windows, setWindows] = React.useState(initial);
   const idRef = React.useRef(20);
-  const owner = useComposeSessionHydration({ windows, setWindows, idRef, loader, persist, focus });
+  const owner = useComposeSessionHydration({ windows, setWindows, idRef, loader, persist, focus, ...terminalOptions });
   controls.current = { ...owner, windows, fresh: (mode = 'new') => setWindows(prev => [...prev, { id: ++idRef.current, mode,
     ...(mode === 'reply' ? { replyTo: { uid: 9, from: { address: 'them@example.test' }, subject: 'Question', html: '<p>Q</p>' } } : {}) }]) };
   return windows.filter(w => !w.minimized && !w.detached && owner.canMount(w)).map(w => <ComposeModal {...props} key={w.id}
-    mode={w.mode || 'new'} replyTo={w.replyTo} initialData={w.initialData} onSaveState={data => owner.saveState(w.id, data)} />);
+    mode={w.mode || 'new'} replyTo={w.replyTo} initialData={w.initialData} onSaveState={data => owner.saveState(w.id, data)} onDiscard={data => owner.terminalCleanup(data, 'discard', w.id)} />);
 }
 const nativeDraft = { ...seed, _draftId: 'managed', _draftRevision: 2, _draftAcceptedRevision: 2, _draftUid: 22, _draftAccountId: 'acct-1' };
 describe('App production hydration owner with the real editor', () => {
@@ -442,4 +442,88 @@ it('preserves exact known native-only text and sender when that contender become
   render(<ComposeModal {...props} initialData={recovered} />); await tick();
   expect(saveLocalDraft.mock.calls[0][0]).toMatchObject({ draftId: recovered._draftId, revision: 1, displayName: 'Exact Native Sender', payload: { html: '<p>typed</p>', text: 'exact native plain' } });
   expect(saveLocalDraft.mock.calls[0][0].previousIdentity).toBeUndefined();
+});
+
+
+// Terminal intent must fence the real editor and be owned by the same hook App uses.
+describe('terminal draft owner with the real editor', () => {
+  const window = () => ({ id: 4, initialData: { ...nativeDraft, _draftId: 'terminal' } });
+  const discardClick = async () => {
+    fireEvent.click(screen.getByTestId('compose-discard'));
+    const dialog = screen.getByTestId('compose-discard-dialog');
+    fireEvent.click([...dialog.querySelectorAll('button')].find(button => button.textContent === 'Discard'));
+    await act(async () => {});
+  };
+  it('freezes before the first save, retains unknown identity, and retries only cleanup', async () => {
+    const load = () => Promise.resolve([]); const discard = vi.fn().mockRejectedValueOnce(Error('lost acknowledgement'))
+      .mockResolvedValueOnce({ draftId: 'terminal', discarded: true, cleanup: 'complete' });
+    const flush = vi.fn().mockResolvedValue(undefined); const controls = { current: null }; const persist = vi.fn();
+    render(<HydrationHarness loader={load} persist={persist} controls={controls} initial={[window()]}
+      terminalOptions={{ discard, flush }} />);
+    await act(async () => {}); await discardClick(); await tick();
+    expect(discard).toHaveBeenCalledWith(expect.objectContaining({ _draftId: 'terminal', body: '<p>typed</p>' }));
+    expect(saveLocalDraft).not.toHaveBeenCalled(); expect(screen.queryByTestId('editor-stub')).toBeNull();
+    expect(controls.current.windows[0].snapshot).toMatchObject({ _draftCleanupOnly: true, _draftTerminal: 'discard', _draftCleanupState: 'unknown', _draftId: 'terminal' });
+    expect(flush).toHaveBeenCalled();
+    await act(async () => { await controls.current.retryCleanup(4); });
+    expect(discard).toHaveBeenCalledTimes(2); expect(controls.current.windows).toEqual([]);
+  });
+  it('does not queue saves after discard intent while an earlier save is in flight', async () => {
+    const save = deferred(); const cleanup = deferred(); saveLocalDraft.mockReturnValueOnce(save.promise);
+    const discard = vi.fn(() => cleanup.promise); const controls = { current: null }; const load = () => Promise.resolve([]);
+    render(<HydrationHarness loader={load} persist={vi.fn()} controls={controls} initial={[window()]} terminalOptions={{ discard, flush: vi.fn() }} />);
+    await tick(); const request = saveLocalDraft.mock.calls[0][0]; await discardClick();
+    fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>too late</p>' } }); await tick();
+    expect(discard).not.toHaveBeenCalled(); expect(controls.current.windows).toHaveLength(1);
+    await act(async () => { save.resolve(accepted(request)); });
+    expect(discard).toHaveBeenCalledTimes(1);
+    await act(async () => { cleanup.resolve({ draftId: 'terminal', discarded: true, cleanup: 'pending' }); });
+    await tick(); expect(saveLocalDraft).toHaveBeenCalledTimes(1);
+    expect(controls.current.windows[0].snapshot).toMatchObject({ body: '<p>typed</p>', _draftCleanupState: 'pending' });
+  });
+  it('keeps a failed durable flush in memory and serializes concurrent windows coherently', async () => {
+    const rpc = deferred(); const flush = vi.fn().mockRejectedValueOnce(Error('settings disk unavailable')).mockResolvedValue(undefined);
+    const discard = vi.fn(() => rpc.promise); const controls = { current: null }; const persist = vi.fn(); const loader = () => Promise.resolve([]);
+    render(<HydrationHarness {...{ loader, persist, controls }} initial={[{ ...window(), minimized: true }]}
+      terminalOptions={{ discard, flush }} />); await act(async () => {});
+    let operation; await act(async () => { operation = controls.current.terminalCleanup({ ...nativeDraft, _draftId: 'terminal', body: 'latest minimized' }, 'sent', 4); });
+    await act(async () => { controls.current.fresh(); });
+    await act(async () => { rpc.reject(Error('lost ACK')); await operation; });
+    expect(controls.current.windows).toHaveLength(2);
+    const terminal = controls.current.windows.find(w => w.id === 4);
+    expect(terminal.snapshot).toMatchObject({ body: 'latest minimized', _draftTerminal: 'sent', _draftCleanupState: 'unknown' });
+    expect(terminal.snapshot._draftCleanupPersistError).toBe(true);
+    expect(persist.mock.calls.at(-1)[0]).toHaveLength(2);
+    expect(controls.current.canMount(terminal)).toBe(false);
+    await act(async () => { controls.current.removeSource(4); });
+    expect(controls.current.windows).toHaveLength(2);
+  });
+  it('restores terminal entries through cleanup only and terminal dominates a stale editable twin', async () => {
+    const discard = vi.fn().mockResolvedValue({ draftId: 'terminal', discarded: true, cleanup: 'pending' });
+    const controls = { current: null }; const persist = vi.fn(); const flush = vi.fn();
+    const data = { ...nativeDraft, _draftId: 'terminal', _draftCleanupOnly: true, _draftTerminal: 'scheduled', _draftCleanupState: 'unknown' };
+    const loader = () => Promise.resolve([{ id: 8, initialData: data }]);
+    render(<HydrationHarness {...{ loader, persist, controls }} initial={[{ ...window(), minimized: true }]}
+      terminalOptions={{ discard, flush }} />);
+    await act(async () => {}); await tick();
+    expect(controls.current.windows).toHaveLength(1); expect(discard).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('editor-stub')).toBeNull(); expect(saveLocalDraft).not.toHaveBeenCalled();
+    await act(async () => { controls.current.openDraft({ ...nativeDraft, _draftId: 'terminal' }); });
+    expect(screen.queryByTestId('editor-stub')).toBeNull(); expect(controls.current.windows).toHaveLength(1);
+  });
+  it('reconciles child accepted identity changes once, with stale publication fenced after terminal', async () => {
+    const controls = { current: null }; const loader = () => Promise.resolve([]); const read = deferred();
+    const reconcile = vi.fn(() => read.promise); const discard = vi.fn().mockResolvedValue({ draftId: 'terminal', discarded: true, cleanup: 'pending' });
+    render(<HydrationHarness loader={loader} persist={vi.fn()} controls={controls} initial={[{ ...window(), minimized: true }]}
+      terminalOptions={{ reconcile, discard, flush: vi.fn() }} />); await act(async () => {});
+    const child = { ...nativeDraft, _draftId: 'terminal', _draftAcceptedRevision: 3, _draftAccountId: 'acct-2', _draftUid: 99 };
+    await act(async () => { controls.current.saveState(4, child); });
+    await act(async () => { controls.current.saveState(4, { ...child, body: '<p>keystroke</p>' }); });
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    const fence = reconcile.mock.calls[0][1]; expect(fence.isCurrent()).toBe(true);
+    await act(async () => { await controls.current.terminalCleanup(child, 'discard', 4); });
+    expect(fence.isCurrent()).toBe(false);
+    await act(async () => { read.resolve({ managed: [] }); });
+    expect(controls.current.windows[0].snapshot._draftTerminal).toBe('discard');
+  });
 });

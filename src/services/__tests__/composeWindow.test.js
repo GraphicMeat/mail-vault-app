@@ -232,3 +232,24 @@ it('preserves newer child snapshot when a delayed older revision arrives before 
   owner.receive({ composeId: '101', token, requestId: 'attach', type: 'attach' });
   await vi.waitFor(() => expect(update).toHaveBeenCalledWith(101, expect.objectContaining({ detached: false, initialData: expect.objectContaining({ body: 'x', _draftRevision: 3 }) })));
 });
+
+
+it.each(['pending', 'unknown', 'complete'])('awaits main discard ownership and carries %s without editable recovery on lost ACK', async cleanup => {
+  let settle; const discarded = new Promise(resolve => { settle = resolve; });
+  const discard = vi.fn(() => discarded); const open = vi.fn().mockResolvedValue('terminal-child');
+  const update = vi.fn(); const remove = vi.fn(); const close = vi.fn(); const emitTo = vi.fn().mockResolvedValue(undefined);
+  const owner = createComposeWindowOwner({ open, emitTo, update, remove, close, discard, queueSend: vi.fn() });
+  const handoff = owner.detach({ id: 22, snapshot: { ...snapshot(), _draftId: 'terminal' } });
+  await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+  ready(owner, 22, token); owner.receive({ composeId: '22', token, type: 'initialized', requestId: 'init' }); await handoff;
+  update.mockClear();
+  owner.receive({ composeId: '22', token, type: 'discard', requestId: 'discard', payload: { ...snapshot('latest'), _draftId: 'terminal' } });
+  await vi.waitFor(() => expect(discard).toHaveBeenCalledTimes(1));
+  expect(remove).not.toHaveBeenCalled();
+  owner.receive({ composeId: '22', token, type: 'discard', requestId: 'duplicate' });
+  owner.recover(22); emitTo.mockRejectedValueOnce(Error('lost ACK'));
+  settle({ draftId: 'terminal', discarded: cleanup !== 'unknown', cleanup });
+  await vi.waitFor(() => expect(close).toHaveBeenCalled());
+  expect(discard).toHaveBeenCalledWith(expect.objectContaining({ _draftId: 'terminal', subject: 'latest' }), 22);
+  expect(update.mock.calls.some(([, patch]) => !patch.snapshot?._draftCleanupOnly && patch.detached === false)).toBe(false);
+});

@@ -106,7 +106,7 @@ beforeEach(() => {
   stageOutgoing.mockImplementation(async () => stagedReply());
   sendStaged.mockReset();
   sendStaged.mockImplementation(async () => sentReply());
-  deleteLocalDraft.mockClear();
+  deleteLocalDraft.mockReset().mockResolvedValue(undefined);
   markAnswered.mockClear();
   markForwarded.mockClear();
   createSchedule.mockReset();
@@ -541,5 +541,39 @@ describe('scheduleCompose', () => {
 
     expect(cancelSchedule).toHaveBeenCalledWith('row-1');
     expect(deleteLocalDraft).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('accepted delivery is separate from terminal cleanup', () => {
+  it.each(['unknown', 'pending'])('keeps sent success and Sent bookkeeping after %s cleanup', async state => {
+    const cleanupDraft = vi.fn(state === 'unknown' ? async () => { throw Error('cleanup RPC lost'); }
+      : async () => ({ discarded: true, cleanup: 'pending' }));
+    const frozen = { ...snapshot, _draftId: 'captured', _draftUid: null, _draftAccountId: 'old-account' };
+    const send = createComposeSend({ snapshot: frozen, account, mode: 'reply', replyTo: { uid: 7 }, cleanupDraft });
+    expect(cleanupDraft).not.toHaveBeenCalled();
+    await expect(send()).resolves.toBeUndefined();
+    expect(sendStaged).toHaveBeenCalledTimes(1); expect(stageOutgoing).toHaveBeenCalledTimes(1);
+    expect(cleanupDraft).toHaveBeenCalledWith(expect.objectContaining({ _draftId: 'captured', _draftAccountId: 'old-account' }), 'sent');
+    expect(mailStore.useMailStore.getState().sentEmails).toHaveLength(1); expect(markAnswered).toHaveBeenCalledTimes(1);
+  });
+  it('uses the canonical captured ID without a UID in the standalone send fallback', async () => {
+    await createComposeSend({ snapshot: { ...snapshot, _draftId: 'no-uid', _draftUid: null }, account })();
+    expect(deleteLocalDraft).toHaveBeenCalledWith({ draftId: 'no-uid' });
+  });
+  it.each([false, true])('keeps accepted schedule create/replace after cleanup rejects (edit=%s)', async edit => {
+    const cleanupDraft = vi.fn().mockRejectedValue(Error('lost cleanup'));
+    const data = { ...snapshot, _draftId: 'schedule-draft', _scheduleDraft: { localTime: '2099-01-01T09:00', tz: 'UTC' },
+      ...(edit ? { _editScheduledId: 'row-1', _editScheduledRow: { accountId: 'acct-1' } } : {}) };
+    await expect(scheduleCompose({ snapshot: data, account, cleanupDraft })).resolves.toBeUndefined();
+    expect(edit ? replaceSchedule : createSchedule).toHaveBeenCalledTimes(1); expect(cancelSchedule).not.toHaveBeenCalled();
+    expect(cleanupDraft).toHaveBeenCalledWith(expect.objectContaining({ _draftId: 'schedule-draft' }), 'scheduled');
+  });
+  it('never starts terminal cleanup for an unaccepted send or schedule', async () => {
+    const cleanupDraft = vi.fn(); sendStaged.mockRejectedValueOnce(Error('offline'));
+    await expect(createComposeSend({ snapshot, account, cleanupDraft })()).rejects.toThrow('offline');
+    createSchedule.mockRejectedValueOnce(Error('schedule offline'));
+    await expect(scheduleCompose({ snapshot: { ...snapshot, _scheduleDraft: { localTime: '2099-01-01T09:00', tz: 'UTC' } }, account, cleanupDraft })).rejects.toThrow('schedule offline');
+    expect(cleanupDraft).not.toHaveBeenCalled();
   });
 });
