@@ -648,21 +648,30 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         entered: Mutex::new(Some(entered_tx)),
         release: Mutex::new(release_rx),
     };
-    let auth_events=channel.access_events.clone();
+    let auth_events = channel.access_events.clone();
     std::thread::scope(|scope| {
         let task = scope.spawn(|| {
-            reconcile(&held,&paused,"shell-a");
-            if paused.entered.lock().unwrap().is_some() {println!("NATIVE_AUTH_CONNECT_WAIT: {}",native.last_status.lock().unwrap());}
-            let deadline=Instant::now()+Duration::from_secs(5);
-            while paused.entered.lock().unwrap().is_some() && Instant::now()<deadline {
-                let events=auth_events.swap(0,SeqCst);
-                if events>0 {reconcile(&held,&paused,"shell-a");}
-                else {std::thread::sleep(Duration::from_millis(10));}
+            reconcile(&held, &paused, "shell-a");
+            if paused.entered.lock().unwrap().is_some() {
+                println!(
+                    "NATIVE_AUTH_CONNECT_WAIT: {}",
+                    native.last_status.lock().unwrap()
+                );
+            }
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while paused.entered.lock().unwrap().is_some() && Instant::now() < deadline {
+                let events = auth_events.swap(0, SeqCst);
+                if events > 0 {
+                    reconcile(&held, &paused, "shell-a");
+                } else {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
             }
         });
-        let entered=entered_rx.recv_timeout(Duration::from_secs(5));
+        let entered = entered_rx.recv_timeout(Duration::from_secs(5));
         if entered.is_err() {
-            let _=release_tx.send(());task.join().unwrap();
+            let _ = release_tx.send(());
+            task.join().unwrap();
             panic!("actual connect/event hook did not enter the paused native resolver");
         }
         let started = Instant::now();
