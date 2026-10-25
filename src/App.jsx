@@ -100,7 +100,7 @@ import { initOAuthTokenSync } from './services/oauthTokenSync.js';
 import { useAbdStore } from './stores/abdStore';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
-import { createReplyFillController } from './services/replyFill';
+import { useReplyFillController } from './hooks/useReplyFillController';
 import { setMailtoComposeOpener, startMailtoBridge, retryMailtoCompose } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
@@ -358,12 +358,8 @@ function App() {
   // Auto-switch to two-column on very narrow windows
   const layoutMode = windowWidth < 768 ? 'two-column' : userLayoutMode;
   const [composeWindows, setComposeWindows] = useState([]);
-  const composeWindowsRef = useRef(composeWindows);
-  composeWindowsRef.current = composeWindows;
-  const replyFillController = useRef(null);
-  if (!replyFillController.current) replyFillController.current = createReplyFillController({
-    getWindows: () => composeWindowsRef.current,
-    setWindows: setComposeWindows,
+  const replyFillController = useReplyFillController({
+    windows: composeWindows, setWindows: setComposeWindows,
     getContext: () => ({ mail: useMailStore.getState(), settings: useSettingsStore.getState() }),
     onError: () => useMailStore.setState({ error: tr('compose.preparationUnavailable') }),
   });
@@ -393,7 +389,7 @@ function App() {
     // window: the fetch finishing late must not reopen a reply the user
     // already sent, discarded or closed, or pull one they minimized back out.
     if (state._fillFrom) {
-      void replyFillController.current.fill(state);
+      void replyFillController.fill(state);
       return;
     }
     const restoredData = state.snapshot || state.initialData;

@@ -90,3 +90,20 @@ it('retains the fill if identity changes before the queued React updater commits
   expect(windows[0].snapshot.body).toBe('<p>Latest before commit</p>'); expect(windows[0].snapshot._draftContent).toBe(h.issued);
   expect(io.calls).toHaveLength(2); expect(h.onError).not.toHaveBeenCalled();
 });
+
+it('does not acknowledge a discarded updater evaluation and replays after an async continuation turn', async () => {
+  const h = make(); let windows = h.windows; let update; let commit; let settled = false;
+  const controller = createReplyFillController({ getWindows: () => windows, getContext: () => io.context, onError: h.onError,
+    setWindows: apply => { update = apply; apply(windows); },
+    commitWindows: apply => new Promise(resolve => { update = apply; apply(windows); commit = resolve; }),
+  });
+  const filling = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: h.full });
+  filling.then(() => { settled = true; });
+  await vi.waitFor(() => expect(update).toBeTypeOf('function'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const beforeCommit = settled;
+  const replayed = update(windows);
+  expect({ retiredBeforeCommit: beforeCommit, replayKeepsFullBody: replayed[0].replyTo === h.full }).toEqual({ retiredBeforeCommit: false, replayKeepsFullBody: true });
+  windows = replayed; commit?.(windows); await filling;
+  expect(windows[0].snapshot._quotedHtml).toContain('full body'); expect(h.onError).not.toHaveBeenCalled();
+});

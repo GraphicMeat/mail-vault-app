@@ -504,3 +504,34 @@ it('preserves an explicitly picked removed alias while its account remains confi
   expect(snapshot.to).toBe('them@example.test, friend@example.test'); expect(snapshot.body).toBe('<p>Saved authored content</p>');
   expect(preparation.calls.at(-1).pickedFrom).toBe('removed-alias@example.test');
 });
+
+it('hands over a coherent pending preparation when native completion precedes its React commit', async () => {
+  let release; preparation.gate = new Promise(r => { release = r; });
+  const onDetach = vi.fn().mockResolvedValue(undefined);
+  render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onDetach={onDetach} />);
+  await waitFor(() => expect(preparation.calls).toHaveLength(1));
+  fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'authored-handoff@example.test' } });
+  fireEvent.change(screen.getByTestId('compose-subject'), { target: { value: 'Authored handoff subject' } });
+  fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>Authored handoff body</p>' } });
+  await act(async () => {
+    release();
+    // Let the native continuation run while this enclosing act still holds
+    // the generated-field React commit, then exercise the real manual handoff.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    fireEvent.click(screen.getByTestId('compose-detach'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  expect(onDetach).toHaveBeenCalledTimes(1);
+  const handed = onDetach.mock.calls[0][0];
+  expect(handed._preparationPending || Boolean(handed._quotedHtml && handed.inReplyTo)).toBe(true);
+  expect(handed.to).toBe('authored-handoff@example.test'); expect(handed.subject).toBe('Authored handoff subject');
+  expect(handed.body).toBe('<p>Authored handoff body</p>');
+  const issued = JSON.stringify(handed._draftContent);
+  cleanup(); preparation.gate = null;
+  const snapshotRef = { current: null };
+  render(<ComposeModal detached mode="reply" initialData={handed} onClose={() => {}} snapshotRef={snapshotRef} acknowledgePreparation={async () => 0} />);
+  await waitFor(() => expect(screen.getByTestId('compose-send').disabled).toBe(false));
+  const restored = await snapshotRef.current();
+  expect(restored._contextHtml).toContain('How much?'); expect(restored.inReplyTo).toBe(parent.messageId);
+  expect(restored.to).toBe(handed.to); expect(restored.body).toBe(handed.body); expect(JSON.stringify(handed._draftContent)).toBe(issued);
+});

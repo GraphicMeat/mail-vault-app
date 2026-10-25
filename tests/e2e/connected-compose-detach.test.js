@@ -15,6 +15,17 @@ async function expectFieldValue(testid, value) {
   expect(await fieldValue(testid)).toBe(value);
 }
 
+// Diagnostics contain readiness/ownership booleans only, never message fields.
+const readinessProbe = () => browser.execute(() => {
+  const button = document.querySelector('[data-testid="compose-send"]');
+  const error = document.querySelector('[data-testid="compose-error"]')?.textContent || '';
+  return { ready: button?.closest('form')?.dataset.preparationReady || null, disabled: button?.disabled ?? null,
+    hasTo: Boolean(document.querySelector('[data-recipient-field="to"] [data-testid="recipient-chip"]') || document.querySelector('[data-testid="compose-to"]')?.value),
+    hasSubject: Boolean(document.querySelector('[data-testid="compose-subject"]')?.value),
+    hasContext: Boolean(document.querySelector('[data-testid="compose-context-panel"]')),
+    error: error.includes('prepare this message') ? 'preparation' : error.includes('recipient') ? 'recipient' : error ? 'other' : null };
+});
+
 describe('Connected Compose Detach', function () {
   this.timeout(120_000);
   let mainHandle;
@@ -200,10 +211,11 @@ describe('Connected Compose Detach', function () {
     });
     const detached = (await browser.getWindowHandles()).find(handle => handle !== mainHandle);
     await browser.switchToWindow(detached);
-    await browser.waitUntil(() => testidPresent('compose-context-panel'), {
-      timeout: 15_000,
-      timeoutMsg: 'Detached reply did not restore its reading context',
-    });
+    try {
+      await browser.waitUntil(() => testidPresent('compose-context-panel'), {
+        timeout: 15_000, timeoutMsg: 'Detached reply did not restore its reading context',
+      });
+    } catch (error) { console.log('[detach-context-readiness]', await readinessProbe()); throw error; }
 
     const contextWideSize = await setNativeSize(1050, 760);
     if (contextWideSize.error) throw new Error(contextWideSize.error);
@@ -265,15 +277,24 @@ describe('Connected Compose Detach', function () {
     await browser.waitUntil(() => testidPresent('compose-send'), {
       timeout: 15_000, timeoutMsg: 'Detached compose did not activate before delayed send',
     });
+    console.log('[detach-send-before-click]', await readinessProbe());
     await browser.$('[data-testid="compose-send"]').click();
-    await browser.waitUntil(async () => (await browser.getWindowHandles()).length === 1, {
-      timeout: 15_000, timeoutMsg: 'Detached compose stayed open after main accepted delayed send',
-    });
     await browser.switchToWindow(mainHandle);
-    await browser.waitUntil(() => browser.execute(() => {
-      const pending = window.__MAIL_STORE__?.getState?.().pendingSend;
-      return pending?.composeState?.initialData?.subject === 'Detached delayed send';
-    }), { timeout: 15_000, timeoutMsg: 'Main did not retain the detached send in its undo queue' });
+    try {
+      await browser.waitUntil(() => browser.execute(() => {
+        const pending = window.__MAIL_STORE__?.getState?.().pendingSend;
+        return pending?.composeState?.initialData?.subject === 'Detached delayed send';
+      }), { timeout: 15_000, timeoutMsg: 'Main never queued the delayed send after the child click' });
+      await browser.waitUntil(async () => (await browser.getWindowHandles()).length === 1, {
+        timeout: 15_000, timeoutMsg: 'Detached compose stayed open after confirmed main queue admission',
+      });
+    } catch (error) {
+      console.log('[detach-main-queue-admitted]', await browser.execute(() => Boolean(window.__MAIL_STORE__?.getState?.().pendingSend)));
+      if ((await browser.getWindowHandles()).includes(detached)) {
+        await browser.switchToWindow(detached); console.log('[detach-send-after-click]', await readinessProbe());
+      }
+      throw error;
+    }
     // The pop-out is remembered; this case pins Undo restoring over the mail.
     await settingsCall('setComposeOpenMode', 'app');
     await browser.$('[data-testid="undo-send-btn"]').click();
