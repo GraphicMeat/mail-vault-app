@@ -81,6 +81,18 @@ it.skipIf(process.env.MAILVAULT_WRITE_BACKUP_FIXTURE !== '1')('captures real sch
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange')); await vi.advanceTimersByTimeAsync(15_000);
   for (const gap of [75_000, 150_000, 151_000]) { vi.setSystemTime(Date.now() + gap - 15_000); await vi.advanceTimersByTimeAsync(15_000); await vi.advanceTimersByTimeAsync(10_000); }
   window.dispatchEvent(new Event('offline')); window.dispatchEvent(new Event('online')); unmount(); await vi.advanceTimersByTimeAsync(180_000); record('hook', 'actual-throttle-idle-visibility-hidden-heartbeat-unmount', {}, hookEvents); spies.forEach(spy => spy.mockRestore()); cleanup();
+  reset(); for (let i = 0; i < 7; i++) { vi.setSystemTime(clock + i * 1000); await s.triggerManualBackup('one'); } record('coordinator', 'history-newest-five-cumulative', {}, trace());
+  reset(); vi.resetModules();
+  let disk = { 'mailvault-settings': { version: 3, state: { language: 'en', backupHistory: {} } } }; let documentVersion = 1;
+  window.__TAURI__ = { core: { invoke: async (command, args) => {
+    if (command === 'daemon_rpc' && args.method === 'settings.get') return { values: copy(disk), version: documentVersion };
+    if (command === 'daemon_rpc' && args.method === 'settings.replace') { Object.assign(disk, args.params.values); return { version: ++documentVersion }; }
+    throw new Error('unexpected capture storage command');
+  } } };
+  const storage = await import('../../../../src/stores/safeStorage'); const stale = JSON.parse(await storage.safeStorage.getItem('mailvault-settings'));
+  disk['mailvault-settings'].state.backupHistory.one = [{ timestamp: clock, success: true }]; documentVersion++;
+  stale.state.language = 'de'; storage.safeStorage.setItem('mailvault-settings', JSON.stringify(stale)); await storage.flushSafeStorage();
+  record('known-gap', 'whole-store-overwrites-native-history', {}, disk); delete window.__TAURI__;
   const files = ['src/services/backupScheduler.js', 'src/hooks/useBackupScheduler.js', 'src/stores/settingsStore.js', 'src/stores/safeStorage.js', 'src/services/downloadCapWatch.js'];
   const fixture = { schemaVersion: 1, source: { dispatchCommit: '2210c130c0ce291faa07d304d688ea58381557b0', captureCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), captureTree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim(), appDbSchema: 11, files: Object.fromEntries(files.map(p => [p, hash(p)])), generatorSha256: hash(new URL(import.meta.url)), node: process.version, icu: process.versions.icu, zone: process.env.TZ, resolvedZone: Intl.DateTimeFormat().resolvedOptions().timeZone, mocks: ['environment/side effects only: API/event/auth/mail/notify/snapshot/build; real scheduler/hook/settings actions/entitlement; fake clock and jsdom events'] }, cases };
   const encoded = Buffer.from(JSON.stringify(fixture, null, 2) + '\n').toString('base64'); console.log(`BACKUP_FIXTURE_${process.env.TZ}_BEGIN\n${encoded}\nBACKUP_FIXTURE_END`);
