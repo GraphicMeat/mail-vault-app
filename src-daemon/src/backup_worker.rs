@@ -698,8 +698,14 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 scan |= wake;
             }
             Cmd::SurfaceGenerationLost(generation) => {
-                state.backup_worker.context.lock().unwrap().retire_generation(&generation);
-                refresh_context(&state); scan = true;
+                state
+                    .backup_worker
+                    .context
+                    .lock()
+                    .unwrap()
+                    .retire_generation(&generation);
+                refresh_context(&state);
+                scan = true;
             }
             Cmd::OwnerLost(owner) => {
                 access::interrupt_owner(&state, &mut ledger, &owner);
@@ -1816,12 +1822,29 @@ pub(crate) fn configuration_changed(state: &Arc<DaemonState>, rearm: bool) {
 }
 
 // Surface lifecycle is independent from native mirror authorization owners.
-pub(crate) struct SurfaceChannelOwner { state: Arc<DaemonState>, generation: String }
-impl Drop for SurfaceChannelOwner {
-    fn drop(&mut self) { let _ = self.state.backup_worker.tx.get().unwrap().send(Cmd::SurfaceGenerationLost(self.generation.clone())); }
+pub(crate) struct SurfaceChannelOwner {
+    state: Arc<DaemonState>,
+    generation: String,
 }
-pub(crate) fn surface_channel_owner(state: &Arc<DaemonState>, generation: Option<&str>) -> Option<SurfaceChannelOwner> {
-    let generation = generation.filter(|s|!s.is_empty() && s.len() <= 256)?;
+impl Drop for SurfaceChannelOwner {
+    fn drop(&mut self) {
+        let _ = self
+            .state
+            .backup_worker
+            .tx
+            .get()
+            .unwrap()
+            .send(Cmd::SurfaceGenerationLost(self.generation.clone()));
+    }
+}
+pub(crate) fn surface_channel_owner(
+    state: &Arc<DaemonState>,
+    generation: Option<&str>,
+) -> Option<SurfaceChannelOwner> {
+    let generation = generation.filter(|s| !s.is_empty() && s.len() <= 256)?;
     start(state.clone());
-    Some(SurfaceChannelOwner { state:state.clone(), generation:generation.into() })
+    Some(SurfaceChannelOwner {
+        state: state.clone(),
+        generation: generation.into(),
+    })
 }

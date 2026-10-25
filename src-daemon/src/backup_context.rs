@@ -72,7 +72,10 @@ impl Context {
     pub fn observe(&mut self, o: Observation, now: i64) -> Value {
         let key = (o.surface_id.clone(), o.session_id.clone());
         let s = self.sessions.entry(key).or_default();
-        let accepted = !o.surface_id.rsplit_once(':').is_some_and(|(generation,_)|self.retired_generations.contains(generation))
+        let accepted = !o
+            .surface_id
+            .rsplit_once(':')
+            .is_some_and(|(generation, _)| self.retired_generations.contains(generation))
             && !self.destroyed.contains(&o.surface_id)
             && !s.retired
             && o.sequence > s.sequence
@@ -128,9 +131,15 @@ impl Context {
     }
     pub fn retire_generation(&mut self, generation: &str) {
         self.retired_generations.insert(generation.into());
-        for ((id,_), source) in &mut self.sessions {
-            if id.rsplit_once(':').is_some_and(|(prefix,_)|prefix == generation) {
-                source.retired = true; source.live = false; source.wake_at = None; source.visible_at = None;
+        for ((id, _), source) in &mut self.sessions {
+            if id
+                .rsplit_once(':')
+                .is_some_and(|(prefix, _)| prefix == generation)
+            {
+                source.retired = true;
+                source.live = false;
+                source.wake_at = None;
+                source.visible_at = None;
             }
         }
     }

@@ -9,26 +9,31 @@ export function useBackupScheduler({ main = true } = {}) {
     const surfaceId = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label || 'browser';
     let sessionId = crypto.randomUUID();
     let sequence = 0;
+    let attached = false;
     let retired = false;
     let activity = Date.now();
     let tick = activity;
     let keyAt = -Infinity;
     let mouseAt = -Infinity;
-    const facts = (kind = 'update', extra = {}) => {
+    const facts = (kind = attached ? 'update' : 'attach', extra = {}) => {
       if (retired && kind !== 'retire') return;
       const payload = { surfaceId, sessionId, sequence: ++sequence, kind };
       if (kind !== 'retire') Object.assign(payload, {
         lastActivityAt: activity, observedAt: Date.now(), loading: main && !!useMailStore.getState().loading,
         visibility: document.visibilityState === 'hidden' ? 'hidden' : 'visible', online: navigator.onLine !== false, ...extra,
       });
-      Promise.resolve().then(() => send('backup.context', payload)).catch(() => {});
+      Promise.resolve().then(() => send('backup.context', payload)).then(reply => {
+        if (!retired && kind !== 'retire' && payload.sessionId === sessionId && payload.sequence === sequence) attached = reply?.accepted === true;
+      }).catch(() => {
+        if (!retired && payload.sessionId === sessionId && payload.sequence === sequence) attached = false;
+      });
     };
     facts('attach');
     let reconnectUnlisten;
     import('@tauri-apps/api/event').then(async ({ listen }) => {
       const unlisten = await listen('daemon-reconnected', () => {
         if (retired) return;
-        facts('retire'); sessionId = crypto.randomUUID(); sequence = 0; facts('attach');
+        facts('retire'); sessionId = crypto.randomUUID(); sequence = 0; attached = false; facts('attach');
       });
       if (retired) unlisten(); else reconnectUnlisten = unlisten;
     }).catch(() => {});
@@ -51,7 +56,7 @@ export function useBackupScheduler({ main = true } = {}) {
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('online', network); window.addEventListener('offline', network);
     const loading = main ? useMailStore.subscribe((state, prev) => { if (state.loading !== prev.loading) facts(); }) : () => {};
-    const heartbeat = setInterval(() => { const now = Date.now(); const gap = now - tick; tick = now; facts('update', { heartbeatGap: gap }); }, 15_000);
+    const heartbeat = setInterval(() => { const now = Date.now(); const gap = now - tick; tick = now; facts(attached ? 'update' : 'attach', { heartbeatGap: gap }); }, 15_000);
     const retire = () => { if (retired) return; retired = true; facts('retire'); };
     window.addEventListener('beforeunload', retire);
     return () => {

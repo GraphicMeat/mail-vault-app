@@ -33,12 +33,20 @@ const keyOf = o => `${current?.accessIncarnation}/${o.intent?.runId}/${o.intent?
 const hasHost = () => [...observers].some(o => o.present);
 const ignoreFailure = fn => { try { Promise.resolve(fn()).catch(() => {}); } catch { /* presentation cannot change a native result */ } };
 
+function partialNotice(result) {
+  const parts = [];
+  if (result.errors > 0) parts.push(t('svc.backupScheduler.messageSCouldFetched', { entry: result.errors }));
+  if (result.external_copy_ok === false) parts.push(t('svc.backupScheduler.failedCopyExternalBackup', { result: result.external_copy_failed_count || t('svc.backupScheduler.some') }));
+  return t('svc.backupScheduler.emailsBackedUp', { entry: result.emails_backed_up || 0, parts: parts.join(' ') }).trim();
+}
 function resultFor(receipt) {
   if (!receipt || !terminal.has(receipt.status)) return null;
   if (receipt.status === 'success' && receipt.result?.success !== true) return null;
+  if (receipt.status === 'missing_account') return { status: 'failed', message: t('errors.accountNotFound') };
+  if (receipt.status === 'limit_reached') return { status: 'limit_reached', message: receipt.message || t('svc.backupScheduler.stoppedAtDailyLimit', { limit: Number.isFinite(receipt.terminal?.limit_bytes) ? Math.round(receipt.terminal.limit_bytes / (1024 * 1024)) : '' }) };
   const result = receipt.result;
   const degraded = receipt.status === 'success' && (result.errors > 0 || result.external_copy_ok === false || result.external_copy_failed_count > 0);
-  return { status: degraded ? 'degraded' : receipt.status, message: receipt.message || result?.error_message || result?.external_copy_error || null };
+  return { status: degraded ? 'degraded' : receipt.status, message: receipt.message || result?.error_message || result?.external_copy_error || (degraded ? partialNotice(result) : null) };
 }
 function present(outcome) {
   if (!outcome.applied) return;
@@ -151,7 +159,7 @@ async function ensure() {
       const registrations = await Promise.allSettled([
         listen('backup-schedule-changed', ({ payload }) => { if (owner !== generation) return; eventGeneration++; consume(payload); }),
         listen('backup-progress', ({ payload }) => { if (owner === generation) progress(payload); }),
-        ...['daemon-reconnected', 'daemon-events-lagged'].map(name => listen(name, () => { if (owner === generation) { retryAmbiguous(); void requestRefresh(); } })),
+        ...['daemon-reconnected', 'daemon-events-lagged', 'settings-changed'].map(name => listen(name, () => { if (owner === generation) { eventGeneration++; if (name !== 'settings-changed') retryAmbiguous(); void requestRefresh(); } })),
       ]);
       for (const result of registrations) if (result.status === 'fulfilled') {
         if (owner === generation) unlisteners.push(result.value); else result.value();

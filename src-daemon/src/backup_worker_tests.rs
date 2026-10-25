@@ -2716,3 +2716,24 @@ async fn backup_worker_surface_channel_retires_only_its_generation_and_reconnect
         "same-process reconnect could not establish fresh facts"
     );
 }
+
+#[tokio::test]
+async fn backup_worker_config_removal_cannot_rearm_stop_but_explicit_enable_can() {
+    async fn consumed(state: &Arc<DaemonState>) { let (done,rx)=oneshot::channel();state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap(); }
+    let r = rig();
+    rpc(&r.state,"backup.context",observation("main","stop-config",1,"attach",NOW,true)).await;
+    rpc(&r.state,"backup.stop",json!({})).await;
+    rpc(&r.state,"backup.schedule.set",json!({"patch":{"backupSchedules":{"one":null}}})).await;
+    consumed(&r.state).await;
+    let removed = r.state.backup_worker.facts.lock().unwrap().automatic;
+    rpc(&r.state,"backup.schedule.set",json!({"patch":{"backupSchedules":{"one":{"enabled":false,"interval":"daily"}}}})).await;
+    consumed(&r.state).await;
+    let disabled = r.state.backup_worker.facts.lock().unwrap().automatic;
+    rpc(&r.state,"backup.schedule.set",json!({"patch":{"backupSchedules":{"one":{"enabled":true,"interval":"daily"}}}})).await;
+    let (done,rx)=oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap();
+    let enabled = r.state.backup_worker.facts.lock().unwrap().automatic;
+    finish(r).await;
+    assert!(!removed,"removing a schedule silently rearmed Stop");
+    assert!(!disabled,"disabling a schedule silently rearmed Stop");
+    assert!(enabled,"explicit enable did not rearm native ownership");
+}

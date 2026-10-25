@@ -102,7 +102,7 @@ it('reconciles pending callers when listener installation rejects', async () => 
 it('disposes listener registrations that finish after the last observer detaches', async () => {
   let release; host.delayedListeners = new Promise(done => { release = done; });
   const dispose = scheduler.observe({ present: false }); await flush(); dispose(); release(); await flush();
-  expect(host.unsub).toHaveBeenCalledTimes(4);
+  expect(host.unsub).toHaveBeenCalledTimes(5);
 });
 it('does not let a stale Done timer hide a new execution', async () => {
   const dispose = scheduler.observe({ present: false }); await flush();
