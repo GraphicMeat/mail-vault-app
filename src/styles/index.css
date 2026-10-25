@@ -1467,7 +1467,7 @@ input[type="range"]::-moz-range-thumb:hover {
 .compose-scroll { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
 .compose-addresses { flex-shrink: 0; }
 .compose-addresses > div { min-height: 36px; }
-.compose-addresses input { min-width: 0; width: 100%; }
+.compose-addresses input:not([data-recipient-input]) { min-width: 0; width: 100%; }
 .compose-addresses input, .compose-addresses select { min-height: 32px; border-radius: 4px; }
 .compose-addresses > div > div { min-width: 0; }
 .compose-editor { min-height: 200px; background: var(--mail-bg); }

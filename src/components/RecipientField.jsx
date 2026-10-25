@@ -320,6 +320,7 @@ export function RecipientField({ name, label, placeholder, value, setValue, test
             type="text"
             name={name}
             data-testid={testid}
+            data-recipient-input="true"
             // The whole field's string: the input itself only holds the draft.
             data-value={value}
             data-autofocus={autoFocus ? true : undefined}

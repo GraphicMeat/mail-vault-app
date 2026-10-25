@@ -391,3 +391,10 @@ describe('contacts list leaves out chips', () => {
     expect(seen.exclude).toEqual(['a@b.de', 'Ann <c@d.de>']);
   });
 });
+
+describe('RecipientField draft input marker', () => {
+  it('carries data-recipient-input so the compose stylesheet can leave its min-width alone', () => {
+    render(<Harness initial="a@x.com, b@x.com" />);
+    expect(screen.getByTestId('compose-to').hasAttribute('data-recipient-input')).toBe(true);
+  });
+});
