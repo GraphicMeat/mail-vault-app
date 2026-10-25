@@ -1612,10 +1612,10 @@ function App() {
           {composeWindows.filter(w => w.minimized).map(w => {
             const data = composeSessionData(w);
             const terminal = isTerminalCompose(data);
-            const cleanupLabel = data?._draftCleanupPersistError ? tr('compose.draftCleanupStorageFailed')
-              : data?._draftTerminal === 'sent' ? tr('compose.sentCleanupPending')
+            const cleanupStateLabel = data?._draftTerminal === 'sent' ? tr('compose.sentCleanupPending')
               : data?._draftTerminal === 'scheduled' ? tr('compose.scheduledCleanupPending')
               : data?._draftCleanupState === 'pending' ? tr('compose.draftCleanupPending') : tr('compose.draftCleanupUnknown');
+            const cleanupLabel = data?._draftCleanupPersistError ? `${cleanupStateLabel} ${tr('compose.draftCleanupStorageFailed')}` : cleanupStateLabel;
             const subject = data?.subject || w.replyTo?.subject || '';
             const displaySubject = w.mode === 'reply' || w.mode === 'replyAll'
               ? (subject.startsWith('Re:') ? subject : tr('app.re', { subject }))

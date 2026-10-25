@@ -1102,7 +1102,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             setDraftSaveError(result.cleanup === 'pending' ? t('compose.draftCleanupPending') : null);
           }
         } catch (err) {
-          if (issuedDraftRef.current === issued && aliveRef.current) setDraftSaveError(err?.message || String(err));
+          if (issuedDraftRef.current === issued && aliveRef.current) setDraftSaveError(t('compose.draftContentNotAccepted'));
           console.warn('[compose:autosave_fail]', err);
         } finally {
           if (queuedDraftRef.current === issued) queuedDraftRef.current = null;

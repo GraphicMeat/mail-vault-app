@@ -246,7 +246,7 @@ describe('revision recovery at the actual component boundary', () => {
     const onSaveState = vi.fn(); const snapshotRef = { current: null };
     const view = render(<ComposeModal {...props} initialData={seed} onSaveState={onSaveState} snapshotRef={snapshotRef} />); await tick();
     const request = saveLocalDraft.mock.calls[0][0];
-    expect(screen.getByRole('alert').textContent).toContain('vault unavailable');
+    expect(screen.getByRole('alert').textContent).toContain('The draft could not be saved. Please retry.');
     const saved = await snapshotRef.current(); view.unmount();
     render(<ComposeModal {...props} initialData={saved} />); await tick();
     expect(saveLocalDraft).toHaveBeenCalledTimes(2);
