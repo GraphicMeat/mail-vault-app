@@ -565,6 +565,11 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
         r.pending
     };
     let Some(p) = pending else { return Ok(()) };
+    // Copy publication requires current local account membership. Terminal
+    // cleanup remains independent of account configuration above this branch.
+    let _ = account(s, &p.copy.identity.scope.account_id,
+        p.copy.entry["from"]["address"].as_str().unwrap_or(""),
+        p.copy.entry["from"]["name"].as_str().unwrap_or(""))?;
     // Restart/retry preparation uses retained vault bytes, outside draft locks.
     let Some(raw) = pending_raw(s, &p)? else {
         return abort_uninstalled(s, id, &p);
@@ -868,12 +873,62 @@ fn discard(s: &Arc<DaemonState>, id: &str) -> Result<Value, String> {
         json!({"draftId":id,"discarded":true,"cleanup":if r.cleanup.is_empty(){"complete"}else{"pending"},"cleanupIdentities":r.cleanup.iter().map(|c|&c.identity).collect::<Vec<_>>()}),
     )
 }
+// A stable id is primary after COW retires its former physical tuple. A tuple
+// supplied alongside it is still a checked association, never a historic alias.
+fn validate_open_tuple(s: &Arc<DaemonState>, id: &str, record: &Record, location: &Location) -> Result<(), String> {
+    if app_db::with(&s.app_dir, |c| db::owner(c, location))?.as_deref() != Some(id) {
+        return Err("draft tuple is not currently associated with this draftId".into());
+    }
+    let copy = record.current.iter()
+        .chain(&record.cleanup)
+        .chain(record.pending.iter().map(|intent| &intent.copy))
+        .find(|copy| copy.location() == *location && drafts::editable(&copy.entry))
+        .ok_or("draft tuple is not editable")?;
+    let _ = read_copy(s, copy, false)?;
+    Ok(())
+}
+
+fn list_id(s: &Arc<DaemonState>, id: &str, exact: Option<&Location>, content: bool) -> Result<Value, String> {
+    if id.is_empty() || id.len() > 200 { return Err("invalid draftId".into()); }
+    let Some(mut record) = app_db::with(&s.app_dir, |c| db::load(c, id))? else {
+        return Ok(json!({"drafts":[],"managed":[],"missingBody":true}));
+    };
+    if let Some(location) = exact { validate_open_tuple(s, id, &record, location)?; }
+    if content && !record.discarded {
+        // Recovery failure leaves the accepted copy and pending facts usable.
+        let _ = recover(s, id);
+        record = load(s, id)?;
+        if let Some(location) = exact { validate_open_tuple(s, id, &record, location)?; }
+    }
+    let mut view = response(&record, "unchanged");
+    if record.discarded {
+        return Ok(json!({"drafts":[],"managed":[view],"terminal":true,"missingBody":false}));
+    }
+    if let Some(copy) = &record.current {
+        if content {
+            let Some(raw) = read_copy(s, copy, true)? else {
+                return Ok(json!({"drafts":[],"managed":[view],"missingBody":true}));
+            };
+            view["eml"] = serde_json::to_value(mailvault_core::vault_eml::parse_eml_bytes(
+                &raw, copy.identity.scope.uid, drafts::FLAGS.map(String::from).to_vec(),
+            )?).map_err(|error| error.to_string())?;
+        }
+        return Ok(json!({"drafts":[view.clone()],"managed":[response(&record,"unchanged")],"missingBody":false}));
+    }
+    let pending = record.pending.is_some() || record.retry.is_some();
+    Ok(json!({"drafts":[],"managed":[view],"pending":pending,"missingBody":!pending}))
+}
+
 fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     let exact = params
         .get("identity")
         .map(|v| serde_json::from_value::<Location>(v.clone()).map_err(|e| e.to_string()))
         .transpose()?;
     let content = params["includeContent"].as_bool().unwrap_or(false);
+    if let Some(value) = params.get("draftId") {
+        let id = value.as_str().ok_or("draftId must be a string")?;
+        return list_id(s, id, exact.as_ref(), content);
+    }
     if content && exact.is_none() {
         return Err("draft content requires exact identity".into());
     }

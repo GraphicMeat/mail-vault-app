@@ -1282,12 +1282,18 @@ async fn drafts_current_mailbox_stays_fixed_when_native_cached_role_changes() {
 
 #[tokio::test]
 async fn drafts_native_contract_stable_id_reopens_current_and_rejects_wrong_tuple() {
+    for format in [message_store::Format::Maildir, message_store::Format::Jmap] {
     let h = Harness::new();
+    message_store::set_vault_format(&h.s.data_dir, format).unwrap();
     let old = saved(&h.s, req("stable-native-open", 1, "old words")).await;
-    let current = saved(&h.s, req("stable-native-open", 2, "current words")).await;
+    let mut current_request = req("stable-native-open", 2, "current words");
+    current_request["snapshot"]["to"] = json!("\"Doe, Jane\" <jane@example.test>, next@example.test");
+    let current = saved(&h.s, current_request).await;
     assert_ne!(old["uid"], current["uid"]);
     let opened = rpc(&h.s, "drafts.list", json!({"draftId":"stable-native-open","includeContent":true})).await.unwrap();
     assert_eq!(opened["drafts"][0]["uid"], current["uid"]);
+    assert_eq!(opened["drafts"][0]["eml"]["to"][0]["address"], "jane@example.test");
+    assert_eq!(opened["drafts"][0]["eml"]["to"][1]["address"], "next@example.test");
     assert!(opened["drafts"][0]["eml"]["html"].as_str().unwrap().contains("current words"));
     assert!(rpc(&h.s, "drafts.list", json!({"draftId":"stable-native-open","identity":loc(&old),"includeContent":true})).await.is_err());
     let old_location: Location = serde_json::from_value(loc(&old)).unwrap();
@@ -1300,10 +1306,13 @@ async fn drafts_native_contract_stable_id_reopens_current_and_rejects_wrong_tupl
     let reopened = DaemonState::for_test(h.s.data_dir.clone(), h.s.app_dir.clone(), true);
     let opened = rpc(&reopened, "drafts.list", json!({"draftId":"stable-native-open","includeContent":true})).await.unwrap();
     assert_eq!(opened["drafts"][0]["uid"], current["uid"]);
+    assert_eq!(opened["drafts"][0]["eml"]["to"][0]["address"], "jane@example.test");
+    assert_eq!(opened["drafts"][0]["eml"]["to"][1]["address"], "next@example.test");
     rpc(&reopened, "drafts.discard", json!({"draftId":"stable-native-open"})).await.unwrap();
     let terminal = rpc(&reopened, "drafts.list", json!({"draftId":"stable-native-open","includeContent":true})).await.unwrap();
     assert_eq!(terminal["terminal"], true);
     assert!(terminal["drafts"].as_array().unwrap().is_empty());
+}
 }
 
 #[tokio::test]
@@ -1332,4 +1341,27 @@ async fn drafts_native_contract_pending_recovery_requires_current_account() {
     std::fs::remove_file(h.s.app_dir.join("accounts.json")).unwrap();
     let discarded = rpc(&h.s, "drafts.discard", json!({"draftId":"recover-account"})).await.unwrap();
     assert_eq!(discarded["cleanup"], "complete");
+}
+
+#[tokio::test]
+async fn drafts_stable_id_reports_pending_terminal_and_missing_without_blank_content() {
+    let h = Harness::new();
+    h.hook(|point| if point == "before_destination" { Err("pending destination".into()) } else { Ok(()) });
+    assert!(rpc(&h.s, "drafts.save", req("pending-native-open", 1, "recoverable words")).await.is_err());
+    let metadata = rpc(&h.s, "drafts.list", json!({"draftId":"pending-native-open"})).await.unwrap();
+    assert_eq!(metadata["pending"], true);
+    assert!(metadata["drafts"].as_array().unwrap().is_empty());
+    let content = rpc(&h.s, "drafts.list", json!({"draftId":"pending-native-open","includeContent":true})).await.unwrap();
+    assert_eq!(content["pending"], true);
+    assert_eq!(content["missingBody"], false);
+    assert!(content["drafts"].as_array().unwrap().is_empty());
+    let missing = rpc(&h.s, "drafts.list", json!({"draftId":"unknown-native-open","includeContent":true})).await.unwrap();
+    assert_eq!(missing["missingBody"], true);
+    h.clear();
+    std::fs::remove_file(h.s.app_dir.join("accounts.json")).unwrap();
+    let discarded = rpc(&h.s, "drafts.discard", json!({"draftId":"pending-native-open"})).await.unwrap();
+    assert_eq!(discarded["cleanup"], "complete");
+    let terminal = rpc(&h.s, "drafts.list", json!({"draftId":"pending-native-open","includeContent":true})).await.unwrap();
+    assert_eq!(terminal["terminal"], true);
+    assert!(terminal["drafts"].as_array().unwrap().is_empty());
 }
