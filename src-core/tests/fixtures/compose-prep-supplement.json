@@ -1,0 +1,3487 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "snapshotCommit": "0d716306ddb0fc56b25bd8bb990d6f7dc0b1bfac",
+    "files": {
+      "src/utils/emailParser.js": "412b02ce8ef67bc14a285c5d107db5478dc749402a5c61146c640771b110c449",
+      "src/utils/ownAddresses.js": "55a16223672be64d6ec789aaaa5d6bae8dd1f5d90acab7b2947c1360c2575578",
+      "src/utils/emailIdentity.js": "b3658e4eb6e08d3eee0c05ee14f4e369fbd227a3c6208e7be550ec7b737d3043",
+      "src/utils/sendAsSuggestions.js": "de9a51ad67c86440dede7c08a204a181a7259a71e33bb1adeda5bc8ed35ba801",
+      "src/utils/replyQuote.js": "a56e91952e4ae02ed62198a514be16513fa1b8093d50ed88c4a17ff5c0335fd4",
+      "src/components/RichTextEditor.jsx": "0eab5dd08e78826b460843376c5c71c63be7ed25d8ec720e63393ff04a5b12c2"
+    },
+    "generatorSha256": "f5a3c6e9501b3bbf19af98b483e43d6ae1ddfaa61ef7f9039ac09a5e4ac15db3",
+    "node": "v24.19.0",
+    "icu": "78.3",
+    "zone": "UTC",
+    "mocks": [
+      "formatDateTime(value)=date:value; real JS identity/recipient/quote/RichTextEditor exports",
+      "large bodies reconstructed from stored deterministic specs; digests are test evidence only"
+    ]
+  },
+  "identityCases": [
+    {
+      "name": "FEFF-prefix-login-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "﻿owner@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-login-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "﻿owner@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-default-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "﻿owner@example.test"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-default-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "﻿owner@example.test"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-alias-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "﻿owner@example.test"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-alias-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "﻿owner@example.test"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-picked-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "﻿owner@example.test",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-picked-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "﻿owner@example.test",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-from-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "﻿owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-from-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "﻿owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-replyTo-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "﻿owner@example.test"
+            }
+          ]
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-replyTo-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "﻿owner@example.test"
+            }
+          ]
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-to-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "﻿owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-to-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "﻿owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-cc-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "﻿owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-prefix-message-cc-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "﻿owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, friend@example.test",
+        "cc": "friend@example.test"
+      }
+    },
+    {
+      "name": "FEFF-prefix-gmail-fold",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "john@gmail.com"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "﻿J.ohn+tag@googlemail.com"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-login-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test﻿"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-login-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test﻿"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-default-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "owner@example.test﻿"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-default-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "owner@example.test﻿"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-alias-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "owner@example.test﻿"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-alias-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "owner@example.test﻿"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-picked-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "owner@example.test﻿",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-picked-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "owner@example.test﻿",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-from-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test﻿"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-from-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test﻿"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-replyTo-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "owner@example.test﻿"
+            }
+          ]
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-replyTo-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "owner@example.test﻿"
+            }
+          ]
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-to-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test﻿"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-to-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test﻿"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-cc-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test﻿"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "FEFF-suffix-message-cc-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test﻿"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, friend@example.test",
+        "cc": "friend@example.test"
+      }
+    },
+    {
+      "name": "FEFF-suffix-gmail-fold",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "john@gmail.com"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "J.ohn+tag@googlemail.com﻿"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-login-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-login-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-default-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "owner@example.test"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-default-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "owner@example.test"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-alias-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "owner@example.test"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-alias-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "owner@example.test"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-picked-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "owner@example.test",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-picked-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "owner@example.test",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-message-from-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-message-from-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-message-replyTo-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "owner@example.test"
+            }
+          ]
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-message-replyTo-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "owner@example.test"
+            }
+          ]
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-message-to-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-message-to-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, owner@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-message-cc-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-prefix-message-cc-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, friend@example.test",
+        "cc": "owner@example.test, friend@example.test"
+      }
+    },
+    {
+      "name": "0085-prefix-gmail-fold",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "john@gmail.com"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "J.ohn+tag@googlemail.com"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "J.ohn+tag@googlemail.com",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-login-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-login-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-default-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "owner@example.test"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-default-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {
+            "one": "owner@example.test"
+          },
+          "aliases": {}
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-alias-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "owner@example.test"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-alias-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {
+            "one": [
+              {
+                "address": "owner@example.test"
+              }
+            ]
+          }
+        },
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-picked-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "owner@example.test",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-picked-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "login@example.test"
+          }
+        ],
+        "settings": {
+          "sendAsAddresses": {},
+          "aliases": {}
+        },
+        "picked": "owner@example.test",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "owner@example.test, copy@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-message-from-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-message-from-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "owner@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-message-replyTo-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "owner@example.test"
+            }
+          ]
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "owner@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-message-replyTo-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic",
+          "replyTo": [
+            {
+              "address": "owner@example.test"
+            }
+          ]
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "owner@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-message-to-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-message-to-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, owner@example.test, friend@example.test",
+        "cc": "copy@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-message-cc-reply",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "outside@example.test",
+        "cc": ""
+      }
+    },
+    {
+      "name": "0085-suffix-message-cc-replyAll",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "owner@example.test"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "outside@example.test"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "replyAll"
+      },
+      "output": {
+        "to": "outside@example.test, friend@example.test",
+        "cc": "owner@example.test, friend@example.test"
+      }
+    },
+    {
+      "name": "0085-suffix-gmail-fold",
+      "input": {
+        "accounts": [
+          {
+            "id": "one",
+            "email": "john@gmail.com"
+          }
+        ],
+        "settings": {},
+        "picked": "",
+        "message": {
+          "from": {
+            "address": "J.ohn+tag@googlemail.com"
+          },
+          "to": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "friend@example.test"
+            }
+          ],
+          "cc": [
+            {
+              "address": "owner@example.test"
+            },
+            {
+              "address": "copy@example.test"
+            }
+          ],
+          "bcc": [
+            {
+              "address": "bcc-supplement@example.test"
+            }
+          ],
+          "subject": "Topic"
+        },
+        "mode": "reply"
+      },
+      "output": {
+        "to": "J.ohn+tag@googlemail.com",
+        "cc": ""
+      }
+    }
+  ],
+  "largeCases": [
+    {
+      "spec": {
+        "name": "context-65",
+        "count": 65,
+        "contextRepeat": 12,
+        "originalRepeat": 7,
+        "unit": "x",
+        "mode": "reply"
+      },
+      "inputBytes": 23317,
+      "digests": {
+        "quotedHeaderHtml": {
+          "bytes": 201,
+          "sha256": "999806e8cdb47b5d8271b1861430a0525b1b7f2cf7b6f0840d2a7676a7861667"
+        },
+        "fullQuotedBodyHtml": {
+          "bytes": 106,
+          "sha256": "b7a6775b8aa7066adb9eebfe09732ae182b982afc793d8ada311a7d3a4d5016c"
+        },
+        "quotedHtml": {
+          "bytes": 307,
+          "sha256": "c2c59449444f4bc178c7f1dcdf62f160462a5c125a79464a0beade6a5dbfd008"
+        },
+        "contextHtml": {
+          "bytes": 21136,
+          "sha256": "3461f7824ad2ba6694dbf5b34b27665ec88ed3e1af7616b9f658abdd60b853e7"
+        },
+        "fullOriginalHtml": {
+          "bytes": 307,
+          "sha256": "c2c59449444f4bc178c7f1dcdf62f160462a5c125a79464a0beade6a5dbfd008"
+        }
+      }
+    },
+    {
+      "spec": {
+        "name": "context-257",
+        "count": 257,
+        "contextRepeat": 5,
+        "originalRepeat": 7,
+        "unit": "x",
+        "mode": "reply"
+      },
+      "inputBytes": 90271,
+      "digests": {
+        "quotedHeaderHtml": {
+          "bytes": 201,
+          "sha256": "999806e8cdb47b5d8271b1861430a0525b1b7f2cf7b6f0840d2a7676a7861667"
+        },
+        "fullQuotedBodyHtml": {
+          "bytes": 106,
+          "sha256": "b7a6775b8aa7066adb9eebfe09732ae182b982afc793d8ada311a7d3a4d5016c"
+        },
+        "quotedHtml": {
+          "bytes": 307,
+          "sha256": "c2c59449444f4bc178c7f1dcdf62f160462a5c125a79464a0beade6a5dbfd008"
+        },
+        "contextHtml": {
+          "bytes": 82714,
+          "sha256": "a96d30976d970466122234bcec0bd51fd998c721db03e0cb262c5b35609ad0f7"
+        },
+        "fullOriginalHtml": {
+          "bytes": 307,
+          "sha256": "c2c59449444f4bc178c7f1dcdf62f160462a5c125a79464a0beade6a5dbfd008"
+        }
+      }
+    },
+    {
+      "spec": {
+        "name": "original-over-2MiB-selected",
+        "count": 0,
+        "contextRepeat": 0,
+        "originalRepeat": 2097200,
+        "unit": "x",
+        "mode": "reply",
+        "selected": "<p>selected-only</p>"
+      },
+      "inputBytes": 2097595,
+      "digests": {
+        "quotedHeaderHtml": {
+          "bytes": 201,
+          "sha256": "999806e8cdb47b5d8271b1861430a0525b1b7f2cf7b6f0840d2a7676a7861667"
+        },
+        "fullQuotedBodyHtml": {
+          "bytes": 2097299,
+          "sha256": "99fb62755e5eab98a2b93fede4b06d760aed922cd7a64f5d64368efeb681f63e"
+        },
+        "quotedHtml": {
+          "bytes": 221,
+          "sha256": "5e6ae64aa35df53adcfc92c82b647eb98eabb6439069b53b582ddd0a21b17f97"
+        },
+        "contextHtml": {
+          "bytes": 2097500,
+          "sha256": "a7c875cd9c9f7a498f66b80508c46fa78a48dc972f385a274539018e04cc6469"
+        },
+        "fullOriginalHtml": {
+          "bytes": 2097500,
+          "sha256": "a7c875cd9c9f7a498f66b80508c46fa78a48dc972f385a274539018e04cc6469"
+        }
+      }
+    },
+    {
+      "spec": {
+        "name": "original-over-2MiB-forward",
+        "count": 0,
+        "contextRepeat": 0,
+        "originalRepeat": 2097200,
+        "unit": "x",
+        "mode": "forward",
+        "selected": "<p>selection-ignored</p>"
+      },
+      "inputBytes": 2097599,
+      "digests": {
+        "quotedHeaderHtml": {
+          "bytes": 201,
+          "sha256": "999806e8cdb47b5d8271b1861430a0525b1b7f2cf7b6f0840d2a7676a7861667"
+        },
+        "fullQuotedBodyHtml": {
+          "bytes": 2097299,
+          "sha256": "99fb62755e5eab98a2b93fede4b06d760aed922cd7a64f5d64368efeb681f63e"
+        },
+        "quotedHtml": {
+          "bytes": 2097500,
+          "sha256": "a7c875cd9c9f7a498f66b80508c46fa78a48dc972f385a274539018e04cc6469"
+        },
+        "contextHtml": {
+          "bytes": 2097500,
+          "sha256": "a7c875cd9c9f7a498f66b80508c46fa78a48dc972f385a274539018e04cc6469"
+        },
+        "fullOriginalHtml": {
+          "bytes": 2097500,
+          "sha256": "a7c875cd9c9f7a498f66b80508c46fa78a48dc972f385a274539018e04cc6469"
+        }
+      }
+    },
+    {
+      "spec": {
+        "name": "aggregate-over-2MiB",
+        "count": 70,
+        "contextRepeat": 35000,
+        "originalRepeat": 7,
+        "unit": "x",
+        "mode": "reply"
+      },
+      "inputBytes": 2474247,
+      "digests": {
+        "quotedHeaderHtml": {
+          "bytes": 201,
+          "sha256": "999806e8cdb47b5d8271b1861430a0525b1b7f2cf7b6f0840d2a7676a7861667"
+        },
+        "fullQuotedBodyHtml": {
+          "bytes": 106,
+          "sha256": "b7a6775b8aa7066adb9eebfe09732ae182b982afc793d8ada311a7d3a4d5016c"
+        },
+        "quotedHtml": {
+          "bytes": 307,
+          "sha256": "c2c59449444f4bc178c7f1dcdf62f160462a5c125a79464a0beade6a5dbfd008"
+        },
+        "contextHtml": {
+          "bytes": 2471926,
+          "sha256": "77c6fc8233a2d1c0b52926ea00fd95d1100fed1552543b18c42a0a6ad1c93b24"
+        },
+        "fullOriginalHtml": {
+          "bytes": 307,
+          "sha256": "c2c59449444f4bc178c7f1dcdf62f160462a5c125a79464a0beade6a5dbfd008"
+        }
+      }
+    },
+    {
+      "spec": {
+        "name": "multibyte-escaped-text",
+        "count": 0,
+        "contextRepeat": 0,
+        "originalRepeat": 350000,
+        "unit": "界<&\n",
+        "mode": "reply",
+        "text": true
+      },
+      "inputBytes": 2450276,
+      "digests": {
+        "quotedHeaderHtml": {
+          "bytes": 201,
+          "sha256": "999806e8cdb47b5d8271b1861430a0525b1b7f2cf7b6f0840d2a7676a7861667"
+        },
+        "fullQuotedBodyHtml": {
+          "bytes": 6650035,
+          "sha256": "e430765ba7bc2479854b022bc248eff26fd22a6e79cd478d6307ce187e9eb331"
+        },
+        "quotedHtml": {
+          "bytes": 6650236,
+          "sha256": "64c8b87284c27e14e3ac0a34700baa0baaa92718c003c38e470d6aa1b21aebab"
+        },
+        "contextHtml": {
+          "bytes": 6650236,
+          "sha256": "64c8b87284c27e14e3ac0a34700baa0baaa92718c003c38e470d6aa1b21aebab"
+        },
+        "fullOriginalHtml": {
+          "bytes": 6650236,
+          "sha256": "64c8b87284c27e14e3ac0a34700baa0baaa92718c003c38e470d6aa1b21aebab"
+        }
+      }
+    }
+  ]
+}
