@@ -32,7 +32,11 @@ const manual = async id => { const result = await s.triggerManualBackup(id); awa
 const reset = async () => {
   s.stopAll();
   for (const id of [...s._terminalWaiters.keys()]) env.handlers['backup-progress']({ payload: { account_id: id, active: false, cancelled: true } });
-  await settle(); vi.clearAllTimers();
+  await settle();
+  expect(s._queueRunning, 'previous real coordinator loop must have drained').toBe(false);
+  expect(s._terminalWaiters.size, 'previous real terminal waiters must drain').toBe(0);
+  expect([...s._running.values()].some(Boolean), 'previous account work must drain').toBe(false);
+  vi.clearAllTimers();
   Object.assign(s, { _state: State.IDLE, _running: new Map(), _retryCount: new Map(), _queue: [], _queueRunning: false, _pausedAccountId: null, _checkpoints: new Map(), _manualIds: new Set(), _manualResolvers: new Map(), _terminalWaiters: new Map(), _stalled: new Set(), _lastProgressAt: clock, _limitHolds: new Map(), _timers: new Set(), _flushTimer: null });
   Object.assign(env, { calls: [], credentials: true, terminal: { success: true, completed_emails: 7 }, loading: false, promptFailure: false, snapshotFailure: false });
   vi.setSystemTime(clock);
