@@ -76,3 +76,17 @@ describe('App-owned asynchronous reply fills', () => {
     expect(h.windows[0].replyTo).toBe(newest); expect(h.windows[0].snapshot._quotedHtml).toContain('newest resolved body'); expect(io.calls).toHaveLength(2);
   });
 });
+it('retains the fill if identity changes before the queued React updater commits', async () => {
+  const h = make(); let windows = h.windows; const queued = [];
+  const controller = createReplyFillController({ getWindows: () => windows, setWindows: updater => queued.push(updater), getContext: () => io.context, onError: h.onError });
+  const filling = controller.fill({ mode: 'reply', _fillFrom: header, replyTo: h.full });
+  await vi.waitFor(() => expect(queued).toHaveLength(1));
+  windows = windows.map(w => ({ ...w, snapshot: { ...w.snapshot, _accountId: 'two', _fromAddress: two.email, body: '<p>Latest before commit</p>' } }));
+  io.context.version = 2;
+  windows = queued.shift()(windows);
+  await vi.waitFor(() => expect(queued).toHaveLength(1));
+  windows = queued.shift()(windows); await filling;
+  expect(windows[0].replyTo === h.full).toBe(true); expect(windows[0].snapshot._quotedHtml).toContain('full body');
+  expect(windows[0].snapshot.body).toBe('<p>Latest before commit</p>'); expect(windows[0].snapshot._draftContent).toBe(h.issued);
+  expect(io.calls).toHaveLength(2); expect(h.onError).not.toHaveBeenCalled();
+});

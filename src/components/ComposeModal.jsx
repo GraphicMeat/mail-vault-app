@@ -564,6 +564,21 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // coalesced; a timeout does not cancel the daemon's blocking worker.
   useEffect(() => {
     if (!preparationSource || !['reply', 'replyAll', 'forward'].includes(mode)) return;
+    // Reuse the existing identity precedence before capturing a request. A
+    // removed account must not leave the live fence comparing two senders.
+    if (!accounts.some(account => account.id === selectedAccountId)) {
+      preparationReadyRef.current = false;
+      setPreparationReady(false);
+      const next = resolveInitialComposeIdentity({ replyTo: preparationSource, initialData, accounts,
+        activeAccountId: accounts.some(account => account.id === activeAccountId) ? activeAccountId : accounts[0]?.id,
+        selectedAccountId: readingAccountId });
+      if (next.accountId !== selectedAccountId && accounts.some(account => account.id === next.accountId)) {
+        setSelectedAccountId(next.accountId); setPickedFrom(next.address);
+      } else {
+        setPreparationFailed(true); setAutoDetach(false); setError(t('compose.preparationUnavailable'));
+      }
+      return;
+    }
     const state = preparationWork.current;
     const captured = { source: preparationSource, mode, identityGeneration, originalKey: preparationOriginalKey };
     const quoteOnly = generatedOnce.current && preparedContext.current?.identityGeneration === identityGeneration
@@ -573,7 +588,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       const settings = useSettingsStore.getState();
       const currentAccounts = settings.getOrderedAccounts(useMailStore.getState().accounts);
       return preparationIdentity({ accountId: selectedAccountId,
-        fromAddress: pickedFrom || settings.sendAsAddresses?.[selectedAccountId] || currentAccounts.find(a => a.id === selectedAccountId)?.email || '',
+        fromAddress: pickedFrom || settings.sendAsAddresses?.[selectedAccountId] || (currentAccounts.find(a => a.id === selectedAccountId) || currentAccounts[0])?.email || '',
         accounts: currentAccounts, aliases: settings.aliases || NO_ALIASES, sendAsAddresses: settings.sendAsAddresses });
     };
     const current = () => !request.cancelled && aliveRef.current
