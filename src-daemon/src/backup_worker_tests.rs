@@ -1661,3 +1661,25 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
     assert_eq!(access_query(&r, &attempt, false).await["state"], "drained");
     finish(r).await;
 }
+
+#[tokio::test]
+async fn backup_access_foreign_status_does_not_reprobe_pending_intent() {
+    async fn probe(state:&Arc<DaemonState>) {
+        let (done,wait)=oneshot::channel();state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();wait.await.unwrap();
+    }
+    let mut r=rig();access_slot(&r);let ack=manual(&r.state,"one","foreign-probe").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;probe(&r.state).await;
+    let current=access_attempt(&r,&ack,"shell-a");let mut foreign=current.clone();foreign["incarnation"]=json!("previous-daemon");
+    let revision=r.state.backup_worker.status()["revision"].clone();let mut observed=Vec::new();
+    for fence in [false,true] {
+        assert_eq!(access_query(&r,&foreign,fence).await["state"],"foreign_incarnation");
+        probe(&r.state).await;observed.push(r.state.backup_worker.status()["revision"].clone());
+        wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    }
+    // A current successful fence keeps its existing recheck/wake semantics.
+    app_db::with(&r.state.app_dir,|c|app_db::locations::clear(c,"external-backup")).unwrap();
+    assert_eq!(access_query(&r,&current,true).await["state"],"fenced");
+    let c=call(&mut r).await;let local=c.ctx.mirror_root.is_none();c.reply.send(Ok(result(1))).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["foreign-probe"]["status"]=="success").await;finish(r).await;
+    assert!(local);assert_eq!(observed,vec![revision.clone(),revision],"foreign status spuriously re-admitted pending intent");
+}
