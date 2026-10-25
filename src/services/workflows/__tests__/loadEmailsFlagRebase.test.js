@@ -4,7 +4,7 @@
 // auto mark-read of a message the user just opened) used to be reverted by the
 // commit, in the list AND in the sidecar. The commit now three-way merges the
 // flags against the live store (rebaseFlags), whichever branch built the list.
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
@@ -125,9 +125,9 @@ const storeRow = (uid) => useMailStore.getState().emails.find(e => e.uid === uid
 const savedRow = (uid) => mockSaveEmailHeaders.mock.calls.at(-1)?.[2]?.find(e => e.uid === uid);
 
 let warnSpy;
+afterAll(() => vi.dynamicImportSettled());
 
 afterEach(async () => {
-  await vi.dynamicImportSettled();
   const recountWarnings = warnSpy.mock.calls.filter(([message]) =>
     message === '[messageMutations] Could not count the saved views again:');
   warnSpy.mockRestore();
