@@ -180,6 +180,29 @@ mod tests {
         assert!(on_disk(&dir).as_array().unwrap().iter().any(|a| a["id"] == "x"));
         assert!(!std::fs::read_to_string(&path).unwrap().contains("only-B"));
     }
+    async fn unrepresentable_legacy_retains_fields(entries: Value) {
+        let (dir, state) = rig();
+        let path = dir.path().join("accounts.json");
+        let creds = dir.path().join("credentials.json");
+        std::fs::write(&path, entries.to_string()).unwrap();
+        std::fs::write(&creds, "{}").unwrap();
+        call(&state, "accounts.put", json!({"entry":{"id":"x"}})).await.unwrap();
+        let live = on_disk(&dir);
+        assert_eq!(&live.as_array().unwrap()[..entries.as_array().unwrap().len()], entries.as_array().unwrap().as_slice(), "retained legacy entries must not lose their fields");
+        assert_eq!(std::fs::read_to_string(&creds).unwrap(), "{}", "an unrepresentable list skips preservation entirely");
+        assert!(!std::fs::read_to_string(dir.path().join("accounts.json.bak1")).unwrap().contains("only-secret"));
+    }
+    #[tokio::test]
+    async fn unrepresentable_legacy_missing_id_is_retained() { unrepresentable_legacy_retains_fields(json!([{"password":"only-secret"}])).await; }
+    #[tokio::test]
+    async fn unrepresentable_legacy_empty_id_is_retained() { unrepresentable_legacy_retains_fields(json!([{"id":"", "password":"only-secret"}])).await; }
+    #[tokio::test]
+    async fn unrepresentable_legacy_nonstring_id_is_retained() { unrepresentable_legacy_retains_fields(json!([{"id":7, "password":"only-secret"}])).await; }
+    #[tokio::test]
+    async fn unrepresentable_legacy_duplicate_secret_ids_are_retained() { unrepresentable_legacy_retains_fields(json!([{"id":"a", "password":"only-secret-A"},{"id":"a", "password":"only-secret-B"}])).await; }
+    #[tokio::test]
+    async fn unrepresentable_legacy_id_duplicated_by_clean_record_is_retained() { unrepresentable_legacy_retains_fields(json!([{"id":"a", "password":"only-secret"},{"id":"a"}])).await; }
+
     #[tokio::test]
     async fn changed_legacy_snapshot_is_refused_before_live_scrub() { snapshot_race(true).await; }
     #[tokio::test]
