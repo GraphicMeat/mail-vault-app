@@ -1683,6 +1683,16 @@ async fn backup_access_foreign_status_does_not_reprobe_pending_intent() {
     })
     .await;
     probe(&r.state).await;
+    // Drain the real initial Wake, its coalesced preparing recheck, and any
+    // scan/Due traffic before attributing revisions to the foreign queries.
+    tokio::time::timeout(Duration::from_secs(3),async {
+        loop {
+            let (done,idle)=oneshot::channel();
+            r.state.backup_worker.tx.get().unwrap().send(Cmd::AccessIdle{done}).unwrap();
+            if idle.await.unwrap() {break;}
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("initial access probe traffic never settled");
     let current = access_attempt(&r, &ack, "shell-a");
     let mut foreign = current.clone();
     foreign["incarnation"] = json!("previous-daemon");
