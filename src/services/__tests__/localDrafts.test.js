@@ -179,7 +179,7 @@ describe('discardDraftFor', () => {
     expect(mockSend).not.toHaveBeenCalled();
   });
 });
-describe('saveLocalDraft — threading wire', () => {
+describe('saveLocalDraft: threading wire', () => {
   it('carries both threading headers explicitly', async () => {
     const payload = complete({ inReplyTo: '<parent@example.com>', references: '<root@example.com> <parent@example.com>' });
     await save({ payload });

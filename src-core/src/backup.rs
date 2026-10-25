@@ -348,7 +348,7 @@ async fn run_imap_backup_inner(
         };
         if spent.is_some() {
             info!(
-                "backup: {} — daily download limit already spent, not starting",
+                "backup: {}: daily download limit already spent, not starting",
                 account.email
             );
             (ctx.on_progress)(stopped_at_limit(
@@ -788,7 +788,7 @@ async fn backup_imap_folder(
         .copied()
         .collect::<Vec<_>>();
     info!(
-        "backup: {} — server={} local={} missing={}",
+        "backup: {}: server={} local={} missing={}",
         mailbox,
         server_uids.len(),
         local_uids.len(),
@@ -843,7 +843,7 @@ async fn backup_imap_folder(
         let applied = map_flag_catchup_outcome(result, &ctx.account_id, &mailbox);
         if applied.total() > 0 {
             info!(
-                "backup: {} — flags caught up on {} vault, {} mirror, {} custody",
+                "backup: {}: flags caught up on {} vault, {} mirror, {} custody",
                 mailbox, applied.renamed, applied.mirrored, applied.index_patched
             );
         }
