@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 10;
+pub const SCHEMA_VERSION: i64 = 11;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -322,6 +322,9 @@ CREATE INDEX follow_ups_due ON follow_ups(state, remind_at);
 
 // NULL retains legacy UID-only authorization. Versioned JSON binds new work
 // to the original native artifact without rewriting any existing obligation.
+const SCHEMA_V11: &str = "CREATE TABLE local_drafts(draft_id TEXT PRIMARY KEY,state_json TEXT NOT NULL);
+CREATE TABLE local_draft_locations(account_id TEXT NOT NULL,mailbox TEXT NOT NULL,uid INTEGER NOT NULL,draft_id TEXT NOT NULL,PRIMARY KEY(account_id,mailbox,uid));";
+
 const SCHEMA_V10: &str = "ALTER TABLE pending_backup_purge ADD COLUMN proof_json TEXT;";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -499,6 +502,7 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
                 "{SCHEMA_V10} INSERT OR REPLACE INTO meta(key,value) VALUES ('schema_version','10');"
             )).map_err(sql)?;
         }
+        if version < 11 { conn.execute_batch(&format!("{SCHEMA_V11} INSERT OR REPLACE INTO meta(key,value) VALUES ('schema_version','11');")).map_err(sql)?; }
         Ok(())
     })();
     match stepped {
