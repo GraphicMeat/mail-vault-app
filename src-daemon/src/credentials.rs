@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use keyring::Entry;
@@ -12,6 +13,7 @@ use tracing::{info, warn};
 
 use crate::events::EventBus;
 use crate::imap::ImapConfig;
+use crate::server::DaemonState;
 
 // Same service/key the app writes to (src-tauri/src/main.rs KEYRING_SERVICE /
 // CREDENTIALS_KEY) — must match exactly, it's the same OS keychain entry.
@@ -1351,10 +1353,39 @@ pub(crate) fn write_generation() -> u64 {
 
 type Job = Box<dyn FnOnce() -> Result<Vec<String>, CredError> + Send>;
 
+/// Finalizes the actual backend outcome while APP_WRITE still excludes the
+/// next writer. A late completion has exactly the same state effects; its
+/// already-timed-out RPC remains an error.
+fn finish_credential_change(
+    state: &Arc<DaemonState>,
+    result: Result<Vec<String>, CredError>,
+) -> Result<(Vec<String>, u64), CredError> {
+    match result {
+        Ok(ids) if ids.is_empty() => Ok((ids, BLOB_READ.generation())),
+        Ok(ids) => {
+            let version = BLOB_READ.bump();
+            info!("[keychain] credentials changed for {} account(s)", ids.len());
+            crate::handlers::oauth2::credentials_written(state);
+            state.events.emit(crate::handlers::credentials::CHANGED_EVENT, json!({"ids": ids, "version": version}));
+            Ok((ids, version))
+        }
+        Err(CredError::WriteFailed) => {
+            // A failed platform write or JoinError may follow a side effect.
+            // Re-read before trusting tokens, without claiming a change.
+            BLOB_READ.bump();
+            state.tokens.credentials_changed();
+            Err(CredError::WriteFailed)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+
 /// Applies `change` to the stored blob. `Ok((ids, version))`: the ids it
 /// changed (none: nothing was written) and the write generation after it.
 /// At most `APP_LOCK_WAIT` + the read's clock + `write_timeout()` long.
 pub(crate) async fn change_credentials(
+    state: &Arc<DaemonState>,
     change: CredChange,
 ) -> Result<(Vec<String>, u64), CredError> {
     use std::sync::atomic::Ordering::SeqCst;
@@ -1399,25 +1430,14 @@ pub(crate) async fn change_credentials(
     let mut task = tokio::task::spawn_blocking(job);
     let finished = tokio::time::timeout(write_timeout(), &mut task).await;
     match finished {
-        Ok(Ok(Ok(changed))) => {
-            if changed.is_empty() {
-                return Ok((changed, BLOB_READ.generation()));
-            }
-            info!(
-                "[keychain] credentials changed for {} account(s)",
-                changed.len()
-            );
-            Ok((changed, BLOB_READ.bump()))
-        }
-        Ok(Ok(Err(e))) => Err(e),
-        Ok(Err(_)) => Err(CredError::WriteFailed),
+        Ok(result) => finish_credential_change(state, result.unwrap_or(Err(CredError::WriteFailed))),
         Err(_) => {
             warn!("[keychain] the credentials write did not finish in time; changes wait until it returns");
             WRITE_PARKED.store(true, SeqCst);
+            let state = Arc::clone(state);
             tokio::spawn(async move {
-                let _ = task.await;
-                // Whatever it wrote is what the next change reads.
-                BLOB_READ.bump();
+                let result = task.await.unwrap_or(Err(CredError::WriteFailed));
+                let _ = finish_credential_change(&state, result);
                 WRITE_PARKED.store(false, SeqCst);
                 drop(held);
                 #[cfg(test)]

@@ -562,6 +562,29 @@ pub(crate) async fn resolve(state: &DaemonState, account_id: &str, read: Read) -
 #[cfg(test)]
 pub(crate) static TEST_RECHECK_DONE: Mutex<Option<(usize, std::sync::mpsc::Sender<()>)>> = Mutex::new(None);
 
+#[cfg(test)]
+pub(crate) struct RecheckCompletion(std::sync::mpsc::Sender<()>);
+
+#[cfg(test)]
+impl Drop for RecheckCompletion {
+    fn drop(&mut self) {
+        let _ = self.0.send(());
+    }
+}
+
+/// Consume before spawn, so cancellation before the first poll also settles
+/// the scoped fixture's one-shot completion acknowledgement.
+#[cfg(test)]
+pub(crate) fn recheck_completion_for_test(state: &Arc<DaemonState>) -> Option<RecheckCompletion> {
+    let mut hook = TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
+    if hook.as_ref().is_some_and(|(owner, _)| *owner == Arc::as_ptr(state) as usize) {
+        hook.take().map(|(_, done)| RecheckCompletion(done))
+    } else {
+        None
+    }
+}
+
+
 /// After the app wrote credentials: read the record of every account with a
 /// refreshed pair not yet seen stored, quietly, so `unsaved` stops offering
 /// what was saved.
@@ -571,14 +594,6 @@ pub(crate) async fn recheck_unsaved(state: &DaemonState) {
             let flight = state.tokens.flight(&account_id);
             let _held = flight.lock().await;
             state.tokens.reconcile(&account_id, &record);
-        }
-    }
-    #[cfg(test)]
-    {
-        let mut hook = TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
-        if hook.as_ref().is_some_and(|(owner, _)| *owner == state as *const DaemonState as usize) {
-            let (_, done) = hook.take().unwrap();
-            let _ = done.send(());
         }
     }
 }

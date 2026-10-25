@@ -152,7 +152,13 @@ pub(crate) fn credentials_written(state: &Arc<DaemonState>) {
     state.tokens.credentials_changed();
     state.abd.wake_token_waits();
     let st = Arc::clone(state);
-    tokio::spawn(async move { crate::oauth_tokens::recheck_unsaved(&st).await });
+    #[cfg(test)]
+    let completion = crate::oauth_tokens::recheck_completion_for_test(state);
+    tokio::spawn(async move {
+        #[cfg(test)]
+        let _completion = completion;
+        crate::oauth_tokens::recheck_unsaved(&st).await;
+    });
 }
 
 /// Test seam for other modules' tests that refresh a token: both providers'

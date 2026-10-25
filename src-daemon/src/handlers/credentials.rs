@@ -50,18 +50,12 @@ pub(crate) async fn route(
             CredError::Invalid.catalog_key(),
         ));
     };
-    Some(match credentials::change_credentials(change).await {
+    Some(match credentials::change_credentials(state, change).await {
         Err(CredError::StaleGrant) => RpcResponse::success(
             id,
             json!({"updated": false, "staleGrant": true, "version": credentials::write_generation()}),
         ),
         Ok((ids, version)) => {
-            if !ids.is_empty() {
-                crate::handlers::oauth2::credentials_written(state);
-                state
-                    .events
-                    .emit(CHANGED_EVENT, json!({"ids": ids, "version": version}));
-            }
             let answer = if key == "updated" {
                 json!(!ids.is_empty())
             } else {
@@ -612,7 +606,8 @@ mod tests {
 
         fn finish(&mut self) {
             self.release.take();
-            self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).expect("terminal completion and exclusion release");
+            self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5)).expect("terminal completion and exclusion release");
+            self.done.take();
         }
     }
 
@@ -620,7 +615,10 @@ mod tests {
         fn drop(&mut self) {
             self.release.take();
             if let Some(done) = self.done.take() {
-                let _ = done.recv_timeout(Duration::from_secs(5));
+                if done.recv_timeout(Duration::from_secs(5)).is_err() {
+                    eprintln!("credential test could not drain its blocking write; refusing fixture teardown");
+                    std::process::abort();
+                }
             }
             crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, std::sync::atomic::Ordering::SeqCst);
             crate::credentials::TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()).take();
@@ -632,6 +630,7 @@ mod tests {
     struct RecheckAck {
         owner: usize,
         done: std::sync::mpsc::Receiver<()>,
+        drained: std::cell::Cell<bool>,
     }
 
     impl RecheckAck {
@@ -639,19 +638,31 @@ mod tests {
             let owner = Arc::as_ptr(state) as usize;
             let (sender, done) = std::sync::mpsc::channel();
             *crate::oauth_tokens::TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner()) = Some((owner, sender));
-            Self { owner, done }
+            Self { owner, done, drained: std::cell::Cell::new(false) }
         }
 
         fn finish(&self) {
             self.done.recv_timeout(Duration::from_secs(5)).expect("the actual quiet recheck finished");
+            self.drained.set(true);
         }
     }
 
     impl Drop for RecheckAck {
         fn drop(&mut self) {
-            let mut hook = crate::oauth_tokens::TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
-            if hook.as_ref().is_some_and(|(owner, _)| *owner == self.owner) {
-                hook.take();
+            // ParkedWrite drops first: no later writer can schedule this
+            // state's recheck after we decide whether its hook was consumed.
+            let scheduled = {
+                let mut hook = crate::oauth_tokens::TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
+                if hook.as_ref().is_some_and(|(owner, _)| *owner == self.owner) {
+                    hook.take();
+                    false
+                } else {
+                    true
+                }
+            };
+            if scheduled && !self.drained.get() && self.done.recv_timeout(Duration::from_secs(5)).is_err() {
+                eprintln!("credential test could not drain its quiet recheck; refusing fixture teardown");
+                std::process::abort();
             }
         }
     }
@@ -807,14 +818,14 @@ mod tests {
         prime_cached_grant(&rig, "synthetic-new-token").await;
         let waiter = token_waiter(&rig);
         let version = credentials::write_generation();
-        for (method, params) in [
-            ("credentials.save", json!({"records":{"g":new.to_string()}})),
-            ("credentials.delete", json!({"ids":["missing"]})),
-            ("credentials.update", json!({"id":"g","fields":{"oauth2AccessToken":"synthetic-stale"},"chain":[fp(&old,None)]})),
-            ("credentials.save", json!({})),
+        for (method, params, expected) in [
+            ("credentials.save", json!({"records":{"g":new.to_string()}}), Ok(json!({"saved":[],"version":version}))),
+            ("credentials.delete", json!({"ids":["missing"]}), Ok(json!({"deleted":[],"version":version}))),
+            ("credentials.update", json!({"id":"g","fields":{"oauth2AccessToken":"synthetic-stale"},"chain":[fp(&old,None)]}), Ok(json!({"updated":false,"staleGrant":true,"version":version}))),
+            ("credentials.save", json!({}), Err("errors.credentialsInvalid".to_string())),
         ] {
             let reply = call(&rig, method, params).await;
-            assert!(reply.is_ok() || reply == Err("errors.credentialsInvalid".into()));
+            assert_eq!(reply, expected);
             assert_eq!(credentials::write_generation(), version);
             assert!(changed_events(&mut rx).is_empty());
             assert!(waiter.ctl.wake.notified().now_or_never().is_none());
