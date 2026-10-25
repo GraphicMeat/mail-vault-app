@@ -131,7 +131,6 @@ vi.mock('../../stores/settingsStore', () => {
 });
 
 const { ComposeModal } = await import('../ComposeModal');
-const { emailKey } = await import('../../stores/slices/unifiedHelpers');
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const seed = { to: '', cc: '', bcc: '', subject: '', body: '<p>typed</p>', attachments: [], _accountId: 'acct-1', _draftUid: 42, _draftMailbox: 'LegacyDrafts' };
@@ -166,6 +165,9 @@ describe('complete draft revisions at the actual component boundary', () => {
     expect(saveLocalDraft.mock.calls.at(-1)[0].payload.html).toContain('BBBB');
   });
   it('persists actual replacement attachment bytes with the same filename and size', async () => {
+    // jsdom FileReader queues three setImmediate tasks; keep those real while
+    // controlling only the component debounce timers. No file bytes are mocked.
+    vi.useRealTimers(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const file = { filename: 'f.bin', size: 3, contentType: 'application/octet-stream', content: 'QUFB' };
     const onSaveState = vi.fn();
     const view = render(<ComposeModal {...props} initialData={{ ...seed, attachments: [file] }} onSaveState={onSaveState} />); await tick();
