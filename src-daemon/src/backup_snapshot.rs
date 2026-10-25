@@ -101,8 +101,9 @@ pub(super) async fn drive(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Resu
     }
     // Policy decisions are small settings/account reads, never the manifest scan.
     // Publication can compact settled outcomes, so locate each candidate anew.
-    while let Some(index) = ledger.outcomes.iter().position(|out| out.applied
-        && (out.snapshot.is_null() || out.snapshot["status"] == "undecided")) {
+    while let Some(index) = ledger.outcomes.iter().position(|out| {
+        out.applied && (out.snapshot.is_null() || out.snapshot["status"] == "undecided")
+    }) {
         let out = &ledger.outcomes[index];
         let due = if out.status != "success"
             || out.intent.epoch != state.backup_worker.epoch.load(SeqCst)
