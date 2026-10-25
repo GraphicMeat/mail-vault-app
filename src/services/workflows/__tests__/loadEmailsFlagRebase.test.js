@@ -4,7 +4,7 @@
 // auto mark-read of a message the user just opened) used to be reverted by the
 // commit, in the list AND in the sidecar. The commit now three-way merges the
 // flags against the live store (rebaseFlags), whichever branch built the list.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
@@ -124,7 +124,18 @@ const markRead = (uid) =>
 const storeRow = (uid) => useMailStore.getState().emails.find(e => e.uid === uid);
 const savedRow = (uid) => mockSaveEmailHeaders.mock.calls.at(-1)?.[2]?.find(e => e.uid === uid);
 
+let warnSpy;
+
+afterEach(async () => {
+  await vi.dynamicImportSettled();
+  const recountWarnings = warnSpy.mock.calls.filter(([message]) =>
+    message === '[messageMutations] Could not count the saved views again:');
+  warnSpy.mockRestore();
+  expect(recountWarnings).toEqual([]);
+});
+
 beforeEach(() => {
+  warnSpy = vi.spyOn(console, 'warn');
   vi.clearAllMocks();
   mockIsGraph.mockReturnValue(false);
   mockSaveEmailHeaders.mockResolvedValue(undefined);
@@ -243,4 +254,10 @@ describe('loadEmails — a flag written while the load is on the wire survives i
     expect(storeRow(7).flags).toContain('\\Seen');
     expect(savedRow(7).flags).toContain('\\Seen');
   });
+});
+
+it('fully initializes the saved-view graph under the flag-rebase mocks', async () => {
+  const { useViewStore, __resetViewCountsForTests } = await import('../../../stores/viewStore');
+  expect(useViewStore.getState().counts).toEqual({});
+  __resetViewCountsForTests();
 });
