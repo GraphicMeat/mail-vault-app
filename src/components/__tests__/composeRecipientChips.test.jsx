@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, waitFor, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent, within, act } from '@testing-library/react';
 
 vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
 vi.mock('../../services/transport', async original => (await import('../../test/composePrep')).preparationTransport(await original()));
@@ -110,6 +110,21 @@ describe('recipient chips in compose', () => {
     open();
     fireEvent.click(await screen.findByTestId('compose-send'));
     await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not abandon Send when blur commits the unchanged typed recipient', async () => {
+    open({ to: '', body: '' });
+    const to = await screen.findByTestId('compose-to');
+    fireEvent.change(to, { target: { value: 'recipient@example.test' } });
+    const before = to.dataset.value;
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('compose-send'));
+      // Setting sending/inert blurs the live recipient field in WebKit.
+      fireEvent.blur(to);
+    });
+    expect(to.dataset.value).toBe(before);
+    await waitFor(() => expect(queueSend).toHaveBeenCalledTimes(1));
+    expect(sentSnapshot().to).toBe('recipient@example.test');
   });
 
   it('refuses to send an entry that is not an address, and names it', async () => {
