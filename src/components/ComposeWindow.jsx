@@ -46,7 +46,7 @@ export function ComposeWindow() {
 
   const request = useCallback((type, payload, { timeoutMs = requestTimeoutMs } = {}) => new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const isOperation = type === 'send' || type === 'schedule';
+    const isOperation = type === 'send' || type === 'schedule' || type === 'discard';
     if (isOperation) operationPending.current = true;
     const settle = (method, value) => {
       const item = pending.current.get(requestId);
@@ -206,8 +206,9 @@ export function ComposeWindow() {
     try {
       const snapshot = explicitSnapshot || await snapshotRef.current?.() || latest.current;
       latest.current = snapshot;
-      await request(type, snapshot);
+      const result = await request(type, snapshot, type === 'discard' ? { timeoutMs: null } : {});
       await getCurrentWebviewWindow().destroy();
+      return result;
     } catch (error) {
       closing.current = false;
       setBridgeError(error?.message || String(error));
@@ -235,7 +236,7 @@ export function ComposeWindow() {
       // promise is handed back so a refused handoff unfreezes this editor.
       onAttach={snapshot => { latest.current = snapshot; return close('attach', snapshot); }}
       onClose={() => { void close('return').catch(() => {}); }}
-      onDiscard={() => { void close('discard').catch(() => {}); }}
+      onDiscard={snapshot => close('discard', snapshot)}
       onContextVisibleChange={visible => relaySetting('composeContextVisible', visible)}
       onAddTemplate={value => relaySetting('addEmailTemplate', value)}
       onQueueSend={(snapshot, delay) => request('send', { snapshot, delay }, { timeoutMs: null })}

@@ -577,3 +577,21 @@ describe('accepted delivery is separate from terminal cleanup', () => {
     expect(cleanupDraft).not.toHaveBeenCalled();
   });
 });
+
+
+// With the existing physical UID path, a lost discard RPC used to reject an
+// already accepted send and invite the real outbox's transport retry.
+describe('accepted physical draft cleanup cannot become a delivery failure', () => {
+  it('keeps SMTP acceptance and Sent projection when the actual draft deletion rejects', async () => {
+    deleteLocalDraft.mockRejectedValueOnce(Error('discard acknowledgement lost'));
+    await expect(createComposeSend({ snapshot, account, mode: 'new' })()).resolves.toBeUndefined();
+    expect(sendStaged).toHaveBeenCalledTimes(1); expect(deleteLocalDraft).toHaveBeenCalledTimes(1);
+    expect(mailStore.useMailStore.getState().sentEmails).toHaveLength(1);
+  });
+  it('keeps an accepted schedule when the actual draft deletion rejects', async () => {
+    deleteLocalDraft.mockRejectedValueOnce(Error('discard acknowledgement lost'));
+    await expect(scheduleCompose({ snapshot: { ...snapshot, _scheduleDraft: { localTime: '2099-01-01T09:00', tz: 'UTC' } }, account })).resolves.toBeUndefined();
+    expect(createSchedule).toHaveBeenCalledTimes(1); expect(deleteLocalDraft).toHaveBeenCalledTimes(1);
+    expect(cancelSchedule).not.toHaveBeenCalled();
+  });
+});

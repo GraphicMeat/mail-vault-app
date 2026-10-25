@@ -9,7 +9,7 @@ export const isComposeMessage = (message, composeId, token) => Boolean(
 
 const makeToken = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
-export function createComposeWindowOwner({ open, emitTo, update, close, remove, queueSend, settings, attached }) {
+export function createComposeWindowOwner({ open, emitTo, update, close, remove, queueSend, discard, settings, attached }) {
   const sessions = new Map();
   const sessionFor = id => sessions.get(String(id));
   const reply = (session, requestId, type, payload) => {
@@ -117,10 +117,24 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
           return true;
         }
         session.terminal = true;
-        void reply(session, requestId, 'ack').then(() => {
+        session.busy = 'discard';
+        const latest = mergeComposeSnapshot(session.snapshot, composeSnapshotForTransfer(message.payload || session.snapshot));
+        session.snapshot = { ...latest, _draftCleanupOnly: true, _draftTerminal: 'discard', _draftCleanupState: 'unknown' };
+        void Promise.resolve().then(() => discard(latest, session.id)).catch(() => {
+          // Main's normal owner returns unknown without throwing. If an owner
+          // boundary itself fails, retain only terminal recovery, never editor.
+          update(session.id, { snapshot: session.snapshot, initialData: session.snapshot, minimized: true, detached: false, nativeLabel: null });
+          return { draftId: latest._draftId, discarded: false, cleanup: 'unknown' };
+        }).then(async result => {
+          session.snapshot = { ...session.snapshot, _draftCleanupState: result.cleanup };
+          if (!session.destroyed) {
+            try { await reply(session, requestId, 'ack', result); }
+            catch { close(session.label); }
+          } else close(session.label);
+          // App removes only the source, retaining its cleanup-only owner.
           remove?.(session.id);
           finish(session);
-        }).catch(() => { session.terminal = false; recover(session); });
+        });
       } else if (['return', 'closed', 'minimize', 'attach'].includes(message.type)) {
         // `attach` is the window's "move back into the main window": the same
         // handover, except the draft reopens in main instead of as a bubble.

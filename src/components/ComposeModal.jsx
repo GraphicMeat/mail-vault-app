@@ -99,7 +99,7 @@ const OriginalThreadView = lazy(() => import('./email/ThreadView').then(m => ({ 
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 const NO_ALIASES = {};
 
-export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend }) {
+export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState, onDetach, onAttach, detached = false, onContextVisibleChange, onDiscard, snapshotRef, onAddTemplate, onQueueSend, onSchedule, onUpgrade, onOpenAliases, onSend, onDraftCleanup }) {
   const t = useT();
   const pa = usePrivateAttr();
   const privateInput = usePrivateInputClass();
@@ -394,6 +394,9 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     ? initialData._draftContent || null : null);
   const saveChainRef = useRef(Promise.resolve());
   const queuedDraftRef = useRef(null);
+  const terminalIntentRef = useRef(null);
+  const terminalOperationRef = useRef(null);
+  const [terminalState, setTerminalState] = useState(null);
   const [draftSaveError, setDraftSaveError] = useState(null);
   const [draftRetry, setDraftRetry] = useState(0);
 
@@ -878,6 +881,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       return;
     }
 
+    if (terminalIntentRef.current) return;
     setSending(true);
     setError(null);
     try {
@@ -893,7 +897,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       if (draft) {
         if (onSchedule) await onSchedule(snapshot);
         else {
-          await scheduleCompose({ snapshot, account: selectedAccount, settings });
+          await scheduleCompose({ snapshot, account: selectedAccount, settings, cleanupDraft: onDraftCleanup });
           onSend?.();
           onClose();
         }
@@ -903,7 +907,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         const composeState = { mode, replyTo: snapshot._replyTo || actionReplyTo, initialData: snapshot };
         useMailStore.getState().queueSend(
           composeState,
-          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings }),
+          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings, cleanupDraft: onDraftCleanup }),
           delay,
         );
         onSend?.();
@@ -1069,8 +1073,9 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // Issue complete revisions at the existing 300 ms pause. The request is
   // immutable while queued; native code alone chooses folders and physical UIDs.
   useEffect(() => {
-    if (!maySaveDraft || sending || !selectedAccount) return;
+    if (!maySaveDraft || sending || terminalIntentRef.current || !selectedAccount) return;
     const timer = setTimeout(() => {
+      if (terminalIntentRef.current) return;
       const issued = captureDraft();
       if (!issued.content || (issued.content === acceptedContentRef.current && !draftSaveError) || queuedDraftRef.current === issued) return;
       const request = JSON.parse(JSON.stringify({ draftId: draftIdRef.current, revision: issued.revision, ...issued.content }));
@@ -1078,6 +1083,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       publishSnapshot();
       saveChainRef.current = saveChainRef.current.then(async () => {
         try {
+          if (terminalIntentRef.current) return;
           const result = await saveLocalDraft(request);
           const current = result?.current;
           const revision = current?.entry?.revision ?? result?.revision;
@@ -1088,12 +1094,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             draftUidRef.current = current.identity.uid;
           }
           if (result?.draftId !== request.draftId || result.disposition === 'superseded' || revision !== request.revision || revision < acceptedRevisionRef.current) {
-            throw new Error('Draft content was not accepted');
+            throw new Error(t('compose.draftContentNotAccepted'));
           }
           acceptedContentRef.current = issued.content;
           if (issuedDraftRef.current === issued) {
             acceptanceUnknownRef.current = false;
-            setDraftSaveError(result.cleanup === 'pending' ? 'Draft cleanup pending' : null);
+            setDraftSaveError(result.cleanup === 'pending' ? t('compose.draftCleanupPending') : null);
           }
         } catch (err) {
           if (issuedDraftRef.current === issued && aliveRef.current) setDraftSaveError(err?.message || String(err));
@@ -1107,32 +1113,41 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return () => clearTimeout(timer);
   }, [draftSignature, maySaveDraft, sending, selectedAccountId, draftRetry, publishSnapshot]);
 
-  /** Drop the vault draft this window owns — the message is being thrown away. */
-  const discardDraft = useCallback(() => {
-    const accountId = draftAccountRef.current || selectedAccountId;
-    // Behind the same chain the saves run on, and reading the refs only once
-    // it gets there: a discard that overtakes a save in flight would either
-    // delete a file that is about to be rewritten, or run before the save has
-    // even resolved which folder the draft went to.
-    saveChainRef.current = saveChainRef.current.then(() => {
-      const uid = draftUidRef.current;
-      const mailbox = draftMailboxRef.current;
-      draftUidRef.current = null;
-      if (!uid || !mailbox) return undefined;
-      return deleteLocalDraft({ accountId, mailbox, uid });
-    });
-    return saveChainRef.current;
-  }, [selectedAccountId]);
-
-  /** Close for good: the vault copy goes with the window. */
-  const closeDiscarding = useCallback(async () => {
-    await discardDraft();
-    (onDiscard || onClose)();
-  }, [discardDraft, onClose, onDiscard]);
+  /** Freeze intent before waiting for saves; retries retain this exact ID. */
+  const closeDiscarding = useCallback(() => {
+    if (terminalOperationRef.current) return terminalOperationRef.current;
+    if (!terminalIntentRef.current) {
+      if (!draftIdRef.current) draftIdRef.current = newDraftId();
+      terminalIntentRef.current = latestSnapshotRef.current();
+    }
+    setSending(true);
+    setTerminalState('working');
+    const operation = saveChainRef.current.catch(() => {}).then(async () => {
+      const snapshot = terminalIntentRef.current;
+      let result;
+      try {
+        result = onDiscard ? await onDiscard(snapshot) : await deleteLocalDraft({ draftId: snapshot._draftId });
+        if (!result?.discarded || !['complete', 'pending'].includes(result.cleanup)) throw new Error('Draft discard outcome unavailable');
+      } catch {
+        setTerminalState('unknown');
+        setError(t('compose.draftCleanupUnknown'));
+        return { draftId: snapshot._draftId, discarded: false, cleanup: 'unknown' };
+      }
+      if (result.cleanup === 'complete') onClose();
+      else {
+        setTerminalState('pending');
+        setError(t('compose.draftCleanupPending'));
+      }
+      return result;
+    }).finally(() => { terminalOperationRef.current = null; });
+    terminalOperationRef.current = operation;
+    return operation;
+  }, [onClose, onDiscard, t]);
 
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   const confirmClose = () => {
+    if (terminalIntentRef.current) { void closeDiscarding(); return; }
     if (detaching) return;
     if (hasUserContent) {
       setShowDiscardDialog(true);
@@ -1182,6 +1197,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
   // Backdrop click: minimize if has content, close if empty
   const handleBackdropClick = () => {
+    if (terminalIntentRef.current) return;
     if (detaching) return;
     if (hasUserContent && onMinimize) {
       handleMinimize();
@@ -1201,7 +1217,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
   // Save editor state before minimizing so it persists across unmount/remount
   const handleMinimize = async () => {
-    if (detaching) return;
+    if (detaching || terminalIntentRef.current) return;
     const snapshot = snapshotRef?.current ? await snapshotRef.current() : latestSnapshotRef.current();
     if (onSaveState) {
       onSaveState(snapshot);
@@ -1339,7 +1355,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
         ref={setComposeShellRef}
-        inert={detaching || sending ? '' : undefined}
+        inert={detaching || (sending && !terminalState) ? '' : undefined}
         style={composeWindowStyle}
         role="dialog"
         aria-modal="true"
@@ -1412,8 +1428,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           </div>
         </div>
 
+        {terminalState && <div role="status" data-testid="compose-terminal-status" className="px-5 py-3 text-sm text-mail-text">
+          {t(terminalState === 'working' ? 'compose.draftCleanupWorking' : terminalState === 'pending' ? 'compose.draftCleanupPending' : 'compose.draftCleanupUnknown')}
+          {terminalState !== 'working' && <button type="button" className="ml-3 underline" onClick={() => { void closeDiscarding(); }}>{t('common.retry')}</button>}
+        </div>}
         {/* Form */}
-        <form
+        <form inert={terminalState ? '' : undefined}
           onSubmit={handleSend}
           onKeyDown={(e) => {
             if (detaching) {
@@ -1646,6 +1666,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                 ? (editor) => editor.commands.focus(signatureCaretPos(editor.state.doc) ?? 'start')
                 : undefined}
               onUpdate={(html) => {
+                if (terminalIntentRef.current) return;
                 if (detaching) return;
                 if (replyTemplateApplied.current) replyTemplateCurrentBody.current = html;
                 setFormData(prev => ({ ...prev, body: html }));
@@ -1674,12 +1695,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           </div>
 
           {/* Error */}
-          {(error || draftSaveError) && (
+          {(error || draftSaveError || terminalState) && (
             <div data-testid="compose-error" role="alert"
                  className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20
                            text-mail-danger text-sm">
-              {error || draftSaveError}
-              {draftSaveError && <button type="button" className="ml-3 underline" onClick={() => setDraftRetry(value => value + 1)}>{t('common.retry')}</button>}
+              {terminalState === 'working' ? t('compose.draftCleanupWorking') : error || draftSaveError}
+              {!terminalState && draftSaveError && <button type="button" className="ml-3 underline" onClick={() => setDraftRetry(value => value + 1)}>{t('common.retry')}</button>}
             </div>
           )}
           </div>

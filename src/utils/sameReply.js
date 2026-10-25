@@ -8,6 +8,7 @@ const key = (m) => m.messageId || `${m._accountId || ''}:${m._mailbox || ''}:${m
 
 /** True when two compose states answer the same message in the same mode. */
 export function sameReply(a, b) {
+  if ((a.snapshot || a.initialData)?._draftCleanupOnly || (b.snapshot || b.initialData)?._draftCleanupOnly) return false;
   if (!a?.replyTo || !b?.replyTo) return false;
   return a.mode === b.mode && key(a.replyTo) === key(b.replyTo);
 }

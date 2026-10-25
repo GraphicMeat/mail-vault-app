@@ -81,12 +81,12 @@ export async function saveLocalDraft({ draftId, revision, accountId, fromAddress
   return response;
 }
 
-export async function reconcileLocalDraft(draftId) {
+export async function reconcileLocalDraft(draftId, { isCurrent = () => true } = {}) {
   if (!draftId) throw new Error('Draft identity required');
   const startedGeneration = getDraftProjection().generation;
   const response = await send('drafts.list', { draftId });
   if (!Array.isArray(response?.drafts) || !Array.isArray(response?.managed)) throw new Error('Draft state unavailable');
-  for (const record of response.managed) publishDraftOutcome(record, startedGeneration);
+  if (isCurrent()) for (const record of response.managed) publishDraftOutcome(record, startedGeneration);
   return response;
 }
 

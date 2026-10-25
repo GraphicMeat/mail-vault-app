@@ -28,7 +28,6 @@ import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { EmailList } from './components/EmailList';
 import { EmailViewer } from './components/EmailViewer';
-import { discardDraftFor } from './services/localDrafts';
 import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { AbdProgressPanel } from './components/abd/AbdProgressPanel';
@@ -105,7 +104,7 @@ import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
 import { openComposeResolved } from './utils/replyTarget';
-import { useComposeSessionHydration } from './services/composeSession';
+import { useComposeSessionHydration, isTerminalCompose, composeSessionData, mergeComposeSnapshot } from './services/composeSession';
 import { sameReply, applyReplyFill } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
@@ -367,7 +366,7 @@ function App() {
     await native.setFocus();
   }, []);
 
-  const { openDraft: openDraftCompose, saveState: saveComposeState, canMount: canMountCompose } = useComposeSessionHydration({
+  const { openDraft: openDraftCompose, saveState: saveComposeState, canMount: canMountCompose, terminalCleanup: cleanupComposeDraft, retryCleanup: retryComposeCleanup, removeSource: removeComposeSource } = useComposeSessionHydration({
     windows: composeWindows, setWindows: setComposeWindows, idRef: composeIdRef, focus: focusNativeCompose,
   });
 
@@ -395,7 +394,7 @@ function App() {
       return;
     }
     setComposeWindows(prev => {
-      const already = prev.find(w => sameReply(w, state));
+      const already = prev.find(w => !isTerminalCompose(composeSessionData(w)) && sameReply(w, state));
       if (already) {
         if (already.detached && already.nativeLabel) void focusNativeCompose(already.nativeLabel).catch(() => {});
         return prev.map(w => w.id === already.id ? { ...w, minimized: false } : w);
@@ -405,9 +404,7 @@ function App() {
     });
   }, [focusNativeCompose]);
 
-  const closeCompose = useCallback((id) => {
-    setComposeWindows(prev => prev.filter(w => w.id !== id));
-  }, []);
+  const closeCompose = removeComposeSource;
 
   const minimizeCompose = useCallback((id) => {
     setComposeWindows(prev => prev.map(w => w.id === id
@@ -416,7 +413,11 @@ function App() {
   }, []);
 
   const patchComposeWindow = useCallback((id, patch) => {
-    setComposeWindows(prev => prev.map(window => window.id === id ? { ...window, ...patch } : window));
+    setComposeWindows(prev => prev.map(window => window.id === id ? {
+      ...window, ...patch,
+      ...(patch.snapshot ? { snapshot: mergeComposeSnapshot(composeSessionData(window), patch.snapshot) } : {}),
+      ...(isTerminalCompose(composeSessionData(window)) ? { minimized: true, detached: false, nativeLabel: null } : {}),
+    } : window));
   }, []);
 
   if (!composeWindowOwnerRef.current) {
@@ -434,7 +435,8 @@ function App() {
       },
       emitTo,
       update: (id, patch) => patchComposeWindow(id, patch),
-      remove: id => setComposeWindows(prev => prev.filter(window => window.id !== id)),
+      remove: id => removeComposeSource(id),
+      discard: (snapshot, id) => cleanupComposeDraft(snapshot, 'discard', id),
       // A compose moved back from its own window. Popping out is remembered
       // (ComposeModal popOut), so popping back in is too: left on 'window',
       // the compose about to open here would hand itself straight back.
@@ -458,13 +460,13 @@ function App() {
           aliases: prefs.aliases?.[account.id], sendAsAddress: prefs.sendAsAddresses?.[account.id],
         }) };
         if (scheduled) {
-          await scheduleCompose({ snapshot, account, settings });
+          await scheduleCompose({ snapshot, account, settings, cleanupDraft: cleanupComposeDraft });
           return;
         }
         const composeState = { mode: session.mode, replyTo, initialData: snapshot };
         useMailStore.getState().queueSend(
           composeState,
-          createComposeSend({ snapshot, mode: session.mode, replyTo, account, settings }),
+          createComposeSend({ snapshot, mode: session.mode, replyTo, account, settings, cleanupDraft: cleanupComposeDraft }),
           snapshot._composeDelay ?? delay,
         );
       },
@@ -522,7 +524,7 @@ function App() {
 
   const restoreCompose = useCallback((id) => {
     setComposeWindows(prev => prev.map(w => {
-      if (w.id !== id) return w;
+      if (w.id !== id || isTerminalCompose(composeSessionData(w))) return w;
       if (w.detached && w.nativeLabel) void focusNativeCompose(w.nativeLabel).catch(() => {});
       return { ...w, initialData: w.snapshot || w.initialData, minimized: false };
     }));
@@ -1574,6 +1576,8 @@ function App() {
             onClose={() => closeCompose(w.id)}
             onMinimize={() => minimizeCompose(w.id)}
             onSaveState={(data) => saveComposeState(w.id, data)}
+            onDiscard={data => cleanupComposeDraft(data, 'discard', w.id)}
+            onDraftCleanup={(data, kind) => cleanupComposeDraft(data, kind, w.id)}
             onSend={w.bugReport ? () => useSettingsStore.getState().setLastBugReportAt(Date.now()) : undefined}
             onDetach={async data => composeWindowOwnerRef.current.detach({
               id: w.id,
@@ -1606,13 +1610,19 @@ function App() {
           {settingsMinimized && <SettingsBubble location={settingsLocation} onRestore={openSettings}
             onClose={() => useUnsavedStore.getState().leave(closeSettings)} />}
           {composeWindows.filter(w => w.minimized).map(w => {
-            const subject = w.initialData?.subject || w.replyTo?.subject || '';
+            const data = composeSessionData(w);
+            const terminal = isTerminalCompose(data);
+            const cleanupLabel = data?._draftCleanupPersistError ? tr('compose.draftCleanupStorageFailed')
+              : data?._draftTerminal === 'sent' ? tr('compose.sentCleanupPending')
+              : data?._draftTerminal === 'scheduled' ? tr('compose.scheduledCleanupPending')
+              : data?._draftCleanupState === 'pending' ? tr('compose.draftCleanupPending') : tr('compose.draftCleanupUnknown');
+            const subject = data?.subject || w.replyTo?.subject || '';
             const displaySubject = w.mode === 'reply' || w.mode === 'replyAll'
               ? (subject.startsWith('Re:') ? subject : tr('app.re', { subject }))
               : w.mode === 'forward'
               ? (subject.startsWith('Fwd:') ? subject : tr('app.fwd', { subject }))
               : subject || 'New Message';
-            const recipient = w.initialData?.to || w.replyTo?.from?.address || '';
+            const recipient = data?.to || w.replyTo?.from?.address || '';
             return (
               <motion.div
                 key={w.id}
@@ -1623,7 +1633,7 @@ function App() {
                 className="flex items-center gap-2 bg-mail-surface border border-mail-strong
                            rounded-lg px-3 py-2 cursor-pointer hover:bg-mail-surface-hover
                            transition-colors max-w-[280px] group"
-                onClick={() => restoreCompose(w.id)}
+                onClick={() => { if (terminal) void retryComposeCleanup(w.id); else restoreCompose(w.id); }}
               >
                 <div className="w-7 h-7 rounded-full bg-mail-accent/20 flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-semibold text-mail-accent-text">
@@ -1632,18 +1642,17 @@ function App() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-mail-text truncate">{displaySubject}</p>
-                  {recipient && <p className="text-[10px] text-mail-text-muted truncate">{recipient}</p>}
+                  {terminal ? <p data-testid="compose-cleanup-status" className="text-[10px] text-mail-text-muted">{cleanupLabel}</p> : recipient && <p className="text-[10px] text-mail-text-muted truncate">{recipient}</p>}
                 </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // The bubble's X is a discard, so the vault draft goes too.
-                    discardDraftFor(w.initialData);
-                    closeCompose(w.id);
+                    if (terminal) void retryComposeCleanup(w.id);
+                    else void cleanupComposeDraft(w.snapshot || w.initialData, 'discard', w.id);
                   }}
                   className="p-0.5 hover:bg-mail-border rounded opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <X size={12} className="text-mail-text-muted" />
+                  {terminal ? <span className="text-xs">{tr('common.retry')}</span> : <X size={12} className="text-mail-text-muted" />}
                 </button>
               </motion.div>
             );

@@ -193,7 +193,17 @@ const EDITED_ROW_DUE_MARGIN_MS = 6 * 60 * 1000;
  * the one MIME/uid identity for all retries, while its input is plain data that
  * can cross a detached compose-window boundary.
  */
-export function createComposeSend({ snapshot, mode, replyTo, account, settings = {} }) {
+const cleanupAcceptedDraft = async (snapshot, kind, cleanupDraft) => {
+  try {
+    if (cleanupDraft) await cleanupDraft(snapshot, kind);
+    else if (snapshot._draftId) await deleteLocalDraft({ draftId: snapshot._draftId });
+    else if (snapshot._draftUid && snapshot._draftMailbox) await deleteLocalDraft({
+      accountId: snapshot._draftAccountId || snapshot._accountId, mailbox: snapshot._draftMailbox, uid: snapshot._draftUid,
+    });
+  } catch (error) { console.warn('[composeSend] accepted mail draft cleanup remains pending:', error); }
+};
+
+export function createComposeSend({ snapshot, mode, replyTo, account, settings = {}, cleanupDraft }) {
   let staged = null;
 
   // This runs at hand-off, before the undo window. An edited scheduled email
@@ -282,9 +292,6 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
       if (mode === 'reply' || mode === 'replyAll') markAnswered(original).catch(err => console.warn('[composeSend] \\Answered not set:', err));
       else if (mode === 'forward') markForwarded(original).catch(err => console.warn('[composeSend] $Forwarded not set:', err));
       useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
-      if (snapshot._draftUid && snapshot._draftMailbox) {
-        await deleteLocalDraft({ accountId: snapshot._draftAccountId || snapshot._accountId || freshAccount.id, mailbox: snapshot._draftMailbox, uid: snapshot._draftUid });
-      }
       setTimeout(() => { try { unlistenAppend?.(); } catch {} }, APPEND_LISTEN_MS);
     } catch (err) {
       try { unlistenAppend?.(); } catch {}
@@ -317,6 +324,7 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
     });
     useMailStore.getState().updateSortedEmails?.();
     markLocalStageDone();
+    await cleanupAcceptedDraft(snapshot, 'sent', cleanupDraft);
   };
 }
 
@@ -324,7 +332,7 @@ export function createComposeSend({ snapshot, mode, replyTo, account, settings =
  * Create a daemon schedule from the same frozen snapshot used by immediate
  * send, or save an edited scheduled email (`_editScheduledId`) over its row.
  */
-export async function scheduleCompose({ snapshot, account, settings = {} }) {
+export async function scheduleCompose({ snapshot, account, settings = {}, cleanupDraft }) {
   // Scheduling at a set time is Premium. Compose shows a free user a locked
   // panel instead of the picker; this is the one place both the in-window and
   // the detached Schedule land, so a stale panel cannot get past it. What is
@@ -365,7 +373,5 @@ export async function scheduleCompose({ snapshot, account, settings = {} }) {
     if (editId) await store.cancel(editId);
     await store.create({ accountId: freshAccount.id, ...fields });
   }
-  if (snapshot._draftUid && snapshot._draftMailbox) {
-    await deleteLocalDraft({ accountId: snapshot._draftAccountId || snapshot._accountId || freshAccount.id, mailbox: snapshot._draftMailbox, uid: snapshot._draftUid });
-  }
+  await cleanupAcceptedDraft(snapshot, 'scheduled', cleanupDraft);
 }

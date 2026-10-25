@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { splitWireHtml } from '../utils/quoteWire';
-import { safeStorage } from '../stores/safeStorage';
+import { safeStorage, flushSafeStorage } from '../stores/safeStorage';
+import { flushSync } from 'react-dom';
 
 const KEY = 'mailvault-compose-session';
 
@@ -9,7 +10,12 @@ export const newDraftId = () => globalThis.crypto.randomUUID();
 
 const unfinished = (window) => Boolean(window?.initialData);
 
-const dataFor = window => window.snapshot || window.initialData;
+export const composeSessionData = window => window.snapshot || window.initialData;
+const dataFor = composeSessionData;
+export const isTerminalCompose = data => Boolean(data?._draftCleanupOnly || data?._draftTerminal);
+const discardSessionDraft = snapshot => import('./localDrafts').then(module => module.discardDraftFor(snapshot));
+const reconcileSessionDraft = (id, fence) => import('./localDrafts').then(module => module.reconcileLocalDraft(id, fence));
+const projectionSignal = data => JSON.stringify([data?._draftId, data?._draftAcceptedRevision, data?._draftAccountId, data?._draftMailbox, data?._draftUid, data?._draftTerminal, data?._draftCleanupState]);
 
 export function sameComposeDraft(left, right) {
   if (!left || !right) return false;
@@ -25,6 +31,12 @@ export function mergeComposeSnapshot(current, incoming) {
   if (!current) return incoming;
   if (!incoming) return current;
   if (!sameComposeDraft(current, incoming)) return incoming;
+  // Terminal intent cannot become editable through a late save or hydration.
+  if (isTerminalCompose(current) || isTerminalCompose(incoming)) {
+    const terminal = isTerminalCompose(current) ? current : incoming;
+    const other = terminal === current ? incoming : current;
+    return { ...other, ...terminal };
+  }
   const currentVersioned = Number.isSafeInteger(current._draftRevision);
   const incomingVersioned = Number.isSafeInteger(incoming._draftRevision);
   let content = currentVersioned !== incomingVersioned
@@ -185,7 +197,8 @@ export function mergeComposeSession(current, restored) {
       window = recoveredWindow(window, provenance, ids.get(memoKey));
     } else if (existing) {
       const data = mergeComposeSnapshot(dataFor(existing), dataFor(window));
-      merged[merged.indexOf(existing)] = { ...existing, initialData: data, snapshot: data };
+      merged[merged.indexOf(existing)] = { ...existing, initialData: data, snapshot: data,
+        ...(isTerminalCompose(data) ? { minimized: true, detached: false, nativeLabel: undefined, _terminalActive: false } : {}) };
       continue;
     }
     if (!used.has(window.id)) {
@@ -212,7 +225,7 @@ export async function loadComposeSession() {
 
 export function saveComposeSession(windows) {
   const drafts = windows
-    .map(({ _awaitDraftHydration, ...window }) => ({ ...window, initialData: window.snapshot || window.initialData, snapshot: undefined }))
+    .map(({ _awaitDraftHydration, _terminalActive, ...window }) => ({ ...window, initialData: window.snapshot || window.initialData, snapshot: undefined }))
     .filter(unfinished)
     .map(window => ({ ...window, minimized: true, detached: false, nativeLabel: undefined }));
   if (!drafts.length) return clearComposeSession();
@@ -226,9 +239,72 @@ export function clearComposeSession() {
 
 // App's existing hydration and draft-open state owner, also exercised with
 // the real editor without mounting the unrelated mail shell.
-export function useComposeSessionHydration({ windows, setWindows, idRef, focus, loader = loadComposeSession, persist = saveComposeSession }) {
+export function useComposeSessionHydration({ windows, setWindows, idRef, focus, loader = loadComposeSession, persist = saveComposeSession,
+  discard = discardSessionDraft, flush = flushSafeStorage, reconcile = reconcileSessionDraft }) {
   const [ready, setReady] = useState(false);
   const readyRef = useRef(false);
+  const windowsRef = useRef(windows);
+  windowsRef.current = windows;
+  const terminalOperations = useRef(new Map());
+  const projectionSignals = useRef(new Map());
+  const restoredCleanup = useRef(new Set());
+  // This rare operation must persist the committed array, including updates
+  // from other compose windows. flushSync commits pending React updates before
+  // reading it; cache writes alone never acknowledge a durable settings write.
+  const commit = useCallback(updater => { flushSync(() => setWindows(updater)); }, [setWindows]);
+  const removeSource = useCallback(id => setWindows(prev => prev.filter(window => window.id !== id || isTerminalCompose(dataFor(window)))), [setWindows]);
+  const terminalCleanup = useCallback((snapshot, kind = 'discard', sourceId) => {
+    const captured = clone(snapshot || {});
+    if (!captured._draftId && !captured._draftUid) return Promise.resolve({ discarded: true, cleanup: 'complete' });
+    const key = captured._draftId || JSON.stringify([captured._draftAccountId || captured._accountId, captured._draftMailbox, captured._draftUid]);
+    if (terminalOperations.current.has(key)) return terminalOperations.current.get(key);
+    restoredCleanup.current.add(captured._draftId);
+    const operation = Promise.resolve().then(async () => {
+      let ownerId;
+      commit(prev => {
+        const existing = prev.find(window => window.id === sourceId || sameComposeDraft(dataFor(window), captured));
+        ownerId = existing?.id || ++idRef.current;
+        const data = { ...captured, _draftCleanupOnly: true, _draftTerminal: captured._draftTerminal || kind,
+          _draftCleanupState: captured._draftCleanupState || 'unknown', _draftCleanupPersistError: false };
+        const owner = { ...existing, id: ownerId, initialData: data, snapshot: data,
+          _terminalActive: Boolean(existing && !existing.minimized && !existing.detached),
+          minimized: !existing || existing.minimized || existing.detached, detached: false, nativeLabel: undefined };
+        return [...prev.filter(window => window.id !== ownerId && !sameComposeDraft(dataFor(window), captured)), owner];
+      });
+      let result;
+      try {
+        result = await discard(captured);
+        if (!result?.discarded || !['complete', 'pending'].includes(result.cleanup)) throw new Error('Draft discard outcome unavailable');
+      } catch { result = { draftId: captured._draftId, discarded: false, cleanup: 'unknown' }; }
+      commit(prev => result.cleanup === 'complete' ? prev.filter(window => window.id !== ownerId) : prev.map(window => {
+        if (window.id !== ownerId) return window;
+        const data = { ...dataFor(window), _draftCleanupState: result.cleanup };
+        return { ...window, initialData: data, snapshot: data, minimized: true, _terminalActive: false };
+      }));
+      if (result.cleanup !== 'complete') {
+        try {
+          // Persist only after the owner state has committed. Ordinary session
+          // persistence sees the same current array and cannot restore an old one.
+          await persist(windowsRef.current);
+          await flush();
+        } catch {
+          commit(prev => prev.map(window => {
+            if (window.id !== ownerId) return window;
+            const data = { ...dataFor(window), _draftCleanupPersistError: true };
+            return { ...window, initialData: data, snapshot: data };
+          }));
+          result = { ...result, persistenceFailed: true };
+        }
+      }
+      return result;
+    }).finally(() => terminalOperations.current.delete(key));
+    terminalOperations.current.set(key, operation);
+    return operation;
+  }, [commit, discard, flush, idRef, persist]);
+  const retryCleanup = useCallback(id => {
+    const owner = windowsRef.current.find(window => window.id === id);
+    return owner ? terminalCleanup(dataFor(owner), dataFor(owner)._draftTerminal, id) : Promise.resolve();
+  }, [terminalCleanup]);
   useEffect(() => {
     let alive = true;
     const settle = restored => {
@@ -254,6 +330,7 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
     setWindows(prev => {
       const already = prev.find(w => sameComposeDraft(dataFor(w), initialData));
       if (already) {
+        if (isTerminalCompose(dataFor(already))) return prev;
         if (already.detached && already.nativeLabel) void Promise.resolve(focus?.(already.nativeLabel)).catch(() => {});
         return prev.map(w => {
           if (w.id !== already.id) return w;
@@ -271,6 +348,33 @@ export function useComposeSessionHydration({ windows, setWindows, idRef, focus, 
       return { ...w, snapshot: mergeComposeSnapshot(dataFor(w), savedData) };
     }));
   }, [setWindows]);
-  const canMount = useCallback(window => !window._awaitDraftHydration, []);
-  return { ready, openDraft, saveState, canMount };
+  useEffect(() => {
+    if (!ready) return;
+    for (const window of windows) {
+      const data = dataFor(window);
+      if (!isTerminalCompose(data) || restoredCleanup.current.has(data._draftId)) continue;
+      restoredCleanup.current.add(data._draftId);
+      // Restore/reconciliation is a single cleanup attempt, never a transport
+      // retry or a polling worker. Existing live operations are coalesced.
+      void Promise.resolve().then(() => terminalCleanup(data, data._draftTerminal, window.id));
+    }
+  }, [ready, windows, terminalCleanup]);
+  useEffect(() => {
+    const live = new Set(windows.map(window => window.id));
+    for (const id of projectionSignals.current.keys()) if (!live.has(id)) projectionSignals.current.delete(id);
+    for (const window of windows) {
+      const data = dataFor(window);
+      const signal = projectionSignal(data);
+      const previous = projectionSignals.current.get(window.id);
+      projectionSignals.current.set(window.id, signal);
+      if (previous === undefined || previous === signal || !data?._draftId || isTerminalCompose(data)) continue;
+      const id = window.id;
+      const isCurrent = () => projectionSignals.current.get(id) === signal
+        && windowsRef.current.some(owner => owner.id === id && !isTerminalCompose(dataFor(owner)) && projectionSignal(dataFor(owner)) === signal);
+      void Promise.resolve().then(() => isCurrent() && reconcile(data._draftId, { isCurrent })).catch(() => {});
+    }
+  }, [windows, reconcile]);
+  const canMount = useCallback(window => !window._awaitDraftHydration
+    && (!isTerminalCompose(dataFor(window)) || Boolean(window._terminalActive)), []);
+  return { ready, openDraft, saveState, canMount, terminalCleanup, retryCleanup, removeSource };
 }

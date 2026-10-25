@@ -447,7 +447,7 @@ it('preserves exact known native-only text and sender when that contender become
 
 // Terminal intent must fence the real editor and be owned by the same hook App uses.
 describe('terminal draft owner with the real editor', () => {
-  const window = () => ({ id: 4, initialData: { ...nativeDraft, _draftId: 'terminal' } });
+  const window = () => ({ id: 4, initialData: { ...nativeDraft, _draftId: 'terminal', _draftRevision: 0, _draftAcceptedRevision: 0 } });
   const discardClick = async () => {
     fireEvent.click(screen.getByTestId('compose-discard'));
     const dialog = screen.getByTestId('compose-discard-dialog');
