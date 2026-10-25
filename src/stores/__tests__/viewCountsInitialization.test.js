@@ -16,7 +16,7 @@ vi.mock('../../services/daemonClient', () => ({
   daemonCall: (...args) => native.daemonCall(...args),
   DaemonError: class DaemonError extends Error {},
 }));
-vi.stubGlobal('window', { __TAURI__: {}, addEventListener() {}, removeEventListener() {} });
+vi.stubGlobal('window', { __TAURI__: {}, location: { origin: 'tauri://localhost' }, addEventListener() {}, removeEventListener() {} });
 vi.stubGlobal('navigator', { onLine: true });
 
 const { useMailStore } = await import('../mailStore');
@@ -38,7 +38,7 @@ beforeEach(() => {
         resolve({ renamed: 1, index_patched: 1, sidecars_patched: 1 });
       }));
     }
-    if (command === 'body.verdicts') return Promise.resolve({ verdicts: [] });
+    if (command === 'body.verdicts') return Promise.resolve({ rows: {} });
     throw new Error(`Unexpected native command: ${command}`);
   });
   native.daemonCall.mockReset().mockImplementation((method) => {

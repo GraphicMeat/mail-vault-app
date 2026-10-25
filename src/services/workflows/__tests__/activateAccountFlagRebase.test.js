@@ -6,6 +6,9 @@
 // too). commitToStore now three-way merges the flags against the live store and
 // writes the merged rows back into the uidMap, so the sidecar write carries them.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {

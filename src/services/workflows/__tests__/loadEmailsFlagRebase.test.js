@@ -4,8 +4,12 @@
 // auto mark-read of a message the user just opened) used to be reverted by the
 // commit, in the list AND in the sidecar. The commit now three-way merges the
 // flags against the live store (rebaseFlags), whichever branch built the list.
-import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
 import { serverUids } from '../../../stores/slices/serverUids';
+
+guardViewCounts();
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -123,21 +127,6 @@ const markRead = (uid) =>
   applySeenLocally(useMailStore, { accountId: ACCOUNT.id, mailbox: 'INBOX', uid, read: true });
 const storeRow = (uid) => useMailStore.getState().emails.find(e => e.uid === uid);
 const savedRow = (uid) => mockSaveEmailHeaders.mock.calls.at(-1)?.[2]?.find(e => e.uid === uid);
-
-let warnSpy;
-const recountWarnings = [];
-beforeAll(() => {
-  const originalWarn = console.warn;
-  warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
-    if (args[0] === '[messageMutations] Could not count the saved views again:') recountWarnings.push(args);
-    originalWarn(...args);
-  });
-});
-afterAll(async () => {
-  await vi.dynamicImportSettled();
-  warnSpy.mockRestore();
-  expect(recountWarnings).toEqual([]);
-});
 
 beforeEach(() => {
   vi.clearAllMocks();

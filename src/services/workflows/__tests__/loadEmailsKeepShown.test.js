@@ -6,6 +6,9 @@
 // complete INBOX recount then moved the unread badge by one. They no longer
 // write `emails` at all.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { guardViewCounts } from '../../../test/viewCountsGuard';
+
+guardViewCounts();
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
