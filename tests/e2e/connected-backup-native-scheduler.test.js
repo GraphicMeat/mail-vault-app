@@ -55,8 +55,10 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
     root=mkdtempSync(join(tmpdir(),'mv-native-scheduler-'));assert.equal((await invoke('backup_save_external_location',{path:root}))?.__error,undefined);
     await browser.execute(()=>{
       window.__SETTINGS_STORE__.setState({language:'en',billingProfile:{hasSubscription:true,premiumAccess:true,status:'active',clientAccessGranted:true},backupGlobalEnabled:false,backupSchedules:{},snapshotAutoEnabled:true,snapshotCadence:'after_every_backup',backupNotifyOnSuccess:false,backupNotifyOnFailure:false});
-      const original=window.__TAURI__.core.invoke;window.__AUTOMATIC_UI_SNAPSHOT_CALLS__=0;
-      window.__TAURI__.core.invoke=function(command,args){if(command==='snapshot_create_from_maildir'||(command==='daemon_rpc'&&args?.method==='snapshot.create_from_maildir'))window.__AUTOMATIC_UI_SNAPSHOT_CALLS__++;return original.call(this,command,args);};
+      const tauri=window.__TAURI__;const original=tauri.core.invoke;window.__AUTOMATIC_UI_SNAPSHOT_CALLS__=0;
+      const observed=function(command,args){if(command==='snapshot_create_from_maildir'||(command==='daemon_rpc'&&args?.method==='snapshot.create_from_maildir'))window.__AUTOMATIC_UI_SNAPSHOT_CALLS__++;return original.call(tauri.core,command,args);};
+      window.__TAURI__={...tauri,core:{...tauri.core,invoke:observed}};
+      if(window.__TAURI__.core.invoke!==observed)throw new Error('Actual snapshot observation hook was not installed');
     });
     await wait(async()=>{const s=await rpc('settings.get');return s.values?.['mailvault-settings']?.state?.snapshotAutoEnabled===true;},15000,'Snapshot settings were not durable');
   });
@@ -89,7 +91,6 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
     await openSettings();assert.equal(await browser.execute(()=>{const button=document.querySelector('[data-testid="settings-detach"]');button?.click();return !!button;}),true);
     await wait(async()=>(await browser.getWindowHandles()).length===2,15000,'Settings did not detach');
     const child=(await browser.getWindowHandles()).find(h=>h!==main);
-    await browser.switchToWindow(child);await observeActualContext();
     await browser.switchToWindow(main);
     await browser.execute(id=>{
       window.__MAIL_STORE__.setState({loading:true});
@@ -101,7 +102,7 @@ describe('Native backup scheduler survives observers and owns automatic work',fu
     const idleStart=Date.now();
     await wait(async()=>Date.now()-idleStart>=185000,190000,'Native idle observation period did not elapse');
     let s=await rpc('backup.schedule.status');assert.equal(s.context.loading,true,'Child false cleared main loading');assert.equal(s.active,null);assert.ok(!s.queue.some(i=>i.accountId===vader.id));
-    await browser.switchToWindow(child);await browser.execute(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',bubbles:true})));
+    await browser.switchToWindow(child);await observeActualContext();await browser.execute(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',bubbles:true})));
     console.log('NATIVE_IDLE_CHILD_CONTEXT '+JSON.stringify(await actualContextEvidence()));
     await browser.closeWindow();await browser.switchToWindow(main);
     await wait(async()=>(await browser.getWindowHandles()).length===1,15000,'Child window did not retire');
