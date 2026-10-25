@@ -2004,3 +2004,58 @@ async fn drafts_review_large_private_receipt_inventory_leaves_shared_work_respon
     let _ = rpc(&h.s, "drafts.save", req("receipt-foreground", 1, "words")).await;
     saved(&h.s, req("receipt-foreground", 1, "words")).await;
 }
+
+
+#[tokio::test]
+async fn drafts_conditional_cleanup_keeps_higher_accepted_bytes() {
+    let h = Harness::new();
+    saved(&h.s, req("conditional-accepted", 1, "sent one")).await;
+    saved(&h.s, req("conditional-accepted", 2, "newer two")).await;
+    let before = serde_json::to_value(row(&h.s, "conditional-accepted")).unwrap();
+    let outcome = rpc(&h.s, "drafts.discard", json!({"draftId":"conditional-accepted","throughRevision":1})).await.unwrap();
+    assert_eq!(outcome["discarded"], false);
+    assert_eq!(outcome["reason"], "newer_revision");
+    assert_eq!(serde_json::to_value(row(&h.s, "conditional-accepted")).unwrap(), before);
+    assert!(String::from_utf8(read_copy(&h.s, row(&h.s, "conditional-accepted").current.as_ref().unwrap(), true).unwrap().unwrap()).unwrap().contains("newer two"));
+    assert_eq!(rpc(&h.s, "drafts.discard", json!({"draftId":"conditional-accepted"})).await.unwrap()["discarded"], true);
+}
+#[tokio::test]
+async fn drafts_conditional_cleanup_keeps_higher_pending_and_retry_claims() {
+    for point in ["after_bytes", "before_prepared_store"] {
+        let h = Harness::new();
+        saved(&h.s, req("conditional-intent", 1, "accepted one")).await;
+        h.hook(move |actual| if actual == point { Err("injected higher save failure".into()) } else { Ok(()) });
+        assert!(rpc(&h.s, "drafts.save", req("conditional-intent", 3, "retained three")).await.is_err());
+        h.clear();
+        let before = serde_json::to_value(row(&h.s, "conditional-intent")).unwrap();
+        if point == "after_bytes" { assert_eq!(before["pending"]["revision"], 3); }
+        else { assert_eq!(before["retry"]["revision"], 3); }
+        let outcome = rpc(&h.s, "drafts.discard", json!({"draftId":"conditional-intent","throughRevision":1})).await.unwrap();
+        assert_eq!(outcome["discarded"], false);
+        assert_eq!(outcome["reason"], "newer_revision");
+        assert_eq!(serde_json::to_value(row(&h.s, "conditional-intent")).unwrap(), before);
+    }
+}
+#[tokio::test]
+async fn drafts_conditional_cleanup_rejects_malformed_bound_without_effects() {
+    for bound in [json!(null), json!(-1), json!(1.5), json!("1"), json!(9007199254740992_u64)] {
+        let h = Harness::new();
+        saved(&h.s, req("conditional-invalid", 1, "keep words")).await;
+        assert!(rpc(&h.s, "drafts.discard", json!({"draftId":"conditional-invalid","throughRevision":bound})).await.is_err());
+        assert!(!row(&h.s, "conditional-invalid").discarded);
+    }
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drafts_conditional_cleanup_fences_higher_preparation_and_is_idempotent() {
+    let h = Harness::new();
+    saved(&h.s, req("conditional-race", 1, "sent one")).await;
+    let (started, gate) = wait_preparation(&h);
+    let state = h.s.clone();
+    let higher = tokio::spawn(async move { rpc(&state, "drafts.save", req("conditional-race", 2, "unpublished two")).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), started).await.unwrap().unwrap();
+    let outcome = rpc(&h.s, "drafts.discard", json!({"draftId":"conditional-race","throughRevision":1})).await.unwrap();
+    release(gate);
+    assert_eq!(outcome["discarded"], true);
+    assert!(higher.await.unwrap().is_err());
+    assert_eq!(rpc(&h.s, "drafts.discard", json!({"draftId":"conditional-race","throughRevision":1})).await.unwrap()["cleanup"], "complete");
+}

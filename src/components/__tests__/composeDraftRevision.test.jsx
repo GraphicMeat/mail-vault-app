@@ -527,3 +527,59 @@ describe('terminal draft owner with the real editor', () => {
     expect(controls.current.windows[0].snapshot._draftTerminal).toBe('discard');
   });
 });
+
+
+describe('automatic cleanup protects reopened writers', () => {
+  it('keeps a real reopened editor with unpublished text after old outbox cancellation and acceptance', async () => {
+    const controls = { current: null }; const loader = () => Promise.resolve([]); const cleanup = vi.fn();
+    const data = { ...nativeDraft, _draftId: 'reopened' }; const sent = deferred();
+    render(<HydrationHarness loader={loader} persist={vi.fn()} controls={controls} initial={[{ id: 30, initialData: data }]}
+      terminalOptions={{ discardThrough: cleanup, flush: vi.fn() }} />); await act(async () => {});
+    const editor = screen.getByTestId('editor-stub');
+    fireEvent.change(editor, { target: { value: '<p>unpublished complete words</p>' } });
+    // No timer/publication: parent is deliberately behind this actual editor.
+    expect(controls.current.windows[0].snapshot).toBeUndefined();
+    const { createComposeSlice } = await import('../../stores/slices/composeSlice');
+    let state; const get = () => state; const set = update => { state = { ...state, ...(typeof update === 'function' ? update(state) : update) }; };
+    state = createComposeSlice(set, get);
+    const api = await import('../../services/api');
+    api.sendStaged.mockReturnValueOnce(sent.promise);
+    const { createComposeSend } = await import('../../services/composeSend');
+    state.queueSend({ initialData: data }, createComposeSend({ snapshot: data, account, cleanupDraft: controls.current.terminalCleanup }), 0);
+    await act(async () => {}); state.cancelOutbox(state.outboxItems[0].id);
+    await act(async () => { sent.resolve({ success: true }); });
+    expect(cleanup).not.toHaveBeenCalled(); expect(controls.current.windows).toHaveLength(1);
+    expect(screen.getByTestId('editor-stub')).toBe(editor); expect(editor.value).toContain('unpublished complete words');
+    await tick(); expect(saveLocalDraft.mock.calls.at(-1)[0]).toMatchObject({ draftId: 'reopened', revision: 3, payload: { html: '<p>unpublished complete words</p>' } });
+  });
+  it('retains the original conditional bound through unknown cleanup and restoration', async () => {
+    const loader = () => Promise.resolve([]); const persist = vi.fn(); const controls = { current: null };
+    const discardThrough = vi.fn().mockRejectedValue(Error('lost ACK'));
+    const data = { ...nativeDraft, _draftId: 'bound', _draftRevision: 4 };
+    const view = render(<HydrationHarness {...{ loader, persist, controls }} terminalOptions={{ discardThrough, flush: vi.fn() }} />);
+    await act(async () => {});
+    await act(async () => { await controls.current.terminalCleanup(data, 'sent'); });
+    const retained = controls.current.windows;
+    expect(retained[0].snapshot).toMatchObject({ _draftCleanupThroughRevision: 4, _draftCleanupState: 'unknown' });
+    view.unmount();
+    const skip = vi.fn().mockResolvedValue({ draftId: 'bound', discarded: false, skipped: true, reason: 'newer_revision', newerRevision: 5 });
+    const restore = () => Promise.resolve(retained);
+    render(<HydrationHarness loader={restore} persist={vi.fn()} controls={controls} terminalOptions={{ discardThrough: skip, flush: vi.fn() }} />);
+    await act(async () => {});
+    expect(skip).toHaveBeenCalledWith(expect.objectContaining({ _draftId: 'bound', _draftCleanupThroughRevision: 4 }));
+    expect(controls.current.windows).toEqual([]); expect(saveLocalDraft).not.toHaveBeenCalled();
+  });
+  it('gates a contender during conditional cleanup and recovers its supplied content if native terminal wins', async () => {
+    const rpc = deferred(); const discardThrough = vi.fn(() => rpc.promise); const controls = { current: null }; const loader = () => Promise.resolve([]);
+    render(<HydrationHarness loader={loader} persist={vi.fn()} controls={controls} terminalOptions={{ discardThrough, flush: vi.fn() }} />);
+    await act(async () => {}); const captured = { ...nativeDraft, _draftId: 'admission' };
+    let operation; await act(async () => { operation = controls.current.terminalCleanup(captured, 'sent'); });
+    await act(async () => { controls.current.openDraft({ ...captured, _draftRevision: 3, body: '<p>retain contender</p>' }); });
+    expect(screen.queryByTestId('editor-stub')).toBeNull(); expect(saveLocalDraft).not.toHaveBeenCalled();
+    await act(async () => { rpc.resolve({ draftId: 'admission', discarded: true, cleanup: 'complete' }); await operation; });
+    expect(controls.current.windows).toHaveLength(1);
+    const recovered = controls.current.windows[0].snapshot || controls.current.windows[0].initialData;
+    expect(recovered.body).toBe('<p>retain contender</p>'); expect(recovered._draftId).not.toBe('admission');
+    expect(recovered._draftUid).toBeUndefined(); expect(recovered._draftTerminal).toBeUndefined();
+  });
+});

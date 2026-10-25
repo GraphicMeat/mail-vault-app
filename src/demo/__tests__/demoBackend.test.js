@@ -23,6 +23,16 @@ describe('demo mailbox backend', () => {
     expect(await reloaded.invoke('daemon_rpc', { method: 'drafts.list', params: { draftId: 'demo-d', includeContent: true } })).toMatchObject({ drafts: [], terminal: true });
   });
 
+  it('conditionally retains newer drafts and refuses malformed cleanup bounds', async () => {
+    const backend = createDemoBackend(); const accountId = backend.accounts[0].id;
+    const call = (method, params) => backend.invoke('daemon_rpc', { method, params });
+    const request = { draftId: 'conditional-demo', revision: 2, accountId, fromAddress: 'me@example.test', displayName: 'Me', snippet: '', snapshot: { to: '', cc: '', bcc: '', subject: 'newer', html: '<p>two</p>', text: 'two', inReplyTo: '', references: '', attachments: [] } };
+    await call('drafts.save', request);
+    expect(await call('drafts.discard', { draftId: request.draftId, throughRevision: 1 })).toMatchObject({ discarded: false, skipped: true, reason: 'newer_revision', newerRevision: 2 });
+    await expect(call('drafts.discard', { draftId: request.draftId, throughRevision: '2' })).rejects.toThrow();
+    expect((await call('drafts.list', { draftId: request.draftId, includeContent: true })).drafts[0].eml.html).toBe('<p>two</p>');
+  });
+
   it('seeds three fictional accounts with nested mailboxes and mixed custody', () => {
     const backend = createDemoBackend();
     const state = backend.snapshot();
