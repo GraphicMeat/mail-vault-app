@@ -4709,6 +4709,8 @@ mod tests {
             "backup.cancel",
             "backup.stop",
             "backup.schedule.status",
+            "backup.attach_access",
+            "backup.access_status",
         ] {
             assert_eq!(
                 crate::reply_timeout(method),

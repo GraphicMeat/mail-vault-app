@@ -149,16 +149,28 @@ fn take_backup_path(app: &tauri::AppHandle, account_id: &str) -> Option<String> 
 /// terminal one (`active: false`), the run that owned the mirror scope is
 /// over: release it. Called for every `backup-progress` event, so anything
 /// that is not terminal, or names no account we hold a scope for, is a no-op.
+fn release_legacy_frame(held: &HeldBackupPaths, payload: &Value, release: impl FnOnce(&str)) {
+    if payload.get("active").and_then(Value::as_bool) != Some(false) { return; }
+    let Some(account) = payload.get("account_id").and_then(Value::as_str) else { return; };
+    let path = held.0.lock().unwrap_or_else(|p| p.into_inner()).remove(account);
+    if let Some(path) = path { release(&path); }
+}
 pub(crate) fn release_after_terminal_progress(app: &tauri::AppHandle, payload: &Value) {
-    if payload.get("active").and_then(Value::as_bool) != Some(false) {
-        return;
-    }
-    let Some(account_id) = payload.get("account_id").and_then(Value::as_str) else {
-        return;
-    };
-    if let Some(path) = take_backup_path(app, account_id) {
-        info!("backup: run for {} finished — releasing the mirror's scoped access", account_id);
-        release_backup_path(&path);
+    if let Some(held) = held(app) { release_legacy_frame(&held, payload, release_backup_path); }
+}
+
+#[cfg(test)]
+mod native_access_tests {
+    use super::*;
+    #[test]
+    fn backup_access_correlated_terminal_cannot_release_legacy_hold() {
+        let held = HeldBackupPaths::default();
+        held.0.lock().unwrap().insert("one".into(), "/same-drive".into());
+        let releases = std::cell::Cell::new(0);
+        release_legacy_frame(&held, &json!({"account_id":"one","active":false,"runId":"native-run","executionId":"native-execution"}), |_| releases.set(releases.get()+1));
+        assert_eq!(releases.get(), 0, "native progress released the independent legacy acquisition");
+        release_legacy_frame(&held, &json!({"account_id":"one","active":false}), |_| releases.set(releases.get()+1));
+        assert_eq!(releases.get(), 1);
     }
 }
 
