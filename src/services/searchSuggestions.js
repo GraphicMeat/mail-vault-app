@@ -5,11 +5,12 @@ import { commitText, formatTag } from '../utils/searchTags';
 /// each entry is the tags picking it commits. A sender becomes a `from:` tag;
 /// a word or phrase becomes one tag, as if typed. An index that cannot answer, or a
 /// daemon that is not there, is no suggestions, never an error: the list is a
-/// convenience and the search itself works without it.
-export async function fetchSearchSuggestions({ prefix, accounts, limit = 10 }) {
+/// convenience and the search itself works without it. `mailboxes` limits the
+/// senders to the folders the search reads; none is every folder.
+export async function fetchSearchSuggestions({ prefix, accounts, mailboxes, limit = 10 }) {
   let found;
   try {
-    found = await daemonCall('search.suggest', { prefix, accounts, limit });
+    found = await daemonCall('search.suggest', mailboxes?.length ? { prefix, accounts, mailboxes, limit } : { prefix, accounts, limit });
   } catch {
     return [];
   }

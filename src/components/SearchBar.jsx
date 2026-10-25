@@ -15,6 +15,7 @@ import { addTags, commitText, serializeTags, tokenizeQuery } from '../utils/sear
 import { SearchTagInput } from './SearchTagInput';
 import { formatCount } from '../utils/formatCount';
 import { useSearchSuggestions } from '../hooks/useSearchSuggestions';
+import { suggestionMailboxes } from '../services/searchTargets';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -144,7 +145,11 @@ export function SearchBar({ autoFocus = false }) {
     ? (s.accounts || []).map(account => account.id).join('\n')
     : (s.activeAccountId || '')));
   const suggestAccounts = useMemo(() => (suggestAccountKey ? suggestAccountKey.split('\n') : []), [suggestAccountKey]);
-  const suggestions = useSearchSuggestions(draft, suggestAccounts);
+  // ...and from the folders it reads: a sender seen only on Sent mail is no
+  // pick for an inbox search.
+  const suggestScopeKey = useAccountStore(s => suggestionMailboxes(s, searchFilters.folder).join('\n'));
+  const suggestMailboxes = useMemo(() => (suggestScopeKey ? suggestScopeKey.split('\n') : []), [suggestScopeKey]);
+  const suggestions = useSearchSuggestions(draft, suggestAccounts, suggestMailboxes);
   // Where the operator help opens: under its button, right-aligned to it.
   const [helpAnchor, setHelpAnchor] = useState(null);
   const [hintVisible, setHintVisible] = useState(false);

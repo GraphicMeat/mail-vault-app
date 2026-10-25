@@ -61,6 +61,12 @@ export function resolveLocalScope(tree, mail, folder) {
   return [resolveMailbox(tree, selected)];
 }
 
+// The folders a search's typeahead reads senders from: the ones the search
+// itself reads on the open account (none is every folder).
+export function suggestionMailboxes(mail, folder) {
+  return resolveLocalScope(mail?.mailboxes ?? [], mail, folder) ?? [];
+}
+
 export async function mailboxTreeFor(accountId, mail) {
   if (accountId === mail?.activeAccountId) return mail.mailboxes ?? [];
   return getAccountCacheMailboxes(accountId) ?? [];
