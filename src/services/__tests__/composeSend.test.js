@@ -497,7 +497,7 @@ describe('scheduleCompose', () => {
       email: expect.objectContaining({ to: 'recipient@example.test', subject: 'A subject' }),
       localTime: '2026-10-02T10:00', tz: 'Europe/Vilnius', fireAt: expect.any(Number), sentMailbox: 'Sent',
     }));
-    expect(cleanupDraftFor).toHaveBeenCalledWith(snapshot);
+    expect(cleanupDraftFor).toHaveBeenCalledWith(expect.objectContaining({ ...snapshot, _editScheduledId: 'row-1', _scheduleDraft: { localTime: '2026-10-02T10:00', tz: 'Europe/Vilnius' } }));
   });
 
   it('keeps everything when the daemon refuses the edit because the row already fired', async () => {

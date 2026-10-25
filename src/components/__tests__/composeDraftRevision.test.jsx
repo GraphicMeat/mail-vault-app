@@ -502,7 +502,7 @@ describe('terminal draft owner with the real editor', () => {
   it('restores terminal entries through cleanup only and terminal dominates a stale editable twin', async () => {
     const discard = vi.fn().mockResolvedValue({ draftId: 'terminal', discarded: true, cleanup: 'pending' });
     const controls = { current: null }; const persist = vi.fn(); const flush = vi.fn();
-    const data = { ...nativeDraft, _draftId: 'terminal', _draftCleanupOnly: true, _draftTerminal: 'scheduled', _draftCleanupState: 'unknown' };
+    const data = { ...nativeDraft, _draftId: 'terminal', _draftCleanupOnly: true, _draftTerminal: 'discard', _draftCleanupState: 'unknown' };
     const loader = () => Promise.resolve([{ id: 8, initialData: data }]);
     render(<HydrationHarness {...{ loader, persist, controls }} initial={[{ ...window(), minimized: true }]}
       terminalOptions={{ discard, flush }} />);
@@ -603,4 +603,13 @@ it.each(['unknown', 'pending'])('the standalone editor freezes discard and expos
   expect(screen.getByTestId('compose-send').disabled).toBe(true);
   fireEvent.click(status.querySelector('button')); await act(async () => {});
   expect(deleteLocalDraft).toHaveBeenCalledTimes(2); expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+
+it('translates native draft save failures without exposing identity proof fields', async () => {
+  saveLocalDraft.mockRejectedValueOnce(Error('draft receipt mismatch account=internal uid=42 sha256=private-proof'));
+  render(<ComposeModal {...props} initialData={seed} />); await tick();
+  const alert = screen.getByRole('alert').textContent;
+  expect(alert).toContain('The draft could not be saved. Please retry.');
+  expect(alert).not.toContain('sha256'); expect(alert).not.toContain('uid=42');
 });

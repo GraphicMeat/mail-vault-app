@@ -2027,6 +2027,11 @@ async fn drafts_conditional_cleanup_keeps_higher_pending_and_retry_claims() {
         h.hook(move |actual| if actual == point { Err("injected higher save failure".into()) } else { Ok(()) });
         assert!(rpc(&h.s, "drafts.save", req("conditional-intent", 3, "retained three")).await.is_err());
         h.clear();
+        // An uninstalled failed intent becomes the existing durable retry
+        // constraint when its normal recovery boundary rejects that retry.
+        if point == "before_prepared_store" {
+            assert!(rpc(&h.s, "drafts.save", req("conditional-intent", 3, "retained three")).await.is_err());
+        }
         let before = serde_json::to_value(row(&h.s, "conditional-intent")).unwrap();
         if point == "after_bytes" { assert_eq!(before["pending"]["revision"], 3); }
         else { assert_eq!(before["retry"]["revision"], 3); }
