@@ -1,6 +1,6 @@
 //! Pure compose preparation and UX preflight. No IO and no transport authority.
 //! The frozen actual-JS corpus pins recipient, quote, parser and timezone policy.
-use crate::notes_to_self::normalize_identity;
+use crate::notes_to_self::fold_identity;
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use serde::Deserialize;
@@ -8,6 +8,8 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
+// Check/mailto payloads and the separate account reader retain this bound.
+// Complete message preparation has no product byte/count cutoff.
 pub const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 const INVALID: &str = "compose.preparationUnavailable";
 type Result<T> = std::result::Result<T, &'static str>;
@@ -202,21 +204,22 @@ fn own_addresses(ctx: &Context, picked: &str) -> HashSet<String> {
             &a.email,
         ] {
             if !trim(address).is_empty() {
-                own.insert(normalize_identity(trim(address)));
+                own.insert(fold_identity(trim(address)));
             }
         }
         if let Some(aliases) = ctx.settings["aliases"][&a.id].as_array() {
             for alias in aliases {
                 if let Some(address) = alias["address"].as_str() {
                     if !trim(address).is_empty() {
-                        own.insert(normalize_identity(trim(address)));
+                        own.insert(fold_identity(trim(address)));
                     }
                 }
             }
         }
     }
+    let picked = fold_identity(trim(picked));
     if !picked.is_empty() {
-        own.insert(normalize_identity(picked));
+        own.insert(picked);
     }
     own
 }
@@ -230,7 +233,10 @@ fn recipients(h: &Header, mode: ReplyMode, own: &HashSet<String>) -> (String, St
     } else {
         first
     };
-    let is_own = |s: &str| own.contains(&normalize_identity(s));
+    let is_own = |s: &str| {
+        let identity = fold_identity(trim(s));
+        !identity.is_empty() && own.contains(&identity)
+    };
     let to = addresses(&h.to);
     let cc = addresses(&h.cc);
     if mode == ReplyMode::Reply {
@@ -332,8 +338,12 @@ fn original_html(m: &Original, label: &str, date_label: &str) -> String {
     format!("<p><strong>{label}</strong><br>From: {} &lt;{}&gt;<br>Date: {}<br>Subject: {}<br>To: {}</p>{body}",escape(name),escape(addr(h.from.as_ref())),escape(date),escape(&h.subject),escape(&to))
 }
 pub fn reply_context(params: &Value, ctx: &Context) -> Result<Value> {
-    bound(params)?;
-    let request: Prepare = serde_json::from_value(params.clone()).map_err(|_| INVALID)?;
+    if params.get("kind").and_then(Value::as_str) != Some("message") {
+        bound(params)?;
+    }
+    // Deserialize from the borrowed JSON instead of cloning the complete body
+    // just to consume that clone. Ordinary shape validation remains unchanged.
+    let request = Prepare::deserialize(params).map_err(|_| INVALID)?;
     match request {
         Prepare::Mailto {
             request_id,
@@ -358,9 +368,6 @@ pub fn reply_context(params: &Value, ctx: &Context) -> Result<Value> {
             presentation,
         } => {
             fence(&request_id, expected_settings_version, ctx)?;
-            if thread_context.len() > 64 {
-                return Err(INVALID);
-            }
             // accountId is the UI's currently resolved selection. Initialization
             // precedence/signature remain React-owned until the next reviewed slice.
             let account = account_id

@@ -502,6 +502,11 @@ where
 /// (`oauth_tokens::inject`), so no handler ever sends the app's copy.
 async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcResponse {
     let method = req.method.clone();
+    // These read-only contracts must reject account-bearing unknown fields
+    // without ever resolving credentials. route_request retains foreground accounting.
+    if matches!(method.as_str(), "compose.reply_context" | "compose.check") {
+        return route_request(state, req).await;
+    }
     let crate::oauth_tokens::Injection { injected, refusal } = crate::oauth_tokens::inject(state, &method, &mut req.params).await;
     if let Some(message) = refusal {
         return RpcResponse::error(req.id.unwrap_or(Value::Null), ipc::INTERNAL_ERROR, message);

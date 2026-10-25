@@ -290,3 +290,13 @@ fn shared_identity_wrapper_keeps_its_existing_trim_contract() {
     assert_eq!(normalize_identity("\u{85}OWNER@example.test\u{85}"),"owner@example.test");
     assert_eq!(normalize_identity("  J.ohn+tag@googlemail.com  "),"john@gmail.com");
 }
+
+#[test]
+fn complete_message_inputs_still_require_valid_shape_and_fences() {
+    let f=supplement::fixture();let c=f["largeCases"].as_array().unwrap().iter().find(|c|c["spec"]["name"]=="original-over-2MiB-selected").unwrap();
+    let ctx=context(&fixture());
+    let mut p=supplement::request(c);p["requestId"]=json!("");assert!(compose_prep::reply_context(&p,&ctx).is_err());
+    p["requestId"]=json!("valid");p["expectedSettingsVersion"]=json!(8);assert_eq!(compose_prep::reply_context(&p,&ctx).unwrap_err(),"errors.settingsConflict");
+    p.as_object_mut().unwrap().remove("expectedSettingsVersion");p["original"]["html"]=json!(42);assert!(compose_prep::reply_context(&p,&ctx).is_err());
+    let mailto=json!({"kind":"mailto","requestId":"mailto","href":format!("mailto:a@example.test?body={}","x".repeat(compose_prep::MAX_REQUEST_BYTES+1))});assert!(compose_prep::reply_context(&mailto,&ctx).is_err());
+}

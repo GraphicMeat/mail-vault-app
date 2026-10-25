@@ -12,12 +12,16 @@ use std::sync::LazyLock;
 
 const GMAIL_DOMAINS: [&str; 2] = ["gmail.com", "googlemail.com"];
 
-/// Mirrors `src/utils/emailIdentity.js` `normalizeEmailIdentity` exactly:
-/// lowercase, then for gmail.com/googlemail.com only, drop `+tag` and dots
-/// from the local part. `tests/fixtures/email-identity-cases.json` is shared
-/// with that file's vitest suite so the two can never drift.
+/// Existing note/search callers retain their Rust whitespace boundary.
+/// Compose supplies its ECMAScript boundary to the same folding primitive.
 pub fn normalize_identity(addr: &str) -> String {
-    let trimmed = addr.trim().to_lowercase();
+    fold_identity(addr.trim())
+}
+
+/// Lowercase and fold a mailbox identity without choosing a trim policy.
+/// Gmail/Googlemail ignore local dots and plus tags; other domains fold case.
+pub fn fold_identity(addr: &str) -> String {
+    let trimmed = addr.to_lowercase();
     let Some(at) = trimmed.rfind('@') else { return trimmed };
     let local = &trimmed[..at];
     let domain = &trimmed[at + 1..];
