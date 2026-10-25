@@ -3,6 +3,7 @@
 //! and hands back the PNG bytes. Delete this file and its cfg lines in main.rs
 //! to remove the module from the shell.
 use base64::Engine;
+use tauri::Manager;
 use std::time::Duration;
 
 /// Concrete `Wry`: `crate::daemon_rpc` is a `#[tauri::command]` over the
@@ -10,11 +11,13 @@ use std::time::Duration;
 pub fn register(b: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     b.register_asynchronous_uri_scheme_protocol("mvrender", |ctx, request, responder| {
         let app = ctx.app_handle().clone();
+        let window = app.get_webview_window(ctx.webview_label());
         let path = request.uri().path().to_string();
         tauri::async_runtime::spawn(async move {
             let not_found = || tauri::http::Response::builder().status(404).body(Vec::new()).unwrap();
             let Some((doc, _rev, index)) = parse_tile_path(&path) else { return responder.respond(not_found()) };
-            let reply = crate::daemon_rpc(app, "render.tile".into(), serde_json::json!({"docId": doc, "index": index})).await;
+            let Some(window) = window else { return responder.respond(not_found()) };
+            let reply = crate::daemon_rpc(app, window, "render.tile".into(), serde_json::json!({"docId": doc, "index": index})).await;
             let png = reply.ok()
                 .and_then(|v| v["png"].as_str().map(str::to_owned))
                 .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
