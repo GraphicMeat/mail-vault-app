@@ -29,6 +29,8 @@ pub use mailvault_core::imap;
 // ONE OAuth2Manager instance in DaemonState (see server.rs), src-tauri no
 // longer references this module at all.
 pub use mailvault_core::oauth2;
+#[cfg(test)]
+mod draft_contract_tests;
 mod events;
 mod export_fetch;
 mod handlers;
