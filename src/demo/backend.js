@@ -978,8 +978,26 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           const input = method === 'settings.patch' ? p.patch : p.values;
           if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('errors.settingsInvalid');
           if (Number.isInteger(p.baseVersion) && p.baseVersion !== settingsVersion) throw new Error('errors.settingsConflict');
+          const rebased = method === 'settings.replace' && Object.hasOwn(p, 'bases');
+          const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+          if (rebased && !object(p.bases)) throw new Error('errors.settingsInvalid');
           const before = JSON.stringify(settings);
           const next = clone(settings);
+          // Match SettingsDoc's shared-store delta: unchanged baseline fields
+          // preserve native writes; removed fields and nested null stay explicit.
+          const canonical = value => JSON.stringify(value, (_key, item) => object(item)
+            ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
+          const storeDelta = (current, prior, edited) => {
+            if (canonical(prior) === canonical(edited)) return current;
+            if (!object(edited) || (prior != null && !object(prior))) return clone(edited);
+            const out = object(current) ? current : {};
+            for (const key of Object.keys(prior || {})) if (!Object.hasOwn(edited, key)) delete out[key];
+            for (const [key, value] of Object.entries(edited)) {
+              if (!Object.hasOwn(prior || {}, key) && value === null) out[key] = null;
+              else if (canonical(prior?.[key]) !== canonical(value)) out[key] = storeDelta(out[key], prior?.[key] ?? null, value);
+            }
+            return out;
+          };
           const mergePatch = (target, patch) => {
             if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return clone(patch);
             const out = target && typeof target === 'object' && !Array.isArray(target) ? target : {};
@@ -990,15 +1008,16 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           for (const [k, v] of Object.entries(input)) {
             const was = JSON.stringify(next[k]);
             if (v === null) delete next[k];
+            else if (rebased && k === 'mailvault-settings' && Object.hasOwn(p.bases, k)) next[k] = storeDelta(next[k], p.bases[k], v);
             else next[k] = method === 'settings.patch' ? mergePatch(next[k], v) : clone(v);
             if (JSON.stringify(next[k]) !== was) changed.push(k);
           }
-          if (JSON.stringify(next) === before) return { version: settingsVersion, changed: [] };
+          if (JSON.stringify(next) === before) return { ...(rebased ? { values: clone(settings) } : {}), version: settingsVersion, changed: [] };
           settings = next;
           settingsVersion += 1;
           emit('demo:state', { type: 'settings' });
           emit('settings-changed', { keys: changed.sort(), version: settingsVersion });
-          return { version: settingsVersion, changed: changed.sort() };
+          return { ...(rebased ? { values: clone(settings) } : {}), version: settingsVersion, changed: changed.sort() };
         }
         // Auto-cleanup rules: the demo deletes nothing from any server; a run
         // ends at once with nothing done.
