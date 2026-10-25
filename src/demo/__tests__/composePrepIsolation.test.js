@@ -17,3 +17,33 @@ it('prepares complete long messages without importing live UI stores', async () 
   expect(result.fullOriginalHtml.endsWith(html)).toBe(true); expect(result.quotedHtml.endsWith(html)).toBe(true);
   expect(result.contextHtml).toContain('<p>69</p>'); expect(JSON.stringify(result)).not.toContain('hidden@example.test');
 });
+
+it('runs actual demo.check in isolation with backend settings/account/version and injected clock', async () => {
+  let clock = Date.parse('2026-10-25T00:00:20Z');
+  const backend = createDemoBackend({ now: () => clock, initialSettings: { 'mailvault-settings': { state: { billingProfile: { hasSubscription: true, status: 'active' } } } } });
+  const request = { requestId: 'check-isolated', expectedSettingsVersion: 0, draftId: 'issued', revision: 4, accountId: backend.accounts[0].id, fromAddress: 'me@example.test', mode: 'new', to: 'friend@example.test', cc: '', bcc: 'authored@example.test', subject: '', authoredBodyText: '界\\"'.repeat(400000) + ' attached', attachmentCount: 0, sendPlan: null, scheduleDraft: null, timeZone: 'UTC', sendAnyway: false };
+  const call = p => backend.invoke('daemon_rpc', { method: 'compose.check', params: { ...request, ...p } });
+  const before = backend.snapshot();
+  const base = { requestId: request.requestId, settingsVersion: 0, draftId: 'issued', revision: 4 };
+  expect(await call({})).toEqual({ ...base, kind: 'confirm_attachment' });
+  expect(await call({ sendAnyway: true })).toEqual({ ...base, kind: 'ready', route: { delay: null } });
+  expect(await call({ to: '', accountId: 'gone' })).toMatchObject({ kind: 'invalid', key: 'compose.pleaseEnterLeastOneRecipient' });
+  expect(await call({ to: 'bad-to', cc: 'bad-cc', accountId: 'gone' })).toMatchObject({ key: 'compose.invalidRecipient', args: { address: 'bad-to' } });
+  expect(await call({ cc: 'bad-cc', bcc: 'bad-bcc' })).toMatchObject({ args: { address: 'bad-cc' } });
+  expect(await call({ bcc: 'bad-bcc' })).toMatchObject({ args: { address: 'bad-bcc' } });
+  expect(await call({ accountId: 'gone' })).toMatchObject({ key: 'compose.noAccountSelected' });
+  expect(await call({ sendAnyway: true, sendPlan: { kind: 'in', minutes: 6 } })).toMatchObject({ route: { draft: { localTime: '2026-10-25T00:07', tz: 'UTC' } } });
+  clock += 60000;
+  expect(await call({ sendAnyway: true, sendPlan: { kind: 'at' }, scheduleDraft: { localTime: '2026-10-25T00:01', tz: 'UTC' } })).toMatchObject({ key: 'scheduled.picker.pastTime' });
+  await expect(call({ expectedSettingsVersion: 1 })).rejects.toThrow('errors.settingsConflict');
+  await expect(call({ premium: true })).rejects.toThrow('compose.preparationUnavailable');
+  expect(backend.snapshot()).toEqual(before);
+});
+it.each([
+  { attachmentReminder: false, billingProfile: { hasSubscription: true, status: 'active' } }, {},
+  { billingProfile: { hasSubscription: true, clientAccessGranted: false, premiumAccess: true, status: 'active' } },
+])('demo check honors backend reminder and entitlement settings %j', async state => {
+  const backend = createDemoBackend({ initialSettings: { 'mailvault-settings': { state } } });
+  const result = await backend.invoke('daemon_rpc', { method: 'compose.check', params: { requestId: 'policy', accountId: backend.accounts[0].id, fromAddress: '', mode: 'new', to: 'friend@example.test', authoredBodyText: 'attached', attachmentCount: 0, timeZone: 'UTC' } });
+  expect(result).toMatchObject({ kind: 'ready', route: { delay: null } });
+});

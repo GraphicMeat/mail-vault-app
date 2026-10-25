@@ -42,3 +42,31 @@ describe('owner preparation settings barrier', () => {
     await expect(flushSafeStorage({ acknowledge: true })).rejects.toThrow('compose.preparationUnavailable');
   });
 });
+
+it.each(['displayNames', 'attachmentReminder', 'billingProfile', 'shareGrant', 'sendDelay', 'undoSendEnabled', 'undoSendDelay'])('send-check ACK refuses a divergent %s while reply-only ACK keeps its numeric contract', async field => {
+  let reads = 0;
+  const state = { aliases: {}, sendAsAddresses: {}, displayNames: { one: 'Owner' }, attachmentReminder: false, billingProfile: { hasSubscription: true }, shareGrant: { expiresAt: 1 }, sendDelay: 5, undoSendEnabled: false, undoSendDelay: 10 };
+  const invoke = vi.fn(async () => {
+    reads++;
+    const observed = structuredClone(state);
+    if (reads > 1) delete observed[field];
+    return { values: { 'mailvault-settings': { state: observed } }, version: reads };
+  });
+  const { flushSafeStorage } = await load(invoke);
+  await expect(flushSafeStorage({ acknowledge: true, purpose: 'send-check' })).rejects.toThrow('errors.settingsConflict');
+  expect(reads).toBe(4);
+  expect(await flushSafeStorage({ acknowledge: true })).toBe(5);
+});
+it('send-check ACK re-reads an edited policy generation and accepts absent defaults without fabricating them', async () => {
+  let values = { 'mailvault-settings': { state: {} } }; let version = 1; let changed = false; let storage;
+  const invoke = vi.fn(async (_cmd, { method, params }) => {
+    if (method === 'settings.replace') { values = { ...values, ...params.values }; return { version: ++version }; }
+    const result = { values: structuredClone(values), version };
+    if (storage && !changed) { changed = true; storage.setItem('mailvault-settings', JSON.stringify({ state: { attachmentReminder: false } })); }
+    return result;
+  });
+  const { safeStorage, flushSafeStorage } = await load(invoke);
+  await safeStorage.getItem('mailvault-settings'); storage = safeStorage;
+  expect(await flushSafeStorage({ acknowledge: true, purpose: 'send-check' })).toBe(2);
+  expect(values['mailvault-settings'].state).toEqual({ attachmentReminder: false });
+});

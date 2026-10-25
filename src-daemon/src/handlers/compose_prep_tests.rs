@@ -155,7 +155,7 @@ async fn compose_prep_bounds_input_and_does_not_wait_on_vault_locks() {
     assert_eq!(out["bodyAvailable"], true);
     let mut p = chk();
     p["authoredBodyText"] = json!("x".repeat(compose_prep::MAX_REQUEST_BYTES + 1));
-    assert!(rpc(&s, "compose.check", p).await.is_err());
+    assert_eq!(rpc(&s, "compose.check", p).await.unwrap()["kind"], "ready");
     let mut p = chk();
     p["premium"] = json!(true);
     assert!(rpc(&s, "compose.check", p).await.is_err());
@@ -321,4 +321,38 @@ async fn compose_prep_account_file_bound_remains_independent() {
         rpc(&s, "compose.reply_context", msg()).await.unwrap_err(),
         "compose.preparationUnavailable"
     );
+}
+
+#[tokio::test]
+async fn compose_prep_large_check_is_read_only_and_keeps_ipc_responsive() {
+    let (_dir, s) = seed();
+    SettingsDoc::shared(&s.app_dir).patch(&json!({"mailvault-settings":{"state":{"billingProfile":{"hasSubscription":true,"status":"active"}}}}),None).unwrap();
+    let accounts = std::fs::read(s.app_dir.join("accounts.json")).unwrap();
+    let settings = std::fs::read(s.app_dir.join("frontend-settings.json")).unwrap();
+    let before: Vec<_> = std::fs::read_dir(&s.data_dir).unwrap().map(|e| e.unwrap().path()).collect();
+    let started = Arc::new(tokio::sync::Notify::new());
+    let (release, wait) = std::sync::mpsc::channel();
+    let wait = std::sync::Mutex::new(wait);
+    let notify = started.clone();
+    HOOKS.lock().unwrap().insert(s.app_dir.clone(), Arc::new(move || {
+        notify.notify_one();
+        let _ = wait.lock().unwrap().recv_timeout(std::time::Duration::from_secs(5));
+    }));
+    let mut p = chk();
+    p["authoredBodyText"] = json!("界\\\"".repeat(400000) + " attached");
+    assert!(serde_json::to_vec(&p).unwrap().len() > compose_prep::MAX_REQUEST_BYTES);
+    let state = s.clone();
+    let mut pending = tokio::spawn(async move { rpc(&state, "compose.check", p).await });
+    tokio::select! {
+        _=started.notified()=>{},
+        result=&mut pending=>panic!("large check refused before worker control: {:?}",result.unwrap().err()),
+    }
+    let other = tokio::time::timeout(std::time::Duration::from_secs(2), crate::server::handle_request_for_test(&s,"ping",json!({}))).await;
+    release.send(()).unwrap();
+    HOOKS.lock().unwrap().remove(&s.app_dir);
+    assert!(other.unwrap().result.is_some());
+    assert_eq!(pending.await.unwrap().unwrap()["kind"], "confirm_attachment");
+    assert_eq!(std::fs::read(s.app_dir.join("accounts.json")).unwrap(), accounts);
+    assert_eq!(std::fs::read(s.app_dir.join("frontend-settings.json")).unwrap(), settings);
+    assert_eq!(std::fs::read_dir(&s.data_dir).unwrap().map(|e| e.unwrap().path()).collect::<Vec<_>>(), before);
 }
