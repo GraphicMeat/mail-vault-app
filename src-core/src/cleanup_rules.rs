@@ -524,6 +524,11 @@ mod tests {
         }
     }
     #[test]
+    fn row14_existing_seconds_iso_share_is_not_a_numeric_epoch() {
+        assert!(!has_premium_access(&json!({"shareGrant":{"expiresAt":"2026-10-26T00:00:00Z"}}),1_792_929_600_000));
+        assert!(!has_premium_access(&json!({"shareGrant":{"expiresAt":"2026-10-26T00:00Z"}}),1_792_929_600_000));
+    }
+    #[test]
     fn row14_share_grants_compare_finite_numbers_without_date_parsing() {
         let now = 1_792_929_600_000;
         for expiry in [json!(now+1),json!("1792929600001")] {
