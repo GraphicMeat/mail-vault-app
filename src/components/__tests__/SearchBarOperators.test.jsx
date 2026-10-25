@@ -47,6 +47,7 @@ vi.mock('../../services/mailSearch.js', () => ({
 }));
 vi.mock('../../services/searchTargets.js', () => ({
   buildSearchTargets: async () => [{ accountId: 'a', localMailboxes: null, serverMailboxes: ['INBOX'] }],
+  suggestionMailboxes: (mail, folder) => (folder === 'all' ? [] : [mail.unifiedInbox ? mail.unifiedFolder : mail.activeMailbox]),
 }));
 
 const { SearchBar } = await import('../SearchBar.jsx');

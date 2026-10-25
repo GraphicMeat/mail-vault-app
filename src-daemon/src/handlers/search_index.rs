@@ -149,13 +149,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         // The search bar's typeahead: `[{ kind: "sender", address, name,
         // count } | { kind: "term", term, count }]`, at most `limit` (10 by
-        // default). No accounts named is every account. Never an error: an
+        // default). No accounts named is every account, no `mailboxes` every folder. Never an error: an
         // index that cannot answer offers nothing.
         "search.suggest" => {
             let prefix = params.get("prefix").and_then(Value::as_str).unwrap_or("").to_string();
             let accounts: Vec<String> = serde_json::from_value(params.get("accounts").cloned().unwrap_or(Value::Null)).unwrap_or_default();
+            let mailboxes: Vec<String> = serde_json::from_value(params.get("mailboxes").cloned().unwrap_or(Value::Null)).unwrap_or_default();
             let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(10).min(20) as usize;
-            done(id, blocking(move || serde_json::to_value(si::suggest_search(&st, &accounts, &prefix, limit)).unwrap_or(Value::Array(Vec::new()))).await)
+            done(id, blocking(move || serde_json::to_value(si::suggest_search(&st, &accounts, &mailboxes, &prefix, limit)).unwrap_or(Value::Array(Vec::new()))).await)
         }
         _ => return None,
     })
@@ -407,6 +408,24 @@ mod tests {
         assert_eq!(r, json!([{"kind": "term", "term": "invoice", "count": 1}]));
         let r = call(&s, "search.suggest", json!({"prefix": "inv", "accounts": []})).await.result.unwrap();
         assert_eq!(r, json!([{"kind": "term", "term": "invoice", "count": 2}]), "no account named is every account");
+    }
+
+    /// An inbox search offers the senders its folder holds: the account's own
+    /// address sits on its Sent mail, and picking it finds nothing there.
+    #[tokio::test]
+    async fn search_suggest_limits_senders_to_the_mailboxes_asked_for() {
+        let (t, s) = st();
+        seed_suggestions(&t, &s);
+        mailvault_core::search_index::lock(&s.search_index.db).as_ref().unwrap().execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, from_addr_lc, from_name_lc, subject_lc, row_json)
+             VALUES ('a', 'Sent', 9, '9.eml', 1, 1, 1, 'me@home.test', 'me', 'lunch', '{\"from\":{\"address\":\"me@home.test\",\"name\":\"Me\"}}')",
+            [],
+        )
+        .unwrap();
+        let r = call(&s, "search.suggest", json!({"prefix": "me@", "accounts": ["a"]})).await.result.unwrap();
+        assert_eq!(r, json!([{"kind": "sender", "address": "me@home.test", "name": "Me", "count": 1}]), "no mailbox named is every folder");
+        let r = call(&s, "search.suggest", json!({"prefix": "me@", "accounts": ["a"], "mailboxes": ["INBOX"]})).await.result.unwrap();
+        assert_eq!(r, json!([]));
     }
 
     /// A suggestion list is a convenience: an index that is closed, or busy

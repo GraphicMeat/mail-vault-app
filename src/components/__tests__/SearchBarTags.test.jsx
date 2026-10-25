@@ -48,6 +48,7 @@ vi.mock('../../services/mailSearch.js', () => ({
 }));
 vi.mock('../../services/searchTargets.js', () => ({
   buildSearchTargets: async () => [{ accountId: 'a', localMailboxes: null, serverMailboxes: ['INBOX'] }],
+  suggestionMailboxes: (mail, folder) => (folder === 'all' ? [] : [mail.unifiedInbox ? mail.unifiedFolder : mail.activeMailbox]),
 }));
 vi.mock('../../services/searchSuggestions.js', () => ({
   fetchSearchSuggestions: (...args) => harness.suggest(...args),
@@ -482,5 +483,16 @@ describe('suggestions from the index', () => {
     type('an');
     await waitFor(() => expect(harness.suggest).toHaveBeenCalled());
     expect(harness.suggest.mock.calls.at(-1)[0].accounts).toEqual(['a', 'b']);
+  });
+
+  // Sent mail holds the account's own address; an inbox search cannot find it.
+  it('asks for the senders of the folder the unified view shows, not every folder', async () => {
+    harness.mailState.unifiedInbox = true;
+    harness.mailState.unifiedFolder = 'INBOX';
+    render(<SearchBar />);
+    fireEvent.focus(input());
+    type('an');
+    await waitFor(() => expect(harness.suggest).toHaveBeenCalled());
+    expect(harness.suggest.mock.calls.at(-1)[0].mailboxes).toEqual(['INBOX']);
   });
 });

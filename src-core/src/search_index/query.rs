@@ -681,6 +681,21 @@ pub fn suggest_senders(
     prefix: &str,
     limit: usize,
 ) -> Result<Vec<SenderSuggestion>, String> {
+    suggest_senders_in(conn, accounts, &[], prefix, limit)
+}
+
+/// `suggest_senders`, limited to rows filed in `mailboxes` (server paths,
+/// sanitized like a search's). None is every folder. A search that reads one
+/// folder offers only the senders it can find there: the account's own
+/// address lives on its Sent mail, and picking it for an inbox search finds
+/// nothing.
+pub fn suggest_senders_in(
+    conn: &rusqlite::Connection,
+    accounts: &[String],
+    mailboxes: &[String],
+    prefix: &str,
+    limit: usize,
+) -> Result<Vec<SenderSuggestion>, String> {
     let p = prefix.trim().to_lowercase();
     if p.is_empty() {
         return Ok(Vec::new());
@@ -697,8 +712,15 @@ pub fn suggest_senders(
     if !accounts.is_empty() {
         sql += &format!(" AND account_id IN ({})", vec!["?"; accounts.len()].join(", "));
     }
+    if !mailboxes.is_empty() {
+        sql += &format!(" AND vault_dir IN ({})", vec!["?"; mailboxes.len()].join(", "));
+    }
     sql += " GROUP BY from_addr_lc";
-    let args: Vec<Value> = std::iter::once(p.clone()).chain(accounts.iter().cloned()).map(Value::Text).collect();
+    let args: Vec<Value> = std::iter::once(p.clone())
+        .chain(accounts.iter().cloned())
+        .chain(mailboxes.iter().map(|b| vault_dir_name(b)))
+        .map(Value::Text)
+        .collect();
     let mut st = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let rows: Vec<(String, String, u64)> = st
         .query_map(rusqlite::params_from_iter(args.iter()), |r| {
@@ -852,13 +874,14 @@ pub enum SearchSuggestion {
 pub fn suggest_search(
     conn: &rusqlite::Connection,
     accounts: &[String],
+    mailboxes: &[String],
     prefix: &str,
     limit: usize,
 ) -> Result<Vec<SearchSuggestion>, String> {
     if limit == 0 || prefix.trim().is_empty() {
         return Ok(Vec::new());
     }
-    let senders = suggest_senders(conn, accounts, prefix, limit)?;
+    let senders = suggest_senders_in(conn, accounts, mailboxes, prefix, limit)?;
     let terms = suggest_terms(conn, accounts, prefix, 0, limit)?;
     let sender_room = senders.len().min((limit / 2).max(limit.saturating_sub(terms.len())));
     let term_room = terms.len().min(limit - sender_room);
@@ -1710,6 +1733,22 @@ mod tests {
     }
 
     #[test]
+    fn senders_are_offered_only_from_the_folders_searched() {
+        let (_t, conn) = sender_fixture(SENDERS);
+        // The account's own address sits on its Sent mail, never on its Inbox.
+        conn.execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, from_addr_lc, from_name_lc, row_json)
+             VALUES ('a', 'Sent', 99, '99,U=99.eml', 1, 1, 1, 'me@home.test', 'me', '{\"from\":{\"address\":\"me@home.test\",\"name\":\"Me\"}}')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(addresses(&suggest_senders_in(&conn, &[], &[], "me@", 8).unwrap()), vec!["me@home.test"], "no folder named is every folder");
+        assert!(suggest_senders_in(&conn, &[], &["INBOX".into()], "me@", 8).unwrap().is_empty());
+        assert_eq!(addresses(&suggest_senders_in(&conn, &[], &["INBOX".into()], "ann", 8).unwrap()), vec!["ann@acme.test"]);
+        assert_eq!(addresses(&suggest_senders_in(&conn, &[], &["Sent".into()], "me@", 8).unwrap()), vec!["me@home.test"]);
+    }
+
+    #[test]
     fn the_limit_caps_the_list_and_a_blank_prefix_suggests_nothing() {
         let (_t, conn) = sender_fixture(SENDERS);
         assert_eq!(suggest_senders(&conn, &[], "ac", 2).unwrap().len(), 2);
@@ -1885,7 +1924,7 @@ mod tests {
             ("a", "ann@acme.test", "Ann", "Invitation to lunch"),
         ]);
         assert_eq!(
-            suggest_search(&conn, &[], "inv", 10).unwrap(),
+            suggest_search(&conn, &[], &[], "inv", 10).unwrap(),
             vec![sender("invoices@acme.test", "Acme Billing", 1), term("invoice", 2), term("invitation", 1)]
         );
     }
@@ -1898,7 +1937,7 @@ mod tests {
         let rows: Vec<(&str, &str, &str, &str)> =
             addresses.iter().zip(&subjects).map(|(a, s)| ("a", a.as_str(), "", s.as_str())).collect();
         let (_t, conn) = mixed_fixture(&rows);
-        let found = suggest_search(&conn, &[], "an", 10).unwrap();
+        let found = suggest_search(&conn, &[], &[], "an", 10).unwrap();
         let senders = found.iter().filter(|s| matches!(s, SearchSuggestion::Sender { .. })).count();
         assert_eq!((found.len(), senders), (10, 5), "both kinds overflow: half each");
     }
@@ -1910,7 +1949,7 @@ mod tests {
         let mut rows: Vec<(&str, &str, &str, &str)> = subjects.iter().map(|s| ("a", "zed@x.test", "", s.as_str())).collect();
         rows.push(("a", "anna@x.test", "", "hello"));
         let (_t, conn) = mixed_fixture(&rows);
-        let found = suggest_search(&conn, &[], "an", 10).unwrap();
+        let found = suggest_search(&conn, &[], &[], "an", 10).unwrap();
         assert_eq!(found.len(), 10);
         assert_eq!(found[0], sender("anna@x.test", "", 1));
         assert!(found[1..].iter().all(|s| matches!(s, SearchSuggestion::Term { .. })));
@@ -1923,15 +1962,15 @@ mod tests {
             ("b", "ann@acme.test", "Ann", "Annual report"),
             ("b", "anton@b.test", "Anton", "Anniversary"),
         ]);
-        assert_eq!(suggest_search(&conn, &[], "ann", 10).unwrap(), vec![sender("ann@acme.test", "Ann", 2), term("annual", 2), term("anniversary", 1)]);
-        assert_eq!(suggest_search(&conn, &["a".into()], "ann", 10).unwrap(), vec![sender("ann@acme.test", "Ann", 1), term("annual", 1)]);
+        assert_eq!(suggest_search(&conn, &[], &[], "ann", 10).unwrap(), vec![sender("ann@acme.test", "Ann", 2), term("annual", 2), term("anniversary", 1)]);
+        assert_eq!(suggest_search(&conn, &["a".into()], &[], "ann", 10).unwrap(), vec![sender("ann@acme.test", "Ann", 1), term("annual", 1)]);
     }
 
     #[test]
     fn nothing_typed_or_no_room_suggests_nothing() {
         let (_t, conn) = mixed_fixture(&[("a", "ann@acme.test", "Ann", "Annual report")]);
-        assert!(suggest_search(&conn, &[], "  ", 10).unwrap().is_empty());
-        assert!(suggest_search(&conn, &[], "ann", 0).unwrap().is_empty());
+        assert!(suggest_search(&conn, &[], &[], "  ", 10).unwrap().is_empty());
+        assert!(suggest_search(&conn, &[], &[], "ann", 0).unwrap().is_empty());
     }
 
     #[test]

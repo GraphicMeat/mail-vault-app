@@ -47,6 +47,15 @@ describe('fetchSearchSuggestions', () => {
     ]);
   });
 
+  // The list offers what the search can find: a sender seen only on Sent mail
+  // (the account's own address) is no pick for an inbox search.
+  it('asks the daemon for the folders the search reads', async () => {
+    vi.useRealTimers();
+    daemonCall.mockResolvedValue([]);
+    await fetchSearchSuggestions({ prefix: 'an', accounts: ['a'], mailboxes: ['INBOX'] });
+    expect(daemonCall).toHaveBeenCalledWith('search.suggest', { prefix: 'an', accounts: ['a'], mailboxes: ['INBOX'], limit: 10 });
+  });
+
   it('answers nothing, and throws nothing, when the daemon cannot answer', async () => {
     vi.useRealTimers();
     daemonCall.mockRejectedValue(new Error('daemon down'));
@@ -69,6 +78,19 @@ describe('useSearchSuggestions', () => {
     expect(daemonCall).toHaveBeenCalledTimes(1);
     expect(daemonCall.mock.calls[0][1]).toMatchObject({ prefix: 'inv', accounts: ['a'] });
     expect(result.current.map(s => s.label)).toEqual(['invoice']);
+  });
+
+  it('asks again, in the new folders, when the search moves to other folders', async () => {
+    daemonCall.mockResolvedValue([]);
+    const { rerender } = renderHook(({ boxes }) => useSearchSuggestions('ann', ['a'], boxes), { initialProps: { boxes: ['INBOX'] } });
+    act(() => { vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS); });
+    await settle();
+    expect(daemonCall.mock.calls[0][1]).toMatchObject({ mailboxes: ['INBOX'] });
+    rerender({ boxes: ['Sent'] });
+    act(() => { vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS); });
+    await settle();
+    expect(daemonCall).toHaveBeenCalledTimes(2);
+    expect(daemonCall.mock.calls[1][1]).toMatchObject({ mailboxes: ['Sent'] });
   });
 
   it('never lets an answer to older text replace the newer one', async () => {

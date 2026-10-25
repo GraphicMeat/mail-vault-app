@@ -854,12 +854,12 @@ pub fn suggest_terms(
 /// read goes without its preview line (`attach_snippets`). Nothing while the
 /// index is off, closed or failing: a suggestion list is a convenience, not a
 /// claim about the mail.
-pub fn suggest_search(st: &SearchIndexState, accounts: &[String], prefix: &str, limit: usize) -> Vec<core::query::SearchSuggestion> {
+pub fn suggest_search(st: &SearchIndexState, accounts: &[String], mailboxes: &[String], prefix: &str, limit: usize) -> Vec<core::query::SearchSuggestion> {
     if *g(&st.enabled) == Some(false) || prefix.trim().is_empty() {
         return Vec::new();
     }
     let ask = |conn: Option<&rusqlite::Connection>| {
-        conn.and_then(|c| core::query::suggest_search(c, accounts, prefix, limit).ok()).unwrap_or_default()
+        conn.and_then(|c| core::query::suggest_search(c, accounts, mailboxes, prefix, limit).ok()).unwrap_or_default()
     };
     for _ in 0..20 {
         match st.db.try_lock() {

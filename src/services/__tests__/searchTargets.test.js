@@ -18,6 +18,7 @@ const {
   resolveLocalScope,
   resolveServerScope,
   serverSearchTargets,
+  suggestionMailboxes,
 } = await import('../searchTargets.js');
 
 const account = (id, extra = {}) => ({ id, email: `${id}@example.com`, password: 'secret', ...extra });
@@ -235,5 +236,25 @@ describe('buildSearchTargets', () => {
     expect(resolveLocalScope(activeTree, mail, 'current')).toEqual(['Archive']);
     await expect(mailboxTreeFor('a', mail)).resolves.toBe(activeTree);
     await expect(mailboxTreeFor('other', mail)).resolves.toBe(cachedTree);
+  });
+});
+
+describe('suggestionMailboxes', () => {
+  const tree = [box('INBOX', 'INBOX'), box('Sent', 'Sent'), box('Work', 'Work', { children: [box('2026', 'Work/2026')] })];
+
+  it('is the unified folder in the unified view, not the internal mailbox', () => {
+    const mail = { unifiedInbox: true, unifiedFolder: 'INBOX', activeMailbox: 'UNIFIED', mailboxes: tree };
+    expect(suggestionMailboxes(mail, 'current')).toEqual(['INBOX']);
+  });
+
+  it('is the open folder outside the unified view', () => {
+    const mail = { unifiedInbox: false, activeMailbox: 'Sent', mailboxes: tree };
+    expect(suggestionMailboxes(mail, 'current')).toEqual(['Sent']);
+  });
+
+  it('is a picked folder, or no limit for every folder', () => {
+    const mail = { unifiedInbox: true, unifiedFolder: 'INBOX', activeMailbox: 'UNIFIED', mailboxes: tree };
+    expect(suggestionMailboxes(mail, 'Work')).toEqual(['Work']);
+    expect(suggestionMailboxes(mail, 'all')).toEqual([]);
   });
 });
