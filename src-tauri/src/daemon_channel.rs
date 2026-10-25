@@ -211,12 +211,13 @@ async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<DaemonRead>>
     };
     let mut lines = BufReader::new(r).lines();
     let owner=uuid::Uuid::new_v4().to_string();
+    let surface_generation=crate::backup::begin_surface_generation();
     let handshake = async {
         write_line(&mut w, &json!({"token": token.trim()})).await?;
         if read_line(&mut lines).await?.get("error").is_some() {
             return Err("daemon rejected the token".to_string());
         }
-        write_line(&mut w, &json!({"jsonrpc": "2.0", "method": "channel.open", "params": {"backupOwner":owner}, "id": 1})).await?;
+        write_line(&mut w, &json!({"jsonrpc": "2.0", "method": "channel.open", "params": {"backupOwner":owner,"backupSurfaceGeneration":surface_generation}, "id": 1})).await?;
         let opened = read_line(&mut lines).await?;
         if let Some(err) = opened.get("error") {
             return Err(format!("channel.open refused (daemon too old?): {err}"));

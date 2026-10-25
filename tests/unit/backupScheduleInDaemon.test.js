@@ -112,3 +112,22 @@ it('does not let a stale Done timer hide a new execution', async () => {
   emit('backup-schedule-changed', { ...host.view,revision:4,active:{accountId:'one',runId:'r2',executionId:'e2',stage:'running'} });
   await vi.advanceTimersByTimeAsync(3000); expect(store.activeBackup.executionId).toBe('e2'); dispose();
 });
+it.each([
+  ['missing_account', null, null, 'failed'],
+  ['limit_reached', {success:false}, {limit_bytes:104857600}, 'limit_reached'],
+  ['success', {success:true,emails_backed_up:3,errors:1,external_copy_ok:true}, null, 'degraded'],
+])('preserves the localized manual %s result', async (status,result,frame,expected) => {
+  const dispose=scheduler.observe({present:false});await flush();
+  const promise=scheduler.triggerManualBackup('one');await flush();
+  const request=send.mock.calls.find(([m])=>m==='backup.run_now')[1].requestId;
+  emit('backup-schedule-changed',terminal(request,2,{status,result,terminal:frame}));await flush();
+  const actual=await promise;expect(actual.status).toBe(expected);expect(actual.message).toBeTypeOf('string');expect(actual.message.length).toBeGreaterThan(0);
+  if(status==='limit_reached')expect(actual.message).toContain('100');
+  if(expected==='degraded')expect(actual.message).toContain('1');dispose();
+});
+it('refreshes native next-eligible display after a configuration event', async () => {
+  const dispose=scheduler.observe({present:false});await flush();
+  host.view={...host.view,version:2,nextEligibleTimes:{one:42000}};
+  emit('settings-changed',{keys:['mailvault-settings'],version:2});await flush();
+  expect(store.nativeStatus.nextEligibleTimes.one).toBe(42000);dispose();
+});

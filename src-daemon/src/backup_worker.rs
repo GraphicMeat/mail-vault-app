@@ -117,7 +117,7 @@ impl BackupState {
         } else {
             view["accessIncarnation"] = json!(self.access.incarnation);
             view["accessReceipts"] = self.access.receipts();
-            let facts = self.facts.lock().unwrap_or_else(|p|p.into_inner());
+            let facts = self.facts.lock().unwrap_or_else(|p| p.into_inner());
             view["context"] = json!({"automaticEnabled":facts.automatic,"paused":facts.paused,"loading":facts.loading,"lastActivityAt":facts.last_activity});
             view
         }
@@ -226,6 +226,7 @@ enum Cmd {
         reply: oneshot::Sender<Value>,
     },
     RetireSurface(String),
+    SurfaceGenerationLost(String),
     ConfigChanged {
         rearm: bool,
     },
@@ -696,14 +697,11 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 let _ = reply.send(result);
                 scan |= wake;
             }
+            Cmd::SurfaceGenerationLost(generation) => {
+                state.backup_worker.context.lock().unwrap().retire_generation(&generation);
+                refresh_context(&state); scan = true;
+            }
             Cmd::OwnerLost(owner) => {
-                state
-                    .backup_worker
-                    .context
-                    .lock()
-                    .unwrap()
-                    .retire_surface(None);
-                refresh_context(&state);
                 access::interrupt_owner(&state, &mut ledger, &owner);
                 scan = true;
             }
@@ -1295,7 +1293,8 @@ async fn finish_run(
         publish(state, &mut next).await?;
         return Ok(next);
     }
-    if intent.pause_requested && !user_cancel && !uncertain {
+    let actually_succeeded = matches!(exit, RunExit::Completed(joined) if joined.error.is_none() && joined.result.as_ref().is_some_and(|r|r["success"] == true && r["cancelled"] != true));
+    if intent.pause_requested && !user_cancel && !uncertain && !actually_succeeded {
         intent.pause_requested = false;
         intent.checkpoint = 0;
         access::renew(state, &mut intent);
@@ -1814,4 +1813,15 @@ pub(crate) fn configuration_changed(state: &Arc<DaemonState>, rearm: bool) {
         .get()
         .unwrap()
         .send(Cmd::ConfigChanged { rearm });
+}
+
+// Surface lifecycle is independent from native mirror authorization owners.
+pub(crate) struct SurfaceChannelOwner { state: Arc<DaemonState>, generation: String }
+impl Drop for SurfaceChannelOwner {
+    fn drop(&mut self) { let _ = self.state.backup_worker.tx.get().unwrap().send(Cmd::SurfaceGenerationLost(self.generation.clone())); }
+}
+pub(crate) fn surface_channel_owner(state: &Arc<DaemonState>, generation: Option<&str>) -> Option<SurfaceChannelOwner> {
+    let generation = generation.filter(|s|!s.is_empty() && s.len() <= 256)?;
+    start(state.clone());
+    Some(SurfaceChannelOwner { state:state.clone(), generation:generation.into() })
 }

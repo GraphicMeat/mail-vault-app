@@ -104,7 +104,10 @@ fn view(snapshot: &Snapshot, ids: &[String], now: i64) -> Result<Value, &'static
     let zone = policy::local_zone()?;
     let mut next = Map::new();
     let mut invalid = Vec::new();
-    let eligibility = ids.iter().map(|id|(id.clone(),json!(policy::scheduled(settings,id,now)))).collect::<Map<_,_>>();
+    let eligibility = ids
+        .iter()
+        .map(|id| (id.clone(), json!(policy::scheduled(settings, id, now))))
+        .collect::<Map<_, _>>();
     for id in ids {
         let config = policy::schedule_for(settings, id);
         if config["enabled"] != true {

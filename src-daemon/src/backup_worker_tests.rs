@@ -434,9 +434,21 @@ async fn backup_worker_success_degraded_and_history_consume_isolated_oracle() {
     );
     // History/request settlement is independent of pending manifest bookkeeping.
     let current = r.state.backup_worker.status();
-    assert_eq!(current["requests"]["history-6"]["status"],"success");
+    assert_eq!(current["requests"]["history-6"]["status"], "success");
     let run = current["requests"]["history-6"]["runId"].clone();
-    wait(&r.state,|s|s["lastOutcomes"].as_array().unwrap().iter().any(|out|out["intent"]["runId"] == run && snapshots::settled(&out["snapshot"])) && s["lastOutcomes"].as_array().unwrap().iter().all(|out|snapshots::settled(&out["snapshot"]))).await;
+    wait(&r.state, |s| {
+        s["lastOutcomes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|out| out["intent"]["runId"] == run && snapshots::settled(&out["snapshot"]))
+            && s["lastOutcomes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|out| snapshots::settled(&out["snapshot"]))
+    })
+    .await;
     assert_eq!(
         r.state.backup_worker.status()["lastOutcomes"]
             .as_array()
@@ -2274,170 +2286,433 @@ async fn backup_worker_snapshot_scan_keeps_controls_responsive_and_stop_truthful
 #[tokio::test]
 async fn backup_worker_snapshot_explicit_undecided_is_decided_after_restart() {
     let dir = tempfile::tempdir().unwrap();
-    let state = DaemonState::for_test(dir.path().join("mail"),dir.path().into(),true);
+    let state = DaemonState::for_test(dir.path().join("mail"), dir.path().into(), true);
     state.clock.set(NOW);
-    SettingsDoc::shared(&state.app_dir).replace(&json!({STORE:{"version":3,"state":{"snapshotAutoEnabled":false}}}),None).unwrap();
+    SettingsDoc::shared(&state.app_dir)
+        .replace(
+            &json!({STORE:{"version":3,"state":{"snapshotAutoEnabled":false}}}),
+            None,
+        )
+        .unwrap();
     let mut ledger = Ledger::default();
-    ledger.outcomes.push(Outcome { intent:new_intent(&state,"one".into(),true),status:"success".into(),at:NOW,result:Some(json!({"success":true})),terminal:None,error:None,applied:true,snapshot:json!({"status":"undecided"}) });
+    ledger.outcomes.push(Outcome {
+        intent: new_intent(&state, "one".into(), true),
+        status: "success".into(),
+        at: NOW,
+        result: Some(json!({"success":true})),
+        terminal: None,
+        error: None,
+        applied: true,
+        snapshot: json!({"status":"undecided"}),
+    });
     snapshots::recover(&mut ledger);
-    snapshots::drive(&state,&mut ledger).await.unwrap();
-    assert_eq!(ledger.outcomes[0].snapshot["status"],"not_due","new-version undecided completion was stranded as an unknown snapshot state");
+    snapshots::drive(&state, &mut ledger).await.unwrap();
+    assert_eq!(
+        ledger.outcomes[0].snapshot["status"], "not_due",
+        "new-version undecided completion was stranded as an unknown snapshot state"
+    );
 }
 #[tokio::test]
 async fn backup_worker_snapshot_new_completion_records_decision_before_applied_boundary() {
-    let mut r = rig(); let mut events = r.state.events.subscribe();
-    let ack = manual(&r.state,"one","new-snapshot-state").await;
-    let c = call(&mut r).await; c.reply.send(Ok(result(1))).ok();
-    let observed = tokio::time::timeout(Duration::from_secs(3),async {
+    let mut r = rig();
+    let mut events = r.state.events.subscribe();
+    let ack = manual(&r.state, "one", "new-snapshot-state").await;
+    let c = call(&mut r).await;
+    c.reply.send(Ok(result(1))).ok();
+    let observed = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            let line = events.recv().await.unwrap(); let event:Value = serde_json::from_str(&line).unwrap();
-            if event["params"]["name"] != EVENT { continue; }
-            if let Some(out) = event["params"]["payload"]["lastOutcomes"].as_array().and_then(|items|items.iter().find(|o|o["intent"]["runId"] == ack["runId"] && o["applied"] == false)) { break out.clone(); }
+            let line = events.recv().await.unwrap();
+            let event: Value = serde_json::from_str(&line).unwrap();
+            if event["params"]["name"] != EVENT {
+                continue;
+            }
+            if let Some(out) = event["params"]["payload"]["lastOutcomes"]
+                .as_array()
+                .and_then(|items| {
+                    items
+                        .iter()
+                        .find(|o| o["intent"]["runId"] == ack["runId"] && o["applied"] == false)
+                })
+            {
+                break out.clone();
+            }
         }
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
     finish(r).await;
-    assert_eq!(observed["snapshot"]["status"],"undecided","new completion did not persist ownership before history application");
+    assert_eq!(
+        observed["snapshot"]["status"], "undecided",
+        "new completion did not persist ownership before history application"
+    );
 }
 #[tokio::test]
 async fn backup_worker_snapshot_unapplied_legacy_gains_explicit_decision_before_ack() {
     let dir = tempfile::tempdir().unwrap();
-    let state = DaemonState::for_test(dir.path().join("mail"),dir.path().into(),true); state.clock.set(NOW);
-    SettingsDoc::shared(&state.app_dir).replace(&json!({STORE:{"version":3,"state":{"backupState":{},"backupHistory":{}}}}),None).unwrap();
+    let state = DaemonState::for_test(dir.path().join("mail"), dir.path().into(), true);
+    state.clock.set(NOW);
+    SettingsDoc::shared(&state.app_dir)
+        .replace(
+            &json!({STORE:{"version":3,"state":{"backupState":{},"backupHistory":{}}}}),
+            None,
+        )
+        .unwrap();
     let mut ledger = Ledger::default();
-    ledger.outcomes.push(Outcome{intent:new_intent(&state,"one".into(),true),status:"success".into(),at:NOW,result:Some(json!({"success":true})),terminal:None,error:None,applied:false,snapshot:Value::Null});
-    apply_retained(&state,&mut ledger).await.unwrap();
-    let mut after_crash = read_ledger(&state.app_dir).unwrap(); snapshots::recover(&mut after_crash);
-    assert_eq!(after_crash.outcomes[0].snapshot["status"],"undecided","applying a retained legacy outcome lost its new-version snapshot decision");
+    ledger.outcomes.push(Outcome {
+        intent: new_intent(&state, "one".into(), true),
+        status: "success".into(),
+        at: NOW,
+        result: Some(json!({"success":true})),
+        terminal: None,
+        error: None,
+        applied: false,
+        snapshot: Value::Null,
+    });
+    apply_retained(&state, &mut ledger).await.unwrap();
+    let mut after_crash = read_ledger(&state.app_dir).unwrap();
+    snapshots::recover(&mut after_crash);
+    assert_eq!(
+        after_crash.outcomes[0].snapshot["status"], "undecided",
+        "applying a retained legacy outcome lost its new-version snapshot decision"
+    );
 }
 
 #[tokio::test(start_paused = true)]
 async fn backup_worker_native_idle_deadline_starts_without_js_tick() {
     let mut r = rig();
-    rpc(&r.state,"backup.context",observation("main","idle",1,"attach",NOW,false)).await;
-    enabled(&r.state); wake(&r.state); paused_quiescent(&r.state).await;
-    r.state.clock.set(NOW+179_999); tokio::time::advance(Duration::from_millis(179_999)).await; paused_quiescent(&r.state).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "idle", 1, "attach", NOW, false),
+    )
+    .await;
+    enabled(&r.state);
+    wake(&r.state);
+    paused_quiescent(&r.state).await;
+    r.state.clock.set(NOW + 179_999);
+    tokio::time::advance(Duration::from_millis(179_999)).await;
+    paused_quiescent(&r.state).await;
     assert!(r.calls.try_recv().is_err());
-    r.state.clock.set(NOW+180_000); tokio::time::advance(Duration::from_millis(1)).await;
-    let c = paused_call(&mut r).await; assert_eq!(c.ctx.account_id,"one"); c.reply.send(Ok(result(1))).ok();
+    r.state.clock.set(NOW + 180_000);
+    tokio::time::advance(Duration::from_millis(1)).await;
+    let c = paused_call(&mut r).await;
+    assert_eq!(c.ctx.account_id, "one");
+    c.reply.send(Ok(result(1))).ok();
     finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_hidden_gap_and_retired_wake_keep_stop_fence() {
     let r = rig();
-    rpc(&r.state,"backup.context",observation("main","heartbeat",1,"attach",NOW,false)).await;
-    let mut hidden = observation("main","heartbeat",2,"update",NOW,false); hidden["visibility"] = json!("hidden"); hidden["heartbeatGap"] = json!(75000);
-    rpc(&r.state,"backup.context",hidden).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "heartbeat", 1, "attach", NOW, false),
+    )
+    .await;
+    let mut hidden = observation("main", "heartbeat", 2, "update", NOW, false);
+    hidden["visibility"] = json!("hidden");
+    hidden["heartbeatGap"] = json!(75000);
+    rpc(&r.state, "backup.context", hidden).await;
     assert!(!r.state.backup_worker.facts.lock().unwrap().paused);
-    let mut slept = observation("main","heartbeat",3,"update",NOW,false); slept["heartbeatGap"] = json!(150001);
-    rpc(&r.state,"backup.context",slept).await;
+    let mut slept = observation("main", "heartbeat", 3, "update", NOW, false);
+    slept["heartbeatGap"] = json!(150001);
+    rpc(&r.state, "backup.context", slept).await;
     assert!(r.state.backup_worker.facts.lock().unwrap().paused);
-    rpc(&r.state,"backup.stop",json!({})).await;
-    rpc(&r.state,"backup.context",observation("main","heartbeat",4,"retire",0,false)).await;
-    r.state.clock.set(NOW+20000); wake(&r.state);
-    rpc(&r.state,"backup.context",observation("main","heartbeat",5,"update",NOW,false)).await;
+    rpc(&r.state, "backup.stop", json!({})).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "heartbeat", 4, "retire", 0, false),
+    )
+    .await;
+    r.state.clock.set(NOW + 20000);
+    wake(&r.state);
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "heartbeat", 5, "update", NOW, false),
+    )
+    .await;
     assert!(!r.state.backup_worker.facts.lock().unwrap().automatic);
     finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_activity_consumption_fences_due_scan_and_destroyed_surface() {
     let mut r = rig();
-    rpc(&r.state,"backup.context",observation("main","loading",1,"attach",NOW,true)).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "loading", 1, "attach", NOW, true),
+    )
+    .await;
     enabled(&r.state);
     let epoch = r.state.backup_worker.epoch.load(SeqCst);
-    r.state.backup_worker.tx.get().unwrap().send(Cmd::Due{epoch,ids:vec!["one".into()]}).unwrap();
-    let (done,rx) = oneshot::channel(); r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap(); rx.await.unwrap();
-    assert!(r.state.backup_worker.status()["queue"].as_array().unwrap().is_empty());
+    r.state
+        .backup_worker
+        .tx
+        .get()
+        .unwrap()
+        .send(Cmd::Due {
+            epoch,
+            ids: vec!["one".into()],
+        })
+        .unwrap();
+    let (done, rx) = oneshot::channel();
+    r.state
+        .backup_worker
+        .tx
+        .get()
+        .unwrap()
+        .send(Cmd::Probe { done })
+        .unwrap();
+    rx.await.unwrap();
+    assert!(r.state.backup_worker.status()["queue"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     assert!(r.calls.try_recv().is_err());
-    rpc(&r.state,"backup.surface_retire",json!({"surfaceId":"main"})).await;
-    let late = rpc(&r.state,"backup.context",observation("main","late",1,"attach",NOW,true)).await;
-    assert_eq!(late["accepted"],false); assert!(!r.state.backup_worker.facts.lock().unwrap().loading);
-    assert_eq!(r.state.backup_worker.facts.lock().unwrap().last_activity,NOW);
+    rpc(
+        &r.state,
+        "backup.surface_retire",
+        json!({"surfaceId":"main"}),
+    )
+    .await;
+    let late = rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "late", 1, "attach", NOW, true),
+    )
+    .await;
+    assert_eq!(late["accepted"], false);
+    assert!(!r.state.backup_worker.facts.lock().unwrap().loading);
+    assert_eq!(
+        r.state.backup_worker.facts.lock().unwrap().last_activity,
+        NOW
+    );
     finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_snapshot_created_receipt_repairs_only_time_and_never_regresses() {
-    let dir = tempfile::tempdir().unwrap(); let state = DaemonState::for_test(dir.path().join("mail"),dir.path().into(),true); state.clock.set(NOW);
-    SettingsDoc::shared(&state.app_dir).replace(&json!({STORE:{"version":3,"state":{"language":"de","snapshotLastTimes":{}}}}),None).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let state = DaemonState::for_test(dir.path().join("mail"), dir.path().into(), true);
+    state.clock.set(NOW);
+    SettingsDoc::shared(&state.app_dir)
+        .replace(
+            &json!({STORE:{"version":3,"state":{"language":"de","snapshotLastTimes":{}}}}),
+            None,
+        )
+        .unwrap();
     let mut ledger = Ledger::default();
     ledger.outcomes.push(Outcome{intent:new_intent(&state,"one".into(),true),status:"success".into(),at:NOW,result:Some(json!({"success":true})),terminal:None,error:None,applied:true,snapshot:json!({"status":"created","receipt":{"filename":"already-created.gz"},"createdAt":NOW})});
-    snapshots::drive(&state,&mut ledger).await.unwrap();
-    assert_eq!(ledger.outcomes[0].snapshot["status"],"applied"); assert_eq!(settings(&state)["snapshotLastTimes"]["one"],NOW); assert_eq!(settings(&state)["language"],"de");
-    assert!(!state.data_dir.join("snapshots").exists(),"repair called the manifest helper");
-    patch(&state,json!({"snapshotLastTimes":{"one":NOW+10000}}));
-    ledger.outcomes[0].snapshot["status"] = json!("created"); snapshots::drive(&state,&mut ledger).await.unwrap();
-    assert_eq!(settings(&state)["snapshotLastTimes"]["one"],NOW+10000);
+    snapshots::drive(&state, &mut ledger).await.unwrap();
+    assert_eq!(ledger.outcomes[0].snapshot["status"], "applied");
+    assert_eq!(settings(&state)["snapshotLastTimes"]["one"], NOW);
+    assert_eq!(settings(&state)["language"], "de");
+    assert!(
+        !state.data_dir.join("snapshots").exists(),
+        "repair called the manifest helper"
+    );
+    patch(&state, json!({"snapshotLastTimes":{"one":NOW+10000}}));
+    ledger.outcomes[0].snapshot["status"] = json!("created");
+    snapshots::drive(&state, &mut ledger).await.unwrap();
+    assert_eq!(settings(&state)["snapshotLastTimes"]["one"], NOW + 10000);
 }
 #[tokio::test]
 async fn backup_worker_snapshot_helper_failure_does_not_fail_manual_history() {
-    let mut r = rig(); patch(&r.state,json!({"billingProfile":{"hasSubscription":true,"status":"active"},"snapshotAutoEnabled":true}));
-    std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"one","email":"one@test"}]"#).unwrap();
-    manual(&r.state,"one","snapshot-failure").await; let c = call(&mut r).await; c.reply.send(Ok(result(2))).ok();
-    let s = wait(&r.state,|s|s["lastOutcomes"][0]["snapshot"]["status"] == "failed").await;
-    assert_eq!(s["requests"]["snapshot-failure"]["status"],"success"); assert_eq!(settings(&r.state)["backupHistory"]["one"][0]["success"],true);
-    assert!(settings(&r.state)["snapshotLastTimes"]["one"].is_null()); finish(r).await;
+    let mut r = rig();
+    patch(
+        &r.state,
+        json!({"billingProfile":{"hasSubscription":true,"status":"active"},"snapshotAutoEnabled":true}),
+    );
+    std::fs::write(
+        r.state.app_dir.join("accounts.json"),
+        r#"[{"id":"one","email":"one@test"}]"#,
+    )
+    .unwrap();
+    manual(&r.state, "one", "snapshot-failure").await;
+    let c = call(&mut r).await;
+    c.reply.send(Ok(result(2))).ok();
+    let s = wait(&r.state, |s| {
+        s["lastOutcomes"][0]["snapshot"]["status"] == "failed"
+    })
+    .await;
+    assert_eq!(s["requests"]["snapshot-failure"]["status"], "success");
+    assert_eq!(
+        settings(&r.state)["backupHistory"]["one"][0]["success"],
+        true
+    );
+    assert!(settings(&r.state)["snapshotLastTimes"]["one"].is_null());
+    finish(r).await;
 }
 
 #[tokio::test]
 async fn backup_worker_pause_manual_join_preserves_pause_and_real_drain() {
     let mut r = rig();
-    rpc(&r.state,"backup.context",observation("main","pause",1,"attach",NOW-180000,false)).await;
-    enabled(&r.state); wake(&r.state); let c = call(&mut r).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "pause", 1, "attach", NOW - 180000, false),
+    )
+    .await;
+    enabled(&r.state);
+    wake(&r.state);
+    let c = call(&mut r).await;
     let active = r.state.backup_worker.status()["active"].clone();
-    let mut offline = observation("main","pause",2,"update",NOW-180000,false); offline["online"] = json!(false);
-    rpc(&r.state,"backup.context",offline).await;
-    let ack = manual(&r.state,"one","pause-join").await; assert_eq!(ack["runId"],active["runId"]);
-    assert!(r.calls.try_recv().is_err(),"manual join overlapped the interrupted execution");
-    let mut cancelled = result(1); cancelled.success = false; cancelled.cancelled = true;
+    let mut offline = observation("main", "pause", 2, "update", NOW - 180000, false);
+    offline["online"] = json!(false);
+    rpc(&r.state, "backup.context", offline).await;
+    let ack = manual(&r.state, "one", "pause-join").await;
+    assert_eq!(ack["runId"], active["runId"]);
+    assert!(
+        r.calls.try_recv().is_err(),
+        "manual join overlapped the interrupted execution"
+    );
+    let mut cancelled = result(1);
+    cancelled.success = false;
+    cancelled.cancelled = true;
     c.reply.send(Ok(cancelled)).ok();
     let resumed = call(&mut r).await;
-    assert_eq!(r.state.backup_worker.status()["active"]["runId"],active["runId"]);
-    assert_ne!(r.state.backup_worker.status()["active"]["executionId"],active["executionId"]);
+    assert_eq!(
+        r.state.backup_worker.status()["active"]["runId"],
+        active["runId"]
+    );
+    assert_ne!(
+        r.state.backup_worker.status()["active"]["executionId"],
+        active["executionId"]
+    );
     assert!(r.state.backup_worker.facts.lock().unwrap().paused);
     resumed.reply.send(Ok(result(1))).ok();
-    wait(&r.state,|s|s["requests"]["pause-join"]["status"] == "success").await;
-    assert!(r.state.backup_worker.facts.lock().unwrap().paused); finish(r).await;
+    wait(&r.state, |s| {
+        s["requests"]["pause-join"]["status"] == "success"
+    })
+    .await;
+    assert!(r.state.backup_worker.facts.lock().unwrap().paused);
+    finish(r).await;
 }
 #[tokio::test]
 async fn backup_worker_pause_after_real_success_does_not_repeat_completed_run() {
     let mut r = rig();
-    rpc(&r.state,"backup.context",observation("main","completed-pause",1,"attach",NOW-180000,false)).await;
-    enabled(&r.state); wake(&r.state); let c = call(&mut r).await;
-    let mut offline = observation("main","completed-pause",2,"update",NOW-180000,false); offline["online"] = json!(false);
-    rpc(&r.state,"backup.context",offline).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "completed-pause", 1, "attach", NOW - 180000, false),
+    )
+    .await;
+    enabled(&r.state);
+    wake(&r.state);
+    let c = call(&mut r).await;
+    let mut offline = observation("main", "completed-pause", 2, "update", NOW - 180000, false);
+    offline["online"] = json!(false);
+    rpc(&r.state, "backup.context", offline).await;
     c.reply.send(Ok(result(3))).ok();
-    let completed = tokio::time::timeout(Duration::from_millis(500),async {
-        loop { if settings(&r.state)["backupState"]["one"]["lastStatus"] == "success" { break; } tokio::task::yield_now().await; }
-    }).await.is_ok();
+    let completed = tokio::time::timeout(Duration::from_millis(500), async {
+        loop {
+            if settings(&r.state)["backupState"]["one"]["lastStatus"] == "success" {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .is_ok();
     finish(r).await;
-    assert!(completed,"a successfully drained backup was discarded merely because a pause raced its return");
+    assert!(
+        completed,
+        "a successfully drained backup was discarded merely because a pause raced its return"
+    );
 }
 
 #[tokio::test]
 async fn backup_worker_foreign_authorization_channel_cannot_retire_surface_facts() {
     let r = rig();
-    rpc(&r.state,"backup.context",observation("surface-owner:main","live",1,"attach",NOW,true)).await;
-    let foreign = channel_owner(&r.state,Some("foreign-authorizer")).unwrap(); drop(foreign);
-    let (done,rx) = oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap();
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("surface-owner:main", "live", 1, "attach", NOW, true),
+    )
+    .await;
+    let foreign = channel_owner(&r.state, Some("foreign-authorizer")).unwrap();
+    drop(foreign);
+    let (done, rx) = oneshot::channel();
+    r.state
+        .backup_worker
+        .tx
+        .get()
+        .unwrap()
+        .send(Cmd::Probe { done })
+        .unwrap();
+    rx.await.unwrap();
     let still_loading = r.state.backup_worker.facts.lock().unwrap().loading;
     finish(r).await;
-    assert!(still_loading,"an unrelated mirror authorizer erased live surface loading");
+    assert!(
+        still_loading,
+        "an unrelated mirror authorizer erased live surface loading"
+    );
 }
 #[tokio::test]
 async fn backup_worker_surface_channel_retires_only_its_generation_and_reconnects_fresh() {
     let r = rig();
-    rpc(&r.state,"backup.context",observation("shell-a:main","a",1,"attach",NOW,true)).await;
-    rpc(&r.state,"backup.context",observation("shell-b:settings","b",1,"attach",NOW,false)).await;
-    // This is the existing coupled seam for the RED. The final surface hook
-    // must be independent of this authorization owner while retaining RAII.
-    let owner = channel_owner(&r.state,Some("shell-a")).unwrap();drop(owner);
-    let (done,rx) = oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap();
-    let own_old = rpc(&r.state,"backup.context",observation("shell-a:main","a",2,"update",NOW,true)).await;
-    let other = rpc(&r.state,"backup.context",observation("shell-b:settings","b",2,"update",NOW,false)).await;
-    let delayed = rpc(&r.state,"backup.context",observation("shell-a:main","unseen-before-loss",1,"attach",NOW,true)).await;
-    let fresh = rpc(&r.state,"backup.context",observation("shell-a-new:main","fresh",1,"attach",NOW,true)).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("shell-a:main", "a", 1, "attach", NOW, true),
+    )
+    .await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("shell-b:settings", "b", 1, "attach", NOW, false),
+    )
+    .await;
+    // This RAII hook is installed by the real channel.open handler, separately
+    // from its unchanged mirror authorization owner.
+    let owner = surface_channel_owner(&r.state, Some("shell-a")).unwrap();
+    drop(owner);
+    let (done, rx) = oneshot::channel();
+    r.state
+        .backup_worker
+        .tx
+        .get()
+        .unwrap()
+        .send(Cmd::Probe { done })
+        .unwrap();
+    rx.await.unwrap();
+    let own_old = rpc(
+        &r.state,
+        "backup.context",
+        observation("shell-a:main", "a", 2, "update", NOW, true),
+    )
+    .await;
+    let other = rpc(
+        &r.state,
+        "backup.context",
+        observation("shell-b:settings", "b", 2, "update", NOW, false),
+    )
+    .await;
+    let delayed = rpc(
+        &r.state,
+        "backup.context",
+        observation("shell-a:main", "unseen-before-loss", 1, "attach", NOW, true),
+    )
+    .await;
+    let fresh = rpc(
+        &r.state,
+        "backup.context",
+        observation("shell-a-new:main", "fresh", 1, "attach", NOW, true),
+    )
+    .await;
     finish(r).await;
-    assert_eq!(own_old["accepted"],false);
-    assert_eq!(other["accepted"],true,"the owning drop retired a different surface generation");
-    assert_eq!(delayed["accepted"],false,"a delayed old-generation attach resurrected loading");
-    assert_eq!(fresh["accepted"],true,"same-process reconnect could not establish fresh facts");
+    assert_eq!(own_old["accepted"], false);
+    assert_eq!(
+        other["accepted"], true,
+        "the owning drop retired a different surface generation"
+    );
+    assert_eq!(
+        delayed["accepted"], false,
+        "a delayed old-generation attach resurrected loading"
+    );
+    assert_eq!(
+        fresh["accepted"], true,
+        "same-process reconnect could not establish fresh facts"
+    );
 }

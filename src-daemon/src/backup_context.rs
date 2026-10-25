@@ -63,6 +63,7 @@ struct Surface {
 pub(super) struct Context {
     sessions: BTreeMap<(String, String), Surface>,
     destroyed: HashSet<String>,
+    retired_generations: HashSet<String>,
     pub last_activity: i64,
     network_at: i64,
     offline: bool,
@@ -71,7 +72,8 @@ impl Context {
     pub fn observe(&mut self, o: Observation, now: i64) -> Value {
         let key = (o.surface_id.clone(), o.session_id.clone());
         let s = self.sessions.entry(key).or_default();
-        let accepted = !self.destroyed.contains(&o.surface_id)
+        let accepted = !o.surface_id.rsplit_once(':').is_some_and(|(generation,_)|self.retired_generations.contains(generation))
+            && !self.destroyed.contains(&o.surface_id)
             && !s.retired
             && o.sequence > s.sequence
             && (o.kind != "update" || s.live);
@@ -121,6 +123,14 @@ impl Context {
                 s.live = false;
                 s.wake_at = None;
                 s.visible_at = None;
+            }
+        }
+    }
+    pub fn retire_generation(&mut self, generation: &str) {
+        self.retired_generations.insert(generation.into());
+        for ((id,_), source) in &mut self.sessions {
+            if id.rsplit_once(':').is_some_and(|(prefix,_)|prefix == generation) {
+                source.retired = true; source.live = false; source.wake_at = None; source.visible_at = None;
             }
         }
     }

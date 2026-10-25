@@ -402,21 +402,31 @@ pub(crate) fn external_status_fields(
     ("needs_reauth".to_string(), err)
 }
 
-// A shell process/window generation is separate from mirror authorization.
-pub(crate) fn surface_id(label: &str) -> String {
+// A channel surface generation is separate from mirror authorization.
+static SURFACE_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn surface_generation() -> String {
     static SHELL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    format!("{}:{label}", SHELL.get_or_init(|| uuid::Uuid::new_v4().to_string()))
+    format!("{}:{}", SHELL.get_or_init(|| uuid::Uuid::new_v4().to_string()),SURFACE_GENERATION.load(std::sync::atomic::Ordering::SeqCst))
 }
+pub(crate) fn begin_surface_generation() -> String {
+    SURFACE_GENERATION.fetch_add(1,std::sync::atomic::Ordering::SeqCst);
+    surface_generation()
+}
+pub(crate) fn surface_id(label: &str) -> String { format!("{}:{label}",surface_generation()) }
 fn retired_surfaces() -> &'static Mutex<std::collections::BTreeSet<String>> {
     static RETIRED: std::sync::OnceLock<Mutex<std::collections::BTreeSet<String>>> = std::sync::OnceLock::new();
     RETIRED.get_or_init(Default::default)
 }
-pub(crate) fn surface_params(label: &str, mut params: Value) -> Result<Value,String> {
-    let id = surface_id(label);
+fn bind_surface_params(generation: &str, label: &str, mut params: Value) -> Result<Value,String> {
+    let id = format!("{generation}:{label}");
     if retired_surfaces().lock().unwrap_or_else(|p|p.into_inner()).contains(&id) { return Err("errors.settingsInvalid".into()); }
     let object = params.as_object_mut().ok_or("errors.settingsInvalid")?;
     object.insert("surfaceId".into(), json!(id));
     Ok(params)
+}
+pub(crate) fn surface_params(label: &str, params: Value) -> Result<Value,String> {
+    if !crate::daemon_channel::is_connected() { return Err("errors.settingsNotLoaded".into()); }
+    bind_surface_params(&surface_generation(),label,params)
 }
 pub(crate) fn retire_surface(label: &str) {
     let id = surface_id(label);
@@ -436,12 +446,12 @@ mod surface_tests {
     #[test]
     fn backup_surface_identity_is_native_and_destroyed_generation_is_terminal() {
         let label = format!("surface-{}",uuid::Uuid::new_v4());
-        let native = surface_params(&label,json!({"surfaceId":"another-window","sessionId":"session"})).unwrap();
+        let native = bind_surface_params(&surface_generation(),&label,json!({"surfaceId":"another-window","sessionId":"session"})).unwrap();
         assert_eq!(native["surfaceId"],surface_id(&label));
         retire_surface(&label);
-        assert!(surface_params(&label,json!({"surfaceId":"another-window"})).is_err());
+        assert!(bind_surface_params(&surface_generation(),&label,json!({"surfaceId":"another-window"})).is_err());
         let mut replayed = vec![]; replay_retired_surfaces(|p|replayed.push(p));
         assert!(replayed.iter().any(|p|p["surfaceId"] == native["surfaceId"]),"disconnected destruction was lost before reconnect");
-        assert!(surface_params(&format!("{label}-new"),json!({})).is_ok());
+        assert!(bind_surface_params(&surface_generation(),&format!("{label}-new"),json!({})).is_ok());
     }
 }

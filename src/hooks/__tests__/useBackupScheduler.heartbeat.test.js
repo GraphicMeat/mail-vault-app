@@ -39,3 +39,9 @@ it.each([['keydown','click',500],['mousemove','mousemove',4000]])('preserves the
   vi.advanceTimersByTime(gap); document.dispatchEvent(new Event(second)); await flush();
   expect(send.mock.calls.at(-1)[1].lastActivityAt).toBe(at);
 });
+it('reattaches after an initial native-channel failure instead of publishing orphan updates forever', async () => {
+  send.mockRejectedValueOnce(new Error('errors.settingsNotLoaded'));
+  renderHook(() => useBackupScheduler()); await flush();
+  vi.advanceTimersByTime(15000); await flush();
+  expect(send.mock.calls.at(-1)[1].kind).toBe('attach');
+});

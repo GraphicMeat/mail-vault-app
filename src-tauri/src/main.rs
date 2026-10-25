@@ -4742,6 +4742,7 @@ mod tests {
                 "backup.attach_access",
                 "backup.access_status",
                 "backup.owner_attach",
+                "backup.surface_retire",
                 "channel.open",
             ] {
                 assert!(super::webview_rpc_token(method, connected, 1, Some("native-token")).is_err());
@@ -4770,6 +4771,7 @@ mod tests {
             "backup.cancel",
             "backup.stop",
             "backup.schedule.status",
+            "backup.context",
             "backup.attach_access",
             "backup.access_status",
         ] {
