@@ -130,6 +130,10 @@ export function ComposeWindow() {
           return;
         }
         // A settings change made in main since detach (composeWindow.js pushSettings).
+        if (payload.type === 'accounts-changed') {
+          useMailStore.setState(payload.payload);
+          return;
+        }
         if (payload.type === 'settings-changed') {
           applySettings(payload.payload);
           return;

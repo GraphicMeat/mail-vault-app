@@ -50,3 +50,5 @@ export async function prepareCompose(input, { acknowledge = () => flushSafeStora
 }
 export const prepareMessage = (input, options) => prepareCompose(messagePreparation(input), options);
 export const prepareMailto = (href, accountId, options) => prepareCompose({ kind: 'mailto', href, ...(accountId && { accountId }) }, options);
+
+export const preparationIdentity = ({ accountId, fromAddress, accounts, aliases, sendAsAddresses }) => JSON.stringify({ accountId, from: fromAddress, accounts: accounts.map(a => [a.id, a.email]), aliases, sendAs: sendAsAddresses });

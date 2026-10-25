@@ -13,7 +13,7 @@ import { RecipientField } from './RecipientField';
 import { addRecipients, invalidRecipients, removeRecipientToken } from '../utils/recipientTokens';
 import { OriginalFrame, OriginalThemeToggle, useDefaultEmailDark } from './OriginalFrame';
 import { resolveOriginalThread } from '../utils/composeOriginalThread';
-import { prepareMessage } from '../services/composePrep';
+import { prepareMessage, preparationIdentity } from '../services/composePrep';
 import { replyTemplateHtml } from '../utils/replyTemplate';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import { withoutSnippet } from '../utils/withoutSnippet';
@@ -429,10 +429,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const [preparationRetry, setPreparationRetry] = useState(0);
   const editRevision = useRef({ to: 0, cc: 0, bcc: 0, subject: 0, ...initialData?._preparationEdits });
   const generatedOnce = useRef(false);
+  const preparedContext = useRef(null);
   const preparationWork = useRef({ running: false, desired: null });
   const preparationSource = replyTo || (initialData?._preparationPending ? initialData._replyTo : null);
-  const identityGeneration = JSON.stringify({ accountId: selectedAccountId, from: composeFrom,
-    accounts: accounts.map(a => [a.id, a.email]), aliases: aliasesByAccount, sendAs: sendAsAddresses });
+  const identityGeneration = preparationIdentity({ accountId: selectedAccountId, fromAddress: composeFrom,
+    accounts, aliases: aliasesByAccount, sendAsAddresses });
   const currentPreparation = useRef(null);
   currentPreparation.current = { source: preparationSource, mode, identityGeneration };
 
@@ -565,10 +566,18 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     const state = preparationWork.current;
     const captured = { source: preparationSource, mode, identityGeneration };
     const request = { cancelled: false };
+    const liveIdentity = () => {
+      const settings = useSettingsStore.getState();
+      const currentAccounts = settings.getOrderedAccounts(useMailStore.getState().accounts);
+      return preparationIdentity({ accountId: selectedAccountId,
+        fromAddress: pickedFrom || settings.sendAsAddresses?.[selectedAccountId] || currentAccounts.find(a => a.id === selectedAccountId)?.email || '',
+        accounts: currentAccounts, aliases: settings.aliases || NO_ALIASES, sendAsAddresses: settings.sendAsAddresses });
+    };
     const current = () => !request.cancelled && aliveRef.current
       && currentPreparation.current.source === captured.source
       && currentPreparation.current.mode === captured.mode
-      && currentPreparation.current.identityGeneration === captured.identityGeneration;
+      && currentPreparation.current.identityGeneration === captured.identityGeneration
+      && liveIdentity() === captured.identityGeneration;
     preparationReadyRef.current = false;
     setPreparationReady(false);
     setPreparationFailed(false);
@@ -600,6 +609,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           });
           generatedOnce.current = true;
         }
+        preparedContext.current = captured;
         preparationReadyRef.current = true;
         setPreparationReady(true);
         setPreparationFailed(false);
@@ -894,7 +904,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   const handleSend = async (event, sendAnyway = false) => {
     event?.preventDefault();
     if (detaching) return;
-    if (!preparationReadyRef.current) { setError(t('compose.preparationUnavailable')); return; }
+    if (!preparationReadyRef.current || needsPreparation && (preparedContext.current?.source !== currentPreparation.current.source || preparedContext.current?.identityGeneration !== currentPreparation.current.identityGeneration)) { setError(t('compose.preparationUnavailable')); return; }
     if (!formData.to.trim()) { setError(t("compose.pleaseEnterLeastOneRecipient")); return; }
     // A chip outlined red is not an address: say which, instead of letting
     // the server bounce the whole message.
@@ -932,7 +942,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       if (draft) {
         if (onSchedule) await onSchedule(snapshot);
         else {
-          await scheduleCompose({ snapshot, account: selectedAccount, settings, cleanupDraft: onDraftCleanup, acknowledgePreparation, preparedQuote = null });
+          await scheduleCompose({ snapshot, account: selectedAccount, settings, cleanupDraft: onDraftCleanup });
           onSend?.();
           onClose();
         }
@@ -942,7 +952,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         const composeState = { mode, replyTo: snapshot._replyTo || actionReplyTo, initialData: snapshot };
         useMailStore.getState().queueSend(
           composeState,
-          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings, cleanupDraft: onDraftCleanup, acknowledgePreparation, preparedQuote = null }),
+          createComposeSend({ snapshot, mode, replyTo: composeState.replyTo, account: selectedAccount, settings, cleanupDraft: onDraftCleanup }),
           delay,
         );
         onSend?.();

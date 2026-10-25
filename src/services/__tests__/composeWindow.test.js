@@ -272,3 +272,18 @@ it('binds token-fenced preparation ACK to accepted in-flight settings', async ()
   await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith('compose-prep', 'compose-window-message', expect.objectContaining({ requestId: 'prep', type: 'ack', payload: 42 })));
   owner.recover(212);
 });
+
+it('pushes authoritative accounts and fences preparation ACK after child close', async () => {
+  let release;
+  const open = vi.fn().mockResolvedValue('compose-accounts'); const emitTo = vi.fn().mockResolvedValue(undefined);
+  const owner = createComposeWindowOwner({ open, emitTo, update: vi.fn(), close: vi.fn(), acknowledgePreparation: () => new Promise(r => { release = r; }) });
+  const handoff = owner.detach({ id: 213, mode: 'reply', snapshot: snapshot() });
+  await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+  ready(owner, 213, token); owner.receive({ composeId: '213', token, requestId: 'init', type: 'initialized' }); await handoff;
+  owner.receive({ composeId: '213', token, requestId: 'prep', type: 'prepare-settings' });
+  await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+  const accounts = [{ id: 'replacement', email: 'current@example.test' }]; owner.pushAccounts(accounts, 'replacement');
+  expect(emitTo).toHaveBeenCalledWith('compose-accounts', 'compose-window-message', expect.objectContaining({ type: 'accounts-changed', token, payload: { accounts, activeAccountId: 'replacement' } }));
+  owner.recover(213); release(9); await Promise.resolve(); await Promise.resolve();
+  expect(emitTo.mock.calls.some(([, , m]) => m.requestId === 'prep' && m.type === 'ack')).toBe(false);
+});

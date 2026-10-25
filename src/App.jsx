@@ -18,7 +18,7 @@ import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
-import { composeSenderName } from './utils/sendAsSuggestions';
+import { composeSenderName, resolveInitialComposeIdentity } from './utils/sendAsSuggestions';
 import { currentListView } from './stores/viewStore';
 import {
   clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH,
@@ -100,7 +100,8 @@ import { initOAuthTokenSync } from './services/oauthTokenSync.js';
 import { useAbdStore } from './stores/abdStore';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
-import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
+import { prepareMessage, preparationIdentity } from './services/composePrep';
+import { setMailtoComposeOpener, startMailtoBridge, retryMailtoCompose } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
 import { openComposeResolved } from './utils/replyTarget';
@@ -357,6 +358,10 @@ function App() {
   // Auto-switch to two-column on very narrow windows
   const layoutMode = windowWidth < 768 ? 'two-column' : userLayoutMode;
   const [composeWindows, setComposeWindows] = useState([]);
+  const composeWindowsRef = useRef(composeWindows);
+  composeWindowsRef.current = composeWindows;
+  const replyFillWork = useRef(new Map());
+  const [mailtoError, setMailtoError] = useState(false);
   const composeIdRef = useRef(0);
   const composeWindowOwnerRef = useRef(null);
   const focusNativeCompose = useCallback(async (label) => {
@@ -382,15 +387,48 @@ function App() {
     // window: the fetch finishing late must not reopen a reply the user
     // already sent, discarded or closed, or pull one they minimized back out.
     if (state._fillFrom) {
-      // buildQuote is only needed for the (rare) minimized case, and pulls in
-      // RichTextEditor's textToHtml — a dynamic import so a plain reply-fill
-      // never drags TipTap into App's own chunk (see composeSend.js for the
-      // same rule). applyReplyFill (utils/sameReply.js) is the pure merge —
-      // unit tested there without a live ComposeModal.
-      import('./utils/replyQuote').then(({ buildQuoteBlocks }) => {
-        setComposeWindows(prev => applyReplyFill(prev, state,
-          replyTo => buildQuoteBlocks(replyTo, tr('compose.originalMessage'))));
-      });
+      const target = composeWindowsRef.current.find(w => !w.detached && !isTerminalCompose(composeSessionData(w))
+        && sameReply(w, { mode: state.mode, replyTo: state._fillFrom }));
+      if (!target) return;
+      const identityFor = window => {
+        const prefs = useSettingsStore.getState();
+        const mail = useMailStore.getState();
+        const accounts = prefs.getOrderedAccounts(mail.accounts);
+        const data = window.snapshot || window.initialData;
+        const initial = resolveInitialComposeIdentity({ replyTo: window.replyTo, initialData: data,
+          accounts, activeAccountId: mail.activeAccountId, selectedAccountId: mail.lastSelectedAccountId });
+        const accountId = data?._accountId || initial.accountId;
+        const fromAddress = data?._fromAddress || initial.address || prefs.sendAsAddresses?.[accountId] || accounts.find(a => a.id === accountId)?.email || '';
+        return { accountId, fromAddress, generation: preparationIdentity({ accountId, fromAddress, accounts,
+          aliases: prefs.aliases || {}, sendAsAddresses: prefs.sendAsAddresses }) };
+      };
+      const identity = identityFor(target);
+      const slot = replyFillWork.current.get(target.id) || { running: false, desired: null, generation: 0 };
+      replyFillWork.current.set(target.id, slot);
+      const generation = ++slot.generation;
+      const current = windows => {
+        const window = windows.find(w => w.id === target.id && !w.detached && !isTerminalCompose(composeSessionData(w))
+          && sameReply(w, { mode: state.mode, replyTo: state._fillFrom }));
+        return Boolean(window && slot.generation === generation && identityFor(window).generation === identity.generation);
+      };
+      slot.desired = async () => {
+        try {
+          const result = await prepareMessage({ replyTo: state.replyTo, mode: state.mode, accountId: identity.accountId,
+            pickedFrom: identity.fromAddress }, { isCurrent: () => current(composeWindowsRef.current) });
+          if (!current(composeWindowsRef.current)) return;
+          const prepared = { source: state.replyTo, identityGeneration: identity.generation, result };
+          setComposeWindows(prev => current(prev) ? applyReplyFill(prev, { ...state, _fillWindowId: target.id }, prepared) : prev);
+        } catch {
+          if (current(composeWindowsRef.current)) useMailStore.setState({ error: tr('compose.preparationUnavailable') });
+        }
+      };
+      if (!slot.running) {
+        slot.running = true;
+        void (async () => {
+          try { while (slot.desired) { const next = slot.desired; slot.desired = null; await next(); } }
+          finally { slot.running = false; if (replyFillWork.current.get(target.id) === slot) replyFillWork.current.delete(target.id); }
+        })();
+      }
       return;
     }
     const restoredData = state.snapshot || state.initialData;
@@ -528,6 +566,11 @@ function App() {
     }
   }), []);
 
+  useEffect(() => useMailStore.subscribe((state, previous) => {
+    if (state.accounts !== previous.accounts || state.activeAccountId !== previous.activeAccountId)
+      composeWindowOwnerRef.current?.pushAccounts(state.accounts, state.activeAccountId);
+  }), []);
+
   const restoreCompose = useCallback((id) => {
     setComposeWindows(prev => prev.map(w => {
       if (w.id !== id || isTerminalCompose(composeSessionData(w))) return w;
@@ -551,7 +594,7 @@ function App() {
   // A mailto: link in a message body opens compose here rather than handing
   // the address to the OS mail client (see utils/mailto.js).
   useEffect(() => {
-    setMailtoComposeOpener(initialData => openCompose({ initialData }));
+    setMailtoComposeOpener(initialData => openCompose({ initialData }), { onError: () => setMailtoError(true) });
     return () => setMailtoComposeOpener(null);
   }, [openCompose]);
 
@@ -1074,7 +1117,8 @@ function App() {
       import('@tauri-apps/api/core'),
       import('@tauri-apps/api/event'),
     ]).then(([{ invoke }, { listen }]) => {
-      const bridge = startMailtoBridge({ invoke, listen });
+      const bridge = startMailtoBridge({ invoke, listen, onError: () => { if (active) setMailtoError(true); } });
+      void bridge.ready.catch(() => { if (active) setMailtoError(true); });
       // Unmounted while the imports were in flight — same guard the listeners
       // below use, or the bridge outlives the component that owns it.
       if (!active) bridge.stop();
@@ -1579,6 +1623,7 @@ function App() {
             replyTo={w.initialData ? null : (w.replyTo || null)}
             initialData={w.initialData}
             templateBody={w.templateBody}
+            preparedQuote={w.preparedQuote}
             onClose={() => closeCompose(w.id)}
             onMinimize={() => minimizeCompose(w.id)}
             onSaveState={(data) => saveComposeState(w.id, data)}
@@ -1669,6 +1714,13 @@ function App() {
       {settingsLayer}
 
       <ToastDockHost />
+      {mailtoError && <Toast duration={0} onClose={() => setMailtoError(false)} message={<>
+        {tr('compose.preparationUnavailable')}
+        <button type="button" className="ml-3 underline" onClick={() => {
+          void retryMailtoCompose().then(() => setMailtoError(false)).catch(() => setMailtoError(true));
+        }}>{tr('common.retry')}</button>
+      </>} />}
+
 
       <AnimatePresence>
         {error && (

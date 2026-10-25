@@ -14,7 +14,7 @@ import { buildThreads } from '../../utils/emailParser';
 
 const { invoke, sendStaged, stageOutgoing, preparation } = vi.hoisted(() => ({
   invoke: vi.fn(),
-  preparation: { gate: null },
+  preparation: { gate: null, calls: [], failure: false },
   sendStaged: vi.fn().mockResolvedValue({ messageId: '<mine@example.test>' }),
   // compose.stage's answer: the staged copy and the row the daemon wrote.
   stageOutgoing: vi.fn(async (_account, email) => ({
@@ -29,7 +29,9 @@ const { invoke, sendStaged, stageOutgoing, preparation } = vi.hoisted(() => ({
 vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
 vi.mock('../../services/transport', () => ({ send: async (method, params) => {
   if (method !== 'compose.reply_context') return;
+  preparation.calls.push(params);
   if (preparation.gate) await preparation.gate;
+  if (preparation.failure) { preparation.failure = false; throw new Error('compose.preparationUnavailable'); }
   const { prepareDemoCompose } = await import('../../demo/composePrep');
   return prepareDemoCompose(params, { accounts: mail.accounts, values: { 'mailvault-settings': { state: settings } }, version: 0 });
 } }));
@@ -136,7 +138,7 @@ const parent = {
 };
 
 beforeEach(() => {
-  preparation.gate = null;
+  preparation.gate = null; preparation.calls = []; preparation.failure = false;
   mail.sentEmails = [];
   mail.emails = [];
   invoke.mockReset();
@@ -331,7 +333,7 @@ describe('a reply opened on the index snippet', () => {
 it('keeps authored fields while native reply defaults are pending', async () => {
   let release;
   preparation.gate = new Promise(resolve => { release = resolve; });
-  render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} />);
+  render(<ComposeModal mode="reply" replyTo={parent} templateBody="Preset reply" onClose={() => {}} />);
   const to = screen.getByLabelText(/To/i, { selector: 'input' });
   expect(screen.getByTestId('compose-subject').value).toBe('');
   expect(screen.queryAllByTestId('recipient-chip')).toHaveLength(0);
@@ -347,4 +349,64 @@ it('keeps authored fields while native reply defaults are pending', async () => 
   expect(to.value).toBe('typed@example.test');
   expect(subject.value).toBe('Authored subject');
   expect(screen.getByTestId('editor-stub').value).toBe('<p>Authored body</p>');
+});
+
+it('coalesces a stale header preparation into a complete large late fill without touching edits', async () => {
+  let release; preparation.gate = new Promise(r => { release = r; });
+  const snapshots = [];
+  const props = { mode: 'reply', onClose: () => {}, onSaveState: data => snapshots.push(data) };
+  const header = { ...parent, text: '', html: '' };
+  const { rerender } = render(<ComposeModal {...props} replyTo={header} />);
+  await waitFor(() => expect(preparation.calls).toHaveLength(1));
+  fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>Typed while loading</p>' } });
+  fireEvent.change(screen.getByTestId('compose-subject'), { target: { value: 'My subject' } });
+  const large = '<p>' + '界'.repeat(750000) + 'FINAL_LARGE</p>';
+  const context = Array.from({ length: 70 }, (_, i) => ({ ...parent, date: `2026-10-${String(i % 25 + 1).padStart(2, '0')}T12:00:00Z`, html: `<p>context-${i}</p>` }));
+  rerender(<ComposeModal {...props} replyTo={{ ...parent, html: large, _threadContext: context }} />);
+  expect(preparation.calls).toHaveLength(1);
+  await act(async () => { release(); });
+  await waitFor(() => expect(screen.getByTestId('compose-subject').closest('form').dataset.preparationReady).toBe('true'));
+  expect(preparation.calls).toHaveLength(2);
+  expect(preparation.calls[1].original.html).toBe(large);
+  expect(preparation.calls[1].threadContext).toHaveLength(70);
+  expect(snapshots.at(-1)._quotedHtml.endsWith(large)).toBe(true);
+  expect(snapshots.at(-1)._contextHtml).toContain('context-69');
+  expect(snapshots.at(-1).subject).toBe('My subject');
+  expect(screen.getByTestId('editor-stub').value).toBe('<p>Typed while loading</p>');
+});
+it('keeps the selected sender and re-prepares after account and alias changes during RPC', async () => {
+  let release; preparation.gate = new Promise(r => { release = r; });
+  const second = { id: 'acct-2', email: 'second@example.test', name: 'Second' };
+  const originalAccounts = mail.accounts; const originalAliases = settings.aliases;
+  mail.accounts = [account, second];
+  const message = { ...parent, to: [...parent.to, { address: 'newalias@example.test' }, { address: 'friend@example.test' }] };
+  const snapshots = [];
+  const props = { mode: 'replyAll', replyTo: message, onClose: () => {}, onSaveState: data => snapshots.push(data) };
+  try {
+    const { rerender } = render(<ComposeModal {...props} />);
+    await waitFor(() => expect(preparation.calls).toHaveLength(1));
+    fireEvent.change(screen.getByTestId('compose-from'), { target: { value: 'acct-2 second@example.test' } });
+    settings.aliases = { 'acct-2': [{ address: 'newalias@example.test' }] };
+    rerender(<ComposeModal {...props} />);
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getByTestId('compose-subject').closest('form').dataset.preparationReady).toBe('true'));
+    expect(preparation.calls.at(-1).accountId).toBe('acct-2');
+    expect(snapshots.at(-1)._accountId).toBe('acct-2');
+    expect(snapshots.at(-1)._fromAddress).toBe('second@example.test');
+    expect(snapshots.at(-1).to).toBe('them@example.test, friend@example.test');
+  } finally { mail.accounts = originalAccounts; settings.aliases = originalAliases; }
+});
+it('retains editable content and readiness guard on preparation failure, then retries explicitly', async () => {
+  preparation.failure = true;
+  const snapshots = [];
+  render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onSaveState={d => snapshots.push(d)} />);
+  fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>Keep this</p>' } });
+  await screen.findByText('Could not prepare this message. Please try again.');
+  fireEvent.submit(screen.getByTestId('compose-subject').closest('form'));
+  expect(stageOutgoing).not.toHaveBeenCalled();
+  expect(snapshots.at(-1)._preparationPending).toBe(true);
+  expect(screen.getByTestId('editor-stub').value).toBe('<p>Keep this</p>');
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  await waitFor(() => expect(screen.getByTestId('compose-subject').closest('form').dataset.preparationReady).toBe('true'));
+  expect(screen.getByTestId('editor-stub').value).toBe('<p>Keep this</p>');
 });

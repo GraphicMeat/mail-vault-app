@@ -8,7 +8,7 @@ const key = (m) => m.messageId || `${m._accountId || ''}:${m._mailbox || ''}:${m
 
 /** True when two compose states answer the same message in the same mode. */
 export function sameReply(a, b) {
-  if ((a.snapshot || a.initialData)?._draftCleanupOnly || (b.snapshot || b.initialData)?._draftCleanupOnly) return false;
+  if ((a.snapshot || a.initialData)?._draftCleanupOnly || (b.snapshot || b.initialData)?._draftCleanupOnly || (a.snapshot || a.initialData)?._draftTerminal || (b.snapshot || b.initialData)?._draftTerminal) return false;
   if (!a?.replyTo || !b?.replyTo) return false;
   return a.mode === b.mode && key(a.replyTo) === key(b.replyTo);
 }
@@ -23,28 +23,16 @@ export function sameReply(a, b) {
 // never reopen a window the user sent, discarded or closed, and never pull a
 // minimized one back out.
 //
-// Pure and React-free so it can be unit tested without a live ComposeModal:
-// App.jsx supplies `buildQuote` (a synchronous `replyTo => { quotedHtml,
-// contextHtml }`, imported dynamically there so a plain reply-fill never
-// pulls TipTap into App's own chunk — see src/utils/replyQuote.js).
-export function applyReplyFill(windows, { mode, replyTo, _fillFrom }, buildQuote) {
-  const target = windows.find(w => sameReply(w, { mode, replyTo: _fillFrom }));
-  // Gone (sent/discarded/closed): nothing to patch, and never create one.
-  // Detached: a native window's state lives in its own webview, not here
-  // (services/composeWindow.js) — not fed through this path.
+// App prepares outside its reducer, then commits only to the captured window.
+// Complete immutable issued draft bytes stay untouched until ordinary save.
+export function applyReplyFill(windows, { mode, replyTo, _fillFrom, _fillWindowId }, prepared) {
+  const target = windows.find(w => (_fillWindowId == null || w.id === _fillWindowId)
+    && sameReply(w, { mode, replyTo: _fillFrom }));
   if (!target || target.detached) return windows;
-  if (!target.minimized) {
-    // The live ComposeModal instance picks this up itself (its
-    // `quotedBodyReadyRef` effect) and rebuilds the quote without touching
-    // anything already typed.
-    return windows.map(w => (w.id === target.id ? { ...w, replyTo } : w));
-  }
-  // Minimized: no ComposeModal is mounted to react to a patched `replyTo` —
-  // restoreCompose reads straight from snapshot/initialData, so the quote
-  // has to land there instead. `minimized` itself is left alone.
-  const { quotedHtml, contextHtml } = buildQuote(replyTo);
-  const withQuote = data => data && { ...data, _quotedHtml: quotedHtml, _contextHtml: contextHtml };
-  return windows.map(w => (w.id === target.id
-    ? { ...w, replyTo, snapshot: withQuote(w.snapshot), initialData: withQuote(w.initialData) }
-    : w));
+  if (!target.minimized) return windows.map(w => w.id === target.id ? { ...w, replyTo, preparedQuote: prepared } : w);
+  const { quotedHtml, contextHtml, bodyAvailable } = prepared.result;
+  const withQuote = data => data && (bodyAvailable || !data._quotedHtml)
+    ? { ...data, _quotedHtml: quotedHtml, _contextHtml: contextHtml } : data;
+  return windows.map(w => w.id === target.id
+    ? { ...w, replyTo, snapshot: withQuote(w.snapshot), initialData: withQuote(w.initialData) } : w);
 }

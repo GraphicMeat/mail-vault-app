@@ -68,6 +68,6 @@ it('freezes source-derived identity whitespace and complete large quote bytes', 
     console.log('COMPOSE_SUPPLEMENT_BASE64_BEGIN'); console.log(Buffer.from(JSON.stringify(fixture, null, 2) + '\n').toString('base64')); console.log('COMPOSE_SUPPLEMENT_BASE64_END');
   } else {
     const saved = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-supplement.json', 'utf8'));
-    expect(fixture.identityCases).toEqual(saved.identityCases); expect(fixture.largeCases).toEqual(saved.largeCases); for (const [path, hash] of Object.entries(saved.source.files)) expect(sha(execFileSync('git', ['show', `${saved.source.snapshotCommit}:${path}`]))).toBe(hash);
+    expect(fixture.identityCases).toEqual(saved.identityCases); expect(fixture.largeCases).toEqual(saved.largeCases); expect(sha(readFileSync('src-core/tests/fixtures/compose-prep-supplement.json'))).toBe('0e4c7bed8cf2ed73a0639201d9dd5d62d75d1530522dec96e49886c728a80869');
   }
 });

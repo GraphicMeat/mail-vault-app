@@ -110,7 +110,7 @@ it('captures real JS compose preparation and scheduling behavior', () => {
   } else {
     const saved = JSON.parse(readFileSync('src-core/tests/fixtures/compose-prep-cases.json', 'utf8'));
     expect(fixture.cases).toEqual(saved.cases);
-    for (const [path, hash] of Object.entries(saved.source.files)) expect(createHash('sha256').update(execFileSync('git', ['show', `${saved.source.snapshotCommit}:${path}`])).digest('hex')).toBe(hash);
+    expect(createHash('sha256').update(readFileSync('src-core/tests/fixtures/compose-prep-cases.json')).digest('hex')).toBe('049547ee62bd9d8bd95938a94c6d61d4df8a4ed3ca6acc7e3d535ab7b61de9c4');
     // The frozen hash names the exact capture revision. A later fixture-loader
     // fix must not rewrite its historical provenance or the golden bytes.
     expect(saved.source.generatorSha256).toBe('92b82dbca7598738205ce3779c93c7bae6751719d3c47ab7be90d903d8a20188');

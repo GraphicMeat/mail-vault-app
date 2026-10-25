@@ -239,6 +239,13 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
       }
     },
 
+    pushAccounts(accounts, activeAccountId) {
+      for (const session of sessions.values()) {
+        if (session.finished) continue;
+        session.context = { ...session.context, accounts, activeAccountId };
+        if (session.label) void reply(session, null, 'accounts-changed', { accounts, activeAccountId }).catch(() => {});
+      }
+    },
     recover(id) { return recover(sessionFor(id)); },
     recoverLabel(label, token) {
       const session = [...sessions.values()].find(item => item.label === label && (!token || item.token === token));
