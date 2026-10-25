@@ -101,11 +101,11 @@ impl BackupState {
                 view["active"]["stage"] = json!("stopping");
             }
         }
-        view["accessIncarnation"] = json!(self.access.incarnation);
-        view["accessReceipts"] = self.access.receipts();
         if view.is_null() {
             json!({"revision":0,"queue":[],"active":null,"pendingAccess":[],"lastOutcomes":[],"automaticOwner":"javascript","ready":false})
         } else {
+            view["accessIncarnation"] = json!(self.access.incarnation);
+            view["accessReceipts"] = self.access.receipts();
             view
         }
     }
@@ -294,6 +294,7 @@ fn compact_outcomes(ledger: &mut Ledger) {
 }
 async fn publish(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result<(), String> {
     compact_outcomes(ledger);
+    if let Some(i)=&ledger.active {access::set_phase(state,&i.execution_id,&i.stage);}
     ledger.epoch = state.backup_worker.epoch.load(SeqCst);
     ledger.revision = ledger.revision.saturating_add(1);
     let path = state.app_dir.clone();
@@ -306,6 +307,7 @@ async fn publish(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result<(), St
         .lock()
         .unwrap_or_else(|p| p.into_inner()) = view.clone();
     state.events.emit(EVENT, view);
+    if ledger.queue.iter().any(|i|i.stage=="pending_access") {state.events.emit("backup-access-needed",json!({"incarnation":state.backup_worker.access.incarnation}));}
     Ok(())
 }
 fn response(intent: &Intent) -> Value {
@@ -669,6 +671,7 @@ async fn settle_cancelled(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Resu
             return true;
         }
         changed = true;
+        access::no_start(state,intent);
         let out = Outcome {
             intent: intent.clone(),
             status: "cancelled".into(),
@@ -992,6 +995,15 @@ async fn finish_run(
     };
     let user_cancel =
         intent.cancel_requested || intent.epoch != state.backup_worker.epoch.load(SeqCst);
+    let (attached,owner_lost)=access::joined(state,&intent,exit);
+    let uncertain=matches!(exit,RunExit::Completed(joined) if joined.uncertain);
+    if !uncertain && !user_cancel && (owner_lost || (attached && matches!(exit,RunExit::Pending(_)))) {
+        access::renew(state,&mut intent);
+        for request in &intent.requests {next.requests.insert(request.clone(),response(&intent));}
+        next.queue.insert(0,intent);
+        publish(state,&mut next).await?;
+        return Ok(next);
+    }
     if let RunExit::Pending(stage) = exit {
         intent.stage = stage.clone();
         for request in &intent.requests {
@@ -1422,3 +1434,11 @@ pub(crate) async fn route(
 #[cfg(test)]
 #[path = "backup_worker_tests.rs"]
 mod tests;
+
+pub(crate) struct AccessOwner {state:Arc<DaemonState>,owner:String}
+impl Drop for AccessOwner {fn drop(&mut self) {access::owner_lost(&self.state,&self.owner);}}
+pub(crate) fn channel_owner(state:&Arc<DaemonState>,owner:Option<&str>)->Option<AccessOwner> {
+    let owner=owner.filter(|s|!s.is_empty() && s.len()<=256)?;
+    start(state.clone());access::owner_connected(state,owner);
+    Some(AccessOwner{state:state.clone(),owner:owner.into()})
+}

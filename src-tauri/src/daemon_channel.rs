@@ -79,7 +79,7 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
     let mut warned = false;
     while !STOPPING.load(SeqCst) {
         match connect(&app).await {
-            Ok((lines, writer)) => {
+            Ok((lines, writer, owner)) => {
                 while rx.try_recv().is_ok() {} // queued for a connection that is gone
                 // connect() can block for seconds inside ensure_daemon_running
                 // (e.g. behind a vault-switch daemon restart); re-check here,
@@ -99,6 +99,7 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 // app re-attaches through `abd_attach` once it is connected.
                 crate::abd::release_all(&app, "the daemon channel reconnected");
                 crate::bulk::reconcile_after_channel_change(&app);
+                crate::backup::access_connected(&app,owner.clone());
                 // And the drive held for a cleanup run (Run All Now).
                 crate::cleanup::release_all(&app, "the daemon channel reconnected");
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
@@ -137,6 +138,7 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                     }
                 };
                 CONNECTED.store(false, SeqCst);
+                crate::backup::access_disconnected(&app,&owner);
                 info!("daemon channel closed");
                 if connected_at.elapsed() >= MIN_LIVE_TO_RESET_BACKOFF {
                     backoff = None;
@@ -172,7 +174,7 @@ async fn read_line<R: tokio::io::AsyncBufRead + Unpin>(lines: &mut Lines<R>) -> 
 /// forever.
 const HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
-async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<DaemonRead>>, DaemonWrite), String> {
+async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<DaemonRead>>, DaemonWrite, String), String> {
     let (socket, token_path) = crate::daemon_ipc_paths()?;
     // Both ensure_daemon_running (blocking: socket check, heartbeat, possible
     // restart) and the token file read are blocking I/O — neither belongs on
@@ -207,12 +209,13 @@ async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<DaemonRead>>
         tokio::io::split(stream)
     };
     let mut lines = BufReader::new(r).lines();
+    let owner=uuid::Uuid::new_v4().to_string();
     let handshake = async {
         write_line(&mut w, &json!({"token": token.trim()})).await?;
         if read_line(&mut lines).await?.get("error").is_some() {
             return Err("daemon rejected the token".to_string());
         }
-        write_line(&mut w, &json!({"jsonrpc": "2.0", "method": "channel.open", "params": {}, "id": 1})).await?;
+        write_line(&mut w, &json!({"jsonrpc": "2.0", "method": "channel.open", "params": {"backupOwner":owner}, "id": 1})).await?;
         let opened = read_line(&mut lines).await?;
         if let Some(err) = opened.get("error") {
             return Err(format!("channel.open refused (daemon too old?): {err}"));
@@ -222,7 +225,7 @@ async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<DaemonRead>>
     tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake)
         .await
         .map_err(|_| "channel handshake timed out".to_string())??;
-    Ok((lines, w))
+    Ok((lines, w, owner))
 }
 
 /// Reads daemon events and re-emits them to the frontend. Never writes —
@@ -252,6 +255,7 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         // And a cleanup run's: its done event lets go.
                         let cleanup_event = (name == crate::cleanup::CLEANUP_RUN).then(|| payload.clone());
                         let lagged = name == "daemon-events-lagged";
+                        let backup_access = matches!(name.as_str(),"backup-access-needed"|"backup-access-release");
                         if name == "settings-changed" {
                             crate::follow_settings_log_level(&payload);
                         }
@@ -271,6 +275,7 @@ async fn pump<R: tokio::io::AsyncBufRead + Unpin>(app: &tauri::AppHandle, mut li
                         if let Some(event) = cleanup_event {
                             crate::cleanup::release_after_event(app, &event);
                         }
+                        if backup_access || lagged {crate::backup::reconcile_native_access(app);}
                         if lagged {
                             crate::bulk::reconcile_after_channel_change(app);
                             crate::export_folder::release_all(app, "the daemon event stream lagged");

@@ -3428,12 +3428,18 @@ async fn rpc_attempt_inner(socket_path: &Path, token: &str, method: &str, params
     RpcOutcome::Ok(resp.get_mut("result").map(serde_json::Value::take).unwrap_or(serde_json::Value::Null))
 }
 
+fn webview_rpc_token(method:&str, connected:bool, inode:u64, token:Option<&str>)->Result<Option<String>,String> {
+    if matches!(method,"backup.attach_access"|"backup.access_status"|"channel.open") || method.starts_with("backup.owner_") {return Err("errors.settingsInvalid".into());}
+    Ok(rpc_fast_path(connected,inode,token))
+}
+
 #[tauri::command]
 async fn daemon_rpc(
     app_handle: tauri::AppHandle,
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    let fast_token = webview_rpc_token(&method, daemon_channel::is_connected(), VERIFIED_SOCKET_INO.load(Ordering::SeqCst), cached_daemon_token().as_deref())?;
     // Native authorization must run before both fast and slow RPC paths.
     if matches!(method.as_str(), "bulk.start" | "bulk.resume") {
         return tauri::async_runtime::spawn_blocking(move || bulk::forward(&app_handle,&method,params)).await.map_err(|e|e.to_string())?;
@@ -3448,12 +3454,6 @@ async fn daemon_rpc(
     // skips ensure_daemon_running (and its spawn_blocking) entirely. No
     // blocking I/O here — is_connected/the atomics/the token mutex are all
     // just reading in-memory state.
-    let fast_token = rpc_fast_path(
-        daemon_channel::is_connected(),
-        VERIFIED_SOCKET_INO.load(Ordering::SeqCst),
-        cached_daemon_token().as_deref(),
-    );
-
     if let Some(token) = fast_token {
         match rpc_attempt(&socket_path, &token, &method, &params, timeout).await {
             RpcOutcome::Ok(v) => return Ok(v),
@@ -3510,7 +3510,7 @@ async fn daemon_rpc(
 /// The daemon bridge: send one fire-and-forget notification on the channel.
 #[tauri::command]
 fn daemon_channel_notify(method: String, params: serde_json::Value) {
-    daemon_channel::notify(&method, params);
+    if webview_rpc_token(&method,false,0,None).is_ok() {daemon_channel::notify(&method, params);}
 }
 
 /// Whether the page inside the main window may render.
@@ -3728,6 +3728,7 @@ fn main() {
     // app-side IMAP callers.
     let builder = builder
         .manage(backup::HeldBackupPaths::default())
+        .manage(backup::NativeBackupAccess::default())
         .manage(abd::HeldAbdPaths::default())
         .manage(bulk::HeldBulkPaths::default())
         .manage(cleanup::HeldCleanupPath::default())
@@ -4694,6 +4695,17 @@ mod tests {
     #[test]
     fn reply_timeout_gives_fetch_remote_asset_thirty_seconds() {
         assert_eq!(crate::reply_timeout("fetch_remote_asset"), Some(std::time::Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn backup_access_private_controls_reject_both_forwarding_paths() {
+        for connected in [false,true] {
+            for method in ["backup.attach_access","backup.access_status","backup.owner_attach","channel.open"] {
+                assert!(super::webview_rpc_token(method,connected,1,Some("native-token")).is_err());
+            }
+        }
+        assert!(super::webview_rpc_token("backup.run_now",false,0,None).unwrap().is_none());
+        assert!(super::webview_rpc_token("backup.run_now",true,1,Some("native-token")).unwrap().is_some());
     }
 
     /// Every window's hydration waits on `settings.get`: bounded by name.

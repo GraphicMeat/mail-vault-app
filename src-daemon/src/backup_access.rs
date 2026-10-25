@@ -36,9 +36,14 @@ pub(crate) fn owner_lost(state: &Arc<DaemonState>, owner: &str) {
     if let Some(tx)=state.backup_worker.tx.get() {let _=tx.send(Cmd::OwnerLost(owner.into()));}
 }
 pub(super) fn interrupt_owner(state:&Arc<DaemonState>,ledger:&mut Ledger,owner:&str) {
-    let records=state.backup_worker.access.records.lock().unwrap();
-    for i in ledger.active.iter_mut().chain(ledger.queue.iter_mut()) {
-        if records.values().any(|r|r.attempt.owner_id==owner && r.attempt.execution_id==i.execution_id && r.lost) && i.stage!="uncertain" {i.stage="stopping".into();}
+    let executions=state.backup_worker.access.records.lock().unwrap().values().filter(|r|r.attempt.owner_id==owner && r.lost).map(|r|r.attempt.execution_id.clone()).collect::<HashSet<_>>();
+    if let Some(active)=ledger.active.as_mut().filter(|i|executions.contains(&i.execution_id)) {
+        if active.stage!="uncertain" {active.stage="stopping".into();set_phase(state,&active.execution_id,"stopping");}
+    }
+    for i in ledger.queue.iter_mut().filter(|i|executions.contains(&i.execution_id)) {
+        no_start(state,i);
+        renew(state,i);
+        for request in &i.requests {ledger.requests.insert(request.clone(),response(i));}
     }
 }
 pub(super) async fn process(state:&Arc<DaemonState>, ledger:&mut Ledger, request:Request)->Result<Value,String> {
@@ -52,11 +57,10 @@ pub(super) async fn process(state:&Arc<DaemonState>, ledger:&mut Ledger, request
     }
     let current=ledger.active.iter().chain(ledger.queue.iter()).find(|i| i.run_id==key.run_id && i.execution_id==key.execution_id);
     let live=current.is_some_and(|i| !cancelled(state,i));
-    let active=ledger.active.as_ref().is_some_and(|i|i.execution_id==key.execution_id);
     let conflict=access.records.lock().unwrap().values().any(|r|r.attempt.execution_id==key.execution_id && !matches!(r.phase.as_str(),"drained"|"fenced"|"rejected"));
     let mut record=Record{attempt:key.clone(),phase:"pending".into(),root:None,slot:None,lost:false};
     match request {
-        Request::Status(_) if fence => { record.phase=if active {"preparing"} else {"fenced"}.into(); }
+        Request::Status(_) if fence => { record.phase="fenced".into(); }
         Request::Status(_) => {return Ok(json!({"attempt":key,"state":"unknown","safeRelease":false}));}
         Request::Attach(attach) => {
             if !live || conflict || !access.owners.lock().unwrap().contains(&key.owner_id) {record.phase="rejected".into();}
@@ -71,6 +75,8 @@ pub(super) async fn process(state:&Arc<DaemonState>, ledger:&mut Ledger, request
             }
         }
     }
+    // Owner loss can arrive while the fallible slot read was off-thread.
+    if record.root.is_some() && !access.owners.lock().unwrap().contains(&key.owner_id) {record.root=None;record.phase="rejected".into();}
     let out=receipt(&record);
     access.records.lock().unwrap().insert(key,record);
     if out["state"]=="accepted" {
@@ -102,4 +108,30 @@ pub(super) async fn root(state:&Arc<DaemonState>,intent:&Intent)->Result<Option<
         return Err(());
     }
     if stamp.is_none() {Ok(None)} else {Err(())}
+}
+
+pub(super) fn set_phase(state:&Arc<DaemonState>,execution:&str,phase:&str) {
+    for r in state.backup_worker.access.records.lock().unwrap().values_mut().filter(|r|r.attempt.execution_id==execution && r.root.is_some()) {
+        if !matches!(r.phase.as_str(),"drained"|"fenced"|"rejected"|"uncertain") {r.phase=phase.into();}
+    }
+}
+fn complete(state:&Arc<DaemonState>,intent:&Intent,uncertain:bool)->(bool,bool) {
+    let mut attached=false;let mut lost=false;
+    let mut indications=Vec::new();
+    for r in state.backup_worker.access.records.lock().unwrap().values_mut().filter(|r|r.attempt.execution_id==intent.execution_id && r.attempt.run_id==intent.run_id) {
+        if matches!(r.phase.as_str(),"fenced"|"rejected") {continue;}
+        attached=true;lost|=r.lost;
+        if uncertain {r.phase="uncertain".into();}
+        else if r.phase!="drained" {r.phase="drained".into();r.root=None;indications.push(receipt(r));}
+    }
+    for indication in indications {state.events.emit("backup-access-release",indication);}
+    (attached,lost)
+}
+pub(super) fn joined(state:&Arc<DaemonState>,intent:&Intent,exit:&RunExit)->(bool,bool) {
+    complete(state,intent,matches!(exit,RunExit::Completed(joined) if joined.uncertain))
+}
+pub(super) fn no_start(state:&Arc<DaemonState>,intent:&Intent) {complete(state,intent,false);}
+pub(super) fn renew(state:&Arc<DaemonState>,intent:&mut Intent) {
+    intent.execution_id=uuid::Uuid::new_v4().to_string();intent.stage="pending_access".into();intent.checkpoint=0;
+    state.backup_worker.controls.lock().unwrap().insert(intent.run_id.clone(),Arc::new(AtomicBool::new(false)));
 }

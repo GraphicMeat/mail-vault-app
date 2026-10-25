@@ -30,6 +30,9 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::external_location;
+#[path = "backup_native_access.rs"]
+mod native_access;
+pub(crate) use native_access::{NativeBackupAccess, connected as access_connected, disconnected as access_disconnected, schedule as reconcile_native_access};
 
 /// Every mirror-touching daemon call shares this budget, same value and same
 /// reasoning as `vault_flags.rs`'s (`reply_timeout`'s 600 s family): a
