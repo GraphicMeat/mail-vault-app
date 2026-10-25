@@ -436,3 +436,32 @@ it('applies App-prepared full body immediately while an old header RPC finishes 
   expect(snapshots.at(-1)._quotedHtml).toContain('Full body first');
   expect(screen.getByTestId('editor-stub').value).toBe('<p>Keep authored text</p>');
 });
+
+it('keeps an already prepared header reply sendable when the quote-only body fill fails', async () => {
+  const snapshots = []; const header = { ...parent, html: '', text: '' };
+  const props = { mode: 'reply', onClose: () => {}, onSaveState: d => snapshots.push(d) };
+  const { rerender } = render(<ComposeModal {...props} replyTo={header} />);
+  await waitFor(() => expect(screen.getByTestId('compose-send').disabled).toBe(false));
+  fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>Header reply kept</p>' } });
+  preparation.failure = true;
+  rerender(<ComposeModal {...props} replyTo={{ ...parent, html: '<p>Later original</p>' }} />);
+  await screen.findByText('Could not prepare this message. Please try again.');
+  expect(screen.getByTestId('compose-send').disabled).toBe(false);
+  expect(screen.getByTestId('editor-stub').value).toBe('<p>Header reply kept</p>');
+  fireEvent.click(screen.getByTestId('compose-send'));
+  await waitFor(() => expect(stageOutgoing).toHaveBeenCalled());
+  expect(stageOutgoing.mock.calls[0][1].to).toBe('them@example.test');
+  expect(stageOutgoing.mock.calls[0][1].text).toContain('Header reply kept');
+  expect(stageOutgoing.mock.calls[0][1].text).not.toContain('Later original');
+});
+it('reveals an automatically detached editor when initial preparation fails', async () => {
+  const previous = settings.composeOpenMode; settings.composeOpenMode = 'window'; preparation.failure = true;
+  const onDetach = vi.fn();
+  try {
+    render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} onDetach={onDetach} />);
+    await screen.findByText('Could not prepare this message. Please try again.');
+    expect(document.querySelector('[data-auto-detach="true"]')).toBeNull();
+    expect(onDetach).not.toHaveBeenCalled();
+    expect(screen.getByTestId('compose-send').disabled).toBe(true);
+  } finally { settings.composeOpenMode = previous; }
+});
