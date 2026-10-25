@@ -4982,6 +4982,7 @@ dependencies = [
  "futures",
  "hickory-resolver",
  "html5ever 0.40.1",
+ "iana-time-zone",
  "imap-proto",
  "jiff",
  "keyring",

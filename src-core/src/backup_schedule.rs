@@ -146,16 +146,23 @@ pub fn local_zone() -> Result<jiff::tz::TimeZone, &'static str> {
     // name library may otherwise return a stale textual /etc/timezone value.
     let localtime = if cfg!(all(unix, not(target_os = "macos"))) {
         Some(std::path::Path::new("/etc/localtime"))
-    } else { None };
-    system_zone(|| iana_time_zone::get_timezone().map_err(|_| INVALID), localtime)
+    } else {
+        None
+    };
+    system_zone(
+        || iana_time_zone::get_timezone().map_err(|_| INVALID),
+        localtime,
+    )
 }
 fn named_zone(name: &str) -> Result<jiff::tz::TimeZone, &'static str> {
     let zone = jiff::tz::db().get(name).map_err(|_| INVALID)?;
-    if zone.is_unknown() { return Err(INVALID); }
+    if zone.is_unknown() {
+        return Err(INVALID);
+    }
     Ok(zone)
 }
 fn zoneinfo_name(path: &str) -> Option<&str> {
-    path.rsplit_once("zoneinfo/").map(|(_,name)|name)
+    path.rsplit_once("zoneinfo/").map(|(_, name)| name)
 }
 fn read_tzif(path: &std::path::Path) -> Result<jiff::tz::TimeZone, &'static str> {
     // Keep the complete rules and reread every time, including copied files.
@@ -163,14 +170,20 @@ fn read_tzif(path: &std::path::Path) -> Result<jiff::tz::TimeZone, &'static str>
     jiff::tz::TimeZone::tzif("local", &bytes).map_err(|_| INVALID)
 }
 fn zone_from_env(value: &str) -> Result<jiff::tz::TimeZone, &'static str> {
-    if value.is_empty() { return Ok(jiff::tz::TimeZone::UTC); }
+    if value.is_empty() {
+        return Ok(jiff::tz::TimeZone::UTC);
+    }
     // Preserve Jiff's POSIX rule before name/path precedence. A leading colon
     // selects the implementation/name/path form and is not a POSIX rule.
     if !value.starts_with(':') {
-        if let Ok(zone) = jiff::tz::TimeZone::posix(value) { return Ok(zone); }
+        if let Ok(zone) = jiff::tz::TimeZone::posix(value) {
+            return Ok(zone);
+        }
     }
     let path = value.strip_prefix(':').unwrap_or(value);
-    if let Ok(zone) = named_zone(zoneinfo_name(path).unwrap_or(path)) { return Ok(zone); }
+    if let Ok(zone) = named_zone(zoneinfo_name(path).unwrap_or(path)) {
+        return Ok(zone);
+    }
     read_tzif(std::path::Path::new(path))
 }
 fn system_zone(
@@ -180,7 +193,9 @@ fn system_zone(
     if let Some(path) = localtime {
         if let Ok(target) = std::fs::read_link(path) {
             if let Some(name) = target.to_str().and_then(zoneinfo_name) {
-                if let Ok(zone) = named_zone(name) { return Ok(zone); }
+                if let Ok(zone) = named_zone(name) {
+                    return Ok(zone);
+                }
             }
         }
         return read_tzif(path);
@@ -367,37 +382,77 @@ pub fn config_view(settings: &Value) -> Value {
 #[cfg(test)]
 mod zone_provider_tests {
     use super::*;
-    mod data { include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/support/backup_zone_tzif.rs")); }
+    mod data {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/support/backup_zone_tzif.rs"
+        ));
+    }
     fn offsets(zone: &jiff::tz::TimeZone) -> Vec<i32> {
-        [1_699_999_999_000,1_750_000_000_000,1_800_000_001_000].into_iter().map(|t|zone.to_offset(jiff::Timestamp::from_millisecond(t).unwrap()).seconds()).collect()
+        [1_699_999_999_000, 1_750_000_000_000, 1_800_000_001_000]
+            .into_iter()
+            .map(|t| {
+                zone.to_offset(jiff::Timestamp::from_millisecond(t).unwrap())
+                    .seconds()
+            })
+            .collect()
     }
     #[test]
     fn native_names_are_requested_fresh_and_errors_never_become_utc() {
-        for (name,expected) in [("UTC",1792918800000),("Europe/Vilnius",1792911600000),("America/New_York",1792933200000),("UTC",1792918800000)] {
-            let zone = system_zone(||Ok(name.into()),None).unwrap();
-            assert_eq!(next_in_zone(&json!({}),&json!({"interval":"hours","hours":[9]}),1792888200000,&zone).unwrap(),expected);
+        for (name, expected) in [
+            ("UTC", 1792918800000),
+            ("Europe/Vilnius", 1792911600000),
+            ("America/New_York", 1792933200000),
+            ("UTC", 1792918800000),
+        ] {
+            let zone = system_zone(|| Ok(name.into()), None).unwrap();
+            assert_eq!(
+                next_in_zone(
+                    &json!({}),
+                    &json!({"interval":"hours","hours":[9]}),
+                    1792888200000,
+                    &zone
+                )
+                .unwrap(),
+                expected
+            );
         }
-        assert!(system_zone(||Err(INVALID),None).is_err());
-        assert!(system_zone(||Ok("not-a-zone".into()),None).is_err());
+        assert!(system_zone(|| Err(INVALID), None).is_err());
+        assert!(system_zone(|| Ok("not-a-zone".into()), None).is_err());
     }
     #[test]
     fn copied_current_localtime_rules_beat_stale_text_and_are_reread() {
-        let directory=tempfile::tempdir().unwrap();let current=directory.path().join("localtime");let stale=directory.path().join("timezone");
-        std::fs::write(&stale,"America/New_York").unwrap();
-        let fallback=||std::fs::read_to_string(&stale).map_err(|_|INVALID);
-        std::fs::write(&current,data::tzif(7200)).unwrap();
-        assert_eq!(offsets(&system_zone(fallback,Some(&current)).unwrap()),vec![7200,10800,7200]);
-        std::fs::write(&current,data::tzif(0)).unwrap();
-        assert_eq!(offsets(&system_zone(fallback,Some(&current)).unwrap()),vec![0,3600,0]);
-        std::fs::write(&current,b"broken").unwrap();assert!(system_zone(fallback,Some(&current)).is_err());
-        std::fs::remove_file(&current).unwrap();assert!(system_zone(fallback,Some(&current)).is_err());
+        let directory = tempfile::tempdir().unwrap();
+        let current = directory.path().join("localtime");
+        let stale = directory.path().join("timezone");
+        std::fs::write(&stale, "America/New_York").unwrap();
+        let fallback = || std::fs::read_to_string(&stale).map_err(|_| INVALID);
+        std::fs::write(&current, data::tzif(7200)).unwrap();
+        assert_eq!(
+            offsets(&system_zone(fallback, Some(&current)).unwrap()),
+            vec![7200, 10800, 7200]
+        );
+        std::fs::write(&current, data::tzif(0)).unwrap();
+        assert_eq!(
+            offsets(&system_zone(fallback, Some(&current)).unwrap()),
+            vec![0, 3600, 0]
+        );
+        std::fs::write(&current, b"broken").unwrap();
+        assert!(system_zone(fallback, Some(&current)).is_err());
+        std::fs::remove_file(&current).unwrap();
+        assert!(system_zone(fallback, Some(&current)).is_err());
     }
     #[cfg(unix)]
     #[test]
     fn current_named_localtime_link_uses_bundled_rules() {
-        let directory=tempfile::tempdir().unwrap();let current=directory.path().join("localtime");
-        std::os::unix::fs::symlink("/not-present/zoneinfo/Europe/Vilnius",&current).unwrap();
-        let zone=system_zone(||panic!("stale textual fallback cannot win"),Some(&current)).unwrap();
-        assert_eq!(zone.iana_name(),Some("Europe/Vilnius"));
+        let directory = tempfile::tempdir().unwrap();
+        let current = directory.path().join("localtime");
+        std::os::unix::fs::symlink("/not-present/zoneinfo/Europe/Vilnius", &current).unwrap();
+        let zone = system_zone(
+            || panic!("stale textual fallback cannot win"),
+            Some(&current),
+        )
+        .unwrap();
+        assert_eq!(zone.iana_name(), Some("Europe/Vilnius"));
     }
 }
