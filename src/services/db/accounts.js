@@ -1,9 +1,23 @@
-// ── db/accounts — accounts.json + keychain account CRUD, dedup, bootstrapping ──
+// ── db/accounts - accounts.json + keychain account CRUD, dedup, bootstrapping ──
+//
+// The daemon owns accounts.json (Phase 1 step 0b, `accounts.*`,
+// src-core/src/accounts_doc.rs): this module never reads or writes the file
+// itself. It asks the daemon for the list and sends each change (a merge by
+// id, an add-if-absent, a removal), and the daemon writes atomically, keeps
+// a version and backups, and emits `accounts-changed {ids, version}`. A
+// daemon without `accounts.*` (errors.daemonOutdated, or a reply of another
+// shape: this window uses the shell from then on) or one that cannot be
+// reached (this call only; a first read waits at most READ_BUDGET_MS) gets
+// the same operation through the shell (`accounts_fallback`, one release),
+// which runs the same core code under the same lock file. Nothing here builds
+// a whole list from a read that failed: the one whole-list write (the
+// duplicate cleanup) carries the version of the read it came from.
+// Credentials go through db/keychain.js.
 
-import { readTextFile, writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
-import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveKeychain } from './keychain.js';
+import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials } from './keychain.js';
 import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
 
@@ -14,7 +28,6 @@ let initialized = false;
 
 // --- File helpers (accounts.json only) ---
 
-const ACCOUNTS_FILE = 'accounts.json';
 const MAILDIR = 'Maildir';
 
 // The app data dir comes from Rust (`get_app_data_dir`, the same resolver the
@@ -52,21 +65,81 @@ async function ensureDir(rel) {
   }
 }
 
+// ── The account list, through the daemon ───────────────────────────────────
+
+// The daemon's own errors (`accounts_doc::AccountsError`): it answered and
+// refused or failed this one, so the shell is not tried instead.
+const ACCOUNTS_ERRORS = ['errors.accountsConflict', 'errors.accountsInvalid', 'errors.accountsWriteFailed'];
+// How long a read waits for a daemon not yet seen to answer before the shell
+// reads the file instead (a cold daemon is still starting; quick load paints
+// from this list).
+const READ_BUDGET_MS = 1500;
+const SECRET_FIELDS = ['password', 'oauth2AccessToken', 'oauth2RefreshToken'];
+
+// 'daemon' once accounts.* answered, 'shell' for a daemon without it.
+let listMode = 'unknown';
+
+const errText = e => (typeof e === 'string' ? e : e?.message || String(e));
+const isReply = r => !!r && typeof r === 'object' && Number.isInteger(r.version);
+
+function withBudget(promise, ms) {
+  let timer;
+  const budget = new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('budget'), { code: 'DAEMON_UNAVAILABLE' })), ms); });
+  return Promise.race([promise, budget]).finally(() => clearTimeout(timer));
+}
+
+async function accountsCall(method, params = {}) {
+  if (listMode !== 'shell') {
+    try {
+      const call = Promise.resolve().then(() => invoke(method, params));
+      const read = method === 'accounts.list' || method === 'accounts.get';
+      const reply = await (read && listMode !== 'daemon' ? withBudget(call, READ_BUDGET_MS) : call);
+      if (isReply(reply)) {
+        listMode = 'daemon';
+        return reply;
+      }
+      listMode = 'shell';
+    } catch (error) {
+      if (error?.code === 'DAEMON_OUTDATED') listMode = 'shell';
+      else if (ACCOUNTS_ERRORS.includes(errText(error))) throw new Error(errText(error));
+      // Unreachable, or not an answer of the daemon's own: the shell this time.
+    }
+  }
+  try {
+    const reply = await invoke('accounts_fallback', { method, params });
+    if (!isReply(reply)) throw new Error('errors.accountsWriteFailed');
+    return reply;
+  } catch (error) {
+    throw new Error(errText(error));
+  }
+}
+
+const stripSecrets = (account) => Object.fromEntries(Object.entries(account).filter(([k]) => !SECRET_FIELDS.includes(k)));
+
+// The list and its version. Throws when it could not be read: a caller about
+// to change the list must never work from a list it did not get.
+async function listAccounts() {
+  const reply = await accountsCall('accounts.list');
+  if (!Array.isArray(reply.accounts)) throw new Error('errors.accountsWriteFailed');
+  if (reply.recovered) console.warn('[db.js] accounts.json did not parse; listed from', reply.recovered);
+  return { accounts: reply.accounts, version: reply.version };
+}
+
+// The list for showing and merging: empty when it cannot be read.
 async function readAccountsFile() {
   try {
-    const file = await dataPath(ACCOUNTS_FILE);
-    const fileExists = await exists(file);
-    if (!fileExists) return [];
-    const data = await readTextFile(file);
-    return JSON.parse(data);
+    return (await listAccounts()).accounts;
   } catch (error) {
-    console.warn('[db.js] Failed to read accounts.json:', error);
+    console.warn('[db.js] Failed to read accounts.json:', errText(error));
     return [];
   }
 }
 
-async function writeAccountsFile(accounts) {
-  await writeTextFile(await dataPath(ACCOUNTS_FILE), JSON.stringify(accounts, null, 2));
+/** For tests: forget which way the list was reached. */
+export function __resetAccountsForTests() {
+  listMode = 'unknown';
+  initialized = false;
+  basicInitDone = false;
 }
 
 export function accountDir(accountId) {
@@ -85,15 +158,9 @@ export async function initBasic() {
   // Ensure base directories exist
   await ensureDir(MAILDIR);
 
-  // Ensure accounts.json exists
-  try {
-    const fileExists = await exists(await dataPath(ACCOUNTS_FILE));
-    if (!fileExists) {
-      await writeAccountsFile([]);
-    }
-  } catch {
-    await writeAccountsFile([]);
-  }
+  // accounts.json is not created here any more: a missing file is an empty
+  // list to every reader, and the old `catch` wrote `[]` over the file when
+  // a mere existence check failed.
 
   basicInitDone = true;
   console.log('[db.js] Basic init done (no keychain)');
@@ -130,10 +197,7 @@ export async function initDB() {
 
       if (keysToRemove.length > 0) {
         console.log('[db.js] Removing', keysToRemove.length, 'legacy keychain entries without email:', keysToRemove);
-        for (const key of keysToRemove) {
-          delete data[key];
-        }
-        await saveKeychain(data);
+        await deleteCredentials(keysToRemove);
         console.log('[db.js] Legacy keychain cleanup complete');
       }
     } catch (e) {
@@ -160,31 +224,22 @@ export async function saveAccount(account) {
       account.previousImapHost = prior.imapHost;
       account.hostChangedAt = Date.now();
     }
-  } catch { /* first save — nothing to compare */ }
+  } catch { /* first save - nothing to compare */ }
 
   // Store full account (including password) in keychain
   if (invoke) {
     try {
-      const data = await loadKeychain();
-      data[account.id] = JSON.stringify(account);
-      await saveKeychain(data);
+      await saveCredentials({ [account.id]: JSON.stringify(account) });
       console.log('[db.js] Account stored in keychain');
     } catch (error) {
-      console.error('[db.js] Failed to store account in keychain:', error);
+      console.error('[db.js] Failed to store account in keychain:', errText(error));
       throw error;
     }
   }
 
-  // Also write metadata (no secrets) to accounts.json for quick loading
-  const { password, oauth2AccessToken, oauth2RefreshToken, ...acctData } = account;
-  const accounts = await readAccountsFile();
-  const idx = accounts.findIndex(a => a.id === acctData.id);
-  if (idx >= 0) {
-    accounts[idx] = { ...accounts[idx], ...acctData };
-  } else {
-    accounts.push(acctData);
-  }
-  await writeAccountsFile(accounts);
+  // Also write metadata (no secrets) to accounts.json for quick loading:
+  // merged onto the stored entry with this id, or appended.
+  await accountsCall('accounts.put', { entries: [stripSecrets(account)] });
   console.log('[db.js] Account metadata saved to accounts.json');
   return account;
 }
@@ -203,42 +258,28 @@ export async function saveAccounts(accounts) {
   if (!accounts.length) return;
   await initDB();
 
-  // Mutate the shared cache in place, as saveAccount does: a later queued
-  // keychain write (token refresh) is built from that same cache, so it
-  // keeps these accounts even if the write queue collapses ours into it.
-  const data = await loadKeychain();
+  // One change for every record. On the shell path it is laid onto the
+  // shared cache and taken back out if the write fails, so a later write
+  // built from that cache (token refresh) never persists these accounts.
+  await loadKeychain();
   const status = keychainSession.getStatus();
   if (status !== 'granted' && status !== 'empty') throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
-  const prior = new Map(accounts.map(a => [a.id, data[a.id]]));
-  for (const account of accounts) data[account.id] = JSON.stringify(account);
   try {
-    await saveKeychain(data);
+    await saveCredentials(Object.fromEntries(accounts.map(a => [a.id, JSON.stringify(a)])));
   } catch (error) {
-    // The caller will be told the import failed, so a later write built from
-    // this shared cache (token refresh) must not persist these accounts.
-    for (const [id, value] of prior) {
-      if (value === undefined) delete data[id];
-      else data[id] = value;
-    }
     throw accountsWriteError(error);
   }
 
   try {
-    const file = await readAccountsFile();
-    for (const { password, oauth2AccessToken, oauth2RefreshToken, ...acctData } of accounts) {
-      const idx = file.findIndex(a => a.id === acctData.id);
-      if (idx >= 0) file[idx] = { ...file[idx], ...acctData };
-      else file.push(acctData);
-    }
-    await writeAccountsFile(file);
+    await accountsCall('accounts.put', { entries: accounts.map(stripSecrets) });
   } catch (error) {
     throw accountsWriteError(error);
   }
   console.log('[db.js] saveAccounts stored', accounts.length, 'account(s)');
 }
 
-// The keychain queue rejects with store_credentials' raw Rust string and
-// plugin-fs with its own; callers map on an E_* prefix.
+// The shell's keychain queue rejects with store_credentials' raw Rust string,
+// the account list with its catalog key; callers map on an E_* prefix.
 function accountsWriteError(error) {
   const message = String(error?.message ?? error);
   return new Error(message.startsWith('E_') ? message : `${keychainSession.E_KEYCHAIN_WRITE}: ${message}`);
@@ -252,7 +293,7 @@ export async function getAccountsWithoutPasswords() {
 // Ensure account metadata (no password) exists in accounts.json for quick-load.
 // Called after full init to backfill from keychain data.
 /**
- * Logical account identity key — same email + same server/provider = same account.
+ * Logical account identity key - same email + same server/provider = same account.
  * Used to detect duplicates across keychain and accounts.json.
  */
 export function accountLogicalKey(a) {
@@ -299,18 +340,14 @@ function deduplicateAccounts(accounts) {
   return deduped;
 }
 
-// Batch version: reads accounts.json once, merges all missing accounts, writes once.
+// Batch version: one change that adds every account whose id and logical
+// identity (accountLogicalKey, matched by the daemon) the list lacks.
 export async function ensureAccountsInFile(accounts) {
-  const existing = await readAccountsFile();
-  const existingIds = new Set(existing.map(a => a.id));
-  const existingKeys = new Set(existing.map(a => accountLogicalKey(a)));
-  const newAccounts = accounts
-    .filter(a => !existingIds.has(a.id) && !existingKeys.has(accountLogicalKey(a)))
-    .map(({ password, oauth2AccessToken, oauth2RefreshToken, ...acctData }) => acctData);
-  if (newAccounts.length > 0) {
-    await writeAccountsFile([...existing, ...newAccounts]);
-    console.log('[db.js] Backfilled', newAccounts.length, 'accounts to accounts.json');
-  }
+  const entries = accounts.filter(a => a?.id).map(stripSecrets);
+  if (!entries.length) return;
+  const reply = await accountsCall('accounts.put', { entries, ifAbsent: true });
+  const added = Array.isArray(reply.changed) ? reply.changed.length : 0;
+  if (added > 0) console.log('[db.js] Backfilled', added, 'accounts to accounts.json');
 }
 
 export async function getAccounts() {
@@ -325,9 +362,13 @@ export async function getAccounts() {
     // Filter to only valid accounts (must have email)
     const validAccounts = keychainAccounts.filter(a => a.email);
 
-    // Always read file accounts as a fallback — merge to ensure no accounts are lost
+    // Always read file accounts as a fallback - merge to ensure no accounts are lost
     // when keychain times out and returns fewer accounts
-    const fileAccounts = await readAccountsFile();
+    const listed = await listAccounts().catch((error) => {
+      console.warn('[db.js] Failed to read accounts.json:', errText(error));
+      return { accounts: [], version: null };
+    });
+    const fileAccounts = listed.accounts;
 
     if (validAccounts.length > 0) {
       // Merge: keychain is authoritative, but include file-only accounts (missing from keychain due to timeout)
@@ -336,11 +377,11 @@ export async function getAccounts() {
       const keychainKeys = new Set(validAccounts.map(a => accountLogicalKey(a)));
       const fileOnly = fileAccounts.filter(a => !keychainIds.has(a.id) && !keychainKeys.has(accountLogicalKey(a)));
       if (fileOnly.length > 0) {
-        console.log(`[db.js] ${fileOnly.length} account(s) from file not in keychain — adding without credentials`);
+        console.log(`[db.js] ${fileOnly.length} account(s) from file not in keychain - adding without credentials`);
       }
       accounts = [...validAccounts, ...fileOnly];
     } else {
-      // Keychain empty (timeout or fresh install) — use file accounts with whatever passwords are available
+      // Keychain empty (timeout or fresh install) - use file accounts with whatever passwords are available
       accounts = fileAccounts.map(a => ({
         ...a,
         password: data[a.id] || undefined
@@ -350,12 +391,13 @@ export async function getAccounts() {
     // Deduplicate by logical identity (email + server/provider)
     accounts = deduplicateAccounts(accounts);
 
-    // One-time cleanup: remove duplicates from accounts.json
+    // One-time cleanup: remove duplicates from accounts.json. Only over the
+    // list as it was read (its version): if it changed since, skip it.
     const cleanedFile = deduplicateAccounts(fileAccounts);
-    if (cleanedFile.length < fileAccounts.length) {
+    if (cleanedFile.length < fileAccounts.length && listed.version != null) {
       console.log(`[db.js] Cleaning up ${fileAccounts.length - cleanedFile.length} duplicate(s) from accounts.json`);
-      const cleanedWithoutCreds = cleanedFile.map(({ password, oauth2AccessToken, oauth2RefreshToken, ...rest }) => rest);
-      await writeAccountsFile(cleanedWithoutCreds).catch(e => console.warn('[db.js] Failed to clean accounts.json:', e));
+      await accountsCall('accounts.replace_all', { entries: cleanedFile.map(stripSecrets), baseVersion: listed.version })
+        .catch(e => console.warn('[db.js] Failed to clean accounts.json:', errText(e)));
     }
   } else {
     accounts = deduplicateAccounts(await readAccountsFile());
@@ -363,28 +405,26 @@ export async function getAccounts() {
 
   // Auto-repair: personal Microsoft accounts must use Graph transport.
   // Older saved accounts may have oauth2Transport: 'imap' which fails with XOAUTH2.
-  let repaired = false;
+  const repaired = [];
   for (const account of accounts) {
     if (account.authType === 'oauth2' && isPersonalMicrosoftEmail(account.email) && account.oauth2Transport !== 'graph') {
       console.log(`[db.js] Auto-repairing ${account.email}: switching oauth2Transport from '${account.oauth2Transport}' to 'graph'`);
       account.oauth2Transport = 'graph';
-      repaired = true;
+      repaired.push(account);
     }
   }
 
-  // Persist the repair to keychain so it's permanent
-  if (repaired && invoke) {
+  // Persist the repair to keychain so it's permanent: the repaired records
+  // only, and only those the keychain holds (an accounts.json-only entry has
+  // no secrets to keep; the old whole-blob write could drop other records).
+  if (repaired.length && invoke) {
     try {
-      const credentials = {};
-      for (const a of accounts) {
-        credentials[a.id] = JSON.stringify(a);
-      }
-      await invoke('store_credentials', { credentials });
-      const { credentialsChanged } = await import('../oauthTokenSync.js');
-      credentialsChanged();
+      const data = await loadKeychain();
+      const records = Object.fromEntries(repaired.filter(a => data[a.id]).map(a => [a.id, JSON.stringify(a)]));
+      await saveCredentials(records);
       console.log('[db.js] Persisted auto-repaired account transports to keychain');
     } catch (e) {
-      console.warn('[db.js] Failed to persist transport repair:', e);
+      console.warn('[db.js] Failed to persist transport repair:', errText(e));
     }
   }
 
@@ -414,42 +454,43 @@ export async function updateOAuth2Tokens(accountId, tokens) {
     const data = await loadKeychain();
     if (!data[accountId]) return;
 
-    const account = JSON.parse(data[accountId]);
-    account.oauth2AccessToken = tokens.accessToken;
-    account.oauth2RefreshToken = tokens.refreshToken || account.oauth2RefreshToken;
-    account.oauth2ExpiresAt = tokens.expiresAt;
-
-    data[accountId] = JSON.stringify(account);
-    await saveKeychain(data);
+    const stored = JSON.parse(data[accountId]);
+    // The refresh token only when the pair carries one: this window's copy
+    // may be older than a Reconnect another window saved.
+    const fields = {
+      oauth2AccessToken: tokens.accessToken,
+      ...(tokens.refreshToken ? { oauth2RefreshToken: tokens.refreshToken } : {}),
+      oauth2ExpiresAt: tokens.expiresAt,
+    };
+    // Only these fields change, merged into the record as stored now, and
+    // only while it is still this pair's grant (`chain`, checked by the
+    // daemon against what it holds, not against this window's copy).
+    if (!(await updateCredentials(accountId, fields, { chain: tokens.chain }))) return;
     console.log('[db.js] OAuth2 tokens updated for account:', accountId);
-    return account;
+    return { ...stored, ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) };
   } catch (error) {
-    console.error('[db.js] Failed to update OAuth2 tokens:', error);
+    console.error('[db.js] Failed to update OAuth2 tokens:', errText(error));
     throw error;
   }
 }
 
 export async function deleteAccount(id) {
-  await initDB();
-  // Retire native local-compose evidence before removing account persistence.
+  // Remove this account's compose receipts before any account cleanup.
   await invoke('compose.receipts.remove_account', { accountId: id });
+  await initDB();
 
   // Remove from keychain
   if (invoke) {
     try {
-      const data = await loadKeychain();
-      delete data[id];
-      await saveKeychain(data);
+      await deleteCredentials([id]);
       console.log('[db.js] Account removed from keychain:', id);
     } catch (error) {
-      console.error('[db.js] Failed to remove account from keychain:', error);
+      console.error('[db.js] Failed to remove account from keychain:', errText(error));
     }
   }
 
   // Remove from accounts.json
-  const accounts = await readAccountsFile();
-  const filtered = accounts.filter(a => a.id !== id);
-  await writeAccountsFile(filtered);
+  await accountsCall('accounts.remove', { ids: [id] });
 
   // Remove Maildir/{accountId}/ directory
   try {

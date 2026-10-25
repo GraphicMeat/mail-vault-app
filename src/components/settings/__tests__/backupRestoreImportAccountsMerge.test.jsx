@@ -37,7 +37,16 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 // top-level module side effect the moment anything pulls the `db` barrel
 // in (mailStore's workflows do, statically), before any test's own
 // beforeEach runs. The default must resolve, not return undefined.
-const sendDefault = (cmd) => Promise.resolve(cmd === 'get_app_data_dir' ? '/data' : null);
+// accounts.json is the daemon's (`accounts.*`): a stand-in over the same
+// in-memory file, so the merge is still read back from "disk".
+const { fakeAccountsDaemon } = await import('../../../services/db/__tests__/fakeAccountsDaemon.js');
+const daemon = fakeAccountsDaemon({ read: () => fsFiles[ACCOUNTS_PATH] ?? null, write: (text) => { fsFiles[ACCOUNTS_PATH] = text; } });
+const sendDefault = (cmd, args) => {
+  if (typeof cmd === 'string' && cmd.startsWith('accounts.')) {
+    try { return Promise.resolve(daemon.call(cmd, args)); } catch (e) { return Promise.reject(e); }
+  }
+  return Promise.resolve(cmd === 'get_app_data_dir' ? '/data' : null);
+};
 const sendMock = vi.fn(sendDefault);
 vi.mock('../../../services/transport', () => ({ send: (...a) => sendMock(...a) }));
 
@@ -76,11 +85,11 @@ afterEach(() => {
 });
 
 it('merges import_backup\'s newAccounts descriptors into accounts.json and lists their emails, not [object Object]', async () => {
-  sendMock.mockImplementation((cmd) => {
+  sendMock.mockImplementation((cmd, args) => {
     if (cmd === 'import_backup') {
       return Promise.resolve({ emailCount: 5, accountCount: 2, newAccounts: NEW_ACCOUNTS, settingsJson: null });
     }
-    return sendDefault(cmd);
+    return sendDefault(cmd, args);
   });
 
   render(<BackupRestore />);
@@ -117,7 +126,7 @@ it('round-trips account hosts: export manifest -> import -> accounts.json', asyn
       const newAccounts = manifestAccounts.map((a) => ({ ...a, id: 'restored-carol', createdAt: '2026-01-01T00:00:00Z' }));
       return Promise.resolve({ emailCount: 1, accountCount: 1, newAccounts, settingsJson: null });
     }
-    return Promise.resolve(null);
+    return sendDefault(cmd, args);
   });
 
   render(<BackupRestore />);
@@ -141,9 +150,9 @@ it('round-trips account hosts: export manifest -> import -> accounts.json', asyn
 // message says how many were skipped.
 it('says how many MBOX messages the folder already had', async () => {
   useMailStore.setState({ accounts: [{ id: 'acct-1', email: 'me@test.com' }] });
-  sendMock.mockImplementation((cmd) => (cmd === 'import_mbox'
+  sendMock.mockImplementation((cmd, args) => (cmd === 'import_mbox'
     ? Promise.resolve({ emailCount: 2, skippedCount: 3, accountId: 'acct-1', mailbox: 'INBOX' })
-    : sendDefault(cmd)));
+    : sendDefault(cmd, args)));
 
   render(<BackupRestore />);
   fireEvent.click(screen.getByRole('button', { name: /Import MBOX/i }));

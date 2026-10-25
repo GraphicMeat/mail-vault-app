@@ -12,7 +12,9 @@ vi.mock('../keychain.js', () => ({
   parseKeychainValue: (id, v) => JSON.parse(v),
   getAccountsFromKeychain: () => [],
   loadKeychain: vi.fn(async () => ({})),
-  saveKeychain: vi.fn(async () => {}),
+  saveCredentials: vi.fn(async () => {}),
+  deleteCredentials: vi.fn(async () => {}),
+  updateCredentials: vi.fn(async () => true),
 }));
 vi.mock('../../keychainSession.js', () => ({ getStatus: () => 'granted', E_KEYCHAIN_UNAVAILABLE: 'E_KEYCHAIN_UNAVAILABLE', E_KEYCHAIN_WRITE: 'E_KEYCHAIN_WRITE' }));
 vi.mock('../../transport.js', () => ({ send: vi.fn(async () => ({})) }));

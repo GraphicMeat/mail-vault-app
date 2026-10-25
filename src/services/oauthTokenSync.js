@@ -66,7 +66,7 @@ async function takeAndSave() {
       if (current.oauth2AccessToken && current.oauth2AccessToken !== accessToken
         && Number(current.oauth2ExpiresAt) > Number(expiresAt)) continue;
       // Undefined: the keychain holds no such account any more.
-      const stored = await updateOAuth2Tokens(accountId, { accessToken, refreshToken, expiresAt });
+      const stored = await updateOAuth2Tokens(accountId, { accessToken, refreshToken, expiresAt, chain });
       if (!stored) continue;
       saved += 1;
       useMailStore.setState(state => ({

@@ -1,4 +1,19 @@
-// ── db/keychain — OS keychain read/write, session state, load queueing ──
+// ── db/keychain - OS keychain read/write, session state, load queueing ──
+//
+// The daemon owns the credentials blob (Phase 1 step 0b,
+// src-daemon/src/handlers/credentials.rs): `credentials.get` answers what the
+// shell's `get_credentials` did, and `credentials.save` / `.update` /
+// `.delete` change one account at a time on a fresh read of the store, so a
+// stale cache here can never drop another window's account. The shell's own
+// commands stay for one release, for a daemon without `credentials.*`
+// (errors.daemonOutdated, or a reply of another shape: this window uses the
+// shell from then on) and for a daemon that cannot be reached (this call
+// only). A daemon that answered with an error of its own is not bypassed:
+// `errors.keychainUnavailable` means nothing was written and is the same
+// E_KEYCHAIN_UNAVAILABLE a failed read gave; a keychain write the daemon
+// could not make falls back to the shell's whole-blob write only when this
+// window holds a complete copy (a read that succeeded). `credentials-changed
+// {ids, version}` from another writer refreshes the copy. No secret is logged.
 
 import { parseKeychainValue, getAccountsFromKeychain } from '../keychainUtils.js';
 import * as keychainSession from '../keychainSession.js';
@@ -21,6 +36,67 @@ transportSend('get_app_data_dir', {})
   })
   .catch(error => console.error('[db.js] Transport init check failed:', error));
 
+// How this window reaches the blob: 'daemon' once credentials.* answered,
+// 'shell' for a daemon without it, 'unknown' until then (and while the
+// daemon cannot be reached: every call tries it first).
+let mode = 'unknown';
+let lastVersion = null;
+// Bumped by every change this window made, so a refresh read that started
+// before one never replaces the copy with what it read.
+let localWrites = 0;
+// Which read the cached copy came from: 'shell' when the daemon's read
+// failed and this window's own quiet read succeeded (on macOS the app is the
+// item's creator and may read it while the daemon's gate is blocked).
+let copySource = null;
+
+const errText = e => (typeof e === 'string' ? e : e?.message || String(e));
+const outdated = e => e?.code === 'DAEMON_OUTDATED';
+const unreachable = e => e?.code === 'DAEMON_UNAVAILABLE' || e?.code === 'NO_TAURI';
+const isReadReply = r => !!r && typeof r === 'object' && typeof r.status === 'string';
+const isWriteReply = r => !!r && typeof r === 'object' && Number.isInteger(r.version);
+const E_UNAVAILABLE = 'errors.keychainUnavailable';
+const E_WRITE = 'errors.keychainWriteFailed';
+const E_INVALID = 'errors.credentialsInvalid';
+// A daemon write is parked (a keychain prompt nobody answered): retried, and
+// never answered with the shell's whole-blob write, which the parked write
+// could land on top of.
+const E_BUSY = 'errors.keychainBusy';
+const noteVersion = v => { if (Number.isInteger(v)) lastVersion = lastVersion == null ? v : Math.max(lastVersion, v); };
+
+const readOk = r => r?.status === 'granted' || r?.status === 'empty';
+
+// The blob through the daemon, else the shell's own read. A daemon read that
+// failed (its keychain gate blocked, a refused prompt) is tried once more
+// through the shell, which reads quietly and never prompts: a read cannot
+// lose anything, and whichever succeeded is kept.
+async function readCredentials() {
+  if (mode !== 'shell') {
+    try {
+      const reply = await invoke('credentials.get', {});
+      if (isReadReply(reply)) {
+        mode = 'daemon';
+        listenForChanges();
+        if (readOk(reply)) {
+          copySource = 'daemon';
+          return reply;
+        }
+        const own = await Promise.resolve().then(() => invoke('get_credentials')).catch(() => null);
+        if (readOk(own)) {
+          copySource = 'shell';
+          return own;
+        }
+        return reply;
+      }
+      mode = 'shell';
+    } catch (error) {
+      if (outdated(error)) mode = 'shell';
+      else if (!unreachable(error)) console.warn('[db.js] The daemon could not read the credentials:', error?.code || 'error');
+    }
+  }
+  copySource = 'shell';
+  return invoke('get_credentials');
+}
+
 // Keychain cache - stores full account objects (id, email, servers, password)
 // Each value in the HashMap is a JSON-serialized account object.
 // Format: { accountId: JSON.stringify({id, email, imapHost, smtpHost, password, createdAt}) }
@@ -39,18 +115,18 @@ async function loadKeychain() {
 
   // If the session is locked out (user denied/cancelled), don't re-prompt automatically
   if (keychainSession.isLockedOut()) {
-    console.log('[db.js] Keychain session locked out — skipping automatic read');
+    console.log('[db.js] Keychain session locked out - skipping automatic read');
     keychainCache = keychainCache || {};
     keychainLoaded = true;
     return keychainCache;
   }
 
-  // Single attempt — no retry loop. The Rust side has its own timeout+retry.
+  // Single attempt - no retry loop. The Rust side has its own timeout+retry.
   _keychainLoadPromise = (async () => {
     try {
       console.log('[db.js] Loading accounts from keychain...');
       keychainSession.recordOutcome('requesting');
-      const result = await invoke('get_credentials');
+      const result = await readCredentials();
 
       // Structured response: { status, credentials?, message? }
       const status = result?.status || 'unavailable';
@@ -66,9 +142,9 @@ async function loadKeychain() {
         console.log('[db.js] Keychain loaded:', status, `(${count} account(s))`);
       } else {
         // denied, cancelled, timed_out, unavailable
-        console.warn(`[db.js] Keychain access: ${status}${message ? ' — ' + message : ''}`);
+        console.warn(`[db.js] Keychain access: ${status}${message ? ' - ' + message : ''}`);
         if (isSnap() && status === 'unavailable') {
-          console.error('[db.js] Snap keyring access failed — password-manager-service plug may be disconnected');
+          console.error('[db.js] Snap keyring access failed - password-manager-service plug may be disconnected');
         }
         keychainCache = {};
         keychainLoaded = true;
@@ -96,7 +172,7 @@ async function saveKeychain(data) {
   const newCount = Object.keys(data).length;
   const cachedCount = Object.keys(keychainCache || {}).length;
   if (newCount < cachedCount && cachedCount > 0) {
-    console.warn(`[db.js] saveKeychain: merging — new data has ${newCount} entries but cache has ${cachedCount}, preserving existing`);
+    console.warn(`[db.js] saveKeychain: merging - new data has ${newCount} entries but cache has ${cachedCount}, preserving existing`);
     data = { ...keychainCache, ...data };
   }
 
@@ -151,6 +227,183 @@ async function _processKeychainQueue() {
 }
 
 
+// ── Per-account changes ─────────────────────────────────────────────────────
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// A change through the daemon: its reply, or null when this one must go
+// through the shell (no credentials.* there, or no daemon). Throws when the
+// daemon refused or failed it.
+async function changeThroughDaemon(method, params) {
+  if (mode === 'shell') return null;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const reply = await invoke(method, params);
+      if (isWriteReply(reply)) {
+        mode = 'daemon';
+        noteVersion(reply.version);
+        listenForChanges();
+        return reply;
+      }
+      mode = 'shell';
+      return null;
+    } catch (error) {
+      if (outdated(error)) { mode = 'shell'; return null; }
+      if (unreachable(error)) return null;
+      const text = errText(error);
+      if (text === E_UNAVAILABLE) {
+        // The daemon could not read the blob, but this window's own read
+        // did (the copy came from it): the shell writes, as before step 0b.
+        if (copySource === 'shell' && keychainLoaded && readOk({ status: keychainSession.getStatus() })) {
+          console.warn('[db.js] The daemon could not read the keychain; writing it from this window');
+          return null;
+        }
+        throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
+      }
+      if (text === E_INVALID) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${E_INVALID}`);
+      if (attempt >= 3) {
+        // The daemon could not write the keychain (on macOS, an item it may
+        // not change): the shell's own write, from a complete copy only.
+        const status = keychainSession.getStatus();
+        if (text === E_WRITE && keychainLoaded && (status === 'granted' || status === 'empty')) {
+          console.warn('[db.js] The daemon could not write the keychain; writing it from this window');
+          return null;
+        }
+        throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${text === E_WRITE || text === E_BUSY ? text : 'error'}`);
+      }
+      console.warn(`[db.js] Credentials change failed (attempt ${attempt}/3)`);
+      await sleep(1000 * attempt);
+    }
+  }
+}
+
+// The shell path for one change, as every write went before: the change on
+// the cached blob, the whole blob written. Taken back out of the cache when
+// the write fails, so a later write built from it does not persist it.
+async function changeThroughShell(apply) {
+  const data = await loadKeychain();
+  const before = { ...data };
+  const result = apply(data);
+  try {
+    await saveKeychain(data);
+  } catch (error) {
+    for (const key of Object.keys(data)) if (!(key in before)) delete data[key];
+    Object.assign(data, before);
+    throw error;
+  }
+  return result;
+}
+
+function withCache(apply) {
+  localWrites += 1;
+  if (keychainCache) apply(keychainCache);
+}
+
+const defined = fields => Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+
+/**
+ * Store these records (`{ accountId: JSON.stringify(account) }`), each
+ * replacing the one under its id; every other account is kept.
+ */
+export async function saveCredentials(records) {
+  if (!Object.keys(records).length) return;
+  if (await changeThroughDaemon('credentials.save', { records })) {
+    withCache(cache => Object.assign(cache, records));
+    return;
+  }
+  await changeThroughShell(data => { Object.assign(data, records); });
+}
+
+/**
+ * Merge these top-level fields into the stored record of `accountId`.
+ * Resolves false (and writes nothing) when no record is stored for it, or,
+ * with `chain` (a refreshed pair's grant fingerprints), when the record the
+ * daemon holds now is another grant's (a newer sign-in another window saved).
+ */
+export async function updateCredentials(accountId, fields, { chain } = {}) {
+  const changes = defined(fields);
+  const params = { id: accountId, fields: changes, ...(Array.isArray(chain) ? { chain } : {}) };
+  const reply = await changeThroughDaemon('credentials.update', params);
+  if (reply) {
+    if (reply.staleGrant) return false;
+    if (reply.updated) {
+      withCache(cache => {
+        if (!cache[accountId]) return;
+        try { cache[accountId] = JSON.stringify({ ...JSON.parse(cache[accountId]), ...changes }); } catch { /* a legacy value */ }
+      });
+    }
+    return reply.updated === true;
+  }
+  const data = await loadKeychain();
+  if (!data[accountId]) return false;
+  await changeThroughShell(blob => { blob[accountId] = JSON.stringify({ ...JSON.parse(blob[accountId]), ...changes }); });
+  return true;
+}
+
+/** Remove the stored records of these ids. */
+export async function deleteCredentials(ids) {
+  if (!ids.length) return;
+  if (await changeThroughDaemon('credentials.delete', { ids })) {
+    withCache(cache => ids.forEach(id => delete cache[id]));
+    return;
+  }
+  await changeThroughShell(data => ids.forEach(id => delete data[id]));
+}
+
+// ── Other writers ───────────────────────────────────────────────────────────
+
+// Another window (or the daemon's own writer) changed the blob: take the
+// daemon's copy, unless this window has written since the read started.
+let refreshing = null;
+let refreshAgain = false;
+async function refreshCache() {
+  if (refreshing) { refreshAgain = true; return refreshing; }
+  refreshing = (async () => {
+    do {
+      refreshAgain = false;
+      const status = keychainSession.getStatus();
+      if (!keychainLoaded || mode !== 'daemon' || (status !== 'granted' && status !== 'empty')) return;
+      const writes = localWrites;
+      let reply;
+      try { reply = await invoke('credentials.get', {}); } catch { return; }
+      if (!isReadReply(reply) || (reply.status !== 'granted' && reply.status !== 'empty')) return;
+      if (writes !== localWrites) { refreshAgain = true; continue; }
+      const next = reply.credentials || {};
+      copySource = 'daemon';
+      const cache = keychainCache || (keychainCache = {});
+      for (const id of Object.keys(cache)) if (!(id in next)) delete cache[id];
+      Object.assign(cache, next);
+    } while (refreshAgain);
+  })().finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+let listening = false;
+function listenForChanges() {
+  const listen = typeof window !== 'undefined' ? window.__TAURI__?.event?.listen : undefined;
+  if (listening || typeof listen !== 'function') return;
+  listening = true;
+  const on = (name, cb) => Promise.resolve().then(() => listen(name, cb)).catch(() => {});
+  on('credentials-changed', ({ payload } = {}) => {
+    // This window's own change, or one it has already taken in.
+    if (Number.isInteger(payload?.version) && lastVersion != null && payload.version <= lastVersion) return;
+    noteVersion(payload?.version);
+    void refreshCache();
+  });
+  on('daemon-reconnected', () => { void refreshCache(); });
+}
+
+/** For tests: forget the transport mode and what the listeners set up. */
+export function __resetKeychainForTests() {
+  mode = 'unknown';
+  lastVersion = null;
+  localWrites = 0;
+  copySource = null;
+  listening = false;
+  refreshing = null;
+  clearCredentialsCache();
+}
+
 // Detect snap confinement by checking if app data dir is under ~/snap/
 let _isSnap = null;
 function isSnap() {
@@ -176,7 +429,7 @@ let _keychainLoadPromise = null;
  */
 export function startKeychainLoad() {
   if (_keychainLoadPromise || keychainLoaded) {
-    // Already loading or loaded — notify immediately if resolved
+    // Already loading or loaded - notify immediately if resolved
     if (keychainLoaded) {
       _keychainResolved = true;
       const cbs = _keychainReadyCallbacks;
