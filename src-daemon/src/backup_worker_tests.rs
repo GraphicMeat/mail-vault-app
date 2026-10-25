@@ -122,7 +122,11 @@ async fn backup_worker_panic_retains_actual_claim_as_uncertain() {
     let s=wait(&r.state,|s|s["active"]["stage"]=="uncertain").await;
     assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));
     assert!(s["requests"]["panic"]["status"]!="success");
-    assert!(settings(&r.state)["backupHistory"]["one"].is_null());finish(r).await;
+    assert!(settings(&r.state)["backupHistory"]["one"].is_null());
+    let run=s["active"]["runId"].clone();rpc(&r.state,"backup.stop",json!({})).await;
+    assert!(r.state.backup_runs.lock().unwrap().contains_key("one"));assert_eq!(r.state.backup_worker.uncertain.lock().unwrap().len(),1);
+    let joined=manual(&r.state,"one","join-uncertain").await;assert_eq!(joined["runId"],run);assert_eq!(joined["status"],"uncertain");
+    finish(r).await;
 }
 
 #[tokio::test]
@@ -307,4 +311,22 @@ async fn backup_worker_reopening_active_state_changes_execution_and_uses_zero_ch
     resumed.reply.send(Ok(result(7))).ok().unwrap();wait(&state,|s|s["requests"]["reopened"]["status"]=="success").await;
     assert_eq!(settings(&state)["backupHistory"]["one"].as_array().unwrap().len(),1);
     state.backup_worker.tx.get().unwrap().send(Cmd::Shutdown).unwrap();worker.await.unwrap();
+}
+
+#[tokio::test]
+async fn backup_worker_cancel_followed_by_early_error_never_records_failed_history() {
+    let mut r=rig();let ack=manual(&r.state,"one","cancel-error").await;let c=call(&mut r).await;
+    rpc(&r.state,"backup.cancel",json!({"runId":ack["runId"]})).await;
+    c.reply.send(Err("transport ended after cancellation".into())).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["cancel-error"]["status"]=="cancelled").await;
+    assert!(settings(&r.state)["backupHistory"]["one"].is_null());assert!(settings(&r.state)["backupState"]["one"]["lastBackupTime"].is_null());finish(r).await;
+}
+#[tokio::test]
+async fn backup_worker_provider_cancel_error_projects_failure_without_history_or_time() {
+    let mut r=rig();patch(&r.state,json!({"backupState":{"one":{"lastBackupTime":42,"lastStatus":"success"}}}));
+    manual(&r.state,"one","provider-stop").await;let c=call(&mut r).await;
+    let mut stopped=result(1);stopped.cancelled=true;stopped.error_message=Some("provider download allowance spent".into());c.reply.send(Ok(stopped)).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["provider-stop"]["status"]=="cancelled").await;
+    assert_eq!(settings(&r.state)["backupState"]["one"]["lastStatus"],"failed");assert_eq!(settings(&r.state)["backupState"]["one"]["lastError"],"provider download allowance spent");
+    assert_eq!(settings(&r.state)["backupState"]["one"]["lastBackupTime"],42);assert!(settings(&r.state)["backupHistory"]["one"].is_null());finish(r).await;
 }

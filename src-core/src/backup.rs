@@ -245,9 +245,9 @@ fn terminal_backup_progress(
 ///   checkpoint a caller feeds back in as this on the next run
 ///   (`backup.rs:642,738-741`) — the struct that produces it needs an input
 ///   side or it's write-only.
-/// - `account_id`/`account_json`: `archive::run_with_backup` takes the raw
-///   JSON string and reparses it itself; re-serializing `account` here would
-///   risk not round-tripping identically (e.g. post credential-resolution).
+/// - `account_id`/`account`: the existing archive implementation receives
+///   the resolved typed config. `account_json` is a retained compatibility
+///   field for older context builders and is not read by these runners.
 #[derive(Clone)]
 pub struct BackupRunContext {
     pub account_id: String,
@@ -629,7 +629,7 @@ async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String
     if !missing.is_empty() {
         let archived = archive::run_with_backup_config(
             Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account.clone(), mailbox.clone(), missing,
-            Arc::clone(&ctx.cancel), ctx.mirror_root.clone(), Some(account.email.clone()), false, "backup", false,
+            Arc::clone(&ctx.cancel), ctx.mirror_root.clone(), Some(account.email.clone()), false, "backup", true,
             ctx.limit.clone(), None,
         ).await?.0;
         out.backed_up = archived.completed;

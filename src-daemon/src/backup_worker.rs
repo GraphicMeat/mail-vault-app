@@ -4,7 +4,7 @@ use crate::{handlers::{backup as adapter, common}, ipc::{self, RpcResponse}, ser
 use mailvault_core::{app_db::{self, db}, backup_schedule as policy, settings_doc::{SettingsDoc, SettingsError}};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::{BTreeMap, HashMap}, future::Future, path::Path, pin::Pin, sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering::SeqCst}}, time::Duration};
+use std::{collections::{BTreeMap, HashMap, HashSet}, future::Future, path::Path, pin::Pin, sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering::SeqCst}}, time::Duration};
 use tokio::sync::{mpsc::{unbounded_channel, UnboundedSender, UnboundedReceiver}, oneshot};
 use rusqlite::OptionalExtension;
 
@@ -409,6 +409,17 @@ async fn apply_retained(state:&Arc<DaemonState>,ledger:&mut Ledger)->Result<(),S
         state.backup_worker.controls.lock().unwrap().remove(&next.outcomes[index].intent.run_id);
         *ledger=next;
     }
+    // Outcomes needed for replay are never pruned. Once acknowledged, keep
+    // only the same small newest-five account window as settings history.
+    let mut next=ledger.clone();let mut seen=HashMap::<String,usize>::new();
+    next.outcomes.reverse();next.outcomes.retain(|out|{
+        if !out.applied{return true;}
+        let count=seen.entry(out.intent.account_id.clone()).or_default();*count+=1;*count<=5
+    });next.outcomes.reverse();
+    if next.outcomes.len()!=ledger.outcomes.len(){publish(state,&mut next).await?;*ledger=next;}
+    let live=ledger.active.iter().chain(ledger.queue.iter()).map(|i|i.run_id.clone())
+        .chain(ledger.outcomes.iter().filter(|o|!o.applied).map(|o|o.intent.run_id.clone())).collect::<HashSet<_>>();
+    state.backup_worker.controls.lock().unwrap().retain(|run,_|live.contains(run));
     Ok(())
 }
 fn apply_outcome(path:&Path,out:&Outcome)->Result<Option<mailvault_core::settings_doc::Change>,String> {
