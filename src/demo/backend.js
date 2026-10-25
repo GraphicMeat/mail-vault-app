@@ -713,6 +713,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // Daemon-owned commands (search index, vault rows/search — spec
         // 2026-09-14 §5) keep their Tauri names, not a dotted daemon method.
         if (method && !method.includes('.')) return invoke(method, args.params || {});
+        if (method?.startsWith('credentials.')) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
         // Insights: the daemon's insights.build / aggregate / messages
@@ -1820,6 +1821,8 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'open_file': case 'open_email_window': return unsupported(command);
       case 'oauth2_google_clients': return { mailvault: false, default: 'thunderbird' };
       case 'oauth2.take_refreshed': return { tokens: [] };
+      case 'credentials.get': return invoke('get_credentials');
+      case 'credentials.save': case 'credentials.update': case 'credentials.delete': return unsupported(command);
       case 'oauth2.credentials_changed': return { ok: true };
       case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': case 'store_password': case 'store_credentials': return unsupported(command);
       // The browser demo has no index: searchLocalEmails falls back to its scan.

@@ -641,22 +641,34 @@ fn keyring_entry(name: &str) -> Result<Entry, String> {
 /// (Windows). Parts first, then the manifest, then the previous generation's
 /// parts go: a reader always finds a complete set.
 fn write_credentials_blob(json: &str) -> Result<(), String> {
-    use mailvault_core::keychain::{secret_limit, split_secret, stale_parts};
-    let primary = keyring_entry(CREDENTIALS_KEY)?;
-    let old = primary.get_password().ok();
-    let generation = format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
-    let split = split_secret(CREDENTIALS_KEY, json, secret_limit(), &generation);
-    for (name, value) in &split.parts {
-        keyring_entry(name)?.set_password(value).map_err(|e| format!("Failed to store credentials part: {}", e))?;
-    }
-    primary.set_password(&split.primary).map_err(|e| format!("Failed to store credentials: {}", e))?;
-    if !split.parts.is_empty() {
-        info!("Credentials stored in {} parts", split.parts.len());
-    }
-    for name in stale_parts(CREDENTIALS_KEY, old.as_deref(), &split) {
-        if let Err(e) = keyring_entry(&name).and_then(|e| e.delete_credential().map_err(|e| e.to_string())) {
-            warn!("store_credentials: could not remove stale part {}: {}", name, e);
+    use mailvault_core::keychain::{secret_limit, write_split_secret, SecretStore, SplitWriteError};
+    // The same write the daemon's `credentials.save` does (one order, in core).
+    struct Keyring;
+    impl SecretStore for Keyring {
+        fn get(&mut self, name: &str) -> Result<Option<String>, String> {
+            match keyring_entry(name)?.get_password() {
+                Ok(v) => Ok(Some(v)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(e) => Err(e.to_string()),
+            }
         }
+        fn set(&mut self, name: &str, value: &str) -> Result<(), String> {
+            keyring_entry(name)?.set_password(value).map_err(|e| e.to_string())
+        }
+        fn delete(&mut self, name: &str) -> Result<(), String> {
+            keyring_entry(name)?.delete_credential().map_err(|e| e.to_string())
+        }
+    }
+    let generation = format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let written = write_split_secret(&mut Keyring, CREDENTIALS_KEY, json, secret_limit(), &generation).map_err(|e| match e {
+        SplitWriteError::Part(e) => format!("Failed to store credentials part: {}", e),
+        SplitWriteError::Primary(e) => format!("Failed to store credentials: {}", e),
+    })?;
+    if written.parts > 0 {
+        info!("Credentials stored in {} parts", written.parts);
+    }
+    for (name, e) in written.stale_left {
+        warn!("store_credentials: could not remove stale part {}: {}", name, e);
     }
     Ok(())
 }
@@ -3039,6 +3051,10 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // unbounded, like every other legacy dotted name.
         "ping" => Some(Duration::from_secs(10)),
 
+        // Native changes bound admission at 5s, read at 20s and write at
+        // 20s. Leave time for the daemon to report failure/uncertainty.
+        "credentials.get" | "credentials.save" | "credentials.update" | "credentials.delete" => Some(Duration::from_secs(50)),
+
         "vault_search"
         | "vault_rows"
         | "search_index_status"
@@ -4593,6 +4609,14 @@ mod tests {
     fn reply_timeout_bounds_the_body_scan_so_a_hung_daemon_frames_unscanned() {
         for method in ["body.scan", "body.verdicts", "body.classify_links", "body.info"] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
+    }
+
+    #[test]
+    fn reply_timeout_bounds_the_credential_rpcs_past_the_daemons_own_clocks() {
+        for method in ["credentials.get", "credentials.save", "credentials.update", "credentials.delete"] {
+            let t = crate::reply_timeout(method).expect(method);
+            assert!(t > std::time::Duration::from_secs(45) && t <= std::time::Duration::from_secs(55), "{method}: {t:?}");
         }
     }
 

@@ -117,6 +117,59 @@ pub fn stale_parts(key: &str, old_primary: Option<&str>, new: &SplitSecret) -> V
     old.into_iter().filter(|name| !new.parts.iter().any(|(n, _)| n == name)).collect()
 }
 
+/// How a split secret reaches the platform store (`keyring` in the shell and
+/// the daemon, a map in tests), so both processes write it in one order.
+pub trait SecretStore {
+    /// `Ok(None)`: no such entry.
+    fn get(&mut self, name: &str) -> Result<Option<String>, String>;
+    /// Updates an entry that exists in place, creates one that does not.
+    fn set(&mut self, name: &str, value: &str) -> Result<(), String>;
+    fn delete(&mut self, name: &str) -> Result<(), String>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SplitWriteError {
+    /// A part could not be written: the primary still names the old set.
+    Part(String),
+    /// The primary could not be written: the old set is still whole.
+    Primary(String),
+}
+
+/// What a split write did beyond the primary.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct SplitWritten {
+    pub parts: usize,
+    /// Previous-generation parts that could not be removed (names only).
+    pub stale_left: Vec<(String, String)>,
+}
+
+/// Writes `secret` under `key`: parts first, then the primary, then the
+/// previous generation's parts go, so a reader always finds a complete set.
+/// The primary is set in place, never deleted and recreated: on macOS an
+/// update keeps the item's access list (which app may read it), a new item
+/// would belong to whichever process made it.
+pub fn write_split_secret(
+    store: &mut dyn SecretStore,
+    key: &str,
+    secret: &str,
+    limit: usize,
+    generation: &str,
+) -> Result<SplitWritten, SplitWriteError> {
+    let old = store.get(key).ok().flatten();
+    let split = split_secret(key, secret, limit, generation);
+    for (name, value) in &split.parts {
+        store.set(name, value).map_err(SplitWriteError::Part)?;
+    }
+    store.set(key, &split.primary).map_err(SplitWriteError::Primary)?;
+    let mut written = SplitWritten { parts: split.parts.len(), stale_left: Vec::new() };
+    for name in stale_parts(key, old.as_deref(), &split) {
+        if let Err(e) = store.delete(&name) {
+            written.stale_left.push((name, e));
+        }
+    }
+    Ok(written)
+}
+
 /// The secret a stored primary stands for. `get` reads any entry by name
 /// (`Ok(None)` = no such entry). A manifest whose parts vanished was replaced
 /// mid-read, so the primary is read again once. Every failure says "parts",
@@ -323,5 +376,63 @@ mod tests {
         write(&mut store, &"b".repeat(40), 8, "g2");
         let joined = join_secret("credentials", &stale, &mut |name| Ok(store.get(name).cloned()));
         assert_eq!(joined.unwrap(), "b".repeat(40));
+    }
+
+    /// A map standing in for the platform store, counting what it was asked.
+    #[derive(Default)]
+    struct MapStore {
+        entries: std::collections::HashMap<String, String>,
+        calls: Vec<String>,
+        fail_set: Option<String>,
+    }
+
+    impl SecretStore for MapStore {
+        fn get(&mut self, name: &str) -> Result<Option<String>, String> {
+            Ok(self.entries.get(name).cloned())
+        }
+        fn set(&mut self, name: &str, value: &str) -> Result<(), String> {
+            self.calls.push(format!("set {name}"));
+            if self.fail_set.as_deref() == Some(name) {
+                return Err("refused".to_string());
+            }
+            self.entries.insert(name.to_string(), value.to_string());
+            Ok(())
+        }
+        fn delete(&mut self, name: &str) -> Result<(), String> {
+            self.calls.push(format!("delete {name}"));
+            self.entries.remove(name);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_split_write_sets_parts_then_the_primary_then_drops_the_old_parts_and_never_deletes_the_primary() {
+        let mut store = MapStore::default();
+        write_split_secret(&mut store, "credentials", &"a".repeat(20), 8, "g1").unwrap();
+        store.calls.clear();
+        let written = write_split_secret(&mut store, "credentials", &"b".repeat(12), 8, "g2").unwrap();
+        assert_eq!(written.parts, 2);
+        assert_eq!(
+            store.calls,
+            vec!["set credentials.g2.0", "set credentials.g2.1", "set credentials", "delete credentials.g1.0", "delete credentials.g1.1", "delete credentials.g1.2"]
+        );
+        let joined = join_secret("credentials", &store.entries["credentials"].clone(), &mut |n| Ok(store.entries.get(n).cloned()));
+        assert_eq!(joined.unwrap(), "b".repeat(12));
+        // Back inline: the primary is overwritten, never deleted.
+        store.calls.clear();
+        write_split_secret(&mut store, "credentials", "short", 8, "g3").unwrap();
+        assert_eq!(store.calls[0], "set credentials");
+        assert!(!store.calls.iter().any(|c| c == "delete credentials"));
+        assert_eq!(store.entries["credentials"], "short");
+    }
+
+    #[test]
+    fn a_failed_part_leaves_the_old_primary_whole() {
+        let mut store = MapStore::default();
+        write_split_secret(&mut store, "credentials", "old", 8, "g1").unwrap();
+        store.fail_set = Some("credentials.g2.1".to_string());
+        let err = write_split_secret(&mut store, "credentials", &"c".repeat(20), 8, "g2").unwrap_err();
+        assert_eq!(err, SplitWriteError::Part("refused".to_string()));
+        assert_eq!(store.entries["credentials"], "old");
     }
 }

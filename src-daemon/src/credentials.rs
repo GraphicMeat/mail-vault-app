@@ -1,11 +1,6 @@
-// Credential-resolution seam: the ONE call site in the daemon that reads the
-// keychain entry the app writes (`store_credentials`/`get_credentials` in
-// src-tauri/src/main.rs). Used by sync.now/sync.watch (Task 5.2) so those RPCs
-// stop trusting IMAP passwords/OAuth tokens carried in the request payload.
-//
-// Every other daemon command keeps accepting credentials as RPC params,
-// unchanged — this seam is scoped to the one place the spec wants credentials
-// out of the JS payload.
+// Account credential reads and per-record mutations. The app adapters still
+// use their existing shell path; these native routes are a staged capability.
+// AI/PGP, gate and watcher behavior stays shared with the existing readers.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -349,7 +344,44 @@ fn blob_read(interactive: bool) -> BoxFuture<'static, Result<HashMap<String, Str
     if test_credentials_path().is_some() {
         return unshared(move || load_credentials_blob(interactive)).boxed();
     }
-    BLOB_READ.read(interactive, load_credentials_blob).boxed()
+    BLOB_READ
+        .read(interactive, load_blob_raw)
+        .map(|r| r.and_then(|blob| blob.ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))))
+        .boxed()
+}
+
+/// The blob as stored, `None` when nothing ever was: sealed store, then the
+/// debug file bypass, then the keychain, the precedence `store_credentials`
+/// keeps. Every other failure is an `Err`, never an empty blob, because the
+/// writers below start from what this answers.
+fn load_blob_raw(interactive: bool) -> Result<Option<HashMap<String, String>>, String> {
+    if let Some(store) = sealed() {
+        return store.secrets().map(|s| Some(s.credentials));
+    }
+    if let Some(path) = test_credentials_path() {
+        return match std::fs::read_to_string(&path) {
+            Ok(json) => serde_json::from_str(&json).map(Some).map_err(|_| "failed to parse test credentials".to_string()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(format!("failed to read test credentials: {}", e.kind())),
+        };
+    }
+    keychain_blob(interactive)
+}
+
+/// The blob was written outside `change_credentials` (the shell's own
+/// `store_credentials`, announced by `oauth2.credentials_changed`): a read
+/// already out may predate that write, so the next writer must not join it.
+pub(crate) fn blob_written_elsewhere() {
+    BLOB_READ.bump();
+}
+
+/// `load_blob_raw` started no earlier than write generation `since` (see
+/// `SingleFlight::read_since`).
+fn raw_read(interactive: bool, since: u64) -> BoxFuture<'static, Result<Option<HashMap<String, String>>, String>> {
+    if test_credentials_path().is_some() {
+        return unshared(move || load_blob_raw(interactive)).boxed();
+    }
+    BLOB_READ.read_since(since, interactive, load_blob_raw).boxed()
 }
 
 fn ai_key_read(interactive: bool) -> BoxFuture<'static, Result<Option<String>, String>> {
@@ -366,7 +398,7 @@ use futures::FutureExt;
 
 type SharedRead<T> = futures::future::Shared<BoxFuture<'static, Result<T, String>>>;
 
-static BLOB_READ: SingleFlight<HashMap<String, String>> = SingleFlight::new();
+static BLOB_READ: SingleFlight<Option<HashMap<String, String>>> = SingleFlight::new();
 static AI_KEY_READ: SingleFlight<Option<String>> = SingleFlight::new();
 
 /// At most one blocking read per keychain item. A read parked on a prompt
@@ -377,13 +409,29 @@ static AI_KEY_READ: SingleFlight<Option<String>> = SingleFlight::new();
 /// callers (`sync.watch` for every account on reconnect) share one read, and
 /// `keychain.retry` joins a read still waiting on the prompt the user can see.
 pub(crate) struct SingleFlight<T> {
-    /// The read out, and whether it may prompt.
-    out: std::sync::Mutex<Option<(bool, SharedRead<T>)>>,
+    /// The read out, whether it may prompt, and the write generation it
+    /// started in.
+    out: std::sync::Mutex<Option<(bool, u64, SharedRead<T>)>>,
+    /// Bumped after every write this daemon makes to the item, and for the
+    /// blob after every write the shell announces: a read that started
+    /// before it may not have seen that write.
+    generation: std::sync::atomic::AtomicU64,
 }
 
 impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
     pub(crate) const fn new() -> Self {
-        Self { out: std::sync::Mutex::new(None) }
+        Self { out: std::sync::Mutex::new(None), generation: std::sync::atomic::AtomicU64::new(0) }
+    }
+
+    /// The current write generation.
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// A write to the item landed: reads already out are stale for a caller
+    /// that asks `read_since` the new generation. Answers it.
+    pub(crate) fn bump(&self) -> u64 {
+        self.generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
     }
 
     /// Join the read out for this item, or start one. A non-interactive caller
@@ -395,12 +443,28 @@ impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
         interactive: bool,
         read: impl FnOnce(bool) -> Result<T, String> + Send + 'static,
     ) -> Result<T, String> {
+        self.read_since(0, interactive, read).await
+    }
+
+    /// `read`, answered only by a read that started in generation `since` or
+    /// later: one already out from before a write is waited out (never a
+    /// second thread beside it), then a fresh one starts. What a writer and
+    /// the app's own reads use, so neither works from a blob older than the
+    /// last write the daemon made.
+    pub(crate) async fn read_since(
+        &'static self,
+        since: u64,
+        interactive: bool,
+        read: impl FnOnce(bool) -> Result<T, String> + Send + 'static,
+    ) -> Result<T, String> {
         let mut read = Some(read);
         loop {
             let (answers, shared) = {
                 let mut out = self.out.lock().unwrap_or_else(|e| e.into_inner());
                 match &*out {
-                    Some((out_interactive, shared)) => (*out_interactive || !interactive, shared.clone()),
+                    Some((out_interactive, started, shared)) => {
+                        ((*out_interactive || !interactive) && *started >= since, shared.clone())
+                    }
                     None => {
                         // Taken once: a caller that starts a read returns its result.
                         let read = read.take().expect("a read is started at most once");
@@ -412,7 +476,7 @@ impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
                             *self.out.lock().unwrap_or_else(|e| e.into_inner()) = None;
                             result
                         });
-                        *out = Some((interactive, shared.clone()));
+                        *out = Some((interactive, self.generation(), shared.clone()));
                         (true, shared)
                     }
                 }
@@ -1028,6 +1092,372 @@ pub async fn update_pgp_keys(
     Ok(keys)
 }
 
+// ── The app's credentials, read and written here (Phase 1, step 0b) ────────
+//
+// The app no longer reads or writes the blob itself: `credentials.get` hands
+// it the blob with the status its own `get_credentials` answered, and
+// `credentials.save` / `.update` / `.delete` change it one account at a
+// time. Each change reads the blob fresh (never a read that started before
+// the last write), applies only the ids it names, and writes the whole blob
+// back in the store's own order, one change at a time. A read that did not
+// succeed fails the change: starting from an empty blob would drop every
+// other account's secrets. Only "nothing stored yet" starts from empty.
+//
+// Same backends and precedence as the app's commands: a portable copy's
+// sealed store, then the debug file bypass, then the keychain (service
+// `com.mailvault.app`, entry `credentials`, split into parts on Windows).
+// On the keychain the primary item is updated in place, never deleted and
+// recreated, so on macOS it keeps the access list it was created with.
+//
+// Nothing here logs or answers a record, a password or a token: ids, counts
+// and catalog keys only.
+
+/// Why a change was refused or failed; the RPC answers the catalog key.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum CredError {
+    /// The blob could not be read (locked, refused, no answer, unparseable,
+    /// a locked portable store): nothing was written.
+    Unavailable,
+    /// The blob could not be written: the stored one is unchanged.
+    WriteFailed,
+    /// A write is parked (a keychain prompt nobody answered) or the one
+    /// ahead took too long: nothing was written, try again later.
+    Busy,
+    /// The request is not a set of records the app writes.
+    Invalid,
+    /// An update for another grant than the one stored (a newer sign-in was
+    /// saved since): nothing was written. An answer, not an error.
+    StaleGrant,
+}
+
+impl CredError {
+    pub(crate) fn catalog_key(&self) -> &'static str {
+        match self {
+            CredError::Unavailable => "errors.keychainUnavailable",
+            CredError::WriteFailed => "errors.keychainWriteFailed",
+            CredError::Busy => "errors.keychainBusy",
+            CredError::Invalid | CredError::StaleGrant => "errors.credentialsInvalid",
+        }
+    }
+}
+
+/// One change the app asks for.
+#[derive(Debug, Clone)]
+pub(crate) enum CredChange {
+    /// Each record replaces the one stored under its id (or is added). A
+    /// record is the JSON text of an account object, stored as given.
+    Save(HashMap<String, String>),
+    /// `Save` for the ids the blob does not hold yet only: what the account
+    /// list still carried from an older release, kept before it is scrubbed.
+    SaveIfAbsent(HashMap<String, String>),
+    /// These top-level fields merged into the stored record of `id`; nothing
+    /// when there is no such record. With `chain` (the grant fingerprints of
+    /// a refreshed pair, `oauth_tokens`), only over a stored record of that
+    /// grant (else `StaleGrant`), and a refresh token only when it is a new
+    /// one of the same grant.
+    Update { id: String, fields: serde_json::Map<String, Value>, chain: Option<Vec<String>> },
+    Delete(Vec<String>),
+}
+
+fn valid_records(records: &HashMap<String, String>) -> Result<(), CredError> {
+    for (id, record) in records {
+        let parsed = serde_json::from_str::<Value>(record).map_err(|_| CredError::Invalid)?;
+        if id.is_empty() || !parsed.is_object() {
+            return Err(CredError::Invalid);
+        }
+    }
+    Ok(())
+}
+
+/// The ids `change` changes in `blob`, applied.
+pub(crate) fn apply_change(blob: &mut HashMap<String, String>, change: &CredChange) -> Result<Vec<String>, CredError> {
+    let mut changed = Vec::new();
+    match change {
+        CredChange::Save(records) | CredChange::SaveIfAbsent(records) => {
+            valid_records(records)?;
+            let only_new = matches!(change, CredChange::SaveIfAbsent(_));
+            let mut ids: Vec<&String> = records.keys().collect();
+            ids.sort();
+            for id in ids {
+                let record = &records[id];
+                if only_new && blob.contains_key(id) {
+                    continue;
+                }
+                if blob.get(id) != Some(record) {
+                    blob.insert(id.clone(), record.clone());
+                    changed.push(id.clone());
+                }
+            }
+        }
+        CredChange::Update { id, fields, chain } => {
+            let Some(raw) = blob.get(id) else { return Ok(changed) };
+            let Ok(Value::Object(mut record)) = serde_json::from_str::<Value>(raw) else { return Err(CredError::Unavailable) };
+            let mut fields = fields.clone();
+            if let Some(chain) = chain {
+                let stored = Value::Object(record.clone());
+                // The grant stored now must be the pair's own.
+                if !crate::oauth_tokens::record_fingerprint(&stored, None).is_some_and(|fp| chain.contains(&fp)) {
+                    return Err(CredError::StaleGrant);
+                }
+                let sent = fields.get("oauth2RefreshToken").and_then(Value::as_str).map(str::to_owned);
+                if let Some(rt) = sent {
+                    let same = record.get("oauth2RefreshToken").and_then(Value::as_str) == Some(rt.as_str());
+                    let of_chain = crate::oauth_tokens::record_fingerprint(&stored, Some(&rt)).is_some_and(|fp| chain.contains(&fp));
+                    if same || !of_chain {
+                        fields.remove("oauth2RefreshToken");
+                    }
+                }
+            }
+            let before = record.clone();
+            for (k, v) in fields {
+                record.insert(k, v);
+            }
+            if record != before {
+                blob.insert(id.clone(), Value::Object(record).to_string());
+                changed.push(id.clone());
+            }
+        }
+        CredChange::Delete(ids) => {
+            for id in ids {
+                if blob.remove(id).is_some() && !changed.contains(id) {
+                    changed.push(id.clone());
+                }
+            }
+        }
+    }
+    Ok(changed)
+}
+
+/// What the app's `get_credentials` answered, from the daemon's read:
+/// `{status, credentials}` (`granted`, `empty`) or `{status, message}`
+/// (`denied`, `timed_out`, `unavailable`). The message is a code or a fixed
+/// sentence, never the store's own error text (a parse error quotes values).
+pub(crate) async fn app_read() -> Value {
+    let since = BLOB_READ.generation();
+    match guarded(CREDENTIALS_KEY, raw_read(may_prompt(), since), AI_KEY_TIMEOUT).await {
+        Ok(Some(blob)) if !blob.is_empty() => json!({"status": "granted", "credentials": blob}),
+        Ok(_) => json!({"status": "empty", "credentials": {}}),
+        Err(e) => {
+            let (status, message) = read_failure(&e);
+            json!({"status": status, "message": message})
+        }
+    }
+}
+
+/// The status and message for a failed read.
+fn read_failure(error: &str) -> (&'static str, String) {
+    if error == E_PORTABLE_LOCKED {
+        return ("unavailable", E_PORTABLE_LOCKED.to_string());
+    }
+    if error.contains("did not answer in time") {
+        return ("timed_out", "The keychain did not answer in time".to_string());
+    }
+    let denied = GATE.status()["reason"] == "denied";
+    let fallback = if denied { "Keychain access was refused" } else { "The keychain could not be read" };
+    let message = mailvault_core::keychain::snap_keyring_hint(std::env::var_os("SNAP").is_some(), error)
+        .map(str::to_owned)
+        .unwrap_or_else(|| fallback.to_string());
+    (if denied { "denied" } else { "unavailable" }, message)
+}
+
+/// One change at a time, across every backend: read, apply, write.
+static APP_WRITE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// A write that outlived its clock still holds `APP_WRITE` until it returns
+/// (so nothing it then lands can overwrite a newer change); every change
+/// asked for meanwhile is answered `Busy` at once instead of queueing.
+pub(crate) static WRITE_PARKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// How long a change waits for the one ahead of it.
+const APP_LOCK_WAIT: Duration = Duration::from_secs(5);
+
+#[cfg(test)]
+pub(crate) static TEST_WRITE_TIMEOUT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Test seam: the next debug-file write parks until this is sent to.
+#[cfg(test)]
+pub(crate) static TEST_WRITE_GATE: std::sync::Mutex<Option<std::sync::mpsc::Receiver<()>>> = std::sync::Mutex::new(None);
+
+fn write_timeout() -> Duration {
+    #[cfg(test)]
+    {
+        let ms = TEST_WRITE_TIMEOUT_MS.load(std::sync::atomic::Ordering::SeqCst);
+        if ms > 0 {
+            return Duration::from_millis(ms);
+        }
+    }
+    AI_KEY_TIMEOUT
+}
+
+/// The write generation now (the `version` the credentials RPCs answer).
+pub(crate) fn write_generation() -> u64 {
+    BLOB_READ.generation()
+}
+
+type Job = Box<dyn FnOnce() -> Result<Vec<String>, CredError> + Send>;
+
+/// Applies `change` to the stored blob. `Ok((ids, version))`: the ids it
+/// changed (none: nothing was written) and the write generation after it.
+/// At most `APP_LOCK_WAIT` + the read's clock + `write_timeout()` long.
+pub(crate) async fn change_credentials(change: CredChange) -> Result<(Vec<String>, u64), CredError> {
+    use std::sync::atomic::Ordering::SeqCst;
+    if WRITE_PARKED.load(SeqCst) {
+        return Err(CredError::Busy);
+    }
+    let Ok(held) = tokio::time::timeout(APP_LOCK_WAIT, APP_WRITE.lock()).await else { return Err(CredError::Busy) };
+    if WRITE_PARKED.load(SeqCst) {
+        return Err(CredError::Busy);
+    }
+    let job: Job = if let Some(store) = sealed() {
+        Box::new(move || store.change_credentials(|blob| apply_change(blob, &change)))
+    } else if let Some(path) = test_credentials_path() {
+        Box::new(move || change_test_file(&path, &change))
+    } else {
+        // A blocked gate would only answer a quiet read's failure: fail fast,
+        // and never raise a prompt from here while one episode is open.
+        if GATE.is_blocked() {
+            return Err(CredError::Unavailable);
+        }
+        let since = BLOB_READ.generation();
+        let mut blob = match guarded(CREDENTIALS_KEY, raw_read(true, since), AI_KEY_TIMEOUT).await {
+            Ok(blob) => blob.unwrap_or_default(),
+            Err(_) => return Err(CredError::Unavailable),
+        };
+        let changed = apply_change(&mut blob, &change)?;
+        if changed.is_empty() {
+            return Ok((changed, since));
+        }
+        let json = serde_json::to_string(&blob).map_err(|_| CredError::WriteFailed)?;
+        Box::new(move || {
+            with_interaction(true, || write_keychain_blob(&json)).map(|()| changed).map_err(|e| {
+                warn!("[keychain] the credentials write failed: {e}");
+                CredError::WriteFailed
+            })
+        })
+    };
+    let mut task = tokio::task::spawn_blocking(job);
+    let finished = tokio::time::timeout(write_timeout(), &mut task).await;
+    match finished {
+        Ok(Ok(Ok(changed))) => {
+            if changed.is_empty() {
+                return Ok((changed, BLOB_READ.generation()));
+            }
+            info!("[keychain] credentials changed for {} account(s)", changed.len());
+            Ok((changed, BLOB_READ.bump()))
+        }
+        Ok(Ok(Err(e))) => Err(e),
+        Ok(Err(_)) => Err(CredError::WriteFailed),
+        Err(_) => {
+            warn!("[keychain] the credentials write did not finish in time; changes wait until it returns");
+            WRITE_PARKED.store(true, SeqCst);
+            tokio::spawn(async move {
+                let _ = task.await;
+                // Whatever it wrote is what the next change reads.
+                BLOB_READ.bump();
+                WRITE_PARKED.store(false, SeqCst);
+                drop(held);
+            });
+            Err(CredError::WriteFailed)
+        }
+    }
+}
+
+/// The debug file bypass: the same compact `{id: record}` JSON the app's
+/// `store_credentials` writes there, replaced atomically.
+fn change_test_file(path: &std::path::Path, change: &CredChange) -> Result<Vec<String>, CredError> {
+    let mut blob: HashMap<String, String> = match std::fs::read_to_string(path) {
+        Ok(json) => serde_json::from_str(&json).map_err(|_| CredError::Unavailable)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
+        Err(_) => return Err(CredError::Unavailable),
+    };
+    let changed = apply_change(&mut blob, change)?;
+    if changed.is_empty() {
+        return Ok(changed);
+    }
+    let json = serde_json::to_string(&blob).map_err(|_| CredError::WriteFailed)?;
+    #[cfg(test)]
+    {
+        let gate = TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(gate) = gate {
+            let _ = gate.recv();
+        }
+    }
+    mailvault_core::fsx::write_atomic(path, json.as_bytes()).map_err(|_| CredError::WriteFailed)?;
+    Ok(changed)
+}
+
+/// The blob into the keychain, parts first (Windows), in the order the
+/// app's `store_credentials` keeps (`mailvault_core::keychain`).
+fn write_keychain_blob(json: &str) -> Result<(), String> {
+    use mailvault_core::keychain::{secret_limit, write_split_secret, SecretStore, SplitWriteError};
+    struct Keyring;
+    impl SecretStore for Keyring {
+        fn get(&mut self, name: &str) -> Result<Option<String>, String> {
+            match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.get_password()) {
+                Ok(v) => Ok(Some(v)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(e) => Err(e.to_string()),
+            }
+        }
+        fn set(&mut self, name: &str, value: &str) -> Result<(), String> {
+            Entry::new(KEYRING_SERVICE, name).and_then(|e| e.set_password(value)).map_err(|e| e.to_string())
+        }
+        fn delete(&mut self, name: &str) -> Result<(), String> {
+            Entry::new(KEYRING_SERVICE, name).and_then(|e| e.delete_credential()).map_err(|e| e.to_string())
+        }
+    }
+    let generation = format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let written = write_split_secret(&mut Keyring, CREDENTIALS_KEY, json, secret_limit(), &generation).map_err(|e| match e {
+        SplitWriteError::Part(e) => format!("a part could not be written: {e}"),
+        SplitWriteError::Primary(e) => format!("the entry could not be written: {e}"),
+    })?;
+    for (name, e) in written.stale_left {
+        warn!("[keychain] could not remove stale credentials part {name}: {e}");
+    }
+    Ok(())
+}
+
+impl SealedStore {
+    /// `apply` on the open store's account blob, sealed to the drive when it
+    /// changed something. Locked refuses (the caller would start from the
+    /// empty set it sees while locked).
+    pub(crate) fn change_credentials(
+        &self,
+        apply: impl FnOnce(&mut HashMap<String, String>) -> Result<Vec<String>, CredError>,
+    ) -> Result<Vec<String>, CredError> {
+        let mut guard = self.opened();
+        let Some((passphrase, current)) = guard.as_mut() else { return Err(CredError::Unavailable) };
+        let mut next = current.clone();
+        let changed = apply(&mut next.credentials)?;
+        if changed.is_empty() {
+            return Ok(changed);
+        }
+        mailvault_core::portable::write_sealed(&self.path, passphrase, &next, self.params).map_err(|_| CredError::WriteFailed)?;
+        *current = next;
+        Ok(changed)
+    }
+}
+
+#[cfg(test)]
+pub(crate) struct TestEnvRestore(Vec<(&'static str, Option<std::ffi::OsString>)>);
+
+#[cfg(test)]
+impl TestEnvRestore {
+    pub(crate) fn capture() -> Self {
+        Self(["MAILVAULT_TEST_CREDENTIALS", "MAILVAULT_TEST_AI_KEY", "MAILVAULT_TEST_PGP_KEYS"]
+            .into_iter().map(|key| (key, std::env::var_os(key))).collect())
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestEnvRestore {
+    fn drop(&mut self) {
+        for (key, value) in self.0.drain(..) {
+            match value {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1062,6 +1492,7 @@ mod tests {
     #[test]
     fn resolve_account_credentials_uses_the_test_file_bypass() {
         let _guard = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = TestEnvRestore::capture();
 
         let mut blob = HashMap::new();
         blob.insert("acct-1".to_string(), sample_account_json());
@@ -1305,6 +1736,46 @@ mod tests {
         assert_eq!(*started.lock().unwrap(), vec![false, true]);
     }
 
+    /// The shell writes the blob itself (`store_credentials`) and then tells
+    /// the daemon (`oauth2.credentials_changed`). A keychain read already out
+    /// from before that write holds the old blob, so a daemon write that
+    /// starts after the notice (`change_credentials` reads at the current
+    /// generation) must wait that read out and read again; joining it would
+    /// write the old blob back over the shell's change.
+    #[tokio::test]
+    async fn a_write_after_the_shells_notice_never_joins_a_read_from_before_it() {
+        let _guard = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = TestEnvRestore::capture();
+        let dir = std::env::temp_dir().join(format!("mv-cred-notice-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir, true);
+        let blob = |v: &str| Some(HashMap::from([("acct-1".to_string(), v.to_string())]));
+
+        let started = Started::default();
+        let (release, parked) = std::sync::mpsc::channel::<()>();
+        let s = started.clone();
+        let stale = tokio::spawn(BLOB_READ.read_since(BLOB_READ.generation(), true, move |interactive| {
+            s.lock().unwrap().push(interactive);
+            let _ = parked.recv();
+            Ok(blob("before the shell wrote"))
+        }));
+        until_started(&started, 1).await;
+
+        let notice = crate::server::handle_request_for_test(&state, "oauth2.credentials_changed", serde_json::json!({})).await;
+        assert!(notice.error.is_none(), "the notice is answered");
+
+        let s = started.clone();
+        let write_read = tokio::spawn(BLOB_READ.read_since(BLOB_READ.generation(), true, move |interactive| {
+            s.lock().unwrap().push(interactive);
+            Ok(blob("what the shell wrote"))
+        }));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        release.send(()).unwrap();
+        assert_eq!(stale.await.unwrap(), Ok(blob("before the shell wrote")));
+        assert_eq!(write_read.await.unwrap(), Ok(blob("what the shell wrote")), "the write reads the blob the shell wrote");
+        assert_eq!(*started.lock().unwrap(), vec![true, true], "a fresh read after the parked one, never beside it");
+    }
+
     // ── Portable: the sealed store on the drive ─────────────────────────
 
     use mailvault_core::portable::{read_sealed, write_sealed, Secrets};
@@ -1325,6 +1796,34 @@ mod tests {
         let root = std::path::Path::new("/Volumes/USB/MailVault Data");
         assert_eq!(sealed_store_path(Some(root)), Some(root.join("data").join("credentials.sealed")));
         assert_eq!(sealed_store_path(None), None, "an installed copy keeps the OS keychain");
+    }
+
+    #[test]
+    fn save_if_absent_keeps_existing_record_bytes() {
+        let old = "{ \"id\": \"a\", \"password\": \"synthetic-original\" }";
+        let mut blob = HashMap::from([("a".to_string(), old.to_string())]);
+        let records = HashMap::from([("a".to_string(), "{}".to_string()), ("b".to_string(), "{}".to_string())]);
+        assert_eq!(apply_change(&mut blob, &CredChange::SaveIfAbsent(records)).unwrap(), vec!["b"]);
+        assert_eq!(blob["a"], old);
+        assert_eq!(blob["b"], "{}");
+    }
+
+    #[test]
+    fn sealed_per_record_changes_refuse_locked_and_keep_unrelated_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = sealed_with_one_account(dir.path());
+        let before = std::fs::read(store.path()).unwrap();
+        let change = CredChange::Save(HashMap::from([("acct-2".to_string(), "{}".to_string())]));
+        assert_eq!(store.change_credentials(|blob| apply_change(blob, &change)), Err(CredError::Unavailable));
+        assert_eq!(std::fs::read(store.path()).unwrap(), before);
+        store.unlock("drive passphrase").unwrap();
+        assert_eq!(store.change_credentials(|blob| apply_change(blob, &change)).unwrap(), vec!["acct-2"]);
+        let disk = read_sealed(store.path(), "drive passphrase").unwrap();
+        assert_eq!(disk.credentials["acct-1"], sample_account_json());
+        assert_eq!(disk.credentials["acct-2"], "{}");
+        let before = std::fs::read(store.path()).unwrap();
+        assert!(store.change_credentials(|blob| apply_change(blob, &change)).unwrap().is_empty());
+        assert_eq!(std::fs::read(store.path()).unwrap(), before, "a sealed no-op does not rewrite the file");
     }
 
     #[test]
@@ -1396,6 +1895,7 @@ mod tests {
     #[tokio::test]
     async fn ai_endpoint_key_round_trips_through_the_test_file_bypass() {
         let _guard = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = TestEnvRestore::capture();
 
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("ai_key");

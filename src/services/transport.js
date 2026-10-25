@@ -279,6 +279,8 @@ export const DAEMON_OWNED = new Set([
   // Phase 1 step 0c: the daemon refreshes OAuth2 tokens itself; the app
   // saves the pairs it refreshed and says when it wrote credentials.
   'oauth2.take_refreshed', 'oauth2.credentials_changed',
+  // Staged native per-record capability; app adapters retain the shell path.
+  'credentials.get', 'credentials.save', 'credentials.update', 'credentials.delete',
   // Task 5.8: DNS (autodiscover email server settings, post-server-change
   // health probe). Tauri twins deleted in this same task — flat names, no
   // rename layer, no Tauri fallback, same reasoning as every other Phase 5

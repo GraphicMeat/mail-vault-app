@@ -28,6 +28,7 @@ pub(crate) mod cache;
 pub(crate) mod cleanup;
 pub(crate) mod common;
 pub(crate) mod compose;
+pub(crate) mod credentials;
 pub(crate) mod custody;
 pub(crate) mod custody_probe;
 pub(crate) mod daemon;

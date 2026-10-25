@@ -11,9 +11,10 @@
 //! tenant, Graph scopes). A refresh always posts a refresh token together with
 //! the client that issued it, both from the same source.
 //!
-//! Where tokens are stored does not change: the app stays the only writer of
-//! the credentials blob (the keychain item it created; the sealed store on a
-//! portable drive). After a refresh this module emits `REFRESHED_EVENT` with
+//! Where tokens are stored does not change: the app remains the normal
+//! credential persistence orchestrator (the existing keychain item or sealed
+//! store). This token module never writes credentials itself. After a refresh
+//! this module emits `REFRESHED_EVENT` with
 //! the account id and nothing else; the app takes the new pair
 //! (`oauth2.take_refreshed`) and saves it through its own `updateOAuth2Tokens`
 //! path, then says it wrote (`oauth2.credentials_changed`).
@@ -208,6 +209,15 @@ fn grant_of(record: &Value) -> Option<(Grant, String, i64)> {
     };
     let expires_at = record.get("oauth2ExpiresAt").and_then(Value::as_f64).map(|v| v as i64).unwrap_or(0);
     Some((grant, text("oauth2AccessToken").unwrap_or_default(), expires_at))
+}
+
+/// A stored record's grant fingerprint for `refresh_token` (its own when
+/// `None`): what `unsaved()` names in `chain`, so a writer can tell whether a
+/// refreshed pair belongs to the grant stored now. `None` for a record with
+/// no OAuth2 grant. Never logged.
+pub(crate) fn record_fingerprint(record: &Value, refresh_token: Option<&str>) -> Option<String> {
+    let (grant, _, _) = grant_of(record)?;
+    Some(grant.fingerprint(refresh_token.unwrap_or(&grant.refresh_token)))
 }
 
 /// The stored token of an OAuth2 record with no refresh token: used as it
@@ -668,6 +678,11 @@ async fn inject_account(state: &DaemonState, slot: &mut Value, fallback_id: Opti
 /// going on to a bare "Missing accessToken".
 pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value) -> Injection {
     let mut injected = Vec::new();
+    // Persistence stores exactly the app-supplied records. Even extraneous
+    // account-bearing params must not trigger a credential read or refresh.
+    if method.starts_with("accounts.") || method.starts_with("credentials.") {
+        return Injection { injected, refusal: None };
+    }
     let Some(obj) = params.as_object_mut() else { return Injection { injected, refusal: None } };
     let request_account = obj.get("accountId").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
     for key in ACCOUNT_PARAMS {
@@ -826,6 +841,7 @@ mod tests {
     #[tokio::test]
     async fn a_token_good_past_the_margin_is_used_without_a_refresh() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(Vec::new());
         let s = st();
         store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000})))]);
@@ -850,15 +866,18 @@ mod tests {
             }
         }
         let _restore = Restore(std::env::var_os("MAILVAULT_TEST_CREDENTIALS"));
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("synthetic-control-token", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
         let account = json!({"id":"g1", "email":"me@gmail.test", "authType":"oauth2"});
+        let (_trap, lookups) = lookup_trap("g1");
         let original = json!({"records":{}, "account":account, "accountId":"g1"});
         let mut params = original.clone();
         let injected = inject(&s, "credentials.save", &mut params).await;
         assert!(injected.injected.is_empty(), "credential writes must not receive native tokens");
         assert_eq!(params, original);
+        assert_eq!(lookups.load(std::sync::atomic::Ordering::SeqCst), 0, "credential writes must not read a grant");
         assert!(test_token_posts().is_empty(), "credential writes must not refresh an expired stored grant");
         let mut control = json!({"account":account});
         assert_eq!(inject(&s, "imap_get_mailboxes", &mut control).await.injected.len(), 1);
@@ -870,6 +889,7 @@ mod tests {
     #[tokio::test]
     async fn an_expired_token_is_refreshed_with_the_records_grant_and_announced() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fresh-0002", None)]);
         let s = st();
         let mut rx = s.events.subscribe();
@@ -892,6 +912,7 @@ mod tests {
     #[tokio::test]
     async fn a_token_inside_the_margin_is_refreshed() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fresh-0003", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 120_000})))]);
@@ -909,6 +930,7 @@ mod tests {
     #[tokio::test]
     async fn accounts_the_daemon_does_not_manage_are_left_alone() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(Vec::new());
         let s = st();
         let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
@@ -931,6 +953,7 @@ mod tests {
     #[tokio::test]
     async fn concurrent_callers_share_one_refresh() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fresh-0004", None), granted("at-second-0004", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
@@ -953,6 +976,7 @@ mod tests {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let logs = crate::events::captured_logs();
         let echo = json!({"error": "invalid_grant", "error_description": "Bad grant rt-stored-0001 for at-stored-0001"});
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![(400, echo.to_string())]);
         let s = st();
         let mut rx = s.events.subscribe();
@@ -979,6 +1003,7 @@ mod tests {
     #[tokio::test]
     async fn a_failed_refresh_keeps_a_still_valid_token_and_does_not_retry_at_once() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![(503, "Service Unavailable".to_string()), granted("at-late-0005", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 120_000})))]);
@@ -997,6 +1022,7 @@ mod tests {
     #[tokio::test]
     async fn a_stale_stored_record_does_not_roll_back_a_refreshed_token() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fresh-0006", None), granted("at-wrong-0006", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
@@ -1017,6 +1043,7 @@ mod tests {
     #[tokio::test]
     async fn a_new_sign_in_replaces_the_held_token_and_its_grant() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fresh-0007", Some("rt-rotated-0007")), granted("at-after-0007", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
@@ -1047,6 +1074,7 @@ mod tests {
     #[tokio::test]
     async fn a_refreshed_pair_is_offered_until_the_stored_record_shows_it() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fresh-0008", Some("rt-rotated-0008"))]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
@@ -1085,6 +1113,7 @@ mod tests {
     #[tokio::test]
     async fn a_request_carries_the_daemons_token_not_the_one_the_app_sent() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fresh-0009", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
@@ -1116,6 +1145,7 @@ mod tests {
     #[tokio::test]
     async fn the_apps_token_is_kept_only_where_the_daemon_has_none() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(Vec::new());
         let s = st();
         let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
@@ -1149,6 +1179,7 @@ mod tests {
     #[tokio::test]
     async fn every_mail_search_target_carries_its_own_accounts_token() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-search-0012", None)]);
         let s = st();
         let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
@@ -1173,6 +1204,7 @@ mod tests {
     #[tokio::test]
     async fn a_new_sign_in_still_being_tested_keeps_its_own_token() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(Vec::new());
         let s = st();
         store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_000_000})))]);
@@ -1195,6 +1227,7 @@ mod tests {
     #[tokio::test]
     async fn a_token_a_server_refused_is_refreshed_before_the_next_request() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-renewed-0010", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000})))]);
@@ -1223,6 +1256,7 @@ mod tests {
     async fn a_graph_call_naming_only_its_account_is_sent_with_a_fresh_token() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let _graph = crate::handlers::graph::test_graph_mock_with(vec![(200, "{}".to_string())]);
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-graph-0011", Some("rt-graph-0011"))]);
         let s = st();
         let outlook = json!({
@@ -1261,6 +1295,7 @@ mod tests {
     #[tokio::test]
     async fn a_new_grant_replaces_the_held_entry_even_with_an_earlier_expiry() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-a-fresh-0013", Some("rt-a-rotated-0013")), granted("at-b-fresh-0013", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
@@ -1293,6 +1328,7 @@ mod tests {
     #[tokio::test]
     async fn a_reconnect_from_imap_to_graph_refreshes_with_graph_scopes() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-imap-0014", None), granted("at-graph-0014", None)]);
         let s = st();
         let outlook = |extra: Value| {
@@ -1331,6 +1367,7 @@ mod tests {
     #[tokio::test]
     async fn a_stale_write_after_a_rotation_keeps_the_held_pair() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-rotated-0015", Some("rt-rotated-0015")), granted("at-wrong-0015", None)]);
         let s = st();
         store(&s, &[("g1", &gmail(json!({})))]);
@@ -1351,6 +1388,7 @@ mod tests {
     async fn a_server_refusing_valid_tokens_gets_at_most_one_refresh_a_minute() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let answers = (0..200).map(|i| granted(&format!("at-loop-{i:04}"), None)).collect();
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(answers);
         let s = st();
         store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000})))]);
@@ -1372,6 +1410,7 @@ mod tests {
     #[tokio::test]
     async fn a_graph_call_without_a_token_says_whether_to_sign_in_or_unlock() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(Vec::new());
         let s = st();
         let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
@@ -1394,6 +1433,7 @@ mod tests {
     #[tokio::test]
     async fn an_offered_pair_names_its_grant_by_fingerprint() {
         let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(vec![granted("at-fp-0016", Some("rt-fp-rotated-0016"))]);
         let s = st();
         let record = json!({
@@ -1416,6 +1456,7 @@ mod tests {
         let _env = credentials::test_env_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock(
             (0..20)
                 .map(|_| granted("at-backup-control-trap", None))
@@ -1453,6 +1494,7 @@ mod tests {
         let _env = credentials::test_env_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _restore_env = credentials::TestEnvRestore::capture();
         let _mock = test_token_mock((0..20).map(|_| granted("at-prep-trap", None)).collect());
         let logs = crate::events::captured_logs();
         let mut observed = Vec::new();

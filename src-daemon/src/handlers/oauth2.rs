@@ -132,17 +132,27 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // The app wrote the credentials blob: no held token is trusted before
         // the stored record is read again (a new sign-in, a removed account),
         // the pairs it just saved stop being offered, and Archive & delete
-        // jobs waiting for a token look again at once.
+        // jobs waiting for a token look again at once. A keychain read out
+        // from before that write is not joined by the next daemon write.
         "oauth2.credentials_changed" => {
-            state.tokens.credentials_changed();
-            state.abd.wake_token_waits();
-            let st = Arc::clone(state);
-            tokio::spawn(async move { crate::oauth_tokens::recheck_unsaved(&st).await });
+            crate::credentials::blob_written_elsewhere();
+            credentials_written(state);
             RpcResponse::success(id, json!({ "ok": true }))
         }
 
         _ => return None,
     })
+}
+
+/// The credentials blob was written (by the app, or by `credentials.*`):
+/// no held token is trusted before the stored record is read again, the
+/// pairs it now holds stop being offered, and Archive & delete jobs waiting
+/// for a token look again at once.
+pub(crate) fn credentials_written(state: &Arc<DaemonState>) {
+    state.tokens.credentials_changed();
+    state.abd.wake_token_waits();
+    let st = Arc::clone(state);
+    tokio::spawn(async move { crate::oauth_tokens::recheck_unsaved(&st).await });
 }
 
 /// Test seam for other modules' tests that refresh a token: both providers'
