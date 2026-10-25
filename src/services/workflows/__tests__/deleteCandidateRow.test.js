@@ -3,10 +3,13 @@
 // compose-staged Sent copy (a local-only row with a pseudo-uid) made the delete
 // of a real INBOX message that shared its uid a vault delete: the server copy
 // stayed, and the vault copy of the wrong folder's message went to the bin.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
 guardViewCounts();
+// This suite starts deletion immediately; initialize its real recount graph
+// before the first action, while the separate cold-store checks stay lazy.
+beforeAll(() => import('../../../stores/viewStore'));
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 

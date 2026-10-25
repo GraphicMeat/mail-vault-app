@@ -4,10 +4,13 @@
 // list's rows and their (account, folder, uid), and a reminder row there IS
 // the Sent copy's identity, so any of them can reach the real Sent message.
 // Reminders are shown pinned above the list instead (FollowUpPinnedRows).
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
 guardViewCounts();
+// This suite starts deletion immediately; initialize its real recount graph
+// before the first action, while the separate cold-store checks stay lazy.
+beforeAll(() => import('../../../stores/viewStore'));
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 

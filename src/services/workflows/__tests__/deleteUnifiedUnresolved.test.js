@@ -2,10 +2,13 @@
 // account's INBOX under its bare uid. Before this guard the fallback
 // `unified?.accountId || state.activeAccountId` did exactly that, and
 // loadUnifiedInbox never clears activeAccountId, so the fallback had a target.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { guardViewCounts } from '../../../test/viewCountsGuard';
 
 guardViewCounts();
+// This suite starts deletion immediately; initialize its real recount graph
+// before the first action, while the separate cold-store checks stay lazy.
+beforeAll(() => import('../../../stores/viewStore'));
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 
