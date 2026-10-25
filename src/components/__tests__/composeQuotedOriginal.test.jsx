@@ -8,6 +8,7 @@
 // leaves on the wire keeps the original as it arrived.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { savedDraftReply } from '../../test/draftReply';
 import React from 'react';
 import { act, render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
@@ -78,6 +79,7 @@ vi.mock('../../services/localDrafts', () => ({
   saveLocalDraft,
   deleteLocalDraft: vi.fn().mockResolvedValue(undefined),
   newDraftUid: () => 1,
+  newDraftId: () => "stable-draft",
 }));
 vi.mock('../../services/workflows/messageMutations', () => ({
   markAnswered: vi.fn().mockResolvedValue(undefined),
@@ -193,7 +195,7 @@ beforeEach(() => {
   mail.activeMailbox = 'INBOX';
   stageOutgoing.mockClear();
   saveLocalDraft.mockReset();
-  saveLocalDraft.mockResolvedValue(undefined);
+  saveLocalDraft.mockImplementation(savedDraftReply);
 });
 afterEach(() => cleanup());
 
@@ -351,13 +353,13 @@ describe('the quoted original in a reply', () => {
     expect(onDetach).toHaveBeenCalledTimes(1);
   });
 
-  it('allocates an owner draft uid before an empty compose detaches', async () => {
+  it('allocates an owner stable draft ID before an empty compose detaches', async () => {
     const onDetach = vi.fn().mockResolvedValue(undefined);
     render(<ComposeModal mode="new" onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} onDetach={onDetach} />);
 
     fireEvent.click(await screen.findByTestId('compose-detach'));
     await waitFor(() => expect(onDetach).toHaveBeenCalledTimes(1));
-    expect(onDetach.mock.calls[0][0]).toMatchObject({ _draftUid: 1, _draftAccountId: 'acct-1' });
+    expect(onDetach.mock.calls[0][0]).toMatchObject({ _draftId: 'stable-draft', _draftUid: null, _draftAccountId: 'acct-1' });
   });
 
   // A compose moved into a window of its own had no way back. The window now

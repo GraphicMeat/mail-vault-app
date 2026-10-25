@@ -18,7 +18,7 @@ import { replyTemplateHtml } from '../utils/replyTemplate';
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import { withoutSnippet } from '../utils/withoutSnippet';
 import { composeIdentities, composeSenderName, composeSignature, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
-import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
+import { saveLocalDraft, deleteLocalDraft, newDraftId } from '../services/localDrafts';
 import { t, useT, tErr, getLocale } from '../i18n/index.js';
 import { Private } from './privacy/Private';
 import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
@@ -37,7 +37,6 @@ import { firstRecipient } from '../utils/mailto';
 import { useScheduledStore } from '../stores/scheduledStore';
 import { AiComposeActions } from './ai/AiComposeActions';
 import { createComposeSend, scheduleCompose } from '../services/composeSend';
-import { withAttachmentBytes } from '../services/attachmentUtils';
 import { signatureCaretPos, swapSignature } from '../utils/signatureCaret';
 import { buildQuoteBlocks, replyWireHtml } from '../utils/replyQuote';
 import { clampComposeSize } from '../utils/composeSize';
@@ -375,19 +374,25 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return () => { disposed = true; clearTimeout(timer); stop?.(); };
   }, [detached, setComposeSizeSetting]);
 
-  // ── Autosaved draft (see services/localDrafts.js) ──
-  // The vault draft this window owns. The uid is allocated on the first save
-  // and threaded through minimize/restore, so one compose window is always one
-  // draft, however many times it is put away and taken out again.
+  // Stable logical identity is independent of the native accepted location.
+  const draftIdRef = useRef(initialData?._draftId || null);
   const draftUidRef = useRef(initialData?._draftUid || null);
   const draftMailboxRef = useRef(initialData?._draftMailbox || null);
-  // Which account currently holds it: picking a different From moves the draft
-  // to that account's Drafts folder instead of leaving a copy behind.
   const draftAccountRef = useRef(initialData?._draftAccountId || initialData?._accountId || null);
-  const lastSavedRef = useRef(null);
-  // Saves are serialised: maildir_store deletes-then-writes one uid, so two
-  // overlapping saves of the same draft can interleave into a lost write.
+  const acceptedRevisionRef = useRef(initialData?._draftAcceptedRevision || 0);
+  const issuedDraftRef = useRef({
+    revision: initialData?._draftRevision || 0,
+    content: initialData?._draftContent || null,
+    signature: initialData?._draftUiSignature || (initialData?._draftContent ? JSON.stringify(initialData._draftContent) : null),
+  });
+  const initialNativeContentRef = useRef(null);
+  const recoveredContentRef = useRef(initialData?._draftRecoveredContent || null);
+  const acceptedContentRef = useRef(initialData?._draftRevision > 0 && initialData._draftRevision === initialData._draftAcceptedRevision
+    ? initialData._draftContent || null : null);
   const saveChainRef = useRef(Promise.resolve());
+  const queuedDraftRef = useRef(null);
+  const [draftSaveError, setDraftSaveError] = useState(null);
+  const [draftRetry, setDraftRetry] = useState(0);
 
   const [formData, setFormData] = useState({
     to: '',
@@ -543,8 +548,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
       if (replyTo.attachments?.length > 0) {
         // The light fetch that loaded the original carries no attachment
-        // bytes. `_source` is where they are read back from: here, so autosave
-        // has them, and again at send for any still missing then.
+        // bytes. Native autosave resolves `_source`; the outgoing-send helper
+        // still prepares any missing bytes at its own boundary.
         // Located the way the body resolver found the original: a row in a
         // single-account folder carries no `_accountId` or `_mailbox`.
         const loc = resolveEmailLocation(replyTo, useMailStore.getState());
@@ -558,14 +563,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
             content: att.content,
             isFromOriginal: true,
             ...(htmlReferencesCid(replyTo.html, att.contentId) && { cid: bareContentId(att.contentId) }),
-            ...(!att.content && loc && replyTo.uid != null
+            ...(att.content == null && loc && replyTo.uid != null
               ? { _source: { ...loc, uid: replyTo.uid, attachmentIndex: att._originalIndex ?? i } } : {}),
           };
         });
         setAttachments(forwarded);
-        withAttachmentBytes(forwarded).then(full => {
-          if (full !== forwarded) setAttachments(prev => prev.map(att => full[forwarded.indexOf(att)] || att));
-        }).catch(err => console.warn('[ComposeModal] forwarded attachments not read yet:', err));
       }
     }
   // composeContextVisible is the default for a newly opened reply. Toggling
@@ -929,10 +931,51 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     : (formData.to.trim() !== '' || formData.subject.trim() !== '' ||
        htmlToText(formData.body).trim() !== '' || attachments.length > 0);
 
+  // Exact persisted content, including ordered attachment bytes or native
+  // source descriptors. UI layout and visual dirty state are separate.
+  const draftContent = {
+    accountId: selectedAccountId, fromAddress: composeFrom,
+    displayName: selectedAccount ? senderNameFor(selectedAccount, composeFrom) : '',
+    payload: {
+      to: formData.to, cc: formData.cc, bcc: formData.bcc, subject: formData.subject,
+      html: replyWireHtml(formData.body, quotedHtml, isForward),
+      text: quotedHtml ? htmlToText(formData.body) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml) : htmlToText(formData.body),
+      inReplyTo: formData.inReplyTo, references: formData.references,
+      attachments: attachments.map(att => ({ filename: att.filename, contentType: att.contentType,
+        ...(att.content != null ? { content: att.content } : {}), encoding: att.encoding || 'base64',
+        ...(att.cid != null ? { cid: att.cid } : {}),
+        ...((att.source || att._source) ? { source: { ...(att.source || att._source) } } : {}),
+      })),
+    }, snippet: htmlToText(formData.body),
+    ...((initialData?._draftContent?.previousIdentity || (!initialData?._draftId && initialData?._draftUid && initialData?._draftMailbox)) ? {
+      previousIdentity: initialData._draftContent?.previousIdentity || { accountId: initialData._draftAccountId || initialData._accountId,
+        mailbox: initialData._draftMailbox, uid: initialData._draftUid },
+    } : {}),
+  };
+  const draftSignature = JSON.stringify(draftContent);
+  const maySaveDraft = hasUserContent || Boolean(draftUidRef.current) || issuedDraftRef.current.revision > 0;
+  // A native reopen already has accepted bytes. Establish its local complete
+  // baseline after initialization without rewriting parsed MIME at the same
+  // revision. Restored issued requests instead keep their exact wire content.
+  if (initializedRef.current && !initialNativeContentRef.current && initialData?._draftId
+      && initialData._draftRevision > 0 && initialData._draftRevision === initialData._draftAcceptedRevision && !initialData._draftContent) {
+    initialNativeContentRef.current = draftSignature;
+  }
+  const captureDraft = () => {
+    if (!maySaveDraft || !selectedAccount || !initializedRef.current) return issuedDraftRef.current;
+    if (!draftIdRef.current) draftIdRef.current = newDraftId();
+    const issued = issuedDraftRef.current;
+    if (issued.signature !== draftSignature && (issued.content || initialNativeContentRef.current !== draftSignature)) {
+      // JSON cloning pins bytes, account and descriptors before any await.
+      issuedDraftRef.current = { revision: Math.max(issued.revision, acceptedRevisionRef.current) + 1,
+        signature: draftSignature, content: recoveredContentRef.current || JSON.parse(draftSignature) };
+      recoveredContentRef.current = null;
+    }
+    return issuedDraftRef.current;
+  };
+
   const composeSnapshot = useCallback(() => {
-    // Allocate before either the session or vault debounce starts. A quit in
-    // their gap must resume the same local draft identity, not create another.
-    if (hasUserContent && !draftUidRef.current) draftUidRef.current = newDraftUid();
+    const issued = captureDraft();
     return {
       to: formData.to,
       cc: formData.cc,
@@ -951,6 +994,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       _replyTo: replyTo || initialData?._replyTo || null,
       _accountId: selectedAccountId,
       _fromAddress: composeFrom,
+      _draftId: draftIdRef.current,
+      _draftRevision: issued.revision,
+      _draftContent: issued.content,
+      _draftUiSignature: issued.signature,
+      ...(initialData?._draftRecovery ? { _draftRecovery: initialData._draftRecovery } : {}),
+      _draftAcceptedRevision: acceptedRevisionRef.current,
       _draftAccountId: draftAccountRef.current || selectedAccountId,
       _baseline: initialSnapshot.current,
       _draftUid: draftUidRef.current,
@@ -968,7 +1017,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
         _editScheduledRow: initialData._editScheduledRow,
       }),
     };
-  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft, remindDays, isForward]);
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, contextSplit, originalDarkOverride, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent, sendPlan, composeSize, scheduleDraft, remindDays, isForward, draftSignature, maySaveDraft]);
 
   const latestSnapshotRef = useRef(composeSnapshot);
   latestSnapshotRef.current = composeSnapshot;
@@ -1000,91 +1049,43 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     return () => clearTimeout(timer);
   }, [hasSessionState, sending, sessionSignature, publishSnapshot]);
 
-  // ── Autosave into the vault's Drafts folder, 0.3s after typing stops ──
-  //
-  // The window is no longer the only copy of what the user wrote. Local only:
-  // no SMTP, no IMAP APPEND, so this costs nothing and works offline. The draft
-  // is removed again when the message is sent or discarded.
+  // Issue complete revisions at the existing 300 ms pause. The request is
+  // immutable while queued; native code alone chooses folders and physical UIDs.
   useEffect(() => {
-    if (!hasUserContent || sending || !selectedAccount) return;
+    if (!maySaveDraft || sending || !selectedAccount) return;
     const timer = setTimeout(() => {
-      const files = attachments.map(att => ({
-        filename: att.filename,
-        content: att.content,
-        encoding: 'base64',
-        contentType: att.contentType,
-        cid: att.cid,
-        _source: att._source,
-      }));
-      const signature = JSON.stringify([
-        selectedAccountId, composeFrom, formData.to, formData.cc, formData.bcc,
-        formData.subject, formData.body, quotedHtml.length,
-        attachments.map(a => `${a.filename}:${a.size}`),
-      ]);
-      if (signature === lastSavedRef.current) return;
-      lastSavedRef.current = signature;
-      // Allocated here, not inside the async chain below: Send reads these to
-      // clean the draft up, and a short message can be sent before the first
-      // save has finished.
-      if (!draftUidRef.current) draftUidRef.current = newDraftUid();
-      const movedAccount = draftAccountRef.current && draftAccountRef.current !== selectedAccountId
-        ? { accountId: draftAccountRef.current, mailbox: draftMailboxRef.current, uid: draftUidRef.current }
-        : null;
-      if (movedAccount) draftMailboxRef.current = null;
-      draftAccountRef.current = selectedAccountId;
-
-      // Inline pictures keep their data: URIs here — a draft is read back by
-      // this app, and cid: parts would only pay off on the wire.
-      const html = replyWireHtml(formData.body, quotedHtml, isForward);
-      const text = htmlToText(formData.body);
-      const payload = {
-        to: formData.to,
-        cc: formData.cc || undefined,
-        bcc: formData.bcc || undefined,
-        subject: formData.subject,
-        text: quotedHtml
-          ? text + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
-          : text,
-        html,
-        inReplyTo: formData.inReplyTo || undefined,
-        references: formData.references || undefined,
-        attachments: files.length ? files : undefined,
-      };
-      // ponytail: the whole message is re-encoded on every pause, attachments
-      // included. Fine at mail sizes; if a 20 MB attachment ever makes this
-      // stutter, save the body and the files separately.
+      const issued = captureDraft();
+      if (!issued.content || (issued.content === acceptedContentRef.current && !draftSaveError) || queuedDraftRef.current === issued) return;
+      const request = JSON.parse(JSON.stringify({ draftId: draftIdRef.current, revision: issued.revision, ...issued.content }));
+      queuedDraftRef.current = issued;
+      publishSnapshot();
       saveChainRef.current = saveChainRef.current.then(async () => {
         try {
-          if (movedAccount?.mailbox) await deleteLocalDraft(movedAccount);
-          if (!draftMailboxRef.current) {
-            draftMailboxRef.current = await resolveDraftsMailbox(selectedAccountId);
+          const result = await saveLocalDraft(request);
+          const current = result?.current;
+          const revision = current?.entry?.revision ?? result?.revision;
+          if (result?.draftId === draftIdRef.current && current && revision >= acceptedRevisionRef.current) {
+            acceptedRevisionRef.current = revision;
+            draftAccountRef.current = current.identity.accountId;
+            draftMailboxRef.current = current.identity.mailbox;
+            draftUidRef.current = current.identity.uid;
           }
-          if (payload.attachments) payload.attachments = await withAttachmentBytes(payload.attachments);
-          await saveLocalDraft({
-            account: selectedAccount,
-            accountId: selectedAccountId,
-            mailbox: draftMailboxRef.current,
-            uid: draftUidRef.current,
-            fromAddress: composeFrom,
-            displayName: senderNameFor(selectedAccount, composeFrom),
-            payload,
-            snippet: text,
-            hasAttachments: attachments.length > 0,
-          });
-          // Mailbox resolution happens asynchronously. Publish the latest
-          // state now, not the body captured when this save began.
-          publishSnapshot();
+          if (result?.draftId !== request.draftId || result.disposition === 'superseded' || revision !== request.revision || revision < acceptedRevisionRef.current) {
+            throw new Error('Draft content was not accepted');
+          }
+          acceptedContentRef.current = issued.content;
+          if (issuedDraftRef.current === issued) setDraftSaveError(result.cleanup === 'pending' ? 'Draft cleanup pending' : null);
         } catch (err) {
-          // Typing must never be interrupted by a failed save. Clearing the
-          // signature makes the next pause try again instead of assuming the
-          // draft on disk is current.
-          lastSavedRef.current = null;
+          if (issuedDraftRef.current === issued && aliveRef.current) setDraftSaveError(err?.message || String(err));
           console.warn('[compose:autosave_fail]', err);
+        } finally {
+          if (queuedDraftRef.current === issued) queuedDraftRef.current = null;
+          publishSnapshot();
         }
       });
     }, 300);
     return () => clearTimeout(timer);
-  }, [formData, attachments, quotedHtml, isForward, hasUserContent, sending, selectedAccountId, composeFrom, publishSnapshot]);
+  }, [draftSignature, maySaveDraft, sending, selectedAccountId, draftRetry, publishSnapshot]);
 
   /** Drop the vault draft this window owns — the message is being thrown away. */
   const discardDraft = useCallback(() => {
@@ -1197,10 +1198,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
       // Do not hand a draft to another webview while a previous disk write can
       // still finish behind it. The snapshot is read after that chain settles
       // so its mailbox identity is the resolved one.
-      // This uid is minted by the main webview before a blank draft crosses
-      // into a native child. Each webview otherwise owns its own counter and
-      // two blank windows opened in the same second can collide on first save.
-      if (!draftUidRef.current) draftUidRef.current = newDraftUid();
+      // Allocate even for blank handoff without forcing a vault write.
+      if (!draftIdRef.current) draftIdRef.current = newDraftId();
       await saveChainRef.current.catch(() => {});
       await onDetach(latestSnapshotRef.current());
       transferred = true;
@@ -1655,11 +1654,12 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
           </div>
 
           {/* Error */}
-          {error && (
+          {(error || draftSaveError) && (
             <div data-testid="compose-error" role="alert"
                  className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20
                            text-mail-danger text-sm">
-              {error}
+              {error || draftSaveError}
+              {draftSaveError && <button type="button" className="ml-3 underline" onClick={() => setDraftRetry(value => value + 1)}>{t('common.retry')}</button>}
             </div>
           )}
           </div>

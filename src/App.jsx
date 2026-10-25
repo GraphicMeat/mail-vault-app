@@ -105,7 +105,7 @@ import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
 import { openComposeResolved } from './utils/replyTarget';
-import { loadComposeSession, mergeComposeSession, saveComposeSession } from './services/composeSession';
+import { useComposeSessionHydration } from './services/composeSession';
 import { sameReply, applyReplyFill } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
@@ -367,25 +367,9 @@ function App() {
     await native.setFocus();
   }, []);
 
-  // UI session is separate from settings and the vault draft. Hydrate before
-  // persisting so an empty first render cannot replace disk state.
-  const composeSessionHydrated = useRef(false);
-  useEffect(() => {
-    let alive = true;
-    loadComposeSession().then((windows) => {
-      if (!alive) return;
-      setComposeWindows(current => {
-        const merged = mergeComposeSession(current, windows);
-        composeIdRef.current = Math.max(composeIdRef.current, 0, ...merged.map(window => window.id || 0));
-        return merged;
-      });
-      composeSessionHydrated.current = true;
-    });
-    return () => { alive = false; };
-  }, []);
-  useEffect(() => {
-    if (composeSessionHydrated.current) saveComposeSession(composeWindows);
-  }, [composeWindows]);
+  const { openDraft: openDraftCompose, saveState: saveComposeState, canMount: canMountCompose } = useComposeSessionHydration({
+    windows: composeWindows, setWindows: setComposeWindows, idRef: composeIdRef, focus: focusNativeCompose,
+  });
 
   // A reply already open on this message comes forward instead of stacking —
   // see utils/sameReply.js for why the header made that necessary.
@@ -429,13 +413,6 @@ function App() {
     setComposeWindows(prev => prev.map(w => w.id === id
       ? { ...w, initialData: w.snapshot || w.initialData, minimized: true }
       : w));
-  }, []);
-
-  const saveComposeState = useCallback((id, savedData) => {
-    setComposeWindows(prev => prev.map(w => {
-      if (w.id !== id || JSON.stringify(w.snapshot) === JSON.stringify(savedData)) return w;
-      return { ...w, snapshot: savedData };
-    }));
   }, []);
 
   const patchComposeWindow = useCallback((id, patch) => {
@@ -558,20 +535,6 @@ function App() {
   // A draft already open comes forward instead of opening a second window on
   // it: two windows autosaving one vault uid interleave their writes, and the
   // loser's text is gone.
-  const openDraftCompose = useCallback((initialData) => {
-    const already = composeWindows.find(w => {
-      const saved = w.snapshot || w.initialData;
-      return saved?._draftUid === initialData._draftUid &&
-        saved?._draftMailbox === initialData._draftMailbox &&
-        saved?._accountId === initialData._accountId;
-    });
-    if (already) {
-      restoreCompose(already.id);
-      return;
-    }
-    openCompose({ initialData });
-  }, [composeWindows, openCompose, restoreCompose]);
-
   useEffect(() => {
     setComposeOpener(openDraftCompose);
     return () => setComposeOpener(null);
@@ -1601,7 +1564,7 @@ function App() {
       <ChunkErrorBoundary name="Compose">
       <Suspense fallback={null}>
       <AnimatePresence>
-        {composeWindows.filter(w => !w.minimized && !w.detached).map(w => (
+        {composeWindows.filter(w => !w.minimized && !w.detached && canMountCompose(w)).map(w => (
           <ComposeModal
             key={w.id}
             mode={w.mode || 'new'}

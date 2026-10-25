@@ -42,11 +42,12 @@ vi.mock('../RichTextEditor', async (importOriginal) => ({
   RichTextEditor: ({ placeholder }) => React.createElement('div', { 'data-testid': 'editor-stub' }, placeholder),
 }));
 vi.mock('../ContactsPicker', () => ({ ContactsPickerButton: () => null, ContactsAutocomplete: () => null }));
-vi.mock('../../services/localDrafts', () => ({
+vi.mock('../../services/localDrafts', async () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),
-  saveLocalDraft: vi.fn().mockResolvedValue(undefined),
+  saveLocalDraft: vi.fn((await import('../../test/draftReply')).savedDraftReply),
   deleteLocalDraft: vi.fn().mockResolvedValue(undefined),
   newDraftUid: () => 1,
+  newDraftId: () => "stable-draft",
 }));
 vi.mock('../../services/workflows/messageMutations', () => ({
   markAnswered: vi.fn().mockResolvedValue(undefined),

@@ -88,3 +88,66 @@ describe('stable draft session recovery', () => {
     expect(merged[0].snapshot || merged[0].initialData).toMatchObject({ body: 'unsaved', _draftId: 'adopted', _draftAcceptedRevision: 1 });
   });
 });
+
+it('normalizes hydration replay once and persists recovery identity and exact request-only content', async () => {
+  const owner = { id: 7, detached: true, nativeLabel: 'live-token', initialData: { _draftId: 'same', _draftRevision: 3, _draftAcceptedRevision: 2, body: 'left' } };
+  const contender = { id: 7, initialData: { body: 'obsolete' }, snapshot: {
+    _draftId: 'same', _draftRevision: 3, _draftAcceptedRevision: 2, _draftUid: 42, _draftMailbox: 'Drafts', _draftAccountId: 'old',
+    _draftContent: { accountId: 'sender', fromAddress: 'alias@example.test', displayName: 'Alias', previousIdentity: { accountId: 'old', mailbox: 'Drafts', uid: 42 },
+      payload: { to: 'to@example.test', cc: '', bcc: 'secret@example.test', subject: 'right', html: '<p>right</p>', text: 'exact plain text', inReplyTo: '<p>', references: '<r> <p>',
+        attachments: [{ filename: 'empty', contentType: 'text/plain', content: '', encoding: 'base64', cid: 'cid', source: { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 } }] }, snippet: 'exact snippet' },
+  } };
+  const restored = [contender];
+  const once = mergeComposeSession([owner], restored);
+  const replay = mergeComposeSession([owner], restored);
+  expect(replay).toEqual(once);
+  expect(mergeComposeSession(once, restored)).toEqual(once);
+  expect(once[0]).toBe(owner);
+  const recovered = once[1]; const data = recovered.snapshot || recovered.initialData;
+  expect(recovered).toMatchObject({ minimized: true, detached: false });
+  expect(data).toMatchObject({ _draftId: expect.any(String), _draftRevision: 0, _draftAcceptedRevision: 0,
+    _accountId: 'sender', _fromAddress: 'alias@example.test', bcc: 'secret@example.test', body: '<p>right</p>', inReplyTo: '<p>', references: '<r> <p>',
+    attachments: [{ content: '', source: { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 } }] });
+  expect(data._draftId).not.toBe('same'); expect(data._draftUid).toBeUndefined(); expect(data._draftMailbox).toBeUndefined(); expect(data._draftContent).toBeUndefined();
+  await saveComposeSession(once); const loaded = await loadComposeSession();
+  const again = mergeComposeSession(loaded, restored);
+  expect(again).toHaveLength(2);
+  expect(again.map(w => (w.snapshot || w.initialData)._draftId)).toEqual(once.map(w => (w.snapshot || w.initialData)._draftId));
+  expect(JSON.stringify(again)).toContain('exact plain text');
+});
+
+it.each([
+  ['full same-length quote', { _quotedHtml: '<p>BBBB</p>' }],
+  ['same-name/size bytes', { attachments: [{ filename: 'f', size: 3, content: 'QkJC' }] }],
+  ['Bcc', { bcc: 'other@example.test' }],
+  ['selected account', { _accountId: 'other' }],
+  ['actual From', { _fromAddress: 'alias@example.test' }],
+  ['source attachment index', { attachments: [{ filename: 'f', size: 3, source: { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 } }] }],
+])('preserves divergent %s in a separate recovery without rekeying the live owner', (_label, change) => {
+  const data = { _draftId: 'same', _draftRevision: 3, _draftAcceptedRevision: 2, body: 'body', bcc: 'secret@example.test',
+    _quotedHtml: '<p>AAAA</p>', _accountId: 'account', _fromAddress: 'from@example.test', attachments: [{ filename: 'f', size: 3, content: 'QUFB' }] };
+  const owner = { id: 1, detached: true, nativeLabel: 'live', initialData: data };
+  const incoming = { ...data, ...change };
+  const merged = mergeComposeSession([owner], [{ id: 1, initialData: incoming }]);
+  expect(merged).toHaveLength(2); expect(merged[0]).toBe(owner);
+  expect(merged[1].initialData).toMatchObject(change);
+  expect(merged[1].initialData._draftId).not.toBe('same');
+  expect(merged[1]).toMatchObject({ minimized: true, detached: false });
+});
+
+it('deduplicates identical complete drafts in persisted order without forking scheduled editors', () => {
+  const first = { id: 2, initialData: { _draftId: 'same', _draftRevision: 3, body: 'exact', attachments: [{ content: '' }] } };
+  expect(mergeComposeSession([], [first, { ...first, id: 3 }])).toHaveLength(1);
+  const scheduled = { ...first, initialData: { ...first.initialData, _editScheduledId: 'schedule', body: 'scheduled' } };
+  const merged = mergeComposeSession([scheduled], [{ ...scheduled, initialData: { ...scheduled.initialData, body: 'changed' } }]);
+  expect(merged).toHaveLength(1); expect(merged[0].initialData._draftId).toBe('same');
+});
+
+it('treats failed or malformed stored sessions as settled empty and strips transient admission markers on save', async () => {
+  values.set('mailvault-compose-session', '{malformed');
+  await expect(loadComposeSession()).resolves.toEqual([]);
+  const saved = { id: 1, _awaitDraftHydration: true, initialData: { _draftId: 'kept', body: 'native data' } };
+  saveComposeSession([saved]);
+  expect(values.get('mailvault-compose-session')).not.toContain('_awaitDraftHydration');
+  await expect(loadComposeSession()).resolves.toMatchObject([{ initialData: { body: 'native data' } }]);
+});

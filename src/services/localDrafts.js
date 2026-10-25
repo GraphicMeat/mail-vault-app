@@ -42,7 +42,7 @@ export const newDraftUid = () => {
 };
 
 /** Stable session identity, allocated before asynchronous save or handoff. */
-export const newDraftId = () => globalThis.crypto.randomUUID();
+export { newDraftId } from './composeSession';
 
 const snapshotFields = ['to', 'cc', 'bcc', 'subject', 'html', 'text', 'inReplyTo', 'references'];
 const physicalTuple = identity => ({ accountId: identity.accountId, mailbox: identity.mailbox, uid: identity.uid });

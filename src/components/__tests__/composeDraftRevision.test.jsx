@@ -29,13 +29,17 @@ vi.mock('lucide-react', () => {
     has: () => true,
   });
 });
-vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, {
-    get: () => React.forwardRef(({ children, initial, animate, exit, ...props }, ref) =>
-      React.createElement('div', { ...props, ref }, children)),
-  }),
-  AnimatePresence: ({ children }) => children,
-}));
+vi.mock('framer-motion', () => {
+  const components = new Map();
+  return {
+    motion: new Proxy({}, { get: (_target, tag) => {
+      if (!components.has(tag)) components.set(tag, React.forwardRef(({ children, initial, animate, exit, ...props }, ref) =>
+        React.createElement('div', { ...props, ref }, children)));
+      return components.get(tag);
+    } }),
+    AnimatePresence: ({ children }) => children,
+  };
+});
 // Only the editor itself is stubbed: textToHtml and htmlToText are what build
 // the quote and its text part, so they stay real.
 vi.mock('../RichTextEditor', async (importOriginal) => ({
@@ -266,5 +270,91 @@ describe('revision recovery at the actual component boundary', () => {
     fireEvent.click(screen.getByTestId('compose-detach')); await act(async () => {});
     expect(onDetach.mock.calls[0][0]).toMatchObject({ _draftId: 'stable-draft', _draftRevision: 0, _draftAcceptedRevision: 0 });
     expect(saveLocalDraft).not.toHaveBeenCalled();
+  });
+});
+
+it('saves recovered request-only bytes as revision one without adopting the original tuple', async () => {
+  const original = { accountId: 'acct-1', fromAddress: 'me@example.test', displayName: 'Exact Name',
+    payload: { to: '', cc: '', bcc: 'secret@example.test', subject: '', html: '<p>recovered</p>', text: 'exact plain text', inReplyTo: '<p>', references: '<r> <p>',
+      attachments: [{ filename: 'empty', contentType: 'text/plain', content: '', encoding: 'base64', source: { accountId: 'source', mailbox: 'Inbox', uid: 9, attachmentIndex: 2 } }] }, snippet: 'exact snippet' };
+  const onSaveState = vi.fn();
+  render(<ComposeModal {...props} onSaveState={onSaveState} initialData={{ _draftId: 'recovered', _draftRevision: 0, _draftAcceptedRevision: 0,
+    _draftRecoveredContent: original, _draftRecovery: 'exact-provenance', _accountId: 'acct-1', _fromAddress: 'me@example.test',
+    body: '<p>recovered</p>', bcc: 'secret@example.test', inReplyTo: '<p>', references: '<r> <p>', attachments: original.payload.attachments }} />); await tick();
+  expect(saveLocalDraft).toHaveBeenCalledExactlyOnceWith({ draftId: 'recovered', revision: 1, ...original });
+  expect(onSaveState.mock.calls.at(-1)[0]._draftRecovery).toBe('exact-provenance');
+});
+
+it('retains accepted location and offers the same revision retry while native cleanup is pending', async () => {
+  saveLocalDraft.mockImplementationOnce(async request => ({ ...accepted(request), cleanup: 'pending', cleanupIdentities: [{ accountId: 'acct-1', mailbox: 'LegacyDrafts', uid: 40 }] }));
+  const snapshotRef = { current: null };
+  render(<ComposeModal {...props} initialData={seed} snapshotRef={snapshotRef} />); await tick();
+  const first = saveLocalDraft.mock.calls[0][0]; const saved = await snapshotRef.current();
+  expect(saved._draftAcceptedRevision).toBe(first.revision); expect(saved._draftUid).toBe(42);
+  expect(screen.getByRole('alert')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' })); await tick();
+  expect(saveLocalDraft.mock.calls[1][0]).toEqual(first);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+const { useComposeSessionHydration } = await import('../../services/composeSession');
+function HydrationHarness({ loader, persist, controls, initial = [], focus }) {
+  const [windows, setWindows] = React.useState(initial);
+  const idRef = React.useRef(20);
+  const owner = useComposeSessionHydration({ windows, setWindows, idRef, loader, persist, focus });
+  controls.current = { ...owner, windows, fresh: (mode = 'new') => setWindows(prev => [...prev, { id: ++idRef.current, mode,
+    ...(mode === 'reply' ? { replyTo: { uid: 9, from: { address: 'them@example.test' }, subject: 'Question', html: '<p>Q</p>' } } : {}) }]) };
+  return windows.filter(w => !w.minimized && !w.detached && owner.canMount(w)).map(w => <ComposeModal {...props} key={w.id}
+    mode={w.mode || 'new'} replyTo={w.replyTo} initialData={w.initialData} onSaveState={data => owner.saveState(w.id, data)} />);
+}
+const nativeDraft = { ...seed, _draftId: 'managed', _draftRevision: 2, _draftAcceptedRevision: 2, _draftUid: 22, _draftAccountId: 'acct-1' };
+describe('App production hydration owner with the real editor', () => {
+  it('waits for newer complete session content before mounting one native-reopen editor', async () => {
+    const load = deferred(); const loader = vi.fn(() => load.promise); const persist = vi.fn(); const controls = { current: null };
+    render(<HydrationHarness {...{ loader, persist, controls }} />);
+    await act(async () => { controls.current.openDraft(nativeDraft); controls.current.openDraft({ ...nativeDraft }); });
+    expect(controls.current.windows).toHaveLength(1);
+    expect(screen.queryByTestId('editor-stub')).toBeNull(); await tick();
+    expect(saveLocalDraft).not.toHaveBeenCalled(); expect(persist).not.toHaveBeenCalled();
+    const file = { filename: 'same', contentType: 'text/plain', content: 'QkJC', encoding: 'base64' };
+    const content = { accountId: 'acct-1', fromAddress: 'me@example.test', displayName: 'Me', payload: {
+      to: '', cc: '', bcc: '', subject: '', html: '<p>x</p><hr data-mailvault-quote="reply"><blockquote><p>QQ</p></blockquote>',
+      text: 'x\n\n-------- Original Message --------\nQQ', inReplyTo: '', references: '', attachments: [file],
+    }, snippet: 'x' };
+    const session = { ...nativeDraft, body: '<p>x</p>', _quotedHtml: '<p>QQ</p>', attachments: [file], _draftContent: content,
+      _draftRevision: 3, _draftAcceptedRevision: 1, _draftUid: 11 };
+    await act(async () => { load.resolve([{ id: 90, minimized: true, initialData: session }]); });
+    expect(screen.getAllByTestId('editor-stub')).toHaveLength(1); expect(screen.getByTestId('editor-stub').value).toBe('<p>x</p>');
+    expect(controls.current.windows[0].initialData).toMatchObject({ _draftRevision: 3, _draftAcceptedRevision: 2, _draftUid: 22 });
+    expect(persist.mock.calls.at(-1)[0][0].initialData.body).toBe('<p>x</p>');
+    await tick(); expect(saveLocalDraft.mock.calls[0][0]).toMatchObject({ draftId: 'managed', revision: 3, ...content });
+  });
+  it('keeps fresh and reply editors mounted while hydration is pending and after they gain IDs', async () => {
+    const load = deferred(); const loader = () => load.promise; const controls = { current: null }; const persist = vi.fn();
+    render(<HydrationHarness {...{ loader, persist, controls }} />);
+    await act(async () => { controls.current.fresh(); });
+    const editor = screen.getByTestId('editor-stub'); fireEvent.change(editor, { target: { value: '<p>fresh exact</p>' } }); await tick();
+    expect(controls.current.windows[0].snapshot._draftId).toBe('stable-draft'); expect(screen.getByTestId('editor-stub')).toBe(editor);
+    await act(async () => { controls.current.fresh('reply'); }); expect(screen.getAllByTestId('editor-stub')).toHaveLength(2);
+    await act(async () => { load.resolve([]); });
+    expect(screen.getAllByTestId('editor-stub')[0]).toBe(editor); expect(editor.value).toBe('<p>fresh exact</p>');
+  });
+  it('releases a pending native reopen on loader rejection without persisting a waiting marker', async () => {
+    const load = deferred(); const loader = () => load.promise; const controls = { current: null }; const persist = vi.fn();
+    render(<HydrationHarness {...{ loader, persist, controls }} />);
+    await act(async () => { controls.current.openDraft(nativeDraft); });
+    await act(async () => { load.reject(Error('session unavailable')); });
+    expect(screen.getByTestId('editor-stub').value).toBe('<p>typed</p>');
+    expect(controls.current.windows.some(w => w._awaitDraftHydration)).toBe(false);
+    expect(persist).toHaveBeenCalled();
+  });
+  it('preserves the already-live detached owner and ignores hydration completion after unmount', async () => {
+    const load = deferred(); const loader = () => load.promise; const controls = { current: null }; const persist = vi.fn(); const focus = vi.fn();
+    const live = { id: 5, detached: true, nativeLabel: 'live-token', initialData: nativeDraft };
+    const view = render(<HydrationHarness {...{ loader, persist, controls, focus }} initial={[live]} />);
+    await act(async () => { controls.current.openDraft(nativeDraft); });
+    expect(focus).toHaveBeenCalledWith('live-token'); expect(controls.current.windows).toHaveLength(1);
+    expect(controls.current.windows[0]).toMatchObject({ detached: true, nativeLabel: 'live-token' });
+    view.unmount(); await act(async () => { load.resolve([]); }); expect(persist).not.toHaveBeenCalled();
   });
 });

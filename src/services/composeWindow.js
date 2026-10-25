@@ -1,3 +1,4 @@
+import { mergeComposeSnapshot } from './composeSession';
 import { t } from '../i18n/index.js';
 
 export const composeSnapshotForTransfer = snapshot => snapshot ? JSON.parse(JSON.stringify(snapshot)) : snapshot;
@@ -107,7 +108,7 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
         update(session.id, { detached: true, nativeLabel: session.label, snapshot: session.snapshot, minimized: false });
         void reply(session, requestId, 'activate').then(() => session.resolve?.(session.label)).catch(() => recover(session));
       } else if (message.type === 'snapshot') {
-        session.snapshot = composeSnapshotForTransfer(message.payload);
+        session.snapshot = mergeComposeSnapshot(session.snapshot, composeSnapshotForTransfer(message.payload));
         update(session.id, { snapshot: session.snapshot });
         void reply(session, requestId, 'ack').catch(() => recover(session));
       } else if (message.type === 'discard') {
@@ -128,7 +129,7 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
           void reply(session, requestId, 'error', t('errors.composeWindowRequestInProgress')).catch(() => recover(session));
           return true;
         }
-        const latest = composeSnapshotForTransfer(message.payload || session.snapshot);
+        const latest = mergeComposeSnapshot(session.snapshot, composeSnapshotForTransfer(message.payload || session.snapshot));
         session.snapshot = latest;
         if (!session.initialized) {
           session.terminal = true;

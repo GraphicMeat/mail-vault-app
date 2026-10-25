@@ -45,11 +45,12 @@ vi.mock('../ContactsPicker', () => ({
   ContactsPickerButton: () => null,
   ContactsAutocomplete: () => null,
 }));
-vi.mock('../../services/localDrafts', () => ({
+vi.mock('../../services/localDrafts', async () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),
-  saveLocalDraft: vi.fn().mockResolvedValue(undefined),
+  saveLocalDraft: vi.fn((await import('../../test/draftReply')).savedDraftReply),
   deleteLocalDraft: vi.fn().mockResolvedValue(undefined),
   newDraftUid: () => 1,
+  newDraftId: () => "stable-draft",
 }));
 vi.mock('../../services/api', () => ({}));
 vi.mock('../../services/db', () => ({}));
