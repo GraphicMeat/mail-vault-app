@@ -53,6 +53,8 @@ pub(crate) struct BackupState {
     #[cfg(test)]
     pending_access_exit: Mutex<Option<(oneshot::Sender<()>, oneshot::Receiver<()>)>>,
     #[cfg(test)]
+    pending_limit_exit: Mutex<Option<(oneshot::Sender<()>,oneshot::Receiver<()>)>>,
+    #[cfg(test)]
     scans_in_flight: std::sync::atomic::AtomicUsize,
 }
 impl BackupState {
@@ -872,6 +874,11 @@ async fn pump(state: &Arc<DaemonState>, ledger: &mut Ledger, services: &Services
                 let _ = entered.send(());
                 let _ = release.await;
             }
+        }
+        #[cfg(test)]
+        if exit.pending_stage()==Some("limit") {
+            let barrier=st.backup_worker.pending_limit_exit.lock().unwrap().take();
+            if let Some((entered,release))=barrier {let _=entered.send(());let _=release.await;}
         }
         let _ = st.backup_worker.tx.get().unwrap().send(Cmd::Finished {
             run,

@@ -669,6 +669,16 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         "old provider joined and fresh execution pending",
     );
     reconcile(&held, &native, "shell-b");
+    if native.acquired.load(SeqCst)!=2 {println!("NATIVE_OWNER_FIRST_RECONCILE: {}",native.last_status.lock().unwrap());}
+    until(|| {
+        if native.acquired.load(SeqCst)==2 {return true;}
+        let events=channel.access_events.swap(0,SeqCst);
+        if events>0 {
+            reconcile(&held,&native,"shell-b");
+            println!("NATIVE_OWNER_EVENT_RECONCILE: triggers={} acquired={} status={}",events,native.acquired.load(SeqCst),native.last_status.lock().unwrap());
+        }
+        native.acquired.load(SeqCst)==2
+    },"event-triggered second actual native acquisition after owner loss");
     assert_eq!(native.acquired.load(SeqCst), 2);
     assert_eq!(native.released.load(SeqCst), 1);
     until(

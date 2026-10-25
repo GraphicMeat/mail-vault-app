@@ -1853,3 +1853,22 @@ async fn backup_access_late_attach_revalidates_slot_before_provider() {
 async fn backup_access_late_attach_cannot_keep_a_lost_owner() {
     late_access_negative(true).await;
 }
+
+#[tokio::test]
+async fn backup_access_cap_wake_during_pending_probe_is_not_lost() {
+    let mut r=rig();enabled(&r.state);patch(&r.state,json!({"transferLimits":{"one":{"capEnabled":true,"dailyDownLimitBytes":1024}}}));
+    manual(&r.state,"one","cap-probe-wake").await;let c=call(&mut r).await;
+    let mut terminal=frame(&c.ctx);terminal.cancelled=true;terminal.stop_reason=Some("limit_reached");terminal.limit_bytes=Some(1024);terminal.resume_after_ms=Some((NOW+10_000) as u64);(c.ctx.on_progress)(terminal);
+    let mut limited=result(0);limited.success=false;limited.cancelled=true;c.reply.send(Ok(limited)).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["cap-probe-wake"]["status"]=="limit_reached").await;
+    let (entered_tx,entered_rx)=oneshot::channel();let (release_tx,release_rx)=oneshot::channel();
+    *r.state.backup_worker.pending_limit_exit.lock().unwrap()=Some((entered_tx,release_rx));automatic(&r.state,false);entered_rx.await.unwrap();
+    patch(&r.state,json!({"transferLimits":{"one":{"capEnabled":false}}}));wake(&r.state);
+    let (done,consumed)=oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();consumed.await.unwrap();
+    release_tx.send(()).unwrap();
+    let next=tokio::time::timeout(Duration::from_secs(2),r.calls.recv()).await.ok().flatten();
+    let resumed=next.is_some();
+    if let Some(c)=next {assert_eq!(c.ctx.skip_folders,0);c.reply.send(Ok(result(1))).ok().unwrap();wait(&r.state,|s|s["active"].is_null() && s["lastOutcomes"].as_array().is_some_and(|a|a.len()>=2)).await;}
+    finish(r).await;
+    assert!(resumed,"a real cap-change Wake consumed during preparing was lost after its old limit Pending result");
+}
