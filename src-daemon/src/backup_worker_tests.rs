@@ -2059,3 +2059,30 @@ async fn backup_worker_context_sequence_and_strictmode_fence_late_attach() {
     assert!(!r.state.backup_worker.facts.lock().unwrap().loading);
     finish(r).await;
 }
+
+#[tokio::test]
+async fn backup_worker_snapshot_success_is_native_without_ui_listener() {
+    let mut r = rig();
+    patch(&r.state,json!({"billingProfile":{"hasSubscription":true,"status":"active"},"snapshotAutoEnabled":true,"snapshotCadence":"after_every_backup"}));
+    std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"one","email":"one@test"},{"id":"two","email":"two@test"}]"#).unwrap();
+    let cur = r.state.data_dir.join("Maildir/one/INBOX/cur");
+    std::fs::create_dir_all(&cur).unwrap();
+    std::fs::write(cur.join(format!("7{}AS.eml",mailvault_core::maildir::INFO_PREFIX)),b"From: fixture@test\r\n\r\nfixture").unwrap();
+    let ack = manual(&r.state,"one","snapshot-native").await;
+    let c = call(&mut r).await; c.reply.send(Ok(result(1))).ok();
+    wait(&r.state,|s| s["requests"]["snapshot-native"]["status"] == "success").await;
+    let saved = tokio::time::timeout(Duration::from_secs(2),async {
+        loop {
+            if settings(&r.state)["snapshotLastTimes"]["one"].as_i64().is_some() { return true; }
+            tokio::task::yield_now().await;
+        }
+    }).await.is_ok();
+    assert!(saved,"successful native completion never created/applied its automatic snapshot");
+    let snapshots = crate::snapshot::list_snapshots(&r.state.data_dir,"one").unwrap();
+    assert_eq!(snapshots.len(),1);
+    assert_eq!(settings(&r.state)["backupHistory"]["one"].as_array().unwrap().len(),1);
+    let replay = manual(&r.state,"one","snapshot-native").await;
+    assert_eq!(replay["runId"],ack["runId"]);
+    assert_eq!(crate::snapshot::list_snapshots(&r.state.data_dir,"one").unwrap().len(),1);
+    finish(r).await;
+}

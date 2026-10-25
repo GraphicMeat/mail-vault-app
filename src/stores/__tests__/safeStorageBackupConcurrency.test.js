@@ -16,7 +16,7 @@ const name = 'mailvault-settings';
 const original = () => ({ version: 3, state: { language: 'en', backupHistory: {}, backupState: {}, snapshotLastTimes: {}, obsolete: null } });
 async function rig(shell = false) {
   vi.resetModules();
-  const host = { disk: { [name]: original() }, version: 1, beforeWrite: null, fail: false, writes: 0 };
+  const host = { disk: { [name]: original() }, version: 1, beforeWrite: null, fail: false, writes: 0, configWrites: [] };
   const write = async (values, bases) => {
     host.writes++;
     await host.beforeWrite?.();
@@ -30,6 +30,13 @@ async function rig(shell = false) {
   globalThis.window = { location: { search: '' }, __TAURI__: { core: { invoke: async (command, args) => {
     if (command === 'daemon_rpc') {
       if (shell) throw new Error('errors.daemonOutdated');
+      if (args.method === 'backup.schedule.get') return { version: host.version, config: clone(host.disk[name].state) };
+      if (args.method === 'backup.schedule.set') {
+        host.configWrites.push(clone(args.params));
+        const apply = (target, patch) => { for (const [key, value] of Object.entries(patch)) { if (value === null) delete target[key]; else if (value && typeof value === 'object' && !Array.isArray(value)) { target[key] ||= {}; apply(target[key], value); } else target[key] = clone(value); } };
+        apply(host.disk[name].state, args.params.patch); host.version++;
+        return { version: host.version, config: clone(host.disk[name].state) };
+      }
       if (args.method === 'settings.get') return { values: clone(host.disk), version: host.version };
       if (args.method === 'settings.replace') return write(args.params.values, args.params.bases);
     }
@@ -83,4 +90,22 @@ it('adopts a coherent native completion returned during another store write', as
   host.beforeWrite = () => { host.beforeWrite = null; complete(host); };
   await flushSafeStorage();
   expect(JSON.parse(await safeStorage.getItem(name)).state.backupState.one).toEqual({ lastBackupTime: 42 });
+});
+
+it('writes backup config as an exact targeted delta and preserves removals and completion', async () => {
+  const { safeStorage, flushSafeStorage, host } = await rig();
+  const seeded = original(); seeded.state.backupSchedules = { one: { enabled: true, interval: 'daily' } };
+  host.disk[name] = seeded;
+  // A fresh reader establishes the accepted baseline.
+  const next = original(); next.state.backupSchedules = { one: { enabled: true, interval: 'daily' } };
+  safeStorage.setItem(name, JSON.stringify(next)); await flushSafeStorage(); host.configWrites.length = 0;
+  next.state.backupSchedules = {}; next.state.language = 'de';
+  safeStorage.setItem(name,JSON.stringify(next));
+  host.beforeWrite = () => { host.beforeWrite = null; complete(host); };
+  await flushSafeStorage();
+  expect(host.configWrites).toHaveLength(1);
+  expect(host.configWrites[0].patch).toEqual({ backupSchedules: { one: null } });
+  expect(host.disk[name].state.backupSchedules).toEqual({});
+  expect(host.disk[name].state.language).toBe('de');
+  expect(host.disk[name].state.backupHistory.one).toEqual([{ success: true, timestamp: 42 }]);
 });
