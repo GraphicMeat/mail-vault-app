@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "Échec de la sauvegarde - {{account}}",
   "svc.backupScheduler.completedCount": "{{count}} nouveaux e-mails sauvegardés.",
   "svc.backupScheduler.pendingAccess": "En attente d’accès à l’emplacement de sauvegarde.",
-  "svc.backupScheduler.uncertain": "État incertain ; en attente du processus natif."
+  "svc.backupScheduler.uncertain": "État incertain ; en attente du processus natif.",
+  "errors.accountsConflict": "Votre liste de comptes a changé dans une autre fenêtre. Réessayez.",
+  "errors.accountsInvalid": "Cette modification de compte n'a pas pu être enregistrée car elle n'est pas valide.",
+  "errors.accountsWriteFailed": "La modification de votre compte n’a pas pu être effectuée."
 }

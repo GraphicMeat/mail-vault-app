@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "Backup non riuscito - {{account}}",
   "svc.backupScheduler.completedCount": "{{count}} nuove email salvate.",
   "svc.backupScheduler.pendingAccess": "In attesa dell’accesso alla posizione di backup.",
-  "svc.backupScheduler.uncertain": "Stato del backup incerto; in attesa del processo nativo."
+  "svc.backupScheduler.uncertain": "Stato del backup incerto; in attesa del processo nativo.",
+  "errors.accountsConflict": "L'elenco degli account è cambiato in un'altra finestra. Riprova.",
+  "errors.accountsInvalid": "Questa modifica dell'account non è stata salvata perché non è valida.",
+  "errors.accountsWriteFailed": "Non è stato possibile completare la modifica del tuo account."
 }

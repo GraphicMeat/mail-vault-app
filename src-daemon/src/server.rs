@@ -761,6 +761,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     if let Some(resp) = crate::handlers::message::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::accounts::route(state, &req.method, &req.params, id.clone()).await { return resp; }
     if let Some(resp) = crate::handlers::settings::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }

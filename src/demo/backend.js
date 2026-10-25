@@ -411,6 +411,11 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
   const classificationOverrides = new Map();
   let externalBackupPath = null;
 
+  // accounts.json as the daemon serves it (`accounts.*`); no secrets in it.
+  const seedAccountList = () => ACCOUNTS.map(({ password, oauth2AccessToken, oauth2RefreshToken, ...rest }) => clone(rest));
+  let accountList = seedAccountList();
+  let accountsVersion = 1;
+
   const emit = (event, payload) => { for (const callback of listeners.get(event) || []) callback({ payload }); };
 
   // The daemon job's progress payload (src-daemon/src/mbox_upload_job.rs
@@ -646,6 +651,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     learning: [...learning.entries()].map(([id, value]) => [id, clone(value)]),
     classificationOverrides: [...classificationOverrides.entries()].map(([id, value]) => [id, clone(value)]),
     externalBackupPath,
+    accountList: clone(accountList),
   });
 
   const restoreState = stored => {
@@ -684,6 +690,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     for (const [id, value] of stored.learning || []) learning.set(id, clone(value));
     classificationOverrides.clear();
     for (const [id, value] of stored.classificationOverrides || []) classificationOverrides.set(id, clone(value));
+    accountList = Array.isArray(stored.accountList) ? clone(stored.accountList) : seedAccountList();
     snapshotSeq = Number.isFinite(stored.snapshotSeq) ? stored.snapshotSeq : 0;
     capsuleSeq = Number.isFinite(stored.capsuleSeq) ? stored.capsuleSeq : 0;
     externalBackupPath = typeof stored.externalBackupPath === 'string' ? stored.externalBackupPath : null;
@@ -713,7 +720,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // Daemon-owned commands (search index, vault rows/search — spec
         // 2026-09-14 §5) keep their Tauri names, not a dotted daemon method.
         if (method && !method.includes('.')) return invoke(method, args.params || {});
-        if (method?.startsWith('credentials.')) return invoke(method, args.params || {});
+        if ((method?.startsWith('accounts.') || method?.startsWith('credentials.'))) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
         // Insights: the daemon's insights.build / aggregate / messages
@@ -1823,6 +1830,31 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'oauth2.take_refreshed': return { tokens: [] };
       case 'credentials.get': return invoke('get_credentials');
       case 'credentials.save': case 'credentials.update': case 'credentials.delete': return unsupported(command);
+      case 'accounts.list': return { accounts: clone(accountList), version: accountsVersion };
+      case 'accounts.get': return { account: clone(accountList.find(a => a.id === args.id) || null), version: accountsVersion };
+      case 'accounts.put': case 'accounts.remove': case 'accounts.reorder': case 'accounts.replace_all': {
+        const strip = ({ password, oauth2AccessToken, oauth2RefreshToken, ...rest }) => rest;
+        const entries = (args.entries || (args.entry ? [args.entry] : [])).map(strip);
+        const before = JSON.stringify(accountList);
+        if (command === 'accounts.put') {
+          for (const entry of entries) {
+            const at = accountList.findIndex(a => a.id === entry.id);
+            if (at >= 0 && !args.ifAbsent) accountList[at] = { ...accountList[at], ...entry };
+            else if (at < 0) accountList.push(entry);
+          }
+        } else if (command === 'accounts.remove') {
+          const ids = args.ids || [args.id];
+          accountList = accountList.filter(a => !ids.includes(a.id));
+        } else if (command === 'accounts.reorder') {
+          const ids = args.ids || [];
+          accountList = [...ids.map(id => accountList.find(a => a.id === id)).filter(Boolean), ...accountList.filter(a => !ids.includes(a.id))];
+        } else {
+          accountList = entries;
+        }
+        const changed = JSON.stringify(accountList) !== before;
+        if (changed) { accountsVersion += 1; emit('demo:state', { type: 'accounts' }); }
+        return { version: accountsVersion, changed: changed ? entries.map(e => e.id).concat(args.ids || []) : [] };
+      }
       case 'oauth2.credentials_changed': return { ok: true };
       case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': case 'store_password': case 'store_credentials': return unsupported(command);
       // The browser demo has no index: searchLocalEmails falls back to its scan.
@@ -1843,7 +1875,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; bulkAdmissions.clear(); migrationState = null; snapshots.clear(); draftRecords.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; bulkAdmissions.clear(); migrationState = null; snapshots.clear(); draftRecords.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; accountList = seedAccountList(); syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }

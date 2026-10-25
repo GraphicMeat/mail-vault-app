@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "Sicherung fehlgeschlagen - {{account}}",
   "svc.backupScheduler.completedCount": "{{count}} neue E-Mails gesichert.",
   "svc.backupScheduler.pendingAccess": "Warten auf Zugriff auf den Sicherungsort.",
-  "svc.backupScheduler.uncertain": "Sicherungsstatus unklar; der native Worker wird abgewartet."
+  "svc.backupScheduler.uncertain": "Sicherungsstatus unklar; der native Worker wird abgewartet.",
+  "errors.accountsConflict": "Deine Kontoliste wurde in einem anderen Fenster geändert. Versuche es erneut.",
+  "errors.accountsInvalid": "Diese Kontoänderung ist ungültig und wurde nicht gespeichert.",
+  "errors.accountsWriteFailed": "Deine Kontoänderung konnte nicht abgeschlossen werden."
 }

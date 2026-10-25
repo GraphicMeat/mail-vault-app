@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "Error de copia - {{account}}",
   "svc.backupScheduler.completedCount": "{{count}} correos nuevos copiados.",
   "svc.backupScheduler.pendingAccess": "Esperando acceso a la ubicación de copia.",
-  "svc.backupScheduler.uncertain": "Estado de copia incierto; esperando al proceso nativo."
+  "svc.backupScheduler.uncertain": "Estado de copia incierto; esperando al proceso nativo.",
+  "errors.accountsConflict": "Tu lista de cuentas cambió en otra ventana. Inténtalo de nuevo.",
+  "errors.accountsInvalid": "Ese cambio de cuenta no se pudo guardar porque no es válido.",
+  "errors.accountsWriteFailed": "No se pudo completar el cambio de tu cuenta."
 }

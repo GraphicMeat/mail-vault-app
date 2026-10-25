@@ -1,0 +1,10 @@
+[
+  { "account": { "email": "A@X.test", "imapHost": "IMAP.x.test" }, "key": "a@x.test@imap.x.test" },
+  { "account": { "email": "a@x.test", "oauth2Provider": "Google" }, "key": "a@x.test@google" },
+  { "account": { "email": "a@x.test", "imapHost": "", "oauth2Provider": "microsoft" }, "key": "a@x.test@microsoft" },
+  { "account": { "email": "a@x.test", "imapHost": "imap.x.test", "oauth2Provider": "google" }, "key": "a@x.test@imap.x.test" },
+  { "account": { "email": "a@x.test" }, "key": "a@x.test@" },
+  { "account": { "imapHost": "imap.x.test" }, "key": "@imap.x.test" },
+  { "account": {}, "key": "@" },
+  { "account": { "email": "A@x.test", "imapHost": "api.fastmail.com", "jmapSessionUrl": "https://api.fastmail.com/jmap/session" }, "key": "a@x.test@api.fastmail.com" }
+]

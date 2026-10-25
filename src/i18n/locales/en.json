@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "Backup failed - {{account}}",
   "svc.backupScheduler.completedCount": "{{count}} new emails backed up.",
   "svc.backupScheduler.pendingAccess": "Waiting for access to the backup location.",
-  "svc.backupScheduler.uncertain": "Backup status is uncertain; waiting for the native worker."
+  "svc.backupScheduler.uncertain": "Backup status is uncertain; waiting for the native worker.",
+  "errors.accountsConflict": "Your account list changed in another window. Try again.",
+  "errors.accountsInvalid": "That account change could not be saved because it is not valid.",
+  "errors.accountsWriteFailed": "Your account change could not be completed."
 }

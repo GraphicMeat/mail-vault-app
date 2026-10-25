@@ -52,3 +52,14 @@ describe('accountLogicalKey for JMAP accounts', () => {
     expect(accountLogicalKey(imap)).not.toBe(accountLogicalKey(jmap));
   });
 });
+
+// The daemon dedupes `accounts.put {ifAbsent}` by the same key
+// (`mailvault_core::accounts_doc::logical_key`): both read one fixture.
+describe('accountLogicalKey matches the daemon', () => {
+  it('answers every case of the shared fixture', async () => {
+    const { readFileSync } = await import('node:fs');
+    const cases = JSON.parse(readFileSync('src-core/tests/fixtures/account-logical-key-cases.json', 'utf8'));
+    expect(cases.length).toBeGreaterThan(5);
+    for (const { account, key } of cases) expect(accountLogicalKey(account), JSON.stringify(account)).toBe(key);
+  });
+});

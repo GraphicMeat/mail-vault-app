@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "バックアップ失敗 - {{account}}",
   "svc.backupScheduler.completedCount": "新しいメール {{count}} 件をバックアップしました。",
   "svc.backupScheduler.pendingAccess": "バックアップ先へのアクセスを待っています。",
-  "svc.backupScheduler.uncertain": "バックアップの状態が不明です。ネイティブ処理を待っています。"
+  "svc.backupScheduler.uncertain": "バックアップの状態が不明です。ネイティブ処理を待っています。",
+  "errors.accountsConflict": "別のウィンドウでアカウント一覧が変更されました。もう一度お試しください。",
+  "errors.accountsInvalid": "このアカウントの変更は有効でないため保存できませんでした。",
+  "errors.accountsWriteFailed": "アカウントの変更を完了できませんでした。"
 }

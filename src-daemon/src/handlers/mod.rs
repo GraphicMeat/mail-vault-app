@@ -1,3 +1,4 @@
+pub mod accounts;
 //! JSON-RPC method handlers. `server::handle_request` routes to these.
 
 use crate::classification;

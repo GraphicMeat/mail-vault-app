@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "备份失败 - {{account}}",
   "svc.backupScheduler.completedCount": "已备份 {{count}} 封新邮件。",
   "svc.backupScheduler.pendingAccess": "正在等待访问备份位置。",
-  "svc.backupScheduler.uncertain": "备份状态不确定，正在等待原生进程。"
+  "svc.backupScheduler.uncertain": "备份状态不确定，正在等待原生进程。",
+  "errors.accountsConflict": "你的账户列表已在另一个窗口中更改。请重试。",
+  "errors.accountsInvalid": "此账户更改无效，未能保存。",
+  "errors.accountsWriteFailed": "无法完成你的账户更改。"
 }

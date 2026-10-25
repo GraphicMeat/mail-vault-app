@@ -4010,5 +4010,8 @@
   "svc.backupScheduler.failedTitle": "백업 실패 - {{account}}",
   "svc.backupScheduler.completedCount": "새 메일 {{count}}개를 백업했습니다.",
   "svc.backupScheduler.pendingAccess": "백업 위치에 대한 접근을 기다리는 중입니다.",
-  "svc.backupScheduler.uncertain": "백업 상태가 불확실합니다. 기본 작업 프로세스를 기다리는 중입니다."
+  "svc.backupScheduler.uncertain": "백업 상태가 불확실합니다. 기본 작업 프로세스를 기다리는 중입니다.",
+  "errors.accountsConflict": "다른 창에서 계정 목록이 변경되었습니다. 다시 시도하세요.",
+  "errors.accountsInvalid": "이 계정 변경은 유효하지 않아 저장하지 못했습니다.",
+  "errors.accountsWriteFailed": "계정 변경을 완료하지 못했습니다."
 }

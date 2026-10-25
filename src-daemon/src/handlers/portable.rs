@@ -302,6 +302,10 @@ pub(crate) async fn run_create(state: &Arc<DaemonState>, req: CreateRequest, pay
         let mail = blocking(move || {
             let mail = mailvault_core::vault_ops::remove_sources(&st.data_dir, &dirs);
             let accounts = std::fs::remove_file(st.app_dir.join("accounts.json"));
+            // Best effort companion cleanup after successful copy only.
+            for extra in mailvault_core::json_doc::companion_files(&st.app_dir, mailvault_core::accounts_doc::SPEC) {
+                let _ = std::fs::remove_file(extra);
+            }
             mail && accounts.map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true)
         })
         .await?;
