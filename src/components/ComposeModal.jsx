@@ -713,7 +713,9 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
 
   // A recipient chip field hands over its whole comma-joined string.
   const setRecipients = (field) => (value) => {
-    if (detaching) return;
+    // WebKit blurs the focused field when sending makes the editor inert.
+    // Committing its unchanged draft is not a new mail generation.
+    if (detaching || value === formData[field]) return;
     editRevision.current[field]++;
     setFormData(prev => ({ ...prev, [field]: value }));
     setError(null);

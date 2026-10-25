@@ -134,6 +134,18 @@ describe('recipient chips in compose', () => {
     expect(sentSnapshot().to).toBe('recipient@example.test');
   });
 
+  it.each(['changed', 'away and back'])('retires pending Send after a recipient is %s', async edit => {
+    open({ to: '', body: '' });
+    fireEvent.change(await screen.findByTestId('compose-to'), { target: { value: 'first@example.test' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('compose-send'));
+      fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'other@example.test' } });
+      if (edit === 'away and back') fireEvent.change(screen.getByTestId('compose-to'), { target: { value: 'first@example.test' } });
+    });
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(screen.getByTestId('compose-to').dataset.value).toBe(edit === 'changed' ? 'other@example.test' : 'first@example.test');
+  });
+
   it('refuses to send an entry that is not an address, and names it', async () => {
     open({ to: 'them@example.test, John Doe' });
     fireEvent.click(await screen.findByTestId('compose-send'));
