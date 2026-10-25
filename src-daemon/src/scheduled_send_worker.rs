@@ -325,7 +325,7 @@ fn is_terminal_smtp_error(msg: &str) -> bool {
 ///
 /// The stored record comes back too: `with_fresh_token` reads its OAuth2
 /// fields.
-async fn resolve_credentials(account_id: &str) -> Result<(ImapConfig, serde_json::Value), String> {
+async fn resolve_credentials(account_id: &str) -> Result<(ImapConfig, crate::credentials::RecordSnapshot), String> {
     crate::credentials::resolve_account_with_record_guarded(account_id).await
 }
 
@@ -346,7 +346,7 @@ async fn with_fresh_token(
     state: &Arc<DaemonState>,
     account_id: &str,
     account: ImapConfig,
-    record: &serde_json::Value,
+    record: &crate::credentials::RecordSnapshot,
 ) -> Result<ImapConfig, String> {
     let email = account.email.clone();
     match crate::oauth_tokens::fresh_config(state, account_id, account, record).await {
@@ -513,7 +513,7 @@ mod tests {
 
     /// A stored OAuth2 record whose token expired long ago, with `extra`
     /// merged in, and the `ImapConfig` the keychain read makes of it.
-    fn expired_record(extra: Value) -> (ImapConfig, Value) {
+    fn expired_record(extra: Value) -> (ImapConfig, crate::credentials::RecordSnapshot) {
         let mut record = json!({
             "authType": "oauth2",
             "oauth2AccessToken": "token-stored",
@@ -523,7 +523,7 @@ mod tests {
         for (k, v) in extra.as_object().cloned().unwrap_or_default() {
             record[k] = v;
         }
-        (serde_json::from_value(record.clone()).expect("ImapConfig"), record)
+        (serde_json::from_value(record.clone()).expect("ImapConfig"), crate::credentials::RecordSnapshot { record, generation: crate::credentials::write_generation() })
     }
 
     fn field(body: &str, key: &str) -> Option<String> {
@@ -534,12 +534,31 @@ mod tests {
         (200, json!({"access_token": token, "expires_in": 3600}).to_string())
     }
 
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn a_scheduled_send_rejects_a_stale_config_and_token_snapshot() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        let _restore=crate::credentials::TestEnvRestore::capture();
+        let dir=tempfile::tempdir().unwrap();let path=dir.path().join("credentials.json");
+        let mut record=json!({"id":"g","email":"me@gmail.test","imapHost":"imap.gmail.com","authType":"oauth2","oauth2Provider":"google","oauth2ClientId":mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,"oauth2AccessToken":"synthetic-old-token","oauth2RefreshToken":"synthetic-old-refresh","oauth2ExpiresAt":chrono::Utc::now().timestamp_millis()+3_600_000});
+        std::fs::write(&path,json!({"g":record.to_string()}).to_string()).unwrap();std::env::set_var("MAILVAULT_TEST_CREDENTIALS",&path);
+        let state=DaemonState::for_test(dir.path().join("vault"),dir.path().to_path_buf(),true);
+        let (done,finished)=std::sync::mpsc::channel();let _cleanup=crate::credentials::TestTaskDrain(finished);
+        let pause=crate::oauth_tokens::TestRecordReadPause::arm("g");let completion=crate::credentials::TestTaskDone(done);
+        let s=Arc::clone(&state);let pending=tokio::spawn(async move {let _completion=completion;let (account,record)=resolve_credentials("g").await?;with_fresh_token(&s,"g",account,&record).await});
+        pause.wait();record["oauth2AccessToken"]=json!("synthetic-new-token");record["oauth2RefreshToken"]=json!("synthetic-new-refresh");
+        let reply=crate::server::handle_request_for_test(&state,"credentials.save",json!({"records":{"g":record.to_string()}})).await;assert!(reply.error.is_none());
+        drop(pause);assert!(pending.await.unwrap().is_err(),"stale send must not receive its old config or fallback token");
+        let (account,snapshot)=resolve_credentials("g").await.unwrap();
+        let current=with_fresh_token(&state,"g",account,&snapshot).await.unwrap();assert!(current.access_token.as_deref()==Some("synthetic-new-token"));
+    }
+
     /// A Gmail account refreshes with the Google client that issued its
     /// refresh token (the one stamped on the record) and Google's mail scope:
     /// never Graph's scopes, and never the other Google client, whose token
     /// endpoint would answer `invalid_grant` for a grant it did not issue.
     #[tokio::test]
     async fn a_google_record_refreshes_with_its_own_client_and_the_google_scope() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let _tokens = crate::handlers::oauth2::test_token_mock(vec![fresh("g-fresh"), fresh("g-fresh-2")]);
         let s = st();
         let thunderbird = mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID;
@@ -583,6 +602,7 @@ mod tests {
     /// is the control: same provider, Graph's scopes.
     #[tokio::test]
     async fn a_microsoft_imap_record_refreshes_with_the_imap_scopes() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let _tokens = crate::handlers::oauth2::test_token_mock(vec![fresh("ms-fresh"), fresh("graph-fresh")]);
         let s = st();
         let microsoft = |transport: Option<&str>| {
@@ -622,6 +642,7 @@ mod tests {
         use crate::jmap_test_support as support;
         use mailvault_core::app_db::follow_up;
         let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = crate::credentials::TestEnvRestore::capture();
         let m = mock_jmap::MockJmap::start(support::scenario());
         let (trap, port) = support::imap_trap();
         let s = st();

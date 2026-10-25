@@ -79,6 +79,10 @@ pub(crate) enum FailKind {
     NoRecord,
 }
 
+fn stale_snapshot() -> TokenError {
+    TokenError { kind: FailKind::Unreadable, message: "Stored credentials changed during this request. Try again.".to_string(), fallback: None }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct TokenError {
     pub kind: FailKind,
@@ -287,13 +291,15 @@ impl TokenStore {
 
     /// Lay a just-read record over the held entry: the later expiry wins. A
     /// record the daemon does not manage (or none) drops the entry.
-    fn reconcile(&self, account_id: &str, record: &Value) -> Option<Entry> {
+    fn reconcile(&self, account_id: &str, snapshot: &credentials::RecordSnapshot) -> Result<Option<Entry>, TokenError> {
         #[cfg(test)]
         tests::before_publication(account_id);
         let mut entries = self.entries();
+        if snapshot.generation != credentials::write_generation() { return Err(stale_snapshot()); }
+        let record = &snapshot.record;
         let Some((grant, access_token, expires_at)) = grant_of(record) else {
             entries.remove(account_id);
-            return None;
+            return Ok(None);
         };
         if let Some(held) = entries.get_mut(account_id) {
             let same_grant = held.grant.same_grant(&held.lineage, &grant);
@@ -303,7 +309,7 @@ impl TokenStore {
                     held.unsaved = false;
                 }
                 held.checked = true;
-                return Some(held.clone());
+                return Ok(Some(held.clone()));
             }
         }
         // A new grant (or none held): the record's pair, and nothing of the
@@ -322,7 +328,7 @@ impl TokenStore {
             rejection_backoff: Duration::ZERO,
         };
         entries.insert(account_id.to_string(), entry.clone());
-        Some(entry)
+        Ok(Some(entry))
     }
 
     #[cfg(test)]
@@ -396,10 +402,11 @@ impl TokenStore {
         self.entries().iter().filter(|(_, e)| e.unsaved).map(|(id, _)| id.clone()).collect()
     }
 
-    fn store_refresh(&self, account_id: &str, grant: &Grant, access_token: String, refresh_token: Option<String>, expires_at: i64) {
+    fn store_refresh(&self, account_id: &str, grant: &Grant, access_token: String, refresh_token: Option<String>, expires_at: i64, generation: u64, events: &crate::events::EventBus) -> Result<(), TokenError> {
         let now = self.now();
         let mut entries = self.entries();
-        let Some(entry) = entries.get_mut(account_id) else { return };
+        if generation != credentials::write_generation() { return Err(stale_snapshot()); }
+        let Some(entry) = entries.get_mut(account_id) else { return Err(stale_snapshot()) };
         if entry.rejected {
             let wait = if entry.rejection_backoff.is_zero() { REJECTION_BACKOFF } else { (entry.rejection_backoff * 2).min(REJECTION_BACKOFF_CAP) };
             entry.rejection_backoff = wait;
@@ -419,26 +426,30 @@ impl TokenStore {
         entry.unsaved = true;
         entry.rejected = false;
         entry.cooldown = None;
+        // Publication and its event precede any completed invalidation.
+        events.emit(REFRESHED_EVENT, json!({ "accountId": account_id }));
+        Ok(())
     }
 
-    fn store_failure(&self, account_id: &str, kind: FailKind, message: &str) {
+    fn store_failure(&self, account_id: &str, kind: FailKind, message: &str, generation: u64) -> Result<(), TokenError> {
         let wait = if kind == FailKind::Refused { REFUSED_COOLDOWN } else { UNANSWERED_COOLDOWN };
         let now = self.now();
-        if let Some(entry) = self.entries().get_mut(account_id) {
+        let mut entries = self.entries();
+        if generation != credentials::write_generation() { return Err(stale_snapshot()); }
+        if let Some(entry) = entries.get_mut(account_id) {
             entry.cooldown = Some((now + wait.as_millis() as i64, kind, message.to_string()));
         }
+        Ok(())
     }
 }
 
-async fn read_record(account_id: &str, read: Read) -> Result<(ImapConfig, Value), String> {
+async fn read_record(account_id: &str, read: Read) -> Result<(ImapConfig, credentials::RecordSnapshot), String> {
     #[cfg(test)]
     tests::record_credential_lookup(account_id);
     let result = match read {
         Read::Guarded => credentials::resolve_account_with_record_guarded(account_id).await,
         Read::Quiet => credentials::resolve_account_with_record_quiet(account_id).await,
     };
-    #[cfg(test)]
-    tests::record_read_finished(account_id);
     result
 }
 
@@ -463,12 +474,12 @@ pub(crate) async fn access_token(state: &DaemonState, account_id: &str, read: Re
 }
 
 /// `access_token` for a caller that has just read the record itself.
-pub(crate) async fn for_record(state: &DaemonState, account_id: &str, record: &Value) -> Result<Option<String>, TokenError> {
+pub(crate) async fn for_record(state: &DaemonState, account_id: &str, record: &credentials::RecordSnapshot) -> Result<Option<String>, TokenError> {
     let flight = state.tokens.flight(account_id);
     let _one_refresh = flight.lock().await;
     // A refresh that finished while this caller waited wins here: its expiry
     // is later than the record this caller read.
-    let Some(entry) = state.tokens.reconcile(account_id, record) else { return Ok(unrefreshable_token(record)) };
+    let Some(entry) = state.tokens.reconcile(account_id, record)? else { return Ok(unrefreshable_token(&record.record)) };
     let now = state.tokens.now();
     if !entry.needs_refresh(now) {
         return Ok(Some(entry.access_token));
@@ -477,8 +488,8 @@ pub(crate) async fn for_record(state: &DaemonState, account_id: &str, record: &V
         let _ = until;
         return if entry.still_valid(now) { Ok(Some(entry.access_token)) } else { Err(entry.failure(kind, message)) };
     }
-    let config = serde_json::from_value::<ImapConfig>(record.clone()).ok();
-    refresh(state, account_id, entry, now, config.as_ref()).await
+    let config = serde_json::from_value::<ImapConfig>(record.record.clone()).ok();
+    refresh(state, account_id, entry, now, config.as_ref(), record.generation).await
 }
 
 async fn refresh(
@@ -487,6 +498,7 @@ async fn refresh(
     entry: Entry,
     now: i64,
     config: Option<&ImapConfig>,
+    generation: u64,
 ) -> Result<Option<String>, TokenError> {
     let grant = &entry.grant;
     // Network Activity shows the refresh as the account's, from a worker too.
@@ -507,14 +519,15 @@ async fn refresh(
             // The provider's lifetime counted on this store's clock (the core
             // stamps the system clock, which a debug test may have moved past).
             let expires_at = tokens.expires_at as i64 + (state.tokens.now() - now_ms());
-            state.tokens.store_refresh(account_id, grant, tokens.access_token, tokens.refresh_token, expires_at);
-            info!("[oauth] refreshed the access token of {}", grant.email);
             // Pooled IMAP sessions signed in with the old token would be
             // ended under a request once it expires (Outlook): sign in anew.
             if let Some(config) = config.filter(|c| !c.uses_graph() && !c.uses_jmap()) {
                 state.imap_pool.retire_idle(config).await;
             }
-            state.events.emit(REFRESHED_EVENT, json!({ "accountId": account_id }));
+            // Retiring sessions can await; publish only after it, then emit
+            // under the same short cache critical section as invalidation.
+            state.tokens.store_refresh(account_id, grant, tokens.access_token, tokens.refresh_token, expires_at, generation, &state.events)?;
+            info!("[oauth] refreshed the access token of {}", grant.email);
             return Ok(Some(token));
         }
         Ok(_) => "the refresh returned no token".to_string(),
@@ -522,7 +535,7 @@ async fn refresh(
     };
     let kind = if renewal_unanswered(&failure) { FailKind::Unanswered } else { FailKind::Refused };
     let message = scrub(&failure, &[&grant.refresh_token, &entry.access_token]);
-    state.tokens.store_failure(account_id, kind, &message);
+    state.tokens.store_failure(account_id, kind, &message, generation)?;
     if entry.still_valid(now) {
         warn!("[oauth] could not refresh the token of {}: {message}; using the stored one, still valid", grant.email);
         return Ok(Some(entry.access_token));
@@ -537,9 +550,11 @@ pub(crate) async fn fresh_config(
     state: &DaemonState,
     account_id: &str,
     mut config: ImapConfig,
-    record: &Value,
+    record: &credentials::RecordSnapshot,
 ) -> Result<ImapConfig, TokenError> {
     if !config.is_oauth2() {
+        let _entries = state.tokens.entries();
+        if record.generation != credentials::write_generation() { return Err(stale_snapshot()); }
         return Ok(config);
     }
     if let Some(token) = for_record(state, account_id, record).await? {
@@ -556,6 +571,7 @@ pub(crate) async fn resolve(state: &DaemonState, account_id: &str, read: Read) -
     let (config, record) = read_record(account_id, read).await?;
     Ok(match fresh_config(state, account_id, config.clone(), &record).await {
         Ok(fresh) => fresh,
+        Err(TokenError { kind: FailKind::Unreadable, message, fallback: None }) => return Err(message),
         Err(e) => {
             let mut stale = config;
             if e.fallback.is_some() {
@@ -564,6 +580,30 @@ pub(crate) async fn resolve(state: &DaemonState, account_id: &str, read: Read) -
             stale
         }
     })
+}
+
+#[cfg(test)]
+pub(crate) fn record_read_finished_for_test(id: &str) { tests::record_read_finished(id); }
+
+#[cfg(test)]
+pub(crate) struct TestRecordReadPause {
+    id: String,
+    release: Option<std::sync::mpsc::Sender<()>>,
+    entered: std::sync::mpsc::Receiver<()>,
+}
+#[cfg(test)]
+impl TestRecordReadPause {
+    pub(crate) fn arm(id: &str) -> Self {
+        let (release, gate) = std::sync::mpsc::channel();
+        let (entered, notice) = std::sync::mpsc::channel();
+        tests::install_record_pause(id, entered, gate);
+        Self { id: id.into(), release: Some(release), entered: notice }
+    }
+    pub(crate) fn wait(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("stored snapshot captured"); }
+}
+#[cfg(test)]
+impl Drop for TestRecordReadPause {
+    fn drop(&mut self) { self.release.take(); tests::clear_record_pause(&self.id); }
 }
 
 #[cfg(test)]
@@ -600,7 +640,7 @@ pub(crate) async fn recheck_unsaved(state: &DaemonState) {
         if let Ok((_, record)) = read_record(&account_id, Read::Quiet).await {
             let flight = state.tokens.flight(&account_id);
             let _held = flight.lock().await;
-            state.tokens.reconcile(&account_id, &record);
+            let _ = state.tokens.reconcile(&account_id, &record);
         }
     }
 }
@@ -857,6 +897,13 @@ mod tests {
             if let Some(gate) = gate { let _ = gate.recv(); }
         }
     }
+    pub(super) fn install_record_pause(id: &str, entered: std::sync::mpsc::Sender<()>, gate: std::sync::mpsc::Receiver<()>) {
+        *RECORD_READ_HOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some((id.into(), entered, Some(gate)));
+    }
+    pub(super) fn clear_record_pause(id: &str) {
+        let mut hook = RECORD_READ_HOOK.lock().unwrap_or_else(|e| e.into_inner());
+        if hook.as_ref().is_some_and(|(owner, _, _)| owner == id) { hook.take(); }
+    }
     pub(super) fn record_read_finished(id: &str) { run_read_hook(&RECORD_READ_HOOK, id); }
     pub(super) fn before_publication(id: &str) { run_read_hook(&PUBLICATION_HOOK, id); }
     pub(super) fn before_refresh_publication(id: &str) { run_read_hook(&REFRESH_RESULT_HOOK, id); }
@@ -998,6 +1045,17 @@ mod tests {
             let next=recv(&rig.access());
             if delete {assert!(matches!(next,Err(TokenError{kind:FailKind::NoRecord,..})));}else{assert!(next.ok().flatten().as_deref()==Some("synthetic-new-token"));}
         }
+    }
+
+    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    async fn resolve_does_not_fall_back_to_a_stale_config() {
+        let mut rig=FreshRig::new(fresh_grant("synthetic-old-grant","synthetic-old-token"));
+        let read=rig.hook(&RECORD_READ_HOOK,true);let state=Arc::clone(&rig.state);
+        let pending=rig.spawn(async move {resolve(&state,"g",Read::Quiet).await});recv(&read);
+        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
+        assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());
+        rig.release_all();assert!(recv(&pending).is_err(),"resolve must not swallow stale unreadable into its old config");
+        assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
     }
 
     #[tokio::test(flavor="multi_thread",worker_threads=2)]

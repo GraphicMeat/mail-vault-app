@@ -282,25 +282,39 @@ pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<Ima
     account_from_blob(&blob, account_id)
 }
 
+/// Internal provenance captured before reading storage, never persisted or
+/// carried in a public RPC record.
+#[derive(Clone)]
+pub(crate) struct RecordSnapshot {
+    pub record: Value,
+    pub generation: u64,
+}
+
 /// `resolve_account_credentials_guarded` plus the account's whole stored
 /// record, from the same read: the OAuth2 fields `ImapConfig` drops (refresh
 /// token, expiry, provider, client) for a caller that refreshes a token
 /// itself. The record holds secrets too: never log it.
-pub async fn resolve_account_with_record_guarded(account_id: &str) -> Result<(ImapConfig, Value), String> {
+pub(crate) async fn resolve_account_with_record_guarded(account_id: &str) -> Result<(ImapConfig, RecordSnapshot), String> {
+    let generation = BLOB_READ.generation();
     let blob = guarded(CREDENTIALS_KEY, blob_read(may_prompt()), AI_KEY_TIMEOUT).await?;
     let account = account_from_blob(&blob, account_id)?;
     let record = blob.get(account_id).and_then(|raw| serde_json::from_str(raw).ok()).unwrap_or(Value::Null);
-    Ok((account, record))
+    #[cfg(test)]
+    crate::oauth_tokens::record_read_finished_for_test(account_id);
+    Ok((account, RecordSnapshot { record, generation }))
 }
 
 /// `resolve_account_with_record_guarded` that never raises the keychain prompt
 /// (see `resolve_account_credentials_quiet`). The record holds secrets: never
 /// log it.
-pub async fn resolve_account_with_record_quiet(account_id: &str) -> Result<(ImapConfig, Value), String> {
+pub(crate) async fn resolve_account_with_record_quiet(account_id: &str) -> Result<(ImapConfig, RecordSnapshot), String> {
+    let generation = BLOB_READ.generation();
     let blob = guarded(CREDENTIALS_KEY, blob_read(false), AI_KEY_TIMEOUT).await?;
     let account = account_from_blob(&blob, account_id)?;
     let record = blob.get(account_id).and_then(|raw| serde_json::from_str(raw).ok()).unwrap_or(Value::Null);
-    Ok((account, record))
+    #[cfg(test)]
+    crate::oauth_tokens::record_read_finished_for_test(account_id);
+    Ok((account, RecordSnapshot { record, generation }))
 }
 
 /// `resolve_account_credentials_guarded` for background work that must never
@@ -402,6 +416,18 @@ fn test_blob_join(flight: usize) {
 }
 
 #[cfg(test)]
+pub(crate) struct TestTaskDrain(pub std::sync::mpsc::Receiver<()>);
+#[cfg(test)]
+impl Drop for TestTaskDrain {
+    fn drop(&mut self) {
+        if self.0.recv_timeout(Duration::from_secs(5)).is_err() {
+            eprintln!("credential reader did not drain; refusing fixture teardown");
+            std::process::abort();
+        }
+    }
+}
+
+#[cfg(test)]
 pub(crate) struct TestTaskDone(pub std::sync::mpsc::Sender<()>);
 
 #[cfg(test)]
@@ -410,6 +436,7 @@ impl Drop for TestTaskDone {
 }
 
 fn blob_read(interactive: bool) -> BoxFuture<'static, Result<HashMap<String, String>, String>> {
+    let since = BLOB_READ.generation();
     // The debug file bypass cannot hang on a prompt, and tests point it at
     // different files: its read is never shared with anyone else's.
     #[cfg(test)]
@@ -421,7 +448,7 @@ fn blob_read(interactive: bool) -> BoxFuture<'static, Result<HashMap<String, Str
         return unshared(move || load_credentials_blob(interactive)).boxed();
     }
     BLOB_READ
-        .read(interactive, move |interactive| {
+        .read_since(since, interactive, move |interactive| {
             #[cfg(test)]
             if let Some(test) = shared_test { return test.load(); }
             load_blob_raw(interactive)

@@ -730,6 +730,7 @@ mod tests {
     async fn late_saved_refresh_wakes_token_wait_and_rechecks_unsaved_pair() {
         let mut old = fresh_oauth("synthetic-original-refresh", "synthetic-expired-token");
         old["oauth2ExpiresAt"] = json!(1);
+        old["oauth2ClientId"] = json!(mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID);
         let rig = rig(Some(json!({"g":old.to_string()})));
         let _mock = crate::handlers::oauth2::test_token_mock(vec![(200,json!({"access_token":"synthetic-refreshed-token","refresh_token":"synthetic-rotated-refresh","expires_in":3600}).to_string())]);
         let token = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await.unwrap();
