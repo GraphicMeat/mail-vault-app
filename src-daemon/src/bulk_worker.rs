@@ -1451,6 +1451,7 @@ mod tests {
             std::fs::write(&credentials, json!({"acc":account.to_string()}).to_string()).unwrap();
             std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &credentials);
             std::fs::write(dir.path().join("accounts.json"), "[{\"id\":\"acc\"}]").unwrap();
+            let mut frames = state.events.subscribe();
             let reply = handle_request_for_test(&state, "bulk.start", json!({
                 "operationId":"download-limit", "attemptId":"download-attempt", "type":"archive_and_delete",
                 "scope":original_scope(&config, "INBOX", Some("<selected@test>")),
@@ -1460,7 +1461,15 @@ mod tests {
             assert!(server.commands().iter().any(|command| command.contains("BODY.PEEK[]")), "must reach actual archive IO");
             assert_eq!(pending["lastError"], expected, "{pending}");
             assert_eq!(pending["worker"]["lastError"], expected, "worker checkpoint: {pending}");
-            assert_eq!(pending["worker"]["errors"], 1);
+            let mut archive = Vec::new();
+            while let Ok(line) = frames.try_recv() {
+                let frame: Value = serde_json::from_str(&line).unwrap();
+                if frame["params"]["name"] == "archive-progress" {
+                    let payload = &frame["params"]["payload"];
+                    archive.push(json!({"active":payload["active"], "errors":payload["errors"], "bandwidthLimited":payload["bandwidthLimited"]}));
+                }
+            }
+            assert_eq!(pending["worker"]["errors"], 1, "diagnosis: phase={}, status={}, archive={archive:?}", pending["currentPhase"], pending["status"]);
             assert!(!server.commands().iter().any(|command| command.contains("UID STORE")), "unarchived mail stays on server");
             let status = handle_request_for_test(&state, "bulk.status", json!({
                 "operationId":"download-limit", "attemptId":"download-attempt",

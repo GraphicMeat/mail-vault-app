@@ -100,6 +100,7 @@ describe('the daemon owns the token', () => {
     expect(exempt).not.toBeNull();
     expect([...exempt[1].matchAll(/"([^"]+)"/g)].map(match => match[1])).toEqual(['compose.reply_context', 'compose.check']);
     expect(exempt[1]).toBe('"compose.reply_context" | "compose.check"');
+    expect([...handle.matchAll(/route_request\(state, req\)/g)]).toHaveLength(3);
     const ordinary = handle.slice(exempt.index + exempt[0].length);
     const injection = ordinary.indexOf('oauth_tokens::inject(');
     const refusal = /if let Some\(message\) = refusal \{\s*return RpcResponse::error\([^;]+;\s*\}/.exec(ordinary);

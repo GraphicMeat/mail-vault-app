@@ -175,7 +175,7 @@ function seed() {
     localEmails: [msg(7, { subject: 'localEmails' })],
     selectedEmail: msg(7, { subject: 'selectedEmail' }),
     selectedThread: { threadId: 't', emails: [msg(7), msg(8)] },
-    emailCache: new Map(),
+    emailCache: new Map(), selectedEmailIds: new Set(), selectedEmailSnapshots: new Map(),
   });
   useSearchStore.setState({
     searchResults: [msg(7, { subject: 'search' }), msg(8)],
@@ -297,11 +297,11 @@ describe('patchEverywhere', () => {
   it('paints current rows without mutating or resolving the original selection evidence', () => {
     useMailStore.setState({ selectedEmailIds: new Set(), selectedEmailSnapshots: new Map() });
     useMailStore.getState().setEmailsSelected([msg(7)], true);
-    const captured = useMailStore.getState().selectedEmailSnapshots.get('a1:INBOX:7');
+    const captured = useMailStore.getState().selectedEmailSnapshots.get(7);
     expect(captured.messageId).toBe('m7@mock');
     patchEverywhere(['a1-INBOX-7'], row => ({ ...row, messageId: 'replacement@mock', flags: ['seen'] }));
     expect(useMailStore.getState().emails[0].messageId).toBe('replacement@mock');
-    expect(useMailStore.getState().selectedEmailSnapshots.get('a1:INBOX:7')).toBe(captured);
+    expect(useMailStore.getState().selectedEmailSnapshots.get(7)).toBe(captured);
     expect(captured.messageId).toBe('m7@mock');
     expect(Object.isFrozen(captured)).toBe(true);
     expect(resolvePool(useMailStore.getState())).not.toContain(captured);
