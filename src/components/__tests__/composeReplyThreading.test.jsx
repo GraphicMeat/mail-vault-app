@@ -333,6 +333,8 @@ it('keeps authored fields while native reply defaults are pending', async () => 
   preparation.gate = new Promise(resolve => { release = resolve; });
   render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} />);
   const to = screen.getByLabelText(/To/i, { selector: 'input' });
+  expect(screen.getByTestId('compose-subject').value).toBe('');
+  expect(screen.queryAllByTestId('recipient-chip')).toHaveLength(0);
   expect(to.value).toBe('');
   fireEvent.change(to, { target: { value: 'typed@example.test' } });
   const subject = screen.getByLabelText(/Subject/i);

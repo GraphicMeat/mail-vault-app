@@ -253,3 +253,22 @@ it.each(['pending', 'unknown', 'complete'])('awaits main discard ownership and c
   expect(discard).toHaveBeenCalledWith(expect.objectContaining({ _draftId: 'terminal', subject: 'latest' }), 22);
   expect(update.mock.calls.some(([, patch]) => !patch.snapshot?._draftCleanupOnly && patch.detached === false)).toBe(false);
 });
+
+it('binds token-fenced preparation ACK to accepted in-flight settings', async () => {
+  let release;
+  let accepted = false;
+  const open = vi.fn().mockResolvedValue('compose-prep');
+  const emitTo = vi.fn().mockResolvedValue(undefined);
+  const acknowledgePreparation = vi.fn(async () => { expect(accepted).toBe(true); return 42; });
+  const owner = createComposeWindowOwner({ open, emitTo, update: vi.fn(), close: vi.fn(), settings: { composeSize: async () => { await new Promise(r => { release = r; }); accepted = true; } }, acknowledgePreparation });
+  const handoff = owner.detach({ id: 212, mode: 'reply', snapshot: snapshot() });
+  await vi.waitFor(() => expect(open).toHaveBeenCalled()); const token = open.mock.calls[0][0].token;
+  ready(owner, 212, token); owner.receive({ composeId: '212', token, requestId: 'init', type: 'initialized' }); await handoff;
+  owner.receive({ composeId: '212', token, requestId: 'setting', type: 'settings', payload: { key: 'composeSize', value: {} } });
+  owner.receive({ composeId: '212', token, requestId: 'prep', type: 'prepare-settings' });
+  expect(owner.receive({ composeId: '212', token: 'old', requestId: 'stale', type: 'prepare-settings' })).toBe(false);
+  await vi.waitFor(() => expect(release).toBeTypeOf('function')); expect(acknowledgePreparation).not.toHaveBeenCalled();
+  release();
+  await vi.waitFor(() => expect(emitTo).toHaveBeenCalledWith('compose-prep', 'compose-window-message', expect.objectContaining({ requestId: 'prep', type: 'ack', payload: 42 })));
+  owner.recover(212);
+});
