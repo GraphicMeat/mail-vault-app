@@ -2827,52 +2827,123 @@ async fn backup_worker_config_removal_cannot_rearm_stop_but_explicit_enable_can(
     assert!(enabled, "explicit enable did not rearm native ownership");
 }
 
-// Signal exactly after the final admission checks, before the real foreground wait.
+// Signal at the real foreground wait; final admission must observe facts consumed here.
 async fn foreground_admission_regression(activity: bool, manual_run: bool) {
     let mut r = rig();
-    rpc(&r.state, "backup.context", observation("main", "foreground", 1, "attach", NOW - 180_000, false)).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "foreground", 1, "attach", NOW - 180_000, false),
+    )
+    .await;
     let (entered, waiting) = oneshot::channel();
-    *r.state.backup_worker.foreground_wait_entered.lock().unwrap() = Some(entered);
+    *r.state
+        .backup_worker
+        .foreground_wait_entered
+        .lock()
+        .unwrap() = Some(entered);
     crate::search_index::note_foreground(&r.state.search_index);
-    if manual_run { manual(&r.state, "one", "foreground-manual").await; }
-    else { enabled(&r.state); wake(&r.state); }
-    tokio::time::timeout(Duration::from_secs(3), waiting).await.unwrap().unwrap();
+    if manual_run {
+        manual(&r.state, "one", "foreground-manual").await;
+    } else {
+        enabled(&r.state);
+        wake(&r.state);
+    }
+    tokio::time::timeout(Duration::from_secs(3), waiting)
+        .await
+        .unwrap()
+        .unwrap();
     // Refresh the real 400ms quiet period, then consume a real surface observation.
     crate::search_index::note_foreground(&r.state.search_index);
-    rpc(&r.state, "backup.context", observation("main", "foreground", 2, "update", if activity {NOW} else {NOW-180_000}, !activity)).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation(
+            "main",
+            "foreground",
+            2,
+            "update",
+            if activity { NOW } else { NOW - 180_000 },
+            !activity,
+        ),
+    )
+    .await;
     if manual_run {
-        let c = call(&mut r).await; c.reply.send(Ok(result(1))).ok(); finish(r).await; return;
+        let c = call(&mut r).await;
+        c.reply.send(Ok(result(1))).ok();
+        finish(r).await;
+        return;
     }
     let early = tokio::select! {
         c = r.calls.recv() => Some(c.unwrap()),
         _ = wait(&r.state, |s| s["active"].is_null() && s["queue"].as_array().is_some_and(|q|q.iter().any(|i|i["stage"] == "pending_policy"))) => None,
     };
-    if let Some(c) = early { c.reply.send(Ok(result(1))).ok(); finish(r).await; panic!("automatic provider entered after new activity/loading during foreground wait"); }
+    if let Some(c) = early {
+        c.reply.send(Ok(result(1))).ok();
+        finish(r).await;
+        panic!("automatic provider entered after new activity/loading during foreground wait");
+    }
     assert!(r.calls.try_recv().is_err());
     r.state.clock.set(NOW + 180_001);
-    rpc(&r.state, "backup.context", observation("main", "foreground", 3, "update", NOW, false)).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "foreground", 3, "update", NOW, false),
+    )
+    .await;
     wake(&r.state);
-    let c = call(&mut r).await; c.reply.send(Ok(result(1))).ok(); finish(r).await;
+    let c = call(&mut r).await;
+    c.reply.send(Ok(result(1))).ok();
+    finish(r).await;
 }
 #[tokio::test]
-async fn backup_worker_foreground_wait_rechecks_activity_before_provider() { foreground_admission_regression(true,false).await; }
+async fn backup_worker_foreground_wait_rechecks_activity_before_provider() {
+    foreground_admission_regression(true, false).await;
+}
 #[tokio::test]
-async fn backup_worker_foreground_wait_rechecks_loading_before_provider() { foreground_admission_regression(false,false).await; }
+async fn backup_worker_foreground_wait_rechecks_loading_before_provider() {
+    foreground_admission_regression(false, false).await;
+}
 #[tokio::test]
-async fn backup_worker_foreground_wait_preserves_manual_bypass() { foreground_admission_regression(false,true).await; }
+async fn backup_worker_foreground_wait_preserves_manual_bypass() {
+    foreground_admission_regression(false, true).await;
+}
 #[tokio::test]
 async fn backup_worker_snapshot_recovery_decides_seven_unsettled_before_compaction() {
     let dir = tempfile::tempdir().unwrap();
-    let state = DaemonState::for_test(dir.path().join("mail"),dir.path().into(),true);
+    let state = DaemonState::for_test(dir.path().join("mail"), dir.path().into(), true);
     state.clock.set(NOW);
-    SettingsDoc::shared(&state.app_dir).replace(&json!({STORE:{"version":3,"state":{"snapshotAutoEnabled":false}}}),None).unwrap();
+    SettingsDoc::shared(&state.app_dir)
+        .replace(
+            &json!({STORE:{"version":3,"state":{"snapshotAutoEnabled":false}}}),
+            None,
+        )
+        .unwrap();
     let mut ledger = Ledger::default();
-    for n in 0..7 { ledger.outcomes.push(Outcome {intent:new_intent(&state,"one".into(),true),status:"success".into(),at:NOW+n,result:Some(json!({"success":true})),terminal:None,error:None,applied:true,snapshot:json!({"status":"undecided"})}); }
-    save_ledger(&state.app_dir,&ledger).unwrap();
-    let mut recovered = read_ledger(&state.app_dir).unwrap(); snapshots::recover(&mut recovered);
-    snapshots::drive(&state,&mut recovered).await.unwrap();
-    assert_eq!(recovered.outcomes.len(),5);
-    assert!(recovered.outcomes.iter().all(|o|o.snapshot["status"] == "not_due"));
-    assert_eq!(recovered.outcomes.iter().map(|o|o.at).collect::<Vec<_>>(),(2..7).map(|n|NOW+n).collect::<Vec<_>>());
-    assert_eq!(read_ledger(&state.app_dir).unwrap().outcomes.len(),5);
+    for n in 0..7 {
+        ledger.outcomes.push(Outcome {
+            intent: new_intent(&state, "one".into(), true),
+            status: "success".into(),
+            at: NOW + n,
+            result: Some(json!({"success":true})),
+            terminal: None,
+            error: None,
+            applied: true,
+            snapshot: json!({"status":"undecided"}),
+        });
+    }
+    save_ledger(&state.app_dir, &ledger).unwrap();
+    let mut recovered = read_ledger(&state.app_dir).unwrap();
+    snapshots::recover(&mut recovered);
+    snapshots::drive(&state, &mut recovered).await.unwrap();
+    assert_eq!(recovered.outcomes.len(), 5);
+    assert!(recovered
+        .outcomes
+        .iter()
+        .all(|o| o.snapshot["status"] == "not_due"));
+    assert_eq!(
+        recovered.outcomes.iter().map(|o| o.at).collect::<Vec<_>>(),
+        (2..7).map(|n| NOW + n).collect::<Vec<_>>()
+    );
+    assert_eq!(read_ledger(&state.app_dir).unwrap().outcomes.len(), 5);
 }

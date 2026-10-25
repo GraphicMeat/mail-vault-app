@@ -156,3 +156,13 @@ it('reobserves coherently when an old generation query finishes after remount', 
   const current=store.nativeStatus; const queries=send.mock.calls.filter(([method])=>method==='backup.schedule.get').length;
   second(); expect(queries).toBe(2); expect(current?.revision).toBe(9); expect(current?.nextEligibleTimes.one).toBe(42000);
 });
+
+it('projects only the current execution progress, including missing-message detail', async () => {
+  const dispose=scheduler.observe({present:false});await flush();
+  emit('backup-schedule-changed',{...host.view,revision:2,active:{accountId:'one',runId:'run-b',executionId:'exec-b',stage:'running'}});
+  emit('backup-progress',{account_id:'one',runId:'run-b',executionId:'exec-b',active:true,folder:'CURRENT',total_folders:10,completed_folders:4,completed_emails:40,missing_in_folder:2});
+  const projected={...store.activeBackup};
+  emit('backup-progress',{account_id:'one',runId:'run-a',executionId:'exec-a',active:true,folder:'STALE',completed_emails:1});
+  emit('backup-progress',{account_id:'one',runId:'run-a',executionId:'exec-a',active:false});await flush();
+  expect(store.activeBackup).toEqual(projected);expect(projected.folder).toBe('CURRENT');expect(projected.missingInFolder).toBe(2);dispose();
+});

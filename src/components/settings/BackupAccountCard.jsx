@@ -97,7 +97,6 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   const [storageSize, setStorageSize] = useState(null);
   const [accountFolders, setAccountFolders] = useState([]);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
-  const [backupProgress, setBackupProgress] = useState(null);
   const [archiveProgress, setArchiveProgress] = useState(null);
   const [backupStatusData, setBackupStatusData] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
@@ -107,20 +106,13 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   // card shows it. `done` is the 3s "Complete" tail, not a live run.
   const isActive = !!activeBackup?.active && !activeBackup.done && activeBackup.accountId === account.id;
   const isQueued = queue.includes(account.id);
-  // The card's own Rust event is richer (per-folder counts); the store carries
-  // the same run for the branches that have no event yet.
-  const live = !isActive ? null : backupProgress?.active ? {
-    folder: backupProgress.folder,
-    completedFolders: backupProgress.completed_folders,
-    totalFolders: backupProgress.total_folders,
-    completedEmails: backupProgress.completed_emails,
-    missingInFolder: backupProgress.missing_in_folder,
-  } : {
+  // Progress is already fenced by account, run and execution in the facade.
+  const live = !isActive ? null : {
     folder: activeBackup.folder,
     completedFolders: activeBackup.completedFolders,
     totalFolders: activeBackup.totalFolders,
     completedEmails: activeBackup.completedEmails,
-    missingInFolder: 0,
+    missingInFolder: activeBackup.missingInFolder || 0,
   };
   const barPercent = live && live.totalFolders > 0
     ? Math.round((live.completedFolders / live.totalFolders) * 100)
@@ -138,20 +130,10 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   }, [account.id]);
 
   useEffect(() => {
-    let unlistenBackup, unlistenArchive;
+    let unlistenArchive;
     (async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event');
-        unlistenBackup = await listen('backup-progress', (event) => {
-          const p = event.payload;
-          if (p.account_id === account.id) {
-            setBackupProgress(p);
-            if (!p.active) {
-              setArchiveProgress(null);
-              setTimeout(() => setBackupProgress(null), 2000);
-            }
-          }
-        });
         unlistenArchive = await listen('archive-progress', (event) => {
           const p = event.payload;
           // Task 3.3 (R3.2): archive-progress now carries operation + accountId,
@@ -166,7 +148,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         });
       } catch {}
     })();
-    return () => { unlistenBackup?.(); unlistenArchive?.(); };
+    return () => { unlistenArchive?.(); };
   }, [account.id]);
 
   const handleToggle = useCallback(() => {

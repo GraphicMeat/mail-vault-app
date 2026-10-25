@@ -1182,6 +1182,18 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
                 }
             }
         };
+    // The yielding quiet wait must precede the final fresh admission checks.
+    #[cfg(test)]
+    if let Some(entered) = state
+        .backup_worker
+        .foreground_wait_entered
+        .lock()
+        .unwrap()
+        .take()
+    {
+        let _ = entered.send(());
+    }
+    crate::search_index::wait_foreground_quiet(&state.search_index).await;
     let (fresh, ids, _absent) = match admission_facts(state).await {
         Ok(f) => f,
         Err(stage) => return RunExit::Pending(stage),
@@ -1223,15 +1235,6 @@ async fn run_intent(state: &Arc<DaemonState>, intent: &Intent, services: Service
             return RunExit::Pending("pending_policy".into());
         }
     }
-    if cancelled(state, intent) {
-        return RunExit::Completed(adapter::JoinedBackup {
-            result: Some(json!({"cancelled":true})),
-            ..Default::default()
-        });
-    }
-    #[cfg(test)]
-    if let Some(entered) = state.backup_worker.foreground_wait_entered.lock().unwrap().take() { let _ = entered.send(()); }
-    crate::search_index::wait_foreground_quiet(&state.search_index).await;
     if cancelled(state, intent) {
         return RunExit::Completed(adapter::JoinedBackup {
             result: Some(json!({"cancelled":true})),

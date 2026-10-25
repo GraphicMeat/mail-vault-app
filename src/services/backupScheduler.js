@@ -106,7 +106,9 @@ function consume(view, query = false) {
   if (!view || !Number.isSafeInteger(view.revision) || typeof view.accessIncarnation !== 'string') return;
   if (current?.accessIncarnation !== view.accessIncarnation && !query) { void requestRefresh(); return; }
   if (current?.accessIncarnation === view.accessIncarnation && view.revision < current.revision) return;
-  current = view; useBackupStore.setState({ nativeError: null }); project(view);
+  // Ledger events replace live fields but retain the coherent query's versioned projection.
+  current = !query && current?.accessIncarnation === view.accessIncarnation ? { ...current, ...view } : view;
+  useBackupStore.setState({ nativeError: null }); project(current);
   if (hasHost() && !hostHydrated) {
     for (const out of view.lastOutcomes || []) remember(out);
     hostHydrated = true;
@@ -123,9 +125,12 @@ function consume(view, query = false) {
 }
 function requestRefresh() {
   refreshNeeded = true;
-  if (refresh) return refresh;
   const owner = generation;
-  refresh = (async () => {
+  if (refresh?.owner === owner) return refresh.promise;
+  const previous = refresh;
+  const job = { owner, promise: null }; refresh = job;
+  job.promise = (async () => {
+    if (previous) await previous.promise;
     while (refreshNeeded && owner === generation) {
       refreshNeeded = false; const eventAtStart = eventGeneration;
       try {
@@ -135,8 +140,8 @@ function requestRefresh() {
         consume(view, true);
       } catch { if (owner === generation) useBackupStore.setState({ nativeError: 'unavailable' }); }
     }
-  })().finally(() => { refresh = null; });
-  return refresh;
+  })().finally(() => { if (refresh === job) refresh = null; });
+  return job.promise;
 }
 function progress(payload) {
   const active = current?.active;
@@ -146,7 +151,7 @@ function progress(payload) {
   const old = useBackupStore.getState().activeBackup;
   if (!old || old.executionId !== active.executionId) return;
   useBackupStore.getState().setActiveBackup({ ...old, folder: payload.folder, totalFolders: payload.total_folders,
-    completedFolders: payload.completed_folders, completedEmails: payload.completed_emails,
+    completedFolders: payload.completed_folders, completedEmails: payload.completed_emails, missingInFolder: payload.missing_in_folder,
     // A terminal progress frame is display data, never a completion receipt.
     active: true, done: false,
   });

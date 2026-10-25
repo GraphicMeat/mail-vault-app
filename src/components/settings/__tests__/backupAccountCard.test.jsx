@@ -22,7 +22,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 
-// The card's own progress listener. Captured so a spec can fire Rust's events.
+// Captured listeners let stale native frames exercise any remaining card bypass.
 const eventHandlers = {};
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (name, cb) => { eventHandlers[name] = cb; return () => {}; }),
@@ -142,17 +142,15 @@ describe('BackupAccountCard - the run the store knows about', () => {
   it('ignores a finished progress event while the store still says the run is live', async () => {
     useBackupStore.setState({ activeBackup: activeRun({ folder: 'Archive', totalFolders: 9, completedFolders: 3 }) });
     renderCard();
-    await waitFor(() => expect(typeof eventHandlers['backup-progress']).toBe('function'));
 
-    eventHandlers['backup-progress']({
+    eventHandlers['backup-progress']?.({
       payload: {
         account_id: ACCOUNT.id, folder: 'Complete', total_folders: 9,
         completed_folders: 9, completed_emails: 500, active: false,
       },
     });
 
-    // The card's own event is richer, but only while it is live. A stale
-    // `active: false` must not repaint the run the store is still reporting.
+    // A stale raw event must not repaint the facade's correlated live projection.
     await waitFor(() => expect(progress().textContent).toContain('Archive'));
     expect(progress().textContent).toContain('(3/9');
   });
@@ -173,10 +171,9 @@ describe('BackupAccountCard - the run the store knows about', () => {
       activeBackup: activeRun({ folder: 'INBOX', totalFolders: 5, completedFolders: 1 }),
     });
     renderCard();
-    await waitFor(() => expect(typeof eventHandlers['backup-progress']).toBe('function'));
     await waitFor(() => expect(typeof eventHandlers['archive-progress']).toBe('function'));
 
-    eventHandlers['backup-progress']({
+    eventHandlers['backup-progress']?.({
       payload: {
         account_id: ACCOUNT.id, active: true, folder: 'INBOX',
         total_folders: 5, completed_folders: 1, completed_emails: 10,
