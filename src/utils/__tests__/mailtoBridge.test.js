@@ -37,6 +37,23 @@ function fakeListen() {
 }
 
 describe('startMailtoBridge', () => {
+  it('does not deliver a destructively taken URL after teardown', async () => {
+    const { listen, settle } = fakeListen();
+    let release;
+    const invoke = vi.fn(() => new Promise(r => { release = r; }));
+    settle();
+    const bridge = startMailtoBridge({ invoke, listen });
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    bridge.stop();
+    release(['mailto:retained@example.test']);
+    await bridge.ready;
+    expect(opened).toHaveLength(0);
+    const next = startMailtoBridge({ invoke: vi.fn().mockResolvedValue([]), listen: async () => () => {} });
+    await next.ready;
+    expect(opened.map(d => d.to)).toEqual(['retained@example.test']);
+    next.stop();
+  });
+
   it('opens compose for a URL already queued before the bridge started', async () => {
     const { listen, settle } = fakeListen();
     const invoke = vi.fn().mockResolvedValueOnce(['mailto:cold@start.test']);

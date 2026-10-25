@@ -2,6 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoBackend } from '../backend.js';
 
 describe('demo mailbox backend', () => {
+  it('prepares message and authored mailto Bcc against its settings version', async () => {
+    const backend = createDemoBackend();
+    const call = (method, params = {}) => backend.invoke('daemon_rpc', { method, params });
+    const { version } = await call('settings.get');
+    const accountId = backend.accounts[0].id;
+    const message = { kind: 'message', requestId: 'prep-1', expectedSettingsVersion: version, accountId,
+      mode: 'replyAll', original: { header: { from: { address: 'writer@example.test' }, to: [{ address: backend.accounts[0].email }], subject: 'hello', messageId: '<original>' }, html: '<b>complete</b>' },
+      presentation: { originalLabel: 'Original', dateLabel: 'today', subjectCandidate: 'Re: hello' }, threadContext: [] };
+    expect(await call('compose.reply_context', message)).toMatchObject({ requestId: 'prep-1', settingsVersion: version, accountId, to: 'writer@example.test', bcc: '', subject: 'Re: hello', bodyAvailable: true });
+    expect(await call('compose.reply_context', { kind: 'mailto', requestId: 'prep-2', expectedSettingsVersion: version, href: 'mailto:plus+tag@example.test?bcc=private@example.test&body=%3Cb%3E', accountId })).toMatchObject({ requestId: 'prep-2', settingsVersion: version, initialData: { to: 'plus+tag@example.test', bcc: 'private@example.test', body: '&lt;b&gt;', _prefill: true, _accountId: accountId } });
+    await expect(call('compose.reply_context', { ...message, expectedSettingsVersion: version + 1 })).rejects.toThrow('errors.settingsConflict');
+  });
+
   it('persists draft identity, complete revisions, reopen and terminal discard', async () => {
     const backend = createDemoBackend();
     const accountId = backend.accounts[0].id;
