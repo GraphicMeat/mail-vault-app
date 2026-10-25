@@ -1429,6 +1429,51 @@ mod tests {
         }
         panic!("bulk worker did not drain")
     }
+    // Exercise the real archive result adapter, worker checkpoint and durable
+    // status contract. A fake ArchiveOutcome would miss a discarded typed flag.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bulk_worker_archive_download_limit_survives_durable_status() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        for (refusal, expected) in [
+            ("copy refused", "errors.bulkOperationFailed"),
+            ("Account exceeded bandwidth limits. (Failure)", "errors.bulkDownloadLimited"),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+            seed_selection(&state, "INBOX");
+            let server = MockImap::start(Scenario::new().mailbox(inbox(1)).fault(
+                mock_imap::Trigger::with("FETCH", "BODY.PEEK[]"),
+                mock_imap::Action::Respond("NO".into(), refusal.into()),
+            ));
+            let config = config(&server);
+            let credentials = dir.path().join("credentials.json");
+            let account = json!({"id":"acc","email":config.email,"password":"pw","imapHost":server.host(),"imapPort":server.port()});
+            std::fs::write(&credentials, json!({"acc":account.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &credentials);
+            std::fs::write(dir.path().join("accounts.json"), "[{\"id\":\"acc\"}]").unwrap();
+            let reply = handle_request_for_test(&state, "bulk.start", json!({
+                "operationId":"download-limit", "attemptId":"download-attempt", "type":"archive_and_delete",
+                "scope":original_scope(&config, "INBOX", Some("<selected@test>")),
+            })).await;
+            assert!(reply.error.is_none(), "{:?}", reply.error);
+            let pending = wait_drained(&state).await;
+            assert!(server.commands().iter().any(|command| command.contains("BODY.PEEK[]")), "must reach actual archive IO");
+            assert_eq!(pending["lastError"], expected, "{pending}");
+            assert_eq!(pending["worker"]["lastError"], expected, "worker checkpoint: {pending}");
+            assert_eq!(pending["errors"], 1);
+            assert!(!server.commands().iter().any(|command| command.contains("UID STORE")), "unarchived mail stays on server");
+            let status = handle_request_for_test(&state, "bulk.status", json!({
+                "operationId":"download-limit", "attemptId":"download-attempt",
+            })).await.result.unwrap();
+            assert!(status["active"].is_null());
+            // Terminal pending records are compacted out of status; the owned
+            // durable record is the frontend's documented recovery source.
+            let raw = handle_request_for_test(&state, "read_pending_operation", json!({})).await.result.unwrap();
+            assert_eq!(raw["lastError"], expected);
+            assert_eq!(raw["attemptId"], pending["attemptId"]);
+            std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        }
+    }
     #[tokio::test(flavor = "multi_thread")]
     async fn bulk_worker_real_four_modes_use_exact_permanent_delete_and_bin_policy() {
         let _env = crate::credentials::test_env_lock()
