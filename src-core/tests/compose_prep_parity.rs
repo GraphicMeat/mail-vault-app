@@ -350,21 +350,39 @@ fn complete_message_inputs_still_require_valid_shape_and_fences() {
 fn complete_large_check_keeps_keyword_order_and_same_snapshot_override() {
     let mut ctx = context(&fixture());
     ctx.settings = json!({"attachmentReminder":true,"billingProfile":{"hasSubscription":true,"status":"active"}});
-    for text in ["x".repeat(compose_prep::MAX_REQUEST_BYTES + 1) + " attached", "界\\\"".repeat(400000) + " attached"] {
-        if text.starts_with("界") { assert_eq!(text.len(), 2000009); }
+    for text in [
+        "x".repeat(compose_prep::MAX_REQUEST_BYTES + 1) + " attached",
+        "界\\\"".repeat(400000) + " attached",
+    ] {
+        if text.starts_with("界") {
+            assert_eq!(text.len(), 2000009);
+        }
         let mut p = check_request();
         p["authoredBodyText"] = json!(text);
         assert!(serde_json::to_vec(&p).unwrap().len() > compose_prep::MAX_REQUEST_BYTES);
-        assert_eq!(compose_prep::check(&p, &ctx, 0).unwrap()["kind"], "confirm_attachment");
+        assert_eq!(
+            compose_prep::check(&p, &ctx, 0).unwrap()["kind"],
+            "confirm_attachment"
+        );
         p["sendAnyway"] = json!(true);
         let out = compose_prep::check(&p, &ctx, 0).unwrap();
-        assert_eq!(out, json!({"requestId":"check","settingsVersion":7,"draftId":"draft-1","revision":3,"kind":"ready","route":{"delay":null}}));
+        assert_eq!(
+            out,
+            json!({"requestId":"check","settingsVersion":7,"draftId":"draft-1","revision":3,"kind":"ready","route":{"delay":null}})
+        );
         p["to"] = json!("bad-to");
         p["accountId"] = json!("gone");
-        assert_eq!(compose_prep::check(&p, &ctx, 0).unwrap()["args"]["address"], "bad-to");
+        assert_eq!(
+            compose_prep::check(&p, &ctx, 0).unwrap()["args"]["address"],
+            "bad-to"
+        );
         p["to"] = json!("ok@example.test");
-        assert_eq!(compose_prep::check(&p, &ctx, 0).unwrap()["key"], "compose.noAccountSelected");
-        p["accountId"] = json!("one"); p["sendAnyway"] = json!(false);
+        assert_eq!(
+            compose_prep::check(&p, &ctx, 0).unwrap()["key"],
+            "compose.noAccountSelected"
+        );
+        p["accountId"] = json!("one");
+        p["sendAnyway"] = json!(false);
         ctx.settings["attachmentReminder"] = json!(false);
         assert_eq!(compose_prep::check(&p, &ctx, 0).unwrap()["kind"], "ready");
         ctx.settings = json!({"attachmentReminder":true});
