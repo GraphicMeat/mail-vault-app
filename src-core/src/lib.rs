@@ -60,6 +60,7 @@ pub mod unsubscribe;
 pub mod smtp;
 pub mod compose;
 pub mod spellcheck;
+pub mod json_doc;
 pub mod settings_doc;
 pub mod notify_policy;
 pub mod transfer_limits;
