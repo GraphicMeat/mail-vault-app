@@ -837,6 +837,34 @@ mod tests {
         assert!(test_token_posts().is_empty(), "no refresh for a good token");
     }
 
+    #[tokio::test]
+    async fn credential_store_namespace_does_not_read_or_refresh_tokens() {
+        let _env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(v) => std::env::set_var("MAILVAULT_TEST_CREDENTIALS", v),
+                    None => std::env::remove_var("MAILVAULT_TEST_CREDENTIALS"),
+                }
+            }
+        }
+        let _restore = Restore(std::env::var_os("MAILVAULT_TEST_CREDENTIALS"));
+        let _mock = test_token_mock(vec![granted("synthetic-control-token", None)]);
+        let s = st();
+        store(&s, &[("g1", &gmail(json!({})))]);
+        let account = json!({"id":"g1", "email":"me@gmail.test", "authType":"oauth2"});
+        let original = json!({"records":{}, "account":account, "accountId":"g1"});
+        let mut params = original.clone();
+        let injected = inject(&s, "credentials.save", &mut params).await;
+        assert!(injected.injected.is_empty(), "credential writes must not receive native tokens");
+        assert_eq!(params, original);
+        assert!(test_token_posts().is_empty(), "credential writes must not refresh an expired stored grant");
+        let mut control = json!({"account":account});
+        assert_eq!(inject(&s, "imap_get_mailboxes", &mut control).await.injected.len(), 1);
+        assert_eq!(test_token_posts().len(), 1);
+    }
+
     /// The record's own refresh token and Google client go to the token
     /// endpoint; the app hears an account id and nothing else.
     #[tokio::test]

@@ -1035,6 +1035,36 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[tokio::test]
+    async fn stage1_credentials_save_preserves_other_records() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(v) => std::env::set_var("MAILVAULT_TEST_CREDENTIALS", v),
+                    None => std::env::remove_var("MAILVAULT_TEST_CREDENTIALS"),
+                }
+            }
+        }
+        let _restore = Restore(std::env::var_os("MAILVAULT_TEST_CREDENTIALS"));
+        let unrelated = "{ \"id\": \"b\", \"password\": \"synthetic-other\" }";
+        std::fs::write(&path, json!({"a":"{\"id\":\"a\",\"password\":\"synthetic-old\"}", "b":unrelated}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        let response = handle_request(&state, req("credentials.save", json!({"records":{"a":"{\"id\":\"a\",\"password\":\"synthetic-new\"}"}}))).await;
+        assert!(response.error.is_none(), "credential dispatch failed: {:?}", response.error);
+        let result = response.result.unwrap();
+        assert_eq!(result["saved"], json!(["a"]));
+        assert!(result["version"].is_u64());
+        assert_eq!(result.as_object().unwrap().len(), 2, "mutation replies carry IDs/version only");
+        let blob: std::collections::HashMap<String, String> = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(blob["b"], unrelated);
+        assert!(blob["a"].contains("synthetic-new"));
+    }
+
     /// The two halves of a client connection to the real socket server,
     /// scripted against the endpoint `mailvault_core::transport` also gives
     /// production: a unix socket on unix, a named pipe on Windows. Both
