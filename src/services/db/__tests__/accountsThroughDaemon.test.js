@@ -441,6 +441,18 @@ describe('qualified U outcome policy', () => {
 });
 
 describe('qualified U connection epochs', () => {
+  it('a native write overtaking the first load obtains a fresh usable cache', async () => {
+    const old = deferred();
+    let first = true;
+    useDaemon(cmd => cmd === 'credentials.get' && first ? () => { first = false; return old.promise; } : undefined);
+    const loading = keychain.loadKeychain();
+    await vi.waitFor(() => expect(first).toBe(false));
+    await keychain.saveCredentials({ mine: '{"id":"mine","email":"mine@x.test"}' });
+    old.resolve({ status: 'granted', credentials: { old: blob.old } });
+    expect(Object.keys(await loading).sort()).toEqual(['mine', 'old']);
+    expect(Object.keys(await keychain.loadKeychain()).sort()).toEqual(['mine', 'old']);
+    expect(keychainSession.getStatus()).toBe('granted');
+  });
   it('restart after generation100 accepts new generation1/2 and another window deletion', async () => {
     await keychain.loadKeychain();
     credVersion = 100;
