@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const native = vi.hoisted(() => ({ managed: [], calls: [], rows: [], list: null, tiers: {}, saved: [1, 2, 3, 4, 9] }));
 vi.mock('../../transport.js', () => ({ send: async (cmd, args) => {
   native.calls.push([cmd, args]);
-  if (cmd === 'drafts.list') { if (native.list) return native.list(); return { drafts: [], managed: native.managed }; }
+  if (cmd === 'drafts.list') { if (native.list) return native.list(args); return { drafts: [], managed: native.managed }; }
   if (cmd === 'local_index_read') return JSON.stringify(native.rows);
   if (cmd === 'vault_uid_sets') return { saved: native.saved, archived: native.saved };
   if (cmd === 'maildir_repair_generation') return { ran: false };
@@ -103,4 +103,43 @@ it('does not carry a stale draft ID or draft flag onto a positively foreign cach
   const rows = await db.getArchivedEmails('a', 'Drafts', new Set([1]));
   expect(rows.find(row => row.uid === 1)).toMatchObject({ _origin: 'local_sent', flags: ['archived', 'seen'] });
   expect(rows.find(row => row.uid === 1).draftId).toBeUndefined();
+});
+it.each([
+  { label: 'another archived draft', flags: ['archived', 'seen', 'draft'], consumed: true },
+  { label: 'a staged draft', flags: ['seen', 'draft'], consumed: false },
+])('does not reopen cached managed identity for a projected foreign tuple containing $label', async ({ flags, consumed }) => {
+  const drafts = await import('../../localDrafts');
+  const open = vi.fn(); drafts.setComposeOpener(open);
+  native.rows = [{ uid: 1, source: 'local_draft', message_id: '<foreign>', flags }];
+  native.list = args => {
+    if (args.identity) throw new Error('Exact tuple belongs to different bytes');
+    return { drafts: args.draftId ? [{ ...current(), accountId: 'a', mailbox: 'Drafts', uid: 2, entry: current().current.entry, eml: { html: '<p>old managed draft</p>', attachments: [] } }] : [], managed: [current()] };
+  };
+  try {
+    const row = (await db.readLocalEmailIndex('a', 'Drafts')).find(row => row.uid === 1);
+    expect(row.draftId).toBeUndefined();
+    native.calls.length = 0;
+    expect(await drafts.openLocalDraft('a', 'Drafts', row.uid, row.draftId)).toBe(consumed);
+    expect(open).not.toHaveBeenCalled();
+    expect(native.calls.filter(([name]) => name === 'drafts.list')).toEqual(consumed
+      ? [['drafts.list', { identity: { accountId: 'a', mailbox: 'Drafts', uid: 1 }, includeContent: true }]] : []);
+  } finally { drafts.setComposeOpener(null); }
+});
+
+function bodySearchRows() {
+  native.tiers.vault_search = () => ({ available: false });
+  native.tiers.maildir_list = () => [1, 2, 3, 4, 9].map(uid => ({ uid, isArchived: true, flags: ['archived', 'draft'] }));
+  native.tiers.maildir_read_light_batch = ({ uids }) => uids.map(uid => ({ uid, messageId: '<native>', subject: 'parsed stale header', text: uid === 9 ? 'unrelated' : 'body-only-needle', html: uid === 9 ? '<p>unrelated</p>' : '<p>html-only-needle</p>', hasAttachments: uid !== 9, attachments: uid === 9 ? [] : [{ filename: 'empty.txt', contentType: 'text/plain', size: 0, contentId: null, contentDisposition: 'attachment' }] }));
+}
+it.each(['body-only-needle', 'html-only-needle'])('raw fallback search preserves current parsed content matching %s', async term => {
+  bodySearchRows();
+  const rows = await db.searchLocalEmails('a', term, { mailbox: 'Drafts' });
+  expect(rows.map(row => row.uid)).toEqual([2]);
+  expect(rows[0]).toMatchObject({ subject: 'accepted', draftId: 'd', text: 'body-only-needle', html: '<p>html-only-needle</p>' });
+});
+it('raw fallback attachment search preserves only current parsed attachment metadata', async () => {
+  bodySearchRows();
+  const rows = await db.searchLocalEmails('a', '', { mailbox: 'Drafts', hasAttachments: true });
+  expect(rows.map(row => row.uid)).toEqual([2]);
+  expect(rows[0]).toMatchObject({ subject: 'accepted', hasAttachments: true, attachments: [{ filename: 'empty.txt', contentType: 'text/plain', size: 0, contentId: null, contentDisposition: 'attachment' }] });
 });

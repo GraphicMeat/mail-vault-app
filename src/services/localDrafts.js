@@ -106,9 +106,10 @@ export async function deleteLocalDraft({ draftId, accountId, mailbox, uid } = {}
     draftId = response.drafts[0]?.draftId || response.managed?.[0]?.draftId;
     if (!draftId) throw new Error('Draft identity unavailable');
   }
+  const startedGeneration = getDraftProjection().generation;
   const response = await send('drafts.discard', { draftId });
   if (response?.draftId !== draftId || response.discarded !== true || !['complete', 'pending'].includes(response.cleanup)) throw new Error('Draft discard outcome unavailable');
-  publishDraftOutcome(response);
+  publishDraftOutcome(response, startedGeneration);
   return response;
 }
 
@@ -284,12 +285,6 @@ export async function openLocalDraft(accountId, mailbox, uid, draftId) {
   // A row may already carry stable identity even after its old UID was cleaned.
   if (typeof draftId === 'object') draftId = draftId?.draftId;
   if (!draftId) {
-    const known = getDraftProjection().managed.find(record =>
-      [record.current?.identity, record.pending?.identity, record.pending?.preparedIdentity, ...(record.cleanupIdentities || [])]
-        .some(i => i?.accountId === accountId && i.mailbox === mailbox && Number(i.uid) === Number(uid)));
-    draftId = known?.draftId;
-  }
-  if (!draftId) {
     const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
     // Source alone also describes staged sends; admission requires the legacy
     // archived user-draft shape and native verification of bytes/purpose.
@@ -298,6 +293,8 @@ export async function openLocalDraft(accountId, mailbox, uid, draftId) {
   try {
     const response = await readDraft(draftId ? { draftId } : { identity: { accountId, mailbox, uid } });
     const current = response.drafts[0];
+    // A content reply can predate a terminal decision published while it waited.
+    if (getDraftProjection().managed.some(record => record.draftId === current?.draftId && record.discarded)) return true;
     if (!response.terminal && !response.pending && !response.missingBody && current?.eml && current?.draftId) {
       _composeOpener(draftToInitialData(current));
     }

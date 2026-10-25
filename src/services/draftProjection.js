@@ -46,11 +46,13 @@ function remember(value) {
 
 export function observeDraftOutcome(value, startedGeneration) {
   const known = records.get(value?.draftId);
-  // A slower same-revision response cannot reintroduce cleanup that a newer
-  // native observation already completed. Higher accepted revisions and
-  // terminal acceptance still advance the projection.
-  if (startedGeneration != null && startedGeneration !== generation && known && !value.discarded
-    && Number(value.revision) <= Number(known.revision)) return getDraftProjection();
+  // First terminal acceptance wins over an in-flight save observation. Once
+  // terminal is known, an older terminal read/discard cannot restore cleanup
+  // that a newer observation already drained. Complete terminal cleanup is
+  // monotonic progress, even if overlapping requests began together.
+  if (startedGeneration != null && startedGeneration !== generation && known
+    && ((known.discarded && value.discarded && value.cleanup !== 'complete')
+      || (!value.discarded && Number(value.revision) <= Number(known.revision)))) return getDraftProjection();
   generation += 1; // invalidate requests already reading an older native view
   const previous = records.get(value?.draftId);
   remember(value);
@@ -97,7 +99,7 @@ function nativeLocations(frame) {
 }
 export function draftOwnedLocations(frame) { return nativeLocations(frame).filter(identity => !foreign(identity)); }
 
-function presentationRows(accountId, mailbox) {
+function presentationRows(accountId, mailbox, parsedRows = []) {
   const rows = [];
   for (const record of records.values()) {
     const terminalPending = record.discarded && record.cleanup === 'pending';
@@ -106,7 +108,11 @@ function presentationRows(accountId, mailbox) {
     // A terminal marker is deliberately unavailable to compose. Retained bytes
     // are cleanup work, never a second editable draft.
     const entry = terminalPending ? { subject: '', flags: ['archived', 'draft'] } : record.current.entry;
-    rows.push({ ...entry, uid: identity.uid, draftId: record.draftId, revision: record.revision,
+    // Retain already parsed body/attachment fields only for this exact current
+    // tuple. Native headers still replace stale cache metadata; cleanup bodies
+    // never become the content of the current draft.
+    const parsed = !terminalPending && parsedRows.find(row => tupleKey({ accountId: row._accountId || row.accountId || accountId, mailbox: row._mailbox || row.mailbox || mailbox, uid: row.uid }) === tupleKey(identity));
+    rows.push({ ...parsed, ...entry, uid: identity.uid, draftId: record.draftId, revision: record.revision,
       cleanup: record.cleanup, _draftState: terminalPending ? 'cleanupPending' : 'current',
       _draftUnavailable: !!terminalPending, _origin: 'local_draft', source: 'local',
       isLocal: true, isArchived: true, _accountId: accountId, _mailbox: mailbox,
@@ -133,7 +139,7 @@ export function projectDraftRows(rows, accountId, mailbox, frame, includeCurrent
     const { draftId, revision, _draftState, _draftUnavailable, ...unrelated } = row;
     return { ...unrelated, ...(current?.flags ? { flags: current.flags } : {}), _origin: current?.source || row._origin };
   });
-  return [...presented, ...(includeCurrent ? presentationRows(accountId, mailbox) : [])];
+  return [...presented, ...(includeCurrent ? presentationRows(accountId, mailbox, rows) : [])];
 }
 
 export function projectDraftUids(ids, accountId, mailbox, frame) {

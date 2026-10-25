@@ -83,3 +83,58 @@ it('retries metadata after a synchronous transport failure instead of caching un
   expect((await projection.refreshDraftProjection()).available).toBe(true);
   expect(send).toHaveBeenCalledTimes(2);
 });
+it('does not restore pending cleanup from a delayed discard after another discard completes', async () => {
+  const projection = await import('../draftProjection'); projection.observeDraftOutcome(reply());
+  let resolve;
+  send.mockImplementationOnce(() => new Promise(r => { resolve = r; })).mockResolvedValueOnce({ draftId: 'd', discarded: true, cleanup: 'complete', cleanupIdentities: [] });
+  const old = drafts.deleteLocalDraft({ draftId: 'd' });
+  await drafts.deleteLocalDraft({ draftId: 'd' });
+  resolve({ draftId: 'd', discarded: true, cleanup: 'pending', cleanupIdentities: [identity(2)] }); await old;
+  expect(projection.getDraftProjection().managed[0]).toMatchObject({ discarded: true, cleanup: 'complete', cleanupIdentities: [] });
+  expect(store.state.localEmails).toEqual([]);
+  expect([...store.state.archivedEmailIds]).toEqual([]);
+});
+it.each(['metadata', 'content'])('does not restore pending cleanup from an older terminal %s read after discard completes', async kind => {
+  const projection = await import('../draftProjection'); projection.observeDraftOutcome(reply(2));
+  let resolve;
+  send.mockImplementationOnce(() => new Promise(r => { resolve = r; })).mockResolvedValueOnce({ draftId: 'd', discarded: true, cleanup: 'complete', cleanupIdentities: [] });
+  drafts.setComposeOpener(vi.fn());
+  const old = kind === 'metadata' ? drafts.reconcileLocalDraft('d') : drafts.openLocalDraft('a', 'Drafts', 2, 'd');
+  await drafts.deleteLocalDraft({ draftId: 'd' });
+  resolve({ drafts: [], managed: [{ ...reply(2), current: null, discarded: true, cleanup: 'pending', cleanupIdentities: [identity(2)] }], terminal: true }); await old;
+  expect(projection.getDraftProjection().managed[0]).toMatchObject({ discarded: true, cleanup: 'complete', cleanupIdentities: [] });
+  expect(store.state.localEmails).toEqual([]);
+});
+it('retains first terminal acceptance even when a newer save observation arrived while discard waited', async () => {
+  const projection = await import('../draftProjection'); projection.observeDraftOutcome(reply());
+  let resolve;
+  send.mockImplementationOnce(() => new Promise(r => { resolve = r; })).mockResolvedValueOnce(reply(3, 30));
+  const discarding = drafts.deleteLocalDraft({ draftId: 'd' });
+  await drafts.saveLocalDraft({ draftId: 'd', revision: 3, accountId: 'a', fromAddress: '', displayName: '', payload, snippet: '' });
+  resolve({ draftId: 'd', discarded: true, cleanup: 'pending', cleanupIdentities: [identity(30)] }); await discarding;
+  expect(projection.getDraftProjection().managed[0]).toMatchObject({ discarded: true, cleanup: 'pending' });
+  expect(store.state.localEmails).toEqual([expect.objectContaining({ _draftUnavailable: true, _draftState: 'cleanupPending' })]);
+});
+it('allows terminal cleanup to progress from pending to complete for discards started together', async () => {
+  const projection = await import('../draftProjection'); projection.observeDraftOutcome(reply());
+  let resolveFirst, resolveSecond;
+  send.mockImplementationOnce(() => new Promise(r => { resolveFirst = r; })).mockImplementationOnce(() => new Promise(r => { resolveSecond = r; }));
+  const first = drafts.deleteLocalDraft({ draftId: 'd' });
+  const second = drafts.deleteLocalDraft({ draftId: 'd' });
+  resolveFirst({ draftId: 'd', discarded: true, cleanup: 'pending', cleanupIdentities: [identity(2)] }); await first;
+  resolveSecond({ draftId: 'd', discarded: true, cleanup: 'complete', cleanupIdentities: [] }); await second;
+  expect(projection.getDraftProjection().managed[0]).toMatchObject({ discarded: true, cleanup: 'complete', cleanupIdentities: [] });
+  expect(store.state.localEmails).toEqual([]);
+});
+it('does not open a late nonterminal content reply after the same draft became terminal', async () => {
+  const projection = await import('../draftProjection'); projection.observeDraftOutcome(reply());
+  const open = vi.fn(); drafts.setComposeOpener(open);
+  let resolve;
+  send.mockImplementationOnce(() => new Promise(r => { resolve = r; })).mockResolvedValueOnce({ draftId: 'd', discarded: true, cleanup: 'complete', cleanupIdentities: [] });
+  const opening = drafts.openLocalDraft('a', 'Drafts', 2, 'd');
+  await drafts.deleteLocalDraft({ draftId: 'd' });
+  resolve({ drafts: [{ ...reply(), eml: { html: '<p>accepted before discard</p>', attachments: [] } }], managed: [reply()] });
+  expect(await opening).toBe(true);
+  expect(open).not.toHaveBeenCalled();
+  expect(projection.getDraftProjection().managed[0]).toMatchObject({ discarded: true, cleanup: 'complete' });
+});
