@@ -10,4 +10,3 @@ export function textToHtml(text) {
     .map(line => `<p>${escapeHtml(line) || '<br>'}</p>`)
     .join('');
 }
-

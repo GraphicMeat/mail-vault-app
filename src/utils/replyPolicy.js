@@ -10,7 +10,7 @@ export function normalizeMessageId(id) {
  * Message-IDs inside a References / In-Reply-To value, oldest ancestor first.
  *
  * Accepts the array the IMAP and Maildir parsers produce AND the raw header
- * string the local index writes for a locally-sent message — indexing a string
+ * string the local index writes for a locally-sent message; indexing a string
  * gave `refs[0] === '<'`, which made every such message share one bogus thread.
  */
 export function parseReferenceList(value) {
@@ -64,7 +64,6 @@ export function computeReplyRecipients(replyTo, mode, ownAddresses = []) {
   // replyAll
   const to = dedupe([sender, ...toList].filter(a => a && !isOwn(a)));
   const cc = dedupe(ccList.filter(a => !isOwn(a)));
-  if (!to.length) to.push(sender); // every participant was me — note to self
+  if (!to.length) to.push(sender); // every participant was me; note to self
   return { to: to.join(', '), cc: cc.join(', ') };
 }
-

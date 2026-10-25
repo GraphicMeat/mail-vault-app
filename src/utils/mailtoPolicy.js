@@ -1,5 +1,5 @@
 const _dec = (s) => {
-  // RFC 6068: every octet is percent-encoded and '+' is literal — NOT a space,
+  // RFC 6068: every octet is percent-encoded and '+' is literal; NOT a space,
   // so URLSearchParams (form-urlencoded rules) would eat the plus out of
   // addresses like `rokas+lists@example.com`.
   try { return decodeURIComponent(s); } catch { return s; }
@@ -13,7 +13,7 @@ const _escapeHtml = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<'
  * Parse a `mailto:` href into ComposeModal's `initialData` shape.
  *
  * Returns null for anything that is not a mailto: URI. `body` comes back as
- * HTML because that is what compose loads into the editor — and it is escaped
+ * HTML because that is what compose loads into the editor, and it is escaped
  * on the way, since the href came out of someone else's email.
  */
 export function parseMailto(href, accountId) {
@@ -46,4 +46,3 @@ export function parseMailto(href, accountId) {
     ...(accountId ? { _accountId: accountId } : {}),
   };
 }
-
