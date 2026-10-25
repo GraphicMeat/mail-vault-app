@@ -18,7 +18,7 @@ fn oracle(value: &str) -> Option<Vec<i32>> {
     let output=std::process::Command::new(std::env::current_exe().unwrap()).args(["--ignored","--exact","jiff_system_tz_oracle","--nocapture"]).env("ROW14_TZ_ORACLE","1").env("TZ",value).output().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
     let stdout=String::from_utf8(output.stdout).unwrap();
-    serde_json::from_str(stdout.lines().find_map(|line|line.strip_prefix("ROW14_TZ_ORACLE=")).expect("fresh oracle result")).unwrap()
+    serde_json::from_str(stdout.lines().find_map(|line|line.split_once("ROW14_TZ_ORACLE=").map(|(_,value)|value)).expect("fresh oracle result")).unwrap()
 }
 #[test]
 fn machine_zone_changes_are_re_evaluated_without_persisting_an_offset() {
