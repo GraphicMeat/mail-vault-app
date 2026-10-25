@@ -4,9 +4,9 @@ use sha2::{Digest, Sha256};
 #[test]
 fn actual_js_local_date_oracle_is_immutable_and_matches() {
     for (bytes, hash) in [
-        (include_bytes!("fixtures/backup-schedule-UTC.json").as_slice(), "9f046f86a12971dd7e062a4854d6afae111ce5d9ee881a2df7a1a28b82161f2a"),
-        (include_bytes!("fixtures/backup-schedule-Europe-Vilnius.json").as_slice(), "cc986951e37ad597f336dfa790cc0c8c3917f2281cb1e56874b7bb056ff5d731"),
-        (include_bytes!("fixtures/backup-schedule-America-New_York.json").as_slice(), "e1e9b660a653d8d6c3d85aace35699c5593ab08e18525a36b4e54846e20f5ec8"),
+        (include_bytes!("fixtures/backup-schedule-isolated-UTC.json").as_slice(), "21590eec4c87b0903cde76a6d63d907bdc2f19725f4df40c063c52ae6eb4eb93"),
+        (include_bytes!("fixtures/backup-schedule-isolated-Europe-Vilnius.json").as_slice(), "7c232e07a3922375585bb908709561f50467508d2686e6a41b1eaa9a6c3798f8"),
+        (include_bytes!("fixtures/backup-schedule-isolated-America-New_York.json").as_slice(), "a2462212b610ead09b9718bc598b4828fb7911ec6174d77001ab38f20f6b01d6"),
     ] {
         assert_eq!(format!("{:x}", Sha256::digest(bytes)), hash);
         let oracle: Value = serde_json::from_slice(bytes).unwrap();
