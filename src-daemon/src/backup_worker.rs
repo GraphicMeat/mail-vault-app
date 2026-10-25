@@ -447,6 +447,9 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
     let mut tick = tokio::time::interval(Duration::from_secs(60));
     tick.tick().await;
     let mut pending_finish = None;
+    // A real wake consumed during an admission probe cannot be serviced until
+    // that probe returns. Coalesce one recheck for that exact execution.
+    let mut deferred_probe_scan: Option<String> = None;
     #[cfg(test)]
     let mut manual_barrier = None;
     #[cfg(test)]
@@ -505,7 +508,12 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 let _ = reply.send(result);
                 scan = true;
             }
-            Cmd::Wake => scan = true,
+            Cmd::Wake => {
+                scan=true;
+                if let Some(active)=ledger.active.as_ref().filter(|i|i.stage=="preparing") {
+                    deferred_probe_scan=Some(active.execution_id.clone());
+                }
+            },
             Cmd::Access { request, reply } => {
                 // Reconciliation of an old hold must not repeatedly move an
                 // unrelated pending execution into preparing before its next
@@ -588,6 +596,9 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             Cmd::Facts(facts) => {
                 *state.backup_worker.facts.lock().unwrap() = facts;
                 scan = true;
+                if let Some(active)=ledger.active.as_ref().filter(|i|i.stage=="preparing") {
+                    deferred_probe_scan=Some(active.execution_id.clone());
+                }
             }
             Cmd::Running {
                 run,
@@ -655,7 +666,16 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         }
         if let Some((run, execution, exit)) = pending_finish.take() {
             match finish_run(&state, &ledger, &run, &execution, &exit).await {
-                Ok(next) => ledger = next,
+                Ok(next) => {
+                    // Only a joined no-start Pending needs its deferred wake.
+                    // Publication failure keeps the flag with pending_finish;
+                    // ordinary status and provider IO never create a re-probe.
+                    if deferred_probe_scan.as_deref()==Some(execution.as_str()) {
+                        scan |= exit.pending_stage().is_some();
+                        deferred_probe_scan=None;
+                    }
+                    ledger=next;
+                },
                 Err(_) => pending_finish = Some((run, execution, exit)),
             }
         }
