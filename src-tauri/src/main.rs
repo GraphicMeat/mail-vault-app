@@ -4636,7 +4636,7 @@ mod tests {
     /// Every window's hydration waits on `settings.get`: bounded by name.
     #[test]
     fn reply_timeout_bounds_the_settings_rpcs() {
-        for method in ["settings.get", "settings.patch", "settings.replace", "backup.schedule.get", "backup.schedule.set"] {
+        for method in ["settings.get", "settings.patch", "settings.replace", "backup.schedule.get", "backup.schedule.set", "backup.run_now", "backup.cancel", "backup.stop", "backup.schedule.status"] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
         }
     }

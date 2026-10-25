@@ -58,6 +58,7 @@ struct Intent {
     not_before: i64,
     checkpoint: usize,
     #[serde(default)] cap: Value,
+    #[serde(default)] hold: bool,
     last_progress: i64,
     #[serde(default)] cancel_requested: bool,
     epoch: u64,
@@ -101,7 +102,7 @@ enum Cmd {
     Stop {reply:oneshot::Sender<Result<Value,String>>},
     Running { run: String, execution: String, cap: Value },
     Finished { run: String, execution: String, exit: RunExit },
-    Due(Vec<String>),
+    Due {epoch:u64,ids:Vec<String>},
     #[cfg(test)]
     Shutdown,
 }
@@ -188,6 +189,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 if result.is_ok(){ledger=next;}let _=reply.send(result);scan=true;
             }
             Cmd::Stop{reply}=>{
+                state.backup_worker.facts.lock().unwrap().automatic=false;
                 let mut next=ledger.clone();
                 if let Some(i)=next.active.as_mut(){i.cancel_requested=true;if i.stage!="uncertain"{i.stage="stopping".into();}}
                 let result=async {settle_cancelled(&state,&mut next).await?;publish(&state,&mut next).await?;Ok(json!({"accepted":true}))}.await;
@@ -195,7 +197,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             }
             #[cfg(test)] Cmd::Facts(facts)=> { *state.backup_worker.facts.lock().unwrap()=facts;scan=true; }
             Cmd::Running{run,execution,cap}=> {
-                if let Some(i)=ledger.active.as_mut().filter(|i|i.run_id==run && i.execution_id==execution) {i.stage="running".into();i.cap=cap;let _=publish(&state,&mut ledger).await;}
+                if let Some(i)=ledger.active.as_mut().filter(|i|i.run_id==run && i.execution_id==execution) {if !i.cancel_requested {i.stage="running".into();}i.cap=cap;let _=publish(&state,&mut ledger).await;}
             }
             Cmd::Finished{run,execution,exit}=>{
                 // A real joined run may free work that was waiting behind it.
@@ -203,7 +205,8 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 if !matches!(exit,RunExit::Pending(_)){scan=true;}
                 pending_finish=Some((run,execution,exit));
             },
-            Cmd::Due(ids)=> {
+            Cmd::Due{epoch,ids}=> {
+                if epoch!=state.backup_worker.epoch.load(SeqCst) || !state.backup_worker.facts.lock().unwrap().automatic {continue;}
                 for id in ids {
                     if ledger.active.iter().chain(ledger.queue.iter()).any(|i|i.account_id==id) {continue;}
                     let mut intent=new_intent(&state,id,false);intent.stage="queued".into();
@@ -231,7 +234,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
     }
 }
 fn new_intent(state:&Arc<DaemonState>,account:String,manual:bool)->Intent {
-    Intent {account_id:account,run_id:uuid::Uuid::new_v4().to_string(),execution_id:uuid::Uuid::new_v4().to_string(),manual,requests:Vec::new(),stage:"queued".into(),retries:0,not_before:0,checkpoint:0,cap:Value::Null,last_progress:state.clock.now_ms(),cancel_requested:false,epoch:state.backup_worker.epoch.load(SeqCst)}
+    Intent {account_id:account,run_id:uuid::Uuid::new_v4().to_string(),execution_id:uuid::Uuid::new_v4().to_string(),manual,requests:Vec::new(),stage:"queued".into(),retries:0,not_before:0,checkpoint:0,cap:Value::Null,hold:false,last_progress:state.clock.now_ms(),cancel_requested:false,epoch:state.backup_worker.epoch.load(SeqCst)}
 }
 fn cancelled(state:&Arc<DaemonState>, intent:&Intent)->bool {
     intent.cancel_requested || intent.epoch!=state.backup_worker.epoch.load(SeqCst) || state.backup_worker.controls.lock().unwrap().get(&intent.run_id).is_some_and(|t|t.load(SeqCst))
@@ -264,12 +267,13 @@ async fn check_stall(state:&Arc<DaemonState>,ledger:&mut Ledger) {
 }
 fn loaded_settings(path:&Path)->Result<Value,String> {
     let s=SettingsDoc::shared(path).get(None).map_err(|e|e.catalog_key().to_string())?;
-    if s.recovered.is_some() || !s.values[STORE]["state"].is_object() {return Err("errors.settingsNotLoaded".into());}
-    Ok(s.values[STORE]["state"].clone())
+    if s.recovered.is_some(){return Err("errors.settingsNotLoaded".into());}
+    s.values.get(STORE).and_then(|v|v.get("state")).filter(|v|v.is_object()).cloned().ok_or_else(||"errors.settingsNotLoaded".into())
 }
 fn scan_automatic(state:&Arc<DaemonState>) {
     let facts=state.backup_worker.facts.lock().unwrap().clone();
     if !facts.automatic || facts.paused || facts.loading || state.clock.now_ms().saturating_sub(facts.last_activity)<180_000 {return;}
+    let epoch=state.backup_worker.epoch.load(SeqCst);
     let state=state.clone();tokio::spawn(async move {
         let path=state.app_dir.clone();let now=state.clock.now_ms();
         let due=common::blocking(move || ->Result<Vec<String>,String> {
@@ -278,7 +282,7 @@ fn scan_automatic(state:&Arc<DaemonState>) {
             let zone=policy::local_zone().map_err(str::to_string)?;
             Ok(ids.into_iter().filter(|id|policy::scheduled(&settings,id,now) && policy::next_in_zone(&settings["backupState"][id],&policy::schedule_for(&settings,id),now,&zone).is_ok_and(|at|now>=at)).collect())
         }).await;
-        if let Ok(Ok(ids))=due {let _=state.backup_worker.tx.get().unwrap().send(Cmd::Due(ids));}
+        if let Ok(Ok(ids))=due {let _=state.backup_worker.tx.get().unwrap().send(Cmd::Due{epoch,ids});}
     });
 }
 async fn pump(state:&Arc<DaemonState>,ledger:&mut Ledger,services:&Services,scan:bool) {
@@ -287,7 +291,7 @@ async fn pump(state:&Arc<DaemonState>,ledger:&mut Ledger,services:&Services,scan
     let eligible=ledger.queue.iter().position(|i| {
         if !i.manual && (!facts.automatic || facts.paused || facts.loading || now.saturating_sub(facts.last_activity)<180_000) {return false;}
         if i.stage.starts_with("pending_") && !scan {return false;}
-        i.not_before<=now || (i.stage=="limit" && scan)
+        i.not_before<=now || (i.hold && scan)
     });
     let Some(index)=eligible else{return;};
     let mut next=ledger.clone();let mut intent=next.queue.remove(index);
@@ -318,11 +322,19 @@ async fn run_intent(state:&Arc<DaemonState>,intent:&Intent,services:Services)->R
     if !absent {return RunExit::Pending("pending_access".into());}
     let now=state.clock.now_ms();
     if !intent.manual && !policy::scheduled(&settings,&intent.account_id,now) {return RunExit::Pending("pending_policy".into());}
-    if intent.stage=="limit" && intent.not_before>now && !policy::download_cap_changed(&intent.cap,&settings["transferLimits"][&intent.account_id]) {return RunExit::Pending("limit".into());}
+    if intent.hold && intent.not_before>now && !policy::download_cap_changed(&intent.cap,&settings["transferLimits"][&intent.account_id]) {return RunExit::Pending("limit".into());}
     let token=state.backup_worker.controls.lock().unwrap().get(&intent.run_id).cloned().unwrap();
     if cancelled(state,intent) {return RunExit::Completed(adapter::JoinedBackup{result:Some(json!({"cancelled":true})),..Default::default()});}
     let Some(guard)=adapter::claim_controlled(state,&intent.account_id,token.clone()) else {return RunExit::Pending("pending_claim".into());};
-    let account=match (services.resolve)(state.clone(),intent.account_id.clone(),intent.manual).await {Ok(c)=>c,Err(e)=>return RunExit::Credentials(e)};
+    let account=match (services.resolve)(state.clone(),intent.account_id.clone(),intent.manual).await {
+        Ok(c)=>c,
+        Err(error)=>return match admission_facts(state).await {
+            Err(stage)=>RunExit::Pending(stage),
+            Ok((_,ids,_)) if !ids.contains(&intent.account_id)=>RunExit::Missing,
+            Ok((_,_,false))=>RunExit::Pending("pending_access".into()),
+            Ok(_)=>RunExit::Credentials(error),
+        },
+    };
     let (fresh,ids,absent)=match admission_facts(state).await {Ok(f)=>f,Err(stage)=>return RunExit::Pending(stage)};
     if !ids.contains(&intent.account_id) {return RunExit::Missing;}
     if !absent {return RunExit::Pending("pending_access".into());}
@@ -369,7 +381,7 @@ async fn finish_run(state:&Arc<DaemonState>,ledger:&Ledger,run:&str,execution:&s
             }
         }
         if status=="limit_reached" {
-            let mut held=new_intent(state,intent.account_id.clone(),false);held.stage="limit".into();held.cap=intent.cap.clone();
+            let mut held=new_intent(state,intent.account_id.clone(),false);held.stage="limit".into();held.hold=true;held.cap=intent.cap.clone();
             held.checkpoint=result.as_ref().and_then(|v|v["completed_folders"].as_u64()).unwrap_or(0) as usize;
             held.not_before=policy::limit_hold_until(at,terminal.as_ref().and_then(|v|v["resume_after_ms"].as_i64()));
             // Stop invalidates delayed intent even if the core was already
@@ -400,7 +412,7 @@ fn apply_outcome(path:&Path,out:&Outcome)->Result<Option<mailvault_core::setting
     let doc=SettingsDoc::shared(path);
     for _ in 0..3 {
         let snapshot=doc.get(None).map_err(|e|e.catalog_key().to_string())?;
-        if snapshot.recovered.is_some() || !snapshot.values[STORE]["state"].is_object() {return Err("errors.settingsNotLoaded".into());}
+        if snapshot.recovered.is_some() || !snapshot.values.get(STORE).and_then(|v|v.get("state")).is_some_and(Value::is_object) {return Err("errors.settingsNotLoaded".into());}
         let settings=&snapshot.values[STORE]["state"];let id=&out.intent.account_id;let old=&settings["backupState"][id];
         if old["lastSchedulerRunId"]==out.intent.run_id {return Ok(None);}
         let mut state=json!({"lastSchedulerRunId":out.intent.run_id});
@@ -438,7 +450,7 @@ async fn admit(state:&Arc<DaemonState>, ledger:&mut Ledger, account:String, requ
         publish(state,&mut next).await?;*ledger=next;return Ok(ack);
     }
     let found=next.active.iter_mut().chain(next.queue.iter_mut()).find(|i| i.account_id==account);
-    let intent=if let Some(i)=found { i.manual=true; i.requests.push(request.clone()); i.not_before=0; if i.stage!="running" && i.stage!="preparing" {i.stage="queued".into();} i.clone() } else {
+    let intent=if let Some(i)=found { i.manual=true; i.requests.push(request.clone()); i.not_before=0; i.hold=false; if i.stage!="running" && i.stage!="preparing" {i.stage="queued".into();} i.clone() } else {
         let mut i=new_intent(state,account.clone(),true);i.requests.push(request.clone());
         next.queue.insert(0,i.clone()); i
     };
@@ -468,6 +480,7 @@ pub(crate) async fn route(state:&Arc<DaemonState>, method:&str, params:&Value, i
         }
         "backup.stop"=> {
             state.backup_worker.epoch.fetch_add(1,SeqCst);
+            state.backup_worker.facts.lock().unwrap().automatic=false;
             for token in state.backup_worker.controls.lock().unwrap().values(){token.store(true,SeqCst);}
             let(tx,rx)=oneshot::channel();
             if state.backup_worker.tx.get().unwrap().send(Cmd::Stop{reply:tx}).is_err(){Err("errors.settingsNotLoaded".into())}else{rx.await.unwrap_or_else(|_|Err("errors.settingsNotLoaded".into()))}

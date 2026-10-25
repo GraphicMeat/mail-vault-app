@@ -129,7 +129,7 @@ async fn backup_worker_success_degraded_and_history_consume_isolated_oracle() {
     let corpus:Value=serde_json::from_str(include_str!("../../src-core/tests/fixtures/backup-schedule-isolated-UTC.json")).unwrap();
     for name in ["success","degraded"] {
         let expected=corpus["cases"].as_array().unwrap().iter().find(|c|c["category"]=="coordinator" && c["name"]==name).unwrap();
-        let mut r=rig();manual(&r.state,"one",name).await;let c=call(&mut r).await;
+        let mut r=rig();patch(&r.state,json!({"backupState":{"one":{"lastError":"stale previous failure"}}}));manual(&r.state,"one",name).await;let c=call(&mut r).await;
         let input=&expected["input"];let mut out=result(7);out.duration_secs=0.0;out.errors=input["errors"].as_u64().unwrap_or(0) as usize;
         out.error_message=input["last_error"].as_str().map(str::to_string);out.external_copy_ok=input["external_copy_ok"]!=false;
         out.external_copy_error=input["external_copy_error"].as_str().map(str::to_string);out.external_copy_failed_count=input["external_copy_failed_count"].as_u64().unwrap_or(0) as usize;
@@ -254,7 +254,7 @@ async fn backup_worker_stop_fences_a_delayed_automatic_scan() {
     rpc(&r.state,"backup.stop",json!({})).await;
     // An earlier read of settings may return after Stop. It cannot re-enable
     // the scheduler or become fresh intent just by being delivered late.
-    r.state.backup_worker.tx.get().unwrap().send(Cmd::Due(vec!["one".into()])).unwrap();
+    r.state.backup_worker.tx.get().unwrap().send(Cmd::Due{epoch:0,ids:vec!["one".into()]}).unwrap();
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(r.state.backup_worker.status()["queue"].as_array().unwrap().is_empty(),"late automatic scan recreated stopped intent");
     assert!(r.calls.try_recv().is_err());finish(r).await;
@@ -282,4 +282,27 @@ async fn backup_worker_removed_during_credentials_is_not_failed_credentials() {
     std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"two"}]"#).unwrap();release.send(()).unwrap();
     wait(&r.state,|s|s["requests"]["removed"]["status"]=="missing_account").await;
     assert!(settings(&r.state)["backupHistory"]["one"].is_null());finish(r).await;
+}
+
+#[tokio::test]
+async fn backup_worker_reopening_active_state_changes_execution_and_uses_zero_checkpoint() {
+    let mut r=rig();let original=manual(&r.state,"one","reopened").await;let c=call(&mut r).await;
+    let mut persisted=read_ledger(&r.state.app_dir).unwrap();persisted.active.as_mut().unwrap().checkpoint=4;
+    let mut cancelled=result(0);cancelled.cancelled=true;c.reply.send(Ok(cancelled)).ok().unwrap();
+    wait(&r.state,|s|s["requests"]["reopened"]["status"]=="cancelled").await;
+    r.state.backup_worker.tx.get().unwrap().send(Cmd::Shutdown).unwrap();r.worker.await.unwrap();
+    // This is state reopening after the first task actually drained. It is
+    // not a process-kill/power-loss experiment and never overlaps that task.
+    save_ledger(&r.state.app_dir,&persisted).unwrap();
+    std::fs::write(r.state.app_dir.join("accounts.json"),r#"[{"id":"one","mailboxes":["Renamed","INBOX"]}]"#).unwrap();
+    let state=DaemonState::for_test(r.state.data_dir.clone(),r.state.app_dir.clone(),true);state.clock.set(NOW+1);
+    let (calls_tx,mut calls)=unbounded_channel();let (tx,rx)=unbounded_channel();state.backup_worker.tx.set(tx).ok().unwrap();
+    let services=Services{resolve:Arc::new(|_,_,_|Box::pin(async {Ok(serde_json::from_value(json!({"email":"one@test","imapHost":"127.0.0.1","imapPort":1})).unwrap())})),provider:Arc::new(move |ctx|{let tx=calls_tx.clone();Box::pin(async move{let(reply,rx)=oneshot::channel();tx.send(Call{ctx,reply}).unwrap();rx.await.unwrap()})})};
+    let worker=tokio::spawn(worker_loop(state.clone(),rx,services));
+    let resumed=tokio::time::timeout(Duration::from_secs(2),calls.recv()).await.unwrap().unwrap();assert_eq!(resumed.ctx.skip_folders,0);
+    let live=state.backup_worker.status();assert_ne!(live["active"]["executionId"],original["executionId"]);
+    let replay=manual(&state,"one","reopened").await;assert_eq!(replay["runId"],original["runId"]);assert_eq!(replay["executionId"],live["active"]["executionId"]);
+    resumed.reply.send(Ok(result(7))).ok().unwrap();wait(&state,|s|s["requests"]["reopened"]["status"]=="success").await;
+    assert_eq!(settings(&state)["backupHistory"]["one"].as_array().unwrap().len(),1);
+    state.backup_worker.tx.get().unwrap().send(Cmd::Shutdown).unwrap();worker.await.unwrap();
 }
