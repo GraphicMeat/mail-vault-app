@@ -567,9 +567,12 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
     let Some(p) = pending else { return Ok(()) };
     // Copy publication requires current local account membership. Terminal
     // cleanup remains independent of account configuration above this branch.
-    let _ = account(s, &p.copy.identity.scope.account_id,
+    let _ = account(
+        s,
+        &p.copy.identity.scope.account_id,
         p.copy.entry["from"]["address"].as_str().unwrap_or(""),
-        p.copy.entry["from"]["name"].as_str().unwrap_or(""))?;
+        p.copy.entry["from"]["name"].as_str().unwrap_or(""),
+    )?;
     // Restart/retry preparation uses retained vault bytes, outside draft locks.
     let Some(raw) = pending_raw(s, &p)? else {
         return abort_uninstalled(s, id, &p);
@@ -875,11 +878,18 @@ fn discard(s: &Arc<DaemonState>, id: &str) -> Result<Value, String> {
 }
 // A stable id is primary after COW retires its former physical tuple. A tuple
 // supplied alongside it is still a checked association, never a historic alias.
-fn validate_open_tuple(s: &Arc<DaemonState>, id: &str, record: &Record, location: &Location) -> Result<(), String> {
+fn validate_open_tuple(
+    s: &Arc<DaemonState>,
+    id: &str,
+    record: &Record,
+    location: &Location,
+) -> Result<(), String> {
     if app_db::with(&s.app_dir, |c| db::owner(c, location))?.as_deref() != Some(id) {
         return Err("draft tuple is not currently associated with this draftId".into());
     }
-    let copy = record.current.iter()
+    let copy = record
+        .current
+        .iter()
         .chain(&record.cleanup)
         .chain(record.pending.iter().map(|intent| &intent.copy))
         .find(|copy| copy.location() == *location && drafts::editable(&copy.entry))
@@ -888,17 +898,28 @@ fn validate_open_tuple(s: &Arc<DaemonState>, id: &str, record: &Record, location
     Ok(())
 }
 
-fn list_id(s: &Arc<DaemonState>, id: &str, exact: Option<&Location>, content: bool) -> Result<Value, String> {
-    if id.is_empty() || id.len() > 200 { return Err("invalid draftId".into()); }
+fn list_id(
+    s: &Arc<DaemonState>,
+    id: &str,
+    exact: Option<&Location>,
+    content: bool,
+) -> Result<Value, String> {
+    if id.is_empty() || id.len() > 200 {
+        return Err("invalid draftId".into());
+    }
     let Some(mut record) = app_db::with(&s.app_dir, |c| db::load(c, id))? else {
         return Ok(json!({"drafts":[],"managed":[],"missingBody":true}));
     };
-    if let Some(location) = exact { validate_open_tuple(s, id, &record, location)?; }
+    if let Some(location) = exact {
+        validate_open_tuple(s, id, &record, location)?;
+    }
     if content && !record.discarded {
         // Recovery failure leaves the accepted copy and pending facts usable.
         let _ = recover(s, id);
         record = load(s, id)?;
-        if let Some(location) = exact { validate_open_tuple(s, id, &record, location)?; }
+        if let Some(location) = exact {
+            validate_open_tuple(s, id, &record, location)?;
+        }
     }
     let mut view = response(&record, "unchanged");
     if record.discarded {
@@ -910,10 +931,15 @@ fn list_id(s: &Arc<DaemonState>, id: &str, exact: Option<&Location>, content: bo
                 return Ok(json!({"drafts":[],"managed":[view],"missingBody":true}));
             };
             view["eml"] = serde_json::to_value(mailvault_core::vault_eml::parse_eml_bytes(
-                &raw, copy.identity.scope.uid, drafts::FLAGS.map(String::from).to_vec(),
-            )?).map_err(|error| error.to_string())?;
+                &raw,
+                copy.identity.scope.uid,
+                drafts::FLAGS.map(String::from).to_vec(),
+            )?)
+            .map_err(|error| error.to_string())?;
         }
-        return Ok(json!({"drafts":[view.clone()],"managed":[response(&record,"unchanged")],"missingBody":false}));
+        return Ok(
+            json!({"drafts":[view.clone()],"managed":[response(&record,"unchanged")],"missingBody":false}),
+        );
     }
     let pending = record.pending.is_some() || record.retry.is_some();
     Ok(json!({"drafts":[],"managed":[view],"pending":pending,"missingBody":!pending}))
