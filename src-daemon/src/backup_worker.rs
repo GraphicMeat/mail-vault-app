@@ -51,6 +51,8 @@ pub(crate) struct BackupState {
     execution: Mutex<Option<String>>,
     facts: Mutex<Facts>,
     #[cfg(test)]
+    pending_access_exit: Mutex<Option<(oneshot::Sender<()>,oneshot::Receiver<()>)>>,
+    #[cfg(test)]
     scans_in_flight: std::sync::atomic::AtomicUsize,
 }
 impl BackupState {
@@ -851,6 +853,11 @@ async fn pump(state: &Arc<DaemonState>, ledger: &mut Ledger, services: &Services
         let run = driver_intent.run_id.clone();
         let execution = driver_intent.execution_id.clone();
         let exit = run_intent(&st, &driver_intent, services).await;
+        #[cfg(test)]
+        if matches!(&exit,RunExit::Pending(stage) if stage=="pending_access") {
+            let barrier=st.backup_worker.pending_access_exit.lock().unwrap().take();
+            if let Some((entered,release))=barrier {let _=entered.send(());let _=release.await;}
+        }
         let _ = st.backup_worker.tx.get().unwrap().send(Cmd::Finished {
             run,
             execution,

@@ -1721,3 +1721,33 @@ async fn backup_access_foreign_status_does_not_reprobe_pending_intent() {
         "foreign status spuriously re-admitted pending intent"
     );
 }
+
+#[tokio::test]
+async fn backup_access_attach_after_pending_decision_keeps_new_authority() {
+    let mut r=rig();let stamp=access_slot(&r);
+    let (entered_tx,entered_rx)=oneshot::channel();let (release_tx,release_rx)=oneshot::channel();
+    *r.state.backup_worker.pending_access_exit.lock().unwrap()=Some((entered_tx,release_rx));
+    let ack=manual(&r.state,"one","late-access-decision").await;entered_rx.await.unwrap();
+    let attempt=access_attempt(&r,&ack,"shell-b");
+    assert_eq!(access_attach(&r,&attempt,&stamp,"/native-authorized").await["state"],"accepted");
+    assert_eq!(access_query(&r,&attempt,false).await["safeRelease"],false);
+    release_tx.send(()).unwrap();
+    let provider=tokio::time::timeout(Duration::from_secs(3),async {
+        loop {
+            if let Ok(call)=r.calls.try_recv() {break Some(call);}
+            let status=r.state.backup_worker.status();
+            if status["accessReceipts"].as_array().unwrap().iter().any(|v|v["attempt"]==attempt && v["safeRelease"]==true) {break None;}
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    let started=provider.is_some();let mut held_until_join=false;
+    if let Some(c)=provider {
+        held_until_join=access_query(&r,&attempt,true).await["safeRelease"]==false;
+        assert_eq!(c.ctx.mirror_root.as_deref(),Some("/native-authorized"));
+        c.reply.send(Ok(result(1))).ok().unwrap();
+        wait(&r.state,|s|s["requests"]["late-access-decision"]["status"]=="success").await;
+    }
+    finish(r).await;
+    assert!(started,"a pre-attach Pending result drained newer accepted authority before provider admission");
+    assert!(held_until_join);
+}
