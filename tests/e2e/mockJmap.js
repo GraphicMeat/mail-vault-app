@@ -177,7 +177,7 @@ export function seedJmapAccount(home, account) {
 
 /** Build the mock server binary. Cargo no-ops when it is current. */
 export function buildMockJmap() {
-  execFileSync('cargo', ['build', '-p', 'mock-jmap', '--bin', 'mock-jmap-server'], {
+  execFileSync('cargo', ['build', '--locked', '-p', 'mock-jmap', '--bin', 'mock-jmap-server'], {
     cwd: REPO_ROOT,
     stdio: 'inherit',
   });

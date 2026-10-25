@@ -1619,6 +1619,16 @@ async fn backup_access_slot_changed_during_credentials_blocks_provider() {
 #[tokio::test]
 async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal() {
     use mailvault_core::mirror_mutation::MirrorRoot;
+    async fn wait_stage(state: &Arc<DaemonState>, stage: &str, predicate: impl Fn(&Value)->bool) {
+        let reached = tokio::time::timeout(Duration::from_secs(3),async {
+            loop { let view=state.backup_worker.status(); if predicate(&view) { return; } tokio::task::yield_now().await; }
+        }).await;
+        if reached.is_err() {
+            let view=state.backup_worker.status();
+            let summary=json!({"stage":stage,"activeStage":view["active"]["stage"],"activeRun":view["active"]["runId"],"activeExecution":view["active"]["executionId"],"cancelRequested":view["active"]["cancelRequested"],"pendingCount":view["pendingAccess"].as_array().map(Vec::len),"requestStatus":view["requests"]["real-blocking-scope"]["status"],"ownsAccount":state.backup_runs.lock().unwrap().contains_key("one"),"revision":view["revision"]});
+            panic!("real mirror drain stage timed out: {summary}");
+        }
+    }
     let (entered_tx, entered_rx) = oneshot::channel();
     let entered = Arc::new(Mutex::new(Some(entered_tx)));
     let provider: adapter::Provider = Arc::new(move |ctx| {
@@ -1660,7 +1670,7 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
     });
     locked_rx.await.unwrap();
     let ack = manual(&r.state, "one", "real-blocking-scope").await;
-    wait(&r.state, |s| {
+    wait_stage(&r.state, "initial pending access", |s| {
         !s["pendingAccess"].as_array().unwrap().is_empty()
     })
     .await;
@@ -1673,7 +1683,7 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
     let file_remains = cur.join("7.eml").exists();
     release_tx.send(()).unwrap();
     holding.await.unwrap().unwrap();
-    wait(&r.state, |s| s["active"].is_null()).await;
+    wait_stage(&r.state, "joined drain after mirror release", |s| s["active"].is_null()).await;
     assert_eq!(before["safeRelease"], false);
     assert!(claimed);
     assert!(file_remains);
@@ -2719,21 +2729,59 @@ async fn backup_worker_surface_channel_retires_only_its_generation_and_reconnect
 
 #[tokio::test]
 async fn backup_worker_config_removal_cannot_rearm_stop_but_explicit_enable_can() {
-    async fn consumed(state: &Arc<DaemonState>) { let (done,rx)=oneshot::channel();state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap(); }
+    async fn consumed(state: &Arc<DaemonState>) {
+        let (done, rx) = oneshot::channel();
+        state
+            .backup_worker
+            .tx
+            .get()
+            .unwrap()
+            .send(Cmd::Probe { done })
+            .unwrap();
+        rx.await.unwrap();
+    }
     let r = rig();
-    rpc(&r.state,"backup.context",observation("main","stop-config",1,"attach",NOW,true)).await;
-    rpc(&r.state,"backup.stop",json!({})).await;
-    rpc(&r.state,"backup.schedule.set",json!({"patch":{"backupSchedules":{"one":null}}})).await;
+    rpc(
+        &r.state,
+        "backup.context",
+        observation("main", "stop-config", 1, "attach", NOW, true),
+    )
+    .await;
+    rpc(&r.state, "backup.stop", json!({})).await;
+    rpc(
+        &r.state,
+        "backup.schedule.set",
+        json!({"patch":{"backupSchedules":{"one":null}}}),
+    )
+    .await;
     consumed(&r.state).await;
     let removed = r.state.backup_worker.facts.lock().unwrap().automatic;
-    rpc(&r.state,"backup.schedule.set",json!({"patch":{"backupSchedules":{"one":{"enabled":false,"interval":"daily"}}}})).await;
+    rpc(
+        &r.state,
+        "backup.schedule.set",
+        json!({"patch":{"backupSchedules":{"one":{"enabled":false,"interval":"daily"}}}}),
+    )
+    .await;
     consumed(&r.state).await;
     let disabled = r.state.backup_worker.facts.lock().unwrap().automatic;
-    rpc(&r.state,"backup.schedule.set",json!({"patch":{"backupSchedules":{"one":{"enabled":true,"interval":"daily"}}}})).await;
-    let (done,rx)=oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::Probe{done}).unwrap();rx.await.unwrap();
+    rpc(
+        &r.state,
+        "backup.schedule.set",
+        json!({"patch":{"backupSchedules":{"one":{"enabled":true,"interval":"daily"}}}}),
+    )
+    .await;
+    let (done, rx) = oneshot::channel();
+    r.state
+        .backup_worker
+        .tx
+        .get()
+        .unwrap()
+        .send(Cmd::Probe { done })
+        .unwrap();
+    rx.await.unwrap();
     let enabled = r.state.backup_worker.facts.lock().unwrap().automatic;
     finish(r).await;
-    assert!(!removed,"removing a schedule silently rearmed Stop");
-    assert!(!disabled,"disabling a schedule silently rearmed Stop");
-    assert!(enabled,"explicit enable did not rearm native ownership");
+    assert!(!removed, "removing a schedule silently rearmed Stop");
+    assert!(!disabled, "disabling a schedule silently rearmed Stop");
+    assert!(enabled, "explicit enable did not rearm native ownership");
 }

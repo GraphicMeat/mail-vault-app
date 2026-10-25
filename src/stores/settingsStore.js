@@ -912,9 +912,6 @@ export const useSettingsStore = create(
       // Time Capsule actions
       setSnapshotAutoEnabled: (val) => set({ snapshotAutoEnabled: val }),
       setSnapshotCadence: (cadence) => set({ snapshotCadence: cadence }),
-      recordSnapshotTime: (accountId) => set(state => ({
-        snapshotLastTimes: { ...state.snapshotLastTimes, [accountId]: Date.now() }
-      })),
 
       // Daemon actions
       setDaemonMode: (mode) => set({ daemonMode: mode }),
@@ -953,19 +950,6 @@ export const useSettingsStore = create(
       removeBackupSchedule: (accountId) => set(state => {
         const { [accountId]: _, ...rest } = state.backupSchedules;
         return { backupSchedules: rest };
-      }),
-
-      updateBackupState: (accountId, update) => set(state => ({
-        backupState: {
-          ...state.backupState,
-          [accountId]: { ...(state.backupState[accountId] || {}), ...update }
-        }
-      })),
-
-      addBackupHistoryEntry: (accountId, entry) => set(state => {
-        const existing = state.backupHistory[accountId] || [];
-        const updated = [entry, ...existing].slice(0, 5);
-        return { backupHistory: { ...state.backupHistory, [accountId]: updated } };
       }),
 
       setBackupNotifyOnSuccess: (val) => set({ backupNotifyOnSuccess: val }),

@@ -53,7 +53,7 @@ async fn route_with_view(
         ));
     }
     let rearm = params["patch"]["backupGlobalEnabled"] == true
-        || params["patch"]["backupSchedules"].is_object();
+        || params["patch"]["backupSchedules"].as_object().is_some_and(|schedules|schedules.values().any(|config|config["enabled"] == true));
     let params = params.clone();
     let app_dir = state.app_dir.clone();
     let now = state.clock.now_ms();

@@ -17,7 +17,7 @@ vi.mock('../../src/services/api', () => ({ backupRunAccount: host.legacy, backup
 vi.mock('../../src/services/authUtils', () => ({ hasValidCredentials: () => true, resolveServerAccount: async (_, a) => ({ ok: true, account: a }) }));
 vi.mock('../../src/services/snapshotService', () => ({ createSnapshotFromMaildir: vi.fn() }));
 vi.mock('../../src/stores/focusStore', () => ({ notify: host.notify }));
-const settings = vi.hoisted(() => ({ backupNotifyOnSuccess: true, backupNotifyOnFailure: true, billingProfile: { hasSubscription: true }, backupState: {}, backupHistory: {}, backupSchedules: {}, updateBackupState: vi.fn(), addBackupHistoryEntry: vi.fn() }));
+const settings = vi.hoisted(() => ({ backupNotifyOnSuccess: true, backupNotifyOnFailure: true, billingProfile: { hasSubscription: true }, backupState: {}, backupHistory: {}, backupSchedules: {} }));
 vi.mock('../../src/stores/settingsStore', () => ({ useSettingsStore: { getState: () => settings, setState: vi.fn() }, hasPremiumAccess: () => true }));
 vi.mock('../../src/stores/mailStore', () => ({ useMailStore: { getState: () => ({ accounts: [{ id: 'one', email: 'one@test', password: 'test' }], loading: false }) } }));
 const store = vi.hoisted(() => ({ activeBackup: null, queue: [], setQueue: vi.fn(), setActiveBackup: vi.fn(), clearActiveBackup: vi.fn(), setBackupUpsell: vi.fn(), setShareUnlock: vi.fn() }));
@@ -130,4 +130,17 @@ it('refreshes native next-eligible display after a configuration event', async (
   host.view={...host.view,version:2,nextEligibleTimes:{one:42000}};
   emit('settings-changed',{keys:['mailvault-settings'],version:2});await flush();
   expect(store.nativeStatus.nextEligibleTimes.one).toBe(42000);dispose();
+});
+it('keeps hydration history quiet across incarnation changes but presents a missed new completion once', async () => {
+  const historical={intent:{accountId:'one',runId:'baseline-run',executionId:'baseline-execution',manual:true},at:42,status:'success',result:{success:true,emails_backed_up:3,errors:0,external_copy_ok:true},applied:true};
+  host.view={...host.view,lastOutcomes:[historical]};
+  const dispose=scheduler.observe({present:true});await flush();
+  expect(host.notify).not.toHaveBeenCalled();
+  host.view={...host.view,accessIncarnation:'replacement',revision:0};
+  emit('backup-schedule-changed',host.view);await flush();const baselineNotices=host.notify.mock.calls.length;
+  const missed={...historical,intent:{...historical.intent,runId:'missed-run',executionId:'missed-execution'},at:43};
+  host.view={...host.view,revision:1,lastOutcomes:[historical,missed]};
+  emit('daemon-reconnected',{});await flush();emit('daemon-events-lagged',{});await flush();
+  const unseenNotices=host.notify.mock.calls.length-baselineNotices;dispose();
+  expect(unseenNotices).toBe(1);expect(baselineNotices).toBe(0);
 });

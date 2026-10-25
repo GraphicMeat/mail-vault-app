@@ -31,7 +31,7 @@ const SERVER_BIN = join(
 
 /** Build the mock server binary once per run. Cargo no-ops when it's current. */
 export function buildMockServer() {
-  execFileSync('cargo', ['build', '-p', 'mock-imap', '--bin', 'mock-imap-server'], {
+  execFileSync('cargo', ['build', '--locked', '-p', 'mock-imap', '--bin', 'mock-imap-server'], {
     cwd: REPO_ROOT,
     stdio: 'inherit',
   });

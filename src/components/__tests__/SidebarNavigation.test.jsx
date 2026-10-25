@@ -199,7 +199,7 @@ describe('Sidebar navigation', () => {
       backupState: { studio: { lastStatus: 'success', lastBackupTime: Date.now() } },
     });
     render(<Sidebar />);
-    act(() => useSettingsStore.getState().updateBackupState('studio', { lastStatus: 'failed' }));
+    act(() => useSettingsStore.setState({ backupState: { ...useSettingsStore.getState().backupState, studio: { ...useSettingsStore.getState().backupState.studio, lastStatus: 'failed' } } }));
     expect(screen.queryByRole('button', { name: t('sidebar.backupFailedClickView') })).toBeNull();
     act(() => useSettingsStore.getState().setSidebarBackupStatusLocation('row'));
     expect(screen.getByRole('button', { name: t('sidebar.backupFailedClickView') })).toBeTruthy();
