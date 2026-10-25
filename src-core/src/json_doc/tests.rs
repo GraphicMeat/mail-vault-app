@@ -470,3 +470,169 @@ fn a_held_lock_makes_a_writer_give_up_in_time() {
     drop(held);
     assert!(lock_file(d.path(), &OBJ.lock_name(), Duration::from_millis(200)).unwrap().is_some());
 }
+
+fn array_replace(doc: &JsonDoc, next: Value, base: Option<u64>) -> Result<Change, DocError> {
+    doc.write_op(base, |value| {
+        if *value == next { return Ok(vec![]); }
+        *value = next;
+        Ok(vec!["synthetic".into()])
+    })
+}
+
+#[test]
+fn array_documents_preserve_missed_write_and_aba_versions() {
+    for through_read in [false, true] {
+        let d = dir();
+        let writer = JsonDoc::open(d.path(), ARR);
+        let reader = JsonDoc::open(d.path(), ARR);
+        let stale_writer = JsonDoc::open(d.path(), ARR);
+        array_replace(&writer,json!(["A"]),None).unwrap();
+        reader.get().unwrap();
+        array_replace(&writer,json!(["B"]),None).unwrap();
+        let distinct = array_replace(&writer,json!(["C"]),None).unwrap();
+        if through_read { reader.read().unwrap(); }
+        assert_eq!(reader.get().unwrap().version,distinct.version,"missed writes");
+        let old = stale_writer.get().unwrap();
+        let before = fs::read(writer.path()).unwrap();
+        array_replace(&writer,json!(["B"]),None).unwrap();
+        let aba = array_replace(&writer,json!(["C"]),None).unwrap();
+        assert_eq!(fs::read(writer.path()).unwrap(),before);
+        if through_read { reader.read().unwrap(); }
+        assert_eq!(reader.get().unwrap().version,aba.version,"ABA adopts newer matching sidecar");
+        let called = std::cell::Cell::new(false);
+        assert_eq!(stale_writer.write_op(Some(old.version), |_| { called.set(true); Ok(vec![]) }),Err(DocError::Conflict {current:aba.version}));
+        assert!(!called.get(),"stale base refused before mutation");
+        assert_eq!(fs::read(writer.path()).unwrap(),before);
+        let fresh = array_replace(&stale_writer,json!(["fresh"]),Some(aba.version)).unwrap();
+        assert!(fresh.version > aba.version);
+        assert_eq!(writer.get().unwrap().version,fresh.version);
+    }
+}
+
+fn scrub_passwords(value: &mut Value) -> Vec<String> {
+    let mut removed = Vec::new();
+    for record in value.as_array_mut().unwrap() {
+        if record.as_object_mut().unwrap().remove("password").is_some() {
+            removed.push(record["id"].as_str().unwrap().to_string());
+        }
+    }
+    removed
+}
+
+#[test]
+fn scrubbed_backups_preserve_live_data_until_authorized() {
+    for live in [false,true] {
+        let d = dir();
+        let original = json!([{"id":"one","password":"synthetic-marker","keep":[2,1]},{"id":"two","keep":"safe"}]);
+        fs::write(d.path().join(ARR.file),serde_json::to_vec_pretty(&original).unwrap()).unwrap();
+        let doc = JsonDoc::open_with(d.path(),ARR,Duration::ZERO);
+        doc.write_op_scrubbed(None,Some(Scrub {clean:&scrub_passwords,live}),|v| {
+            v.as_array_mut().unwrap().push(json!({"id":"three","keep":3}));
+            Ok(vec!["three".into()])
+        }).unwrap();
+        let stored: Value = serde_json::from_slice(&fs::read(doc.path()).unwrap()).unwrap();
+        let mut expected = original.clone();
+        scrub_passwords(&mut expected);
+        assert_eq!(serde_json::from_slice::<Value>(&fs::read(d.path().join(ARR.backup_name(1))).unwrap()).unwrap(),expected);
+        if live { assert!(stored[0].get("password").is_none()); }
+        else { assert_eq!(stored[0]["password"],"synthetic-marker"); }
+        expected.as_array_mut().unwrap().push(json!({"id":"three","keep":3}));
+        let mut clean_stored = stored.clone();
+        scrub_passwords(&mut clean_stored);
+        assert_eq!(clean_stored,expected);
+        assert_eq!(fs::read(doc.path()).unwrap(),serde_json::to_vec_pretty(&stored).unwrap());
+    }
+}
+
+#[test]
+fn scrub_only_change_is_persisted_and_invalid_writes_leave_bytes_unchanged() {
+    let d = dir();
+    let doc = JsonDoc::open_with(d.path(),ARR,Duration::ZERO);
+    let original = json!([{"id":"one","password":"synthetic-marker","keep":7}]);
+    array_replace(&doc,original.clone(),None).unwrap();
+    let initial = doc.get().unwrap().version;
+    let bytes = fs::read(doc.path()).unwrap();
+    for refuse in 0..3 {
+        let result = doc.write_op_scrubbed(if refuse==0 {Some(initial-1)} else {None},Some(Scrub {clean:&scrub_passwords,live:true}),|v| {
+            if refuse==1 { return Err(DocError::Invalid); }
+            *v = json!({"wrong":"shape"});
+            Ok(vec!["one".into()])
+        });
+        if refuse==0 { assert_eq!(result,Err(DocError::Conflict {current:initial})); }
+        else { assert_eq!(result,Err(DocError::Invalid)); }
+        assert_eq!(fs::read(doc.path()).unwrap(),bytes);
+        assert!(!d.path().join(ARR.backup_name(1)).exists());
+        assert_eq!(doc.get().unwrap().version,initial);
+    }
+    let change = doc.write_op_scrubbed(Some(initial),Some(Scrub {clean:&scrub_passwords,live:true}),|_| Ok(vec![])).unwrap();
+    assert_eq!(change.changed,vec!["one"]);
+    assert!(change.version > initial);
+    let expected = json!([{"id":"one","keep":7}]);
+    assert_eq!(doc.get().unwrap().value,expected);
+    assert_eq!(serde_json::from_slice::<Value>(&fs::read(d.path().join(ARR.backup_name(1))).unwrap()).unwrap(),expected);
+    let clean = fs::read(doc.path()).unwrap();
+    let repeat = doc.write_op_scrubbed(None,Some(Scrub {clean:&scrub_passwords,live:true}),|_| Ok(vec![])).unwrap();
+    assert_eq!(repeat,Change {version:change.version,changed:vec![]});
+    assert_eq!(fs::read(doc.path()).unwrap(),clean);
+}
+
+#[test]
+fn private_document_companions_are_private_on_unix() {
+    let d = dir();
+    fs::write(d.path().join(ARR.file),"[]").unwrap();
+    #[cfg(unix)] {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(d.path().join(ARR.file),fs::Permissions::from_mode(0o644)).unwrap();
+    }
+    let doc = JsonDoc::open_with(d.path(),ARR,Duration::ZERO);
+    array_replace(&doc,json!([{"id":"one"}]),None).unwrap();
+    fs::write(doc.path(),"synthetic corrupt bytes").unwrap();
+    assert_eq!(doc.get().unwrap().recovered.as_deref(),Some("memory"));
+    array_replace(&doc,json!([{"id":"two"}]),None).unwrap();
+    assert_eq!(doc.get().unwrap().value,json!([{"id":"two"}]));
+    assert_eq!(fs::read(d.path().join(ARR.corrupt_name())).unwrap(),b"synthetic corrupt bytes");
+    assert_eq!(fs::read(d.path().join(ARR.backup_name(1))).unwrap(),b"[]");
+    for name in [ARR.file.to_string(),ARR.lock_name(),ARR.version_name(),ARR.backup_name(1),ARR.corrupt_name()] {
+        assert!(d.path().join(&name).is_file());
+        #[cfg(unix)] {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(fs::metadata(d.path().join(name)).unwrap().permissions().mode() & 0o777,0o600);
+        }
+    }
+}
+
+#[test]
+fn separate_document_specs_do_not_share_state_or_backups() {
+    let d = dir();
+    let settings_spec = Spec {file:"frontend-settings.json",..OBJ};
+    let accounts_spec = Spec {file:"accounts.json",..ARR};
+    let settings = JsonDoc::shared(d.path(),settings_spec);
+    let array = JsonDoc::shared(d.path(),accounts_spec);
+    assert!(Arc::ptr_eq(&settings,&JsonDoc::shared(d.path(),settings_spec)));
+    assert!(Arc::ptr_eq(&array,&JsonDoc::shared(d.path(),accounts_spec)));
+    assert!(!Arc::ptr_eq(&settings,&array));
+    set(&settings,"one",json!(1),None).unwrap();
+    let settings_change = set(&settings,"one",json!(2),None).unwrap();
+    array_replace(&array,json!(["A"]),None).unwrap();
+    let array_change = array_replace(&array,json!(["B"]),None).unwrap();
+    assert_eq!(settings.spec().version_name(),"frontend-settings.version.json");
+    assert_eq!(array.spec().version_name(),"accounts.version.json");
+    assert_eq!(settings.get().unwrap().version,settings_change.version);
+    assert_eq!(array.get().unwrap().version,array_change.version);
+    assert_eq!(fs::read(d.path().join(settings_spec.backup_name(1))).unwrap(),br#"{"one":1}"#);
+    assert_eq!(serde_json::from_slice::<Value>(&fs::read(d.path().join(accounts_spec.backup_name(1))).unwrap()).unwrap(),json!(["A"]));
+    let array_bytes = fs::read(array.path()).unwrap();
+    fs::write(settings.path(),"broken").unwrap();
+    assert_eq!(settings.get().unwrap().value,json!({"one":2}));
+    set(&settings,"two",json!(3),None).unwrap();
+    assert_eq!(fs::read(array.path()).unwrap(),array_bytes);
+    assert_eq!(array.get().unwrap().version,array_change.version);
+    let settings_files = companion_files(d.path(),settings_spec);
+    let array_files = companion_files(d.path(),accounts_spec);
+    assert!(settings_files.iter().all(|p| !array_files.contains(p)));
+    // The same shared engine exposes one fault hook to every facade owner.
+    settings.fail_before_rename.store(true,Ordering::SeqCst);
+    let shared_again = JsonDoc::shared(d.path(),settings_spec);
+    assert!(matches!(set(&shared_again,"three",json!(4),None),Err(DocError::Io(_))));
+    assert!(array_replace(&array,json!(["C"]),None).is_ok());
+}
