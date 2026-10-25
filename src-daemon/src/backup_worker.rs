@@ -46,7 +46,8 @@ pub(crate) struct BackupState {
     progress: AtomicI64,
     execution: Mutex<Option<String>>,
     facts: Mutex<Facts>,
-    #[cfg(test)] scans_in_flight: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    scans_in_flight: std::sync::atomic::AtomicUsize,
 }
 impl BackupState {
     pub(crate) fn retain_uncertain(&self, guard: adapter::BackupRunGuard) {
@@ -161,11 +162,22 @@ struct Facts {
     last_activity: i64,
 }
 enum Cmd {
-    #[cfg(test)] Probe { done: oneshot::Sender<()> },
     #[cfg(test)]
-    PauseManual { armed: oneshot::Sender<()>, entered: oneshot::Sender<()>, release: oneshot::Receiver<()> },
+    Probe {
+        done: oneshot::Sender<()>,
+    },
     #[cfg(test)]
-    PauseFinished { armed: oneshot::Sender<()>, entered: oneshot::Sender<()>, release: oneshot::Receiver<()> },
+    PauseManual {
+        armed: oneshot::Sender<()>,
+        entered: oneshot::Sender<()>,
+        release: oneshot::Receiver<()>,
+    },
+    #[cfg(test)]
+    PauseFinished {
+        armed: oneshot::Sender<()>,
+        entered: oneshot::Sender<()>,
+        release: oneshot::Receiver<()>,
+    },
 
     #[cfg(test)]
     Facts(Facts),
@@ -320,17 +332,30 @@ pub(crate) fn start(state: Arc<DaemonState>) {
     }
 }
 fn next_queued_deadline(state: &Arc<DaemonState>, ledger: &Ledger) -> Option<tokio::time::Instant> {
-    if ledger.active.is_some() { return None; }
+    if ledger.active.is_some() {
+        return None;
+    }
     let facts = state.backup_worker.facts.lock().unwrap().clone();
     let now = state.clock.now_ms();
-    if !facts.automatic || facts.paused || facts.loading || now.saturating_sub(facts.last_activity) < 180_000 { return None; }
-    ledger.queue.iter()
+    if !facts.automatic
+        || facts.paused
+        || facts.loading
+        || now.saturating_sub(facts.last_activity) < 180_000
+    {
+        return None;
+    }
+    ledger
+        .queue
+        .iter()
         // Past deadlines blocked by policy/access/foreign claims use ordinary
         // maintenance or control messages, never a zero-duration timer loop.
         .filter(|intent| !intent.cancel_requested && intent.not_before > now)
         .map(|intent| intent.not_before)
         .min()
-        .and_then(|at| tokio::time::Instant::now().checked_add(Duration::from_millis(at.saturating_sub(now) as u64)))
+        .and_then(|at| {
+            tokio::time::Instant::now()
+                .checked_add(Duration::from_millis(at.saturating_sub(now) as u64))
+        })
 }
 
 async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, services: Services) {
@@ -386,8 +411,10 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
     let mut tick = tokio::time::interval(Duration::from_secs(60));
     tick.tick().await;
     let mut pending_finish = None;
-    #[cfg(test)] let mut manual_barrier = None;
-    #[cfg(test)] let mut finished_barrier = None;
+    #[cfg(test)]
+    let mut manual_barrier = None;
+    #[cfg(test)]
+    let mut finished_barrier = None;
     let _ = state.backup_worker.tx.get().unwrap().send(Cmd::Wake);
     loop {
         let deadline = next_queued_deadline(&state, &ledger);
@@ -406,15 +433,38 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
         };
         let mut scan = scan;
         match cmd {
-            #[cfg(test)] Cmd::Probe { done } => {let _ = done.send(());}
-            #[cfg(test)] Cmd::PauseManual { armed, entered, release } => {manual_barrier = Some((entered, release)); let _ = armed.send(());}
-            #[cfg(test)] Cmd::PauseFinished { armed, entered, release } => {finished_barrier = Some((entered, release)); let _ = armed.send(());}
+            #[cfg(test)]
+            Cmd::Probe { done } => {
+                let _ = done.send(());
+            }
+            #[cfg(test)]
+            Cmd::PauseManual {
+                armed,
+                entered,
+                release,
+            } => {
+                manual_barrier = Some((entered, release));
+                let _ = armed.send(());
+            }
+            #[cfg(test)]
+            Cmd::PauseFinished {
+                armed,
+                entered,
+                release,
+            } => {
+                finished_barrier = Some((entered, release));
+                let _ = armed.send(());
+            }
             Cmd::Manual {
                 account,
                 request,
                 reply,
             } => {
-                #[cfg(test)] if let Some((entered, release)) = manual_barrier.take() {let _ = entered.send(()); let _ = release.await;}
+                #[cfg(test)]
+                if let Some((entered, release)) = manual_barrier.take() {
+                    let _ = entered.send(());
+                    let _ = release.await;
+                }
                 let result = admit(&state, &mut ledger, account, request).await;
                 let _ = reply.send(result);
                 scan = true;
@@ -427,9 +477,16 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 if let Some(token) = state.backup_worker.controls.lock().unwrap().get(&run) {
                     token.store(true, SeqCst);
                 }
-                for i in next.active.iter_mut().chain(next.queue.iter_mut()).filter(|i| i.run_id == run) {
+                for i in next
+                    .active
+                    .iter_mut()
+                    .chain(next.queue.iter_mut())
+                    .filter(|i| i.run_id == run)
+                {
                     i.cancel_requested = true;
-                    if i.stage != "uncertain" {i.stage = "stopping".into();}
+                    if i.stage != "uncertain" {
+                        i.stage = "stopping".into();
+                    }
                 }
                 let result = async {
                     settle_cancelled(&state, &mut next).await?;
@@ -448,11 +505,15 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 // Manual consumed after the RPC's immediate sideband epoch.
                 state.backup_worker.epoch.fetch_add(1, SeqCst);
                 state.backup_worker.facts.lock().unwrap().automatic = false;
-                for token in state.backup_worker.controls.lock().unwrap().values() {token.store(true, SeqCst);}
+                for token in state.backup_worker.controls.lock().unwrap().values() {
+                    token.store(true, SeqCst);
+                }
                 let mut next = ledger.clone();
                 for i in next.active.iter_mut().chain(next.queue.iter_mut()) {
                     i.cancel_requested = true;
-                    if i.stage != "uncertain" {i.stage = "stopping".into();}
+                    if i.stage != "uncertain" {
+                        i.stage = "stopping".into();
+                    }
                 }
                 let result = async {
                     settle_cancelled(&state, &mut next).await?;
@@ -493,7 +554,11 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 execution,
                 exit,
             } => {
-                #[cfg(test)] if let Some((entered, release)) = finished_barrier.take() {let _ = entered.send(()); let _ = release.await;}
+                #[cfg(test)]
+                if let Some((entered, release)) = finished_barrier.take() {
+                    let _ = entered.send(());
+                    let _ = release.await;
+                }
                 // A real joined run may free work that was waiting behind it.
                 // A pending probe must not immediately probe itself forever.
                 if !matches!(exit, RunExit::Pending(_)) {
@@ -666,7 +731,8 @@ fn scan_automatic(state: &Arc<DaemonState>) {
         return;
     }
     let epoch = state.backup_worker.epoch.load(SeqCst);
-    #[cfg(test)] state.backup_worker.scans_in_flight.fetch_add(1, SeqCst);
+    #[cfg(test)]
+    state.backup_worker.scans_in_flight.fetch_add(1, SeqCst);
     let state = state.clone();
     tokio::spawn(async move {
         let path = state.app_dir.clone();
@@ -698,7 +764,8 @@ fn scan_automatic(state: &Arc<DaemonState>) {
                 .unwrap()
                 .send(Cmd::Due { epoch, ids });
         }
-        #[cfg(test)] state.backup_worker.scans_in_flight.fetch_sub(1, SeqCst);
+        #[cfg(test)]
+        state.backup_worker.scans_in_flight.fetch_sub(1, SeqCst);
     });
 }
 async fn pump(state: &Arc<DaemonState>, ledger: &mut Ledger, services: &Services, scan: bool) {
