@@ -1603,3 +1603,45 @@ async fn drafts_review_stable_id_rejects_absent_tracked_tuple() {
     let stable = rpc(&h.s, "drafts.list", json!({"draftId":"absent-association","includeContent":true})).await.unwrap();
     assert!(stable["drafts"][0]["eml"]["html"].as_str().unwrap().contains("current words"));
 }
+
+async fn foreign_receipt_before_install(point: &'static str, after: &'static str, stage: bool) {
+    let h = Harness::new();
+    saved(&h.s, req("preinstall-receipt", 1, "accepted words")).await;
+    let prior = row(&h.s, "preinstall-receipt").current.unwrap();
+    let prior_raw = read_copy(&h.s, &prior, true).unwrap().unwrap();
+    let s = h.s.clone();
+    h.hook(move |at| {
+        if at == point {
+            let pending = row(&s, "preinstall-receipt").pending.unwrap();
+            let copy = if stage { pending.prepared } else { pending.copy };
+            let mut scope = copy.identity.scope;
+            scope.message_id = "foreign-receipt@example.test".into();
+            let raw = b"Message-ID: <foreign-receipt@example.test>\r\n\r\nforeign";
+            let receipt = Receipt::present(Identity::from_bytes(scope, raw).unwrap());
+            app_db::with(&s.app_dir, |c| compose_receipts::save(c, &receipt))?;
+        }
+        if at == after { return Err("observe immediately after install".into()); }
+        Ok(())
+    });
+    assert!(rpc(&h.s, "drafts.save", req("preinstall-receipt", 2, "new words")).await.is_err());
+    let pending = row(&h.s, "preinstall-receipt").pending.unwrap();
+    let copy = if stage { pending.prepared } else { pending.copy };
+    let l = copy.location();
+    assert!(message_store::read_raw(&h.s.data_dir, &l.account_id, &l.mailbox, l.uid)
+        .unwrap().is_none(), "different-MID receipt tuple received draft bytes");
+    assert_eq!(row(&h.s, "preinstall-receipt").current.unwrap().identity, prior.identity);
+    assert_eq!(read_copy(&h.s, &prior, true).unwrap().unwrap(), prior_raw);
+    let mut foreign_scope = copy.identity.scope;
+    foreign_scope.message_id = "foreign-receipt@example.test".into();
+    assert_eq!(app_db::with(&h.s.app_dir, |c| compose_receipts::load(c, &foreign_scope)).unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn drafts_review_receipts_stage_refuses_different_mid_before_bytes() {
+    foreign_receipt_before_install("before_prepared_store", "after_prepared_store", true).await;
+}
+
+#[tokio::test]
+async fn drafts_review_receipts_destination_refuses_different_mid_before_bytes() {
+    foreign_receipt_before_install("before_destination", "after_bytes", false).await;
+}
