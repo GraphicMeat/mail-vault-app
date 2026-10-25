@@ -160,6 +160,19 @@ fn parse_date_str(s: &str) -> Option<i64> {
     if let Ok(d) = chrono::DateTime::parse_from_rfc3339(t) {
         return Some(d.timestamp_millis());
     }
+    // JS Date accepts minute precision with an explicit zone. Recognize only
+    // these ASCII ISO shapes, then let the existing RFC3339 parser validate
+    // the calendar/time/offset. No timezone-less inference is introduced.
+    let bytes = t.as_bytes();
+    let minute_iso = (bytes.len() == 17 && bytes[16] == b'Z')
+        || (bytes.len() == 22 && matches!(bytes[16], b'+' | b'-') && bytes[19] == b':'
+            && [17,18,20,21].iter().all(|i| bytes[*i].is_ascii_digit()));
+    if minute_iso && bytes[4] == b'-' && bytes[7] == b'-' && bytes[10] == b'T' && bytes[13] == b':'
+        && [0,1,2,3,5,6,8,9,11,12,14,15].iter().all(|i| bytes[*i].is_ascii_digit()) {
+        if let Ok(d) = chrono::DateTime::parse_from_rfc3339(&format!("{}:00{}", &t[..16], &t[16..])) {
+            return Some(d.timestamp_millis());
+        }
+    }
     let mut rfc = t.to_string();
     if rfc.ends_with(')') {
         if let Some(open) = rfc.rfind('(') {
@@ -238,8 +251,11 @@ fn js_string(v: Option<&Value>) -> String {
 /// exist outside the webview.)
 pub fn has_premium_access(state: &Value, now_ms: i64) -> bool {
     if let Some(g) = state.get("shareGrant").filter(|g| truthy(Some(g))) {
-        if let Some(exp) = g.get("expiresAt").filter(|e| truthy(Some(e))).and_then(|e| js_date_ms(Some(e))) {
-            if exp > now_ms {
+        if let Some(expiry) = g.get("expiresAt").filter(|e| truthy(Some(e))) {
+            // The actual JS grant compares numerically, unlike canceled billing
+            // expiry's new Date(...). ISO strings are never epoch authority.
+            let exp = js_number(Some(expiry));
+            if exp.is_finite() && exp > now_ms as f64 {
                 return true;
             }
         }
