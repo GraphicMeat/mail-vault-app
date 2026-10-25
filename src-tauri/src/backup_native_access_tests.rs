@@ -491,13 +491,21 @@ fn backup_access_fresh_shell_daemon_reconnect() {
                 Duration::from_secs(30),
             )
             .map_err(|_| "native RPC unavailable".into());
-            if m == "backup.attach_access" && result.as_ref().is_ok_and(|v| v["state"] == "accepted") && self.lose_ack.swap(false,SeqCst) {
+            if m == "backup.attach_access"
+                && result.as_ref().is_ok_and(|v| v["state"] == "accepted")
+                && self.lose_ack.swap(false, SeqCst)
+            {
                 Err("accepted native ACK deliberately lost at the RPC boundary".into())
-            } else {result}
+            } else {
+                result
+            }
         }
         fn resolve(&self) -> AttachResolution {
             let r = resolve_native(self.app);
-            assert!(matches!(r.result,Resolution::Authorized{..}),"actual saved native resolver unavailable in the connected fixture");
+            assert!(
+                matches!(r.result, Resolution::Authorized { .. }),
+                "actual saved native resolver unavailable in the connected fixture"
+            );
             if matches!(r.result, Resolution::Authorized { .. }) {
                 self.acquired.fetch_add(1, SeqCst);
             }
@@ -596,7 +604,10 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         },
         "actual body fetch entered",
     );
-    assert!(!native.lose_ack.load(SeqCst),"actual accepted ACK was not exercised");
+    assert!(
+        !native.lose_ack.load(SeqCst),
+        "actual accepted ACK was not exercised"
+    );
     let old = held.holds.lock().unwrap().keys().next().unwrap().clone();
     let started = Instant::now();
     rpc("ping", json!({}));
