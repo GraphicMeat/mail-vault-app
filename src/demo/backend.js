@@ -12,6 +12,7 @@ const ACCOUNT_IDS = [
   '7f7d5d80-4bd3-4f67-9a1a-1d1c00100002',
   '7f7d5d80-4bd3-4f67-9a1a-1d1c00100003',
 ];
+import { prepareDemoCompose } from './composePrep.js';
 import { buildEnrichmentMessages } from './enrichmentFixtures.js';
 
 const clone = value => typeof structuredClone === 'function'
@@ -835,7 +836,8 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // its own, as the daemon does. Built from the demo's own commands.
         // Slice 1 is read-only and has no demo caller yet. Fail closed until
         // the reviewed UI adapter supplies demo preparation at its own seam.
-        if (method === 'compose.reply_context' || method === 'compose.check') {
+        if (method === 'compose.reply_context') return prepareDemoCompose(args.params || {}, { accounts: ACCOUNTS, values: settings, version: settingsVersion });
+        if (method === 'compose.check') {
           throw new Error('compose.preparationUnavailable');
         }
         if (method === 'compose.receipts.remove_account') return { removed: 0, simulated: true };

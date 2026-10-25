@@ -239,6 +239,7 @@ export function ComposeWindow() {
       onDiscard={snapshot => close('discard', snapshot)}
       onContextVisibleChange={visible => relaySetting('composeContextVisible', visible)}
       onAddTemplate={value => relaySetting('addEmailTemplate', value)}
+      acknowledgePreparation={() => request('prepare-settings')}
       onQueueSend={(snapshot, delay) => request('send', { snapshot, delay }, { timeoutMs: null })}
       onSchedule={snapshot => request('schedule', { snapshot }, { timeoutMs: null })}
       // Settings lives in the main window, which also answers the native menu's Settings item.

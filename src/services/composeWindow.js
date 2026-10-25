@@ -9,8 +9,9 @@ export const isComposeMessage = (message, composeId, token) => Boolean(
 
 const makeToken = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
-export function createComposeWindowOwner({ open, emitTo, update, close, remove, queueSend, discard, settings, attached }) {
+export function createComposeWindowOwner({ open, emitTo, update, close, remove, queueSend, discard, settings, attached, acknowledgePreparation }) {
   const sessions = new Map();
+  let settingsChain = Promise.resolve();
   const sessionFor = id => sessions.get(String(id));
   const reply = (session, requestId, type, payload) => {
     if (!session.label) return Promise.reject(new Error(t('errors.composeWindowClosed')));
@@ -201,15 +202,26 @@ export function createComposeWindowOwner({ open, emitTo, update, close, remove, 
             }
             void reply(session, requestId, 'error', error?.message || String(error)).catch(() => recover(session));
           });
+      } else if (message.type === 'prepare-settings') {
+        const run = settingsChain.then(() => {
+          if (session.finished || sessionFor(session.id) !== session) throw new Error(t('errors.composeWindowClosed'));
+          if (!acknowledgePreparation) throw new Error(t('compose.preparationUnavailable'));
+          return acknowledgePreparation();
+        });
+        void run.then(version => {
+          if (!session.finished && sessionFor(session.id) === session) return reply(session, requestId, 'ack', version);
+        }).catch(error => {
+          if (!session.finished && sessionFor(session.id) === session) return reply(session, requestId, 'error', t('compose.preparationUnavailable')).catch(() => recover(session));
+        });
       } else if (message.type === 'settings') {
         const key = message.payload?.key;
         if (!settings?.[key]) {
           void reply(session, requestId, 'error', t('errors.composeWindowSettingUnavailable')).catch(() => recover(session));
           return true;
         }
-        void Promise.resolve()
-          .then(() => settings[key](message.payload.value))
-          .then(payload => reply(session, requestId, 'ack', payload))
+        const run = settingsChain.then(() => settings[key](message.payload.value));
+        settingsChain = run.catch(() => {});
+        void run.then(payload => reply(session, requestId, 'ack', payload))
           .catch(error => reply(session, requestId, 'error', error?.message || String(error)).catch(() => recover(session)));
       }
       return true;

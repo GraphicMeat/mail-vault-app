@@ -9,11 +9,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import { buildThreads } from '../../utils/emailParser';
 
-const { invoke, sendStaged, stageOutgoing } = vi.hoisted(() => ({
+const { invoke, sendStaged, stageOutgoing, preparation } = vi.hoisted(() => ({
   invoke: vi.fn(),
+  preparation: { gate: null },
   sendStaged: vi.fn().mockResolvedValue({ messageId: '<mine@example.test>' }),
   // compose.stage's answer: the staged copy and the row the daemon wrote.
   stageOutgoing: vi.fn(async (_account, email) => ({
@@ -25,6 +26,13 @@ const { invoke, sendStaged, stageOutgoing } = vi.hoisted(() => ({
   })),
 }));
 
+vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: vi.fn(async () => 0) }));
+vi.mock('../../services/transport', () => ({ send: async (method, params) => {
+  if (method !== 'compose.reply_context') return;
+  if (preparation.gate) await preparation.gate;
+  const { prepareDemoCompose } = await import('../../demo/composePrep');
+  return prepareDemoCompose(params, { accounts: mail.accounts, values: { 'mailvault-settings': { state: settings } }, version: 0 });
+} }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invoke(...a) }));
 vi.mock('lucide-react', () => {
@@ -56,6 +64,7 @@ vi.mock('../../services/localDrafts', async () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),
   saveLocalDraft: vi.fn((await import('../../test/draftReply')).savedDraftReply),
   deleteLocalDraft: vi.fn().mockResolvedValue(undefined),
+  cleanupDraftFor: vi.fn().mockResolvedValue(undefined),
   newDraftUid: () => 1,
   newDraftId: () => "stable-draft",
 }));
@@ -127,6 +136,7 @@ const parent = {
 };
 
 beforeEach(() => {
+  preparation.gate = null;
   mail.sentEmails = [];
   mail.emails = [];
   invoke.mockReset();
@@ -316,4 +326,23 @@ describe('a reply opened on the index snippet', () => {
     await waitFor(() => expect(sendStaged).toHaveBeenCalled());
     expect(stageOutgoing.mock.calls[0][1].text).not.toContain('Snippet only words');
   });
+});
+
+it('keeps authored fields while native reply defaults are pending', async () => {
+  let release;
+  preparation.gate = new Promise(resolve => { release = resolve; });
+  render(<ComposeModal mode="reply" replyTo={parent} onClose={() => {}} />);
+  const to = screen.getByLabelText(/To/i, { selector: 'input' });
+  expect(to.value).toBe('');
+  fireEvent.change(to, { target: { value: 'typed@example.test' } });
+  const subject = screen.getByLabelText(/Subject/i);
+  fireEvent.change(subject, { target: { value: 'Authored subject' } });
+  fireEvent.change(screen.getByTestId('editor-stub'), { target: { value: '<p>Authored body</p>' } });
+  fireEvent.submit(to.closest('form'));
+  expect(stageOutgoing).not.toHaveBeenCalled();
+  await act(async () => { release(); });
+  await waitFor(() => expect(screen.queryByText('Could not prepare this message. Please try again.')).toBeNull());
+  expect(to.value).toBe('typed@example.test');
+  expect(subject.value).toBe('Authored subject');
+  expect(screen.getByTestId('editor-stub').value).toBe('<p>Authored body</p>');
 });

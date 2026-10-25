@@ -1,61 +1,45 @@
+import { prepareMailto } from '../services/composePrep';
 // ── mailto: links in a message body open compose, not the OS mail client ──
 //
 // The body renders in an iframe, so its click handler cannot reach App's
 // compose state directly. Same seam services/localDrafts.js uses for reopening
 // a draft row: App registers the opener, this module hands it the prefill.
 
-let _opener = null;
-
-export function setMailtoComposeOpener(fn) { _opener = fn; }
-
-const _dec = (s) => {
-  // RFC 6068: every octet is percent-encoded and '+' is literal — NOT a space,
-  // so URLSearchParams (form-urlencoded rules) would eat the plus out of
-  // addresses like `rokas+lists@example.com`.
-  try { return decodeURIComponent(s); } catch { return s; }
-};
-
-const _addresses = (s) => s.split(',').map(a => a.trim()).filter(Boolean).join(', ');
-
 const _escapeHtml = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-
-/**
- * Parse a `mailto:` href into ComposeModal's `initialData` shape.
- *
- * Returns null for anything that is not a mailto: URI. `body` comes back as
- * HTML because that is what compose loads into the editor — and it is escaped
- * on the way, since the href came out of someone else's email.
- */
-export function parseMailto(href, accountId) {
-  if (typeof href !== 'string') return null;
-  const m = /^mailto:([^?]*)(?:\?([\s\S]*))?$/i.exec(href.trim());
-  if (!m) return null;
-
-  const fields = { to: _addresses(_dec(m[1])), cc: '', bcc: '', subject: '', body: '' };
-  for (const pair of (m[2] || '').split('&')) {
-    if (!pair) continue;
-    const eq = pair.indexOf('=');
-    const key = _dec(eq === -1 ? pair : pair.slice(0, eq)).trim().toLowerCase();
-    const value = eq === -1 ? '' : _dec(pair.slice(eq + 1));
-    if (key === 'to') fields.to = _addresses([fields.to, value].filter(Boolean).join(','));
-    else if (key === 'cc' || key === 'bcc') fields[key] = _addresses(value);
-    else if (key === 'subject' || key === 'body') fields[key] = value;
-    // Every other header (RFC 6068 allows arbitrary ones) is dropped: compose
-    // has no field for them and a silent one would leave the sender guessing.
+let _opener = null;
+let openerGeneration = 0;
+let onError = null;
+let bridgeOwner = null;
+const pendingIntents = [];
+let work = Promise.resolve();
+const isMailto = href => typeof href === 'string' && /^mailto:/i.test(href.trim());
+const serialized = task => {
+  const result = work.then(task);
+  work = result.catch(() => {});
+  return result;
+};
+async function deliver(owner = bridgeOwner) {
+  const opener = _opener;
+  const generation = openerGeneration;
+  const current = () => Boolean(opener && opener === _opener && generation === openerGeneration
+    && (!owner || owner === bridgeOwner && owner.active));
+  while (pendingIntents.length && current()) {
+    const intent = pendingIntents[0];
+    if (intent.shell && !owner) return;
+    const result = await prepareMailto(intent.href, intent.accountId, { isCurrent: current });
+    if (!current()) return;
+    if (result.initialData) await opener(result.initialData);
+    if (!current()) return;
+    pendingIntents.shift();
   }
-
-  return {
-    ...fields,
-    body: fields.body ? _escapeHtml(fields.body).replace(/\r?\n/g, '<br>') : '',
-    // A prefill is a fresh compose, not a restored draft: it records its own
-    // dirty-check baseline so closing it untouched asks nothing.
-    _prefill: true,
-    // Which account the message carrying the link arrived on, so the reply
-    // leaves from the address it was addressed to. Only unified-inbox rows
-    // carry one; without it compose falls back to its usual precedence.
-    ...(accountId ? { _accountId: accountId } : {}),
-  };
 }
+export function retryMailtoCompose() {
+  return serialized(() => deliver()).catch(error => { onError?.(error); throw error; });
+}
+
+export function setMailtoComposeOpener(fn, options = {}) { _opener = fn; openerGeneration++; onError = options.onError || null; }
+
+export { parseMailto } from './mailtoPolicy';
 
 /**
  * Open compose prefilled from a `mailto:` href. False when the href is not a
@@ -63,9 +47,9 @@ export function parseMailto(href, accountId) {
  * it did before.
  */
 export function openMailtoCompose(href, accountId) {
-  const initialData = parseMailto(href, accountId);
-  if (!initialData || !_opener) return false;
-  _opener(initialData);
+  if (!isMailto(href) || !_opener) return false;
+  pendingIntents.push({ href, accountId, shell: false });
+  void retryMailtoCompose().catch(() => {});
   return true;
 }
 
@@ -148,26 +132,30 @@ export function plainTextBodyHtml(text) {
  * Returns `stop` synchronously so a React cleanup can detach without awaiting,
  * and `ready` for tests and anyone who needs the first drain to have landed.
  */
-export function startMailtoBridge({ invoke, listen }) {
-  let active = true;
+export function startMailtoBridge({ invoke, listen, onError: reportError }) {
+  const owner = { active: true };
+  bridgeOwner = owner;
   let unlisten = null;
-
-  const drain = async () => {
+  const current = () => owner.active && bridgeOwner === owner;
+  const drain = () => serialized(async () => {
+    if (!current()) return;
     const urls = await invoke('take_pending_mailto');
-    for (const url of urls || []) openMailtoCompose(url);
-  };
-
-  const ready = listen('mailto-open', drain)
+    // take is destructive: retain accepted occurrences even if stop raced it.
+    for (const href of urls || []) if (isMailto(href)) pendingIntents.push({ href, shell: true });
+    if (!current()) return;
+    await deliver(owner);
+  });
+  const report = error => { if (current()) (reportError || onError)?.(error); };
+  const ready = Promise.resolve().then(() => listen('mailto-open', () => drain().catch(report)))
     .then(fn => {
-      // Stopped while `listen` was still in flight: detach immediately rather
-      // than leaving a handler nobody holds a reference to.
-      if (!active) fn();
+      if (!current()) fn();
       else unlisten = fn;
-    })
-    .then(() => (active ? drain() : undefined));
-
-  return {
-    ready,
-    stop: () => { active = false; if (unlisten) unlisten(); },
-  };
+    }).then(() => current() ? drain() : undefined);
+  // Keep rejection observable to the owner while preventing unhandled loss.
+  void ready.catch(report);
+  return { ready, retry: () => drain().catch(report), stop: () => {
+    owner.active = false;
+    if (bridgeOwner === owner) bridgeOwner = null;
+    unlisten?.();
+  } };
 }

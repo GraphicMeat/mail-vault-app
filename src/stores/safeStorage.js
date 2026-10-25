@@ -427,10 +427,29 @@ export function setSafeStorageWriteEnabled(enabled) {
 // whose writes are disabled (detached compose/settings). REJECTS when the
 // write fails, so the caller can tell the user their settings did not land;
 // the change stays queued and is retried.
-export async function flushSafeStorage() {
+export async function flushSafeStorage({ acknowledge = false } = {}) {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   await ensureLoaded(); // never write a cache that is missing on-disk keys
   await writeQueued();
+  if (!acknowledge) return;
+  if (!writesEnabled || !invoke) throw new Error('compose.preparationUnavailable');
+  // A write arriving during flush/read needs a new acknowledged generation.
+  // The bounded loop does not retry an ordinary preparation timeout.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await writeQueued();
+    const expected = identityValues(parse(cache.get('mailvault-settings')));
+    const reply = await rpc('settings.get', {});
+    if (!isSnapshot(reply) || reply.version < 0 || reply.recovered) throw new Error('compose.preparationUnavailable');
+    const current = identityValues(parse(cache.get('mailvault-settings')));
+    if (deepEqual(expected, current) && deepEqual(current, identityValues(reply.values['mailvault-settings']))
+      && !dirty.has('mailvault-settings') && !inflight.has('mailvault-settings')) return reply.version;
+  }
+  throw new Error('errors.settingsConflict');
+}
+
+function identityValues(document) {
+  const state = document?.state || {};
+  return { aliases: state.aliases || {}, sendAsAddresses: state.sendAsAddresses || {} };
 }
 
 // ── Other writers ───────────────────────────────────────────────────────────

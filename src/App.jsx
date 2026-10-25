@@ -475,6 +475,7 @@ function App() {
           snapshot._composeDelay ?? delay,
         );
       },
+      acknowledgePreparation: () => flushSafeStorage({ acknowledge: true }),
       settings: {
         composeContextVisible: value => {
           const store = useSettingsStore.getState();
