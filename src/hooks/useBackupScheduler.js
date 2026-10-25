@@ -32,7 +32,9 @@ export function useBackupScheduler({ main = true } = {}) {
       });
       if (retired) unlisten(); else reconnectUnlisten = unlisten;
     }).catch(() => {});
-    const observer = backupScheduler.observe?.({ present: main });
+    let observer = backupScheduler.observe?.({ present: main });
+    const probe = { detach() { observer?.(); observer = null; }, attach() { if (!retired && !observer) observer = backupScheduler.observe?.({ present: main }); } };
+    if (import.meta.env.VITE_E2E === '1') window.__BACKUP_UI_OBSERVER__ = probe;
     const markActive = () => {
       const now = Date.now(); if (now - keyAt < 1000) return;
       keyAt = activity = now; facts();
@@ -54,6 +56,7 @@ export function useBackupScheduler({ main = true } = {}) {
     window.addEventListener('beforeunload', retire);
     return () => {
       retire(); clearInterval(heartbeat); loading(); observer?.(); reconnectUnlisten?.();
+      if (window.__BACKUP_UI_OBSERVER__ === probe) delete window.__BACKUP_UI_OBSERVER__;
       events.forEach(e => document.removeEventListener(e, markActive));
       document.removeEventListener('mousemove', mouse);
       document.removeEventListener('visibilitychange', visibility);

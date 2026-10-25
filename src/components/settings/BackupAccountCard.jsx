@@ -83,6 +83,8 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   const activeBackup = useBackupStore(s => s.activeBackup);
   const queue = useBackupStore(s => s.queue);
   const nativeStatus = useBackupStore(s => s.nativeStatus);
+  const nativeError = useBackupStore(s => s.nativeError);
+  const uncertainNative = nativeError || (nativeStatus?.active?.accountId === account.id && nativeStatus.active.stage === 'uncertain');
   const pendingNative = nativeStatus?.pendingAccess?.some(i => i.accountId === account.id);
 
   const config = backupSchedules[account.id] || { enabled: false, interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1 };
@@ -341,6 +343,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
 
       {verificationSection}
 
+      {uncertainNative && <div role="status" className="text-xs text-mail-text-muted">{t('svc.backupScheduler.uncertain')}</div>}
       {pendingNative && <div role="status" className="text-xs text-mail-text-muted">{t('svc.backupScheduler.pendingAccess')}</div>}
       {state.lastStatus === 'failed' && state.lastError && (
         <div className="text-mail-danger text-xs">{state.lastError}</div>

@@ -1,14 +1,18 @@
 import { it, expect, vi, beforeEach, afterEach } from 'vitest';
 const host = vi.hoisted(() => ({ handlers: {}, view: null, reply: null, notify: vi.fn(), legacy: vi.fn(), unsub: vi.fn(), listeners: [], fail: false }));
 const send = vi.hoisted(() => vi.fn(async (method, params) => {
+  if (method !== 'backup.run_now' && host.query) return host.query();
   if (method === 'backup.run_now') {
+    if (host.kickoff) await host.kickoff;
     if (host.fail) { host.fail = false; throw new Error('timeout'); }
     return { runId: 'r', executionId: 'e', accountId: params.accountId, status: 'queued' };
   }
   return structuredClone(host.view);
 }));
 vi.mock('../../src/services/transport', () => ({ send }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async (name, cb) => { host.handlers[name] = cb; return host.unsub; }) }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async (name, cb) => { if (host.rejectListeners) throw new Error('listener fixture');
+    if (host.delayedListeners) await host.delayedListeners;
+    host.handlers[name] = cb; return host.unsub; }) }));
 vi.mock('../../src/services/api', () => ({ backupRunAccount: host.legacy, backupCancel: vi.fn(), sendNotification: vi.fn() }));
 vi.mock('../../src/services/authUtils', () => ({ hasValidCredentials: () => true, resolveServerAccount: async (_, a) => ({ ok: true, account: a }) }));
 vi.mock('../../src/services/snapshotService', () => ({ createSnapshotFromMaildir: vi.fn() }));
@@ -23,7 +27,8 @@ const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve()
 const emit = (name, payload) => host.handlers[name]?.({ payload });
 const terminal = (request, revision = 2, extra = {}) => ({ ...host.view, revision, requests: { [request]: { runId: 'r', executionId: 'e', accountId: 'one', status: 'success', result: { success: true, emails_backed_up: 3, errors: 0, external_copy_ok: true }, ...extra } } });
 beforeEach(async () => {
-  vi.resetModules(); vi.useFakeTimers(); send.mockClear(); host.legacy.mockReset(); host.notify.mockReset(); host.unsub.mockClear(); host.handlers = {}; host.fail = false;
+  vi.resetModules(); vi.useFakeTimers(); send.mockClear(); host.legacy.mockReset(); host.notify.mockReset(); host.unsub.mockClear(); host.handlers = {}; host.fail = false; host.query = null; host.kickoff = null; host.rejectListeners = false; host.delayedListeners = null;
+  store.activeBackup = null; store.queue = []; store.setActiveBackup.mockImplementation(value => { store.activeBackup = value; }); store.clearActiveBackup.mockImplementation(() => { store.activeBackup = null; });
   host.view = { accessIncarnation: 'inc', revision: 1, queue: [], active: null, pendingAccess: [], lastOutcomes: [], requests: {}, ready: true };
   scheduler = (await import('../../src/services/backupScheduler')).backupScheduler;
 });
@@ -63,4 +68,47 @@ it('settles success independently of rejected presentation and does not replay o
   const out = { intent: { runId: 'r', executionId: 'e', accountId: 'one', manual: true }, at: 42, status: 'success', result: { success: true, emails_backed_up: 3, external_copy_ok: true }, applied: true };
   host.view = { ...terminal(request), lastOutcomes: [out] }; emit('backup-schedule-changed', host.view); await flush();
   expect((await promise).status).toBe('success'); emit('daemon-reconnected', {}); await flush(); expect(host.notify).toHaveBeenCalledTimes(1); dispose?.();
+});
+
+it('settles a receipt that arrives before the accepted kickoff reply', async () => {
+  const dispose = scheduler.observe({ present: false }); await flush();
+  let release; host.kickoff = new Promise(done => { release = done; });
+  const promise = scheduler.triggerManualBackup('one'); await flush();
+  const request = send.mock.calls.find(([m]) => m === 'backup.run_now')[1].requestId;
+  emit('backup-schedule-changed', terminal(request, 3)); await flush();
+  expect((await promise).status).toBe('success'); release(); await flush(); dispose();
+});
+it('fences a stale query behind a new event and rechecks a changed incarnation', async () => {
+  const dispose = scheduler.observe({ present: false }); await flush();
+  const promise = scheduler.triggerManualBackup('one'); await flush();
+  const request = send.mock.calls.find(([m]) => m === 'backup.run_now')[1].requestId;
+  let release; host.query = () => new Promise(done => { release = done; });
+  emit('daemon-events-lagged', {}); await flush();
+  emit('backup-schedule-changed', { ...host.view, revision: 5 }); await flush();
+  host.query = null; host.view = { ...host.view, revision: 5 };
+  release(terminal(request, 2)); await flush(); let settled = false; promise.then(() => { settled = true; }); await flush(); expect(settled).toBe(false);
+  host.view = { ...host.view, accessIncarnation: 'new', revision: 0 };
+  emit('backup-schedule-changed', host.view); await flush();
+  emit('backup-schedule-changed', { ...terminal(request, 100), accessIncarnation: 'inc' }); await flush(); expect(settled).toBe(false);
+  emit('backup-schedule-changed', { ...terminal(request, 1), accessIncarnation: 'new' }); await flush(); expect(settled).toBe(true); dispose();
+});
+it('reconciles pending callers when listener installation rejects', async () => {
+  host.rejectListeners = true;
+  const promise = scheduler.triggerManualBackup('one'); await flush();
+  const request = send.mock.calls.find(([m]) => m === 'backup.run_now')[1].requestId;
+  host.view = terminal(request, 3); await vi.advanceTimersByTimeAsync(2000); await flush();
+  expect((await promise).status).toBe('success');
+});
+it('disposes listener registrations that finish after the last observer detaches', async () => {
+  let release; host.delayedListeners = new Promise(done => { release = done; });
+  const dispose = scheduler.observe({ present: false }); await flush(); dispose(); release(); await flush();
+  expect(host.unsub).toHaveBeenCalledTimes(4);
+});
+it('does not let a stale Done timer hide a new execution', async () => {
+  const dispose = scheduler.observe({ present: false }); await flush();
+  emit('backup-schedule-changed', { ...host.view, revision: 2, active: { accountId:'one',runId:'r',executionId:'e',stage:'running' } }); await flush();
+  const out = { intent:{accountId:'one',runId:'r',executionId:'e'},status:'success',applied:true,result:{success:true},at:42 };
+  emit('backup-schedule-changed', { ...host.view,revision:3,lastOutcomes:[out] }); await flush(); expect(store.activeBackup.done).toBe(true);
+  emit('backup-schedule-changed', { ...host.view,revision:4,active:{accountId:'one',runId:'r2',executionId:'e2',stage:'running'} });
+  await vi.advanceTimersByTimeAsync(3000); expect(store.activeBackup.executionId).toBe('e2'); dispose();
 });

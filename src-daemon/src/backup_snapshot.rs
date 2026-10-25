@@ -101,7 +101,7 @@ pub(super) async fn drive(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Resu
     }
     // Policy decisions are small settings/account reads, never the manifest scan.
     for index in 0..ledger.outcomes.len() {
-        if !ledger.outcomes[index].applied || !ledger.outcomes[index].snapshot.is_null() {
+        if !ledger.outcomes[index].applied || !(ledger.outcomes[index].snapshot.is_null() || ledger.outcomes[index].snapshot["status"] == "undecided") {
             continue;
         }
         let out = &ledger.outcomes[index];

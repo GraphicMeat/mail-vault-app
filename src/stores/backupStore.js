@@ -7,6 +7,7 @@ import { create } from 'zustand';
  */
 export const useBackupStore = create((set) => ({
   nativeStatus: null,
+  nativeError: null,
 
   // Active backup progress (for toast / sidebar display)
   activeBackup: null, // { accountId, accountEmail, folder, totalFolders, completedFolders, completedEmails, active, done, queueLength }

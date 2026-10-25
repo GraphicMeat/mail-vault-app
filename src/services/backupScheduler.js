@@ -28,6 +28,7 @@ function retryAmbiguous() {
   }
 }
 const presented = new Set();
+const presentedRuns = new Set();
 const keyOf = o => `${current?.accessIncarnation}/${o.intent?.runId}/${o.intent?.executionId}/${o.at}`;
 const hasHost = () => [...observers].some(o => o.present);
 const ignoreFailure = fn => { try { Promise.resolve(fn()).catch(() => {}); } catch { /* presentation cannot change a native result */ } };
@@ -41,7 +42,8 @@ function resultFor(receipt) {
 }
 function present(outcome) {
   if (!outcome.applied) return;
-  const key = keyOf(outcome); if (presented.has(key)) return; presented.add(key);
+  const key = keyOf(outcome); const stable = `${outcome.intent?.runId}/${outcome.intent?.executionId}/${outcome.at}`;
+  if (presented.has(key) || presentedRuns.has(stable)) return; presented.add(key); presentedRuns.add(stable);
   const result = resultFor(outcome); if (!result || !hasHost()) return;
   const settings = useSettingsStore.getState();
   const success = result.status === 'success';
@@ -94,7 +96,7 @@ function consume(view, query = false) {
   if (!view || !Number.isSafeInteger(view.revision) || typeof view.accessIncarnation !== 'string') return;
   if (current?.accessIncarnation !== view.accessIncarnation && !query) { void requestRefresh(); return; }
   if (current?.accessIncarnation === view.accessIncarnation && view.revision < current.revision) return;
-  current = view; project(view);
+  current = view; useBackupStore.setState({ nativeError: null }); project(view);
   if (hasHost() && !hostHydrated) {
     for (const out of view.lastOutcomes || []) presented.add(keyOf(out));
     hostHydrated = true;
@@ -121,7 +123,7 @@ function requestRefresh() {
         if (owner !== generation) return;
         if (eventAtStart !== eventGeneration) { refreshNeeded = true; continue; }
         consume(view, true);
-      } catch { /* reconnect or the pending-call observer retries */ }
+      } catch { if (owner === generation) useBackupStore.setState({ nativeError: 'unavailable' }); }
     }
   })().finally(() => { refresh = null; });
   return refresh;

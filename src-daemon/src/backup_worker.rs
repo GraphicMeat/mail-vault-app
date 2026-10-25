@@ -117,6 +117,8 @@ impl BackupState {
         } else {
             view["accessIncarnation"] = json!(self.access.incarnation);
             view["accessReceipts"] = self.access.receipts();
+            let facts = self.facts.lock().unwrap_or_else(|p|p.into_inner());
+            view["context"] = json!({"automaticEnabled":facts.automatic,"paused":facts.paused,"loading":facts.loading,"lastActivityAt":facts.last_activity});
             view
         }
     }
@@ -526,7 +528,7 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
                 terminal: None,
                 error: None,
                 applied: true,
-                snapshot: Value::Null,
+                snapshot: json!({"status":"not_due"}),
             };
             settle_requests(&mut ledger.requests, &out);
             ledger.outcomes.push(out);
@@ -921,7 +923,7 @@ async fn settle_cancelled(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Resu
             terminal: None,
             error: None,
             applied: true,
-            snapshot: Value::Null,
+            snapshot: json!({"status":"not_due"}),
         };
         settle_requests(&mut next.requests, &out);
         next.outcomes.push(out);
@@ -1419,7 +1421,7 @@ async fn finish_run(
             terminal,
             error,
             applied: false,
-            snapshot: Value::Null,
+            snapshot: json!({"status":"undecided"}),
         };
         next.outcomes.push(outcome);
     }
@@ -1428,6 +1430,12 @@ async fn finish_run(
 }
 async fn apply_retained(state: &Arc<DaemonState>, ledger: &mut Ledger) -> Result<(), String> {
     while let Some(index) = ledger.outcomes.iter().position(|out| !out.applied) {
+        if ledger.outcomes[index].snapshot.is_null() {
+            let mut next = ledger.clone();
+            next.outcomes[index].snapshot = json!({"status":"undecided"});
+            publish(state, &mut next).await?;
+            *ledger = next;
+        }
         let path = state.app_dir.clone();
         let outcome = ledger.outcomes[index].clone();
         let run = outcome.intent.run_id.clone();

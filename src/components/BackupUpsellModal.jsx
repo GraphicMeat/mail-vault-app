@@ -9,7 +9,7 @@ import { formatCount } from '../utils/formatCount';
 
 /**
  * Post-backup automation upsell. Shown once, right after a free user's first
- * successful manual backup (gated in backupScheduler._runBackup). Nudges toward
+ * successful manual backup (presented by the native backup observer). Nudges toward
  * the paid automatic-backup trial without ever having surfaced automation as
  * a locked feature beforehand.
  */

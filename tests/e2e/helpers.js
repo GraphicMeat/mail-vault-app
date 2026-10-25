@@ -617,8 +617,8 @@ export async function churnAccounts(stops) {
  * A terminal `backup-progress` frame in the shape the old blocking
  * `backup_run_account` used to return.
  *
- * Mirrors `terminalFrameToResult` in `src/services/backupScheduler.js` — the
- * app's own copy of this mapping, and the authority if the two ever disagree.
+ * Legacy manual-wrapper progress mapping. Native scheduler manual promises
+ * instead use exact retained request receipts; this helper does not schedule.
  * Duplicated rather than imported because that module pulls in the Zustand
  * stores, i18n and the Tauri API, none of which load in the wdio Node process.
  * Two fields are named for the progress frame they ride on rather than for

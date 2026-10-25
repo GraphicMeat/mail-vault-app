@@ -97,11 +97,13 @@ if (import.meta.env.VITE_E2E === '1') {
       return { status, error, progress: progress ? { loaded: progress.loaded, total: progress.total } : null };
     };
   });
-  // The scheduler itself, because "automatic backups are premium" is invisible
-  // from the DOM: a stored schedule looks identical whether or not the checker
-  // will ever act on it. The queue after a checkAndQueueDue() IS the assertion.
+  // Native scheduler controls/status only; no writable JavaScript engine.
   import('./services/backupScheduler').then(({ backupScheduler }) => {
-    window.__BACKUP_SCHEDULER__ = backupScheduler;
+    window.__BACKUP_SCHEDULER__ = Object.freeze({
+      status: () => backupScheduler.status(),
+      triggerManualBackup: id => backupScheduler.triggerManualBackup(id),
+      stopAll: () => backupScheduler.stopAll(),
+    });
   });
   // Below the stores: the two-process seam. `maildir_exists` and
   // `maildir_storage_stats` used to be answered by the daemon in a shape the
