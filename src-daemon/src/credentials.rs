@@ -294,11 +294,16 @@ pub(crate) struct RecordSnapshot {
 /// record, from the same read: the OAuth2 fields `ImapConfig` drops (refresh
 /// token, expiry, provider, client) for a caller that refreshes a token
 /// itself. The record holds secrets too: never log it.
-pub(crate) async fn resolve_account_with_record_guarded(account_id: &str) -> Result<(ImapConfig, RecordSnapshot), String> {
+pub(crate) async fn resolve_account_with_record_guarded(
+    account_id: &str,
+) -> Result<(ImapConfig, RecordSnapshot), String> {
     let generation = BLOB_READ.generation();
     let blob = guarded(CREDENTIALS_KEY, blob_read(may_prompt()), AI_KEY_TIMEOUT).await?;
     let account = account_from_blob(&blob, account_id)?;
-    let record = blob.get(account_id).and_then(|raw| serde_json::from_str(raw).ok()).unwrap_or(Value::Null);
+    let record = blob
+        .get(account_id)
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or(Value::Null);
     #[cfg(test)]
     crate::oauth_tokens::record_read_finished_for_test(account_id);
     Ok((account, RecordSnapshot { record, generation }))
@@ -307,11 +312,16 @@ pub(crate) async fn resolve_account_with_record_guarded(account_id: &str) -> Res
 /// `resolve_account_with_record_guarded` that never raises the keychain prompt
 /// (see `resolve_account_credentials_quiet`). The record holds secrets: never
 /// log it.
-pub(crate) async fn resolve_account_with_record_quiet(account_id: &str) -> Result<(ImapConfig, RecordSnapshot), String> {
+pub(crate) async fn resolve_account_with_record_quiet(
+    account_id: &str,
+) -> Result<(ImapConfig, RecordSnapshot), String> {
     let generation = BLOB_READ.generation();
     let blob = guarded(CREDENTIALS_KEY, blob_read(false), AI_KEY_TIMEOUT).await?;
     let account = account_from_blob(&blob, account_id)?;
-    let record = blob.get(account_id).and_then(|raw| serde_json::from_str(raw).ok()).unwrap_or(Value::Null);
+    let record = blob
+        .get(account_id)
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or(Value::Null);
     #[cfg(test)]
     crate::oauth_tokens::record_read_finished_for_test(account_id);
     Ok((account, RecordSnapshot { record, generation }))
@@ -373,25 +383,46 @@ impl TestSharedBlobRead {
         self.starts.fetch_add(1, SeqCst);
         let active = self.active.fetch_add(1, SeqCst) + 1;
         self.max_active.fetch_max(active, SeqCst);
-        struct Finish<'a>(&'a std::sync::atomic::AtomicUsize, Option<std::sync::mpsc::Sender<()>>);
+        struct Finish<'a>(
+            &'a std::sync::atomic::AtomicUsize,
+            Option<std::sync::mpsc::Sender<()>>,
+        );
         impl Drop for Finish<'_> {
             fn drop(&mut self) {
                 self.0.fetch_sub(1, SeqCst);
-                if let Some(done) = self.1.take() { let _ = done.send(()); }
+                if let Some(done) = self.1.take() {
+                    let _ = done.send(());
+                }
             }
         }
         let gate = self.gate.lock().unwrap_or_else(|e| e.into_inner()).take();
-        let done = if gate.is_some() { self.finished.lock().unwrap_or_else(|e| e.into_inner()).take() } else { None };
+        let done = if gate.is_some() {
+            self.finished
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+        } else {
+            None
+        };
         let _finish = Finish(&self.active, done);
         // The path is captured at fixture installation. Never consult env or
         // fall through to Entry, even if a caller unwinds while this is parked.
         let result = match std::fs::read_to_string(&self.path) {
-            Ok(raw) => serde_json::from_str(&raw).map(Some).map_err(|_| "invalid synthetic credential blob".to_string()),
+            Ok(raw) => serde_json::from_str(&raw)
+                .map(Some)
+                .map_err(|_| "invalid synthetic credential blob".to_string()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) => Err("synthetic credential read failed".to_string()),
         };
         if let Some(gate) = gate {
-            if let Some(captured) = self.captured.lock().unwrap_or_else(|e| e.into_inner()).take() { let _ = captured.send(()); }
+            if let Some(captured) = self
+                .captured
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+            {
+                let _ = captured.send(());
+            }
             let _ = gate.recv();
         }
         result
@@ -399,19 +430,33 @@ impl TestSharedBlobRead {
 }
 
 #[cfg(test)]
-pub(crate) static TEST_SHARED_BLOB_READ: std::sync::Mutex<Option<Arc<TestSharedBlobRead>>> = std::sync::Mutex::new(None);
+pub(crate) static TEST_SHARED_BLOB_READ: std::sync::Mutex<Option<Arc<TestSharedBlobRead>>> =
+    std::sync::Mutex::new(None);
 
 #[cfg(test)]
 fn test_shared_blob_read() -> Option<Arc<TestSharedBlobRead>> {
     let path = test_credentials_path()?;
-    TEST_SHARED_BLOB_READ.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|test| test.path == path).cloned()
+    TEST_SHARED_BLOB_READ
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .filter(|test| test.path == path)
+        .cloned()
 }
 
 #[cfg(test)]
 fn test_blob_join(flight: usize) {
-    if flight != &BLOB_READ as *const _ as usize { return; }
-    if let Some(test) = TEST_SHARED_BLOB_READ.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        if let Some(joined) = test.joined.lock().unwrap_or_else(|e| e.into_inner()).take() { let _ = joined.send(()); }
+    if flight != &BLOB_READ as *const _ as usize {
+        return;
+    }
+    if let Some(test) = TEST_SHARED_BLOB_READ
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        if let Some(joined) = test.joined.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = joined.send(());
+        }
     }
 }
 
@@ -432,7 +477,9 @@ pub(crate) struct TestTaskDone(pub std::sync::mpsc::Sender<()>);
 
 #[cfg(test)]
 impl Drop for TestTaskDone {
-    fn drop(&mut self) { let _ = self.0.send(()); }
+    fn drop(&mut self) {
+        let _ = self.0.send(());
+    }
 }
 
 fn blob_read(interactive: bool) -> BoxFuture<'static, Result<HashMap<String, String>, String>> {
@@ -450,7 +497,9 @@ fn blob_read(interactive: bool) -> BoxFuture<'static, Result<HashMap<String, Str
     BLOB_READ
         .read_since(since, interactive, move |interactive| {
             #[cfg(test)]
-            if let Some(test) = shared_test { return test.load(); }
+            if let Some(test) = shared_test {
+                return test.load();
+            }
             load_blob_raw(interactive)
         })
         .map(|r| {
@@ -588,7 +637,10 @@ impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
                     Some((out_interactive, started, shared)) => {
                         #[cfg(test)]
                         test_blob_join(self as *const Self as usize);
-                        ((*out_interactive || !interactive) && *started >= since, shared.clone())
+                        (
+                            (*out_interactive || !interactive) && *started >= since,
+                            shared.clone(),
+                        )
                     }
                     None => {
                         // Taken once: a caller that starts a read returns its result.
@@ -1437,9 +1489,11 @@ pub(crate) static TEST_WRITE_GATE: std::sync::Mutex<Option<std::sync::mpsc::Rece
     std::sync::Mutex::new(None);
 
 #[cfg(test)]
-pub(crate) static TEST_WRITE_ENTERED: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> = std::sync::Mutex::new(None);
+pub(crate) static TEST_WRITE_ENTERED: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> =
+    std::sync::Mutex::new(None);
 #[cfg(test)]
-pub(crate) static TEST_WRITE_FINISHED: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> = std::sync::Mutex::new(None);
+pub(crate) static TEST_WRITE_FINISHED: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> =
+    std::sync::Mutex::new(None);
 
 fn write_timeout() -> Duration {
     #[cfg(test)]
@@ -1470,9 +1524,15 @@ fn finish_credential_change(
         Ok(ids) if ids.is_empty() => Ok((ids, BLOB_READ.generation())),
         Ok(ids) => {
             let version = BLOB_READ.bump();
-            info!("[keychain] credentials changed for {} account(s)", ids.len());
+            info!(
+                "[keychain] credentials changed for {} account(s)",
+                ids.len()
+            );
             crate::handlers::oauth2::credentials_written(state);
-            state.events.emit(crate::handlers::credentials::CHANGED_EVENT, json!({"ids": ids, "version": version}));
+            state.events.emit(
+                crate::handlers::credentials::CHANGED_EVENT,
+                json!({"ids": ids, "version": version}),
+            );
             Ok((ids, version))
         }
         Err(CredError::WriteFailed) => {
@@ -1485,7 +1545,6 @@ fn finish_credential_change(
         Err(error) => Err(error),
     }
 }
-
 
 /// Applies `change` to the stored blob. `Ok((ids, version))`: the ids it
 /// changed (none: nothing was written) and the write generation after it.
@@ -1536,7 +1595,9 @@ pub(crate) async fn change_credentials(
     let mut task = tokio::task::spawn_blocking(job);
     let finished = tokio::time::timeout(write_timeout(), &mut task).await;
     match finished {
-        Ok(result) => finish_credential_change(state, result.unwrap_or(Err(CredError::WriteFailed))),
+        Ok(result) => {
+            finish_credential_change(state, result.unwrap_or(Err(CredError::WriteFailed)))
+        }
         Err(_) => {
             warn!("[keychain] the credentials write did not finish in time; changes wait until it returns");
             WRITE_PARKED.store(true, SeqCst);
@@ -1547,7 +1608,11 @@ pub(crate) async fn change_credentials(
                 WRITE_PARKED.store(false, SeqCst);
                 drop(held);
                 #[cfg(test)]
-                if let Some(done) = TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                if let Some(done) = TEST_WRITE_FINISHED
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .take()
+                {
                     let _ = done.send(());
                 }
             });
@@ -1576,7 +1641,11 @@ fn change_test_file(path: &std::path::Path, change: &CredChange) -> Result<Vec<S
             .unwrap_or_else(|e| e.into_inner())
             .take();
         if let Some(gate) = gate {
-            if let Some(entered) = TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            if let Some(entered) = TEST_WRITE_ENTERED
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+            {
                 let _ = entered.send(());
             }
             let _ = gate.recv();
@@ -1672,24 +1741,38 @@ pub(crate) struct TestWritePause {
 #[cfg(test)]
 impl TestWritePause {
     pub(crate) fn arm() -> Self {
-        use crate::credentials::{TEST_WRITE_ENTERED, TEST_WRITE_FINISHED, TEST_WRITE_GATE, TEST_WRITE_TIMEOUT_MS};
+        use crate::credentials::{
+            TEST_WRITE_ENTERED, TEST_WRITE_FINISHED, TEST_WRITE_GATE, TEST_WRITE_TIMEOUT_MS,
+        };
         let (release, gate) = std::sync::mpsc::channel();
         let (started, entered) = std::sync::mpsc::channel();
         let (finished, done) = std::sync::mpsc::channel();
         *TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(gate);
         *TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()) = Some(started);
-        *TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()) = Some(finished);
+        *TEST_WRITE_FINISHED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(finished);
         TEST_WRITE_TIMEOUT_MS.store(300, std::sync::atomic::Ordering::SeqCst);
-        Self { release: Some(release), entered, done: Some(done) }
+        Self {
+            release: Some(release),
+            entered,
+            done: Some(done),
+        }
     }
 
     pub(crate) fn wait_until_entered(&self) {
-        self.entered.recv_timeout(Duration::from_secs(5)).expect("the synthetic write entered its gate");
+        self.entered
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the synthetic write entered its gate");
     }
 
     pub(crate) fn finish(&mut self) {
         self.release.take();
-        self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5)).expect("terminal completion and exclusion release");
+        self.done
+            .as_ref()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(5))
+            .expect("terminal completion and exclusion release");
         self.done.take();
     }
 }
@@ -1700,17 +1783,27 @@ impl Drop for TestWritePause {
         self.release.take();
         if let Some(done) = self.done.take() {
             if done.recv_timeout(Duration::from_secs(5)).is_err() {
-                eprintln!("credential test could not drain its blocking write; refusing fixture teardown");
+                eprintln!(
+                    "credential test could not drain its blocking write; refusing fixture teardown"
+                );
                 std::process::abort();
             }
         }
         crate::credentials::TEST_WRITE_TIMEOUT_MS.store(0, std::sync::atomic::Ordering::SeqCst);
-        crate::credentials::TEST_WRITE_GATE.lock().unwrap_or_else(|e| e.into_inner()).take();
-        crate::credentials::TEST_WRITE_ENTERED.lock().unwrap_or_else(|e| e.into_inner()).take();
-        crate::credentials::TEST_WRITE_FINISHED.lock().unwrap_or_else(|e| e.into_inner()).take();
+        crate::credentials::TEST_WRITE_GATE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        crate::credentials::TEST_WRITE_ENTERED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        crate::credentials::TEST_WRITE_FINISHED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
     }
 }
-
 
 #[cfg(test)]
 pub(crate) struct TestEnvRestore(Vec<(&'static str, Option<std::ffi::OsString>)>);

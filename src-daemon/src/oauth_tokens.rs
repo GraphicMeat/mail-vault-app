@@ -80,7 +80,11 @@ pub(crate) enum FailKind {
 }
 
 fn stale_snapshot() -> TokenError {
-    TokenError { kind: FailKind::Unreadable, message: "Stored credentials changed during this request. Try again.".to_string(), fallback: None }
+    TokenError {
+        kind: FailKind::Unreadable,
+        message: "Stored credentials changed during this request. Try again.".to_string(),
+        fallback: None,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -263,7 +267,10 @@ impl TokenStore {
     /// Epoch ms: the system clock, moved by a test in a debug build.
     pub(crate) fn now(&self) -> i64 {
         #[cfg(debug_assertions)]
-        return now_ms() + self.clock_offset_ms.load(std::sync::atomic::Ordering::SeqCst);
+        return now_ms()
+            + self
+                .clock_offset_ms
+                .load(std::sync::atomic::Ordering::SeqCst);
         #[cfg(not(debug_assertions))]
         now_ms()
     }
@@ -271,7 +278,8 @@ impl TokenStore {
     /// Debug builds only: move this store's clock forward (tests).
     #[cfg(debug_assertions)]
     pub(crate) fn advance_clock_for_tests(&self, by: Duration) {
-        self.clock_offset_ms.fetch_add(by.as_millis() as i64, std::sync::atomic::Ordering::SeqCst);
+        self.clock_offset_ms
+            .fetch_add(by.as_millis() as i64, std::sync::atomic::Ordering::SeqCst);
     }
 
     fn entries(&self) -> std::sync::MutexGuard<'_, HashMap<String, Entry>> {
@@ -286,16 +294,25 @@ impl TokenStore {
     /// The held token, when it is good past the margin and the stored record
     /// was read since the app last wrote. No I/O: the hot path.
     fn cached(&self, account_id: &str, now: i64) -> Option<String> {
-        self.entries().get(account_id).filter(|e| e.checked && !e.needs_refresh(now)).map(|e| e.access_token.clone())
+        self.entries()
+            .get(account_id)
+            .filter(|e| e.checked && !e.needs_refresh(now))
+            .map(|e| e.access_token.clone())
     }
 
     /// Lay a just-read record over the held entry: the later expiry wins. A
     /// record the daemon does not manage (or none) drops the entry.
-    fn reconcile(&self, account_id: &str, snapshot: &credentials::RecordSnapshot) -> Result<Option<Entry>, TokenError> {
+    fn reconcile(
+        &self,
+        account_id: &str,
+        snapshot: &credentials::RecordSnapshot,
+    ) -> Result<Option<Entry>, TokenError> {
         #[cfg(test)]
         tests::before_publication(account_id);
         let mut entries = self.entries();
-        if snapshot.generation != credentials::write_generation() { return Err(stale_snapshot()); }
+        if snapshot.generation != credentials::write_generation() {
+            return Err(stale_snapshot());
+        }
         let record = &snapshot.record;
         let Some((grant, access_token, expires_at)) = grant_of(record) else {
             entries.remove(account_id);
@@ -395,20 +412,43 @@ impl TokenStore {
 
     /// The address the held token was issued for.
     fn email(&self, account_id: &str) -> Option<String> {
-        self.entries().get(account_id).map(|e| e.grant.email.clone())
+        self.entries()
+            .get(account_id)
+            .map(|e| e.grant.email.clone())
     }
 
     fn unsaved_ids(&self) -> Vec<String> {
-        self.entries().iter().filter(|(_, e)| e.unsaved).map(|(id, _)| id.clone()).collect()
+        self.entries()
+            .iter()
+            .filter(|(_, e)| e.unsaved)
+            .map(|(id, _)| id.clone())
+            .collect()
     }
 
-    fn store_refresh(&self, account_id: &str, grant: &Grant, access_token: String, refresh_token: Option<String>, expires_at: i64, generation: u64, events: &crate::events::EventBus) -> Result<(), TokenError> {
+    fn store_refresh(
+        &self,
+        account_id: &str,
+        grant: &Grant,
+        access_token: String,
+        refresh_token: Option<String>,
+        expires_at: i64,
+        generation: u64,
+        events: &crate::events::EventBus,
+    ) -> Result<(), TokenError> {
         let now = self.now();
         let mut entries = self.entries();
-        if generation != credentials::write_generation() { return Err(stale_snapshot()); }
-        let Some(entry) = entries.get_mut(account_id) else { return Err(stale_snapshot()) };
+        if generation != credentials::write_generation() {
+            return Err(stale_snapshot());
+        }
+        let Some(entry) = entries.get_mut(account_id) else {
+            return Err(stale_snapshot());
+        };
         if entry.rejected {
-            let wait = if entry.rejection_backoff.is_zero() { REJECTION_BACKOFF } else { (entry.rejection_backoff * 2).min(REJECTION_BACKOFF_CAP) };
+            let wait = if entry.rejection_backoff.is_zero() {
+                REJECTION_BACKOFF
+            } else {
+                (entry.rejection_backoff * 2).min(REJECTION_BACKOFF_CAP)
+            };
             entry.rejection_backoff = wait;
             entry.rejection_quiet_until = Some(now + wait.as_millis() as i64);
         }
@@ -431,11 +471,23 @@ impl TokenStore {
         Ok(())
     }
 
-    fn store_failure(&self, account_id: &str, kind: FailKind, message: &str, generation: u64) -> Result<(), TokenError> {
-        let wait = if kind == FailKind::Refused { REFUSED_COOLDOWN } else { UNANSWERED_COOLDOWN };
+    fn store_failure(
+        &self,
+        account_id: &str,
+        kind: FailKind,
+        message: &str,
+        generation: u64,
+    ) -> Result<(), TokenError> {
+        let wait = if kind == FailKind::Refused {
+            REFUSED_COOLDOWN
+        } else {
+            UNANSWERED_COOLDOWN
+        };
         let now = self.now();
         let mut entries = self.entries();
-        if generation != credentials::write_generation() { return Err(stale_snapshot()); }
+        if generation != credentials::write_generation() {
+            return Err(stale_snapshot());
+        }
         if let Some(entry) = entries.get_mut(account_id) {
             entry.cooldown = Some((now + wait.as_millis() as i64, kind, message.to_string()));
         }
@@ -443,7 +495,10 @@ impl TokenStore {
     }
 }
 
-async fn read_record(account_id: &str, read: Read) -> Result<(ImapConfig, credentials::RecordSnapshot), String> {
+async fn read_record(
+    account_id: &str,
+    read: Read,
+) -> Result<(ImapConfig, credentials::RecordSnapshot), String> {
     #[cfg(test)]
     tests::record_credential_lookup(account_id);
     let result = match read {
@@ -474,22 +529,41 @@ pub(crate) async fn access_token(state: &DaemonState, account_id: &str, read: Re
 }
 
 /// `access_token` for a caller that has just read the record itself.
-pub(crate) async fn for_record(state: &DaemonState, account_id: &str, record: &credentials::RecordSnapshot) -> Result<Option<String>, TokenError> {
+pub(crate) async fn for_record(
+    state: &DaemonState,
+    account_id: &str,
+    record: &credentials::RecordSnapshot,
+) -> Result<Option<String>, TokenError> {
     let flight = state.tokens.flight(account_id);
     let _one_refresh = flight.lock().await;
     // A refresh that finished while this caller waited wins here: its expiry
     // is later than the record this caller read.
-    let Some(entry) = state.tokens.reconcile(account_id, record)? else { return Ok(unrefreshable_token(&record.record)) };
+    let Some(entry) = state.tokens.reconcile(account_id, record)? else {
+        return Ok(unrefreshable_token(&record.record));
+    };
     let now = state.tokens.now();
     if !entry.needs_refresh(now) {
         return Ok(Some(entry.access_token));
     }
-    if let Some((until, kind, message)) = entry.cooldown.clone().filter(|(until, ..)| now < *until) {
+    if let Some((until, kind, message)) = entry.cooldown.clone().filter(|(until, ..)| now < *until)
+    {
         let _ = until;
-        return if entry.still_valid(now) { Ok(Some(entry.access_token)) } else { Err(entry.failure(kind, message)) };
+        return if entry.still_valid(now) {
+            Ok(Some(entry.access_token))
+        } else {
+            Err(entry.failure(kind, message))
+        };
     }
     let config = serde_json::from_value::<ImapConfig>(record.record.clone()).ok();
-    refresh(state, account_id, entry, now, config.as_ref(), record.generation).await
+    refresh(
+        state,
+        account_id,
+        entry,
+        now,
+        config.as_ref(),
+        record.generation,
+    )
+    .await
 }
 
 async fn refresh(
@@ -526,21 +600,38 @@ async fn refresh(
             }
             // Retiring sessions can await; publish only after it, then emit
             // under the same short cache critical section as invalidation.
-            state.tokens.store_refresh(account_id, grant, tokens.access_token, tokens.refresh_token, expires_at, generation, &state.events)?;
+            state.tokens.store_refresh(
+                account_id,
+                grant,
+                tokens.access_token,
+                tokens.refresh_token,
+                expires_at,
+                generation,
+                &state.events,
+            )?;
             info!("[oauth] refreshed the access token of {}", grant.email);
             return Ok(Some(token));
         }
         Ok(_) => "the refresh returned no token".to_string(),
         Err(e) => e,
     };
-    let kind = if renewal_unanswered(&failure) { FailKind::Unanswered } else { FailKind::Refused };
+    let kind = if renewal_unanswered(&failure) {
+        FailKind::Unanswered
+    } else {
+        FailKind::Refused
+    };
     let message = scrub(&failure, &[&grant.refresh_token, &entry.access_token]);
-    state.tokens.store_failure(account_id, kind, &message, generation)?;
+    state
+        .tokens
+        .store_failure(account_id, kind, &message, generation)?;
     if entry.still_valid(now) {
         warn!("[oauth] could not refresh the token of {}: {message}; using the stored one, still valid", grant.email);
         return Ok(Some(entry.access_token));
     }
-    warn!("[oauth] the token of {} has expired and could not be refreshed: {message}", grant.email);
+    warn!(
+        "[oauth] the token of {} has expired and could not be refreshed: {message}",
+        grant.email
+    );
     Err(entry.failure(kind, message))
 }
 
@@ -554,7 +645,9 @@ pub(crate) async fn fresh_config(
 ) -> Result<ImapConfig, TokenError> {
     if !config.is_oauth2() {
         let _entries = state.tokens.entries();
-        if record.generation != credentials::write_generation() { return Err(stale_snapshot()); }
+        if record.generation != credentials::write_generation() {
+            return Err(stale_snapshot());
+        }
         return Ok(config);
     }
     if let Some(token) = for_record(state, account_id, record).await? {
@@ -567,23 +660,35 @@ pub(crate) async fn fresh_config(
 /// `credentials::resolve_account_*` readers return, for a caller that sends
 /// with it. A refresh that failed leaves the newest token held in it, as the
 /// app did: the server's refusal is what the caller reports.
-pub(crate) async fn resolve(state: &DaemonState, account_id: &str, read: Read) -> Result<ImapConfig, String> {
+pub(crate) async fn resolve(
+    state: &DaemonState,
+    account_id: &str,
+    read: Read,
+) -> Result<ImapConfig, String> {
     let (config, record) = read_record(account_id, read).await?;
-    Ok(match fresh_config(state, account_id, config.clone(), &record).await {
-        Ok(fresh) => fresh,
-        Err(TokenError { kind: FailKind::Unreadable, message, fallback: None }) => return Err(message),
-        Err(e) => {
-            let mut stale = config;
-            if e.fallback.is_some() {
-                stale.access_token = e.fallback;
+    Ok(
+        match fresh_config(state, account_id, config.clone(), &record).await {
+            Ok(fresh) => fresh,
+            Err(TokenError {
+                kind: FailKind::Unreadable,
+                message,
+                fallback: None,
+            }) => return Err(message),
+            Err(e) => {
+                let mut stale = config;
+                if e.fallback.is_some() {
+                    stale.access_token = e.fallback;
+                }
+                stale
             }
-            stale
-        }
-    })
+        },
+    )
 }
 
 #[cfg(test)]
-pub(crate) fn record_read_finished_for_test(id: &str) { tests::record_read_finished(id); }
+pub(crate) fn record_read_finished_for_test(id: &str) {
+    tests::record_read_finished(id);
+}
 
 #[cfg(test)]
 pub(crate) struct TestRecordReadPause {
@@ -597,17 +702,29 @@ impl TestRecordReadPause {
         let (release, gate) = std::sync::mpsc::channel();
         let (entered, notice) = std::sync::mpsc::channel();
         tests::install_record_pause(id, entered, gate);
-        Self { id: id.into(), release: Some(release), entered: notice }
+        Self {
+            id: id.into(),
+            release: Some(release),
+            entered: notice,
+        }
     }
-    pub(crate) fn wait(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("stored snapshot captured"); }
+    pub(crate) fn wait(&self) {
+        self.entered
+            .recv_timeout(Duration::from_secs(5))
+            .expect("stored snapshot captured");
+    }
 }
 #[cfg(test)]
 impl Drop for TestRecordReadPause {
-    fn drop(&mut self) { self.release.take(); tests::clear_record_pause(&self.id); }
+    fn drop(&mut self) {
+        self.release.take();
+        tests::clear_record_pause(&self.id);
+    }
 }
 
 #[cfg(test)]
-pub(crate) static TEST_RECHECK_DONE: Mutex<Option<(usize, std::sync::mpsc::Sender<()>)>> = Mutex::new(None);
+pub(crate) static TEST_RECHECK_DONE: Mutex<Option<(usize, std::sync::mpsc::Sender<()>)>> =
+    Mutex::new(None);
 
 #[cfg(test)]
 pub(crate) struct RecheckCompletion(std::sync::mpsc::Sender<()>);
@@ -624,13 +741,15 @@ impl Drop for RecheckCompletion {
 #[cfg(test)]
 pub(crate) fn recheck_completion_for_test(state: &Arc<DaemonState>) -> Option<RecheckCompletion> {
     let mut hook = TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
-    if hook.as_ref().is_some_and(|(owner, _)| *owner == Arc::as_ptr(state) as usize) {
+    if hook
+        .as_ref()
+        .is_some_and(|(owner, _)| *owner == Arc::as_ptr(state) as usize)
+    {
         hook.take().map(|(_, done)| RecheckCompletion(done))
     } else {
         None
     }
 }
-
 
 /// After the app wrote credentials: read the record of every account with a
 /// refreshed pair not yet seen stored, quietly, so `unsaved` stops offering
@@ -882,7 +1001,11 @@ mod tests {
         (LookupTrap(id.into()), count)
     }
 
-    type ReadHook = (String, std::sync::mpsc::Sender<()>, Option<std::sync::mpsc::Receiver<()>>);
+    type ReadHook = (
+        String,
+        std::sync::mpsc::Sender<()>,
+        Option<std::sync::mpsc::Receiver<()>>,
+    );
     static RECORD_READ_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static PUBLICATION_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static REFRESH_RESULT_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
@@ -890,23 +1013,42 @@ mod tests {
     fn run_read_hook(hook: &Mutex<Option<ReadHook>>, id: &str) {
         let taken = {
             let mut held = hook.lock().unwrap_or_else(|e| e.into_inner());
-            if held.as_ref().is_some_and(|(owner, _, _)| owner == id) { held.take() } else { None }
+            if held.as_ref().is_some_and(|(owner, _, _)| owner == id) {
+                held.take()
+            } else {
+                None
+            }
         };
         if let Some((_, entered, gate)) = taken {
             let _ = entered.send(());
-            if let Some(gate) = gate { let _ = gate.recv(); }
+            if let Some(gate) = gate {
+                let _ = gate.recv();
+            }
         }
     }
-    pub(super) fn install_record_pause(id: &str, entered: std::sync::mpsc::Sender<()>, gate: std::sync::mpsc::Receiver<()>) {
-        *RECORD_READ_HOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some((id.into(), entered, Some(gate)));
+    pub(super) fn install_record_pause(
+        id: &str,
+        entered: std::sync::mpsc::Sender<()>,
+        gate: std::sync::mpsc::Receiver<()>,
+    ) {
+        *RECORD_READ_HOOK.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some((id.into(), entered, Some(gate)));
     }
     pub(super) fn clear_record_pause(id: &str) {
         let mut hook = RECORD_READ_HOOK.lock().unwrap_or_else(|e| e.into_inner());
-        if hook.as_ref().is_some_and(|(owner, _, _)| owner == id) { hook.take(); }
+        if hook.as_ref().is_some_and(|(owner, _, _)| owner == id) {
+            hook.take();
+        }
     }
-    pub(super) fn record_read_finished(id: &str) { run_read_hook(&RECORD_READ_HOOK, id); }
-    pub(super) fn before_publication(id: &str) { run_read_hook(&PUBLICATION_HOOK, id); }
-    pub(super) fn before_refresh_publication(id: &str) { run_read_hook(&REFRESH_RESULT_HOOK, id); }
+    pub(super) fn record_read_finished(id: &str) {
+        run_read_hook(&RECORD_READ_HOOK, id);
+    }
+    pub(super) fn before_publication(id: &str) {
+        run_read_hook(&PUBLICATION_HOOK, id);
+    }
+    pub(super) fn before_refresh_publication(id: &str) {
+        run_read_hook(&REFRESH_RESULT_HOOK, id);
+    }
 
     struct FreshRig {
         _dir: tempfile::TempDir,
@@ -923,193 +1065,442 @@ mod tests {
 
     impl FreshRig {
         fn new(record: Value) -> Self {
-            let env = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+            let env = credentials::test_env_lock()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             let restore = credentials::TestEnvRestore::capture();
             let dir = tempfile::tempdir().unwrap();
-            let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+            let state =
+                DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
             store(&state, &[("g", &record)]);
-            Self { _dir:dir, state, releases:vec![], tasks:vec![], write:None, shared:None, shared_done:None, quiet_done:None, _restore:restore, _env:env }
+            Self {
+                _dir: dir,
+                state,
+                releases: vec![],
+                tasks: vec![],
+                write: None,
+                shared: None,
+                shared_done: None,
+                quiet_done: None,
+                _restore: restore,
+                _env: env,
+            }
         }
-        fn spawn<T: Send + 'static>(&mut self, future: impl std::future::Future<Output=T> + Send + 'static) -> std::sync::mpsc::Receiver<T> {
+        fn spawn<T: Send + 'static>(
+            &mut self,
+            future: impl std::future::Future<Output = T> + Send + 'static,
+        ) -> std::sync::mpsc::Receiver<T> {
             let (result, receiver) = std::sync::mpsc::channel();
             let (done, completion) = std::sync::mpsc::channel();
             let guard = credentials::TestTaskDone(done);
-            let task = tokio::spawn(async move { let _guard = guard; let value = future.await; let _ = result.send(value); });
+            let task = tokio::spawn(async move {
+                let _guard = guard;
+                let value = future.await;
+                let _ = result.send(value);
+            });
             self.tasks.push((task, completion));
             receiver
         }
         fn access(&mut self) -> std::sync::mpsc::Receiver<Result<Option<String>, TokenError>> {
-            let state=Arc::clone(&self.state);
-            self.spawn(async move { access_token(&state,"g",Read::Quiet).await })
+            let state = Arc::clone(&self.state);
+            self.spawn(async move { access_token(&state, "g", Read::Quiet).await })
         }
-        fn request(&mut self, method: &'static str, params: Value) -> std::sync::mpsc::Receiver<crate::ipc::RpcResponse> {
-            let state=Arc::clone(&self.state);
-            self.spawn(async move { crate::server::handle_request_for_test(&state,method,params).await })
+        fn request(
+            &mut self,
+            method: &'static str,
+            params: Value,
+        ) -> std::sync::mpsc::Receiver<crate::ipc::RpcResponse> {
+            let state = Arc::clone(&self.state);
+            self.spawn(async move {
+                crate::server::handle_request_for_test(&state, method, params).await
+            })
         }
         fn shared_pause(&mut self) -> std::sync::mpsc::Receiver<()> {
-            let (release,gate)=std::sync::mpsc::channel();
-            let (captured,read)=std::sync::mpsc::channel();
-            let (finished,done)=std::sync::mpsc::channel();
-            let control=Arc::new(credentials::TestSharedBlobRead {
-                path:self.state.app_dir.join("credentials.json"), gate:Mutex::new(Some(gate)), captured:Mutex::new(Some(captured)), finished:Mutex::new(Some(finished)), joined:Mutex::new(None), starts:0.into(),active:0.into(),max_active:0.into(),
+            let (release, gate) = std::sync::mpsc::channel();
+            let (captured, read) = std::sync::mpsc::channel();
+            let (finished, done) = std::sync::mpsc::channel();
+            let control = Arc::new(credentials::TestSharedBlobRead {
+                path: self.state.app_dir.join("credentials.json"),
+                gate: Mutex::new(Some(gate)),
+                captured: Mutex::new(Some(captured)),
+                finished: Mutex::new(Some(finished)),
+                joined: Mutex::new(None),
+                starts: 0.into(),
+                active: 0.into(),
+                max_active: 0.into(),
             });
-            *credentials::TEST_SHARED_BLOB_READ.lock().unwrap_or_else(|e|e.into_inner())=Some(Arc::clone(&control));
-            self.shared=Some(control);self.shared_done=Some(done);self.releases.push(release);read
+            *credentials::TEST_SHARED_BLOB_READ
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&control));
+            self.shared = Some(control);
+            self.shared_done = Some(done);
+            self.releases.push(release);
+            read
         }
         fn join_notice(&self) -> std::sync::mpsc::Receiver<()> {
-            let (joined,notice)=std::sync::mpsc::channel();
-            *self.shared.as_ref().unwrap().joined.lock().unwrap_or_else(|e|e.into_inner())=Some(joined);notice
+            let (joined, notice) = std::sync::mpsc::channel();
+            *self
+                .shared
+                .as_ref()
+                .unwrap()
+                .joined
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(joined);
+            notice
         }
-        fn hook(&mut self, target: &Mutex<Option<ReadHook>>, gated: bool) -> std::sync::mpsc::Receiver<()> {
-            let (entered,notice)=std::sync::mpsc::channel();
-            let gate=if gated { let (release,gate)=std::sync::mpsc::channel();self.releases.push(release);Some(gate) } else {None};
-            *target.lock().unwrap_or_else(|e|e.into_inner())=Some(("g".into(),entered,gate));notice
+        fn hook(
+            &mut self,
+            target: &Mutex<Option<ReadHook>>,
+            gated: bool,
+        ) -> std::sync::mpsc::Receiver<()> {
+            let (entered, notice) = std::sync::mpsc::channel();
+            let gate = if gated {
+                let (release, gate) = std::sync::mpsc::channel();
+                self.releases.push(release);
+                Some(gate)
+            } else {
+                None
+            };
+            *target.lock().unwrap_or_else(|e| e.into_inner()) = Some(("g".into(), entered, gate));
+            notice
         }
-        fn release_all(&mut self) { self.releases.clear(); }
+        fn release_all(&mut self) {
+            self.releases.clear();
+        }
         fn quiet_notice(&mut self) {
-            let (done,notice)=std::sync::mpsc::channel();
-            *TEST_RECHECK_DONE.lock().unwrap_or_else(|e|e.into_inner())=Some((Arc::as_ptr(&self.state) as usize,done));self.quiet_done=Some(notice);
+            let (done, notice) = std::sync::mpsc::channel();
+            *TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some((Arc::as_ptr(&self.state) as usize, done));
+            self.quiet_done = Some(notice);
         }
-        fn finish_quiet(&mut self) { recv(self.quiet_done.as_ref().unwrap());self.quiet_done.take(); }
+        fn finish_quiet(&mut self) {
+            recv(self.quiet_done.as_ref().unwrap());
+            self.quiet_done.take();
+        }
     }
-    fn recv<T>(receiver:&std::sync::mpsc::Receiver<T>)->T { receiver.recv_timeout(Duration::from_secs(5)).expect("synthetic task/barrier completion") }
-    fn stale(result: &Result<Option<String>,TokenError>)->bool { matches!(result,Err(TokenError{kind:FailKind::Unreadable,fallback:None,..})) }
-    fn fresh_grant(rt:&str,token:&str)->Value { gmail(json!({"id":"g","oauth2RefreshToken":rt,"oauth2AccessToken":token,"oauth2ExpiresAt":now_ms()+3_600_000})) }
-    fn changed_request(record:&Value,delete:bool)->(&'static str,Value) { if delete {("credentials.delete",json!({"ids":["g"]}))}else{("credentials.save",json!({"records":{"g":record.to_string()}}))} }
+    fn recv<T>(receiver: &std::sync::mpsc::Receiver<T>) -> T {
+        receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("synthetic task/barrier completion")
+    }
+    fn stale(result: &Result<Option<String>, TokenError>) -> bool {
+        matches!(
+            result,
+            Err(TokenError {
+                kind: FailKind::Unreadable,
+                fallback: None,
+                ..
+            })
+        )
+    }
+    fn fresh_grant(rt: &str, token: &str) -> Value {
+        gmail(
+            json!({"id":"g","oauth2RefreshToken":rt,"oauth2AccessToken":token,"oauth2ExpiresAt":now_ms()+3_600_000}),
+        )
+    }
+    fn changed_request(record: &Value, delete: bool) -> (&'static str, Value) {
+        if delete {
+            ("credentials.delete", json!({"ids":["g"]}))
+        } else {
+            (
+                "credentials.save",
+                json!({"records":{"g":record.to_string()}}),
+            )
+        }
+    }
 
     impl Drop for FreshRig {
         fn drop(&mut self) {
             self.release_all();
             self.write.take();
-            for (_,done) in self.tasks.drain(..) {
-                if done.recv_timeout(Duration::from_secs(5)).is_err() { eprintln!("freshness test tasks did not drain");std::process::abort(); }
+            for (_, done) in self.tasks.drain(..) {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() {
+                    eprintln!("freshness test tasks did not drain");
+                    std::process::abort();
+                }
             }
-            if let Some(done)=self.shared_done.take() {
-                if self.shared.as_ref().is_some_and(|s|s.starts.load(std::sync::atomic::Ordering::SeqCst)>0) && done.recv_timeout(Duration::from_secs(5)).is_err() { eprintln!("synthetic backend read did not drain");std::process::abort(); }
+            if let Some(done) = self.shared_done.take() {
+                if self
+                    .shared
+                    .as_ref()
+                    .is_some_and(|s| s.starts.load(std::sync::atomic::Ordering::SeqCst) > 0)
+                    && done.recv_timeout(Duration::from_secs(5)).is_err()
+                {
+                    eprintln!("synthetic backend read did not drain");
+                    std::process::abort();
+                }
             }
-            if let Some(done)=self.quiet_done.take() {
-                let unused={let mut hook=TEST_RECHECK_DONE.lock().unwrap_or_else(|e|e.into_inner());if hook.as_ref().is_some_and(|(owner,_)|*owner==Arc::as_ptr(&self.state) as usize){hook.take();true}else{false}};
-                if !unused && done.recv_timeout(Duration::from_secs(5)).is_err() {eprintln!("freshness quiet recheck did not drain");std::process::abort();}
+            if let Some(done) = self.quiet_done.take() {
+                let unused = {
+                    let mut hook = TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
+                    if hook
+                        .as_ref()
+                        .is_some_and(|(owner, _)| *owner == Arc::as_ptr(&self.state) as usize)
+                    {
+                        hook.take();
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if !unused && done.recv_timeout(Duration::from_secs(5)).is_err() {
+                    eprintln!("freshness quiet recheck did not drain");
+                    std::process::abort();
+                }
             }
-            credentials::TEST_SHARED_BLOB_READ.lock().unwrap_or_else(|e|e.into_inner()).take();
-            RECORD_READ_HOOK.lock().unwrap_or_else(|e|e.into_inner()).take();
-            PUBLICATION_HOOK.lock().unwrap_or_else(|e|e.into_inner()).take();
-            REFRESH_RESULT_HOOK.lock().unwrap_or_else(|e|e.into_inner()).take();
+            credentials::TEST_SHARED_BLOB_READ
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            RECORD_READ_HOOK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            PUBLICATION_HOOK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            REFRESH_RESULT_HOOK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
         }
     }
 
-    async fn post_completion_join(delete:bool) {
+    async fn post_completion_join(delete: bool) {
         use std::sync::atomic::Ordering::SeqCst;
-        let old=fresh_grant("synthetic-old-grant","synthetic-old-token");
-        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
-        let mut rig=FreshRig::new(old);
-        let captured=rig.shared_pause();
-        rig.write=Some(credentials::TestWritePause::arm());
-        let (method,params)=changed_request(&new,delete);
-        let write=rig.request(method,params);
+        let old = fresh_grant("synthetic-old-grant", "synthetic-old-token");
+        let new = fresh_grant("synthetic-new-grant", "synthetic-new-token");
+        let mut rig = FreshRig::new(old);
+        let captured = rig.shared_pause();
+        rig.write = Some(credentials::TestWritePause::arm());
+        let (method, params) = changed_request(&new, delete);
+        let write = rig.request(method, params);
         rig.write.as_ref().unwrap().wait_until_entered();
-        let timed=recv(&write);
-        let old_reader=rig.access();recv(&captured);
-        rig.write.as_mut().unwrap().finish();rig.write.take();
-        let joined=rig.join_notice();let current=rig.access();recv(&joined);
-        let starts_before_release=rig.shared.as_ref().unwrap().starts.load(SeqCst);
-        let active_before_release=rig.shared.as_ref().unwrap().active.load(SeqCst);
+        let timed = recv(&write);
+        let old_reader = rig.access();
+        recv(&captured);
+        rig.write.as_mut().unwrap().finish();
+        rig.write.take();
+        let joined = rig.join_notice();
+        let current = rig.access();
+        recv(&joined);
+        let starts_before_release = rig.shared.as_ref().unwrap().starts.load(SeqCst);
+        let active_before_release = rig.shared.as_ref().unwrap().active.load(SeqCst);
         rig.release_all();
-        let prior=recv(&old_reader);let answer=recv(&current);
-        assert_eq!(timed.error.unwrap().message,"errors.keychainWriteFailed");
-        assert_eq!(starts_before_release,1);assert_eq!(active_before_release,1);
-        if delete { assert!(matches!(answer,Err(TokenError{kind:FailKind::NoRecord,..})),"post-completion delete read used the pre-write grant"); }
-        else { assert!(answer.ok().flatten().as_deref()==Some("synthetic-new-token"),"post-completion OAuth read used the pre-write grant"); }
-        assert!(stale(&prior),"the earlier read must refuse after invalidation");
-        assert_eq!(rig.shared.as_ref().unwrap().starts.load(SeqCst),2);
-        assert_eq!(rig.shared.as_ref().unwrap().max_active.load(SeqCst),1);
+        let prior = recv(&old_reader);
+        let answer = recv(&current);
+        assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
+        assert_eq!(starts_before_release, 1);
+        assert_eq!(active_before_release, 1);
+        if delete {
+            assert!(
+                matches!(
+                    answer,
+                    Err(TokenError {
+                        kind: FailKind::NoRecord,
+                        ..
+                    })
+                ),
+                "post-completion delete read used the pre-write grant"
+            );
+        } else {
+            assert!(
+                answer.ok().flatten().as_deref() == Some("synthetic-new-token"),
+                "post-completion OAuth read used the pre-write grant"
+            );
+        }
+        assert!(
+            stale(&prior),
+            "the earlier read must refuse after invalidation"
+        );
+        assert_eq!(rig.shared.as_ref().unwrap().starts.load(SeqCst), 2);
+        assert_eq!(rig.shared.as_ref().unwrap().max_active.load(SeqCst), 1);
     }
 
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
-    async fn post_completion_oauth_read_does_not_join_old_blob() { post_completion_join(false).await; }
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
-    async fn post_completion_delete_read_does_not_join_old_blob() { post_completion_join(true).await; }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn post_completion_oauth_read_does_not_join_old_blob() {
+        post_completion_join(false).await;
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn post_completion_delete_read_does_not_join_old_blob() {
+        post_completion_join(true).await;
+    }
 
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn prewrite_reader_cannot_publish_after_invalidation() {
-        for delete in [false,true] {
-            let old=fresh_grant("synthetic-old-grant","synthetic-old-token");
-            let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
-            let mut rig=FreshRig::new(old);
-            let flight=rig.state.tokens.flight("g");let held=flight.lock().await;
-            let read=rig.hook(&RECORD_READ_HOOK,false);let pending=rig.access();recv(&read);
-            let (method,params)=changed_request(&new,delete);let reply=recv(&rig.request(method,params));
-            drop(held);let answer=recv(&pending);
+        for delete in [false, true] {
+            let old = fresh_grant("synthetic-old-grant", "synthetic-old-token");
+            let new = fresh_grant("synthetic-new-grant", "synthetic-new-token");
+            let mut rig = FreshRig::new(old);
+            let flight = rig.state.tokens.flight("g");
+            let held = flight.lock().await;
+            let read = rig.hook(&RECORD_READ_HOOK, false);
+            let pending = rig.access();
+            recv(&read);
+            let (method, params) = changed_request(&new, delete);
+            let reply = recv(&rig.request(method, params));
+            drop(held);
+            let answer = recv(&pending);
             assert!(reply.error.is_none());
-            assert!(stale(&answer),"a pre-write reader re-trusted its old grant after completed invalidation");
-            let next=recv(&rig.access());
-            if delete {assert!(matches!(next,Err(TokenError{kind:FailKind::NoRecord,..})));}else{assert!(next.ok().flatten().as_deref()==Some("synthetic-new-token"));}
+            assert!(
+                stale(&answer),
+                "a pre-write reader re-trusted its old grant after completed invalidation"
+            );
+            let next = recv(&rig.access());
+            if delete {
+                assert!(matches!(
+                    next,
+                    Err(TokenError {
+                        kind: FailKind::NoRecord,
+                        ..
+                    })
+                ));
+            } else {
+                assert!(next.ok().flatten().as_deref() == Some("synthetic-new-token"));
+            }
         }
     }
 
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn resolve_does_not_fall_back_to_a_stale_config() {
-        let mut rig=FreshRig::new(fresh_grant("synthetic-old-grant","synthetic-old-token"));
-        let read=rig.hook(&RECORD_READ_HOOK,true);let state=Arc::clone(&rig.state);
-        let pending=rig.spawn(async move {resolve(&state,"g",Read::Quiet).await});recv(&read);
-        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
-        assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());
-        rig.release_all();assert!(recv(&pending).is_err(),"resolve must not swallow stale unreadable into its old config");
-        assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
+        let mut rig = FreshRig::new(fresh_grant("synthetic-old-grant", "synthetic-old-token"));
+        let read = rig.hook(&RECORD_READ_HOOK, true);
+        let state = Arc::clone(&rig.state);
+        let pending = rig.spawn(async move { resolve(&state, "g", Read::Quiet).await });
+        recv(&read);
+        let new = fresh_grant("synthetic-new-grant", "synthetic-new-token");
+        assert!(
+            recv(&rig.request("credentials.save", json!({"records":{"g":new.to_string()}})))
+                .error
+                .is_none()
+        );
+        rig.release_all();
+        assert!(
+            recv(&pending).is_err(),
+            "resolve must not swallow stale unreadable into its old config"
+        );
+        assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-new-token"));
     }
 
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn publication_fence_rejects_invalidation_before_entry_lock() {
-        let mut rig=FreshRig::new(fresh_grant("synthetic-old-grant","synthetic-old-token"));
-        let reached=rig.hook(&PUBLICATION_HOOK,true);let pending=rig.access();recv(&reached);
-        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
-        assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());
-        rig.release_all();let answer=recv(&pending);
-        assert!(stale(&answer),"publication after invalidation must be refused under the entries lock");
+        let mut rig = FreshRig::new(fresh_grant("synthetic-old-grant", "synthetic-old-token"));
+        let reached = rig.hook(&PUBLICATION_HOOK, true);
+        let pending = rig.access();
+        recv(&reached);
+        let new = fresh_grant("synthetic-new-grant", "synthetic-new-token");
+        assert!(
+            recv(&rig.request("credentials.save", json!({"records":{"g":new.to_string()}})))
+                .error
+                .is_none()
+        );
+        rig.release_all();
+        let answer = recv(&pending);
+        assert!(
+            stale(&answer),
+            "publication after invalidation must be refused under the entries lock"
+        );
         assert!(!rig.state.tokens.has_trusted_token_for_test("g"));
-        assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
-        assert!(recv(&rig.request("credentials.delete",json!({"ids":["g"]}))).error.is_none());
-        assert!(!rig.state.tokens.has_trusted_token_for_test("g"),"publication first must then be invalidated");
+        assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-new-token"));
+        assert!(
+            recv(&rig.request("credentials.delete", json!({"ids":["g"]})))
+                .error
+                .is_none()
+        );
+        assert!(
+            !rig.state.tokens.has_trusted_token_for_test("g"),
+            "publication first must then be invalidated"
+        );
     }
 
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn stale_recheck_cannot_retrust_its_prewrite_record() {
-        let mut old=fresh_grant("synthetic-old-grant","synthetic-expired-token");old["oauth2ExpiresAt"]=json!(1);
-        let mut rig=FreshRig::new(old);
-        let _mock=test_token_mock(vec![granted("synthetic-refreshed-token",Some("synthetic-rotated-refresh"))]);
-        assert!(recv(&rig.access()).is_ok());assert_eq!(rig.state.tokens.unsaved().len(),1);
-        let flight=rig.state.tokens.flight("g");let held=flight.lock().await;
-        let read=rig.hook(&RECORD_READ_HOOK,false);let state=Arc::clone(&rig.state);
-        let explicit=rig.spawn(async move {recheck_unsaved(&state).await});recv(&read);
-        let newer_read=rig.hook(&RECORD_READ_HOOK,true);rig.quiet_notice();
-        let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
-        assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());recv(&newer_read);
-        drop(held);recv(&explicit);
-        let trusted=rig.state.tokens.has_trusted_token_for_test("g");
-        let unsaved=rig.state.tokens.unsaved().len();
-        rig.release_all();rig.finish_quiet();
-        assert!(!trusted,"an obsolete quiet recheck must leave the entry unchecked");assert_eq!(unsaved,1);
-        assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
+        let mut old = fresh_grant("synthetic-old-grant", "synthetic-expired-token");
+        old["oauth2ExpiresAt"] = json!(1);
+        let mut rig = FreshRig::new(old);
+        let _mock = test_token_mock(vec![granted(
+            "synthetic-refreshed-token",
+            Some("synthetic-rotated-refresh"),
+        )]);
+        assert!(recv(&rig.access()).is_ok());
+        assert_eq!(rig.state.tokens.unsaved().len(), 1);
+        let flight = rig.state.tokens.flight("g");
+        let held = flight.lock().await;
+        let read = rig.hook(&RECORD_READ_HOOK, false);
+        let state = Arc::clone(&rig.state);
+        let explicit = rig.spawn(async move { recheck_unsaved(&state).await });
+        recv(&read);
+        let newer_read = rig.hook(&RECORD_READ_HOOK, true);
+        rig.quiet_notice();
+        let new = fresh_grant("synthetic-new-grant", "synthetic-new-token");
+        assert!(
+            recv(&rig.request("credentials.save", json!({"records":{"g":new.to_string()}})))
+                .error
+                .is_none()
+        );
+        recv(&newer_read);
+        drop(held);
+        recv(&explicit);
+        let trusted = rig.state.tokens.has_trusted_token_for_test("g");
+        let unsaved = rig.state.tokens.unsaved().len();
+        rig.release_all();
+        rig.finish_quiet();
+        assert!(
+            !trusted,
+            "an obsolete quiet recheck must leave the entry unchecked"
+        );
+        assert_eq!(unsaved, 1);
+        assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-new-token"));
     }
 
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn obsolete_refresh_result_cannot_publish_token_or_cooldown() {
-        for granted_result in [true,false] {
-            let mut old=fresh_grant("synthetic-old-grant","synthetic-expired-token");old["oauth2ExpiresAt"]=json!(1);
-            let mut rig=FreshRig::new(old);
-            let response=if granted_result {granted("synthetic-obsolete-refresh",Some("synthetic-obsolete-rotation"))}else{(400,json!({"error":"invalid_grant"}).to_string())};
-            let _mock=test_token_mock(vec![response]);
-            let reached=rig.hook(&REFRESH_RESULT_HOOK,true);let pending=rig.access();recv(&reached);
-            let mut events=rig.state.events.subscribe();
-            let new=fresh_grant("synthetic-new-grant","synthetic-new-token");
-            assert!(recv(&rig.request("credentials.save",json!({"records":{"g":new.to_string()}}))).error.is_none());
-            rig.release_all();let answer=recv(&pending);
-            assert!(stale(&answer),"an obsolete refresh completion must refuse without an old fallback");
+        for granted_result in [true, false] {
+            let mut old = fresh_grant("synthetic-old-grant", "synthetic-expired-token");
+            old["oauth2ExpiresAt"] = json!(1);
+            let mut rig = FreshRig::new(old);
+            let response = if granted_result {
+                granted(
+                    "synthetic-obsolete-refresh",
+                    Some("synthetic-obsolete-rotation"),
+                )
+            } else {
+                (400, json!({"error":"invalid_grant"}).to_string())
+            };
+            let _mock = test_token_mock(vec![response]);
+            let reached = rig.hook(&REFRESH_RESULT_HOOK, true);
+            let pending = rig.access();
+            recv(&reached);
+            let mut events = rig.state.events.subscribe();
+            let new = fresh_grant("synthetic-new-grant", "synthetic-new-token");
+            assert!(recv(
+                &rig.request("credentials.save", json!({"records":{"g":new.to_string()}}))
+            )
+            .error
+            .is_none());
+            rig.release_all();
+            let answer = recv(&pending);
+            assert!(
+                stale(&answer),
+                "an obsolete refresh completion must refuse without an old fallback"
+            );
             assert!(rig.state.tokens.unsaved().is_empty());
-            assert!(rig.state.tokens.entries().get("g").unwrap().cooldown.is_none());
-            let announced:Vec<_>=std::iter::from_fn(||events.try_recv().ok()).filter_map(|line|mailvault_core::daemon_ipc::parse_event(&line)).filter(|(name,_)|name==REFRESHED_EVENT).collect();
-            assert!(announced.is_empty());assert_eq!(test_token_posts().len(),1,"no internal retry");
-            assert!(recv(&rig.access()).ok().flatten().as_deref()==Some("synthetic-new-token"));
+            assert!(rig
+                .state
+                .tokens
+                .entries()
+                .get("g")
+                .unwrap()
+                .cooldown
+                .is_none());
+            let announced: Vec<_> = std::iter::from_fn(|| events.try_recv().ok())
+                .filter_map(|line| mailvault_core::daemon_ipc::parse_event(&line))
+                .filter(|(name, _)| name == REFRESHED_EVENT)
+                .collect();
+            assert!(announced.is_empty());
+            assert_eq!(test_token_posts().len(), 1, "no internal retry");
+            assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-new-token"));
         }
     }
 

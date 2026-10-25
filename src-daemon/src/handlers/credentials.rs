@@ -588,12 +588,20 @@ mod tests {
         fn arm(state: &Arc<DaemonState>) -> Self {
             let owner = Arc::as_ptr(state) as usize;
             let (sender, done) = std::sync::mpsc::channel();
-            *crate::oauth_tokens::TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner()) = Some((owner, sender));
-            Self { owner, done, drained: std::cell::Cell::new(false) }
+            *crate::oauth_tokens::TEST_RECHECK_DONE
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some((owner, sender));
+            Self {
+                owner,
+                done,
+                drained: std::cell::Cell::new(false),
+            }
         }
 
         fn finish(&self) {
-            self.done.recv_timeout(Duration::from_secs(5)).expect("the actual quiet recheck finished");
+            self.done
+                .recv_timeout(Duration::from_secs(5))
+                .expect("the actual quiet recheck finished");
             self.drained.set(true);
         }
     }
@@ -603,7 +611,9 @@ mod tests {
             // ParkedWrite drops first: no later writer can schedule this
             // state's recheck after we decide whether its hook was consumed.
             let scheduled = {
-                let mut hook = crate::oauth_tokens::TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
+                let mut hook = crate::oauth_tokens::TEST_RECHECK_DONE
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 if hook.as_ref().is_some_and(|(owner, _)| *owner == self.owner) {
                     hook.take();
                     false
@@ -611,8 +621,13 @@ mod tests {
                     true
                 }
             };
-            if scheduled && !self.drained.get() && self.done.recv_timeout(Duration::from_secs(5)).is_err() {
-                eprintln!("credential test could not drain its quiet recheck; refusing fixture teardown");
+            if scheduled
+                && !self.drained.get()
+                && self.done.recv_timeout(Duration::from_secs(5)).is_err()
+            {
+                eprintln!(
+                    "credential test could not drain its quiet recheck; refusing fixture teardown"
+                );
                 std::process::abort();
             }
         }
@@ -621,14 +636,29 @@ mod tests {
     fn fresh_oauth(rt: &str, at: &str) -> Value {
         let mut record = oauth_record(rt, at);
         record["imapHost"] = json!("imap.gmail.com");
-        record["oauth2ExpiresAt"] = json!(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64 + 3_600_000);
+        record["oauth2ExpiresAt"] = json!(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64
+                + 3_600_000
+        );
         record
     }
 
     async fn prime_cached_grant(rig: &Rig, token: &str) {
-        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await.unwrap();
-        assert!(got.as_deref() == Some(token), "the seeded grant must be loaded");
-        assert!(rig.state.tokens.has_trusted_token_for_test("g"), "a trusted cache entry must exist before the parked write");
+        let got =
+            crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet)
+                .await
+                .unwrap();
+        assert!(
+            got.as_deref() == Some(token),
+            "the seeded grant must be loaded"
+        );
+        assert!(
+            rig.state.tokens.has_trusted_token_for_test("g"),
+            "a trusted cache entry must exist before the parked write"
+        );
     }
 
     fn changed_events(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<Value> {
@@ -639,23 +669,46 @@ mod tests {
     }
 
     fn token_waiter(rig: &Rig) -> Arc<crate::abd_worker::JobHandle> {
-        use mailvault_core::abd::{DateScope, DeleteMode, JobFile, Mode, NewJob, Provider, Scope, Timing};
+        use mailvault_core::abd::{
+            DateScope, DeleteMode, JobFile, Mode, NewJob, Provider, Scope, Timing,
+        };
         let job = JobFile::create(NewJob {
-            account_id: "g".into(), account_email: "g@gmail.test".into(), host: "imap.gmail.com".into(),
-            provider: Provider::Imap, mode: Mode::ArchiveDelete, timing: Timing::AfterAll,
+            account_id: "g".into(),
+            account_email: "g@gmail.test".into(),
+            host: "imap.gmail.com".into(),
+            provider: Provider::Imap,
+            mode: Mode::ArchiveDelete,
+            timing: Timing::AfterAll,
             delete_mode: DeleteMode::MoveToTrashAndEmpty,
-            scope: Scope { folders: vec!["INBOX".into()], dates: DateScope::All, date_choice: "all".into(), year_bounds: vec![] },
+            scope: Scope {
+                folders: vec!["INBOX".into()],
+                dates: DateScope::All,
+                date_choice: "all".into(),
+                year_bounds: vec![],
+            },
             now_ms: rig.state.clock.now_ms(),
         });
         let handle = crate::abd_worker::JobHandle::new(&job);
-        *handle.parked.lock().unwrap_or_else(|e| e.into_inner()) = Some(crate::abd_worker::Parked::Token);
-        rig.state.abd.jobs.lock().unwrap_or_else(|e| e.into_inner()).insert("g".into(), Arc::clone(&handle));
+        *handle.parked.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(crate::abd_worker::Parked::Token);
+        rig.state
+            .abd
+            .jobs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert("g".into(), Arc::clone(&handle));
         handle
     }
 
-    async fn parked_reply(rig: &Rig, gate: &ParkedWrite, method: &'static str, params: Value) -> crate::ipc::RpcResponse {
+    async fn parked_reply(
+        rig: &Rig,
+        gate: &ParkedWrite,
+        method: &'static str,
+        params: Value,
+    ) -> crate::ipc::RpcResponse {
         let state = Arc::clone(&rig.state);
-        let pending = tokio::spawn(async move { handle_request_for_test(&state, method, params).await });
+        let pending =
+            tokio::spawn(async move { handle_request_for_test(&state, method, params).await });
         gate.wait_until_entered();
         pending.await.unwrap()
     }
@@ -664,11 +717,19 @@ mod tests {
     async fn late_save_invalidates_cached_grant_after_timeout() {
         let old = fresh_oauth("synthetic-old-grant", "synthetic-old-token");
         let new = fresh_oauth("synthetic-new-grant", "synthetic-new-token");
-        let rig = rig(Some(json!({"g": old.to_string(), "other": record("other", "keep")})));
+        let rig = rig(Some(
+            json!({"g": old.to_string(), "other": record("other", "keep")}),
+        ));
         prime_cached_grant(&rig, "synthetic-old-token").await;
         let mut rx = rig.state.events.subscribe();
         let mut gate = ParkedWrite::arm();
-        let timed = parked_reply(&rig, &gate, "credentials.save", json!({"records":{"g":new.to_string()}})).await;
+        let timed = parked_reply(
+            &rig,
+            &gate,
+            "credentials.save",
+            json!({"records":{"g":new.to_string()}}),
+        )
+        .await;
         let busy = call(&rig, "credentials.delete", json!({"ids":["other"]})).await;
         let premature = changed_events(&mut rx);
         gate.finish();
@@ -677,11 +738,23 @@ mod tests {
         assert!(premature.is_empty());
         assert_eq!(stored(&rig)["g"], new.to_string());
         assert_eq!(stored(&rig)["other"], record("other", "keep"));
-        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await.unwrap();
-        assert!(got.as_deref() == Some("synthetic-new-token"), "late save must stop serving the trusted old grant");
+        let got =
+            crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet)
+                .await
+                .unwrap();
+        assert!(
+            got.as_deref() == Some("synthetic-new-token"),
+            "late save must stop serving the trusted old grant"
+        );
         let events = changed_events(&mut rx);
-        assert_eq!(events, vec![json!({"ids":["g"],"version":credentials::write_generation()})]);
-        assert!(changed_events(&mut rx).is_empty(), "one terminal change event only");
+        assert_eq!(
+            events,
+            vec![json!({"ids":["g"],"version":credentials::write_generation()})]
+        );
+        assert!(
+            changed_events(&mut rx).is_empty(),
+            "one terminal change event only"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -695,9 +768,23 @@ mod tests {
         gate.finish();
         assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
         assert!(!stored(&rig).contains_key("g"));
-        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await;
-        assert!(matches!(got, Err(crate::oauth_tokens::TokenError { kind: crate::oauth_tokens::FailKind::NoRecord, .. })), "late delete must stop serving its cached grant");
-        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":credentials::write_generation()})]);
+        let got =
+            crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet)
+                .await;
+        assert!(
+            matches!(
+                got,
+                Err(crate::oauth_tokens::TokenError {
+                    kind: crate::oauth_tokens::FailKind::NoRecord,
+                    ..
+                })
+            ),
+            "late delete must stop serving its cached grant"
+        );
+        assert_eq!(
+            changed_events(&mut rx),
+            vec![json!({"ids":["g"],"version":credentials::write_generation()})]
+        );
         assert!(changed_events(&mut rx).is_empty());
     }
 
@@ -718,12 +805,29 @@ mod tests {
         gate.finish();
         assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
         assert!(credentials::write_generation() > before);
-        assert!(!rig.state.tokens.has_trusted_token_for_test("g"), "terminal uncertainty invalidates token trust");
-        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await;
-        assert!(matches!(got, Err(crate::oauth_tokens::TokenError { kind: crate::oauth_tokens::FailKind::Unreadable, .. })), "an unreadable store cannot be hidden by a cached grant");
+        assert!(
+            !rig.state.tokens.has_trusted_token_for_test("g"),
+            "terminal uncertainty invalidates token trust"
+        );
+        let got =
+            crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet)
+                .await;
+        assert!(
+            matches!(
+                got,
+                Err(crate::oauth_tokens::TokenError {
+                    kind: crate::oauth_tokens::FailKind::Unreadable,
+                    ..
+                })
+            ),
+            "an unreadable store cannot be hidden by a cached grant"
+        );
         assert!(changed_events(&mut rx).is_empty());
         assert!(waiter.ctl.wake.notified().now_or_never().is_none());
-        assert!(matches!(quiet.done.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        assert!(matches!(
+            quiet.done.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        ));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -733,9 +837,14 @@ mod tests {
         old["oauth2ClientId"] = json!(mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID);
         let rig = rig(Some(json!({"g":old.to_string()})));
         let _mock = crate::handlers::oauth2::test_token_mock(vec![(200,json!({"access_token":"synthetic-refreshed-token","refresh_token":"synthetic-rotated-refresh","expires_in":3600}).to_string())]);
-        let token = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await.unwrap();
+        let token =
+            crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet)
+                .await
+                .unwrap();
         assert!(token.as_deref() == Some("synthetic-refreshed-token"));
-        let offered = call(&rig, "oauth2.take_refreshed", json!({})).await.unwrap();
+        let offered = call(&rig, "oauth2.take_refreshed", json!({}))
+            .await
+            .unwrap();
         assert_eq!(offered["tokens"].as_array().unwrap().len(), 1);
         let pair = &offered["tokens"][0];
         let mut saved = old;
@@ -746,14 +855,30 @@ mod tests {
         let quiet = RecheckAck::arm(&rig.state);
         let mut rx = rig.state.events.subscribe();
         let mut gate = ParkedWrite::arm();
-        let timed = parked_reply(&rig, &gate, "credentials.save", json!({"records":{"g":saved.to_string()}})).await;
+        let timed = parked_reply(
+            &rig,
+            &gate,
+            "credentials.save",
+            json!({"records":{"g":saved.to_string()}}),
+        )
+        .await;
         gate.finish();
         quiet.finish();
         assert_eq!(timed.error.unwrap().message, "errors.keychainWriteFailed");
-        tokio::time::timeout(Duration::from_secs(5), waiter.ctl.wake.notified()).await.expect("the real parked-token control was woken");
-        let offered = call(&rig, "oauth2.take_refreshed", json!({})).await.unwrap();
-        assert!(offered["tokens"].as_array().unwrap().is_empty(), "the real quiet recheck observed the saved pair");
-        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":credentials::write_generation()})]);
+        tokio::time::timeout(Duration::from_secs(5), waiter.ctl.wake.notified())
+            .await
+            .expect("the real parked-token control was woken");
+        let offered = call(&rig, "oauth2.take_refreshed", json!({}))
+            .await
+            .unwrap();
+        assert!(
+            offered["tokens"].as_array().unwrap().is_empty(),
+            "the real quiet recheck observed the saved pair"
+        );
+        assert_eq!(
+            changed_events(&mut rx),
+            vec![json!({"ids":["g"],"version":credentials::write_generation()})]
+        );
         assert!(changed_events(&mut rx).is_empty());
     }
 
@@ -765,16 +890,41 @@ mod tests {
         prime_cached_grant(&rig, "synthetic-old-token").await;
         let new = fresh_oauth("synthetic-new-grant", "synthetic-new-token");
         let mut rx = rig.state.events.subscribe();
-        let saved = call(&rig, "credentials.save", json!({"records":{"g":new.to_string()}})).await.unwrap();
-        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":saved["version"]})]);
+        let saved = call(
+            &rig,
+            "credentials.save",
+            json!({"records":{"g":new.to_string()}}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            changed_events(&mut rx),
+            vec![json!({"ids":["g"],"version":saved["version"]})]
+        );
         prime_cached_grant(&rig, "synthetic-new-token").await;
         let waiter = token_waiter(&rig);
         let version = credentials::write_generation();
         for (method, params, expected) in [
-            ("credentials.save", json!({"records":{"g":new.to_string()}}), Ok(json!({"saved":[],"version":version}))),
-            ("credentials.delete", json!({"ids":["missing"]}), Ok(json!({"deleted":[],"version":version}))),
-            ("credentials.update", json!({"id":"g","fields":{"oauth2AccessToken":"synthetic-stale"},"chain":[fp(&old,None)]}), Ok(json!({"updated":false,"staleGrant":true,"version":version}))),
-            ("credentials.save", json!({}), Err("errors.credentialsInvalid".to_string())),
+            (
+                "credentials.save",
+                json!({"records":{"g":new.to_string()}}),
+                Ok(json!({"saved":[],"version":version})),
+            ),
+            (
+                "credentials.delete",
+                json!({"ids":["missing"]}),
+                Ok(json!({"deleted":[],"version":version})),
+            ),
+            (
+                "credentials.update",
+                json!({"id":"g","fields":{"oauth2AccessToken":"synthetic-stale"},"chain":[fp(&old,None)]}),
+                Ok(json!({"updated":false,"staleGrant":true,"version":version})),
+            ),
+            (
+                "credentials.save",
+                json!({}),
+                Err("errors.credentialsInvalid".to_string()),
+            ),
         ] {
             let reply = call(&rig, method, params).await;
             assert_eq!(reply, expected);
@@ -782,10 +932,23 @@ mod tests {
             assert!(changed_events(&mut rx).is_empty());
             assert!(waiter.ctl.wake.notified().now_or_never().is_none());
         }
-        let deleted = call(&rig, "credentials.delete", json!({"ids":["g"]})).await.unwrap();
-        assert_eq!(changed_events(&mut rx), vec![json!({"ids":["g"],"version":deleted["version"]})]);
-        let got = crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet).await;
-        assert!(matches!(got, Err(crate::oauth_tokens::TokenError { kind: crate::oauth_tokens::FailKind::NoRecord, .. })));
+        let deleted = call(&rig, "credentials.delete", json!({"ids":["g"]}))
+            .await
+            .unwrap();
+        assert_eq!(
+            changed_events(&mut rx),
+            vec![json!({"ids":["g"],"version":deleted["version"]})]
+        );
+        let got =
+            crate::oauth_tokens::access_token(&rig.state, "g", crate::oauth_tokens::Read::Quiet)
+                .await;
+        assert!(matches!(
+            got,
+            Err(crate::oauth_tokens::TokenError {
+                kind: crate::oauth_tokens::FailKind::NoRecord,
+                ..
+            })
+        ));
     }
 
     #[test]

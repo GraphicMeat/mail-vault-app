@@ -239,30 +239,57 @@ struct Refreshed {
 
 /// The account to look up with, read by the daemon: `None` when it cannot
 /// be (no listing, no record, or a credential a lookup needs is unreadable).
-async fn account_for(state: &Arc<DaemonState>, account_id: &str, login: &str, read: Read) -> Option<Value> {
+async fn account_for(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    login: &str,
+    read: Read,
+) -> Option<Value> {
     let (dir, id) = (state.app_dir.clone(), account_id.to_string());
-    let listed = tokio::task::spawn_blocking(move || crate::ai_gate::listed_record(&dir, &id)).await.ok().flatten();
+    let listed = tokio::task::spawn_blocking(move || crate::ai_gate::listed_record(&dir, &id))
+        .await
+        .ok()
+        .flatten();
     let mut account = match listed {
         Some(listed) => listed,
         None => match read {
-            Read::Quiet => crate::credentials::resolve_account_record_quiet(account_id).await.ok(),
-            Read::Guarded => crate::credentials::resolve_account_with_record_guarded(account_id).await.ok().map(|(_, r)| r.record),
+            Read::Quiet => crate::credentials::resolve_account_record_quiet(account_id)
+                .await
+                .ok(),
+            Read::Guarded => crate::credentials::resolve_account_with_record_guarded(account_id)
+                .await
+                .ok()
+                .map(|(_, r)| r.record),
         }
-        .or_else(|| (!login.trim().is_empty() && read == Read::Guarded).then(|| json!({"email": login})))?,
+        .or_else(|| {
+            (!login.trim().is_empty() && read == Read::Guarded).then(|| json!({"email": login}))
+        })?,
     };
-    if account.get("email").and_then(Value::as_str).map_or(true, |e| e.trim().is_empty()) {
+    if account
+        .get("email")
+        .and_then(Value::as_str)
+        .map_or(true, |e| e.trim().is_empty())
+    {
         account["email"] = json!(login);
     }
     if aliases::is_jmap(&account) {
         // Its server is asked with the stored password or token.
         let resolved = match read {
             Read::Quiet => crate::credentials::resolve_account_with_record_quiet(account_id).await,
-            Read::Guarded => crate::credentials::resolve_account_with_record_guarded(account_id).await,
+            Read::Guarded => {
+                crate::credentials::resolve_account_with_record_guarded(account_id).await
+            }
         };
-        let Ok((config, record)) = resolved else { return (read == Read::Guarded).then_some(account) };
+        let Ok((config, record)) = resolved else {
+            return (read == Read::Guarded).then_some(account);
+        };
         let token = match oauth_tokens::fresh_config(state, account_id, config, &record).await {
             Ok(fresh) => fresh.access_token,
-            Err(TokenError { kind: FailKind::Unreadable, fallback: None, .. }) => return None,
+            Err(TokenError {
+                kind: FailKind::Unreadable,
+                fallback: None,
+                ..
+            }) => return None,
             Err(TokenError { fallback, .. }) => fallback,
         };
         let mut full = record.record;
@@ -273,8 +300,15 @@ async fn account_for(state: &Arc<DaemonState>, account_id: &str, login: &str, re
     }
     if aliases::is_gmail_oauth(&account) {
         match oauth_tokens::access_token(state, account_id, read).await {
-            Ok(Some(token)) | Err(TokenError { fallback: Some(token), .. }) => account["oauth2AccessToken"] = json!(token),
-            Err(TokenError { kind: FailKind::NoRecord | FailKind::Unreadable, .. }) if read == Read::Quiet => return None,
+            Ok(Some(token))
+            | Err(TokenError {
+                fallback: Some(token),
+                ..
+            }) => account["oauth2AccessToken"] = json!(token),
+            Err(TokenError {
+                kind: FailKind::NoRecord | FailKind::Unreadable,
+                ..
+            }) if read == Read::Quiet => return None,
             // No token the daemon holds: the provider half answers `denied`.
             _ => {
                 if let Some(obj) = account.as_object_mut() {
@@ -755,26 +789,48 @@ mod tests {
         })
     }
 
-    #[tokio::test(flavor="multi_thread",worker_threads=2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_stale_jmap_snapshot_is_unavailable_in_quiet_and_guarded_lookups() {
-        for read in [Read::Quiet,Read::Guarded] {
-            let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
-            let _restore=crate::credentials::TestEnvRestore::capture();
-            let dir=tempfile::tempdir().unwrap();let path=dir.path().join("credentials.json");
-            let shape=json!({"id":"j","email":LOGIN,"imapHost":"jmap.invalid","authType":"password","jmapSessionUrl":"https://jmap.invalid/.well-known/jmap","jmapAuth":"basic"});
-            let mut record=shape.clone();record["password"]=json!("synthetic-old-password");
-            std::fs::write(&path,json!({"j":record.to_string()}).to_string()).unwrap();
-            std::env::set_var("MAILVAULT_TEST_CREDENTIALS",&path);
-            let r=rig();r.list_accounts(json!([shape]));
-            let (done,finished)=std::sync::mpsc::channel();let _cleanup=crate::credentials::TestTaskDrain(finished);
-            let pause=crate::oauth_tokens::TestRecordReadPause::arm("j");
-            let completion=crate::credentials::TestTaskDone(done);let state=Arc::clone(&r.s);
-            let pending=tokio::spawn(async move {let _completion=completion;account_for(&state,"j",LOGIN,read).await});
-            pause.wait();record["password"]=json!("synthetic-new-password");
-            r.call("credentials.save",json!({"records":{"j":record.to_string()}})).await.unwrap();
+        for read in [Read::Quiet, Read::Guarded] {
+            let _env = crate::credentials::test_env_lock()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let _restore = crate::credentials::TestEnvRestore::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("credentials.json");
+            let shape = json!({"id":"j","email":LOGIN,"imapHost":"jmap.invalid","authType":"password","jmapSessionUrl":"https://jmap.invalid/.well-known/jmap","jmapAuth":"basic"});
+            let mut record = shape.clone();
+            record["password"] = json!("synthetic-old-password");
+            std::fs::write(&path, json!({"j":record.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+            let r = rig();
+            r.list_accounts(json!([shape]));
+            let (done, finished) = std::sync::mpsc::channel();
+            let _cleanup = crate::credentials::TestTaskDrain(finished);
+            let pause = crate::oauth_tokens::TestRecordReadPause::arm("j");
+            let completion = crate::credentials::TestTaskDone(done);
+            let state = Arc::clone(&r.s);
+            let pending = tokio::spawn(async move {
+                let _completion = completion;
+                account_for(&state, "j", LOGIN, read).await
+            });
+            pause.wait();
+            record["password"] = json!("synthetic-new-password");
+            r.call(
+                "credentials.save",
+                json!({"records":{"j":record.to_string()}}),
+            )
+            .await
+            .unwrap();
             drop(pause);
-            assert!(pending.await.unwrap().is_none(),"stale JMAP lookup must not return its old record");
-            assert!(account_for(&r.s,"j",LOGIN,read).await.is_some(),"current-generation JMAP behavior is preserved");
+            assert!(
+                pending.await.unwrap().is_none(),
+                "stale JMAP lookup must not return its old record"
+            );
+            assert!(
+                account_for(&r.s, "j", LOGIN, read).await.is_some(),
+                "current-generation JMAP behavior is preserved"
+            );
         }
     }
 
