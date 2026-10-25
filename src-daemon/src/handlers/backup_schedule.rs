@@ -49,7 +49,8 @@ async fn route_with_view(
     let params = params.clone();
     let app_dir = state.app_dir.clone();
     let now = state.clock.now_ms();
-    let joined = tokio::task::spawn_blocking(move || run(&app_dir, set, &params, now, prepare)).await;
+    let joined =
+        tokio::task::spawn_blocking(move || run(&app_dir, set, &params, now, prepare)).await;
     Some(match joined.unwrap_or(Err("errors.settingsWriteFailed")) {
         Ok((snapshot, change)) => {
             if let Some(change) = change.filter(|c| !c.changed.is_empty()) {
@@ -136,13 +137,23 @@ fn run(
     for attempt in 0..3 {
         let snapshot = loaded(&doc)?;
         let base = snapshot.version;
-        if params.get("baseVersion").and_then(Value::as_u64).is_some_and(|v| v != base) {
+        if params
+            .get("baseVersion")
+            .and_then(Value::as_u64)
+            .is_some_and(|v| v != base)
+        {
             return Err("errors.settingsConflict");
         }
         let mut applied = Value::Object(snapshot.values);
         mailvault_core::settings_doc::merge_patch(&mut applied, &document_patch);
-        let Value::Object(values) = applied else { unreachable!("object document patch") };
-        let applied = Snapshot { values, version:base, recovered:None };
+        let Value::Object(values) = applied else {
+            unreachable!("object document patch")
+        };
+        let applied = Snapshot {
+            values,
+            version: base,
+            recovered: None,
+        };
         let Value::Object(mut response) = prepare(&applied, &ids, now)? else {
             return Err("errors.settingsInvalid");
         };
@@ -154,7 +165,10 @@ fn run(
                 return Ok((Value::Object(response), Some(change)));
             }
             Err(SettingsError::Conflict { .. })
-                if params.get("baseVersion").is_none() && attempt < 2 => continue,
+                if params.get("baseVersion").is_none() && attempt < 2 =>
+            {
+                continue
+            }
             Err(e) => return Err(e.catalog_key()),
         }
     }
@@ -248,72 +262,137 @@ mod tests {
     async fn unavailable_view_refuses_set_without_mutation_or_event() {
         let (dir, state) = rig();
         let doc = SettingsDoc::shared(dir.path());
-        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}),None).unwrap();
+        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}), None)
+            .unwrap();
         let before = doc.get(None).unwrap();
         let bytes = std::fs::read(dir.path().join("frontend-settings.json")).unwrap();
         let mut events = state.events.subscribe();
-        let response = route_with_view(&state,"backup.schedule.set",&json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}}),json!(1),|_,_,_|Err("errors.settingsInvalid")).await.unwrap();
-        assert_eq!(response.error.unwrap().message,"errors.settingsInvalid");
+        let response = route_with_view(
+            &state,
+            "backup.schedule.set",
+            &json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}}),
+            json!(1),
+            |_, _, _| Err("errors.settingsInvalid"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.error.unwrap().message, "errors.settingsInvalid");
         let after = doc.get(None).unwrap();
-        assert_eq!(after.version,before.version,"failed timezone/view preparation must not commit");
-        assert_eq!(after.values,before.values);
-        assert_eq!(std::fs::read(dir.path().join("frontend-settings.json")).unwrap(),bytes);
-        assert!(events.try_recv().is_err(),"a refusal emits no settings change");
+        assert_eq!(
+            after.version, before.version,
+            "failed timezone/view preparation must not commit"
+        );
+        assert_eq!(after.values, before.values);
+        assert_eq!(
+            std::fs::read(dir.path().join("frontend-settings.json")).unwrap(),
+            bytes
+        );
+        assert!(
+            events.try_recv().is_err(),
+            "a refusal emits no settings change"
+        );
         // The same captured version remains valid after the refusal.
-        let accepted = call(&state,"backup.schedule.set",json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}})).await.unwrap();
-        let (name,payload) = mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
-        assert_eq!(name,super::super::settings::CHANGED_EVENT);
-        assert_eq!(payload,json!({"keys":[STORE],"version":accepted["version"]}));
+        let accepted = call(
+            &state,
+            "backup.schedule.set",
+            json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}}),
+        )
+        .await
+        .unwrap();
+        let (name, payload) =
+            mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(name, super::super::settings::CHANGED_EVENT);
+        assert_eq!(
+            payload,
+            json!({"keys":[STORE],"version":accepted["version"]})
+        );
         assert!(events.try_recv().is_err());
     }
     #[tokio::test]
     async fn set_prepares_applied_view_before_write_and_notifies_once() {
-        let (dir,state) = rig();let doc = SettingsDoc::shared(dir.path());
-        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}),None).unwrap();
-        let before=doc.get(None).unwrap();let path=dir.path().to_path_buf();
-        let mut events=state.events.subscribe();
-        let response=route_with_view(&state,"backup.schedule.set",&json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}}),json!(2),move |snapshot,ids,now| {
-            let observed=SettingsDoc::shared(&path).get(None).map_err(|_|"errors.settingsWriteFailed")?;
-            if observed.version!=before.version || observed.values[STORE]["state"]["backupGlobalEnabled"]!=true {
-                return Err("errors.settingsWriteFailed");
-            }
-            if snapshot.values[STORE]["state"]["backupGlobalEnabled"]!=false {return Err("errors.settingsInvalid");}
-            view(snapshot,ids,now)
-        }).await.unwrap();
-        assert!(response.error.is_none(),"{:?}",response.error);
-        let accepted=response.result.unwrap();let after=doc.get(None).unwrap();
-        assert_eq!(accepted["version"],after.version);assert!(after.version>before.version);
-        assert_eq!(accepted["config"]["backupGlobalEnabled"],false);
-        assert_eq!(accepted["state"]["backupHistory"],after.values[STORE]["state"]["backupHistory"]);
-        let (name,payload)=mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
-        assert_eq!(name,super::super::settings::CHANGED_EVENT);
-        assert_eq!(payload,json!({"keys":[STORE],"version":after.version}));
-        assert!(events.try_recv().is_err(),"committed write emits exactly once");
+        let (dir, state) = rig();
+        let doc = SettingsDoc::shared(dir.path());
+        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}), None)
+            .unwrap();
+        let before = doc.get(None).unwrap();
+        let path = dir.path().to_path_buf();
+        let mut events = state.events.subscribe();
+        let response = route_with_view(
+            &state,
+            "backup.schedule.set",
+            &json!({"baseVersion":before.version,"patch":{"backupGlobalEnabled":false}}),
+            json!(2),
+            move |snapshot, ids, now| {
+                let observed = SettingsDoc::shared(&path)
+                    .get(None)
+                    .map_err(|_| "errors.settingsWriteFailed")?;
+                if observed.version != before.version
+                    || observed.values[STORE]["state"]["backupGlobalEnabled"] != true
+                {
+                    return Err("errors.settingsWriteFailed");
+                }
+                if snapshot.values[STORE]["state"]["backupGlobalEnabled"] != false {
+                    return Err("errors.settingsInvalid");
+                }
+                view(snapshot, ids, now)
+            },
+        )
+        .await
+        .unwrap();
+        assert!(response.error.is_none(), "{:?}", response.error);
+        let accepted = response.result.unwrap();
+        let after = doc.get(None).unwrap();
+        assert_eq!(accepted["version"], after.version);
+        assert!(after.version > before.version);
+        assert_eq!(accepted["config"]["backupGlobalEnabled"], false);
+        assert_eq!(
+            accepted["state"]["backupHistory"],
+            after.values[STORE]["state"]["backupHistory"]
+        );
+        let (name, payload) =
+            mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(name, super::super::settings::CHANGED_EVENT);
+        assert_eq!(payload, json!({"keys":[STORE],"version":after.version}));
+        assert!(
+            events.try_recv().is_err(),
+            "committed write emits exactly once"
+        );
     }
 
     #[tokio::test]
     async fn implicit_retry_rebuilds_a_coherent_applied_view_after_concurrent_write() {
-        let (dir,state)=rig();let doc=SettingsDoc::shared(dir.path());
-        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}),None).unwrap();
-        let before=doc.get(None).unwrap();let path=dir.path().to_path_buf();
-        let once=std::sync::atomic::AtomicBool::new(false);let mut events=state.events.subscribe();
+        let (dir, state) = rig();
+        let doc = SettingsDoc::shared(dir.path());
+        doc.patch(&json!({STORE:{"state":{"backupGlobalEnabled":true}}}), None)
+            .unwrap();
+        let before = doc.get(None).unwrap();
+        let path = dir.path().to_path_buf();
+        let once = std::sync::atomic::AtomicBool::new(false);
+        let mut events = state.events.subscribe();
         let response=route_with_view(&state,"backup.schedule.set",&json!({"patch":{"backupGlobalEnabled":false}}),json!(3),move |snapshot,ids,now| {
             if !once.swap(true,std::sync::atomic::Ordering::SeqCst) {
                 SettingsDoc::shared(&path).patch(&json!({STORE:{"state":{"backupState":{"one":{"lastBackupTime":84}},"backupHistory":{"one":[{"success":true,"timestamp":84}]}}}}),None).map_err(|e|e.catalog_key())?;
             }
             view(snapshot,ids,now)
         }).await.unwrap();
-        assert!(response.error.is_none(),"{:?}",response.error);
-        let accepted=response.result.unwrap();let after=doc.get(None).unwrap();
-        assert_eq!(after.version,before.version+2);
-        assert_eq!(accepted["version"],after.version);
-        assert_eq!(accepted["config"]["backupGlobalEnabled"],false);
-        assert_eq!(accepted["state"]["backupState"]["one"]["lastBackupTime"],84);
-        assert_eq!(accepted["state"]["backupHistory"],after.values[STORE]["state"]["backupHistory"]);
-        let (name,payload)=mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
-        assert_eq!(name,super::super::settings::CHANGED_EVENT);
-        assert_eq!(payload,json!({"keys":[STORE],"version":after.version}));
+        assert!(response.error.is_none(), "{:?}", response.error);
+        let accepted = response.result.unwrap();
+        let after = doc.get(None).unwrap();
+        assert_eq!(after.version, before.version + 2);
+        assert_eq!(accepted["version"], after.version);
+        assert_eq!(accepted["config"]["backupGlobalEnabled"], false);
+        assert_eq!(
+            accepted["state"]["backupState"]["one"]["lastBackupTime"],
+            84
+        );
+        assert_eq!(
+            accepted["state"]["backupHistory"],
+            after.values[STORE]["state"]["backupHistory"]
+        );
+        let (name, payload) =
+            mailvault_core::daemon_ipc::parse_event(&events.try_recv().unwrap()).unwrap();
+        assert_eq!(name, super::super::settings::CHANGED_EVENT);
+        assert_eq!(payload, json!({"keys":[STORE],"version":after.version}));
         assert!(events.try_recv().is_err());
     }
-
 }
