@@ -548,3 +548,29 @@ mod jmap {
         assert!(trap.accept().is_err(), "a JMAP status never dials IMAP");
     }
 }
+
+// A live gap-save and scheduler both use this real account claim. Legacy
+// kickoff must refuse rather than replacing its cancellation authority.
+#[tokio::test]
+async fn backup_legacy_kickoff_cannot_replace_an_existing_claim() {
+    let (_v, s) = st();
+    let held = claim_run(&s, "acct1").unwrap();
+    let token = held.cancel();
+    let result = backup_run_account(&s, json!({"accountId":"acct1","accountJson":account_json()})).await;
+    assert!(result.is_err(), "legacy kickoff admitted overlapping work");
+    assert!(Arc::ptr_eq(s.backup_runs.lock().unwrap().get("acct1").unwrap(), &token));
+    assert!(!token.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn backup_native_manual_ack_is_idempotent_and_not_completion() {
+    let (_v, s) = st();
+    let first = handle_request_for_test(&s, "backup.run_now", json!({"accountId":"acct1","requestId":"lost-ack"})).await;
+    assert!(first.error.is_none(), "native manual admission unavailable: {:?}", first.error);
+    let first = first.result.unwrap();
+    assert_eq!(first["status"], "queued");
+    let replay = handle_request_for_test(&s, "backup.run_now", json!({"accountId":"acct1","requestId":"lost-ack"})).await;
+    assert_eq!(replay.result.unwrap()["runId"], first["runId"]);
+    let conflict = handle_request_for_test(&s, "backup.run_now", json!({"accountId":"other","requestId":"lost-ack"})).await;
+    assert!(conflict.error.is_some(), "request identity must not redirect work");
+}
