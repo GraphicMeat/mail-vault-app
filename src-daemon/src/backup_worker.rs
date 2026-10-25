@@ -8,6 +8,7 @@ use crate::{
 use mailvault_core::{
     app_db::{self, db},
     backup_schedule as policy,
+    backup_access::Resolution as AccessResolution,
     settings_doc::{SettingsDoc, SettingsError},
 };
 use rusqlite::OptionalExtension;
@@ -531,10 +532,13 @@ async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<Cmd>, se
             Cmd::Access { request, reply } => {
                 // Reconciliation of an old hold must not repeatedly move an
                 // unrelated pending execution into preparing before its next
-                // status sample. Current attach/fence keeps its admission wake.
+                // status sample. Unavailable/unknown resolution is an observation,
+                // not a new retry trigger. Authorized/absent attach and current
+                // fence keep their admission wake.
                 let wake = match &request {
                     access::Request::Attach(a) => {
                         a.attempt.incarnation == state.backup_worker.access.incarnation
+                            && matches!(&a.resolution,AccessResolution::Authorized{..}|AccessResolution::NotConfigured)
                     }
                     access::Request::Status(q) => {
                         q.fence_unstarted
