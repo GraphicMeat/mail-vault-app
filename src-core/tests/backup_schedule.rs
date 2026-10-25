@@ -57,3 +57,10 @@ fn pure_policy_preserves_gates_overrides_limits_retries_and_snapshots() {
     assert!(download_cap_changed(&cap,&json!({"capEnabled":true,"dailyDownLimitBytes":2})));
     assert!(!download_cap_changed(&cap,&json!({"capEnabled":true,"dailyDownLimitBytes":1,"warningEnabled":false,"dailyUpLimitBytes":2})));
 }
+#[test]
+fn explicit_zone_rechecks_fold_and_gap_and_invalid_configuration_is_bounded() {
+    assert!(next_eligible(&json!({"lastBackupTime":1}),&json!({"interval":"weekly","dayOfWeek":7}),1,"UTC").is_err());
+    assert!(next_eligible(&json!({}),&json!({"interval":"hours","hours":[1]}),1,"Not/AZone").is_err());
+    let config = json!({"interval":"hours","hours":[1]});
+    assert_ne!(next_eligible(&json!({}),&config,1792929600000,"UTC").unwrap(),next_eligible(&json!({}),&config,1792929600000,"Europe/Vilnius").unwrap());
+}

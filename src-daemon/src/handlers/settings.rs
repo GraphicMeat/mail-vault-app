@@ -41,6 +41,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             }
             RpcResponse::success(id, json!({"version": change.version, "changed": change.changed}))
         }
+        Ok(Outcome::Rebased(change, snapshot)) => {
+            if !change.changed.is_empty() {
+                state.events.emit(CHANGED_EVENT, json!({"keys": change.changed, "version": change.version}));
+            }
+            RpcResponse::success(id, snapshot)
+        }
         Err(e) => {
             let code = if matches!(e, SettingsError::NotAnObject) { ipc::INVALID_PARAMS } else { ipc::INTERNAL_ERROR };
             RpcResponse::error(id, code, e.catalog_key())
@@ -51,6 +57,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 enum Outcome {
     Read(Value),
     Wrote(Change),
+    Rebased(Change, Value),
 }
 
 fn base_version(params: &Value) -> Option<u64> {
@@ -77,7 +84,13 @@ fn run(doc: &SettingsDoc, method: &str, params: &Value) -> Result<Outcome, Setti
         }
         _ => {
             let values = params.get("values").ok_or(SettingsError::NotAnObject)?;
-            doc.replace(values, base_version(params)).map(Outcome::Wrote)
+            if let Some(bases) = params.get("bases") {
+                let change = doc.replace_rebased(values, bases, base_version(params))?;
+                let snapshot = doc.get(None)?;
+                Ok(Outcome::Rebased(change, json!({"values":snapshot.values,"version":snapshot.version})))
+            } else {
+                doc.replace(values, base_version(params)).map(Outcome::Wrote)
+            }
         }
     }
 }

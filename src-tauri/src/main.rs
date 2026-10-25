@@ -519,13 +519,21 @@ fn read_settings_json() -> Result<String, String> {
 // one release. Atomic, refused unless a JSON object, under the daemon's lock;
 // off the main thread (an fsync, and up to 2s waiting for that lock).
 #[tauri::command(async)]
-fn write_settings_json(data: String) -> Result<(), String> {
+fn write_settings_json(data: String, values: Option<serde_json::Value>, bases: Option<serde_json::Value>) -> Result<Option<serde_json::Value>, String> {
     let data_dir = mailvault_core::paths::app_data_dir()
         .map_err(|e| format!("Could not get app data dir: {}", e))?;
+    if let Some(values) = values {
+        let doc = mailvault_core::settings_doc::SettingsDoc::shared(&data_dir);
+        doc.replace_rebased(&values, &bases.unwrap_or_else(|| serde_json::json!({})), None)
+            .map_err(|e| e.catalog_key().to_string())?;
+        let snapshot = doc.get(None).map_err(|e| e.catalog_key().to_string())?;
+        let actual = serde_json::to_string(&snapshot.values).map_err(|_| "errors.settingsWriteFailed".to_string())?;
+        log_redact::set_verbose(log_redact::verbose_from_settings(&actual));
+        return Ok(Some(serde_json::json!({"values":snapshot.values,"version":snapshot.version})));
+    }
     mailvault_core::settings_doc::write_document(&data_dir, &data)?;
-    // The shell's own log level follows `logVerbosity` (the daemon is told by RPC).
     log_redact::set_verbose(log_redact::verbose_from_settings(&data));
-    Ok(())
+    Ok(None)
 }
 
 /// The daemon wrote the settings (`settings-changed`): the shell's own log
@@ -3116,7 +3124,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // The settings document (`handlers/settings.rs`): one small file read,
         // or one write and fsync. Every window hydrates through `settings.get`,
         // so a daemon that accepts and never answers must not hang the UI.
-        "settings.get" | "settings.patch" | "settings.replace" => Some(Duration::from_secs(30)),
+        "settings.get" | "settings.patch" | "settings.replace" | "backup.schedule.get" | "backup.schedule.set" => Some(Duration::from_secs(30)),
 
         // Task 4.4 / decision 8: inline-blocking, same reasoning as
         // archive_emails/bulk_delete_emails above, the whole ZIP
@@ -4617,7 +4625,7 @@ mod tests {
     /// Every window's hydration waits on `settings.get`: bounded by name.
     #[test]
     fn reply_timeout_bounds_the_settings_rpcs() {
-        for method in ["settings.get", "settings.patch", "settings.replace"] {
+        for method in ["settings.get", "settings.patch", "settings.replace", "backup.schedule.get", "backup.schedule.set"] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
         }
     }

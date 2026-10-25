@@ -504,7 +504,7 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
     let method = req.method.clone();
     // These read-only contracts must reject account-bearing unknown fields
     // without ever resolving credentials. route_request retains foreground accounting.
-    if matches!(method.as_str(), "compose.reply_context" | "compose.check") {
+    if matches!(method.as_str(), "compose.reply_context" | "compose.check" | "backup.schedule.get" | "backup.schedule.set") {
         return route_request(state, req).await;
     }
     let crate::oauth_tokens::Injection { injected, refusal } = crate::oauth_tokens::inject(state, &method, &mut req.params).await;
@@ -583,6 +583,9 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::backup_schedule::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
     if let Some(resp) = crate::handlers::backup::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }

@@ -48,6 +48,9 @@ const RETRY_MAX_MS = 60000;
 
 // In-memory cache — always holds the current state, as JSON strings.
 const cache = new Map();
+// Last accepted bytes, distinct from dirty/inflight whole-store snapshots.
+// Only mailvault-settings needs nested rebasing with daemon-owned fields.
+const accepted = new Map();
 // Keys changed in this window and not yet written.
 const dirty = new Set();
 // Keys a window that cannot write changed in its own memory: kept out of
@@ -107,6 +110,7 @@ function noteVersion(version) {
 function fill(values) {
   const overruled = [];
   for (const [key, value] of Object.entries(values)) {
+    accepted.set(key, value);
     if (early.has(key)) {
       overruled.push(key);
       dirty.delete(key);
@@ -225,6 +229,7 @@ function adoptLate(values) {
   const hydrate = [];
   const dropped = [];
   for (const [name, doc] of Object.entries(values)) {
+    accepted.set(name, doc);
     if (dirty.has(name) && !inflight.has(name)) {
       const merged = layOver(name, cache.has(name) ? parse(cache.get(name)) : undefined, doc);
       if (merged) {
@@ -295,48 +300,72 @@ function scheduleProbe() {
 
 // ── Writing ─────────────────────────────────────────────────────────────────
 
-// The changed keys laid over the file as it is now, through the shell.
-async function writeThroughShell(names) {
-  let base = null;
-  try {
-    const parsed = JSON.parse(await invoke('read_settings_json'));
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) base = parsed;
-  } catch { /* unreadable or broken: decided below */ }
+// Apply only the local field delta to a later accepted snapshot. Missing and
+// explicit null are distinct; arrays/scalars replace, object fields recurse.
+function rebase(current, before, after) {
+  if (deepEqual(before, after)) return current;
+  const object = value => value && typeof value === 'object' && !Array.isArray(value);
+  if (!object(after) || (before != null && !object(before))) return after;
+  before ??= {};
+  const result = object(current) ? { ...current } : {};
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (!Object.prototype.hasOwnProperty.call(after, key)) delete result[key];
+    else if (!deepEqual(before[key], after[key])) result[key] = rebase(result[key], before[key], after[key]);
+  }
+  return result;
+}
+
+function acceptWrite(reply, values) {
+  noteVersion(reply?.version);
+  for (const [name, sent] of Object.entries(values)) {
+    const snapshot = reply?.values && typeof reply.values === 'object';
+    const has = snapshot ? Object.prototype.hasOwnProperty.call(reply.values, name) : sent !== null;
+    const actual = snapshot ? reply.values[name] : sent === null ? undefined : sent;
+    const before = cache.has(name) ? parse(cache.get(name)) : undefined;
+    // Preserve a mutation made while this immutable write was in flight.
+    const after = name === 'mailvault-settings' ? rebase(actual, sent === null ? undefined : sent, before) : before;
+    if (has) accepted.set(name, actual); else accepted.delete(name);
+    if (name !== 'mailvault-settings' || deepEqual(before, after)) continue;
+    if (after === undefined) cache.delete(name); else cache.set(name, JSON.stringify(after));
+    applyToStore(name, before, after);
+  }
+}
+
+// Old shells still receive their complete document. This shell additionally
+// takes the immutable values/bases and rebases atomically under SettingsDoc's
+// writer lock, so a daemon write between read and write remains intact.
+async function writeThroughShell(values, bases) {
+  let base = await readThroughShell();
   if (!base) {
-    // Only a cache that holds the whole document may stand in for it.
     if (!loaded) throw new Error(NOT_LOADED);
-    base = {};
-    for (const [key, value] of cache.entries()) base[key] = parse(value);
+    base = Object.fromEntries([...cache].map(([key, value]) => [key, parse(value)]));
   }
-  for (const name of names) {
-    if (cache.has(name)) base[name] = parse(cache.get(name));
-    else delete base[name];
+  for (const [name, value] of Object.entries(values)) {
+    if (value === null) delete base[name]; else base[name] = value;
   }
-  await invoke('write_settings_json', { data: JSON.stringify(base) });
+  const reply = await invoke('write_settings_json', { data: JSON.stringify(base), values, bases });
+  acceptWrite(reply, values);
 }
 
 async function send(names) {
+  const values = Object.fromEntries(names.map(n => [n, cache.has(n) ? parse(cache.get(n)) : null]));
+  const bases = names.includes('mailvault-settings') ? { 'mailvault-settings': accepted.get('mailvault-settings') ?? null } : {};
   if (mode !== 'shell') {
-    const values = Object.fromEntries(names.map(n => [n, cache.has(n) ? parse(cache.get(n)) : null]));
     try {
-      const reply = await rpc('settings.replace', { values });
+      const reply = await rpc('settings.replace', { values, bases });
       if (reply && Number.isInteger(reply.version)) {
         mode = 'daemon';
-        noteVersion(reply.version);
+        acceptWrite(reply, values);
         return;
       }
       mode = 'shell';
     } catch (e) {
       const text = errText(e);
       if (text === OUTDATED) mode = 'shell';
-      // A daemon that answered with an error of its own (the write failed,
-      // the file is intact): keep the change queued and try again later.
       else if (isSettingsError(text)) throw e;
-      // Unreachable, or not a settings answer: through the shell this time,
-      // so nothing waits on it.
     }
   }
-  await writeThroughShell(names);
+  await writeThroughShell(values, bases);
 }
 
 async function writeDirty() {
@@ -516,6 +545,7 @@ async function refresh(keys) {
     if (deepEqual(before, after)) continue;
     if (!has && !keys && localOnly.has(name)) continue;
     localOnly.delete(name);
+    if (has) accepted.set(name, after); else accepted.delete(name);
     if (has) cache.set(name, JSON.stringify(after));
     else cache.delete(name);
     applyToStore(name, before, after);

@@ -562,6 +562,24 @@ impl SettingsDoc {
         })
     }
 
+    /// Apply a whole-store UI write using its last accepted baseline. Only
+    /// mailvault-settings is shared at nested field granularity with native
+    /// writers. Other stores retain replace semantics. Null removes a store;
+    /// nested null is a value, unlike JSON merge patch's deletion operator.
+    pub fn replace_rebased(&self, values: &Value, bases: &Value, base_version: Option<u64>) -> Result<Change, SettingsError> {
+        let entries = values.as_object().ok_or(SettingsError::NotAnObject)?;
+        let bases = bases.as_object().ok_or(SettingsError::NotAnObject)?;
+        self.write_op(base_version, |doc| {
+            let map = doc.as_object_mut().expect("settings document object");
+            for (key, value) in entries {
+                if value.is_null() { map.remove(key); }
+                else if key == "mailvault-settings" && bases.contains_key(key) {
+                    apply_store_delta(map.entry(key.clone()).or_insert(Value::Null), &bases[key], value);
+                } else { map.insert(key.clone(), value.clone()); }
+            }
+        })
+    }
+
     fn write_op(&self, base_version: Option<u64>, apply: impl FnOnce(&mut Value)) -> Result<Change, SettingsError> {
         let _writer = self.writer.lock().unwrap_or_else(|p| p.into_inner());
         let _file_lock = lock_file(&self.dir, DAEMON_LOCK_WAIT).map_err(|e| SettingsError::Io(e.to_string()))?;
@@ -696,6 +714,25 @@ impl SettingsDoc {
 
 /// A temp file older than this is left over from a writer that died.
 const STALE_TEMP: Duration = Duration::from_secs(60);
+
+fn apply_store_delta(current: &mut Value, before: &Value, after: &Value) {
+    if before == after { return; }
+    if let Some(next) = after.as_object().filter(|_| before.is_object() || before.is_null()) {
+        if !current.is_object() { *current = Value::Object(Map::new()); }
+        let current = current.as_object_mut().unwrap();
+        if let Some(previous) = before.as_object() {
+            for key in previous.keys().filter(|key| !next.contains_key(*key)) { current.remove(key); }
+        }
+        for (key, value) in next {
+            let prior = before.get(key).unwrap_or(&Value::Null);
+            // A present null added to an absent field is an explicit value.
+            if before.get(key).is_none() && value.is_null() { current.insert(key.clone(), Value::Null); }
+            else if before.get(key) != Some(value) {
+                apply_store_delta(current.entry(key.clone()).or_insert(Value::Null), prior, value);
+            }
+        }
+    } else { *current = after.clone(); }
+}
 
 /// The shell's fallback write (`write_settings_json`, for a daemon without
 /// `settings.*`): the whole document, refused unless it is a JSON object,
