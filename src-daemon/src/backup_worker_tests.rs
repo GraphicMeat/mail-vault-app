@@ -1934,3 +1934,30 @@ async fn backup_access_cap_wake_during_pending_probe_is_not_lost() {
     finish(r).await;
     assert!(resumed,"a real cap-change Wake consumed during preparing was lost after its old limit Pending result");
 }
+
+#[tokio::test]
+async fn backup_access_unavailable_observations_stay_quiet_and_can_recover() {
+    let mut r=rig();let stamp=access_slot(&r);let ack=manual(&r.state,"one","unavailable-fix1").await;
+    wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
+    tokio::time::timeout(Duration::from_secs(3),async {
+        loop {let(done,idle)=oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::AccessIdle{done}).unwrap();if idle.await.unwrap(){break;}tokio::task::yield_now().await;}
+    }).await.unwrap();
+    let revision=r.state.backup_worker.status()["revision"].clone();let mut events=r.state.events.subscribe();let mut attempts=Vec::new();
+    for status in ["unavailable","unknown"] {
+        let attempt=access_attempt(&r,&ack,"shell-unavailable");
+        let reply=rpc(&r.state,"backup.attach_access",json!({"attempt":attempt,"slotStamp":stamp,"resolution":{"status":status}})).await;
+        assert_eq!(reply["state"],"rejected");attempts.push(attempt);
+        tokio::time::timeout(Duration::from_secs(3),async {
+            loop {let(done,idle)=oneshot::channel();r.state.backup_worker.tx.get().unwrap().send(Cmd::AccessIdle{done}).unwrap();if idle.await.unwrap(){break;}tokio::task::yield_now().await;}
+        }).await.unwrap();
+    }
+    let quiet_revision=r.state.backup_worker.status()["revision"].clone();let mut needed=0;
+    while let Ok(event)=events.try_recv() {if serde_json::from_str::<Value>(&event).unwrap()["params"]["name"]=="backup-access-needed" {needed+=1;}}
+    let pending=r.state.backup_worker.status();let same=pending["pendingAccess"][0]["executionId"]==ack["executionId"] && pending["pendingAccess"][0]["runId"]==ack["runId"];
+    let no_history=settings(&r.state)["backupHistory"]["one"].is_null();let no_provider=r.calls.try_recv().is_err();
+    let authorized=access_attempt(&r,&ack,"shell-unavailable");access_attach(&r,&authorized,&stamp,"/native-authorized").await;
+    let c=call(&mut r).await;c.reply.send(Ok(result(1))).ok().unwrap();wait(&r.state,|s|s["requests"]["unavailable-fix1"]["status"]=="success").await;
+    finish(r).await;
+    assert!(same && no_history && no_provider);
+    assert_eq!(quiet_revision,revision,"unchanged unavailable/unknown access re-probed pending intent");assert_eq!(needed,0,"unavailable observation published its own next resolver trigger");
+}
