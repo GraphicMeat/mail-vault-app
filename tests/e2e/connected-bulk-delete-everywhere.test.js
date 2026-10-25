@@ -103,7 +103,8 @@ describe('Bulk delete everywhere', function () {
     (async () => {
     const hint = value => value && ({ accountId: value.accountId, mailbox: value.mailbox, uid: value.uid,
       nativeIdentity: value.nativeIdentity || value._nativeIdentity || null,
-      messageIdPresent: value.messageIdPresent, hasMessageId: !!value.messageId,
+      messageIdPresent: value.messageIdPresent ?? (Object.hasOwn(value, 'messageId') || Object.hasOwn(value, 'message_id')),
+      hasMessageId: !!(value.messageId ?? value.message_id),
       hasGraphId: !!(value.graphId || value._graphId), hasJmapId: !!(value.jmapId || value._jmapId),
       localIdentity: value.localIdentity || null });
     const state = window.__MAIL_STORE__?.getState?.();
@@ -286,10 +287,28 @@ describe('Bulk delete everywhere', function () {
     // sequence and waits for the store to settle on the pair it asked for;
     // the local switchToVaderArchive only retries the sidebar listing.
     const [, vaderEmail] = browser.mockAccounts.map(a => a.email);
-    await switchToFolder(vaderEmail, 'Archive');
-    folderName = await folderHeaderText();
-    expect(folderName).toBe('Archive');
-    expect((await rows()).length).toBeGreaterThan(0);
+    const wantedAccountId = browser.mockAccounts.find(account => account.email === vaderEmail)?.id;
+    let settled;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      await switchToFolder(vaderEmail, 'Archive');
+      // The active pair can change after the helper's first pair check. Its
+      // final row-stability check alone also accepts a stable Inbox rollback.
+      settled = await browser.execute((pattern) => {
+        const state = window.__MAIL_STORE__?.getState?.();
+        const fixture = new RegExp(pattern);
+        return { accountId: state?.activeAccountId, mailbox: state?.activeMailbox,
+          header: document.querySelector('[data-testid="mailbox-title"]')?.textContent?.trim() || '',
+          fixtureRows: [...document.querySelectorAll('[data-testid="email-row"]')].filter(row => fixture.test(row.innerText || '')).length };
+      }, SUBJECT_RE);
+      console.log('F_SETUP_SCOPE=' + JSON.stringify({ attempt, ...settled }));
+      if (settled.accountId === wantedAccountId && settled.mailbox === 'Archive'
+          && settled.header === 'Archive' && settled.fixtureRows > 0) break;
+    }
+    expect(settled.accountId).toBe(wantedAccountId);
+    expect(settled.mailbox).toBe('Archive');
+    expect(settled.header).toBe('Archive');
+    expect(settled.fixtureRows).toBeGreaterThan(0);
+    folderName = settled.header;
   });
 
   /**

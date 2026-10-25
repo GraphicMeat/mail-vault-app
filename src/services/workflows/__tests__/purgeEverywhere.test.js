@@ -404,3 +404,96 @@ it('keeps known conflicting message identity visible without borrowing it into t
     'm1@mock'
   );
 });
+
+it.each(['original', 'replacement'])(
+  'reconciles an offscreen UNIFIED selection when its %s arrives during native work',
+  async (arrival) => {
+    const key = `${ACCOUNT.id}:INBOX:7`;
+    const original = {
+      ...row(7),
+      _accountId: ACCOUNT.id,
+      _mailbox: 'INBOX',
+      _nativeIdentity: { ...row(7)._nativeIdentity, mailbox: 'INBOX' },
+    };
+    const hint = captureSelectionSnapshot(original, ACCOUNT.id, 'INBOX');
+    useMailStore.setState({
+      activeMailbox: 'UNIFIED',
+      emails: [],
+      sentEmails: [],
+      localEmails: [],
+      selectedEmail: null,
+      selectedEmailId: null,
+      selectedThread: null,
+      emailCache: new Map(),
+      selectedEmailIds: new Set([key]),
+      selectedEmailSnapshots: new Map([[key, hint]]),
+    });
+    let finish;
+    let entered;
+    const started = new Promise((resolve) => {
+      entered = resolve;
+    });
+    native.start.mockImplementation(() => {
+      entered();
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const run = purgeEverywhere([key]);
+    await started;
+    const arrived =
+      arrival === 'original'
+        ? original
+        : {
+            ...original,
+            messageId: 'B',
+            _nativeIdentity: { ...original._nativeIdentity, originHash: 'B' },
+          };
+    useMailStore.setState({ emails: [arrived], totalEmails: 1 });
+    useMailStore.getState().updateSortedEmails();
+    finish(outcome(native.start.mock.calls[0][0].scope));
+    await run;
+    const shown = useMailStore
+      .getState()
+      .sortedEmails.filter((row) => row.uid === 7);
+    if (arrival === 'original') {
+      expect(shown).toEqual([]);
+      expect(
+        useMailStore.getState().deleteTombstones.has(`${ACCOUNT.id}|INBOX|7`)
+      ).toBe(true);
+    } else {
+      expect(shown.map((row) => row.messageId)).toEqual(['B']);
+      expect(
+        useMailStore.getState().deleteTombstones.has(`${ACCOUNT.id}|INBOX|7`)
+      ).toBe(false);
+    }
+    expect(native.start).toHaveBeenCalledTimes(1);
+    expect(native.start.mock.calls[0][0].scope.targetHints).toEqual([hint]);
+    expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
+  }
+);
+
+it('keeps a positive-ID B visible when the retained bound original explicitly has no Message-ID', async () => {
+  const original = { ...row(1), messageId: null };
+  const replacement = { ...row(1), messageId: 'B', _nativeIdentity: undefined };
+  useMailStore.setState({
+    emails: [replacement],
+    sentEmails: [],
+    localEmails: [],
+    selectedEmail: original,
+    selectedEmailId: 1,
+    selectedThread: null,
+  });
+  const scope = captureBulkScope([1], useMailStore.getState(), [original]);
+  native.start.mockImplementation(async ({ scope }) => outcome(scope, true));
+  await purgeEverywhere([1], { scope });
+  expect(useMailStore.getState().emails.map((row) => row.messageId)).toEqual([
+    'B',
+  ]);
+  expect(native.start).toHaveBeenCalledTimes(1);
+  expect(native.start.mock.calls[0][0].scope.targetHints[0]).toMatchObject({
+    messageIdPresent: true,
+    messageId: null,
+    nativeIdentity: { originHash: 'A' },
+  });
+});

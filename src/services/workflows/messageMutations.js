@@ -2608,12 +2608,12 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
     return actual && originalTargetId({ ...actual, localIdentity: null }) === originalTargetId({ ...hint, localIdentity: null });
   };
   // Missing evidence on an archived duplicate is not evidence of a new
-  // message. Only positive conflicting identity vetoes the bound original.
+  // message. Known conflicting identity vetoes the bound original.
   const contradictsHint = (row, hint, state) => {
     const at = resolveEmailLocation(row, state);
     const actual = at && captureSelectionSnapshot(row, at.accountId, at.mailbox);
     return actual && ((actual.nativeIdentity && originalTargetId(actual.nativeIdentity) !== originalTargetId(hint.nativeIdentity))
-      || (actual.messageId && hint.messageId && actual.messageId !== hint.messageId)
+      || (actual.messageIdPresent && hint.messageIdPresent && actual.messageId !== hint.messageId)
       || (actual.graphId && actual.graphId !== hint.graphId)
       || (actual.jmapId && actual.jmapId !== hint.jmapId));
   };
@@ -2626,10 +2626,12 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
     rowsById.get(id).push(row);
   }
   const hintsById = new Map(scope.targetHints.map(hint => [_targetId(hint), hint]));
-  // A replacement under the same numeric key must not be optimistically hidden.
+  // Keep offscreen originals eligible; a known replacement under the same
+  // numeric key must not be optimistically hidden.
   const targets = scope.targetHints.filter(hint => {
     const rows = rowsById.get(_targetId(hint)) || [];
-    return rows.some(row => sameHint(row, hint, live)) && !rows.some(row => contradictsHint(row, hint, live));
+    return (!rows.length || rows.some(row => sameHint(row, hint, live)))
+      && !rows.some(row => contradictsHint(row, hint, live));
   }).map(hint => ({ ...hint, tombstone: _targetId(hint) }));
   const originalHints = new Set(scope.targetHints.map(originalTargetId));
   const consumedKeys = scope.keys.filter(key => {
