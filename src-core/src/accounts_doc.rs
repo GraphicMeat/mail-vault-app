@@ -293,7 +293,8 @@ fn put(
         if if_absent {
             let mut ids: std::collections::HashSet<String> =
                 list.iter().filter_map(id_of).map(str::to_owned).collect();
-            let mut keys: std::collections::HashSet<String> = list.iter().map(logical_key).collect();
+            let mut keys: std::collections::HashSet<String> =
+                list.iter().map(logical_key).collect();
             for entry in incoming {
                 let entry = Value::Object(entry);
                 let id = id_of(&entry).unwrap_or_default().to_string();

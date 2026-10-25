@@ -312,25 +312,40 @@ mod tests {
         let calls = PRESERVATION_CALLS.load(std::sync::atomic::Ordering::SeqCst);
         let generation = crate::credentials::write_generation();
         let mut rx = state.events.subscribe();
-        let version = call(&state,"accounts.list",json!({})).await.unwrap()["version"].as_u64().unwrap();
-        let out = call(&state,"accounts.replace_all",json!({"entries":[]})).await.unwrap();
-        assert_eq!(PRESERVATION_CALLS.load(std::sync::atomic::Ordering::SeqCst), calls);
+        let version = call(&state, "accounts.list", json!({})).await.unwrap()["version"]
+            .as_u64()
+            .unwrap();
+        let out = call(&state, "accounts.replace_all", json!({"entries":[]}))
+            .await
+            .unwrap();
+        assert_eq!(
+            PRESERVATION_CALLS.load(std::sync::atomic::Ordering::SeqCst),
+            calls
+        );
         assert_eq!(crate::credentials::write_generation(), generation);
         assert_eq!(std::fs::read_to_string(&creds).unwrap(), "{}");
         assert_eq!(on_disk(&dir), json!([]));
         assert!(out["version"].as_u64().unwrap() > version);
         assert_eq!(out["changed"], json!([]));
         let event = rx.try_recv().unwrap();
-        let (name,payload) = mailvault_core::daemon_ipc::parse_event(&event).unwrap();
-        assert_eq!(name,CHANGED_EVENT);
-        assert_eq!(payload,json!({"ids":[],"version":out["version"]}));
-        assert!(rx.try_recv().is_err(), "no credential event or duplicate account event");
+        let (name, payload) = mailvault_core::daemon_ipc::parse_event(&event).unwrap();
+        assert_eq!(name, CHANGED_EVENT);
+        assert_eq!(payload, json!({"ids":[],"version":out["version"]}));
+        assert!(
+            rx.try_recv().is_err(),
+            "no credential event or duplicate account event"
+        );
         let bytes = std::fs::read(&path).unwrap();
-        let again = call(&state,"accounts.replace_all",json!({"entries":[]})).await.unwrap();
-        assert_eq!(again,out);
-        assert_eq!(std::fs::read(&path).unwrap(),bytes);
+        let again = call(&state, "accounts.replace_all", json!({"entries":[]}))
+            .await
+            .unwrap();
+        assert_eq!(again, out);
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
         assert!(rx.try_recv().is_err());
-        assert_eq!(PRESERVATION_CALLS.load(std::sync::atomic::Ordering::SeqCst), calls);
+        assert_eq!(
+            PRESERVATION_CALLS.load(std::sync::atomic::Ordering::SeqCst),
+            calls
+        );
     }
     #[tokio::test]
     async fn review_fix_replace_missing_id_rows_commits_and_emits_empty_ids() {
@@ -342,15 +357,18 @@ mod tests {
     }
     #[tokio::test]
     async fn review_fix_if_absent_route_keeps_first_batch_identity_and_distinct_rows() {
-        let (dir,state) = rig();
+        let (dir, state) = rig();
         let mut rx = state.events.subscribe();
         let out = call(&state,"accounts.put",json!({"ifAbsent":true,"entries":[{"id":"a","email":"a@x.test"},{"id":"a","email":"other@x.test"},{"id":"b","email":"A@X.TEST"},{"id":"c","email":"c@x.test"}]})).await.unwrap();
-        assert_eq!(on_disk(&dir),json!([{"id":"a","email":"a@x.test"},{"id":"c","email":"c@x.test"}]));
-        assert_eq!(out["changed"],json!(["a","c"]));
+        assert_eq!(
+            on_disk(&dir),
+            json!([{"id":"a","email":"a@x.test"},{"id":"c","email":"c@x.test"}])
+        );
+        assert_eq!(out["changed"], json!(["a", "c"]));
         let event = rx.try_recv().unwrap();
-        let (name,payload) = mailvault_core::daemon_ipc::parse_event(&event).unwrap();
-        assert_eq!(name,CHANGED_EVENT);
-        assert_eq!(payload,json!({"ids":["a","c"],"version":out["version"]}));
+        let (name, payload) = mailvault_core::daemon_ipc::parse_event(&event).unwrap();
+        assert_eq!(name, CHANGED_EVENT);
+        assert_eq!(payload, json!({"ids":["a","c"],"version":out["version"]}));
         assert!(rx.try_recv().is_err());
     }
 

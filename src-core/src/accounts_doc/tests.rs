@@ -795,9 +795,17 @@ fn legacy_map_representability_requires_unique_nonempty_ids_only_for_secrets() {
 
 #[test]
 fn review_fix_anonymous_empty_replacement_commits_without_public_ids() {
-    for legacy in [json!([{"password":"only-secret"}]), json!([{"id":7,"password":"only-secret"}]), json!([{"name":"legacy"}]), json!([17]), json!([{"id":"","password":"only-secret"}])] {
-        let d = dir(); seed(d.path(), legacy);
-        let doc = doc(d.path()); let version = list(&doc).unwrap().version;
+    for legacy in [
+        json!([{"password":"only-secret"}]),
+        json!([{"id":7,"password":"only-secret"}]),
+        json!([{"name":"legacy"}]),
+        json!([17]),
+        json!([{"id":"","password":"only-secret"}]),
+    ] {
+        let d = dir();
+        seed(d.path(), legacy);
+        let doc = doc(d.path());
+        let version = list(&doc).unwrap().version;
         let out = call(&doc, "accounts.replace_all", json!({"entries":[]})).unwrap();
         assert_eq!(disk(d.path()), json!([]));
         assert!(out.reply["version"].as_u64().unwrap() > version);
@@ -805,32 +813,48 @@ fn review_fix_anonymous_empty_replacement_commits_without_public_ids() {
         assert!(out.changed.as_ref().unwrap().changed.is_empty());
         let bytes = fs::read(d.path().join(FILE_NAME)).unwrap();
         let again = call(&doc, "accounts.replace_all", json!({"entries":[]})).unwrap();
-        assert_eq!(again.reply, out.reply); assert!(again.changed.is_none());
+        assert_eq!(again.reply, out.reply);
+        assert!(again.changed.is_none());
         assert_eq!(fs::read(d.path().join(FILE_NAME)).unwrap(), bytes);
     }
 }
 #[test]
 fn review_fix_if_absent_excludes_same_id_inside_one_batch() {
-    let d = dir(); let doc = doc(d.path());
+    let d = dir();
+    let doc = doc(d.path());
     let out = call(&doc, "accounts.put", json!({"ifAbsent":true,"entries":[{"id":"a","email":"first@x.test","name":"first"},{"id":"a","email":"other@x.test","name":"second"}]})).unwrap();
-    assert_eq!(disk(d.path()), json!([{"id":"a","email":"first@x.test","name":"first"}]));
+    assert_eq!(
+        disk(d.path()),
+        json!([{"id":"a","email":"first@x.test","name":"first"}])
+    );
     assert_eq!(out.reply["changed"], json!(["a"]));
 }
 #[test]
 fn review_fix_if_absent_excludes_same_logical_key_inside_one_batch() {
-    let d = dir(); let doc = doc(d.path());
+    let d = dir();
+    let doc = doc(d.path());
     let out = call(&doc, "accounts.put", json!({"ifAbsent":true,"entries":[{"id":"a","email":"Me@x.test","imapHost":"IMAP.X.TEST"},{"id":"b","email":"me@x.test","imapHost":"imap.x.test"}]})).unwrap();
-    assert_eq!(disk(d.path()), json!([{"id":"a","email":"Me@x.test","imapHost":"IMAP.X.TEST"}]));
+    assert_eq!(
+        disk(d.path()),
+        json!([{"id":"a","email":"Me@x.test","imapHost":"IMAP.X.TEST"}])
+    );
     assert_eq!(out.reply["changed"], json!(["a"]));
 }
 #[test]
 fn review_fix_if_absent_distinct_batch_preserves_legacy_and_existing_precedence() {
     let d = dir();
     let legacy = json!([{"id":"legacy","email":"old@x.test","n":1},{"id":"legacy","email":"old@x.test","n":2}]);
-    seed(d.path(), legacy.clone()); let doc = doc(d.path());
+    seed(d.path(), legacy.clone());
+    let doc = doc(d.path());
     let out = call(&doc, "accounts.put", json!({"ifAbsent":true,"entries":[{"id":"legacy","email":"overwrite@x.test","n":3},{"id":"b","email":"b@x.test"},{"id":"c","email":"c@x.test"}]})).unwrap();
-    assert_eq!(out.reply["changed"], json!(["b","c"]));
+    assert_eq!(out.reply["changed"], json!(["b", "c"]));
     let rows = list(&doc).unwrap().accounts;
     assert_eq!(&rows[..2], legacy.as_array().unwrap().as_slice());
-    assert_eq!(rows[2..], [json!({"id":"b","email":"b@x.test"}),json!({"id":"c","email":"c@x.test"})]);
+    assert_eq!(
+        rows[2..],
+        [
+            json!({"id":"b","email":"b@x.test"}),
+            json!({"id":"c","email":"c@x.test"})
+        ]
+    );
 }
