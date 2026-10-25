@@ -1460,7 +1460,7 @@ mod tests {
             assert!(server.commands().iter().any(|command| command.contains("BODY.PEEK[]")), "must reach actual archive IO");
             assert_eq!(pending["lastError"], expected, "{pending}");
             assert_eq!(pending["worker"]["lastError"], expected, "worker checkpoint: {pending}");
-            assert_eq!(pending["errors"], 1);
+            assert_eq!(pending["worker"]["errors"], 1);
             assert!(!server.commands().iter().any(|command| command.contains("UID STORE")), "unarchived mail stays on server");
             let status = handle_request_for_test(&state, "bulk.status", json!({
                 "operationId":"download-limit", "attemptId":"download-attempt",

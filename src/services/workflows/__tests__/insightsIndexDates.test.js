@@ -5,6 +5,7 @@ vi.mock('../../db', () => ({}));
 vi.mock('../../api', () => ({}));
 vi.mock('../../../stores/settingsStore', () => ({ useSettingsStore: { getState: () => ({}) } }));
 vi.mock('../../../stores/connectivityStore', () => ({ useConnectivityStore: { getState: () => ({ online: false }) } }));
+vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => { throw new Error('serialization must not read runtime mail state'); } } }));
 vi.mock('../../authUtils', () => ({}));
 vi.mock('../../cacheManager', () => ({}));
 import { indexEntryFor } from '../messageMutations.js';

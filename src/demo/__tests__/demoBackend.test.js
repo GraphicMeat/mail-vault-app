@@ -23,6 +23,9 @@ describe('demo mailbox backend', () => {
     const saved = await call('drafts.save', request);
     expect(saved).toMatchObject({ draftId: 'demo-d', revision: 1, disposition: 'saved', cleanup: 'complete' });
     expect(await call('drafts.save', request)).toMatchObject({ uid: saved.uid, disposition: 'unchanged' });
+    const reordered = { ...request, snapshot: Object.fromEntries(Object.entries(request.snapshot).reverse()) };
+    reordered.snapshot.attachments = request.snapshot.attachments.map(attachment => Object.fromEntries(Object.entries(attachment).reverse()));
+    expect(await call('drafts.save', reordered)).toMatchObject({ uid: saved.uid, disposition: 'unchanged' });
     await expect(call('drafts.save', { ...request, snapshot: { ...request.snapshot, html: 'conflict' } })).rejects.toThrow();
     const restored = createDemoBackend(); restored.restoreState(JSON.parse(JSON.stringify(backend.exportState())));
     const restoredCall = (method, params = {}) => restored.invoke('daemon_rpc', { method, params });
@@ -34,6 +37,15 @@ describe('demo mailbox backend', () => {
     const reloaded = createDemoBackend(); reloaded.restoreState(JSON.parse(JSON.stringify(restored.exportState())));
     await expect(reloaded.invoke('daemon_rpc', { method: 'drafts.save', params: request })).rejects.toThrow();
     expect(await reloaded.invoke('daemon_rpc', { method: 'drafts.list', params: { draftId: 'demo-d', includeContent: true } })).toMatchObject({ drafts: [], terminal: true });
+  });
+
+  it('keeps attachment order significant when comparing the same draft revision', async () => {
+    const backend = createDemoBackend();
+    const request = { draftId: 'ordered-demo', revision: 1, accountId: backend.accounts[0].id, fromAddress: 'me@example.test', displayName: 'Me', snippet: '', snapshot: { to: '', cc: '', bcc: '', subject: '', html: '', text: '', inReplyTo: '', references: '', attachments: [{ filename: 'first', contentType: 'text/plain', content: 'one' }, { filename: 'second', contentType: 'text/plain', content: 'two' }] } };
+    const save = params => backend.invoke('daemon_rpc', { method: 'drafts.save', params });
+    await save(request);
+    await expect(save({ ...request, snapshot: { ...request.snapshot, attachments: [...request.snapshot.attachments].reverse() } })).rejects.toThrow('Draft revision conflict');
+    await expect(save({ ...request, snapshot: { ...request.snapshot, attachments: [{ ...request.snapshot.attachments[0], content: 'changed' }, request.snapshot.attachments[1]] } })).rejects.toThrow('Draft revision conflict');
   });
 
   it('conditionally retains newer drafts and refuses malformed cleanup bounds', async () => {

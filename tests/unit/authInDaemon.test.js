@@ -94,11 +94,22 @@ describe('the daemon owns the token', () => {
   const oauth2 = read('src-daemon/src/handlers/oauth2.rs');
   const tokens = read('src-daemon/src/oauth_tokens.rs');
 
-  it('puts its own token into every request before routing it', () => {
-    const handle = server.slice(server.indexOf('async fn handle_request('), server.indexOf('fn jmap_refusal_log_line'));
-    expect(handle).toMatch(/oauth_tokens::inject\(/);
-    expect(handle.indexOf('oauth_tokens::inject(')).toBeLessThan(handle.indexOf('route_request('));
-    expect(handle).toMatch(/oauth_tokens::note_refusal\(/);
+  it('routes only the two read-only compose contracts before credential injection', () => {
+    const handle = server.slice(server.indexOf('async fn handle_request('), server.indexOf('fn jmap_refusal_log_line')).replace(/\/\/[^\n]*/g, '');
+    const exempt = /if matches!\(method\.as_str\(\), ([^)]*)\) \{\s*return route_request\(state, req\)\.await;\s*\}/.exec(handle);
+    expect(exempt).not.toBeNull();
+    expect([...exempt[1].matchAll(/"([^"]+)"/g)].map(match => match[1])).toEqual(['compose.reply_context', 'compose.check']);
+    expect(exempt[1]).toBe('"compose.reply_context" | "compose.check"');
+    const ordinary = handle.slice(exempt.index + exempt[0].length);
+    const injection = ordinary.indexOf('oauth_tokens::inject(');
+    const refusal = /if let Some\(message\) = refusal \{\s*return RpcResponse::error\([^;]+;\s*\}/.exec(ordinary);
+    expect(injection).toBeGreaterThanOrEqual(0);
+    expect(refusal).not.toBeNull();
+    expect(injection).toBeLessThan(refusal.index);
+    const routes = [...ordinary.matchAll(/route_request\(state, req\)/g)];
+    expect(routes).toHaveLength(2);
+    for (const route of routes) expect(refusal.index + refusal[0].length).toBeLessThan(route.index);
+    expect(ordinary).toMatch(/oauth_tokens::note_refusal\(/);
   });
 
   it('refreshes inside the margin the app used, one refresh per account at a time', () => {

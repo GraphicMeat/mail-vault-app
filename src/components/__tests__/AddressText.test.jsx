@@ -7,10 +7,13 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { AddressText } from '../email/AddressText';
 import { setMailtoComposeOpener } from '../../utils/mailto';
 
+const prep = vi.hoisted(() => ({ hold: null, send: vi.fn(), acknowledge: vi.fn(async () => 7) }));
+vi.mock('../../stores/safeStorage', async original => ({ ...(await original()), flushSafeStorage: (...args) => prep.acknowledge(...args) }));
+vi.mock('../../services/transport', () => ({ send: (...args) => prep.send(...args) }));
 const shell = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: (...args) => shell.open(...args) }));
 
@@ -18,6 +21,18 @@ describe('AddressText', () => {
   let opened;
   beforeEach(() => {
     opened = [];
+    prep.hold = null;
+    prep.send.mockReset();
+    prep.send.mockImplementation(async (method, request) => {
+      if (method !== 'compose.reply_context' || request.kind !== 'mailto') throw new Error(`Unexpected preparation RPC: ${method}`);
+      expect(request.expectedSettingsVersion).toBe(7);
+      expect(request.href).toBe('mailto:a@b.com');
+      if (prep.hold) await prep.hold;
+      return { requestId: request.requestId, settingsVersion: 7, initialData: {
+        to: 'a@b.com', cc: '', bcc: '', subject: '', body: '', _prefill: true,
+        ...(request.accountId && { _accountId: request.accountId }),
+      } };
+    });
     setMailtoComposeOpener((data) => opened.push(data));
   });
   afterEach(() => {
@@ -41,25 +56,36 @@ describe('AddressText', () => {
     expect(link.getAttribute('href')).toBe('mailto:partners@blurb.com');
   });
 
-  it('opens compose on click instead of letting the browser follow the href', () => {
+  it('opens compose on click instead of letting the browser follow the href', async () => {
     render(<AddressText text="write to a@b.com" accountId="acct-1" />);
     const link = screen.getByText('a@b.com');
     const event = new MouseEvent('click', { bubbles: true, cancelable: true });
     link.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(opened).toHaveLength(1);
+    await waitFor(() => expect(opened).toHaveLength(1));
     expect(opened[0]).toMatchObject({ to: 'a@b.com', _accountId: 'acct-1', _prefill: true });
   });
 
-  it('does not let the click reach the row or bubble it sits inside', () => {
+  it('does not let the click reach the row or bubble it sits inside', async () => {
     // The chat bubble and the thread row both have their own click handler;
     // clicking an address must not also select or collapse the message.
     const onParent = vi.fn();
     render(<div onClick={onParent}><AddressText text="a@b.com" /></div>);
     fireEvent.click(screen.getByText('a@b.com'));
     expect(onParent).not.toHaveBeenCalled();
-    expect(opened).toHaveLength(1);
+    await waitFor(() => expect(opened).toHaveLength(1));
+  });
+
+  it('holds delivery until native preparation answers, then opens the exact account once', async () => {
+    let release;
+    prep.hold = new Promise(resolve => { release = resolve; });
+    render(<AddressText text="a@b.com" accountId="acct-held" />);
+    fireEvent.click(screen.getByText('a@b.com'));
+    await waitFor(() => expect(prep.send).toHaveBeenCalledTimes(1));
+    expect(opened).toEqual([]);
+    release();
+    await waitFor(() => expect(opened).toEqual([{ to: 'a@b.com', cc: '', bcc: '', subject: '', body: '', _prefill: true, _accountId: 'acct-held' }]));
   });
 
   it('renders markup in the message as text, not as elements', () => {

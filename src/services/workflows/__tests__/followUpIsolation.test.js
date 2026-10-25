@@ -4,7 +4,7 @@
 // list's rows and their (account, folder, uid), and a reminder row there IS
 // the Sent copy's identity, so any of them can reach the real Sent message.
 // Reminders are shown pinned above the list instead (FollowUpPinnedRows).
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey } from '../../../stores/slices/unifiedHelpers';
 
@@ -180,6 +180,8 @@ function prime({ activeMailbox = 'INBOX', emails = [row(1), row(2)], sentEmails 
 
 const atSent77 = (e) => (e._mailbox === 'Sent' || e._fromSentFolder) && e.uid === 77;
 
+afterEach(() => bulkOperationManager._cleanup());
+
 describe('a due follow-up reminder and the inbox list', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -203,14 +205,21 @@ describe('a due follow-up reminder and the inbox list', () => {
     prime();
     const state = useMailStore.getState();
     const keys = state.sortedEmails.map(e => selectionKey(e, state));
+    mockSend.mockImplementationOnce(async (method, request) => {
+      if (method !== 'bulk.start') throw new Error(`Unexpected bulk RPC: ${method}`);
+      return { id: request.operationId, attemptId: request.attemptId, type: request.type, status: 'complete', total: 2, completed: 2, errors: 0 };
+    });
     await bulkOperationManager.start({
       type: 'delete', accountId: ACCT_A.id, account: ACCT_A, accounts: [ACCT_A],
       localFolders: {}, mailbox: 'INBOX', spans: false, uids: keys,
     });
 
-    const calls = mockBulkDeleteEmails.mock.calls.map(([, accountId, mailbox, uids]) => ({ accountId, mailbox, uids }));
-    expect(calls.filter(c => c.mailbox === 'Sent')).toEqual([]);
-    expect(calls).toEqual([{ accountId: ACCT_A.id, mailbox: 'INBOX', uids: [1, 2] }]);
+    const admissions = mockSend.mock.calls.filter(([method]) => method === 'bulk.start');
+    expect(admissions).toHaveLength(1);
+    expect(admissions[0][1]).toMatchObject({ type: 'delete', scope: { accountId: ACCT_A.id, mailbox: 'INBOX', spans: false, keys: [1, 2], targetHints: [] } });
+    expect(admissions[0][1].scope).toEqual({ accountId: ACCT_A.id, mailbox: 'INBOX', spans: false, keys: [1, 2], targetHints: [] });
+    expect(mockBulkDeleteEmails).not.toHaveBeenCalled();
+    expect(bulkOperationManager.isRunning).toBe(false);
   });
 
   // App.jsx's `#`: deleteEmailFromServer(selectedEmailId). A Sent message

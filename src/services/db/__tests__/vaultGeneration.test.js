@@ -6,8 +6,8 @@
  *
  * The uid sets and the light rows now come from the daemon's registry, and the
  * daemon runs the generation repair itself, under the mailbox lock, before it
- * answers (`vault_uid_sets` / `vault_light_rows`). So those reads send no JS
- * repair and never list the folder. The custody readers still repair from JS
+ * answers (`vault_uid_sets` / `vault_light_rows`). Projection then reads custody after its JS generation repair; neither path
+ * lists the folder. The custody readers still repair from JS
  * first, and those assert the ORDER: a repair that runs after the read leaves
  * the same wrong answer on screen as no repair at all.
  */
@@ -27,6 +27,7 @@ vi.mock('../../transport.js', () => ({
         ? repairImpl(args)
         : Promise.resolve({ ran: false, rebound: [], orphaned: [], kept: 0, errors: 0, generation: 1 });
     }
+    if (cmd === 'drafts.list') return Promise.resolve({ drafts: [], managed: [] });
     if (cmd === 'vault_uid_sets') return Promise.resolve({ saved: [3, 4], archived: [3] });
     if (cmd === 'vault_light_rows') return Promise.resolve([{ uid: 3, subject: 's', snippet: '', flags: ['archived'], isArchived: true }]);
     if (cmd === 'local_index_read') return Promise.resolve('[{"uid":3,"source":"local"}]');
@@ -57,9 +58,9 @@ afterEach(() => { vi.clearAllMocks(); });
 const ACCOUNT = 'acc-1';
 
 describe('vault generation repair', () => {
-  it('leaves the uid sets to the daemon: one registry read, no JS repair, no listing', async () => {
+  it('reads daemon-owned uid sets once, then repaired custody for draft projection without listing', async () => {
     const sets = await db.getVaultUidSets(ACCOUNT, 'INBOX');
-    expect(calls).toEqual(['vault_uid_sets']);
+    expect(calls).toEqual(['drafts.list', 'vault_uid_sets', 'maildir_repair_generation', 'local_index_read']);
     expect([...sets.saved]).toEqual([3, 4]);
     expect([...sets.archived]).toEqual([3]);
   });
@@ -67,13 +68,13 @@ describe('vault generation repair', () => {
   it('reads the light rows before any JS repair; only the custody stamp repairs, for its own read', async () => {
     const rows = await db.getLocalEmails(ACCOUNT, 'INBOX');
     expect(rows.map(r => r.uid)).toEqual([3]);
-    expect(calls).toEqual(['vault_light_rows', 'maildir_repair_generation', 'local_index_read']);
+    expect(calls).toEqual(['drafts.list', 'vault_light_rows', 'maildir_repair_generation', 'local_index_read']);
     expect(calls).not.toContain('maildir_list');
   });
 
   it('repairs before reading the local index the list renders from', async () => {
     await db.readLocalEmailIndex(ACCOUNT, 'INBOX');
-    expect(calls).toEqual(['maildir_repair_generation', 'local_index_read']);
+    expect(calls).toEqual(['drafts.list', 'maildir_repair_generation', 'local_index_read']);
   });
 
   it('repairs before reading provenance for a destructive path', async () => {
@@ -130,7 +131,7 @@ describe('vault generation repair', () => {
 
   it('skips the repair when there is no mailbox to repair', async () => {
     await db.readLocalEmailIndex(ACCOUNT, '');
-    expect(calls).toEqual(['local_index_read']);
+    expect(calls).toEqual(['drafts.list', 'local_index_read']);
   });
 });
 

@@ -212,6 +212,7 @@ describe('the guard: a store field that holds rows is registered or exempted', (
       archivedEmailIds: 'a set of uids, no row',
       loadedRanges: 'index ranges of the list',
       selectedEmailIds: 'the ticked rows\' selection keys',
+      selectedEmailSnapshots: 'immutable original selection identity evidence, never mutable rows or resolution candidates',
       deleteTombstones: 'keys of deleted messages',
       unreadKeep: 'selection keys held on screen',
       pendingSends: 'messages being sent, not received ones',
@@ -293,6 +294,19 @@ describe('the guard: a module-level snapshot of rows is registered or exempted',
 });
 
 describe('patchEverywhere', () => {
+  it('paints current rows without mutating or resolving the original selection evidence', () => {
+    useMailStore.setState({ selectedEmailIds: new Set(), selectedEmailSnapshots: new Map() });
+    useMailStore.getState().setEmailsSelected([msg(7)], true);
+    const captured = useMailStore.getState().selectedEmailSnapshots.get('a1:INBOX:7');
+    expect(captured.messageId).toBe('m7@mock');
+    patchEverywhere(['a1-INBOX-7'], row => ({ ...row, messageId: 'replacement@mock', flags: ['seen'] }));
+    expect(useMailStore.getState().emails[0].messageId).toBe('replacement@mock');
+    expect(useMailStore.getState().selectedEmailSnapshots.get('a1:INBOX:7')).toBe(captured);
+    expect(captured.messageId).toBe('m7@mock');
+    expect(Object.isFrozen(captured)).toBe(true);
+    expect(resolvePool(useMailStore.getState())).not.toContain(captured);
+  });
+
   it('lands one mail-store update for the whole batch, however many containers hold the row', () => {
     const mail = count(useMailStore);
     const search = count(useSearchStore);

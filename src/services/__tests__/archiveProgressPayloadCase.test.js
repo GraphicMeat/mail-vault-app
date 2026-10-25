@@ -1,65 +1,67 @@
-/**
- * Task 3.3 (R3.2): `archive-progress` moves to a fully camelCase payload,
- * keyed by `operation` (+ `accountId`/`mailbox`). These RED tests prove
- * BulkOperationManager mis-reads the payload it will actually receive once
- * the Rust struct changes - written BEFORE the rename, per the plan: every
- * read here is `if`-guarded, so a naive rename breaks it silently, with
- * nothing failing loudly.
- */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-const handlers = {};
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (name, cb) => { handlers[name] = cb; return () => {}; }),
-}));
-vi.mock('../api', () => ({
-  savePendingOperation: vi.fn().mockResolvedValue(undefined),
-  clearPendingOperation: vi.fn().mockResolvedValue(undefined),
-}));
-vi.mock('../authUtils', () => ({ ensureFreshToken: (a) => Promise.resolve(a) }));
-
-const { bulkOperationManager } = await import('../BulkOperationManager.js');
-
-beforeEach(async () => {
-  for (const k of Object.keys(handlers)) delete handlers[k];
-  // Bypass start() - it gates on window.__TAURI__, which does not exist in
-  // this (node-environment) test file, and none of that machinery is what
-  // is under test here. Drive the listener directly, as production code
-  // does once a run is under way.
-  bulkOperationManager._operation = { completed: 0, errors: 0, status: 'archiving', accountId: 'acc1', mailbox: 'INBOX' };
-  await bulkOperationManager._setupEventListener();
+// Native bulk snapshots own manual archive diagnostics and drain. Global
+// archive-progress belongs to other archive jobs and is not a facade input.
+import { it, expect, vi, beforeEach, afterEach } from 'vitest';
+const io = vi.hoisted(() => ({ send: vi.fn(), events: {}, unlisten: vi.fn() }));
+vi.mock('../transport.js', () => ({ send: (...args) => io.send(...args) }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async (name, callback) => {
+  io.events[name] = callback;
+  return () => { io.unlisten(); delete io.events[name]; };
+} }));
+import { BulkOperationManager } from '../BulkOperationManager.js';
+const key = 'errors.bulkDownloadLimited';
+const scope = { accountId: 'acc1', mailbox: 'INBOX', spans: false, keys: [7], targetHints: [] };
+let manager;
+beforeEach(() => {
+  manager = new BulkOperationManager();
+  io.send.mockReset(); io.unlisten.mockClear(); io.events = {};
 });
-
-describe('BulkOperationManager reads a camelCase archive-progress payload', () => {
-  it('surfaces lastError when bandwidthLimited is true (:225)', () => {
-    handlers['archive-progress']({
-      payload: {
-        total: 10, completed: 3, errors: 1, active: false,
-        bandwidthLimited: true, lastError: 'Daily download limit reached for this provider.',
-        operation: 'archive', accountId: 'acc1', mailbox: 'INBOX',
-      },
-    });
-
-    expect(bulkOperationManager._operation.lastError).toBe('Daily download limit reached for this provider.');
+afterEach(() => manager._cleanup());
+it('preserves the exact native download-limit key through owned drain and ignores foreign frames', async () => {
+  let admission;
+  io.send.mockImplementation(async (method, request) => {
+    if (method !== 'bulk.start') throw new Error(`Unexpected RPC: ${method}`);
+    admission = { id: request.operationId, attemptId: request.attemptId, type: request.type, status: 'archiving', total: 1, completed: 0, errors: 0, lastError: null };
+    return admission;
   });
+  const observed = [];
+  const off = manager.subscribe((operation, meta) => observed.push({ operation, ...meta }));
+  const run = manager.start({ type: 'archive', scope });
+  await vi.waitFor(() => expect(manager.operation.status).toBe('archiving'));
+  expect(Object.keys(io.events)).toEqual(['bulk-progress']);
+  const emit = (operationId, attemptId, operation) => io.events['bulk-progress']({ payload: { operationId, attemptId, operation, finished: true } });
+  emit('foreign', admission.attemptId, { ...admission, id: 'foreign', completed: 999, errors: 999, lastError: 'errors.bulkOperationFailed', status: 'error' });
+  emit(admission.id, 'old-attempt', { ...admission, attemptId: 'old-attempt', completed: 999, errors: 999, lastError: 'errors.bulkOperationFailed', status: 'error' });
+  expect(manager.operation).toEqual(admission);
+  expect(manager.isRunning).toBe(true);
+  const terminal = { ...admission, status: 'cancelled', errors: 1, lastError: key };
+  emit(admission.id, admission.attemptId, terminal);
+  expect(await run).toMatchObject({ ...terminal, lastError: key });
+  expect(observed.at(-1)).toMatchObject({ operation: { lastError: key, completed: 0, errors: 1 }, settled: true });
+  expect(manager.operation.lastError).toBe(key);
+  expect(manager.isRunning).toBe(false);
+  expect(io.unlisten).toHaveBeenCalledTimes(1);
+  expect(Object.keys(io.events)).toEqual([]);
+  off();
 });
-
-describe('BulkOperationManager archive-progress is keyed by operation (R3.2 / N3)', () => {
-  it('does not let a concurrent scheduled backup overwrite this bulk operation\'s counts', () => {
-    bulkOperationManager._operation.completed = 4;
-    bulkOperationManager._operation.errors = 0;
-
-    // A scheduled backup running alongside a manual bulk archive, on a
-    // different account entirely - today's listener has no operation guard
-    // at all, so this stomps the in-flight bulk operation's own counts.
-    handlers['archive-progress']({
-      payload: {
-        total: 999, completed: 999, errors: 999, active: true,
-        operation: 'backup', accountId: 'someone-elses-account', mailbox: 'INBOX',
-      },
-    });
-
-    expect(bulkOperationManager._operation.completed).toBe(4);
-    expect(bulkOperationManager._operation.errors).toBe(0);
+it('recovers the exact download-limit key from durable native state after a lost admission reply', async () => {
+  let admitted;
+  io.send.mockImplementation(async (method, request) => {
+    if (method === 'bulk.start') {
+      admitted = { id: request.operationId, attemptId: request.attemptId, type: request.type, schemaVersion: 1, status: 'cancelled', errors: 1, lastError: key };
+      throw new Error('lost admission reply');
+    }
+    if (method === 'bulk.status') return { active: null, pending: null, admission: { operationId: admitted.id, attemptId: admitted.attemptId, state: 'done' } };
+    if (method === 'read_pending_operation') return JSON.parse(JSON.stringify(admitted));
+    throw new Error(`Unexpected RPC: ${method}`);
   });
+  const observed = [];
+  const off = manager.subscribe((operation, meta) => observed.push({ operation, ...meta }));
+  const result = await manager.start({ type: 'archive', scope });
+  expect(result.lastError).toBe(key);
+  expect(manager.operation.lastError).toBe(key);
+  expect(observed.at(-1)).toMatchObject({ operation: { lastError: key, errors: 1 }, settled: true });
+  expect(io.send.mock.calls.map(([method]) => method)).toEqual(['bulk.start', 'bulk.status', 'read_pending_operation']);
+  expect(io.unlisten).toHaveBeenCalledTimes(1);
+  expect(manager.isRunning).toBe(false);
+  off();
 });
