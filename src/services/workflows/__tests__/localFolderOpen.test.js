@@ -96,7 +96,7 @@ vi.mock('../../../stores/settingsStore', () => ({
     }),
   },
 }));
-vi.mock('../../transport', () => ({ getDaemonHealth: () => ({ alive: h.daemonAlive }) }));
+vi.mock('../../transport', () => ({ getDaemonHealth: () => ({ alive: h.daemonAlive }), send: vi.fn().mockResolvedValue({ drafts: [], managed: [] }) }));
 const probe = vi.hoisted(() => ({ mailboxIsUnchanged: vi.fn(), markVerified: vi.fn(), invalidate: vi.fn() }));
 vi.mock('../../syncProbe', () => probe);
 const sync = vi.hoisted(() => ({
@@ -285,7 +285,7 @@ describe('reloading a local folder', () => {
 
     await useMailStore.getState().loadEmails();
 
-    expect(db.getVaultUidSets).toHaveBeenCalledWith(ACCOUNT.id, NAME);
+    expect(db.getVaultUidSets).toHaveBeenCalledWith(ACCOUNT.id, NAME, expect.objectContaining({ managed: expect.any(Array) }));
     expect(shownUids()).toEqual([1]);
     expect(useMailStore.getState().loading).toBe(false);
     expectNoServerCallFor(NAME);

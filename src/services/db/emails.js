@@ -1,5 +1,6 @@
 // ── db/emails — Maildir email storage, local/archived reads, search, storage stats ──
 
+import { refreshDraftProjection, projectDraftRows, projectDraftUids, observeDraftCustody } from '../draftProjection.js';
 import { readDir, exists } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { initDB, initBasic, accountDir, dataPath } from './accounts.js';
@@ -208,7 +209,8 @@ export async function getVerifiedRawSource(accountId, mailbox, uid, headerRow) {
  * unlistable, or the call itself failed): unknown is not empty, so callers
  * keep what they already hold rather than adopting "the vault has nothing".
  */
-export async function getLocalEmails(accountId, mailbox) {
+export async function getLocalEmails(accountId, mailbox, draftFrame) {
+  draftFrame ||= await refreshDraftProjection();
   await initBasic();
   if (!invoke) return [];
   let rows;
@@ -224,8 +226,8 @@ export async function getLocalEmails(accountId, mailbox) {
   // whenever this path builds the row instead of getArchivedEmails, and the
   // gold band goes quiet about a message it should be shouting about.
   // Covered by __tests__/vaultRowCustody.test.js.
-  const stamp = custodyStamper(await getLocalIndexMeta(accountId, mailbox));
-  return rows.map(row => stamp({
+  const stamp = custodyStamper(await getLocalIndexMeta(accountId, mailbox, draftFrame));
+  return projectDraftRows(rows.map(row => stamp({
     ...row,
     localId: `${accountId}-${mailbox}-${row.uid}`,
     // Provenance travels with the message. A UID names a message only
@@ -237,12 +239,13 @@ export async function getLocalEmails(accountId, mailbox) {
     _accountId: accountId,
     _mailbox: mailbox,
     isArchived: !!row.isArchived,
-  }));
+  })), accountId, mailbox, draftFrame);
 }
 
 // The same rows WITH `text`/`html`: the no-index search scan matches bodies,
 // so it keeps the per-file batch read. The rare fallback, never a list read.
-async function _getLocalEmailsWithBodies(accountId, mailbox) {
+async function _getLocalEmailsWithBodies(accountId, mailbox, draftFrame) {
+  draftFrame ||= await refreshDraftProjection();
   await initBasic();
   if (!invoke) return [];
 
@@ -266,7 +269,7 @@ async function _getLocalEmailsWithBodies(accountId, mailbox) {
         });
       }
     }
-    return emails.map(custodyStamper(await getLocalIndexMeta(accountId, mailbox)));
+    return projectDraftRows(emails.map(custodyStamper(await getLocalIndexMeta(accountId, mailbox, draftFrame))), accountId, mailbox, draftFrame);
   } catch {
     // A search over what could be read: an unreadable folder adds no hits.
     return [];
@@ -277,7 +280,8 @@ async function _getLocalEmailsWithBodies(accountId, mailbox) {
  * Read the mailbox's custody entries for fast archived email metadata.
  * Returns null if the file doesn't exist (caller should fall back to getLocalEmails).
  */
-export async function readLocalEmailIndex(accountId, mailbox) {
+export async function readLocalEmailIndex(accountId, mailbox, draftFrame) {
+  draftFrame ||= await refreshDraftProjection();
   await initBasic();
   if (!invoke) return null;
   await ensureVaultGeneration(accountId, mailbox);
@@ -285,7 +289,8 @@ export async function readLocalEmailIndex(accountId, mailbox) {
     const data = await invoke('local_index_read', { accountId, mailbox });
     if (data) {
       const entries = JSON.parse(data);
-      return entries.map(e => ({
+      observeDraftCustody(accountId, mailbox, entries, draftFrame);
+      return projectDraftRows(entries.map(e => ({
         ...e,
         // The raw entry's own `source` is the only record of where a message
         // came from, and the rewrite below destroys it. Custody reads
@@ -294,7 +299,8 @@ export async function readLocalEmailIndex(accountId, mailbox) {
         source: 'local',
         isLocal: true,
         isArchived: true,
-      }));
+        _accountId: accountId, _mailbox: mailbox,
+      })), accountId, mailbox, draftFrame);
     }
   } catch (e) {
     console.warn('[db] Failed to read the custody entries:', e);
@@ -322,7 +328,7 @@ export async function readLocalEmailIndex(accountId, mailbox) {
  * nothing. All three are on disk, so a gold row survives a reload — the uid set
  * it used to be derived from does not.
  */
-export async function getLocalIndexMeta(accountId, mailbox) {
+export async function getLocalIndexMeta(accountId, mailbox, draftFrame) {
   await initBasic();
   if (!invoke) return new Map();
   await ensureVaultGeneration(accountId, mailbox);
@@ -330,6 +336,7 @@ export async function getLocalIndexMeta(accountId, mailbox) {
     const data = await invoke('local_index_read', { accountId, mailbox });
     if (!data) return new Map();
     const entries = JSON.parse(data);
+    observeDraftCustody(accountId, mailbox, entries, draftFrame);
     return new Map(entries
       .filter(e => e && e.uid != null)
       .map(e => [Number(e.uid), {
@@ -436,9 +443,11 @@ export async function getLocalEmailFull(accountId, mailbox, uid) {
  * never repatched after a flag change and the index holds the same rows for
  * the same files.
  */
-export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBatch) {
+export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBatch, draftFrame) {
+  draftFrame ||= await refreshDraftProjection();
   await initBasic();
-  if (!invoke || !archivedUidSet || archivedUidSet.size === 0) return [];
+  if (!invoke || !archivedUidSet) return [];
+  if (archivedUidSet.size === 0) return projectDraftRows([], accountId, mailbox, draftFrame);
 
   const uids = Array.from(archivedUidSet).sort((a, b) => b - a); // newest first
   console.log('[db] getArchivedEmails: %d UIDs', uids.length);
@@ -446,7 +455,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
   // Custody rides along with the row, from one read for the whole mailbox:
   // every source below knows nothing about provenance, and without the stamp
   // the list cannot tell a staged send from an archived server message.
-  const withCustody = custodyStamper(await getLocalIndexMeta(accountId, mailbox));
+  const withCustody = custodyStamper(await getLocalIndexMeta(accountId, mailbox, draftFrame));
   const emails = [];
   const found = new Set();
   const take = (rows, tier) => {
@@ -456,7 +465,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
       emails.push(withCustody({ ...row, localId: `${accountId}-${mailbox}-${row.uid}`, isArchived: true }));
     }
     console.log('[db] getArchivedEmails: %s %d/%d', tier, emails.length, uids.length);
-    if (rows.length && onBatch) onBatch([...emails]);
+    if (rows.length && onBatch) onBatch(projectDraftRows(emails, accountId, mailbox, draftFrame));
   };
   const missing = () => uids.filter((uid) => !found.has(uid));
 
@@ -490,7 +499,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
     if (!Array.isArray(rows)) break;
     take(rows, 'files');
   }
-  return emails;
+  return projectDraftRows(emails, accountId, mailbox, draftFrame);
 }
 
 // Vault directory names are sanitised and lossy ("Projekt Nystart" and
@@ -512,6 +521,7 @@ async function mailboxesForVaultDirs(dirs, mailboxes) {
 }
 
 export async function getAllLocalEmails(accountId, mailboxes = []) {
+  const draftFrame = await refreshDraftProjection();
   await initDB();
   if (!invoke) return [];
 
@@ -529,7 +539,7 @@ export async function getAllLocalEmails(accountId, mailboxes = []) {
       // One call per vault directory, and the read stamps custody off that
       // mailbox's index once for the whole batch — one read per MAILBOX here,
       // never one per message. Bodies included: this feeds the search scan.
-      const emails = await _getLocalEmailsWithBodies(accountId, mailbox);
+      const emails = await _getLocalEmailsWithBodies(accountId, mailbox, draftFrame);
       allEmails.push(...emails);
     }
     return allEmails;
@@ -582,13 +592,15 @@ export async function isEmailSaved(accountId, mailbox, uid) {
  * Never an empty Set on failure (I-5): every caller keeps what it
  * already knows instead of persisting "the vault has nothing".
  */
-export async function getVaultUidSets(accountId, mailbox) {
+export async function getVaultUidSets(accountId, mailbox, draftFrame) {
+  draftFrame ||= await refreshDraftProjection();
   await initBasic();
   if (!invoke) return null;
   try {
     const reply = await invoke('vault_uid_sets', { accountId, mailbox });
     if (!Array.isArray(reply?.saved) || !Array.isArray(reply?.archived)) return null;
-    return { saved: new Set(reply.saved), archived: new Set(reply.archived) };
+    await getLocalIndexMeta(accountId, mailbox, draftFrame);
+    return { saved: projectDraftUids(reply.saved, accountId, mailbox, draftFrame), archived: projectDraftUids(reply.archived, accountId, mailbox, draftFrame) };
   } catch (e) {
     console.warn('[db] vault_uid_sets failed:', e);
     return null;

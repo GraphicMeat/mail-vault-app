@@ -1,3 +1,4 @@
+import { refreshDraftProjection, projectDraftRows } from '../draftProjection';
 // ── loadUnifiedInbox workflow — unified inbox loading and folder switching ──
 
 import * as db from '../db';
@@ -31,8 +32,8 @@ export function unifiedSeed(state, folder, snapshot = null) {
       const key = `${account.id}:${e.uid}`;
       if (!seen.has(key)) { seen.add(key); rows.push({ e, account, mailbox }); }
     };
-    for (const e of _getRestore(account.id, path, state.viewMode || 'all')?.firstWindow || []) push(e);
-    if (snapshot?.activeAccountId === account.id) for (const e of snapshot.emails || []) push(e, e._mailbox || path);
+    for (const e of projectDraftRows(_getRestore(account.id, path, state.viewMode || 'all')?.firstWindow || [], account.id, path)) push(e);
+    if (snapshot?.activeAccountId === account.id) for (const e of projectDraftRows(snapshot.emails || [], account.id, path)) push(e, e._mailbox || path);
   }
   // Tag only the rows that make the cut: the snapshot can be the whole
   // window of the account just left.
@@ -160,6 +161,8 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   _loadAbortController = new AbortController();
   setLoadAbortController(_loadAbortController);
   const signal = _loadAbortController.signal;
+  const draftFrame = await refreshDraftProjection();
+  if (signal.aborted) return;
 
   // The rows on screen as this load begins: the base every commit below merges
   // local flag writes against, advanced to what each commit puts in the store.
@@ -405,9 +408,9 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     .map(async (account) => {
       try {
         const localFolder = resolvedPathsByAccount.get(account.id) || targetFolder;
-        const vault = await db.getVaultUidSets(account.id, localFolder);
-        let locals = await db.readLocalEmailIndex(account.id, localFolder);
-        if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
+        const vault = await db.getVaultUidSets(account.id, localFolder, draftFrame);
+        let locals = await db.readLocalEmailIndex(account.id, localFolder, draftFrame);
+        if (!locals) locals = await db.getLocalEmails(account.id, localFolder, draftFrame);
         if (vault) for (const uid of vault.saved) allSavedIds.add(vaultKey(account.id, localFolder, uid));
         else savedUnknown = true;
         // I-5: a null (unknown) read keeps this group's own last-known ids
@@ -416,7 +419,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         setArchivedGroup(account.id, localFolder, vault?.archived ?? null);
         // Unknown rows: skip this account's merge, keep its rows on screen.
         if (!locals) { localsUnknown.push([account.id, localFolder]); return; }
-        for (const e of locals) {
+        for (const e of projectDraftRows(locals, account.id, localFolder, draftFrame)) {
           allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
         }
       } catch {}

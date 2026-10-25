@@ -3002,6 +3002,11 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
     }
     use std::time::Duration;
     match method {
+        // Full draft MIME/attachment preparation may outlast a short UI read.
+        // Expiry is unknown completion, never cancellation of native work.
+        "drafts.save" => Some(Duration::from_secs(600)),
+        // list can recover one selected body; discard validates exact local IO.
+        "drafts.list" | "drafts.discard" => Some(Duration::from_secs(120)),
         "bulk.start" | "bulk.resume" | "bulk.status" | "bulk.cancel" | "bulk.discard" => Some(Duration::from_secs(30)),
         "search_index_destroy" => Some(Duration::from_secs(150)),
 
@@ -4434,6 +4439,13 @@ mod tests {
     #[test]
     fn reply_timeout_delegates_render_methods_to_blitz_tiles() {
         assert_eq!(crate::reply_timeout("render.open"), Some(std::time::Duration::from_secs(10)));
+    }
+
+    #[test]
+    fn reply_timeout_bounds_draft_metadata_and_complete_io() {
+        for (method, seconds) in [("drafts.list", 120), ("drafts.save", 600), ("drafts.discard", 120)] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(seconds)), "method={method}");
+        }
     }
 
     #[test]

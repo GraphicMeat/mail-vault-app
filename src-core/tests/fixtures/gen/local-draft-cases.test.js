@@ -41,6 +41,17 @@ const reset = () => {
 };
 const visible = () => ({ localEmails: h.state.localEmails, emails: h.state.emails, archivedEmailIds: [...h.state.archivedEmailIds], savedEmailIds: [...h.state.savedEmailIds] });
 it('freezes actual local draft and session outputs', async () => {
+  // Historical pre-port oracle. Never regenerate it from the native adapter.
+  // The actual source hashes and unsafe outcomes remain evidence of that era;
+  // current adapter/component behavior has its own behavioral tests.
+  const frozenBytes = readFileSync(new URL('../local-draft-cases.json', import.meta.url));
+  expect(createHash('sha256').update(frozenBytes).digest('hex')).toBe('6322a8d6c43dec742bb588c0c50cb5c4b4728cb9347aacb4bf74e42819e4895d');
+  const frozen = JSON.parse(frozenBytes);
+  if (Object.entries(frozen.source.files).some(([path, hash]) => createHash('sha256').update(readFileSync(path)).digest('hex') !== hash)) {
+    expect(process.env.MAILVAULT_GENERATE_DRAFT_FIXTURE, 'Capture only from the original pre-port source checkout').not.toBe('1');
+    return;
+  }
+
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-25T00:00:00.000Z'));
   vi.stubGlobal('window', { __TAURI__: { core: { invoke() {} } } });
   const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});

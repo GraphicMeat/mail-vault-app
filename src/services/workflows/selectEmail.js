@@ -484,10 +484,10 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // the store this workflow is reached FROM.
   const selectedRow = () => _rowOf(get(), accountId, mailbox, realUid, clickedRow);
   const clickedHeader = selectedRow();
-  if (clickedHeader?.flags?.includes('draft')) {
+  if (clickedHeader?.draftId || clickedHeader?.flags?.includes('draft')) {
     const { openLocalDraft } = await import('../localDrafts');
     if (!isCurrent()) return;
-    if (await openLocalDraft(accountId, mailbox, realUid)) return;
+    if (await openLocalDraft(accountId, mailbox, realUid, clickedHeader?.draftId)) return;
     if (!isCurrent()) return;
   }
 

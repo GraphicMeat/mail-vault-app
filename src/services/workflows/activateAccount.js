@@ -1,3 +1,4 @@
+import { refreshDraftProjection, projectDraftRows, projectDraftUids, projectDraftKeyedUids } from '../draftProjection';
 // ── activateAccount workflow — orchestrates account/mailbox activation ──
 
 import * as db from '../db';
@@ -409,6 +410,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   if (_loadAbortController) _loadAbortController.abort('account-switch');
   _activeController = new AbortController();
   const { signal } = _activeController;
+  const draftFrame = await refreshDraftProjection();
+  if (signal.aborted) return;
 
   let account = get().accounts.find(a => a.id === accountId);
   if (!account) {
@@ -518,8 +521,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
     // The descriptor lists bare uids of its own folder; the store's sets are keyed.
     const restoredFolder = restored.mailbox || mailbox;
-    const restoredSavedIds = vaultKeys(accountId, restoredFolder, restored.firstWindowSavedUids || []);
-    const restoredArchivedIds = vaultKeys(accountId, restoredFolder, restored.firstWindowArchivedUids || []);
+    painted = projectDraftRows(painted, accountId, restoredFolder, draftFrame);
+    const restoredSavedIds = vaultKeys(accountId, restoredFolder, projectDraftUids(restored.firstWindowSavedUids || [], accountId, restoredFolder, draftFrame));
+    const restoredArchivedIds = vaultKeys(accountId, restoredFolder, projectDraftUids(restored.firstWindowArchivedUids || [], accountId, restoredFolder, draftFrame));
     // The descriptor only lists saved/archived UIDs for its own window; past it,
     // recover them from the rows, which carry the flags.
     for (const e of painted) {
@@ -665,7 +669,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       const readAt = Date.now();
       const [memoMeta, vault] = await Promise.all([
         db.getEmailHeadersMeta(accountId, effectiveMailbox),
-        db.getVaultUidSets(accountId, effectiveMailbox),
+        db.getVaultUidSets(accountId, effectiveMailbox, draftFrame),
       ]);
       const rawArchivedEmailIds = vault?.archived ?? null;
       if (signal.aborted) return;
@@ -737,13 +741,13 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // and can legitimately shrink.
       setArchivedGroup(accountId, effectiveMailbox, rawArchivedEmailIds);
       useMailStore.setState({
-        savedEmailIds,
-        archivedEmailIds,
+        savedEmailIds: projectDraftKeyedUids(savedEmailIds, accountId, effectiveMailbox, draftFrame),
+        archivedEmailIds: projectDraftKeyedUids(archivedEmailIds, accountId, effectiveMailbox, draftFrame),
         cachedCount: memoMeta?.totalCached ?? 0,
       });
 
       if (cachedHeaders && cachedHeaders.emails.length > 0) {
-        const headersWithSource = cachedHeaders.emails.map(e => ({
+        const headersWithSource = projectDraftRows(cachedHeaders.emails, accountId, effectiveMailbox, draftFrame).map(e => ({
           ...e,
           source: e.source || 'cache',
           isLocal: savedEmailIds.has(vaultKey(accountId, effectiveMailbox, e.uid)),
@@ -841,9 +845,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         // The daemon takes this folder's bare uids, not the store's keys.
         db.getArchivedEmails(accountId, effectiveMailbox, rawArchivedEmailIds ?? vaultUids(archivedEmailIds, accountId, effectiveMailbox), (batchEmails) => {
           if (signal.aborted || get().activeAccountId !== archivedAccount) return;
-          useMailStore.setState({ localEmails: batchEmails });
+          useMailStore.setState({ localEmails: projectDraftRows(batchEmails, accountId, effectiveMailbox, draftFrame) });
           get().updateSortedEmails();
-        }).catch(e => console.warn('[activateAccount] getArchivedEmails failed:', e));
+        }, draftFrame).catch(e => console.warn('[activateAccount] getArchivedEmails failed:', e));
       }
 
       localTrace.end('done');

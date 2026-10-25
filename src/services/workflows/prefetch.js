@@ -1,3 +1,4 @@
+import { refreshDraftProjection, projectDraftRows } from '../draftProjection';
 // ── prefetch workflow — background mailbox/cache warm-up for inactive accounts ──
 
 import * as db from '../db';
@@ -70,6 +71,7 @@ export async function _prewarmAccountCaches() {
   );
 
   if (otherAccounts.length === 0) return;
+  const draftFrame = await refreshDraftProjection();
   console.log('[prewarm] Pre-warming account cache for', otherAccounts.length, 'background accounts');
 
   await Promise.allSettled(otherAccounts.map(async (account) => {
@@ -78,7 +80,7 @@ export async function _prewarmAccountCaches() {
     try {
       const [cachedHeaders, vault, cachedMailboxEntry] = await Promise.all([
         db.getEmailHeadersPartial(account.id, 'INBOX', 500),
-        db.getVaultUidSets(account.id, 'INBOX'),
+        db.getVaultUidSets(account.id, 'INBOX', draftFrame),
         db.getCachedMailboxEntry(account.id).catch(() => null),
       ]);
       if (!cachedHeaders || !cachedHeaders.emails || cachedHeaders.emails.length === 0) return;
@@ -95,8 +97,8 @@ export async function _prewarmAccountCaches() {
       let localEmails = [];
       if (archivedEmailIds.size > 0) {
         try {
-          localEmails = await db.readLocalEmailIndex(account.id, 'INBOX') ||
-            await db.getArchivedEmails(account.id, 'INBOX', archivedEmailIds);
+          localEmails = await db.readLocalEmailIndex(account.id, 'INBOX', draftFrame) ||
+            await db.getArchivedEmails(account.id, 'INBOX', archivedEmailIds, undefined, draftFrame);
         } catch (e) {
           console.warn(`[prewarm] Failed to load local emails for ${account.email}:`, e.message);
         }
@@ -121,7 +123,7 @@ export async function _prewarmAccountCaches() {
         selectedUid: null,
         mailboxes: cachedMailboxes || [],
         mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null,
-        firstWindow: cachedHeaders.emails.slice(0, 50),
+        firstWindow: projectDraftRows(cachedHeaders.emails, account.id, 'INBOX', draftFrame).slice(0, 50),
         firstWindowSavedUids: cachedHeaders.emails.slice(0, 50)
           .filter(e => savedEmailIds.has(e.uid)).map(e => e.uid),
         firstWindowArchivedUids: cachedHeaders.emails.slice(0, 50)

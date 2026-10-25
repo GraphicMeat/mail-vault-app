@@ -2,6 +2,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoBackend } from '../backend.js';
 
 describe('demo mailbox backend', () => {
+  it('persists draft identity, complete revisions, reopen and terminal discard', async () => {
+    const backend = createDemoBackend();
+    const accountId = backend.accounts[0].id;
+    const call = (method, params = {}) => backend.invoke('daemon_rpc', { method, params });
+    const request = { draftId: 'demo-d', revision: 1, accountId, fromAddress: 'me@example.test', displayName: 'Me', snippet: '', snapshot: { to: '', cc: '', bcc: '', subject: 'draft', html: '<p>text</p>', text: 'text', inReplyTo: '', references: '', attachments: [{ filename: 'empty', contentType: 'text/plain', content: '' }] } };
+    const saved = await call('drafts.save', request);
+    expect(saved).toMatchObject({ draftId: 'demo-d', revision: 1, disposition: 'saved', cleanup: 'complete' });
+    expect(await call('drafts.save', request)).toMatchObject({ uid: saved.uid, disposition: 'unchanged' });
+    await expect(call('drafts.save', { ...request, snapshot: { ...request.snapshot, html: 'conflict' } })).rejects.toThrow();
+    const restored = createDemoBackend(); restored.restoreState(JSON.parse(JSON.stringify(backend.exportState())));
+    const restoredCall = (method, params = {}) => restored.invoke('daemon_rpc', { method, params });
+    expect((await restoredCall('drafts.list', { draftId: 'demo-d', includeContent: true })).drafts[0]).toMatchObject({ draftId: 'demo-d', eml: { html: '<p>text</p>', attachments: [{ content: '' }] } });
+    const moved = await restoredCall('drafts.save', { ...request, revision: 2, accountId: backend.accounts[1].id, snapshot: { ...request.snapshot, html: '' } });
+    expect(moved.accountId).toBe(backend.accounts[1].id);
+    expect((await restoredCall('drafts.list')).drafts.filter(r => r.draftId === 'demo-d')).toHaveLength(1);
+    expect(await restoredCall('drafts.discard', { draftId: 'demo-d' })).toMatchObject({ discarded: true, cleanup: 'complete' });
+    const reloaded = createDemoBackend(); reloaded.restoreState(JSON.parse(JSON.stringify(restored.exportState())));
+    await expect(reloaded.invoke('daemon_rpc', { method: 'drafts.save', params: request })).rejects.toThrow();
+    expect(await reloaded.invoke('daemon_rpc', { method: 'drafts.list', params: { draftId: 'demo-d', includeContent: true } })).toMatchObject({ drafts: [], terminal: true });
+  });
+
   it('seeds three fictional accounts with nested mailboxes and mixed custody', () => {
     const backend = createDemoBackend();
     const state = backend.snapshot();

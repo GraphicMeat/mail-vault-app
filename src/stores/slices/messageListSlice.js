@@ -2,6 +2,7 @@
 // Large async orchestration functions are extracted to src/services/workflows/.
 // This slice contains state, pure synchronous derivations, and passthrough wrappers.
 
+import { projectDraftUids } from '../../services/draftProjection';
 import * as api from '../../services/api';
 import { useSettingsStore } from '../settingsStore';
 import { buildThreads } from '../../utils/emailParser';
@@ -62,11 +63,13 @@ const _groupKey = (accountId, mailbox) => `${accountId} ${mailbox}`;
 // wiping it, the same I-5 rule the old per-call-site fallbacks encoded, now
 // enforced once, here.
 export function setArchivedGroup(accountId, mailbox, ids) {
-  if (ids != null) _archivedIdsByGroup.set(_groupKey(accountId, mailbox), ids);
+  const existing = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+  if (ids != null || existing != null) _archivedIdsByGroup.set(_groupKey(accountId, mailbox), projectDraftUids(ids ?? existing, accountId, mailbox));
 }
 
 export function getArchivedGroup(accountId, mailbox) {
-  return _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+  const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+  return projectDraftUids(ids, accountId, mailbox);
 }
 
 // Add one uid to a group without a full re-read (the archive-progress painter).
@@ -76,7 +79,7 @@ export function addArchivedGroupUid(accountId, mailbox, uid) {
   if (existing?.has(uid)) return;
   const updated = existing ? new Set(existing) : new Set();
   updated.add(uid);
-  _archivedIdsByGroup.set(key, updated);
+  _archivedIdsByGroup.set(key, projectDraftUids(updated, accountId, mailbox));
 }
 
 // The union of exactly these (accountId, mailbox) pairs, never every group
@@ -93,7 +96,7 @@ export function deriveArchivedUnion(currentSet, pairs) {
   const union = new Set();
   let anyKnown = false;
   for (const [accountId, mailbox] of pairs) {
-    const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+    const ids = getArchivedGroup(accountId, mailbox);
     if (ids) { anyKnown = true; for (const uid of ids) union.add(vaultKey(accountId, mailbox, uid)); }
   }
   // None of the groups in view has ever gone through this map (e.g. this
@@ -113,7 +116,7 @@ export function deriveArchivedUnion(currentSet, pairs) {
 // existing union rather than re-deriving the whole thing, with the same
 // identity discipline as deriveArchivedUnion.
 export function mergeArchivedGroup(currentSet, accountId, mailbox) {
-  const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+  const ids = getArchivedGroup(accountId, mailbox);
   if (!ids) return currentSet;
   for (const uid of ids) {
     if (currentSet.has(vaultKey(accountId, mailbox, uid))) continue;

@@ -23,6 +23,16 @@ describe('daemon-owned commands', () => {
     expect(daemonCall).toHaveBeenCalledExactlyOnceWith(name, { accountId: 'a' });
   });
 
+  it('routes all draft methods without shell or network fallback', async () => {
+    for (const method of ['drafts.save', 'drafts.list', 'drafts.discard']) {
+      expect(declaredDaemonOwned.has(method)).toBe(true);
+      DAEMON_OWNED.add(method);
+      daemonCall.mockRejectedValueOnce(new Error('unknown completion'));
+      await expect(send(method, { draftId: 'd' })).rejects.toThrow();
+      expect(daemonCall).toHaveBeenLastCalledWith(method, { draftId: 'd' });
+    }
+  });
+
   // The name regex in the next test only sees flat names; dotted ones are
   // checked by text. Track H: H5's settings call this after a mode change.
   it('owns storage.fetch_mode_changed (download modes)', async () => {

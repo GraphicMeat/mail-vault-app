@@ -1,3 +1,4 @@
+import { refreshDraftProjection, projectDraftRows, projectDraftUids, projectDraftKeyedUids } from '../draftProjection';
 // ── loadEmails workflow — email list loading, Graph API path, sent headers ──
 
 import * as db from '../db';
@@ -94,10 +95,13 @@ function isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds)
 export async function loadLocalFolder(accountId, mailbox, { isCurrent = () => true } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
-  const here = () => isCurrent() && get().activeAccountId === accountId && get().activeMailbox === mailbox;
+  const generation = bumpLoadEmailsGeneration();
+  const draftFrame = await refreshDraftProjection();
+  const here = () => getLoadEmailsGeneration() === generation && isCurrent() && get().activeAccountId === accountId && get().activeMailbox === mailbox;
   const settle = { loading: false, loadingMore: false, restoring: false, hasMoreEmails: false };
 
-  const vault = await db.getVaultUidSets(accountId, mailbox);
+  if (!here()) return;
+  const vault = await db.getVaultUidSets(accountId, mailbox, draftFrame);
   if (!here()) return;
   if (!vault) {
     console.warn('[loadLocalFolder] vault unreadable for %s/%s, keeping the rows shown', accountId, mailbox);
@@ -109,10 +113,14 @@ export async function loadLocalFolder(accountId, mailbox, { isCurrent = () => tr
   // Painted per batch: a large import is read in pages.
   const paint = (rows) => {
     if (!here()) return;
-    useMailStore.setState({ localEmails: rows, totalEmails: vault.archived.size, ...settle });
+    const archived = projectDraftUids(vault.archived, accountId, mailbox, draftFrame);
+    setArchivedGroup(accountId, mailbox, archived);
+    useMailStore.setState({ localEmails: projectDraftRows(rows, accountId, mailbox, draftFrame), totalEmails: archived.size,
+      savedEmailIds: vaultKeys(accountId, mailbox, projectDraftUids(vault.saved, accountId, mailbox, draftFrame)),
+      archivedEmailIds: vaultKeys(accountId, mailbox, archived), ...settle });
     get().updateSortedEmails();
   };
-  paint(await db.getArchivedEmails(accountId, mailbox, vault.archived, paint) || []);
+  paint(await db.getArchivedEmails(accountId, mailbox, vault.archived, paint, draftFrame) || []);
 }
 
 
@@ -174,6 +182,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 
   // Bump generation
   const generation = bumpLoadEmailsGeneration();
+  const draftFrame = await refreshDraftProjection();
 
   const isStale = () => get().activeAccountId !== activeAccountId || get().activeMailbox !== activeMailbox || getLoadEmailsGeneration() !== generation;
 
@@ -200,7 +209,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 
     // ── Graph API path ──
     if (isGraphAccount(account)) {
-      return await _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation);
+      return await _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation, draftFrame);
     }
 
     const invoke = window.__TAURI__?.core?.invoke;
@@ -217,7 +226,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
     } else {
       let vault;
       [vault, cachedHeaders] = await Promise.all([
-        db.getVaultUidSets(activeAccountId, activeMailbox),
+        db.getVaultUidSets(activeAccountId, activeMailbox, draftFrame),
         db.getEmailHeadersMeta(activeAccountId, activeMailbox),
       ]);
       // I-5: `null` means "could not read" — keep the store's current values
@@ -234,6 +243,8 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       savedCount: savedEmailIds?.size || 0,
       archivedCount: archivedEmailIds?.size || 0,
     });
+    savedEmailIds = projectDraftKeyedUids(savedEmailIds, activeAccountId, activeMailbox, draftFrame);
+    archivedEmailIds = projectDraftKeyedUids(archivedEmailIds, activeAccountId, activeMailbox, draftFrame);
     useMailStore.setState({ savedEmailIds, archivedEmailIds });
 
     // Fire-and-forget: load archived email headers from disk in background
@@ -241,12 +252,12 @@ export async function loadEmails({ rereadFlags = false } = {}) {
       const archivedAccount = activeAccountId;
       (async () => {
         try {
-          let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
+          let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox, draftFrame);
           if (!localEmails) {
-            localEmails = await db.getArchivedEmails(activeAccountId, activeMailbox, vaultUids(archivedEmailIds, activeAccountId, activeMailbox));
+            localEmails = await db.getArchivedEmails(activeAccountId, activeMailbox, vaultUids(archivedEmailIds, activeAccountId, activeMailbox), undefined, draftFrame);
           }
-          if (get().activeAccountId !== archivedAccount || loadSignal.aborted) return;
-          useMailStore.setState({ localEmails });
+          if (isStale() || get().activeAccountId !== archivedAccount || loadSignal.aborted) return;
+          useMailStore.setState({ localEmails: projectDraftRows(localEmails, activeAccountId, activeMailbox, draftFrame) });
           get().updateSortedEmails();
         } catch (e) {
           console.warn('[loadEmails] archived emails failed:', e);
@@ -332,7 +343,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 
       if (partialHeaders && partialHeaders.emails.length > 0) {
         useMailStore.setState({
-          emails: partialHeaders.emails,
+          emails: projectDraftRows(partialHeaders.emails, activeAccountId, activeMailbox, draftFrame),
           loadedRanges: [{ start: 0, end: partialHeaders.emails.length }],
           totalEmails: cachedHeaders.totalEmails,
           loading: false,
@@ -782,7 +793,7 @@ export async function loadEmails({ rereadFlags = false } = {}) {
 
     setLoadEmailsRetried(false);
     useMailStore.setState({
-      emails: mergedEmails,
+      emails: projectDraftRows(mergedEmails, activeAccountId, activeMailbox, draftFrame),
       loadedRanges: [{ start: 0, end: mergedEmails.length }],
       connectionStatus: 'connected',
       connectionError: null,
@@ -875,7 +886,8 @@ function _headerDateMs(email) {
   return Date.parse(email?.internalDate || email?.date || '');
 }
 
-export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation) {
+export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation, draftFrame) {
+  draftFrame ||= await refreshDraftProjection();
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
@@ -884,7 +896,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
   await _restoreGraphIdMap(activeAccountId, activeMailbox);
   if (isStale()) return;
 
-  const vault = await db.getVaultUidSets(activeAccountId, activeMailbox);
+  const vault = await db.getVaultUidSets(activeAccountId, activeMailbox, draftFrame);
   if (isStale()) return;
   // I-5: keep the store's current values on a failed read instead of
   // adopting "nothing is in the vault".
@@ -896,10 +908,10 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
   if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {
     const archivedAccount = activeAccountId;
     db.getArchivedEmails(activeAccountId, activeMailbox, vaultUids(archivedEmailIds, activeAccountId, activeMailbox), (batchEmails) => {
-      if (get().activeAccountId !== archivedAccount) return;
-      useMailStore.setState({ localEmails: batchEmails });
+      if (isStale() || get().activeAccountId !== archivedAccount) return;
+      useMailStore.setState({ localEmails: projectDraftRows(batchEmails, activeAccountId, activeMailbox, draftFrame) });
       get().updateSortedEmails();
-    }).catch(e => console.warn('[loadEmailsViaGraph] getArchivedEmails failed:', e));
+    }, draftFrame).catch(e => console.warn('[loadEmailsViaGraph] getArchivedEmails failed:', e));
   }
 
   useMailStore.setState({ loading: get().emails.length === 0, loadingMore: true, error: null });
@@ -967,7 +979,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     const hasMoreEmails = !!result.nextLink;
 
     useMailStore.setState({
-      emails: mergedEmails,
+      emails: projectDraftRows(mergedEmails, activeAccountId, activeMailbox, draftFrame),
       loadedRanges: [{ start: 0, end: mergedEmails.length }],
       connectionStatus: 'connected',
       connectionError: null,

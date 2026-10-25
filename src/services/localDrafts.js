@@ -1,35 +1,14 @@
-// ── localDrafts — the open compose window, kept in the vault while it is typed ──
-//
-// A compose window used to be the one place in the app where a message existed
-// in RAM only: anything that unmounted it (a stray dismissal, a reload, a
-// crash) took the text with it. This writes the message the user is typing
-// into their account's Drafts folder in the local vault, 0.3s after they stop.
-//
-// Local only, by design for now — nothing here APPENDs to the server's Drafts
-// mailbox, so it costs no network and works for an account that is offline.
-//
-// One compose window owns one draft uid for its whole life (threaded through
-// minimize/restore as `_draftUid`), so every save REPLACES that draft rather
-// than adding one per typing pause.
-
-import * as api from './api';
+// Thin native draft RPC and compose/list presentation adapter.
 import { bareContentId, htmlReferencesCid } from '../utils/cidRefs';
 import * as db from './db';
 import { useMailStore } from '../stores/mailStore';
-import { _resolveMailboxPath, sameMessage, vaultKey } from '../stores/slices/unifiedHelpers';
-import { addArchivedGroupUid } from '../stores/slices/messageListSlice';
+import { _resolveMailboxPath } from '../stores/slices/unifiedHelpers';
+import { getArchivedGroup, setArchivedGroup } from '../stores/slices/messageListSlice';
+import { getDraftProjection, observeDraftOutcome, projectDraftRows, projectDraftUids, draftProjectionGroups, projectDraftKeyedUids } from './draftProjection';
 import { send } from './transport';
+import { getAccountCacheMailboxes } from './cacheManager';
 import { getRealAttachments, replaceCidUrls } from './attachmentUtils';
 import { splitWireHtml } from '../utils/quoteWire';
-
-const invoke = () => window.__TAURI__?.core?.invoke;
-
-// 'archived' does not mean "came from a server" — it means the raw .eml is in
-// the vault, and it is what puts a local row in the list (deriveDisplayRows
-// only shows local entries whose uid is in archivedEmailIds, which is
-// `maildir_list requireFlag: 'archived'`). Provenance lives in the index's
-// `source` field instead, where a delete can read it.
-const DRAFT_FLAGS = ['archived', 'seen', 'draft'];
 
 /**
  * The account's Drafts mailbox path, from the folder list we already hold.
@@ -47,6 +26,8 @@ export async function resolveDraftsMailbox(accountId) {
 }
 
 /**
+ * Legacy component helper retained only until the stop 2 cutover. It never
+ * supplies native draft identity or physical allocation.
  * A stable synthetic uid for one compose window. Same second-resolution shape
  * as the staged Sent copy — but a uid IDENTIFIES a draft, so it cannot be a
  * bare clock reading: two windows opened in the same second were handed the
@@ -60,80 +41,80 @@ export const newDraftUid = () => {
   return _lastDraftUid;
 };
 
-/**
- * Write the draft to disk and make it visible in the Drafts list.
- *
- * Returns the index entry that was written, or null when the MIME could not be
- * built — a save that cannot produce the real bytes writes nothing at all,
- * because a draft row that does not open the user's text is worse than no row.
- */
-export async function saveLocalDraft({ account, accountId, mailbox, uid, fromAddress, displayName, payload, snippet, hasAttachments }) {
-  const tauri = invoke();
-  if (!tauri) return null;
+/** Stable session identity, allocated before asynchronous save or handoff. */
+export const newDraftId = () => globalThis.crypto.randomUUID();
 
-  const sendAsEmail = fromAddress && fromAddress !== account.email ? fromAddress : '';
-  const built = await api.buildDraftMime(
-    { ...account, name: displayName, fromEmail: sendAsEmail || undefined },
-    payload,
-  );
-  if (!built?.rawBase64) return null;
+const snapshotFields = ['to', 'cc', 'bcc', 'subject', 'html', 'text', 'inReplyTo', 'references'];
+const physicalTuple = identity => ({ accountId: identity.accountId, mailbox: identity.mailbox, uid: identity.uid });
 
-  await send('maildir_store', {
-    accountId,
-    mailbox,
-    uid,
-    rawSourceBase64: built.rawBase64,
-    flags: DRAFT_FLAGS,
-  });
-
-  const entry = {
-    uid,
-    from: { address: fromAddress || account.email, name: displayName || '' },
-    to: (payload.to || '').split(',').map(s => s.trim()).filter(Boolean).map(address => ({ address, name: '' })),
-    subject: payload.subject || '',
-    date: new Date().toISOString(),
-    has_attachments: !!hasAttachments,
-    message_id: built.messageId || null,
-    // Both threading headers, because both have to come back: the .eml
-    // carries them, but neither survives the vault parse into the app
-    // (`ParsedEmail` has no In-Reply-To and no References), so the index
-    // is the only place a reopen can read them from.
-    in_reply_to: payload.inReplyTo || null,
-    references: payload.references || null,
-    snippet: (snippet || '').slice(0, 200),
-    flags: DRAFT_FLAGS,
-    source: 'local_draft',
-  };
-  await api.appendLocalIndex(accountId, mailbox, [entry]);
-
-  _showInList(accountId, mailbox, entry);
-  return entry;
-}
-
-/** Drop the draft from the vault, its index, and the list. */
-export async function deleteLocalDraft({ accountId, mailbox, uid }) {
-  if (!accountId || !mailbox || !uid) return;
-  const tauri = invoke();
-  try {
-    if (tauri) await send('maildir_delete', { accountId, mailbox, uid });
-    await api.removeFromLocalIndex(accountId, mailbox, uid);
-  } catch (err) {
-    console.warn('[localDrafts] delete failed:', err);
+/** Serialize the complete native contract; UI descriptors never grant proof. */
+export async function saveLocalDraft({ draftId, revision, accountId, fromAddress, displayName, payload, snapshot = payload, snippet, previousIdentity }) {
+  if (!draftId || !Number.isSafeInteger(revision) || revision < 1 || !accountId
+      || snapshotFields.some(field => typeof snapshot?.[field] !== 'string') || !Array.isArray(snapshot?.attachments)) {
+    throw new Error('A complete draft with stable identity and revision is required');
   }
-  _hideFromList(accountId, mailbox, uid);
+  const request = { draftId, revision, accountId, fromAddress: fromAddress ?? '', displayName: displayName ?? '',
+    snapshot: { ...Object.fromEntries(snapshotFields.map(field => [field, snapshot[field]])),
+      attachments: snapshot.attachments.map(attachment => ({
+        filename: attachment.filename, contentType: attachment.contentType,
+        ...Object.fromEntries(['content', 'encoding', 'cid'].filter(field => attachment[field] != null).map(field => [field, attachment[field]])),
+        ...((attachment.source || attachment._source) ? { source: {
+          ...physicalTuple(attachment.source || attachment._source), attachmentIndex: (attachment.source || attachment._source).attachmentIndex,
+        } } : {}),
+      })),
+    }, snippet: snippet ?? '', ...(previousIdentity ? { previousIdentity: physicalTuple(previousIdentity) } : {}),
+  };
+  const startedGeneration = getDraftProjection().generation;
+  let response;
+  try {
+    response = await send('drafts.save', request);
+  } catch (error) {
+    // A lost reply may already have accepted content. Reconcile this identity;
+    // the caller still retains and retries its same immutable revision.
+    await reconcileLocalDraft(draftId).catch(() => {});
+    throw error;
+  }
+  if (response?.draftId !== draftId || !['saved', 'unchanged', 'superseded'].includes(response.disposition)) throw new Error('Draft save outcome unavailable');
+  publishDraftOutcome(response, startedGeneration);
+  // The caller decides acceptance from disposition/revision. A superseded
+  // response can inform projection but never claims submitted content saved.
+  return response;
 }
 
-/**
- * Discard the vault draft a compose window owned, from its saved state.
- * No-ops for a window that never autosaved (nothing was ever typed).
- */
+export async function reconcileLocalDraft(draftId) {
+  if (!draftId) throw new Error('Draft identity required');
+  const startedGeneration = getDraftProjection().generation;
+  const response = await send('drafts.list', { draftId });
+  if (!Array.isArray(response?.drafts) || !Array.isArray(response?.managed)) throw new Error('Draft state unavailable');
+  for (const record of response.managed) publishDraftOutcome(record, startedGeneration);
+  return response;
+}
+
+async function readDraft(params) {
+  const startedGeneration = getDraftProjection().generation;
+  const response = await send('drafts.list', { ...params, includeContent: true });
+  if (!Array.isArray(response?.drafts)) throw new Error('Draft open outcome unavailable');
+  for (const record of response.managed || []) publishDraftOutcome(record, startedGeneration);
+  return response;
+}
+
+/** Canonical-ID discard; a tuple must first pass native legacy adoption. */
+export async function deleteLocalDraft({ draftId, accountId, mailbox, uid } = {}) {
+  if (!draftId) {
+    if (!accountId || !mailbox || !uid) return;
+    const response = await readDraft({ identity: { accountId, mailbox, uid } });
+    draftId = response.drafts[0]?.draftId || response.managed?.[0]?.draftId;
+    if (!draftId) throw new Error('Draft identity unavailable');
+  }
+  const response = await send('drafts.discard', { draftId });
+  if (response?.draftId !== draftId || response.discarded !== true || !['complete', 'pending'].includes(response.cleanup)) throw new Error('Draft discard outcome unavailable');
+  publishDraftOutcome(response);
+  return response;
+}
+
 export function discardDraftFor(saved) {
-  if (!saved?._draftUid || !saved?._draftMailbox) return Promise.resolve();
-  return deleteLocalDraft({
-    accountId: saved._accountId,
-    mailbox: saved._draftMailbox,
-    uid: saved._draftUid,
-  });
+  return deleteLocalDraft({ draftId: saved?._draftId, accountId: saved?._draftAccountId || saved?._accountId,
+    mailbox: saved?._draftMailbox, uid: saved?._draftUid });
 }
 
 // ── Reopening a saved draft ──
@@ -183,7 +164,7 @@ function _withOriginal(html, attachments) {
  * A reply's quote or a forward's original was written after the body
  * (replyWireHtml) and is split off again here (_withOriginal).
  */
-export function draftToInitialData({ accountId, mailbox, uid, entry, eml }) {
+export function draftToInitialData({ accountId, mailbox, uid, entry, eml, draftId, revision }) {
   // Every draft this app writes is multipart with an HTML part, so the text
   // branch is a floor, not a path: it exists so a draft whose HTML part is
   // somehow unreadable reopens with the user's words in it rather than blank.
@@ -211,9 +192,9 @@ export function draftToInitialData({ accountId, mailbox, uid, entry, eml }) {
     ...original,
     _accountId: accountId,
     _fromAddress: entry?.from?.address || eml.from?.address || '',
-    // What makes this the same draft: the window adopts the uid and mailbox it
-    // was read from, so its autosaves REPLACE this draft instead of allocating
-    // a new one and leaving the old row behind.
+    // Stable identity selects native current bytes; the tuple is the last
+    // accepted presentation location, which can change on a content revision.
+    ...(draftId ? { _draftId: draftId, _draftRevision: revision, _draftAcceptedRevision: revision, _draftAccountId: accountId } : {}),
     _draftUid: uid,
     _draftMailbox: mailbox,
   };
@@ -298,68 +279,62 @@ export function scheduledEmlToInitialData({ row, eml }) {
  * server, which shares the same 'local' render source and must still open in
  * the viewer. The caller carries on as usual when it gets false.
  */
-export async function openLocalDraft(accountId, mailbox, uid) {
+export async function openLocalDraft(accountId, mailbox, uid, draftId) {
   if (!_composeOpener) return false;
-  const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
-  if (entry?.source !== 'local_draft') return false;
-  const eml = await db.getLocalEmailFull(accountId, mailbox, uid);
-  // Indexed as a draft, but the vault has no bytes: there is nothing to
-  // continue, and the viewer's own missing-body path reports that better than
-  // an empty compose window pretending the draft was always blank.
-  if (!eml) {
-    console.warn('[localDrafts] Draft indexed but not in the vault:', { accountId, mailbox, uid });
-    return false;
+  // A row may already carry stable identity even after its old UID was cleaned.
+  if (typeof draftId === 'object') draftId = draftId?.draftId;
+  if (!draftId) {
+    const known = getDraftProjection().managed.find(record =>
+      [record.current?.identity, record.pending?.identity, record.pending?.preparedIdentity, ...(record.cleanupIdentities || [])]
+        .some(i => i?.accountId === accountId && i.mailbox === mailbox && Number(i.uid) === Number(uid)));
+    draftId = known?.draftId;
   }
-  _composeOpener(draftToInitialData({ accountId, mailbox, uid, entry, eml }));
-  return true;
+  if (!draftId) {
+    const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
+    // Source alone also describes staged sends; admission requires the legacy
+    // archived user-draft shape and native verification of bytes/purpose.
+    if (entry?.source !== 'local_draft' || !entry.flags?.includes('archived') || !entry.flags?.includes('draft') || mailbox === 'Scheduled') return false;
+  }
+  try {
+    const response = await readDraft(draftId ? { draftId } : { identity: { accountId, mailbox, uid } });
+    const current = response.drafts[0];
+    if (!response.terminal && !response.pending && !response.missingBody && current?.eml && current?.draftId) {
+      _composeOpener(draftToInitialData(current));
+    }
+    // Recognized unavailable drafts must not fall through to an ordinary viewer.
+    return true;
+  } catch (error) {
+    console.warn('[localDrafts] Draft unavailable:', error);
+    return true;
+  }
 }
 
-// The row the user is looking at, without waiting for a folder reload. Mirrors
-// exactly what `readLocalEmailIndex` would produce for this entry on the next
-// load, so the optimistic row and the reloaded one are the same row.
-function _showInList(accountId, mailbox, entry) {
+function publishDraftOutcome(response, startedGeneration) {
+  const previous = getDraftProjection();
+  observeDraftOutcome(response, startedGeneration);
+  const groups = draftProjectionGroups(previous);
+  for (const [accountId, mailbox] of groups) {
+    const existing = getArchivedGroup(accountId, mailbox);
+    const projected = projectDraftUids(existing || new Set(), accountId, mailbox, previous);
+    if (existing != null || projected.size) setArchivedGroup(accountId, mailbox, projected);
+  }
   const s = useMailStore.getState();
-  if (s.activeAccountId !== accountId || s.activeMailbox !== mailbox) return;
-  // `_origin` is what `readLocalEmailIndex` preserves from the entry's own
-  // `source` before overwriting it, and custody reads it — without it the
-  // optimistic row and the reloaded one disagree about whether this message
-  // ever had a server copy (it never did).
-  const row = { ...entry, _origin: entry.source, source: 'local', isLocal: true, isArchived: true, _accountId: accountId };
-  addArchivedGroupUid(accountId, mailbox, entry.uid);
-  useMailStore.setState(st => ({
-    localEmails: [row, ...(st.localEmails || []).filter(e => e.uid !== entry.uid)],
-    // A local row is only rendered when its uid is in this set — a new Set
-    // instance, or the sorted-rows memo skips the recompute.
-    archivedEmailIds: new Set([...(st.archivedEmailIds || []), vaultKey(accountId, mailbox, entry.uid)]),
-    savedEmailIds: new Set([...(st.savedEmailIds || []), vaultKey(accountId, mailbox, entry.uid)]),
-  }));
-  useMailStore.getState().updateSortedEmails?.();
-}
-
-function _hideFromList(accountId, mailbox, uid) {
-  // Scoped to the account whose view is on screen: a uid is unique inside one
-  // mailbox only, so dropping it from another account's sets would blank an
-  // unrelated row.
-  if (useMailStore.getState().activeAccountId !== accountId) return;
-  // No `removeArchivedGroupUid` exists on `_archivedIdsByGroup` (only the
-  // additive `addArchivedGroupUid`), so this uid removal does not go through
-  // the group map. Left as a bypass: a later failed read for this group can
-  // still resurrect this uid via the stale map entry.
-  useMailStore.setState(st => {
-    const archived = new Set(st.archivedEmailIds || []);
-    const saved = new Set(st.savedEmailIds || []);
-    const key = vaultKey(accountId, mailbox, uid);
-    archived.delete(key);
-    saved.delete(key);
-    // Rows go by the message they are (account, folder, uid), so a real
-    // message of another folder that carries the draft's number stays.
-    const isDraft = (e) => sameMessage(e, { accountId, mailbox, uid }, st);
-    return {
-      localEmails: (st.localEmails || []).filter(e => !isDraft(e)),
-      emails: (st.emails || []).filter(e => !isDraft(e)),
-      archivedEmailIds: archived,
-      savedEmailIds: saved,
-    };
-  });
+  const visible = groups.filter(([accountId, mailbox]) => (s.activeAccountId === accountId && s.activeMailbox === mailbox)
+    || (s.unifiedInbox && mailbox === _resolveMailboxPath(getAccountCacheMailboxes(accountId) || [], s.unifiedFolder || 'INBOX')));
+  // Remove old exact tuples even on account move; only add rows for groups in
+  // view. Unrelated account/mailbox rows and keyed set members remain intact.
+  const rows = entries => {
+    const kept = projectDraftRows(entries || [], s.activeAccountId, s.activeMailbox, previous, false);
+    for (const [accountId, mailbox] of visible) kept.push(...projectDraftRows([], accountId, mailbox));
+    return kept;
+  };
+  const ids = values => {
+    let next = new Set(values || []);
+    for (const [accountId, mailbox] of groups) next = projectDraftKeyedUids(next, accountId, mailbox, previous, false);
+    for (const [accountId, mailbox] of visible) next = projectDraftKeyedUids(next, accountId, mailbox);
+    return next;
+  };
+  useMailStore.setState({ localEmails: rows(s.localEmails), emails: projectDraftRows(s.emails || [], s.activeAccountId, s.activeMailbox, previous, false),
+    archivedEmailIds: ids(s.archivedEmailIds), savedEmailIds: ids(s.savedEmailIds) });
   useMailStore.getState().updateSortedEmails?.();
 }

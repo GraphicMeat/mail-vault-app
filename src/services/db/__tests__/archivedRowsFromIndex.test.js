@@ -29,6 +29,7 @@ const calls = [];
 
 vi.mock('../../transport.js', () => ({
   send: (cmd, args) => {
+    if (cmd === 'drafts.list') return Promise.resolve({ drafts: [], managed: [] });
     if (cmd === 'local_index_read') return Promise.resolve(null);
     if (cmd === 'maildir_repair_generation') {
       return Promise.resolve({ ran: false, rebound: [], orphaned: [], kept: 0, errors: 0, generation: 1 });

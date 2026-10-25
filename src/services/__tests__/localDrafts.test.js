@@ -43,6 +43,7 @@ const {
   resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, discardDraftFor, newDraftUid,
   setComposeOpener, openLocalDraft, draftToInitialData, scheduledEmlToInitialData,
 } = await import('../localDrafts');
+const { resetDraftProjectionForTest } = await import('../draftProjection');
 const { _resetArchivedGroupsForTest, getArchivedGroup } = await import('../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct-1', email: 'me@example.com' };
@@ -56,6 +57,7 @@ const draftsTree = [
 beforeEach(() => {
   vi.clearAllMocks();
   _resetArchivedGroupsForTest();
+  resetDraftProjectionForTest();
   mockBuildDraftMime.mockResolvedValue({ rawBase64: 'Ym9keQ==', messageId: '<id@example.com>', rawSize: 4 });
   mockGetCachedMailboxes.mockResolvedValue(null);
   storeState = {
@@ -72,14 +74,26 @@ beforeEach(() => {
   globalThis.window.__TAURI__ = { core: { invoke } };
 });
 
+const nativeEntry = { uid: 1700000000, source: 'local_draft', subject: 'Half written', to: [{ address: 'a@example.com', name: '' }, { address: 'b@example.com', name: '' }], message_id: '<id@example.com>', flags: ['archived', 'seen', 'draft'] };
+const nativeReply = (entry = nativeEntry, revision = 1) => ({ draftId: 'draft-one', revision, disposition: 'saved', accountId: 'acct-1', mailbox: 'Drafts', uid: entry.uid, entry, current: { identity: { accountId: 'acct-1', mailbox: 'Drafts', uid: entry.uid, messageId: entry.message_id }, entry }, pending: null, cleanupIdentities: [], cleanup: 'complete', discarded: false });
+const complete = over => ({ to: '', cc: '', bcc: '', subject: '', html: '', text: '', inReplyTo: '', references: '', attachments: [], ...over });
+beforeEach(() => {
+  mockSend.mockImplementation(async (method) => {
+    if (method === 'drafts.save') return nativeReply();
+    if (method === 'drafts.discard') return { draftId: 'draft-one', discarded: true, cleanup: 'complete', cleanupIdentities: [] };
+    if (method === 'drafts.list') return { drafts: [{ ...nativeReply(), eml: await mockGetLocalEmailFull() }], managed: [nativeReply()] };
+  });
+});
+
 const save = (over = {}) => saveLocalDraft({
+  draftId: 'draft-one', revision: 1,
   account: ACCOUNT,
   accountId: 'acct-1',
   mailbox: 'Drafts',
   uid: 1700000000,
   fromAddress: 'me@example.com',
   displayName: 'Me',
-  payload: { to: 'a@example.com, b@example.com', subject: 'Half written', html: '<p>hi</p>' },
+  payload: complete({ to: 'a@example.com, b@example.com', subject: 'Half written', html: '<p>hi</p>' }),
   snippet: 'hi',
   hasAttachments: false,
   ...over,
@@ -106,122 +120,70 @@ describe('resolveDraftsMailbox', () => {
 });
 
 describe('saveLocalDraft', () => {
-  it('writes the .eml with the flags that make it a visible local draft', async () => {
-    await save();
-    expect(mockSend).toHaveBeenCalledWith('maildir_store', {
-      accountId: 'acct-1',
-      mailbox: 'Drafts',
-      uid: 1700000000,
-      rawSourceBase64: 'Ym9keQ==',
-      // 'archived' is what puts a local row in the list at all; 'draft' is what
-      // it is.
-      flags: ['archived', 'seen', 'draft'],
-    });
-  });
-
-  it('indexes it as locally created, with the recipients split out', async () => {
-    const entry = await save();
-    expect(mockAppendLocalIndex).toHaveBeenCalledWith('acct-1', 'Drafts', [entry]);
-    expect(entry.source).toBe('local_draft');
-    expect(entry.uid).toBe(1700000000);
-    expect(entry.subject).toBe('Half written');
-    expect(entry.to).toEqual([
-      { address: 'a@example.com', name: '' },
-      { address: 'b@example.com', name: '' },
-    ]);
-    expect(entry.message_id).toBe('<id@example.com>');
-  });
-
-  it('writes nothing when the MIME could not be built', async () => {
-    mockBuildDraftMime.mockResolvedValue(null);
-    // Half a draft is worse than none: a row that cannot open the user's text
-    // reads as "saved" and is not.
-    expect(await save()).toBe(null);
-    expect(mockSend).not.toHaveBeenCalled();
+  it('routes only a complete snapshot to the daemon', async () => {
+    expect(await save()).toMatchObject({ draftId: 'draft-one', disposition: 'saved', entry: nativeEntry });
+    expect(mockSend).toHaveBeenCalledWith('drafts.save', expect.objectContaining({ draftId: 'draft-one', revision: 1, snapshot: complete({ to: 'a@example.com, b@example.com', subject: 'Half written', html: '<p>hi</p>' }) }));
+    expect(mockBuildDraftMime).not.toHaveBeenCalled();
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
-
-  it('shows the row while that folder is on screen, and keeps one row per draft', async () => {
-    await save();
-    await save({ payload: { to: 'a@example.com', subject: 'Second pass', html: '<p>hi</p>' } });
-
-    expect(storeState.localEmails.length).toBe(1);
-    expect(storeState.localEmails[0].subject).toBe('Second pass');
-    expect(storeState.localEmails[0].isArchived).toBe(true);
-    // A local row only renders when its uid is in this set.
-    expect(storeState.archivedEmailIds.has('acct-1:Drafts:1700000000')).toBe(true);
+  it('uses native envelope metadata and does not reinterpret recipients', async () => {
+    const entry = (await save()).entry;
+    expect(entry).toEqual(nativeEntry);
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
-
-  it('leaves the list alone when the user is looking somewhere else', async () => {
-    storeState.activeMailbox = 'INBOX';
+  it('preserves the accepted row when a native save fails', async () => {
+    await save(); mockSend.mockRejectedValueOnce(new Error('disk unavailable'));
+    await expect(save({ revision: 2 })).rejects.toThrow('disk unavailable');
+    expect(storeState.localEmails.map(e => e.uid)).toEqual([1700000000]);
+  });
+  it('shows one row after native copy-on-write publication', async () => {
     await save();
-    expect(storeState.localEmails.length).toBe(0);
-    // Still written, though — the row appears when they open Drafts.
-    expect(mockAppendLocalIndex).toHaveBeenCalled();
+    mockSend.mockResolvedValueOnce(nativeReply({ ...nativeEntry, uid: 1700000001, subject: 'Second pass' }, 2));
+    await save({ revision: 2, payload: complete({ subject: 'Second pass' }) });
+    expect(storeState.localEmails.map(e => [e.uid, e.subject])).toEqual([[1700000001, 'Second pass']]);
+    expect(storeState.archivedEmailIds.has('acct-1:Drafts:1700000000')).toBe(false);
+    expect(storeState.archivedEmailIds.has('acct-1:Drafts:1700000001')).toBe(true);
+  });
+  it('keeps the visible folder scoped while saving elsewhere', async () => {
+    storeState.activeMailbox = 'INBOX'; await save();
+    expect(storeState.localEmails).toEqual([]);
+    expect(mockSend).toHaveBeenCalledWith('drafts.save', expect.anything());
   });
 });
-
 describe('deleteLocalDraft', () => {
-  it('removes the file, the index entry and the row', async () => {
-    await save();
-    await deleteLocalDraft({ accountId: 'acct-1', mailbox: 'Drafts', uid: 1700000000 });
-
-    expect(mockSend).toHaveBeenCalledWith('maildir_delete', {
-      accountId: 'acct-1', mailbox: 'Drafts', uid: 1700000000,
-    });
-    expect(mockRemoveFromLocalIndex).toHaveBeenCalledWith('acct-1', 'Drafts', 1700000000);
-    expect(storeState.localEmails.length).toBe(0);
+  it('discards by canonical identity and removes the exact presented tuple', async () => {
+    await save(); await deleteLocalDraft({ draftId: 'draft-one' });
+    expect(mockSend).toHaveBeenLastCalledWith('drafts.discard', { draftId: 'draft-one' });
+    expect(mockRemoveFromLocalIndex).not.toHaveBeenCalled();
+    expect(storeState.localEmails).toEqual([]);
     expect(storeState.archivedEmailIds.has('acct-1:Drafts:1700000000')).toBe(false);
   });
-
-  it('does nothing without a draft to delete', async () => {
+  it('does nothing without an identity', async () => {
     await deleteLocalDraft({ accountId: 'acct-1', mailbox: 'Drafts', uid: null });
     expect(mockSend).not.toHaveBeenCalled();
-    expect(mockRemoveFromLocalIndex).not.toHaveBeenCalled();
   });
-
-  it('leaves another account\'s rows alone', async () => {
+  it('keeps an unrelated account with the same UID', async () => {
     await save();
-    storeState.activeAccountId = 'acct-2';
-    await deleteLocalDraft({ accountId: 'acct-1', mailbox: 'Drafts', uid: 1700000000 });
-
-    // The file is gone, but a uid is unique only inside one mailbox — dropping
-    // it from the visible account's sets would blank an unrelated row.
-    expect(mockSend).toHaveBeenCalledWith('maildir_delete', expect.anything());
-    expect(storeState.localEmails.length).toBe(1);
+    storeState.localEmails.push({ uid: 1700000000, _accountId: 'acct-2', _mailbox: 'Drafts', subject: 'unrelated' });
+    await deleteLocalDraft({ draftId: 'draft-one' });
+    expect(storeState.localEmails.map(e => e.subject)).toEqual(['unrelated']);
   });
 });
-
 describe('discardDraftFor', () => {
-  it('discards the draft a minimized window owned', async () => {
-    await discardDraftFor({ _accountId: 'acct-1', _draftMailbox: 'Drafts', _draftUid: 42 });
-    expect(mockRemoveFromLocalIndex).toHaveBeenCalledWith('acct-1', 'Drafts', 42);
+  it('uses the stable identity carried by a minimized snapshot', async () => {
+    await discardDraftFor({ _draftId: 'draft-one', _accountId: 'acct-1', _draftMailbox: 'Drafts', _draftUid: 42 });
+    expect(mockSend).toHaveBeenLastCalledWith('drafts.discard', { draftId: 'draft-one' });
   });
-
-  it('no-ops for a window that never saved one', async () => {
-    await discardDraftFor({ _accountId: 'acct-1' });
-    await discardDraftFor(null);
+  it('no-ops for a window without identity', async () => {
+    await discardDraftFor({ _accountId: 'acct-1' }); await discardDraftFor(null);
     expect(mockSend).not.toHaveBeenCalled();
   });
 });
-
-describe('saveLocalDraft — threading headers survive the round trip', () => {
-  it('indexes both In-Reply-To and References', async () => {
-    const entry = await save({
-      payload: {
-        to: 'a@example.com',
-        subject: 'Re: something',
-        html: '<p>hi</p>',
-        inReplyTo: '<parent@example.com>',
-        references: '<root@example.com> <parent@example.com>',
-      },
-    });
-    // The .eml carries both, but the vault parse surfaces neither, so the
-    // index is the only place a reopened draft can read them back from —
-    // dropping References here is what turns a continued reply into a new
-    // thread on the recipient's side.
-    expect(entry.in_reply_to).toBe('<parent@example.com>');
-    expect(entry.references).toBe('<root@example.com> <parent@example.com>');
+describe('saveLocalDraft — threading wire', () => {
+  it('carries both threading headers explicitly', async () => {
+    const payload = complete({ inReplyTo: '<parent@example.com>', references: '<root@example.com> <parent@example.com>' });
+    await save({ payload });
+    expect(mockSend).toHaveBeenCalledWith('drafts.save', expect.objectContaining({ snapshot: payload }));
   });
 });
 
@@ -430,7 +392,7 @@ describe('openLocalDraft', () => {
   beforeEach(() => {
     opened = [];
     setComposeOpener((data) => opened.push(data));
-    mockGetLocalIndexEntry.mockResolvedValue({ uid: 42, source: 'local_draft' });
+    mockGetLocalIndexEntry.mockResolvedValue({ uid: 42, source: 'local_draft', flags: ['archived', 'draft'] });
     mockGetLocalEmailFull.mockResolvedValue(eml);
   });
 
@@ -438,7 +400,8 @@ describe('openLocalDraft', () => {
     expect(await openLocalDraft('acct-1', 'Drafts', 42)).toBe(true);
     expect(opened.length).toBe(1);
     expect(opened[0].subject).toBe('Continue me');
-    expect(opened[0]._draftUid).toBe(42);
+    expect(opened[0]._draftUid).toBe(1700000000);
+    expect(opened[0]._draftId).toBe('draft-one');
   });
 
   it('leaves a message archived from a server to the viewer', async () => {
@@ -460,7 +423,7 @@ describe('openLocalDraft', () => {
     // Indexed as a draft, nothing on disk: an empty compose would look like
     // the draft was always blank. The viewer says "missing" honestly.
     mockGetLocalEmailFull.mockResolvedValue(undefined);
-    expect(await openLocalDraft('acct-1', 'Drafts', 42)).toBe(false);
+    expect(await openLocalDraft('acct-1', 'Drafts', 42)).toBe(true);
     expect(opened.length).toBe(0);
   });
 

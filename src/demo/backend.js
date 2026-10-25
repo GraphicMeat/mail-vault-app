@@ -401,6 +401,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
   const snapshots = new Map();
   const insightsModels = new Map();
   const builtMimes = new Map();
+  const draftRecords = new Map();
   const learning = new Map();
   const classificationOverrides = new Map();
   let externalBackupPath = null;
@@ -532,10 +533,95 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     return { rawBase64: btoa(unescape(encodeURIComponent(raw))), messageId: id, rawSize: raw.length };
   };
 
+  // Browser simulation of the observable draft contract. No native hashes or
+  // receipt proof are fabricated; exportState is the existing browser store.
+  const draftView = (record, disposition = 'unchanged') => {
+    const current = record.current;
+    return { draftId: record.draftId, revision: record.revision, disposition, current: clone(current), pending: null,
+      cleanup: 'complete', cleanupIdentities: [], discarded: record.discarded, simulated: true,
+      ...(current ? { ...current.identity, entry: clone(current.entry) } : {}) };
+  };
+  const draftEligible = row => row?.vaultPresent && row._origin === 'local_draft' && row.vaultFlags?.includes('archived') && row.vaultFlags?.includes('draft') && row.mailbox !== 'Scheduled';
+  const draftOwner = identity => [...draftRecords.values()].find(record => record.current && key(record.current.identity.accountId, record.current.identity.mailbox, record.current.identity.uid) === key(identity.accountId, identity.mailbox, identity.uid));
+  const adoptDraft = (identity, draftId = globalThis.crypto.randomUUID()) => {
+    const owned = draftOwner(identity);
+    if (owned) return owned;
+    const row = find(identity);
+    if (!draftEligible(row)) throw new Error('Draft identity is not editable');
+    const entry = { ...header(row), source: 'local_draft', message_id: row.messageId, in_reply_to: row.inReplyTo, references: row.references.join(' '), flags: ['archived', 'seen', 'draft'] };
+    const record = { draftId, revision: 0, discarded: false, current: { identity: { accountId: row.accountId, mailbox: row.mailbox, uid: row.uid, messageId: row.messageId }, entry } };
+    draftRecords.set(draftId, record);
+    return record;
+  };
+  const draftRpc = (method, p) => {
+    if (method === 'drafts.save') {
+      const fields = ['to', 'cc', 'bcc', 'subject', 'html', 'text', 'inReplyTo', 'references'];
+      if (!p.draftId || !Number.isSafeInteger(p.revision) || p.revision < 1 || !ACCOUNTS.some(a => a.id === p.accountId)
+        || typeof p.fromAddress !== 'string' || typeof p.displayName !== 'string' || typeof p.snippet !== 'string'
+        || fields.some(field => typeof p.snapshot?.[field] !== 'string') || !Array.isArray(p.snapshot?.attachments)) throw new Error('Complete draft required');
+      let record = draftRecords.get(p.draftId);
+      if (!record && p.previousIdentity) {
+        record = adoptDraft(p.previousIdentity, p.draftId);
+        if (record.draftId !== p.draftId) throw new Error('Draft identity already managed');
+      }
+      if (record?.discarded) throw new Error('Draft discarded');
+      const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+        ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+      const fingerprint = canonical({ accountId: p.accountId, fromAddress: p.fromAddress, displayName: p.displayName, snapshot: p.snapshot, snippet: p.snippet });
+      if (record && p.revision < record.revision) return draftView(record, 'superseded');
+      if (record && p.revision === record.revision) {
+        if (record.fingerprint !== fingerprint) throw new Error('Draft revision conflict');
+        return draftView(record);
+      }
+      const attachments = p.snapshot.attachments.map(attachment => {
+        if (typeof attachment.filename !== 'string' || typeof attachment.contentType !== 'string' || (attachment.encoding && attachment.encoding !== 'base64')) throw new Error('Invalid draft attachment');
+        const source = attachment.source && find(attachment.source);
+        const content = attachment.content ?? (source?.vaultPresent ? source.attachments?.[attachment.source.attachmentIndex]?.content : undefined);
+        if (typeof content !== 'string') throw new Error('Draft attachment unavailable');
+        return { filename: attachment.filename, contentType: attachment.contentType, content, ...(attachment.cid ? { contentId: attachment.cid } : {}) };
+      });
+      const mailbox = record?.current?.identity.accountId === p.accountId ? record.current.identity.mailbox : (accountMailboxes(p.accountId).find(box => box.specialUse === '\\Drafts')?.path || 'Drafts');
+      let uid = Math.max(Math.floor(Date.now() / 1000), ...messages.map(row => row.uid + 1));
+      while (find({ accountId: p.accountId, mailbox, uid })) uid += 1;
+      const row = makeMessage({ accountId: p.accountId, mailbox, uid, from: { address: p.fromAddress, name: p.displayName }, to: mimeAddressList(p.snapshot.to), cc: mimeAddressList(p.snapshot.cc), bcc: mimeAddressList(p.snapshot.bcc), subject: p.snapshot.subject, text: p.snapshot.text, htmlContent: p.snapshot.html, inReplyTo: p.snapshot.inReplyTo, references: p.snapshot.references.split(/\s+/).filter(Boolean), vault: true, server: false }, sessionNow);
+      row.html = p.snapshot.html; row.attachments = attachments; row.hasAttachments = attachments.length > 0;
+      row._origin = 'local_draft'; row.vaultFlags = ['archived', 'seen', 'draft']; row.flags = ['archived', 'seen', 'draft'];
+      const entry = { uid, from: row.from, to: row.to, subject: row.subject, date: row.date, message_id: row.messageId, in_reply_to: p.snapshot.inReplyTo || null, references: p.snapshot.references || null, snippet: p.snippet.slice(0, 200), has_attachments: !!attachments.length, flags: [...row.vaultFlags], source: 'local_draft', draftId: p.draftId, revision: p.revision };
+      if (record?.current) { const previous = find(record.current.identity); if (previous) previous.vaultPresent = false; }
+      messages.push(row);
+      record = { draftId: p.draftId, revision: p.revision, fingerprint, discarded: false, current: { identity: { accountId: p.accountId, mailbox, uid, messageId: row.messageId }, entry } };
+      draftRecords.set(p.draftId, record); emit('demo:state', { type: 'draft-save' });
+      return draftView(record, 'saved');
+    }
+    if (method === 'drafts.discard') {
+      if (!p.draftId) throw new Error('Draft identity required');
+      const record = draftRecords.get(p.draftId) || { draftId: p.draftId, revision: 0, current: null };
+      if (record.current) { const row = find(record.current.identity); if (row) row.vaultPresent = false; }
+      record.current = null; record.discarded = true; draftRecords.set(p.draftId, record);
+      emit('demo:state', { type: 'draft-discard' });
+      return { draftId: p.draftId, discarded: true, cleanup: 'complete', cleanupIdentities: [], simulated: true };
+    }
+    if (p.includeContent && !p.draftId && !p.identity) throw new Error('Select one draft');
+    const record = p.draftId ? draftRecords.get(p.draftId) : p.identity ? (p.includeContent ? adoptDraft(p.identity) : draftOwner(p.identity)) : null;
+    if (p.draftId || p.identity) {
+      if (!record) return { drafts: [], managed: [], missingBody: true };
+      const view = draftView(record);
+      if (record.discarded) return { drafts: [], managed: [view], terminal: true };
+      const row = find(record.current.identity);
+      if (p.identity && key(p.identity.accountId, p.identity.mailbox, p.identity.uid) !== key(row?.accountId, row?.mailbox, row?.uid)) throw new Error('Draft identity mismatch');
+      if (!row?.vaultPresent) return { drafts: [], managed: [view], missingBody: true };
+      return { drafts: [{ ...view, ...(p.includeContent ? { eml: clone(row) } : {}) }], managed: [view], missingBody: false };
+    }
+    const managed = [...draftRecords.values()].map(record => draftView(record));
+    const legacy = messages.filter(row => draftEligible(row) && !draftOwner(row)).map(row => ({ accountId: row.accountId, mailbox: row.mailbox, uid: row.uid, entry: { ...header(row), source: 'local_draft' }, draftId: null, revision: 0, legacy: true, disposition: 'unadopted' }));
+    return { drafts: [...managed.filter(view => !view.discarded && view.current), ...legacy].filter(view => !p.accountId || view.accountId === p.accountId), managed: managed.filter(view => !p.accountId || view.accountId === p.accountId), simulated: true };
+  };
+
   const exportState = () => ({
     schemaVersion: 1,
     seedVersion: 'demo-300-v1',
     messages: messages.map(serializeMessage),
+    drafts: [...draftRecords.entries()].map(([id, record]) => [id, clone(record)]),
     mailboxList: clone(mailboxList),
     accountMailboxAdds: [...accountMailboxAdds.entries()].map(([id, rows]) => [id, clone(rows)]),
     localFolders: [...localFolders.entries()].map(([id, rows]) => [id, clone(rows)]),
@@ -563,6 +649,8 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       throw new Error('Invalid demo workspace messages');
     }
     messages = restoredMessages;
+    draftRecords.clear();
+    for (const [id, record] of stored.drafts || []) draftRecords.set(id, clone(record));
     mailboxList = Array.isArray(stored.mailboxList) ? clone(stored.mailboxList) : clone(MAILBOXES);
     accountMailboxAdds.clear();
     for (const [id, rows] of stored.accountMailboxAdds || []) {
@@ -611,6 +699,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'demo_emit_event': emit(args.event, args.payload); return null;
       case 'daemon_rpc': {
         const method = args.method;
+        if (['drafts.save', 'drafts.list', 'drafts.discard'].includes(method)) return draftRpc(method, args.params || {});
         // Daemon-owned commands (search index, vault rows/search — spec
         // 2026-09-14 §5) keep their Tauri names, not a dotted daemon method.
         if (method && !method.includes('.')) return invoke(method, args.params || {});
@@ -1689,7 +1778,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     restoreState,
     invoke,
     on: (event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(callback); return () => listeners.get(event)?.delete(callback); },
-    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; bulkAdmissions.clear(); migrationState = null; snapshots.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
+    reset: () => { uploads.forEach(stopUpload); uploads.clear(); messages = seedMessages(sessionNow); mailboxList = clone(MAILBOXES); accountMailboxAdds.clear(); localFolders.clear(); settings = clone(initialSettings); journal.length = 0; pendingOperation = null; activeBulk = null; bulkAdmissions.clear(); migrationState = null; snapshots.clear(); draftRecords.clear(); insightsModels.clear(); timeCapsules.clear(); capsuleInitialized.clear(); builtMimes.clear(); learning.clear(); classificationOverrides.clear(); externalBackupPath = null; syncTickets.clear(); syncTicket = 0; emit('demo:state', { type: 'reset' }); },
     DemoUnsupportedError,
   };
 }

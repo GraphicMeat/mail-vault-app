@@ -115,6 +115,7 @@ function mapArgs(command, args) {
 // shapes the deleted Tauri commands used, not the old daemon-only format that
 // test guards against.
 export const DAEMON_OWNED = new Set([
+  'drafts.save', 'drafts.list', 'drafts.discard',
   'vault_search', 'vault_rows', 'search_index_configure', 'search_index_status', 'search_index_rebuild', 'search_index_destroy',
   // Task 5: the daemon owns the search-run and cancellation lifecycle.
   'mail_search_start', 'mail_search_cancel',
