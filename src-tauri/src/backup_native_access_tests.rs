@@ -165,10 +165,10 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         while !check() {assert!(Instant::now()<deadline,"native integration timed out: {label}");std::thread::sleep(Duration::from_millis(10));}
     }
     let mut token=String::new();
-    until(|| {token=std::fs::read_to_string(ipc.join("mv.token")).unwrap_or_default();!token.is_empty() && mailvault_core::daemon_ipc::call(&endpoint,&token,"daemon.ping",json!({}),Duration::from_secs(1)).is_ok()},"daemon ready");
+    until(|| {token=std::fs::read_to_string(ipc.join("mv.token")).unwrap_or_default();!token.is_empty() && mailvault_core::daemon_ipc::call(&endpoint,&token,"ping",json!({}),Duration::from_secs(1)).is_ok()},"daemon ready");
     let rpc=|method:&str,params:Value| mailvault_core::daemon_ipc::call(&endpoint,&token,method,params,Duration::from_secs(30)).expect("native RPC");
     rpc("portable.unlock",json!({"passphrase":"native fixture passphrase"}));
-    struct Channel {stream:UnixStream,reader:Option<std::thread::JoinHandle<()>>}
+    struct Channel {stream:UnixStream,reader:Option<std::thread::JoinHandle<()>>,pings:std::sync::Arc<AtomicUsize>}
     impl Drop for Channel {fn drop(&mut self){let _=self.stream.shutdown(std::net::Shutdown::Both);if let Some(reader)=self.reader.take(){let _=reader.join();}}}
     fn owner(endpoint:&std::path::Path,token:&str,id:&str)->Channel {
         let mut stream=UnixStream::connect(endpoint).unwrap();stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
@@ -176,8 +176,9 @@ fn backup_access_fresh_shell_daemon_reconnect() {
         writeln!(stream,"{}",json!({"token":token.trim()})).unwrap();let mut line=String::new();reader.read_line(&mut line).unwrap();
         writeln!(stream,"{}",json!({"jsonrpc":"2.0","method":"channel.open","params":{"backupOwner":id},"id":1})).unwrap();line.clear();reader.read_line(&mut line).unwrap();
         let ack:Value=serde_json::from_str(&line).unwrap();assert_eq!(ack["result"]["channel"],true);
-        let task=std::thread::spawn(move|| {let mut line=String::new();loop {line.clear();match reader.read_line(&mut line) {Ok(0)=>break,Ok(_)=>{},Err(e) if matches!(e.kind(),std::io::ErrorKind::WouldBlock|std::io::ErrorKind::TimedOut)=>{},Err(_)=>break}}});
-        Channel{stream,reader:Some(task)}
+        let pings=std::sync::Arc::new(AtomicUsize::new(0));let observed=pings.clone();
+        let task=std::thread::spawn(move|| {let mut line=String::new();loop {line.clear();match reader.read_line(&mut line) {Ok(0)=>break,Ok(_)=>{if serde_json::from_str::<Value>(&line).is_ok_and(|v|v["params"]["name"]=="daemon-ping") {observed.fetch_add(1,SeqCst);}},Err(e) if matches!(e.kind(),std::io::ErrorKind::WouldBlock|std::io::ErrorKind::TimedOut)=>{},Err(_)=>break}}});
+        Channel{stream,reader:Some(task),pings}
     }
     struct Native<'a> {app:&'a std::path::Path,endpoint:&'a std::path::Path,token:&'a str,acquired:AtomicUsize,released:AtomicUsize}
     impl Ports for Native<'_> {
@@ -190,12 +191,33 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     let first=rpc("backup.run_now",json!({"accountId":"native","requestId":"native-manual"}));
     until(||rpc("backup.schedule.status",json!({}))["pendingAccess"].as_array().is_some_and(|a|!a.is_empty()),"pending without shell");
     assert!(mock.commands().is_empty(),"configured backup started without an authorizing shell");
-    let channel=owner(&endpoint,&token,"shell-a");
-    reconcile(&held,&native,"shell-a");
+    let mut channel=owner(&endpoint,&token,"shell-a");
+    struct Paused<'a,'b> {base:&'a Native<'b>,entered:Mutex<Option<std::sync::mpsc::Sender<()>>>,release:Mutex<std::sync::mpsc::Receiver<()>>}
+    impl Ports for Paused<'_,'_> {
+        fn call(&self,m:&str,p:Value)->Result<Value,String>{self.base.call(m,p)}
+        fn resolve(&self)->AttachResolution {self.entered.lock().unwrap().take().unwrap().send(()).unwrap();self.release.lock().unwrap().recv().unwrap();self.base.resolve()}
+        fn release(&self,path:&str){self.base.release(path)}
+    }
+    let (entered_tx,entered_rx)=std::sync::mpsc::channel();let (release_tx,release_rx)=std::sync::mpsc::channel();
+    let paused=Paused{base:&native,entered:Mutex::new(Some(entered_tx)),release:Mutex::new(release_rx)};
+    std::thread::scope(|scope| {
+        let task=scope.spawn(||reconcile(&held,&paused,"shell-a"));entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let started=Instant::now();let ping=native.call("ping",json!({}));let responsive=started.elapsed()<Duration::from_secs(1);
+        writeln!(channel.stream,"{}",json!({"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"paused-native-resolver"}})).unwrap();
+        let deadline=Instant::now()+Duration::from_secs(1);while channel.pings.load(SeqCst)==0 && Instant::now()<deadline {std::thread::sleep(Duration::from_millis(10));}
+        let pumped=channel.pings.load(SeqCst)>0;
+        release_tx.send(()).unwrap();task.join().unwrap();
+        assert!(ping.is_ok() && responsive,"pending native resolver blocked unrelated RPC");assert!(pumped,"pending native resolver blocked native event channel");
+    });
     until(||mock.commands().iter().any(|c|c.to_uppercase().contains("BODY.PEEK[]")),"actual body fetch entered");
     let old=held.holds.lock().unwrap().keys().next().unwrap().clone();
-    let started=Instant::now();rpc("daemon.ping",json!({}));assert!(started.elapsed()<Duration::from_secs(1),"paused body blocked unrelated RPC");
+    let started=Instant::now();rpc("ping",json!({}));assert!(started.elapsed()<Duration::from_secs(1),"paused body blocked unrelated RPC");
     assert_eq!(rpc("backup.access_status",serde_json::to_value(Query{attempt:old.clone(),fence_unstarted:true}).unwrap())["safeRelease"],false);
+    // An unrelated consumer acquires the very same saved native location.
+    // Its one release cannot consume the scheduler's independent acquisition.
+    let other=resolve_native(&app);let Resolution::Authorized{root:other_root}=other.result else {panic!("second actual native acquisition unavailable");};
+    assert_eq!(std::path::Path::new(&other_root),mirror.as_path());release_backup_path(&other_root);
+    assert_eq!(held.holds.lock().unwrap().len(),1);
     // Lose the actual authorizing channel while the real provider is paused.
     drop(channel);
     let channel=owner(&endpoint,&token,"shell-b");*held.session.lock().unwrap()=Some("shell-b".into());
@@ -214,7 +236,7 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     until(||rpc("backup.schedule.status",json!({}))["pendingAccess"].as_array().is_some_and(|a|!a.is_empty()),"pending intent before daemon replacement");
     let mut child=daemon.child.take().unwrap();child.kill().unwrap();child.wait().unwrap();
     daemon.child=Some(spawn());
-    until(||mailvault_core::daemon_ipc::call(&endpoint,&token,"daemon.ping",json!({}),Duration::from_secs(1)).is_ok(),"replacement daemon ready");
+    until(||mailvault_core::daemon_ipc::call(&endpoint,&token,"ping",json!({}),Duration::from_secs(1)).is_ok(),"replacement daemon ready");
     rpc("portable.unlock",json!({"passphrase":"native fixture passphrase"}));
     assert_eq!(rpc("backup.access_status",serde_json::to_value(Query{attempt:old,fence_unstarted:true}).unwrap())["safeRelease"],false);
     let channel=owner(&endpoint,&token,"shell-c");*held.session.lock().unwrap()=Some("shell-c".into());
@@ -223,5 +245,20 @@ fn backup_access_fresh_shell_daemon_reconnect() {
     until(||rpc("backup.schedule.status",json!({}))["requests"]["daemon-restart"]["status"]=="success","replacement daemon requires fresh native scope");
     reconcile(&held,&native,"shell-c");assert_eq!(native.released.load(SeqCst),3);
     drop(channel);
-    println!("NATIVE_ACCESS_CONNECTED: real resolver, pending/manual/attach, live owner disconnect, joined drain, same-daemon replacement shell, fresh acquisition, persisted pending daemon replacement, byte-exact mirror, responsive ping");
+    println!("NATIVE_ACCESS_CONNECTED: real resolver, pending/manual/attach, live owner disconnect, joined drain, same-daemon replacement shell, fresh acquisition, persisted pending daemon replacement, byte-exact mirror, responsive ping+event channel during paused resolver, independent actual same-path consumer");
+}
+#[test]
+fn backup_access_bookmark_refresh_reacquires_against_renewed_record() {
+    let dir=tempfile::tempdir().unwrap();
+    mailvault_core::app_db::with(dir.path(),|c| {
+        mailvault_core::app_db::locations::save_meta(c,"external-backup","/same-selection","macos",1,false)?;
+        mailvault_core::app_db::locations::save_bookmark(c,"external-backup",b"old-bookmark")
+    }).unwrap();
+    let old=wire::slot_stamp(dir.path()).unwrap().unwrap();let count=AtomicUsize::new(0);let released=AtomicUsize::new(0);
+    let resolved=resolve_saved(||wire::slot_stamp(dir.path()),|| {
+        if count.fetch_add(1,SeqCst)==0 {mailvault_core::app_db::with(dir.path(),|c|mailvault_core::app_db::locations::save_bookmark(c,"external-backup",b"renewed-bookmark")).unwrap();}
+        Ok("/same-root".into())
+    },|path| {assert_eq!(path,"/same-root");released.fetch_add(1,SeqCst);});
+    assert!(matches!(resolved.result,Resolution::Authorized{root} if root=="/same-root"));
+    assert_ne!(resolved.stamp.as_deref(),Some(old.as_str()));assert_eq!(count.load(SeqCst),2);assert_eq!(released.load(SeqCst),1);
 }

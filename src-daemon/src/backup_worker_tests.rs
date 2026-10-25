@@ -1267,6 +1267,8 @@ async fn backup_access_authorized_root_reaches_actual_provider() {
     let attempt=access_attempt(&r,&ack,"shell-a");
     let attached=access_attach(&r,&attempt,&stamp,"/native-authorized").await;
     assert_eq!(attached["state"],"accepted");
+    let journal=app_db::with(&r.state.app_dir,|c|c.query_row("SELECT value FROM meta WHERE key=?1",[META],|r|r.get::<_,String>(0)).map_err(|e|e.to_string())).unwrap();
+    assert!(!journal.contains("/native-authorized"),"resolved scope was persisted as reusable authority");
     let reached=tokio::time::timeout(Duration::from_millis(200),r.calls.recv()).await;
     let observed=reached.is_ok();
     if let Ok(Some(c))=reached {
@@ -1423,7 +1425,7 @@ async fn backup_access_slot_changed_during_credentials_blocks_provider() {
     wait(&r.state,|s|!s["pendingAccess"].as_array().unwrap().is_empty()).await;
     let attempt=access_attempt(&r,&ack,"shell-a");access_attach(&r,&attempt,&stamp,"/old-native-root").await;
     entered_rx.await.unwrap();
-    let ping=handle_request_for_test(&r.state,"daemon.ping",json!({})).await;assert!(ping.error.is_none());
+    let ping=handle_request_for_test(&r.state,"ping",json!({})).await;assert!(ping.error.is_none());
     assert_eq!(access_query(&r,&attempt,false).await["safeRelease"],false);
     app_db::with(&r.state.app_dir,|c|app_db::locations::save_meta(c,"external-backup","/new-choice","native",2,false)).unwrap();
     release_tx.send(()).ok();
