@@ -459,7 +459,11 @@ mod tests {
     #[tokio::test]
     async fn removal_from_the_host_happens_only_after_a_verified_copy() {
         let _guard = credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = credentials::TestEnvRestore::capture();
         let h = host();
+        let companions = ["accounts.json.lock", "accounts.version.json", "accounts.json.corrupt", "accounts.json.bak1", ".accounts.json.tmp-synthetic"];
+        for name in companions { std::fs::write(h.state.app_dir.join(name), b"synthetic").unwrap(); }
+        std::fs::write(h.state.app_dir.join("settings.json.bak1"), b"unrelated").unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &h.creds);
         // Never the runner's real keychain for the AI key.
         std::env::set_var("MAILVAULT_TEST_AI_KEY", h.creds.with_file_name("ai_key"));
@@ -472,6 +476,7 @@ mod tests {
         assert!(refused.is_err());
         assert!(h.eml.exists() && h.creds.exists(), "a failed copy removes nothing");
 
+        for name in companions { assert!(h.state.app_dir.join(name).exists(), "failed copy removed {name}"); }
         std::fs::remove_dir_all(h.dest.join("MailVault Data")).unwrap();
         let reply = run_create(&h.state, request(&h, true), h.payload.clone()).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
@@ -480,6 +485,8 @@ mod tests {
         assert_eq!(reply.expect("created")["removedFromHost"], json!(true));
         assert!(!h.eml.exists(), "host mail removed after the verified copy");
         assert!(!h.creds.exists(), "host credentials removed after the verified copy");
+        for name in companions { assert!(!h.state.app_dir.join(name).exists(), "successful removal left {name}"); }
+        assert!(h.state.app_dir.join("settings.json.bak1").exists());
         assert!(h.dest.join(format!("MailVault Data/data/Maildir/acct/INBOX/cur/1.eml{}S", mailvault_core::maildir::INFO_PREFIX)).exists());
     }
 

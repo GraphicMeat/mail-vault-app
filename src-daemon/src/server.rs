@@ -1038,6 +1038,21 @@ impl DaemonState {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn accounts_native_list_returns_legacy_array_without_rewriting() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("accounts.json");
+        let bytes = b"[ { \"id\": \"legacy\", \"password\": \"synthetic-only\" } ]";
+        std::fs::write(&path, bytes).unwrap();
+        let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        let reply = handle_request_for_test(&state, "accounts.list", serde_json::json!({})).await;
+        assert!(reply.error.is_none(), "native list refused: {:?}", reply.error);
+        let result = reply.result.unwrap();
+        assert_eq!(result["accounts"], serde_json::json!([{"id":"legacy", "password":"synthetic-only"}]));
+        assert!(result["version"].as_u64().is_some());
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+
     use super::*;
     use serde_json::json;
 
