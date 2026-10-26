@@ -218,10 +218,12 @@ async function mintActivationToken({ db, stripe, sessionId, now = Date.now, log 
 
   const applied = await applyCheckoutCompleted({ db, stripe, session, log });
   if (!applied) throw new ActivationError('session_incomplete', 409, 'Checkout is not a subscription.');
-  // The email typed at Checkout is unverified. When the payer is only an alias of
-  // an existing row, a token for that row would hand them its Stripe customer id
-  // (and with it its billing portal), so they sign in with the email instead.
-  if (applied.customer.stripe_customer_id !== session.customer) {
+  // The email typed at Checkout is unverified. A token for an existing row hands
+  // its Stripe customer id (and billing portal) to whoever paid, so only a web
+  // checkout, where Stripe made the customer, whose row is the payer's own gets
+  // one. The email checkout presets `customer:` from an unverified email, and an
+  // alias payer is not the row's owner: both sign in with the email instead.
+  if (session.metadata?.source !== 'web' || applied.customer.stripe_customer_id !== session.customer) {
     throw new ActivationError('verification_required', 409, 'Sign in with the email you already use.');
   }
 
