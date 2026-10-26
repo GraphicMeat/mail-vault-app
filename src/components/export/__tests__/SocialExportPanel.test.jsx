@@ -22,7 +22,12 @@ vi.mock('../../../services/export/social/composeSocialImage', () => ({
   composeSocialImage: (...a) => composeSocialImage(...a),
 }));
 const MARK = { icon: { naturalWidth: 256, naturalHeight: 256 }, mark: { naturalWidth: 478, naturalHeight: 84 } };
-vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => MARK }));
+const OWN = { custom: { naturalWidth: 300, naturalHeight: 100 } };
+const loadBrand = vi.fn(async ({ brand } = {}) => (brand === 'none' ? null : brand === 'image' ? OWN : MARK));
+vi.mock('../../../services/export/social/socialWatermark', () => ({ loadBrand: (...a) => loadBrand(...a) }));
+const PICKED = 'data:image/png;base64,iVBORw0KGgo=';
+const brandImageFromFile = vi.fn(async () => PICKED);
+vi.mock('../../../services/export/social/brandImage', () => ({ brandImageFromFile: (...a) => brandImageFromFile(...a) }));
 vi.mock('../../../services/export/exportSaver', () => ({
   saveOneFile: (...a) => saveOneFile(...a),
 }));
@@ -54,7 +59,7 @@ beforeEach(() => {
     socialExport: { ...DEFAULT_SOCIAL_EXPORT, size: 'square', redact: false },
     setSocialExport, billingProfile: { hasSubscription: true }, localeEpoch: 0,
   };
-  [buildSocialContent, buildSocialExport, composeSocialImage, saveOneFile, setSocialExport].forEach(m => m.mockClear());
+  [buildSocialContent, buildSocialExport, composeSocialImage, saveOneFile, setSocialExport, loadBrand, brandImageFromFile].forEach(m => m.mockClear());
   isSpam.mockReset();
   isSpam.mockReturnValue(false);
   getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ clearRect() {}, drawImage() {} });
@@ -418,6 +423,96 @@ describe('SocialExportPanel', () => {
       expect(rangeMarkLeft(12, 0, 40)).toBe('calc(8px + 0.3 * (100% - 16px))');
       expect(rangeMarkLeft(0, 0, 40)).toBe('calc(8px + 0 * (100% - 16px))');
       expect(rangeMarkLeft(40, 0, 40)).toBe('calc(8px + 1 * (100% - 16px))');
+    });
+  });
+
+  describe('Hide To, Custom colors and Branding', () => {
+    const toggle = (name) => screen.getByRole('switch', { name });
+    const lastOptions = () => buildSocialContent.mock.calls.at(-1)[1];
+
+    it('Hide To row: off by default, remembered, a different render, and carried to Save', async () => {
+      renderPanel();
+      await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
+      expect(toggle('Hide To row').getAttribute('aria-checked')).toBe('false');
+      expect(lastOptions()).not.toHaveProperty('hideTo');
+      fireEvent.click(toggle('Hide To row'));
+      await waitFor(() => expect(lastOptions()).toMatchObject({ hideTo: true }));
+      expect(setSocialExport).toHaveBeenCalledWith({ hideTo: true });
+      expect(toggle('Hide To row').getAttribute('aria-checked')).toBe('true');
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options.hideTo).toBe(true);
+    });
+
+    it('Hide To row is offered for the app window too', async () => {
+      renderPanel();
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      await waitFor(() => expect(lastOptions().content).toBe('app'));
+      fireEvent.click(toggle('Hide To row'));
+      await waitFor(() => expect(lastOptions()).toMatchObject({ content: 'app', hideTo: true }));
+    });
+
+    it('the custom swatch says it is custom colors, and its pickers are labelled in plain sight', async () => {
+      renderPanel();
+      expect(screen.queryByText('Start color')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Custom colors' }));
+      expect(screen.getByText('Custom colors', { selector: 'span' })).toBeTruthy();
+      expect(screen.getByText('Start color')).toBeTruthy();
+      expect(screen.getByText('End color')).toBeTruthy();
+      expect(screen.getByLabelText('Start color').type).toBe('color');
+      expect(screen.getByLabelText('End color').type).toBe('color');
+    });
+
+    it('Branding: the MailVault lockup by default; None takes it off the preview and is remembered', async () => {
+      renderPanel();
+      await waitFor(() => expect(lastCompose()?.watermark).toBe(MARK));
+      expect(screen.getByRole('button', { name: 'MailVault', pressed: true })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'None' }));
+      await waitFor(() => expect(lastCompose().watermark).toBeNull());
+      expect(setSocialExport).toHaveBeenCalledWith({ brand: 'none' });
+      expect(buildSocialContent).toHaveBeenCalledTimes(1); // the brand is not part of the content
+    });
+
+    it('Branding: picking a file stores a data URL, shows the picture in place of the lockup, and Save carries it', async () => {
+      const { container } = renderPanel();
+      await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
+      const file = new File(['x'], 'logo.png', { type: 'image/png' });
+      fireEvent.change(screen.getByLabelText('Choose branding image'), { target: { files: [file] } });
+      await waitFor(() => expect(lastCompose().watermark).toBe(OWN));
+      expect(brandImageFromFile).toHaveBeenCalledWith(file);
+      expect(setSocialExport).toHaveBeenCalledWith({ brand: 'image', brandImage: PICKED });
+      expect(screen.getByRole('button', { name: 'My image', pressed: true })).toBeTruthy();
+      expect(container.querySelectorAll('input[type="file"]').length).toBeGreaterThan(1); // beside the background's
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options).toMatchObject({ brand: 'image', brandImage: PICKED });
+    });
+
+    it('Branding: My image with none stored opens the picker instead of showing nothing; a bad file says so and keeps the brand', async () => {
+      renderPanel();
+      await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
+      const input = screen.getByLabelText('Choose branding image');
+      const click = vi.spyOn(input, 'click');
+      fireEvent.click(screen.getByRole('button', { name: 'My image' }));
+      expect(click).toHaveBeenCalled();
+      expect(setSocialExport).not.toHaveBeenCalledWith(expect.objectContaining({ brand: 'image' }));
+      brandImageFromFile.mockRejectedValueOnce(new Error('bad'));
+      fireEvent.change(input, { target: { files: [new File(['x'], 'x.png', { type: 'image/png' })] } });
+      await waitFor(() => expect(screen.getByText(/could not be exported|couldn.t/i)).toBeTruthy());
+      expect(setSocialExport).not.toHaveBeenCalledWith(expect.objectContaining({ brand: 'image' }));
+    });
+
+    it('Branding: a stored picture is picked again with one click', async () => {
+      settingsState.socialExport = { ...settingsState.socialExport, brand: 'none', brandImage: PICKED };
+      renderPanel();
+      await waitFor(() => expect(lastCompose()).toBeDefined());
+      fireEvent.click(screen.getByRole('button', { name: 'My image' }));
+      expect(setSocialExport).toHaveBeenCalledWith({ brand: 'image' });
+      await waitFor(() => expect(lastCompose().watermark).toBe(OWN));
     });
   });
 

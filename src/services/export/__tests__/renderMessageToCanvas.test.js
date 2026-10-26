@@ -90,6 +90,17 @@ describe('renderMessageToCanvas', () => {
     expect(domToCanvas.mock.calls[0][1]).toMatchObject({ scale: 2, backgroundColor: '#ffffff' });
   });
 
+  it('hideTo builds the document without the To row', async () => {
+    // jsdom never navigates the frame: the document is the srcdoc it was given.
+    let srcdoc;
+    domToCanvas.mockImplementation(async () => { srcdoc = document.querySelector('iframe').getAttribute('srcdoc'); return { width: 1640, height: 2000 }; });
+    await renderMessageToCanvas({ message, part: 'head', hideTo: true, loadTimeoutMs: 10 });
+    expect(srcdoc).toContain('Ana Brandt');
+    expect(srcdoc).not.toContain('Rowan Marsh');
+    await renderMessageToCanvas({ message, part: 'head', loadTimeoutMs: 10 });
+    expect(srcdoc).toContain('Rowan Marsh');
+  });
+
   it('passes the part, sandbox, background and pre-capture hook of a social card through', async () => {
     const beforeCapture = vi.fn(async () => {});
     await renderMessageToCanvas({

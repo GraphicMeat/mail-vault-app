@@ -122,11 +122,11 @@ function adopt(canvas) {
 // alternative renderer's dark body (the frame path gets it through extraHead).
 export async function renderMessageToCanvas({
   message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode,
-  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture, width, palette,
+  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture, width, palette, hideTo,
 }) {
   const columnWidth = Number.isFinite(width) && width > 0 ? Math.round(width) : EXPORT_WIDTH_PX;
   const html = buildMessageDocument({
-    message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml,
+    message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml, hideTo,
     ...(columnWidth !== EXPORT_WIDTH_PX ? { width: columnWidth } : {}),
   });
   // An alternative renderer draws the whole document itself. Only the body of a

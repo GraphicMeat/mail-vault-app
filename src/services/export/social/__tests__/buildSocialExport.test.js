@@ -22,8 +22,8 @@ vi.mock('../../renderMessageToCanvas', () => ({
 vi.mock('../captureAppWindow', () => ({ captureAppWindow: (...a) => captureAppWindow(...a) }));
 vi.mock('../composeSocialImage', () => ({ composeSocialImage: (...a) => composeSocialImage(...a) }));
 const MARK = { icon: { naturalWidth: 256, naturalHeight: 256 }, mark: { naturalWidth: 478, naturalHeight: 84 } };
-const loadWatermark = vi.fn(async () => MARK);
-vi.mock('../socialWatermark', () => ({ loadWatermark: (...a) => loadWatermark(...a) }));
+const loadBrand = vi.fn(async () => MARK);
+vi.mock('../socialWatermark', () => ({ loadBrand: (...a) => loadBrand(...a), loadWatermark: async () => MARK }));
 vi.mock('../../../../stores/settingsStore', () => ({
   hasPremiumAccess: () => true,
   useSettingsStore: { getState: () => ({ billingProfile: { hasSubscription: true } }) },
@@ -161,13 +161,31 @@ describe('buildSocialExport', () => {
     expect(r).toMatchObject({ ok: false, reason: 'render' });
   });
 
-  it('puts the maker\'s lockup on the saved image, and still saves when it cannot load', async () => {
+  it('puts the brand on the saved image, and still saves when it cannot load', async () => {
     await buildSocialExport({ message, options });
     expect(composeSocialImage.mock.calls[0][0].watermark).toBe(MARK);
-    loadWatermark.mockResolvedValueOnce(null);
+    loadBrand.mockResolvedValueOnce(null);
     const r = await buildSocialExport({ message, options });
     expect(r.ok).toBe(true);
     expect(composeSocialImage.mock.calls[1][0].watermark).toBeNull();
+  });
+
+  it('loads the brand the style picked: none, an own image, or (absent) the default', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    await buildSocialExport({ message, options: { ...options, brand: 'image', brandImage: png } });
+    expect(loadBrand).toHaveBeenLastCalledWith(expect.objectContaining({ brand: 'image', brandImage: png }));
+    await buildSocialExport({ message, options: { ...options, brand: 'none' } });
+    expect(loadBrand).toHaveBeenLastCalledWith(expect.objectContaining({ brand: 'none' }));
+  });
+
+  it('hideTo reaches the card render and the app capture, and is off otherwise', async () => {
+    await buildSocialExport({ message, options: { ...options, hideTo: true } });
+    expect(renderSocialCard.mock.calls[0][0].hideTo).toBe(true);
+    await buildSocialExport({ message, options: { ...options, content: 'app', hideTo: true } });
+    expect(captureAppWindow.mock.calls[0][0].hideTo).toBe(true);
+    renderSocialCard.mockClear();
+    await buildSocialExport({ message, options });
+    expect(renderSocialCard.mock.calls[0][0].hideTo).toBeFalsy();
   });
 
   describe('spam sender reveal, sender details and links', () => {

@@ -25,6 +25,20 @@ describe('headerCardHtml', () => {
     expect(html).toContain('2026');
   });
 
+  it('hideTo leaves the To row (label and recipients) off, the rest stays', () => {
+    const html = headerCardHtml(message, { hideTo: true });
+    expect(html).not.toContain('Rowan Marsh');
+    expect(html).not.toContain('>To<');
+    expect(html).toContain('Ana Brandt');
+    expect(html).toContain('2026');
+    expect(headerCardHtml(message)).toContain('>To<');
+  });
+
+  it('buildMessageDocument hands hideTo to the header, and a body-only part has no header to hide', () => {
+    expect(buildMessageDocument({ message, bodyHtml: '<p>x</p>', hideTo: true })).not.toContain('Rowan Marsh');
+    expect(buildMessageDocument({ message, bodyHtml: '<p>x</p>' })).toContain('Rowan Marsh');
+  });
+
   it('escapes markup in header values', () => {
     const html = headerCardHtml({ ...message, subject: '<script>x</script>' });
     expect(html).not.toContain('<script>');

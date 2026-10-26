@@ -50,11 +50,12 @@ function stack(head, body, headBg) {
  * `extrasHtml` is the boxes under the header (sender details, links). A dark body mounts its frame with scripts, under a
  * CSP that admits only the nonced Dark Reader tags, so the mail's own scripts
  * (already stripped by the sanitizer) could not run anyway. `width` (CSS px)
- * goes to both halves: stack() puts them on one canvas of one width.
+ * goes to both halves: stack() puts them on one canvas of one width. `hideTo`
+ * leaves the To row off the header.
  */
-export async function renderSocialCard({ message, bodyHtml, appearance = 'light', mail = 'light', palette, redactStyle, onCloneNode, onCloneHead, extrasHtml, width }) {
+export async function renderSocialCard({ message, bodyHtml, appearance = 'light', mail = 'light', palette, redactStyle, onCloneNode, onCloneHead, extrasHtml, width, hideTo }) {
   const head = await renderMessageToCanvas({
-    message, part: 'head', theme: appearance, redactStyle, onCloneNode: onCloneHead ?? onCloneNode, extrasHtml, width,
+    message, part: 'head', theme: appearance, redactStyle, onCloneNode: onCloneHead ?? onCloneNode, extrasHtml, width, hideTo,
     backgroundColor: appearance === 'dark' ? EXPORT_HEAD_DARK.bg : '#ffffff',
   });
   let body;

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2, Sun, Moon } from 'lucide-react';
+import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2, Sun, Moon, Palette } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
@@ -8,7 +8,8 @@ import { useSettingsStore, DEFAULT_SOCIAL_EXPORT } from '../../stores/settingsSt
 import { buildSocialContent, buildSocialExport, chromeTheme } from '../../services/export/social/buildSocialExport';
 import { composeSocialImage } from '../../services/export/social/composeSocialImage';
 import { SIZE_PRESETS, MACOS_WINDOW_RADIUS, EMAIL_WIDTH, rangeMarkLeft, layoutSocial } from '../../services/export/social/socialLayout';
-import { loadWatermark } from '../../services/export/social/socialWatermark';
+import { loadBrand } from '../../services/export/social/socialWatermark';
+import { brandImageFromFile } from '../../services/export/social/brandImage';
 import { GRADIENT_PRESETS, SOLID_PRESETS, DEFAULT_CUSTOM_STOPS, cssGradient } from '../../services/export/social/socialBackgrounds';
 import { saveOneFile } from '../../services/export/exportSaver';
 import { usePrivacyStore } from '../../stores/privacyStore';
@@ -178,6 +179,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const [notice, setNotice] = useState(null);
   const [watermark, setWatermark] = useState(null);
   const previewRef = useRef(null);
+  const brandInput = useRef(null);
   const request = useRef(0);
   const cache = useRef(new Map());
 
@@ -222,20 +224,38 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
 
   useEffect(() => { cache.current = new Map(); }, [message]);
 
-  // The preview carries the mark Save puts on, once it has decoded.
+  // The preview carries the brand Save puts on (the lockup, an own picture or
+  // nothing), once it has decoded. Not part of the content: no re-render.
+  const brand = prefs.brand ?? 'default';
+  const brandImage = prefs.brandImage ?? null;
   useEffect(() => {
     let live = true;
-    loadWatermark().then((mark) => { if (live) setWatermark(mark); });
+    loadBrand({ brand, brandImage }).then((mark) => { if (live) setWatermark(mark); });
     return () => { live = false; };
-  }, []);
+  }, [brand, brandImage]);
+  const pickBrand = (value) => {
+    if (value === 'image' && !brandImage) brandInput.current?.click();
+    else update({ brand: value });
+  };
+  const pickBrandImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      update({ brand: 'image', brandImage: await brandImageFromFile(file) });
+    } catch {
+      setNotice(t('export.dialog.messageCouldExported'));
+    }
+  };
 
   // The boxes (and the reveal) are part of the picture: a different choice is a different render.
   const reveal = redacting && revealSender;
   const details = prefs.senderDetails === true;
   const withLinks = isCard && prefs.links === true;
+  const hideTo = prefs.hideTo === true;
 
   useEffect(() => {
-    const key = `${prefs.content}|${redacting}|${theme}|${mailTheme}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}|w${cardWidth ?? ''}`;
+    const key = `${prefs.content}|${redacting}|${theme}|${mailTheme}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}|ht${hideTo ? 1 : 0}|w${cardWidth ?? ''}`;
     const id = ++request.current;
     const hit = cache.current.get(key);
     if (hit) { remember(cache.current, key, hit); setContent(hit); setLoading(false); return; }
@@ -251,6 +271,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
       ...(reveal ? { revealSender: true } : {}),
       ...(details ? { senderDetails: true } : {}),
       ...(withLinks ? { links: true } : {}),
+      ...(hideTo ? { hideTo: true } : {}),
     })
       .then((canvas) => {
         remember(cache.current, key, canvas);
@@ -262,7 +283,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
         setNotice(err?.code === 'not-open' ? t('export.social.openInApp') : t('export.dialog.messageCouldExported'));
       })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [src, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks, cardWidth]);
+  }, [src, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks, hideTo, cardWidth]);
 
   // Fit never enlarges past actual pixels: a small image would only blur.
   const full = content ? fullSize(content, prefs) : null;
@@ -417,7 +438,9 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
               ))}
               <Swatch label={t('export.social.custom')} style={{ background: cssGradient(customStops, 45) }}
                 selected={!imageActive && prefs.background.type === 'custom'}
-                onClick={() => pickBackground({ type: 'custom', stops: customStops })} />
+                onClick={() => pickBackground({ type: 'custom', stops: customStops })}>
+                <Palette size={14} aria-hidden="true" className="text-white drop-shadow" />
+              </Swatch>
               <Swatch label={t('export.social.transparent')} style={{ background: CHECKERBOARD }}
                 selected={!imageActive && prefs.background.type === 'transparent'}
                 onClick={() => pickBackground({ type: 'transparent' })} />
@@ -429,13 +452,31 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
               </label>
             </div>
             {!imageActive && prefs.background.type === 'custom' && (
-              <div className="flex items-center gap-2 pt-1">
-                <input type="color" aria-label={t('export.social.customFrom')} value={customStops[0]}
-                  onChange={e => update({ background: { type: 'custom', stops: [e.target.value, customStops[1]] } })} />
-                <input type="color" aria-label={t('export.social.customTo')} value={customStops[1]}
-                  onChange={e => update({ background: { type: 'custom', stops: [customStops[0], e.target.value] } })} />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-mail-text-muted">
+                <span className="font-medium">{t('export.social.custom')}</span>
+                <label className="flex items-center gap-1.5">
+                  {t('export.social.customFrom')}
+                  <input type="color" value={customStops[0]}
+                    onChange={e => update({ background: { type: 'custom', stops: [e.target.value, customStops[1]] } })} />
+                </label>
+                <label className="flex items-center gap-1.5">
+                  {t('export.social.customTo')}
+                  <input type="color" value={customStops[1]}
+                    onChange={e => update({ background: { type: 'custom', stops: [customStops[0], e.target.value] } })} />
+                </label>
               </div>
             )}
+          </Field>
+
+          <Field label={t('export.social.brand')}>
+            <Chips label={t('export.social.brand')} value={brand} onChange={pickBrand}
+              options={[
+                { value: 'default', label: t('export.social.brandDefault') },
+                { value: 'none', label: t('export.social.brandNone') },
+                { value: 'image', label: t('export.social.brandImage') },
+              ]} />
+            <input ref={brandInput} type="file" accept="image/*" className="sr-only" tabIndex={-1}
+              aria-label={t('export.social.brandImagePick')} onChange={pickBrandImage} />
           </Field>
 
           {isCard && (
@@ -484,6 +525,10 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
           <div className="flex items-center justify-between">
             <span className="text-sm text-mail-text">{t('export.social.senderDetails')}</span>
             <ToggleSwitch active={details} label={t('export.social.senderDetails')} onClick={() => update({ senderDetails: !details })} />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-mail-text">{t('export.social.hideTo')}</span>
+            <ToggleSwitch active={hideTo} label={t('export.social.hideTo')} onClick={() => update({ hideTo: !hideTo })} />
           </div>
           {/* The reader already marks a risky link in the body, so the app window has no list. */}
           {isCard && (

@@ -132,6 +132,9 @@ export const DEFAULT_SOCIAL_EXPORT = Object.freeze({
   appTheme: null, // Appearance: 'light' | 'dark', null follows the app. The app window, and the card's frame and header
   mailTheme: null, // the mail body (card, or the app window's reader): 'light' | 'dark', null follows the Appearance
   width: EMAIL_WIDTH.default, // the card's email column, CSS px
+  hideTo: false, // leaves the To row off the card's header
+  brand: 'default', // the maker's lockup under the card: 'default' | 'none' | 'image' (brandImage in its place)
+  brandImage: null, // an own picture as an image data URL; kept while another brand is picked
 });
 const SOCIAL_BACKGROUNDS = ['gradient', 'solid', 'custom', 'transparent'];
 export const normalizeSocialExport = (value) => {
@@ -143,6 +146,9 @@ export const normalizeSocialExport = (value) => {
   out.senderDetails = out.senderDetails === true;
   out.links = out.links === true;
   out.width = normalizeEmailWidth(out.width);
+  out.hideTo = out.hideTo === true;
+  if (!/^data:image\/(png|jpeg|webp|gif);base64,/i.test(out.brandImage ?? '')) out.brandImage = null;
+  if (out.brand !== 'none' && !(out.brand === 'image' && out.brandImage)) out.brand = 'default';
   return out;
 };
 export const normalizeSearchMailboxConcurrency = value => {
