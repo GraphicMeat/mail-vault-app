@@ -37,7 +37,7 @@ This file is for local agent guidance and repo-specific working rules. Stable ar
 - `npm run test:dmg` for the post-build smoke test of the signed macOS bundle.
 - `npm run test:e2e` for end-to-end coverage.
 - `bash scripts/bump-version.sh <patch|minor|major>` for version bumps.
-- `node scripts/ci-watch.mjs [sha]` to watch CI for a commit on main; never watch a run id by hand. CI on main never cancels a running build, and pushes that land mid-run batch into one run on the newest commit, so your commit's own run may end `cancelled` while a newer run covers it.
+- CI on main runs once a night (21:17 UTC, `ci.yml` schedule), and only when a tested path changed since the last scheduled or manual run; pushes to main do not trigger it, PRs do. Run it now with `gh workflow run ci.yml --ref main` (`-f force=true` skips the change gate), then `node scripts/ci-watch.mjs [sha]` to watch the run that covers a commit; never watch a run id by hand.
 
 ## Repo Conventions
 

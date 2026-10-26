@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-// Every session pushes to main. A push that cancels the running CI run means
-// no main run ever finishes while pushes keep landing. GitHub keeps one run
-// going and one pending per group, and a newer push replaces the pending run,
-// so queued pushes collapse into a single run on the newest commit.
+// Main runs on a nightly schedule or a manual dispatch. Cancelling a running
+// main build would leave it with no finished result, so only PRs cancel.
 const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
 const block = workflow.match(/^concurrency:\n((?: {2}.*\n)+)/m)?.[1] ?? '';
 const cancel = block.match(/^ {2}cancel-in-progress: (.+)$/m)?.[1]?.trim();
@@ -23,7 +21,20 @@ describe('CI concurrency', () => {
   });
 
   it('never cancels a running main build', () => {
-    expect(cancels('push')).toBe(false);
+    expect(cancels('schedule')).toBe(false);
+    expect(cancels('workflow_dispatch')).toBe(false);
+  });
+
+  it('has a nightly schedule and no push trigger', () => {
+    expect(workflow).toMatch(/^ {2}schedule:\n(?: {4}#.*\n)*? {4}- cron: '\d+ \d+ \* \* \*'/m);
+    expect(workflow).not.toMatch(/^ {2}push:/m);
+  });
+
+  it('gates every test job on the change check', () => {
+    for (const job of ['unit-integration', 'imap-mock', 'render-crate', 'blitz-removable', 'e2e']) {
+      const body = workflow.match(new RegExp(`^  ${job}:\\n((?: {4}.*\\n|\\n)+)`, 'm'))?.[1] ?? '';
+      expect(body, job).toMatch(/needs\.gate\.outputs\.changed == 'true'/);
+    }
   });
 
   it('still drops superseded pull request builds', () => {
