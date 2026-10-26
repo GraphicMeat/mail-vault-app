@@ -266,7 +266,18 @@ export async function saveAccount(entry) {
   return reply.accounts[0];
 }
 export async function saveAccounts(entries) {
-  return persistAccount({ entries, ifAbsent: true });
+  if (!Array.isArray(entries) || entries.some(e => !object(e) || !Object.hasOwn(e, 'id') || typeof e.id !== 'string' || !e.id)
+    || new Set(entries.map(e => e.id)).size !== entries.length) {
+    throw accountsWriteError(new Error('errors.accountsInvalid'));
+  }
+  const requested = new Set(entries.map(e => e.id));
+  const reply = await persistAccount({ entries, ifAbsent: true });
+  const completed = [...reply.accepted, ...Object.keys(reply.skipped)];
+  if (completed.length !== requested.size || new Set(completed).size !== completed.length || completed.some(id => !requested.has(id))) {
+    markNativeMutationUncertain();
+    throw accountsWriteError(new Error('errors.accountsWriteFailed'));
+  }
+  return reply;
 }
 
 // The shell's keychain queue rejects with store_credentials' raw Rust string,

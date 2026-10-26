@@ -597,6 +597,59 @@ impl Drop for TestKeychainGuard {
     }
 }
 
+// Pause the actual write callback after the macOS interaction lock, while
+// the installed synthetic backend guarantees no real keyring call.
+#[cfg(test)]
+static TEST_KEYCHAIN_ENTRY: std::sync::Mutex<
+    Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>,
+> = std::sync::Mutex::new(None);
+#[cfg(all(test, target_os = "macos"))]
+pub(crate) struct TestKeychainEntryPause {
+    release: Option<std::sync::mpsc::Sender<()>>,
+    entered: std::sync::mpsc::Receiver<()>,
+}
+#[cfg(all(test, target_os = "macos"))]
+impl TestKeychainEntryPause {
+    pub(crate) fn arm() -> Self {
+        let (release, gate) = std::sync::mpsc::channel();
+        let (entered, notice) = std::sync::mpsc::channel();
+        *TEST_KEYCHAIN_ENTRY.lock().unwrap() = Some((entered, gate));
+        Self {
+            release: Some(release),
+            entered: notice,
+        }
+    }
+    pub(crate) fn entered(&self) {
+        self.entered
+            .recv_timeout(Duration::from_secs(5))
+            .expect("actual post-interaction write entry");
+    }
+    pub(crate) fn release(&mut self) {
+        self.release.take();
+    }
+}
+#[cfg(all(test, target_os = "macos"))]
+impl Drop for TestKeychainEntryPause {
+    fn drop(&mut self) {
+        self.release.take();
+        TEST_KEYCHAIN_ENTRY
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+    }
+}
+#[cfg(test)]
+fn test_pause_keychain_entry() {
+    let gate = TEST_KEYCHAIN_ENTRY
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some((entered, gate)) = gate {
+        let _ = entered.send(());
+        let _ = gate.recv();
+    }
+}
+
 #[cfg(test)]
 fn test_keychain_backend() -> Option<Arc<TestKeychainBackend>> {
     let path = test_credentials_path()?;
@@ -2100,13 +2153,21 @@ async fn change_credentials_mode(
             check_deadline(deadline)?;
             with_interaction(interactive, || {
                 #[cfg(test)]
-                if let Some(backend) = synthetic {
-                    return backend.write(&json, interactive);
-                }
-                write_keychain_blob(&json)
+                test_pause_keychain_entry();
+                // The macOS interaction mutex can wait beyond this save's
+                // deadline. The storage write starts only after this check.
+                check_deadline(deadline)?;
+                let write = || {
+                    #[cfg(test)]
+                    if let Some(backend) = synthetic {
+                        return backend.write(&json, interactive);
+                    }
+                    write_keychain_blob(&json)
+                };
+                write()
+                    .map(|()| applied)
+                    .map_err(|_| MutationFailure::Credential(CredError::WriteFailed))
             })
-            .map(|()| applied)
-            .map_err(|_| MutationFailure::Credential(CredError::WriteFailed))
         })
     };
     let mut task = tokio::task::spawn_blocking(move || {

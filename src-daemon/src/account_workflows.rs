@@ -1482,4 +1482,69 @@ mod tests {
                 .is_ok());
         }
     }
+    #[cfg(target_os = "macos")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn fix1_expired_post_interaction_entry_starts_no_keychain_write() {
+        let a = row("a", "a@example.test", "h");
+        let rig = Rig::new(vec![a.clone()], vec![clean(a)]);
+        let (backend, _sealed) = backend(&rig, "keychain");
+        let backend = backend.unwrap();
+        let (done, finished) = std::sync::mpsc::channel();
+        credentials::test_owned_completions()
+            .lock()
+            .unwrap()
+            .insert(rig.state.app_dir.clone(), done);
+        let drain = credentials::TestTaskDrain(finished);
+        let mut pause = credentials::TestKeychainEntryPause::arm();
+        TEST_REPLY_MS.store(300, std::sync::atomic::Ordering::SeqCst);
+        let state = Arc::clone(&rig.state);
+        let task = tokio::spawn(async move {
+            save(
+                &state,
+                &json!({"patch":{"id":"a","fields":{"name":"must-not-write"}}}),
+                json!(1),
+            )
+            .await
+        });
+        pause.entered();
+        assert_eq!(
+            task.await.unwrap().error.unwrap().message,
+            "errors.accountsWriteFailed"
+        );
+        assert!(rig
+            .state
+            .account_admission
+            .try_reserve(scope("a", "a@example.test", "h"))
+            .is_err());
+        pause.release();
+        drop(drain);
+        let writes = backend
+            .0
+            .modes
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(kind, _)| *kind == "write")
+            .count();
+        assert_eq!(
+            writes, 0,
+            "expired post-interaction entry must not invoke actual synthetic backend write"
+        );
+        assert!(rig.stored("a").get("name").is_none());
+        assert!(rig.meta()[0].get("name").is_none());
+        assert!(rig
+            .state
+            .account_admission
+            .try_reserve(scope("a", "a@example.test", "h"))
+            .is_ok());
+        assert!(
+            credentials::change_credentials_quiet(
+                &rig.state,
+                credentials::CredChange::Delete(vec!["missing".to_string()])
+            )
+            .await
+            .is_ok(),
+            "serializer released after owned finalization"
+        );
+    }
 }

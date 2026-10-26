@@ -947,3 +947,26 @@ describe('account intent persistence regressions', () => {
   });
 });
 
+
+const fix1Reply=(accepted,skipped={})=>({accounts:accepted.map(id=>({id,email:`${id}@example.test`,imapHost:'h'})),accepted,skipped,version:1,credentialVersion:1,hostChanged:false});
+for(const [kind,reply] of [
+  ['missing',fix1Reply([])],['overlap',fix1Reply(['a'],{a:'old'})],['unknown accepted',fix1Reply(['alien'])],['unknown skipped',fix1Reply([],{alien:'old'})],
+])it(`fix1 import rejects ${kind} completion and retains uncertainty`,async()=>{
+  useDaemon(cmd=>cmd==='accounts.save'?()=>reply:undefined);
+  await expect(accounts.saveAccounts([{id:'a',email:'a@example.test',imapHost:'h'}])).rejects.toThrow('E_KEYCHAIN_WRITE');
+  expect(()=>keychain.assertLegacyWriteAllowed()).toThrow('errors.keychainWriteFailed');
+  expect(sent('accounts.save')).toHaveLength(1);expect(names()).not.toContain('accounts_fallback');
+});
+for(const [kind,entries,reply] of [
+  ['empty',[],fix1Reply([])],
+  ['accepted',[{id:'a'}],fix1Reply(['a'])],
+  ['skipped shared target',[{id:'a'},{id:'b'}],fix1Reply([],{a:'old',b:'old'})],
+  ['mixed',[{id:'a'},{id:'b'},{id:'c'}],fix1Reply(['a'],{b:'old',c:'old'})],
+])it(`fix1 accepts complete ${kind} request partition`,async()=>{
+  useDaemon(cmd=>cmd==='accounts.save'?()=>reply:undefined);expect(await accounts.saveAccounts(entries.map(e=>({...e,email:`${e.id}@example.test`,imapHost:'h'})))).toEqual(reply);
+});
+
+for(const [kind,entries] of [['empty id',[{id:''}]],['duplicate ids',[{id:'a'},{id:'a'}]],['non-string id',[{id:9}]],['missing record',[null]]])it(`fix1 refuses ${kind} before import dispatch`,async()=>{
+  await expect(accounts.saveAccounts(entries)).rejects.toThrow('errors.accountsInvalid');
+  expect(sent('accounts.save')).toHaveLength(0);expect(()=>keychain.assertLegacyWriteAllowed()).not.toThrow();
+});

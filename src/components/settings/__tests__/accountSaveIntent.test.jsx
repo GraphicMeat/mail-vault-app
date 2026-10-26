@@ -101,3 +101,19 @@ it('failed optional compose persistence retains the current send path without ma
   h.boxes=[];const real=h.handler;h.handler=async(cmd,args)=>{if(cmd==='accounts.save')throw new Error('errors.accountsWriteFailed');return real(cmd,args);};
   const result=await resolveSentMailboxForAccount(stale());expect(result.path).toBe('Sent created');expect(useMailStore.getState().accounts[0].sentFolderOverride).toBeUndefined();expect(JSON.parse(h.file)[0].sentFolderOverride).toBeUndefined();expect(pairSurvived()).toBe(true);
 });
+
+for(const kind of ['missing','overlap','unknown accepted','unknown skipped'])it(`fix1 actual import stops all settings and config effects for ${kind} completion`,async()=>{
+  const file={id:'file-new',email:'new@example.test',imapHost:'h',password:'synthetic-import'};
+  const accepted=kind==='overlap'?['file-new']:kind==='unknown accepted'?['alien']:[];
+  const skipped=kind==='overlap'?{'file-new':'g'}:kind==='unknown skipped'?{alien:'g'}:{};
+  const reply={accounts:accepted.map(id=>({id,email:'new@example.test',imapHost:'h'})),accepted,skipped,version:2,credentialVersion:2,hostChanged:false};
+  const real=h.handler;h.handler=async(cmd,args)=>cmd==='accounts.save'?reply:real(cmd,args);
+  useSettingsStore.setState({undoSendDelay:5,signatures:{g:{html:'keep existing'}}});
+  const bundle={accounts:[file],accountSettings:{signatures:{'file-new':{html:'must not apply'}}},appSettings:{undoSendDelay:32},appConfig:{views:[]},accountOrder:['file-new']};
+  let failure;try{await applyImport(bundle,{selectedIds:['file-new'],applyAppSettings:true});}catch(error){failure=error;}
+  expect.soft(useSettingsStore.getState().undoSendDelay).toBe(5);
+  expect.soft(useSettingsStore.getState().signatures).toEqual({g:{html:'keep existing'}});
+  expect.soft(h.calls.some(([cmd])=>cmd==='transfer.apply_config')).toBe(false);
+  expect(failure?.message).toContain('E_KEYCHAIN_WRITE');
+  expect(()=>keychain.assertLegacyWriteAllowed()).toThrow('errors.keychainWriteFailed');
+});
