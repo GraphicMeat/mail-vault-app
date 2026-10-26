@@ -215,6 +215,7 @@ mod github;
 // Task 5 moved the backup runners — this crate's last `GraphClient` and
 // `ImapPool` callers — there too, so no re-export is left for any of the three.
 mod iap;
+mod activation_link;
 mod mailto;
 mod notification_open;
 mod notification_sound;
@@ -300,6 +301,20 @@ fn log_from_frontend(message: String) {
 /// to the running app — so no test can produce a genuine handover. This injects
 /// one at the same seam the real one uses (queue, then wake-up) and is inert
 /// outside the `webdriver` build.
+/// Test-only twin of e2e_queue_mailto for `mailvault://activate` links.
+#[tauri::command]
+fn e2e_queue_activation(app: tauri::AppHandle, url: String) {
+    #[cfg(feature = "webdriver")]
+    {
+        app.state::<activation_link::PendingActivation>().push(url);
+        let _ = app.emit("activation-open", ());
+    }
+    #[cfg(not(feature = "webdriver"))]
+    {
+        let _ = (app, url);
+    }
+}
+
 #[tauri::command]
 fn e2e_queue_mailto(app: tauri::AppHandle, url: String) {
     #[cfg(feature = "webdriver")]
@@ -315,6 +330,11 @@ fn e2e_queue_mailto(app: tauri::AppHandle, url: String) {
 
 #[tauri::command]
 fn take_pending_mailto(state: tauri::State<mailto::PendingMailto>) -> Vec<String> {
+    state.take()
+}
+
+#[tauri::command]
+fn take_pending_activation(state: tauri::State<activation_link::PendingActivation>) -> Vec<String> {
     state.take()
 }
 
@@ -3853,6 +3873,7 @@ fn main() {
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
         .manage(mailto::PendingMailto::default())
+        .manage(activation_link::PendingActivation::default())
         .manage(notification_open::PendingNotificationOpen::default())
         .manage(notification_open::PendingNotificationDeletes::default())
         .manage(app_icon::SelectedAppIcon::default());
@@ -3871,9 +3892,11 @@ fn main() {
             quit_app,
             dropped_files::read_dropped_files,
             take_pending_mailto,
+            take_pending_activation,
             notification_open::take_notification_open,
             notification_open::take_notification_deletes,
             e2e_queue_mailto,
+            e2e_queue_activation,
             mailto_default_status,
             mailto_make_default,
             spellcheck::spellcheck_status,
@@ -3967,20 +3990,38 @@ fn main() {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 let handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
-                    let queue = handle.state::<mailto::PendingMailto>();
+                    let mailto_queue = handle.state::<mailto::PendingMailto>();
+                    let activation_queue = handle.state::<activation_link::PendingActivation>();
+                    let (mut mail, mut activation) = (false, false);
                     for url in event.urls() {
-                        queue.push(url.to_string());
+                        if activation_link::is_activation_url(url.as_str()) {
+                            activation_queue.push(url.to_string());
+                            activation = true;
+                        } else {
+                            mailto_queue.push(url.to_string());
+                            mail = true;
+                        }
                     }
                     if let Some(window) = handle.get_webview_window("main") {
                         show_main_window(&window);
                     }
-                    let _ = handle.emit("mailto-open", ());
+                    if mail {
+                        let _ = handle.emit("mailto-open", ());
+                    }
+                    if activation {
+                        let _ = handle.emit("activation-open", ());
+                    }
                 });
                 // The URL this process was launched with, if any.
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
-                    let queue = app.state::<mailto::PendingMailto>();
+                    let mailto_queue = app.state::<mailto::PendingMailto>();
+                    let activation_queue = app.state::<activation_link::PendingActivation>();
                     for url in urls {
-                        queue.push(url.to_string());
+                        if activation_link::is_activation_url(url.as_str()) {
+                            activation_queue.push(url.to_string());
+                        } else {
+                            mailto_queue.push(url.to_string());
+                        }
                     }
                 }
                 // Linux and Windows register at runtime; macOS is static, from

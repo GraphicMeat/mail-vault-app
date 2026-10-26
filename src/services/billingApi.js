@@ -55,7 +55,10 @@ async function billingFetch(endpoint, options = {}) {
     try { body = await res.json(); } catch {
       throw new Error(t('errors.billingHttp', { status: res.status, endpoint }));
     }
-    throw new Error(body.message || body.error || `Billing request failed (${res.status}).`);
+    const err = new Error(body.message || body.error || `Billing request failed (${res.status}).`);
+    err.status = res.status;
+    err.code = body.error;
+    throw err;
   }
   return res.json();
 }
@@ -79,6 +82,14 @@ export async function createCheckoutSession(email, { planId } = {}) {
   return billingFetch('/api/billing/checkout-session', {
     method: 'POST',
     body: JSON.stringify({ email, planId }),
+  });
+}
+
+/** Spend the one-time token from a mailvault://activate link: who paid, once. Throws with `status` 410 when it is used or expired. */
+export async function redeemActivation(token) {
+  return billingFetch('/api/billing/activate', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
   });
 }
 

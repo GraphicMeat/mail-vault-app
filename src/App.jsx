@@ -107,6 +107,7 @@ import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { useReplyFillController } from './hooks/useReplyFillController';
 import { setMailtoComposeOpener, startMailtoBridge, retryMailtoCompose } from './utils/mailto';
+import { startActivationBridge, announceActivation } from './services/billingActivation';
 import { openNotificationTarget, startNotificationOpenBridge, startNotificationDeleteBridge } from './utils/notificationOpen';
 import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
 import { openComposeResolved } from './utils/replyTarget';
@@ -1093,6 +1094,21 @@ function App() {
       void bridge.ready.catch(() => { if (active) setMailtoError(true); });
       // Unmounted while the imports were in flight — same guard the listeners
       // below use, or the bridge outlives the component that owns it.
+      if (!active) bridge.stop();
+      else stop = bridge.stop;
+    }).catch(() => {}); // not in Tauri
+    return () => { active = false; if (stop) stop(); };
+  }, []);
+
+  // mailvault://activate links from the website's web checkout: spend the token, sign in.
+  useEffect(() => {
+    let stop = null;
+    let active = true;
+    Promise.all([
+      import('@tauri-apps/api/core'),
+      import('@tauri-apps/api/event'),
+    ]).then(([{ invoke }, { listen }]) => {
+      const bridge = startActivationBridge({ invoke, listen, onResult: announceActivation });
       if (!active) bridge.stop();
       else stop = bridge.stop;
     }).catch(() => {}); // not in Tauri

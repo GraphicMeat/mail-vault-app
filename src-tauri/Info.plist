@@ -41,6 +41,14 @@
                 <string>mailto</string>
             </array>
         </dict>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>MailVault activation</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>mailvault</string>
+            </array>
+        </dict>
     </array>
 </dict>
 </plist>
