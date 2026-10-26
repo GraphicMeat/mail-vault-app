@@ -177,9 +177,11 @@ describe('footage: howto-abd', function () {
       mark('server-list', 'Open the Server view of the account.');
       await take.click(SELECT, 'select-messages');
       await take.waitFor((t) => document.body.innerText.includes(t), 'bulk dialog', 10000, L('bulk.ops.bulkEmailOperations'));
-      // The loading line can start with its placeholder (ja, ko): wait on the first fixed words.
-      const reading = L('bulk.ops.readingAllEmails').split(/\{\{[^}]*\}\}/).map((w) => w.trim()).find(Boolean) || '';
-      await take.waitFor((r) => !document.body.innerText.includes(r) && [...document.querySelectorAll('[role="dialog"] button')]
+      // The loading line ("Reading all {{count}} emails…") is matched whole, the count as a number wildcard:
+      // its first words can start with the placeholder (ja) or be a common word (ko "메일").
+      const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reading = L('bulk.ops.readingAllEmails').split(/\{\{[^}]*\}\}/).map(esc).join("[\\d.,\\u00a0\\u202f']+");
+      await take.waitFor((r) => !new RegExp(r).test(document.body.innerText) && [...document.querySelectorAll('[role="dialog"] button')]
         .filter((b) => /^\d{4} \(/.test((b.textContent || '').trim())).length >= 2, 'year buttons', 30000, reading);
       const years = await browser.execute(() => [...document.querySelectorAll('[role="dialog"] button')]
         .map((b) => (b.textContent || '').trim()).filter((s) => /^\d{4} \(/.test(s)));
