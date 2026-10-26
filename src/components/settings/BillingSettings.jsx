@@ -12,7 +12,7 @@ import { notify } from '../../stores/focusStore';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { PremiumFeatureList } from './PremiumFeatureList';
-import { TrialFeedbackPrompt, isTrialing } from './TrialFeedbackPrompt';
+import { BillingIssuesDialog } from './BillingIssuesDialog';
 import { Toast } from '../Toast';
 import { formatDateLong, formatTime } from '../../utils/dateFormat';
 import { pricingRecord } from '../../utils/pricing';
@@ -407,7 +407,11 @@ export function BillingSettings({ onNavigate, onReportBug }) {
     } finally { setCheckoutLoading(null); }
   };
 
+  // Manage Subscription is where a trial or plan gets cancelled: ask first
+  // whether something is wrong that we could fix.
+  const [showIssues, setShowIssues] = useState(false);
   const handleManageBilling = async () => {
+    setShowIssues(false);
     try {
       const { url } = await createPortalSession(customerId, billingEmail);
       await openInBrowser(url);
@@ -688,13 +692,10 @@ export function BillingSettings({ onNavigate, onReportBug }) {
         </button>
       )}
 
-      {/* Mid-trial: ask before they cancel over something we could fix. */}
-      {isTrialing(billingProfile) && <TrialFeedbackPrompt onReportBug={onReportBug} />}
-
       {/* Manage Billing — the Stripe portal can change or restart a plan, which
           makes it a purchase mechanism App Review will not accept in-app. */}
       {!IS_APPSTORE_BUILD && billingProfile?.hasSubscription && customerId && (
-        <button onClick={handleManageBilling}
+        <button onClick={() => setShowIssues(true)}
           className="w-full py-2.5 text-sm font-medium bg-mail-surface border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors flex items-center justify-center gap-2 text-mail-text">
           <ExternalLink size={14} />
           {t('settings.billing.manageSubscription')}
@@ -783,6 +784,14 @@ export function BillingSettings({ onNavigate, onReportBug }) {
           <PremiumFeaturesLink />
         </div>
       </div>
+
+      {showIssues && (
+        <BillingIssuesDialog
+          onClose={() => setShowIssues(false)}
+          onContinue={handleManageBilling}
+          onReportBug={onReportBug}
+        />
+      )}
 
       {/* Premium sign-out confirmation */}
       <ConfirmDialog
