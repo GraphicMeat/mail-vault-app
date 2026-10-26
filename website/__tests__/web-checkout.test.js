@@ -16,7 +16,7 @@ const SESSION = 'cs_test_a1B2c3D4e5F6g7H8i9J0';
 
 // ── fake MySQL ──────────────────────────────────────────────────────────────
 function fakeDb({ customers = [], subs = [] } = {}) {
-  const state = { customers: [...customers], subs: [...subs], tokens: [], nextId: 100 };
+  const state = { customers: [...customers], subs: [...subs], tokens: [], aliases: [], nextId: 100 };
   const lower = (s) => s.replace(/\s+/g, ' ').trim();
   return {
     state,
@@ -28,12 +28,21 @@ function fakeDb({ customers = [], subs = [] } = {}) {
       if (/^SELECT \* FROM billing_customers WHERE email = \?/.test(sql)) {
         return [state.customers.filter((c) => c.email === params[0]), []];
       }
-      if (/^INSERT INTO billing_customers/.test(sql)) {
+      if (/^SELECT bc\.\* FROM billing_customer_aliases a JOIN billing_customers bc ON bc\.id = a\.billing_customer_id WHERE a\.stripe_customer_id = \?/.test(sql)) {
+        const a = state.aliases.find((x) => x.stripe_customer_id === params[0]);
+        return [a ? state.customers.filter((c) => c.id === a.billing_customer_id) : [], []];
+      }
+      if (/^INSERT INTO billing_customers \(email, stripe_customer_id\) VALUES \(\?, \?\)$/.test(sql)) {
         const [email, stripeId] = params;
         if (!email) throw new Error('empty email would collide on the UNIQUE key');
-        const same = state.customers.find((c) => c.email === email);
-        if (same) same.stripe_customer_id = stripeId;
-        else state.customers.push({ id: state.nextId++, email, stripe_customer_id: stripeId });
+        if (state.customers.some((c) => c.email === email || c.stripe_customer_id === stripeId)) {
+          throw Object.assign(new Error('Duplicate entry'), { code: 'ER_DUP_ENTRY' });
+        }
+        state.customers.push({ id: state.nextId++, email, stripe_customer_id: stripeId });
+        return [{ affectedRows: 1 }, undefined];
+      }
+      if (/^INSERT IGNORE INTO billing_customer_aliases/.test(sql)) {
+        if (!state.aliases.some((x) => x.stripe_customer_id === params[0])) state.aliases.push({ stripe_customer_id: params[0], billing_customer_id: params[1] });
         return [{ affectedRows: 1 }, undefined];
       }
       if (/^SELECT id FROM billing_subscriptions WHERE billing_customer_id = \? AND stripe_subscription_id != \?/.test(sql)) {
@@ -189,11 +198,34 @@ describe('ensureBillingCustomer', () => {
     expect(stripe.calls.customersRetrieve).toEqual([]);
   });
 
-  it('moves a returning email onto its new Stripe customer without changing the row id', async () => {
+  it('never hands an existing row to another Stripe customer: the email at checkout is unverified', async () => {
     const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_old' }], subs: [priorSub(5)] });
     const row = await web.ensureBillingCustomer(db, fakeStripe(), 'cus_new', 'buyer@example.com');
-    expect(row).toMatchObject({ id: 5, stripe_customer_id: 'cus_new' });
+    // The row keeps its owner; the new Stripe customer is only an alias for it.
+    expect(row).toMatchObject({ id: 5, stripe_customer_id: 'cus_old' });
+    expect(db.state.customers).toMatchObject([{ id: 5, stripe_customer_id: 'cus_old' }]);
+    expect(db.state.aliases).toEqual([{ stripe_customer_id: 'cus_new', billing_customer_id: 5 }]);
     expect(db.state.subs[0].billing_customer_id).toBe(5);
+  });
+
+  it('finds the same row again through the alias, without asking Stripe or writing twice', async () => {
+    const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_old' }] });
+    const stripe = fakeStripe();
+    await web.ensureBillingCustomer(db, stripe, 'cus_new', 'buyer@example.com');
+    const again = await web.ensureBillingCustomer(db, stripe, 'cus_new', '');
+    expect(again.id).toBe(5);
+    expect(db.state.aliases).toHaveLength(1);
+    expect(stripe.calls.customersRetrieve).toEqual([]);
+  });
+
+  it('survives two events creating the same new customer at once', async () => {
+    const db = fakeDb();
+    const [a, b] = await Promise.all([
+      web.ensureBillingCustomer(db, fakeStripe(), 'cus_new', 'buyer@example.com'),
+      web.ensureBillingCustomer(db, fakeStripe(), 'cus_new', 'buyer@example.com'),
+    ]);
+    expect(a.id).toBe(b.id);
+    expect(db.state.customers).toHaveLength(1);
   });
 });
 
@@ -216,6 +248,13 @@ describe('applyCheckoutCompleted', () => {
     expect(stripe.calls.update).toEqual([['sub_new', { trial_end: 'now' }]]);
     expect(out.trialEnded).toBe(true);
     expect(db.state.subs.find((s) => s.stripe_subscription_id === 'sub_new').status).toBe('active');
+  });
+
+  it('attaches a returning buyer\'s new subscription to the existing row, owner unchanged', async () => {
+    const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_old' }], subs: [priorSub(5)] });
+    await web.applyCheckoutCompleted({ db, stripe: fakeStripe(), session: checkoutSession(), log: quiet });
+    expect(db.state.customers[0].stripe_customer_id).toBe('cus_old');
+    expect(db.state.subs.find((s) => s.stripe_subscription_id === 'sub_new').billing_customer_id).toBe(5);
   });
 
   it('leaves the trial of the app checkout (email entered first) to the code that decided it', async () => {
@@ -319,6 +358,14 @@ describe('mintActivationToken', () => {
   });
 });
 
+describe('redeemActivationToken for a returning buyer', () => {
+  it('signs in as the original customer, whose status now includes the new subscription', async () => {
+    const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_old' }], subs: [priorSub(5)] });
+    const { token } = await web.mintActivationToken({ db, stripe: fakeStripe(), sessionId: SESSION, now: () => NOW, log: quiet });
+    expect(await web.redeemActivationToken({ db, token, now: () => NOW })).toEqual({ customerId: 'cus_old', customerEmail: 'buyer@example.com' });
+  });
+});
+
 describe('redeemActivationToken', () => {
   async function minted() {
     const db = fakeDb();
@@ -390,6 +437,7 @@ describe('server wiring', () => {
 
   it('creates the token table at startup', () => {
     expect(readFileSync('website/api/database.js', 'utf8')).toMatch(/CREATE TABLE IF NOT EXISTS billing_activation_tokens/);
+    expect(readFileSync('website/api/database.js', 'utf8')).toMatch(/CREATE TABLE IF NOT EXISTS billing_customer_aliases/);
   });
 });
 
