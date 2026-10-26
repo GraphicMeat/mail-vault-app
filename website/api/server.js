@@ -31,6 +31,10 @@ try { stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STR
 const path = require('path');
 const analytics = require('meatlytics');
 const { getPool, initDatabase } = require('./database');
+const {
+  ActivationError, computePremiumAccess, webSessionParams, ensureBillingCustomer, upsertSubscription,
+  applyCheckoutCompleted, mintActivationToken, redeemActivationToken,
+} = require('./web-billing');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -659,13 +663,6 @@ function requireBilling(req, res, next) {
   next();
 }
 
-// Compute whether a Stripe status grants premium access
-function computePremiumAccess(status, cancelAtPeriodEnd, currentPeriodEnd) {
-  if (['trialing', 'active', 'past_due'].includes(status)) return true;
-  if (status === 'canceled' && currentPeriodEnd && new Date(currentPeriodEnd) > new Date()) return true;
-  return false;
-}
-
 // ── Hybrid pricing: EUR base, manual USD/GBP, Adaptive for others ───────────
 // Two EUR-based Stripe prices with currency_options for USD and GBP.
 // Stripe Adaptive Pricing handles other eligible currencies from the EUR base.
@@ -797,7 +794,9 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
 app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async (req, res) => {
   try {
     const { email, priceType, planId } = req.body;
-    if (!email || !isValidEmail(email)) return res.status(400).json({ error: 'Valid email required.' });
+    // No email is the web-first path: Stripe asks for it, the webhook makes the customer.
+    const webCheckout = !email;
+    if (!webCheckout && !isValidEmail(email)) return res.status(400).json({ error: 'Valid email required.' });
 
     // Always use the EUR-based prices — Stripe handles currency via currency_options + adaptive
     const interval = planId === 'yearly' || priceType === 'yearly' ? 'yearly' : 'monthly';
@@ -808,9 +807,29 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       earlyBird: { monthly: PRICE_MONTHLY, yearly: PRICE_YEARLY },
       standard: STANDARD_PRICES,
     });
-    if (choice.error) return res.status(409).json({ error: choice.error, message: choice.message });
+    if (choice.error) {
+      if (isFormPost(req)) return res.redirect(303, '/pricing.html?checkout=failed');
+      return res.status(409).json({ error: choice.error, message: choice.message });
+    }
     const priceId = choice.priceId;
-    if (!priceId) return res.status(503).json({ error: 'billing_unavailable', message: 'Price not configured.' });
+    if (!priceId) {
+      if (isFormPost(req)) return res.redirect(303, '/pricing.html?checkout=failed');
+      return res.status(503).json({ error: 'billing_unavailable', message: 'Price not configured.' });
+    }
+
+    if (webCheckout) {
+      // The yearly trial is offered to every web buyer; one-trial-per-customer is
+      // enforced when the webhook learns the email (applyCheckoutCompleted).
+      const session = await stripe.checkout.sessions.create(webSessionParams({
+        priceId, interval, trialDays: TRIAL_DAYS,
+        successUrl: process.env.BILLING_SUCCESS_URL || 'https://mailvaultapp.com/billing-success.html',
+        cancelUrl: process.env.BILLING_CANCEL_URL || 'https://mailvaultapp.com/billing-cancel.html',
+        attribution: req.body,
+      }));
+      bumpMetric('checkout_created');
+      if (isFormPost(req)) return res.redirect(303, session.url);
+      return res.json({ url: session.url, trialApplied: interval === 'yearly' });
+    }
 
     const db = getPool();
 
@@ -877,9 +896,36 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
     res.json({ url: session.url, customerId, trialApplied });
   } catch (error) {
     console.error('[billing/checkout-session]', error.message);
+    if (isFormPost(req)) return res.redirect(303, '/pricing.html?checkout=failed');
     // Echo Stripe's error code (never the message — it can carry ids): enough to tell a
     // config rot from a card/customer problem without shelling into journalctl.
     res.status(500).json({ error: 'checkout_failed', code: error.code || null, message: 'Could not create checkout session. Please try again.' });
+  }
+});
+
+// POST /api/billing/activation-token — the welcome page trades the Stripe session id
+// from success_url for a one-time token, which it puts in a mailvault://activate link.
+app.post('/api/billing/activation-token', mutationLimiter, requireBilling, async (req, res) => {
+  try {
+    const { token, expiresAt } = await mintActivationToken({ db: getPool(), stripe, sessionId: req.body.sessionId });
+    res.json({ token, expiresAt, deepLink: `mailvault://activate?token=${token}` });
+  } catch (error) {
+    if (error instanceof ActivationError) return res.status(error.status).json({ error: error.code, message: error.message });
+    console.error('[billing/activation-token]', error.message);
+    res.status(500).json({ error: 'activation_failed', message: 'Could not prepare activation. Please try again.' });
+  }
+});
+
+// POST /api/billing/activate — the app spends the token. It gets who paid back and then
+// signs in through the ordinary status call, which registers the device (5-device limit).
+app.post('/api/billing/activate', mutationLimiter, requireBilling, async (req, res) => {
+  try {
+    const who = await redeemActivationToken({ db: getPool(), token: req.body.token });
+    if (!who) return res.status(410).json({ error: 'invalid_token', message: 'This activation link was already used or has expired.' });
+    res.json(who);
+  } catch (error) {
+    console.error('[billing/activate]', error.message);
+    res.status(500).json({ error: 'activation_failed', message: 'Could not activate. Please try again.' });
   }
 });
 
@@ -1230,19 +1276,10 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
-        if (session.mode !== 'subscription' || !session.subscription) break;
-        const email = (session.customer_email || session.customer_details?.email || '').toLowerCase();
-        const customerId = session.customer;
-        // Upsert customer
-        await db.execute(
-          `INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)
-           ON DUPLICATE KEY UPDATE stripe_customer_id = VALUES(stripe_customer_id), updated_at = NOW()`,
-          [email, customerId]
-        );
-        // Fetch subscription from Stripe for full details
-        const sub = await stripe.subscriptions.retrieve(session.subscription);
-        await upsertSubscription(db, customerId, sub);
+        const applied = await applyCheckoutCompleted({ db, stripe, session, log: console });
+        if (!applied) break;
         // One activation event per completed checkout (trialing or active both count as conversion)
+        const sub = applied.sub;
         const activationPeriodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end;
         if (computePremiumAccess(sub.status, sub.cancel_at_period_end, activationPeriodEnd ? new Date(activationPeriodEnd * 1000) : null)) {
           bumpMetric('sub_activated');
@@ -1251,15 +1288,12 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
       }
 
       case 'customer.subscription.created':
-      case 'customer.subscription.updated': {
-        const sub = event.data.object;
-        await upsertSubscription(db, sub.customer, sub);
-        break;
-      }
-
+      case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        // Use upsertSubscription so premium_access is computed from period end, not forced FALSE
+        // A web checkout has no customer row yet: this event can beat checkout.session.completed.
+        // Premium_access is computed from the period end, not forced FALSE, on deletion.
         const sub = event.data.object;
+        await ensureBillingCustomer(db, stripe, sub.customer, '');
         await upsertSubscription(db, sub.customer, sub);
         break;
       }
@@ -1311,39 +1345,6 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
     res.status(500).json({ error: 'Webhook processing failed.' });
   }
 });
-
-// Upsert subscription from Stripe object into DB
-async function upsertSubscription(db, stripeCustomerId, sub) {
-  const [custRows] = await db.execute('SELECT id FROM billing_customers WHERE stripe_customer_id = ?', [stripeCustomerId]);
-  if (custRows.length === 0) return;
-
-  const billingCustomerId = custRows[0].id;
-  const priceItem = sub.items?.data?.[0];
-  const priceId = priceItem?.price?.id || null;
-  const interval = priceItem?.price?.recurring?.interval || null;
-  // 2025-03-31.basil moved the billing period off the subscription onto its items. The SDK is
-  // pinned to acacia so its own calls still return the old shape; webhooks follow the account's
-  // default version, which can be either. Read both.
-  const periodStartTs = sub.current_period_start ?? priceItem?.current_period_start;
-  const periodEndTs = sub.current_period_end ?? priceItem?.current_period_end;
-  const periodStart = periodStartTs ? new Date(periodStartTs * 1000) : null;
-  const periodEnd = periodEndTs ? new Date(periodEndTs * 1000) : null;
-  const canceledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000) : null;
-  const premiumAccess = computePremiumAccess(sub.status, sub.cancel_at_period_end, periodEnd);
-
-  await db.execute(
-    `INSERT INTO billing_subscriptions
-       (billing_customer_id, stripe_subscription_id, stripe_price_id, price_interval, status, premium_access,
-        current_period_start, current_period_end, cancel_at_period_end, canceled_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       stripe_price_id = VALUES(stripe_price_id), price_interval = VALUES(price_interval),
-       status = VALUES(status), premium_access = VALUES(premium_access),
-       current_period_start = VALUES(current_period_start), current_period_end = VALUES(current_period_end),
-       cancel_at_period_end = VALUES(cancel_at_period_end), canceled_at = VALUES(canceled_at), updated_at = NOW()`,
-    [billingCustomerId, sub.id, priceId, interval, sub.status, premiumAccess, periodStart, periodEnd, !!sub.cancel_at_period_end, canceledAt]
-  );
-}
 
 // ===========================================
 // Admin Routes (protected)
