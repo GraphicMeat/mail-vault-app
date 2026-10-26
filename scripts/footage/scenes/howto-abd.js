@@ -19,6 +19,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Take, sampleLoad, OUT_DIR } from '../lib/footage.js';
+import { APP_LOCALE } from '../lib/locale.js';
 import { L, SEL, probe, bootToInbox, resetView, beforeTake, waitPage, since, clickSel, closeSettings } from '../lib/scene.js';
 
 const EXPECT_TOTAL = Number(process.env.FOOTAGE_EXPECT_TOTAL || 0);
@@ -59,6 +60,7 @@ describe('footage: howto-abd', function () {
   before(async function () {
     mkdirSync(OUT_DIR, { recursive: true });
     const t0 = Date.now();
+    facts.locale = APP_LOCALE;
     facts.boot = await bootToInbox({ expectTotal: EXPECT_TOTAL });
     facts.bootSeconds = Number(since(t0));
     await seedBackupDrive(facts);
@@ -183,9 +185,10 @@ describe('footage: howto-abd', function () {
       await take.hold(1200);
       mark('bulk-dialog', 'Bulk Email Operations lists the years.');
       await take.click('[role="dialog"] button', `year-${year}`, { text: `${year} (` });
-      const selectedWord = L('bulk.ops.emailsSelected').replace('{{selectedCount}}', '').trim();
-      await take.waitFor((w) => document.body.innerText.includes(w), 'selection count', 10000, selectedWord);
-      const selected = await browser.execute((w) => document.body.innerText.match(new RegExp(`([\\d,.\\u00a0\\u202f']+) ${w}`))?.[1], selectedWord);
+      // The year button reads "<year> (<count>)" in every language; the count is what the year selects.
+      await take.waitFor((y) => [...document.querySelectorAll('[role="dialog"] button[aria-pressed="true"]')]
+        .some((b) => (b.textContent || '').trim().startsWith(y)), 'year picked', 10000, year);
+      const selected = years.find((y2) => y2.startsWith(year)).match(/\(([^)]*)\)/)[1];
       facts[`${clip}Selected`] = selected;
       await take.hold(1100);
       mark('year-picked', 'Pick a year and see how many emails it selects.');

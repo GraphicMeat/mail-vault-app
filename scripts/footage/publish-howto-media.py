@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Publish the howto-abd recordings: videos, per-step stills, captions, manifest entries.
 
-    python3 scripts/footage/publish-howto-media.py <collected run dir>
+    python3 scripts/footage/publish-howto-media.py <run dir>
 
-The run dir holds what scenes/howto-abd.js wrote (unpacked run tar): per clip
-<clip>.mov, <clip>.mov.json, <clip>.steps.json, <clip>.census.json, plus
-howto-abd.facts.json and geometry.json. Needs ffmpeg, ffprobe and Pillow.
+The run dir is what scripts/footage/howto-media.sh wrote: one unpacked run per
+website locale in <run dir>/<locale>/ (or, for a single English run, the
+unpacked run itself). Each holds, per clip, <clip>.mov, <clip>.mov.json,
+<clip>.steps.json, <clip>.census.json, plus howto-abd.facts.json and
+geometry.json. Captions and descriptions of a non-English locale come from
+scripts/footage/howto-captions.json (missing one is an error). Needs ffmpeg,
+ffprobe and Pillow.
 
 App pixels come only from the mini's ScreenCaptureKit footage. Added pixels are
 the version footer below the window (as publish-help-media.py). A long progress
@@ -38,6 +42,7 @@ WIDTH, HEIGHT = 1440, 900      # window 1536 x 960 pt, scaled
 KEEP_HEAD, KEEP_TAIL = 5.0, 2.0  # seconds kept either side of a cut wait
 MIN_CUT = 6.0
 # A bulk "progress" mark is taken as the bubble's first percent shows, while the confirmation dialog still fades.
+CAPTIONS = Path(__file__).with_name("howto-captions.json")
 STILL_OFFSET = {("bulk-archive-delete", "progress"): 2.0, ("bulk-archive-backup-delete", "progress"): 2.0}
 
 
@@ -61,23 +66,65 @@ def to_output(t, cut):
     return t - (cut[1] - cut[0])
 
 
+def captions_for(locale):
+    """English string -> that locale's string (identity for English); a missing one is an error."""
+    doc = json.loads(CAPTIONS.read_text())
+    if locale == "en":
+        return lambda text: text
+    table = doc["locales"].get(locale)
+    if table is None:
+        raise ValueError(f"no captions for {locale} in {CAPTIONS.name}")
+    missing = [x for x in doc["strings"] if x not in table]
+    if missing:
+        raise ValueError(f"{locale}: untranslated captions {missing[:3]}")
+    return lambda text: table.get(text, text)
+
+
+def find_runs(source):
+    if (source / "howto-abd.facts.json").exists():
+        return {"en": source}
+    runs = {d.name: d for d in sorted(source.iterdir()) if d.is_dir() and (d / "howto-abd.facts.json").exists()}
+    if not runs:
+        raise ValueError(f"no howto-abd runs under {source}")
+    return runs
+
+
 def publish(source):
-    facts = base.read(source / "howto-abd.facts.json")
-    geometry = base.read(source / "geometry.json")
     version = json.loads((ROOT / "package.json").read_text())["version"]
     commit = run("git", "-C", ROOT, "rev-parse", "HEAD").decode().strip()
-    locale = "en"
+    manifest_path = ROOT / "website/help-media.json"
+    manifest = base.read(manifest_path)
+    evidence_path = ROOT / "website/assets/help-media/capture-howto-evidence.json"
+    evidence = base.read(evidence_path) if evidence_path.exists() else {}
+    evidence.update({"version": version, "sourceCommit": commit,
+                     "note": "Recorded from the minijob snapshot of the source commit plus uncommitted scripts/footage files; the app code is the commit's."})
+    for stale in ("geometry", "facts", "clips"):  # the English-only layout of the first publish
+        evidence.pop(stale, None)
+    evidence.setdefault("locales", {})
+    for locale, run_dir in find_runs(source).items():
+        publish_locale(locale, run_dir, version, commit, manifest, evidence)
+    manifest["provenance"] = [p for p in manifest["provenance"] if not p.startswith("How-to recordings")] + [
+        "How-to recordings (bulk-* and settings-* archive and delete): ScreenCaptureKit takes of the real app on the Mac mini at 2x, "
+        "one app launch per locale (UI language and demo mailbox from the locale catalog); stills are decoded at recorded step moments; "
+        "a long progress wait is cut from the videos and captioned as shortened."]
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    evidence_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n")
+
+
+def publish_locale(locale, source, version, commit, manifest, evidence):
+    tr = captions_for(locale)
+    facts = base.read(source / "howto-abd.facts.json")
+    if facts.get("locale") and facts["locale"] != {"pt-br": "pt-BR", "zh": "zh-Hans"}.get(locale, locale):
+        raise ValueError(f"{locale}: run was recorded in {facts['locale']}")
+    geometry = base.read(source / "geometry.json")
     label = f"MailVault version {version} {locale}"
     out = ROOT / "website/assets/help-media" / locale
     out.mkdir(parents=True, exist_ok=True)
-    manifest_path = ROOT / "website/help-media.json"
-    manifest = base.read(manifest_path)
     workflows = manifest["locales"][locale]["workflows"]
-    evidence = {"version": version, "sourceCommit": commit,
-                "note": "Recorded from the minijob snapshot of this commit plus the uncommitted scripts/footage/scenes/howto-abd.js; the app code is the commit's.",
-                "geometry": geometry, "facts": facts, "clips": {}}
+    ev = evidence["locales"][locale] = {"geometry": geometry, "facts": facts, "clips": {}}
 
-    for clip, description in CLIPS.items():
+    for clip, english in CLIPS.items():
+        description = tr(english)
         mov = source / f"{clip}.mov"
         recorder = base.read(source / f"{clip}.mov.json")
         census = base.read(source / f"{clip}.census.json")
@@ -116,9 +163,9 @@ def publish(source):
             for i, step in enumerate(steps):
                 start = to_output(step["t"], cut)
                 end = to_output(steps[i + 1]["t"], cut) if i + 1 < len(steps) else duration
-                text = step["caption"]
+                text = tr(step["caption"])
                 if cut and step["id"] == "progress":
-                    text += " The wait is shortened here."
+                    text += " " + tr("The wait is shortened here.")
                 if end - start > 0.2:
                     cues.append((start, end, text))
             vtt = "WEBVTT\n\n" + "\n".join(f"{base.clock(s)} --> {base.clock(e)}\n{c}\n" for s, e, c in cues)
@@ -140,7 +187,7 @@ def publish(source):
                 if step["id"] == "progress":
                     final.resize((960, round(final.height * 960 / final.width)), Image.Resampling.LANCZOS).save(
                         out / f"{clip}.jpg", "JPEG", quality=90, optimize=True)
-                step_alt = f"{step['caption']} · {label}"
+                step_alt = f"{tr(step['caption'])} · {label}"
                 entries[name] = {
                     "image": f"/assets/help-media/{locale}/{name}.webp", "imageAlt": step_alt,
                     "imageSize": [final.width, final.height], "stamp": label, "captureVersion": version,
@@ -162,14 +209,9 @@ def publish(source):
                 "sha256": {ext: base.digest(path) for ext, path in files.items()},
             }
             workflows.update(entries)
-            evidence["clips"][clip] = {"recorder": recorder, "census": census, "steps": steps_doc, "cut": cut}
+            ev["clips"][clip] = {"recorder": recorder, "census": census, "steps": steps_doc, "cut": cut}
             print(f"Published {clip}: {duration:.1f}s from {total:.1f}s, {len(steps)} stills")
 
-    manifest["provenance"] = [p for p in manifest["provenance"] if not p.startswith("How-to recordings")] + [
-        "How-to recordings (bulk-* and settings-* archive and delete): ScreenCaptureKit takes of the real app on the Mac mini at 2x; "
-        "stills are decoded at recorded step moments; a long progress wait is cut from the videos and captioned as shortened."]
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-    (ROOT / "website/assets/help-media/capture-howto-evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n")
 
 
 if __name__ == "__main__":

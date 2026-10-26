@@ -1,0 +1,31 @@
+{
+  "about": "English caption and description strings the how-to publisher uses, and their translations per website locale (key = the exact English string). Use each language's own MailVault UI words from src/i18n/locales/<app code>.json.",
+  "strings": [
+    "Progress runs in the corner of the window.",
+    "Operation Complete, and the Server count drops.",
+    "The Vault view still holds the archived emails.",
+    "The Server view no longer lists them.",
+    "Open the Server view of the account.",
+    "Bulk Email Operations lists the years.",
+    "Pick a year and see how many emails it selects.",
+    "Choose the action.",
+    "The option explains what it will do before you start.",
+    "Read the confirmation, then confirm.",
+    "Open Settings.",
+    "Archive & delete holds both jobs.",
+    "Tick the folders to clear.",
+    "Choose the years.",
+    "Choose when and how to delete.",
+    "The summary shows what will be removed.",
+    "Tick the confirmation and Start.",
+    "The job starts and runs in the background.",
+    "The progress panel follows the job.",
+    "The job finishes.",
+    "Archive and delete from the server for selected emails",
+    "Archive, back up and delete from the server for selected emails",
+    "Archive and delete from the server for a whole account in Settings",
+    "Archive, back up and delete from the server for a whole account in Settings",
+    "The wait is shortened here."
+  ],
+  "locales": {}
+}
