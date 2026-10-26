@@ -23,7 +23,7 @@ vi.mock('../../../services/export/social/buildSocialExport', () => ({
   buildSocialExport: async () => ({ ok: false, reason: 'render' }),
   chromeTheme: () => 'light',
 }));
-vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => null }));
+vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => null, loadBrand: async () => null }));
 vi.mock('../../../services/export/social/composeSocialImage', () => ({ composeSocialImage: () => ({ width: 10, height: 10 }) }));
 
 const hasPremiumAccess = vi.fn(() => true);

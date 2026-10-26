@@ -1,5 +1,6 @@
 import { redactTree, safeDecode, PII_CLASS } from '../../utils/privacy/redactDom';
 import { findPii, maskText, maskString } from '../../utils/privacy/piiDetector';
+import { wordTokens } from '../../utils/privacy/wordKey';
 
 /**
  * Redaction for exports. Unlike the live reader, nothing here is ever put
@@ -25,18 +26,39 @@ function maskParty(p, mask, reveal) {
   return { ...p, name: p.name ? mine(p.name) : p.name, address: p.address ? mine(p.address) : p.address };
 }
 
+// A party is masked whole, whatever the dictionary knows. The user's marks
+// (a click on a social image) reach it by word: `show` keeps a word readable,
+// and with `detect: false` (redact box off) only a `hide` word is masked.
+function partyMask(dict) {
+  const { show, hide } = dict ?? {};
+  const only = dict?.detect === false;
+  if (!only && !show?.size) return maskText;
+  return (text) => {
+    const s = String(text ?? '');
+    let out = '';
+    let last = 0;
+    for (const t of wordTokens(s)) {
+      const word = s.slice(t.start, t.end);
+      out += maskText(s.slice(last, t.start)) + ((only ? !hide?.has(t.key) : show.has(t.key)) ? word : maskText(word));
+      last = t.end;
+    }
+    return out + maskText(s.slice(last));
+  };
+}
+
 // `bar`: █ runs instead of x (the HTML export's header card).
 // `reveal`: defaults to the dictionary's own (`dict.reveal`).
 export function redactMessageForExport(message, dict, { bar = false, reveal = dict?.reveal } = {}) {
-  const mask = bar ? barText : maskText;
+  const mask = bar ? barText : partyMask(dict);
+  const spanMask = bar ? barText : maskText;
   const out = { ...message };
   for (const f of PARTIES) {
     const v = message[f];
     const shown = f === 'from' || f === 'replyTo' ? reveal : null;
     if (v != null) out[f] = Array.isArray(v) ? v.map(p => maskParty(p, mask, shown)) : maskParty(v, mask, shown);
   }
-  out.subject = maskString(message.subject || '', dict, mask);
-  if (message.snippet) out.snippet = maskString(message.snippet, dict, mask);
+  out.subject = maskString(message.subject || '', dict, spanMask);
+  if (message.snippet) out.snippet = maskString(message.snippet, dict, spanMask);
   for (const f of RAW_BODIES) delete out[f];
   if (message.messageId) out.messageId = 'xxxx';
   if (Array.isArray(message.attachments)) {
@@ -54,7 +76,8 @@ const REMOTE_URL = /url\((?!\s*["']?data:)[^)]*\)/gi;
 // Attributes that carry the markup, not the message: kept as they are.
 const KEEP_ATTRS = new Set(['class', 'id', 'style']);
 
-export function redactBodyForExport(html, dict, { format }) {
+// `hooks`: redactTree's (`onText(span, original)` tells a social card what each mask hides).
+export function redactBodyForExport(html, dict, { format, hooks } = {}) {
   const doc = new DOMParser().parseFromString(`<body>${html || ''}</body>`, 'text/html');
   // Never rendered, but serialized: comments (Outlook's <!--[if mso]> blocks
   // hold whole copies of the mail) and <template> content, which the text walk
@@ -64,7 +87,7 @@ export function redactBodyForExport(html, dict, { format }) {
   for (let n = comments.nextNode(); n; n = comments.nextNode()) dead.push(n);
   for (const el of doc.body.querySelectorAll('template')) dead.push(el);
   dead.forEach(n => n.remove());
-  redactTree(doc.body, dict);
+  redactTree(doc.body, dict, hooks);
   // A link's target (tracking ids, base64 addresses) never renders in an image
   // and must not ship in an HTML file either.
   for (const el of doc.body.querySelectorAll('[href]')) el.removeAttribute('href');

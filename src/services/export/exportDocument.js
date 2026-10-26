@@ -45,7 +45,8 @@ export function formatStamp(date) {
   return formatDateTime(date);
 }
 
-export function headerCardHtml(message) {
+// `hideTo`: no To row (a social card whose recipients stay private).
+export function headerCardHtml(message, { hideTo = false } = {}) {
   const row = (label, value) => value
     ? `<tr><td class="mv-l">${esc(label)}</td><td class="mv-v">${esc(value)}</td></tr>`
     : '';
@@ -53,7 +54,7 @@ export function headerCardHtml(message) {
   <h1 class="mv-subject">${esc(message.subject || t('svc.exportDocument.noSubject'))}</h1>
   <table class="mv-meta">
     ${row(t('common.from'), addressLine(message.from))}
-    ${row(t('common.to'), addressLine(message.to))}
+    ${hideTo ? '' : row(t('common.to'), addressLine(message.to))}
     ${row(t('svc.exportDocument.cc'), addressLine(message.cc))}
     ${row(t('svc.exportDocument.date'), formatStamp(message.date))}
   </table>
@@ -171,8 +172,9 @@ const PANEL_DARK_CSS = `
 // default to the whole light document every other export gets. `extrasHtml`:
 // boxes under the header block (sender details, links), never in a body-only part.
 // `width`: the column in CSS px when it is not EXPORT_WIDTH_PX (the Email width
-// slider); the rasterizer's frame and canvas take the same width.
-export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme = 'light', extraHead = '', extrasHtml = '', width }) {
+// slider); the rasterizer's frame and canvas take the same width. `hideTo`: the
+// header block leaves out its To row.
+export function buildMessageDocument({ message, bodyHtml, account, mailbox, stats, redactStyle, part, theme = 'light', extraHead = '', extrasHtml = '', width, hideTo = false }) {
   const dark = theme === 'dark';
   const extras = part !== 'body' && extrasHtml ? extrasHtml : '';
   const headDarkCss = part === 'head' && dark ? HEAD_DARK_CSS + (extras ? PANEL_DARK_CSS : '') : '';
@@ -182,7 +184,7 @@ export function buildMessageDocument({ message, bodyHtml, account, mailbox, stat
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>${EXPORT_CSS}${widthCss}${extras ? PANEL_CSS : ''}${headDarkCss}${redactStyle ? REDACT_CSS[redactStyle] : ''}</style>${extraHead}</head>
 <body>
-${part === 'body' ? '' : headerCardHtml(message)}${extras ? `\n<section class="mv-panels">${extras}</section>` : ''}
+${part === 'body' ? '' : headerCardHtml(message, { hideTo })}${extras ? `\n<section class="mv-panels">${extras}</section>` : ''}
 ${part === 'head' ? '' : `<main class="mv-body">${body}</main>`}
 ${account && !part ? provenanceHtml({ account, mailbox, messages: [message], stats }) : ''}
 </body></html>`;

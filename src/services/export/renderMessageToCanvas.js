@@ -2,6 +2,7 @@ import { domToCanvas } from 'modern-screenshot';
 import { buildMessageDocument, EXPORT_WIDTH_PX, EXPORT_SCALE } from './exportDocument';
 import { trace } from './exportTrace';
 import { getActiveBodyRenderer } from '../../components/email/bodyRendererRegistry';
+import { collectWords } from './social/wordHits';
 
 // The export frame gets no allow-scripts unless the caller asks (`sandbox`).
 // Quotes and signatures are expanded by building the document that way, so
@@ -120,13 +121,14 @@ function adopt(canvas) {
 // `width`: the column in CSS px (default EXPORT_WIDTH_PX), for the document,
 // the frame and the canvas alike. `palette`: the Appearance palette, for an
 // alternative renderer's dark body (the frame path gets it through extraHead).
+// `wantWords`: the canvas carries `mvWords`, every word's rects (wordHits).
 export async function renderMessageToCanvas({
   message, bodyHtml, account, mailbox, stats, redactStyle, loadTimeoutMs, onCloneNode,
-  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture, width, palette,
+  part, theme, extraHead, extrasHtml, sandbox, backgroundColor = '#ffffff', beforeCapture, width, palette, hideTo, wantWords = false,
 }) {
   const columnWidth = Number.isFinite(width) && width > 0 ? Math.round(width) : EXPORT_WIDTH_PX;
   const html = buildMessageDocument({
-    message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml,
+    message, bodyHtml, account, mailbox, stats, redactStyle, part, theme, extraHead, extrasHtml, hideTo,
     ...(columnWidth !== EXPORT_WIDTH_PX ? { width: columnWidth } : {}),
   });
   // An alternative renderer draws the whole document itself. Only the body of a
@@ -145,6 +147,9 @@ export async function renderMessageToCanvas({
   const frame = await mountExportFrame(html, { loadTimeoutMs, width: columnWidth, ...(sandbox ? { sandbox } : {}) });
   try {
     if (beforeCapture) await beforeCapture(frame.doc);
+    // Where each word sits, measured on the laid-out frame (the alternative renderer has no frame: no words).
+    const words = wantWords ? collectWords(frame.doc, EXPORT_SCALE) : null;
+    const withWords = (canvas) => { if (words) canvas.mvWords = words; return canvas; };
     // font:false and a short timeout are load-bearing, not tuning: the Task 0
     // probe measured 30,277 ms with the defaults versus 3,887 ms with these,
     // for byte-identical output. The export document uses system fonts only,
@@ -159,12 +164,12 @@ export async function renderMessageToCanvas({
     try {
       const canvas = await domToCanvas(frame.doc.body, options);
       trace('canvas', { w: canvas.width, h: canvas.height });
-      return adopt(canvas);
+      return withWords(adopt(canvas));
     } catch (first) {
       trace('canvas-retry', { error: String(first?.message || first) });
       // Known WebKit flake: the first foreignObject rasterize of a document can
       // come back empty or throw. One retry, then it is a real failure.
-      return adopt(await domToCanvas(frame.doc.body, options));
+      return withWords(adopt(await domToCanvas(frame.doc.body, options)));
     }
   } finally {
     frame.dispose();

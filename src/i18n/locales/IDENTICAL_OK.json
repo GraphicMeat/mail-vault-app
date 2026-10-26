@@ -67,6 +67,8 @@
   "explorer.name",
   "export.dialog.formatHtmlLabel",
   "export.dialog.formatImageLabel",
+  "export.social.brand",
+  "export.social.brandDefault",
   "export.social.image",
   "export.social.links",
   "export.social.linksTitle",

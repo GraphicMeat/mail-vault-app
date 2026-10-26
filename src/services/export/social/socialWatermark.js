@@ -39,6 +39,19 @@ export function loadWatermark() {
   return attempt;
 }
 
+/**
+ * What the image carries under the card, from the style's `brand`: the maker's
+ * lockup (default), nothing (none) or the user's own picture (image), which
+ * stands in for the whole lockup as `{ custom }`. An own picture that cannot
+ * decode gives nothing: it never falls back to a lockup the user turned off.
+ */
+export async function loadBrand({ brand, brandImage } = {}) {
+  if (brand === 'none') return null;
+  if (brand !== 'image') return loadWatermark();
+  if (!brandImage) return null;
+  try { return { custom: await decode(brandImage) }; } catch { return null; }
+}
+
 const MARK_MIN_H = 40; // 20 CSS px: the lockup stays readable
 const MARK_INSET = 24;
 const FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -87,14 +100,26 @@ function heartPath(ctx, cx, cy, w) {
  * or empty). `scale` is the preview's: shadows ignore the transform.
  */
 export function paintWatermark(ctx, L, wm, background, scale = 1) {
-  const { icon, mark } = wm;
-  if (!(mark.naturalWidth || mark.width) || !(mark.naturalHeight || mark.height)) return;
+  const { icon, mark, custom } = wm;
+  const picture = custom ?? mark;
+  const pw = picture.naturalWidth || picture.width;
+  const ph = picture.naturalHeight || picture.height;
+  if (!pw || !ph) return;
   const { card } = L;
   const band = L.canvasH - (card.y + card.h);
   let h = Math.round(Math.max(MARK_MIN_H, Math.min(band * 0.45, L.canvasW * 0.035)));
   const fits = band >= h + MARK_INSET;
   // In the band it may run left past a narrow card, to the canvas inset.
   const maxW = fits ? card.x + card.w - MARK_INSET : card.w - MARK_INSET * 2;
+  if (custom) {
+    // An own picture is the whole brand: sized like the lockup, same place.
+    let w = (pw * h) / ph;
+    if (w > maxW && maxW > 0) { h = (h * maxW) / w; w = maxW; }
+    const x = Math.max(MARK_INSET, card.x + card.w - w - (fits ? 0 : MARK_INSET));
+    const y = fits ? card.y + card.h + Math.round((band - h) / 2) : card.y + card.h - h - MARK_INSET;
+    ctx.drawImage(custom, x, y, w, h);
+    return;
+  }
   ctx.save();
   let m = measureLockup(ctx, h, wm);
   if (m.total > maxW && maxW > 0) { h = (h * maxW) / m.total; m = measureLockup(ctx, h, wm); }

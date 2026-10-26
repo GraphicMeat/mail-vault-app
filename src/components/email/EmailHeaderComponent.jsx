@@ -25,6 +25,7 @@ import { t, useT  } from '../../i18n/index.js';
 import { Private } from '../privacy/Private';
 import { usePrivateAttr } from '../../hooks/usePrivacy';
 import { useCaptureSenderDetails } from '../../hooks/useCaptureSenderDetails';
+import { usePrivacyStore } from '../../stores/privacyStore';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
@@ -246,6 +247,7 @@ export function SenderVerificationBadge({ email, size = 14 }) {
 export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingRaw, showInsights, onToggleInsights }) {
   const t = useT();
   const pa = usePrivateAttr();
+  const hideTo = usePrivacyStore(s => s.captureHideTo);
   return (
     <div
       className="p-4 border-b border-mail-border cursor-pointer"
@@ -280,14 +282,17 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
             </button>
           </div>
 
-          <div className="text-sm text-mail-text-muted">
-            {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => pa(x.name || x.address, 'name')).join(', ') || t('settings.cleanup.unknown') })}
-            {email.cc?.length > 0 && (
-              <span className="ml-2">
-                {t('email.header.cc', { cc: email.cc.map(c => pa(c.name || c.address, 'name')).join(', ') })}
-              </span>
-            )}
-          </div>
+          {/* A social capture can leave the To row out (privacyStore.captureHideTo): the live layout changes, so the shot's frame rects stay true. */}
+          {(!hideTo || email.cc?.length > 0) && (
+            <div className="text-sm text-mail-text-muted">
+              {!hideTo && t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => pa(x.name || x.address, 'name')).join(', ') || t('settings.cleanup.unknown') })}
+              {email.cc?.length > 0 && (
+                <span className={hideTo ? '' : 'ml-2'}>
+                  {t('email.header.cc', { cc: email.cc.map(c => pa(c.name || c.address, 'name')).join(', ') })}
+                </span>
+              )}
+            </div>
+          )}
 
           <AnimatePresence>
             {expanded && (

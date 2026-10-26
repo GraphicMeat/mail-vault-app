@@ -27,6 +27,7 @@ import { formatPurgeEverywhereOutcome } from '../../utils/purgeOutcome';
 import { retainSelectionSnapshots, captureSelectionSnapshot } from '../headerIdentity.js';
 import { captureBulkScope } from '../bulkSelection.js';
 import { bulkOperationManager, originalTargetId, groupBulkTargets } from '../BulkOperationManager.js';
+import { retryAfterResync } from './purgeResync.js';
 import { useMailStore as nativePurgeStore } from '../../stores/mailStore';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
@@ -2646,6 +2647,12 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
     operation = await bulkOperationManager.start({ type: 'delete_everywhere', scope,
       onProgress: op => onProgress?.({ ...op, phase: op.currentPhase }) });
   } catch (error) { failure = error; }
+  // A row cached before native identity existed is refused as "needs resync":
+  // sync its mailbox, re-prove the row and run once more rather than drop the delete.
+  if (operation && !failure) {
+    try { operation = await retryAfterResync(operation, scope, op => onProgress?.({ ...op, phase: op.currentPhase })); }
+    catch (error) { console.warn('[purgeEverywhere] retry after resync failed:', error); }
+  }
   const outcomes = new Map((operation?.outcomes || []).map(outcome => [originalTargetId(outcome.hint), outcome.target]));
   const restore = new Set();
   const replaced = new Set();

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2, Sun, Moon } from 'lucide-react';
+import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2, Sun, Moon, Palette } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
@@ -8,7 +8,9 @@ import { useSettingsStore, DEFAULT_SOCIAL_EXPORT } from '../../stores/settingsSt
 import { buildSocialContent, buildSocialExport, chromeTheme } from '../../services/export/social/buildSocialExport';
 import { composeSocialImage } from '../../services/export/social/composeSocialImage';
 import { SIZE_PRESETS, MACOS_WINDOW_RADIUS, EMAIL_WIDTH, rangeMarkLeft, layoutSocial } from '../../services/export/social/socialLayout';
-import { loadWatermark } from '../../services/export/social/socialWatermark';
+import { loadBrand } from '../../services/export/social/socialWatermark';
+import { brandImageFromFile } from '../../services/export/social/brandImage';
+import { contentPointAt, wordAt } from '../../services/export/social/wordHits';
 import { GRADIENT_PRESETS, SOLID_PRESETS, DEFAULT_CUSTOM_STOPS, cssGradient } from '../../services/export/social/socialBackgrounds';
 import { saveOneFile } from '../../services/export/exportSaver';
 import { usePrivacyStore } from '../../stores/privacyStore';
@@ -43,6 +45,8 @@ const remember = (map, key, value) => {
   map.set(key, value);
   while (map.size > CONTENT_CACHE_MAX) map.delete(map.keys().next().value);
 };
+// The words clicked on the preview as a stable string: the cache key, and "did they change".
+const marksKey = (marks) => JSON.stringify(Object.entries(marks).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 const CHECKERBOARD = 'repeating-conic-gradient(#d4d4d8 0% 25%, #ffffff 0% 50%) 50% / 12px 12px';
 
 // A compact one-of-a-few row: the settings SegmentedChoice is a 48px tab row.
@@ -147,6 +151,12 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * the Open in window / Back to app button is portaled into (it reads the
  * panel's own choices and busy state); null while that element mounts, and
  * left out, the button sits in the footer.
+ *
+ * On a card, a click on a word of the preview marks it: a masked word is shown,
+ * a readable one hidden, everywhere it appears (`marks`, `{ [wordKey]: 'show' |
+ * 'hide' }`, per open like redact, never stored). The card is rebuilt with the
+ * marks once the clicks settle; until then the old picture stays up. The app
+ * window is a shot of the live UI and takes none.
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
@@ -163,6 +173,9 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const [redact, setRedact] = useState(() => initial?.redact ?? true);
   // Per open, like redact: a spam message names its sender, anything else does not.
   const [revealSender, setRevealSender] = useState(() => initial?.revealSender ?? isSpamMessage(message, useMailStore.getState()));
+  const [marks, setMarks] = useState(() => initial?.marks ?? {});
+  // The marks the card was last asked for: they settle like the Email width.
+  const [renderMarks, setRenderMarks] = useState(marks);
   const [zoom, setZoom] = useState('fit');
   const boxRef = useRef(null);
   const box = useBoxSize(boxRef);
@@ -178,6 +191,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const [notice, setNotice] = useState(null);
   const [watermark, setWatermark] = useState(null);
   const previewRef = useRef(null);
+  const brandInput = useRef(null);
   const request = useRef(0);
   const cache = useRef(new Map());
 
@@ -197,6 +211,15 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     return () => clearTimeout(timer);
   }, [width]);
   const cardWidth = isCard ? renderWidth : null;
+  useEffect(() => {
+    if (marksKey(marks) === marksKey(renderMarks)) return undefined;
+    const timer = setTimeout(() => setRenderMarks(marks), WIDTH_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [marks]);
+  const wordMarks = isCard && Object.keys(renderMarks).length ? renderMarks : null;
+  const markKey = wordMarks ? marksKey(wordMarks) : '';
+  const marksSettling = marksKey(marks) !== marksKey(renderMarks);
+  const baseKey = useRef('');
   const background = imageActive && ownImage ? ownImage : prefs.background;
 
   const update = (patch) => {
@@ -222,27 +245,49 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
 
   useEffect(() => { cache.current = new Map(); }, [message]);
 
-  // The preview carries the mark Save puts on, once it has decoded.
+  // The preview carries the brand Save puts on (the lockup, an own picture or
+  // nothing), once it has decoded. Not part of the content: no re-render.
+  const brand = prefs.brand ?? 'default';
+  const brandImage = prefs.brandImage ?? null;
   useEffect(() => {
     let live = true;
-    loadWatermark().then((mark) => { if (live) setWatermark(mark); });
+    loadBrand({ brand, brandImage }).then((mark) => { if (live) setWatermark(mark); });
     return () => { live = false; };
-  }, []);
+  }, [brand, brandImage]);
+  const pickBrand = (value) => {
+    if (value === 'image' && !brandImage) brandInput.current?.click();
+    else update({ brand: value });
+  };
+  const pickBrandImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      update({ brand: 'image', brandImage: await brandImageFromFile(file) });
+    } catch {
+      setNotice(t('export.dialog.messageCouldExported'));
+    }
+  };
 
   // The boxes (and the reveal) are part of the picture: a different choice is a different render.
   const reveal = redacting && revealSender;
   const details = prefs.senderDetails === true;
   const withLinks = isCard && prefs.links === true;
+  const hideTo = prefs.hideTo === true;
 
   useEffect(() => {
-    const key = `${prefs.content}|${redacting}|${theme}|${mailTheme}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}|w${cardWidth ?? ''}`;
+    const base = `${prefs.content}|${redacting}|${theme}|${mailTheme}|rv${reveal ? 1 : 0}|sd${details ? 1 : 0}|ln${withLinks ? 1 : 0}|ht${hideTo ? 1 : 0}|w${cardWidth ?? ''}`;
+    const key = `${base}|mk${markKey}`;
+    const sameBase = baseKey.current === base;
+    baseKey.current = base;
     const id = ++request.current;
     const hit = cache.current.get(key);
     if (hit) { remember(cache.current, key, hit); setContent(hit); setLoading(false); return; }
     // The old content goes now: an unredacted canvas must not stay painted
     // while the redacted one builds (privacy mode turned on mid-preview), nor
-    // one that shows a sender after Show sender was turned off.
-    setContent(null);
+    // one that shows a sender after Show sender was turned off. Only a click on
+    // a word keeps it: the same card, one word apart, and Save waits for the new one.
+    if (!sameBase) setContent(null);
     setLoading(true);
     setNotice(null);
     src.buildContent({
@@ -251,6 +296,8 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
       ...(reveal ? { revealSender: true } : {}),
       ...(details ? { senderDetails: true } : {}),
       ...(withLinks ? { links: true } : {}),
+      ...(hideTo ? { hideTo: true } : {}),
+      ...(wordMarks ? { marks: wordMarks } : {}),
     })
       .then((canvas) => {
         remember(cache.current, key, canvas);
@@ -262,7 +309,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
         setNotice(err?.code === 'not-open' ? t('export.social.openInApp') : t('export.dialog.messageCouldExported'));
       })
       .finally(() => { if (request.current === id) setLoading(false); });
-  }, [src, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks, cardWidth]);
+  }, [src, prefs.content, redacting, theme, mailTheme, reveal, details, withLinks, hideTo, cardWidth, markKey]);
 
   // Fit never enlarges past actual pixels: a small image would only blur.
   const full = content ? fullSize(content, prefs) : null;
@@ -300,7 +347,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     setNotice(null);
     try {
       // The width the preview was rendered at, not one the slider is still settling on.
-      const result = await src.save({ ...prefs, width: renderWidth, background, redact: redacting, appTheme: theme, mailTheme, revealSender: reveal }, content);
+      const result = await src.save({ ...prefs, width: renderWidth, background, redact: redacting, appTheme: theme, mailTheme, revealSender: reveal, ...(wordMarks ? { marks: wordMarks } : {}) }, content);
       if (!result.ok) {
         setNotice(result.reason === 'premium' ? t('export.dialog.exportPremiumFeature') : t('export.dialog.messageCouldExported'));
         return;
@@ -330,6 +377,19 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     sky: t('export.social.swatch.sky'), blush: t('export.social.swatch.blush'),
   }), [t]);
 
+  // The word under a pointer on the preview, from the hit map the card carries.
+  const wordUnder = (e) => {
+    if (!isCard || !content?.mvWords?.length || !full) return null;
+    const box = e.currentTarget.getBoundingClientRect();
+    if (!box.width || !box.height) return null;
+    const layout = layoutSocial({ contentW: content.width, contentH: content.height, size: SIZE_PRESETS[prefs.size] ?? null, padding: prefs.padding, chrome: prefs.chrome });
+    return wordAt(content.mvWords, contentPointAt({ x: e.clientX - box.left, y: e.clientY - box.top, shown: { w: box.width, h: box.height }, full, layout }));
+  };
+  const clickWord = (e) => {
+    const word = wordUnder(e);
+    if (word) setMarks(m => ({ ...m, [word.k]: word.on ? 'show' : 'hide' }));
+  };
+  const hasWords = isCard && content?.mvWords?.length > 0;
   const zoomButton = 'h-7 min-w-7 px-1.5 rounded-md border border-mail-border text-xs text-mail-text-muted hover:text-mail-text hover:border-mail-accent/50 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed';
   const preview = (
     <div className={`flex flex-col gap-2 min-w-0 ${filled ? 'flex-1 min-h-0' : ''}`}>
@@ -340,6 +400,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
           ${filled ? 'flex-1 min-h-0' : 'h-[436px]'}`}>
           {loading && !content ? <Loader size={18} className="m-auto animate-spin text-mail-text-muted" /> : (
             <canvas ref={previewRef} role="img" aria-label={t('export.social.preview')}
+              onClick={clickWord} onMouseMove={(e) => { e.currentTarget.style.cursor = wordUnder(e) ? 'pointer' : ''; }}
               className="m-auto shrink-0 rounded-md" style={background.type === 'transparent' ? { background: CHECKERBOARD } : undefined} />
           )}
         </div>
@@ -365,13 +426,19 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
           {t('export.social.zoomActual')}
         </button>
       </div>
+      {hasWords && <p className="text-xs text-mail-text-muted">{t('export.social.clickHint')}</p>}
+      {Object.keys(marks).length > 0 && (
+        <div>
+          <Button variant="ghost" size="sm" onClick={() => setMarks({})}>{t('export.social.marksReset')}</Button>
+        </div>
+      )}
     </div>
   );
 
   const handOff = onPopOut ?? onPopIn;
   const windowButton = handOff && (
     <Button variant="ghost" size="sm" className={headerSlot ? '' : 'mr-auto'} disabled={busy}
-      onClick={() => handOff({ redact, revealSender, prefs })}>
+      onClick={() => handOff({ redact, revealSender, prefs, ...(Object.keys(marks).length ? { marks } : {}) })}>
       {onPopOut ? <ExternalLink size={14} aria-hidden="true" /> : <PictureInPicture2 size={14} aria-hidden="true" />}
       {onPopOut ? t('export.social.popOut') : t('export.social.popIn')}
     </Button>
@@ -417,7 +484,9 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
               ))}
               <Swatch label={t('export.social.custom')} style={{ background: cssGradient(customStops, 45) }}
                 selected={!imageActive && prefs.background.type === 'custom'}
-                onClick={() => pickBackground({ type: 'custom', stops: customStops })} />
+                onClick={() => pickBackground({ type: 'custom', stops: customStops })}>
+                <Palette size={14} aria-hidden="true" className="text-white drop-shadow" />
+              </Swatch>
               <Swatch label={t('export.social.transparent')} style={{ background: CHECKERBOARD }}
                 selected={!imageActive && prefs.background.type === 'transparent'}
                 onClick={() => pickBackground({ type: 'transparent' })} />
@@ -429,13 +498,31 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
               </label>
             </div>
             {!imageActive && prefs.background.type === 'custom' && (
-              <div className="flex items-center gap-2 pt-1">
-                <input type="color" aria-label={t('export.social.customFrom')} value={customStops[0]}
-                  onChange={e => update({ background: { type: 'custom', stops: [e.target.value, customStops[1]] } })} />
-                <input type="color" aria-label={t('export.social.customTo')} value={customStops[1]}
-                  onChange={e => update({ background: { type: 'custom', stops: [customStops[0], e.target.value] } })} />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-mail-text-muted">
+                <span className="font-medium">{t('export.social.custom')}</span>
+                <label className="flex items-center gap-1.5">
+                  {t('export.social.customFrom')}
+                  <input type="color" value={customStops[0]}
+                    onChange={e => update({ background: { type: 'custom', stops: [e.target.value, customStops[1]] } })} />
+                </label>
+                <label className="flex items-center gap-1.5">
+                  {t('export.social.customTo')}
+                  <input type="color" value={customStops[1]}
+                    onChange={e => update({ background: { type: 'custom', stops: [customStops[0], e.target.value] } })} />
+                </label>
               </div>
             )}
+          </Field>
+
+          <Field label={t('export.social.brand')}>
+            <Chips label={t('export.social.brand')} value={brand} onChange={pickBrand}
+              options={[
+                { value: 'default', label: t('export.social.brandDefault') },
+                { value: 'none', label: t('export.social.brandNone') },
+                { value: 'image', label: t('export.social.brandImage') },
+              ]} />
+            <input ref={brandInput} type="file" accept="image/*" className="sr-only" tabIndex={-1}
+              aria-label={t('export.social.brandImagePick')} onChange={pickBrandImage} />
           </Field>
 
           {isCard && (
@@ -485,6 +572,10 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
             <span className="text-sm text-mail-text">{t('export.social.senderDetails')}</span>
             <ToggleSwitch active={details} label={t('export.social.senderDetails')} onClick={() => update({ senderDetails: !details })} />
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-mail-text">{t('export.social.hideTo')}</span>
+            <ToggleSwitch active={hideTo} label={t('export.social.hideTo')} onClick={() => update({ hideTo: !hideTo })} />
+          </div>
           {/* The reader already marks a risky link in the body, so the app window has no list. */}
           {isCard && (
             <div className="flex items-center justify-between">
@@ -518,7 +609,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
       <div className="flex items-center justify-end gap-2">
         {headerSlot === undefined && windowButton}
         <Button variant="ghost" size="sm" onClick={onDone} disabled={busy}>{detached ? t('common.close') : t('common.cancel')}</Button>
-        <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content || (isCard && width !== renderWidth)}>
+        <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content || (isCard && (width !== renderWidth || marksSettling))}>
           {busy && <Loader size={14} className="animate-spin" />}{t('export.social.save')}
         </Button>
       </div>

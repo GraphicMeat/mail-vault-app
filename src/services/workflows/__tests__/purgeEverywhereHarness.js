@@ -19,6 +19,16 @@ const mockGetVaultUidSets = vi.fn().mockResolvedValue({ saved: new Set(), archiv
 const mockGetLocalEmails = vi.fn().mockResolvedValue([]);
 const mockSearch = { searchActive: true, searchResults: [], performSearch: vi.fn() };
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
+// A purge refused for missing identity resyncs its mailbox and re-reads the rows.
+const mockSyncNow = vi.fn().mockResolvedValue({ ticket: 7 });
+const mockWaitForSync = vi.fn().mockResolvedValue({ success: true });
+const mockGetEmailHeadersByUids = vi.fn().mockResolvedValue([]);
+
+vi.mock('../../syncService', () => ({
+  syncNow: (...a) => mockSyncNow(...a),
+  waitForSync: (...a) => mockWaitForSync(...a),
+  toSyncAccount: (account) => ({ id: account.id, email: account.email }),
+}));
 
 vi.mock('../../api', () => ({
   deleteEmail: (...a) => mockDeleteEmail(...a),
@@ -54,6 +64,7 @@ vi.mock('../../db', () => ({
   getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
+  getEmailHeadersByUids: (...a) => mockGetEmailHeadersByUids(...a),
   getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
@@ -160,6 +171,9 @@ function resetPurgeMocks() {
   mockCheckMailboxStatus.mockReset().mockResolvedValue({ uidValidity: 1 });
   mockGetEmailHeadersMeta.mockReset().mockResolvedValue({ uidValidity: 1 });
   mockGraphDeleteMessage.mockReset().mockResolvedValue(undefined);
+  mockSyncNow.mockReset().mockResolvedValue({ ticket: 7 });
+  mockWaitForSync.mockReset().mockResolvedValue({ success: true });
+  mockGetEmailHeadersByUids.mockReset().mockResolvedValue([]);
   mockIsGraphAccount.mockReset().mockReturnValue(false);
   mockGetGraphMessageId.mockReset().mockReturnValue(null);
   mockRemoveSearchResults.mockReset();
@@ -184,4 +198,5 @@ export {
   mockGetEmailHeadersMeta, mockSaveEmailHeaders, mockIsGraphAccount,
   mockGetGraphMessageId, mockRemoveSearchResults, mockMoveEmails,
   mockVaultRebindUids, mockGetVaultUidSets, mockGetLocalEmails, mockSearch,
+  mockSyncNow, mockWaitForSync, mockGetEmailHeadersByUids,
 };

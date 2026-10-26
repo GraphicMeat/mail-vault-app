@@ -110,30 +110,63 @@ describe('Billing — premium that ends between refreshes', () => {
   });
 });
 
-describe('Billing — the free-trial feedback question', () => {
+describe('Billing — the issues question before Manage Subscription', () => {
   const TRIAL_PROFILE = { ...PREMIUM_PROFILE, status: 'trialing', currentPeriodEnd: '2026-11-10T00:00:00Z' };
-  beforeEach(() => {
+  const mockApi = async () => await import('../../../services/billingApi');
+  beforeEach(async () => {
     vi.clearAllMocks();
-    fetchSubscriptionStatus.mockResolvedValue(TRIAL_PROFILE);
-    signedInAndStale();
-    useSettingsStore.setState({ billingProfile: TRIAL_PROFILE });
+    const api = await mockApi();
+    api.createPortalSession.mockResolvedValue({ url: 'https://portal.test/s' });
+    api.openInBrowser.mockResolvedValue(true);
   });
   afterEach(cleanup);
 
-  it('asks someone mid-trial whether they are having issues, and Yes reaches the report menu', async () => {
-    const onReportBug = vi.fn();
+  function mountAs(profile, onReportBug = () => {}) {
+    fetchSubscriptionStatus.mockResolvedValue(profile);
+    signedInAndStale();
+    useSettingsStore.setState({ billingProfile: profile });
     render(<BillingSettings onReportBug={onReportBug} />);
-    await screen.findByTestId('trial-feedback');
-    fireEvent.click(screen.getByTestId('trial-feedback-yes'));
-    fireEvent.click(screen.getByTestId('trial-feedback-report'));
-    expect(onReportBug).toHaveBeenCalledTimes(1);
+  }
+
+  it.each([['a free trial', TRIAL_PROFILE], ['a paid subscription', PREMIUM_PROFILE]])(
+    'does not show the question inline, and Manage Subscription raises it as a modal for %s', async (_n, profile) => {
+      const api = await mockApi();
+      mountAs(profile);
+      const manage = await screen.findByText('Manage Subscription');
+      expect(screen.queryByRole('dialog')).toBe(null);
+      expect(screen.queryByTestId('billing-issues-question')).toBe(null);
+      fireEvent.click(manage);
+      expect(screen.getByRole('dialog').textContent).toMatch(/having issues with MailVault/i);
+      expect(api.createPortalSession).not.toHaveBeenCalled();
+    });
+
+  it('No goes straight on to the billing portal', async () => {
+    const api = await mockApi();
+    mountAs(TRIAL_PROFILE);
+    fireEvent.click(await screen.findByText('Manage Subscription'));
+    fireEvent.click(screen.getByTestId('billing-issues-no'));
+    await waitFor(() => expect(api.openInBrowser).toHaveBeenCalledWith('https://portal.test/s'));
+    expect(screen.queryByRole('dialog')).toBe(null);
   });
 
-  it('does not ask a paying subscriber', async () => {
-    fetchSubscriptionStatus.mockResolvedValue({ ...PREMIUM_PROFILE });
-    useSettingsStore.setState({ billingProfile: PREMIUM_PROFILE });
-    render(<BillingSettings onReportBug={() => {}} />);
-    await waitFor(() => expect(fetchSubscriptionStatus).toHaveBeenCalled());
-    expect(screen.queryByTestId('trial-feedback')).toBe(null);
+  it('Yes reaches the report menu and does not open the portal', async () => {
+    const api = await mockApi();
+    const onReportBug = vi.fn();
+    mountAs(TRIAL_PROFILE, onReportBug);
+    fireEvent.click(await screen.findByText('Manage Subscription'));
+    fireEvent.click(screen.getByTestId('billing-issues-yes'));
+    fireEvent.click(screen.getByTestId('billing-issues-report'));
+    expect(onReportBug).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).toBe(null);
+    expect(api.createPortalSession).not.toHaveBeenCalled();
+  });
+
+  it('closing the modal leaves them on the page without opening the portal', async () => {
+    const api = await mockApi();
+    mountAs(TRIAL_PROFILE);
+    fireEvent.click(await screen.findByText('Manage Subscription'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBe(null));
+    expect(api.createPortalSession).not.toHaveBeenCalled();
   });
 });

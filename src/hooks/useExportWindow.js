@@ -79,7 +79,8 @@ export function useExportWindow({ onDock }) {
               buildSocialContent(messages[0], social),
               socialFileName(messages[0], { redact: social.redact, revealSender: social.revealSender }),
             ]);
-            await reply({ ok: true, result: { base64: await canvasToPngBase64(canvas), name } });
+            // The words ride along as plain data: the window's clicks need the hit map the PNG cannot carry.
+            await reply({ ok: true, result: { base64: await canvasToPngBase64(canvas), name, ...(canvas.mvWords ? { words: canvas.mvWords } : {}) } });
             return;
           }
           // In the shape of a failed build: the panel words it as the premium notice.

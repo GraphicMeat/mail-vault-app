@@ -42,3 +42,30 @@ describe('loadWatermark', () => {
     expect(await loadWatermark()).toBeNull();
   });
 });
+
+describe('loadBrand', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+
+  it('default is the maker\'s lockup, none is nothing, and none decodes nothing', async () => {
+    const { loadBrand, loadWatermark } = await import('../socialWatermark');
+    expect(await loadBrand({ brand: 'none' })).toBeNull();
+    expect(decode).not.toHaveBeenCalled();
+    expect(await loadBrand({ brand: 'default' })).toBe(await loadWatermark());
+    expect(await loadBrand(undefined)).toBe(await loadWatermark());
+  });
+
+  it('image decodes the own picture alone: no icon, no Graphic Meat mark', async () => {
+    const { loadBrand } = await import('../socialWatermark');
+    const brand = await loadBrand({ brand: 'image', brandImage: PNG });
+    expect(brand).toEqual({ custom: expect.any(HTMLImageElement) });
+    expect(brand.custom.src).toBe(PNG);
+    expect(decode).toHaveBeenCalledTimes(1);
+  });
+
+  it('an own picture that cannot decode, or is missing, gives nothing (never the default lockup)', async () => {
+    const { loadBrand } = await import('../socialWatermark');
+    decode.mockImplementationOnce(async () => { throw new Error('bad'); });
+    expect(await loadBrand({ brand: 'image', brandImage: PNG })).toBeNull();
+    expect(await loadBrand({ brand: 'image', brandImage: null })).toBeNull();
+  });
+});

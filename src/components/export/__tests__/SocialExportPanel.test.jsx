@@ -22,7 +22,12 @@ vi.mock('../../../services/export/social/composeSocialImage', () => ({
   composeSocialImage: (...a) => composeSocialImage(...a),
 }));
 const MARK = { icon: { naturalWidth: 256, naturalHeight: 256 }, mark: { naturalWidth: 478, naturalHeight: 84 } };
-vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => MARK }));
+const OWN = { custom: { naturalWidth: 300, naturalHeight: 100 } };
+const loadBrand = vi.fn(async ({ brand } = {}) => (brand === 'none' ? null : brand === 'image' ? OWN : MARK));
+vi.mock('../../../services/export/social/socialWatermark', () => ({ loadBrand: (...a) => loadBrand(...a) }));
+const PICKED = 'data:image/png;base64,iVBORw0KGgo=';
+const brandImageFromFile = vi.fn(async () => PICKED);
+vi.mock('../../../services/export/social/brandImage', () => ({ brandImageFromFile: (...a) => brandImageFromFile(...a) }));
 vi.mock('../../../services/export/exportSaver', () => ({
   saveOneFile: (...a) => saveOneFile(...a),
 }));
@@ -43,7 +48,7 @@ vi.mock('../../../stores/settingsStore', () => ({
 }));
 
 import { SocialExportPanel } from '../SocialExportPanel';
-import { SIZE_PRESETS, rangeMarkLeft } from '../../../services/export/social/socialLayout';
+import { SIZE_PRESETS, rangeMarkLeft, layoutSocial } from '../../../services/export/social/socialLayout';
 import { FIXTURE_MESSAGE } from '../../../test/privacyFixtures';
 import { usePrivacyStore } from '../../../stores/privacyStore';
 import { useThemeStore } from '../../../stores/themeStore';
@@ -54,7 +59,7 @@ beforeEach(() => {
     socialExport: { ...DEFAULT_SOCIAL_EXPORT, size: 'square', redact: false },
     setSocialExport, billingProfile: { hasSubscription: true }, localeEpoch: 0,
   };
-  [buildSocialContent, buildSocialExport, composeSocialImage, saveOneFile, setSocialExport].forEach(m => m.mockClear());
+  [buildSocialContent, buildSocialExport, composeSocialImage, saveOneFile, setSocialExport, loadBrand, brandImageFromFile].forEach(m => m.mockClear());
   isSpam.mockReset();
   isSpam.mockReturnValue(false);
   getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ clearRect() {}, drawImage() {} });
@@ -421,6 +426,96 @@ describe('SocialExportPanel', () => {
     });
   });
 
+  describe('Hide To, Custom colors and Branding', () => {
+    const toggle = (name) => screen.getByRole('switch', { name });
+    const lastOptions = () => buildSocialContent.mock.calls.at(-1)[1];
+
+    it('Hide To row: off by default, remembered, a different render, and carried to Save', async () => {
+      renderPanel();
+      await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
+      expect(toggle('Hide To row').getAttribute('aria-checked')).toBe('false');
+      expect(lastOptions()).not.toHaveProperty('hideTo');
+      fireEvent.click(toggle('Hide To row'));
+      await waitFor(() => expect(lastOptions()).toMatchObject({ hideTo: true }));
+      expect(setSocialExport).toHaveBeenCalledWith({ hideTo: true });
+      expect(toggle('Hide To row').getAttribute('aria-checked')).toBe('true');
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options.hideTo).toBe(true);
+    });
+
+    it('Hide To row is offered for the app window too', async () => {
+      renderPanel();
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      await waitFor(() => expect(lastOptions().content).toBe('app'));
+      fireEvent.click(toggle('Hide To row'));
+      await waitFor(() => expect(lastOptions()).toMatchObject({ content: 'app', hideTo: true }));
+    });
+
+    it('the custom swatch says it is custom colors, and its pickers are labelled in plain sight', async () => {
+      renderPanel();
+      expect(screen.queryByText('Start color')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Custom colors' }));
+      expect(screen.getByText('Custom colors', { selector: 'span' })).toBeTruthy();
+      expect(screen.getByText('Start color')).toBeTruthy();
+      expect(screen.getByText('End color')).toBeTruthy();
+      expect(screen.getByLabelText('Start color').type).toBe('color');
+      expect(screen.getByLabelText('End color').type).toBe('color');
+    });
+
+    it('Branding: the MailVault lockup by default; None takes it off the preview and is remembered', async () => {
+      renderPanel();
+      await waitFor(() => expect(lastCompose()?.watermark).toBe(MARK));
+      expect(screen.getByRole('button', { name: 'MailVault', pressed: true })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'None' }));
+      await waitFor(() => expect(lastCompose().watermark).toBeNull());
+      expect(setSocialExport).toHaveBeenCalledWith({ brand: 'none' });
+      expect(buildSocialContent).toHaveBeenCalledTimes(1); // the brand is not part of the content
+    });
+
+    it('Branding: picking a file stores a data URL, shows the picture in place of the lockup, and Save carries it', async () => {
+      const { container } = renderPanel();
+      await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
+      const file = new File(['x'], 'logo.png', { type: 'image/png' });
+      fireEvent.change(screen.getByLabelText('Choose branding image'), { target: { files: [file] } });
+      await waitFor(() => expect(lastCompose().watermark).toBe(OWN));
+      expect(brandImageFromFile).toHaveBeenCalledWith(file);
+      expect(setSocialExport).toHaveBeenCalledWith({ brand: 'image', brandImage: PICKED });
+      expect(screen.getByRole('button', { name: 'My image', pressed: true })).toBeTruthy();
+      expect(container.querySelectorAll('input[type="file"]').length).toBeGreaterThan(1); // beside the background's
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options).toMatchObject({ brand: 'image', brandImage: PICKED });
+    });
+
+    it('Branding: My image with none stored opens the picker instead of showing nothing; a bad file says so and keeps the brand', async () => {
+      renderPanel();
+      await waitFor(() => expect(composeSocialImage).toHaveBeenCalled());
+      const input = screen.getByLabelText('Choose branding image');
+      const click = vi.spyOn(input, 'click');
+      fireEvent.click(screen.getByRole('button', { name: 'My image' }));
+      expect(click).toHaveBeenCalled();
+      expect(setSocialExport).not.toHaveBeenCalledWith(expect.objectContaining({ brand: 'image' }));
+      brandImageFromFile.mockRejectedValueOnce(new Error('bad'));
+      fireEvent.change(input, { target: { files: [new File(['x'], 'x.png', { type: 'image/png' })] } });
+      await waitFor(() => expect(screen.getByText(/could not be exported|couldn.t/i)).toBeTruthy());
+      expect(setSocialExport).not.toHaveBeenCalledWith(expect.objectContaining({ brand: 'image' }));
+    });
+
+    it('Branding: a stored picture is picked again with one click', async () => {
+      settingsState.socialExport = { ...settingsState.socialExport, brand: 'none', brandImage: PICKED };
+      renderPanel();
+      await waitFor(() => expect(lastCompose()).toBeDefined());
+      fireEvent.click(screen.getByRole('button', { name: 'My image' }));
+      expect(setSocialExport).toHaveBeenCalledWith({ brand: 'image' });
+      await waitFor(() => expect(lastCompose().watermark).toBe(OWN));
+    });
+  });
+
   describe('Email width', () => {
     const slider = () => screen.getByRole('slider', { name: 'Email width' });
 
@@ -495,6 +590,166 @@ describe('SocialExportPanel', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Fit' }));
       await waitFor(() => expect(lastCompose().maxSize).toEqual({ w: 360, h: 360 }));
+    });
+  });
+
+  describe('click a word to redact or reveal it', () => {
+    // The card (200x300) as the mock builds it, with two mapped words: a masked one and a readable one.
+    const WORDS = [
+      { k: 'ana', on: true, rects: [[20, 30, 40, 10]] },
+      { k: 'falcon', on: false, rects: [[100, 200, 50, 10]] },
+    ];
+    const withWords = async () => ({ ...stubCanvas(), mvWords: WORDS });
+    const lastOptions = () => buildSocialContent.mock.calls.at(-1)[1];
+    beforeEach(() => { buildSocialContent.mockImplementation(withWords); });
+    afterEach(() => { buildSocialContent.mockImplementation(async () => stubCanvas()); });
+
+    // The preview is shown at the image's size here: a CSS pixel is an image pixel.
+    const clickAt = (cx, cy, opts = {}) => {
+      const c = layoutSocial({ contentW: 200, contentH: 300, size: SIZE_PRESETS.square, padding: 64, chrome: true }).content;
+      const img = screen.getByRole('img', { name: /preview/i });
+      img.getBoundingClientRect = () => ({ left: 0, top: 0, width: 2160, height: 2160 });
+      fireEvent.click(img, { clientX: c.dx + (cx * c.dw) / c.sw, clientY: c.dy + (cy * c.dh) / c.sh, ...opts });
+    };
+    const ready = async () => {
+      const view = renderPanel();
+      await waitFor(() => expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy());
+      return view;
+    };
+
+    it('a click on a masked word reveals it everywhere: the card is rebuilt with that word marked show', async () => {
+      await ready();
+      expect(lastOptions()).not.toHaveProperty('marks');
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions()).toMatchObject({ marks: { ana: 'show' } }), { timeout: 2000 });
+    });
+
+    it('a click on a readable word redacts it everywhere: marked hide', async () => {
+      await ready();
+      clickAt(120, 205);
+      await waitFor(() => expect(lastOptions()).toMatchObject({ marks: { falcon: 'hide' } }), { timeout: 2000 });
+    });
+
+    it('a click off every word, or off the content, changes nothing', async () => {
+      await ready();
+      clickAt(90, 100);
+      clickAt(0, 299.9); // below every word
+      const img = screen.getByRole('img', { name: /preview/i });
+      img.getBoundingClientRect = () => ({ left: 0, top: 0, width: 2160, height: 2160 });
+      fireEvent.click(img, { clientX: 3, clientY: 3 }); // the background
+      await new Promise(r => setTimeout(r, 450));
+      expect(buildSocialContent).toHaveBeenCalledTimes(1);
+    });
+
+    it('quick clicks settle into one rebuild with all the marks', async () => {
+      await ready();
+      clickAt(30, 35);
+      clickAt(120, 205);
+      await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show', falcon: 'hide' }), { timeout: 2000 });
+      expect(buildSocialContent).toHaveBeenCalledTimes(2);
+    });
+
+    it('clicking the same word again flips it back', async () => {
+      await ready();
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show' }), { timeout: 2000 });
+      WORDS[0].on = false; // the rebuilt card shows it now
+      try {
+        await waitFor(() => expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy());
+        clickAt(30, 35);
+        await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'hide' }), { timeout: 2000 });
+      } finally { WORDS[0].on = true; }
+    });
+
+    it('keeps the old picture up while the marked card builds, and holds Save until it has', async () => {
+      await ready();
+      buildSocialContent.mockImplementationOnce(() => new Promise(() => {}));
+      clickAt(30, 35);
+      const save = screen.getByRole('button', { name: /save png/i });
+      expect(save.disabled).toBe(true); // marks still settling
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy();
+      expect(save.disabled).toBe(true); // building
+    });
+
+    it('a change to anything but the marks still clears the picture, as before', async () => {
+      await ready();
+      buildSocialContent.mockImplementationOnce(() => new Promise(() => {}));
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      await waitFor(() => expect(screen.queryByRole('img', { name: /preview/i })).toBeNull());
+    });
+
+    it('marks are never stored, and Save carries them', async () => {
+      await ready();
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show' }), { timeout: 2000 });
+      for (const [patch] of setSocialExport.mock.calls) expect(patch).not.toHaveProperty('marks');
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false));
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options.marks).toEqual({ ana: 'show' });
+    });
+
+    it('says how it works while there are words to click, and offers a reset once any is marked', async () => {
+      await ready();
+      expect(screen.getByText(/click a word in the preview/i)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /reset clicked words/i })).toBeNull();
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show' }), { timeout: 2000 });
+      fireEvent.click(await screen.findByRole('button', { name: /reset clicked words/i }));
+      expect(screen.queryByRole('button', { name: /reset clicked words/i })).toBeNull();
+      // The unmarked card is still cached: Save is allowed again once the reset settles, with no marks.
+      const save = screen.getByRole('button', { name: /save png/i });
+      await waitFor(() => expect(save.disabled).toBe(false), { timeout: 2000 });
+      fireEvent.click(save);
+      await waitFor(() => expect(buildSocialExport).toHaveBeenCalled());
+      expect(buildSocialExport.mock.calls[0][0].options).not.toHaveProperty('marks');
+      expect(buildSocialContent).toHaveBeenCalledTimes(2);
+    });
+
+    it('the app window is a shot of the live UI: no hint, no marks sent, a click does nothing', async () => {
+      await ready();
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show' }), { timeout: 2000 });
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      await waitFor(() => expect(lastOptions().content).toBe('app'));
+      expect(lastOptions()).not.toHaveProperty('marks');
+      expect(screen.queryByText(/click a word in the preview/i)).toBeNull();
+    });
+
+    it('no hint and no click without a hit map (the alternative renderer, or a card not yet built)', async () => {
+      buildSocialContent.mockImplementation(async () => stubCanvas());
+      await ready();
+      expect(screen.queryByText(/click a word in the preview/i)).toBeNull();
+      clickAt(30, 35);
+      await new Promise(r => setTimeout(r, 450));
+      expect(buildSocialContent).toHaveBeenCalledTimes(1);
+    });
+
+    it('a hide mark works with the redact box off: it is part of the render, and shows in the cache key', async () => {
+      await ready();
+      fireEvent.click(screen.getByRole('checkbox', { name: /redact sensitive info/i }));
+      await waitFor(() => expect(lastOptions().redact).toBe(false));
+      clickAt(120, 205);
+      await waitFor(() => expect(lastOptions()).toMatchObject({ redact: false, marks: { falcon: 'hide' } }), { timeout: 2000 });
+    });
+
+    it('goes to the window with the words clicked, and starts from them there', async () => {
+      const onPopOut = vi.fn();
+      render(<SocialExportPanel message={FIXTURE_MESSAGE} onDone={() => {}} onPopOut={onPopOut} />);
+      await waitFor(() => expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy());
+      fireEvent.click(screen.getByRole('button', { name: /open in window/i }));
+      expect(onPopOut.mock.calls[0][0]).not.toHaveProperty('marks');
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show' }), { timeout: 2000 });
+      fireEvent.click(screen.getByRole('button', { name: /open in window/i }));
+      expect(onPopOut.mock.calls[1][0]).toMatchObject({ marks: { ana: 'show' } });
+      cleanup();
+      buildSocialContent.mockClear();
+      render(<SocialExportPanel message={FIXTURE_MESSAGE} onDone={() => {}} initial={{ marks: { ana: 'show' } }} />);
+      await waitFor(() => expect(buildSocialContent).toHaveBeenCalled());
+      expect(lastOptions().marks).toEqual({ ana: 'show' });
     });
   });
 

@@ -107,3 +107,47 @@ describe('export redaction', () => {
     });
   });
 });
+
+describe('export redaction under word marks', () => {
+  const marked = (extra) => ({ ...dict, ...extra });
+
+  it('show keeps one word of a party readable, the rest stays masked', () => {
+    const m = redactMessageForExport(FIXTURE_MESSAGE, marked({ show: new Set(['joanna']) }));
+    expect(m.from.name).toMatch(/^Joanna x+$/);
+    expect(m.from.address).toMatch(/^x[x.@]*$/);
+    expect(m.to.map(p => p.name).join(' ')).not.toContain('Joanna');
+  });
+
+  it('show is a word, not a prefix: the address that starts with it is still masked', () => {
+    const m = redactMessageForExport(FIXTURE_MESSAGE, marked({ show: new Set(['joanna']) }));
+    expect(m.from.address).not.toContain('joanna');
+  });
+
+  it('a shown address reads whole, the name beside it is masked', () => {
+    const m = redactMessageForExport(FIXTURE_MESSAGE, marked({ show: new Set([FIXTURE_MESSAGE.from.address]) }));
+    expect(m.from.address).toBe(FIXTURE_MESSAGE.from.address);
+    expect(m.from.name).not.toContain('Joanna');
+  });
+
+  it('detect:false masks only hide words: the redact box is off', () => {
+    const m = redactMessageForExport(FIXTURE_MESSAGE, marked({ detect: false, show: new Set(), hide: new Set(['kowalczyk']) }));
+    expect(m.from.name).toMatch(/^Joanna x+$/);
+    expect(m.from.address).toBe(FIXTURE_MESSAGE.from.address);
+  });
+
+  it('no marks: the same masks as before', () => {
+    expect(redactMessageForExport(FIXTURE_MESSAGE, marked({ show: new Set(), hide: new Set() }))).toEqual(redactMessageForExport(FIXTURE_MESSAGE, dict));
+  });
+
+  it('the body: show unmasks a detected word, hide masks a missed one, hooks see each mask\'s original', () => {
+    const seen = [];
+    const out = redactBodyForExport('<p>Hi Joanna Kowalczyk, project Falcon</p>', marked({ show: new Set(['joanna']), hide: new Set(['falcon']) }), {
+      format: 'image', hooks: { onText: (span, original) => seen.push(original) },
+    });
+    expect(out).toContain('Joanna');
+    expect(out).not.toContain('Kowalczyk');
+    expect(out).not.toContain('Falcon');
+    expect(seen).toEqual(['Kowalczyk', 'Falcon']);
+  });
+});
+

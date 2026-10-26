@@ -8,6 +8,8 @@
 
 - Persist refreshed OAuth token pairs quietly in the daemon, with guarded writes and retries even when no app saver is listening. Failed or unfinished saves remain memory-only until confirmed.
 
+- Delete everywhere no longer stops with "needs to resync" on a message cached before the update: the mailbox is synced, the message is re-proved by its Message-ID, and the delete runs, while a message whose Message-ID changed is left alone. Every cached mailbox of every account is now synced once shortly after launch, not only the Inbox.
+
 - Keep completed OAuth token rotations across unrelated credential changes, and refresh credential caches reliably after retry.
 
 - Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Validated refreshed tokens now persist through the daemon’s quiet native writer, with memory-only retry on failure and no shutdown flush. Complete provider/removal workflows and remaining caller retirement remain later work.
@@ -27,7 +29,11 @@
 - Add daemon workers for the four ordinary bulk mail actions, with exact identity checkpoints, verified backup copies, operation cancellation, and native backup-access lifetime. The existing bulk UI remains active during migration.
 
 ### Added
-- **Free trial: "Are you having issues with MailVault?"** On the Billing tab, someone in their free trial is asked this above Manage Subscription. No closes the question. Yes shows Report a bug or suggest a feature, a note that we answer reports and requests very quickly, and a link to the GitHub discussion where we say how.
+- **"Are you having issues with MailVault?" before Manage Subscription.** Pressing Manage Subscription on the Billing tab, in a free trial or on a paid plan, now raises this as a modal instead of an always-visible section. No carries on to the billing portal. Yes shows Report a bug or suggest a feature, a note that we answer reports and requests very quickly, a link to the GitHub discussion where we say how, and a way to continue to Manage Subscription. Closing the modal stays on the Billing tab.
+- **Social export: click a word to redact or reveal it.** In the Email card preview, click any word to mask it everywhere it appears, or click a masked word to show it. The card is rebuilt once your clicks settle, and Reset clicked words puts the detector's choices back. It works with the redact box off too (only the words you click are masked), clicked words are not remembered between exports, and the App window shot still uses the redact box alone.
+- **Social export: Hide To row.** A switch leaves the To line off the email card's header and out of the App window shot. Cc stays.
+- **Social export: your own branding.** Branding picks the MailVault "made with love by Graphic Meat" lockup, nothing, or any image of your own (kept for next time) under the card.
+- **Social export: Custom colors says what it is.** The custom background swatch is named Custom colors and shows a palette icon, and its two pickers are labelled Start color and End color.
 - **Safer bulk recovery foundation.** The background helper can read pending selections and discard only the matching operation, without automatically replaying work after a restart. Bulk actions and the Resume/Discard prompt keep their current behavior while the worker migration continues.
 - **The experimental Rust email renderer is in the Mac App Store build.** Settings, Appearance has the same switch as the direct download. It stays off until you turn it on.
 - **View builder.** See an email's distinctive words, who else writes about them, and turn them into a view. Click Make a view from this email (the wand beside Sender insights) in the reading pane, pick words, then add them to a saved view or make a new view for that account, or for that folder only. Point at a word to see its top senders and subjects.

@@ -94,3 +94,23 @@ describe('prepareSocialMessage: details and links', () => {
     expect(r.message.to[0].address).toBe('xxxxx@xxxxxxx.xx');
   });
 });
+
+describe('prepareSocialMessage: for the hit map', () => {
+  it('hands back the message as it reads next to the masked one, redacted or not', async () => {
+    const plain = await prepare(spam);
+    expect(plain.plainMessage).toBe(plain.message);
+    const r = await prepare(spam, { redact: { dict, format: 'image' } });
+    expect(r.plainMessage.from.name).toBe('Prize Desk');
+    expect(r.plainMessage.to[0].name).toBe('Rokas Ambrazevičius');
+    expect(r.message.to[0].name).not.toContain('Rokas');
+  });
+
+  it('lets the caller see each body mask\'s original, without the original reaching the markup', async () => {
+    const seen = [];
+    const r = await prepare(spam, { redact: { dict, format: 'image', hooks: { onText: (span, original) => { span.setAttribute('data-mv-i', String(seen.push(original) - 1)); } } } });
+    expect(seen.join(' ')).toContain('Ambrazevi');
+    expect(r.body).toContain('data-mv-i="0"');
+    noLeak(r.body);
+  });
+});
+

@@ -94,6 +94,41 @@ describe('social export style', () => {
   });
 });
 
+describe('social export branding and To row', () => {
+  const merge = (socialExport) => _mergePersistedSettings({ socialExport }, useSettingsStore.getState()).socialExport;
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+
+  it('defaults: MailVault lockup shown, no own image, To row shown', () => {
+    expect(DEFAULT_SOCIAL_EXPORT).toMatchObject({ brand: 'default', brandImage: null, hideTo: false });
+  });
+
+  it('brand keeps default | none | image, anything else is default', () => {
+    for (const ok of ['default', 'none']) expect(merge({ brand: ok }).brand).toBe(ok);
+    expect(merge({ brand: 'image', brandImage: PNG })).toMatchObject({ brand: 'image', brandImage: PNG });
+    for (const junk of ['x', 5, {}, null, undefined]) expect(merge({ brand: junk }).brand).toBe('default');
+  });
+
+  it('an own image needs a stored image data URL: image without one falls back to default', () => {
+    expect(merge({ brand: 'image' })).toMatchObject({ brand: 'default', brandImage: null });
+    expect(merge({ brand: 'image', brandImage: 'https://x.test/a.png' })).toMatchObject({ brand: 'default', brandImage: null });
+    expect(merge({ brand: 'image', brandImage: 'data:text/html;base64,AA==' })).toMatchObject({ brand: 'default', brandImage: null });
+  });
+
+  it('a stored image survives while another brand is picked, so switching back is one click', () => {
+    const { setSocialExport } = useSettingsStore.getState();
+    setSocialExport({ brand: 'image', brandImage: PNG });
+    setSocialExport({ brand: 'none' });
+    expect(useSettingsStore.getState().socialExport).toMatchObject({ brand: 'none', brandImage: PNG });
+    setSocialExport({ brand: 'image' });
+    expect(useSettingsStore.getState().socialExport.brand).toBe('image');
+  });
+
+  it('hideTo is a boolean, anything else is off', () => {
+    expect(merge({ hideTo: true }).hideTo).toBe(true);
+    for (const junk of ['true', 1, {}, null, undefined]) expect(merge({ hideTo: junk }).hideTo).toBe(false);
+  });
+});
+
 describe('social export radius migration (v15 -> v16)', () => {
   it('moves the old macOS default of 26 to 12', () => {
     expect(migrateSettings({ socialExport: { radius: 26, padding: 40 } }, 15).socialExport).toEqual({ radius: 12, padding: 40 });

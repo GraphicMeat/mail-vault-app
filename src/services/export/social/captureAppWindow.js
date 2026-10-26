@@ -228,7 +228,7 @@ let masking = 0;
 // Captures run strictly one after the other.
 let queue = Promise.resolve();
 
-async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails }) {
+async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails, hideTo }) {
   let flipped = false;
   let mailSet = false;
   const privacy = usePrivacyStore.getState();
@@ -245,8 +245,10 @@ async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails }
       if (shown) privacy.setCaptureReveal(shown);
     }
     if (senderDetails) privacy.setCaptureSenderDetails(senderDetails);
+    // The reader's header drops its To row for the length of the capture: live layout and frame rects agree.
+    if (hideTo) privacy.setCaptureHideTo(true);
     // One frame for React to render masked, one for the frames' pass to land.
-    if (redact || senderDetails) await nextPaint();
+    if (redact || senderDetails || hideTo) await nextPaint();
     if (bodiesBusy(root)) await waitForFrames(root, snapshotFrames(root), redact);
     const themes = useThemeStore.getState();
     const flipApp = (theme === 'light' || theme === 'dark') && theme !== themes.theme && theme !== themes.captureTheme;
@@ -275,15 +277,16 @@ async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails }
     // Not behind the masking count: a reveal belongs to this capture alone.
     privacy.setCaptureReveal(null);
     privacy.setCaptureSenderDetails(null);
+    privacy.setCaptureHideTo(false);
     if (flipped) useThemeStore.getState().setCaptureTheme(null);
     if (mailSet) useThemeStore.getState().setCaptureMailTheme(null);
     if (redact && --masking === 0) usePrivacyStore.getState().setCaptureMask(false);
   }
 }
 
-export function captureAppWindow({ redact, dict, theme, mailTheme, reveal, senderDetails } = {}) {
+export function captureAppWindow({ redact, dict, theme, mailTheme, reveal, senderDetails, hideTo = false } = {}) {
   if (redact) masking += 1;
-  const run = queue.then(() => capture({ redact, dict, theme, mailTheme, reveal: reveal ? new Set([...reveal].map(v => String(v).trim().toLowerCase())) : null, senderDetails }));
+  const run = queue.then(() => capture({ redact, dict, theme, mailTheme, reveal: reveal ? new Set([...reveal].map(v => String(v).trim().toLowerCase())) : null, senderDetails, hideTo }));
   queue = run.catch(() => {});
   return run;
 }
