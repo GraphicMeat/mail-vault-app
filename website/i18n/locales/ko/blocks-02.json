@@ -86,7 +86,6 @@
   "af4e42c0ed12": "다운로드 한도",
   "0fa5edab65b1": "업로드 한도",
   "2e1b284935af": "AI 기반 <span class=\"lamp-text\">메일 정리</span>",
-  "03ca8ba644a5": "MailVault Premium 구독이 활성화되었습니다. MailVault 앱으로 돌아가 설정 &rarr; 결제에서 <strong class=\"text-white\">Check Status</strong>를 눌러 Premium 기능을 켜십시오.",
   "46aa7b51f19e": "<a href=\"https://en.wikipedia.org/wiki/Maildir\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Maildir</a>은 메일 서버가 수십 년째 써 온, 검증된 메일 저장용 디렉터리 구조입니다. 메일 하나가 파일 하나이므로 손상될 수 있는 단일 데이터베이스가 없습니다 — 파일 하나가 망가져도 나머지 보관본은 영향을 받지 않습니다. .eml과 Maildir을 함께 쓰면 메일이 앞으로도 열리고, 이식 가능하며, 어떤 앱 하나에도 묶이지 않습니다.",
   "832558cf7a44": "Proton Mail은 메일을 종단 간 암호화하므로 IMAP을 직접 열어 두지 않습니다. MailVault(또는 다른 제3자 메일 클라이언트)에 연결하려면 <a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a>가 필요합니다 — 사용자 컴퓨터에서 돌면서 암호화된 메일함을 <code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">127.0.0.1</code>의 표준 IMAP/SMTP로 노출해 주는 Proton의 데스크톱 앱입니다. Bridge는 유료 Proton Mail 요금제가 있어야 하며 Proton 무료 등급에서는 쓸 수 없습니다.",
   "2e089a56554e": "Proton 웹사이트에서 <a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a>를 설치하십시오",

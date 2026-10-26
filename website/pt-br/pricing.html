@@ -89,7 +89,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261026">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}.mv-price>.mv-tag{align-self:center;font-size:.78rem;font-weight:700;color:var(--mv-accent)}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -194,8 +194,14 @@
 </div>
 <noscript><p class="mv-small">O Premium mensal custa $4/mês, sem período de teste. <a href="/pt-br/get-started.html?plan=monthly">Escolha a cobrança mensal</a>.</p></noscript>
 <p class="mv-small">Tudo do Free, mais estes 18 recursos. Selecione um para ver como funciona.</p><ul class="mv-premium-links"><li><a href="#premium-backup-schedule">Backups automáticos agendados<span aria-hidden="true">↗</span></a></li><li><a href="#premium-backup-health">Monitoramento da integridade dos backups<span aria-hidden="true">↗</span></a></li><li><a href="#premium-cleanup">Limpeza de e-mail<span aria-hidden="true">↗</span></a></li><li><a href="#premium-time-capsule">Cápsula do tempo<span aria-hidden="true">↗</span></a></li><li><a href="#premium-tracker-blocking">Remoção de rastreadores<span aria-hidden="true">↗</span></a></li><li><a href="#premium-auto-cleanup">Regras de limpeza automática<span aria-hidden="true">↗</span></a></li><li><a href="#premium-migration">Migração de caixa de correio<span aria-hidden="true">↗</span></a></li><li><a href="#premium-server-change">Mudança guiada de servidor<span aria-hidden="true">↗</span></a></li><li><a href="#premium-export-image">Exportar como imagem ou HTML<span aria-hidden="true">↗</span></a></li><li><a href="#premium-focus-session">Sessões de foco<span aria-hidden="true">↗</span></a></li><li><a href="#premium-scheduled-send">Envio agendado<span aria-hidden="true">↗</span></a></li><li><a href="#premium-follow-up-reminder">Lembretes sem resposta<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-reminder">Lembrete de anexo<span aria-hidden="true">↗</span></a></li><li><a href="#premium-devices">Cinco dispositivos<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-search">Busca em anexos<span aria-hidden="true">↗</span></a></li><li><a href="#premium-fast-multi-folder-search">Pesquisa mais rápida em várias pastas<span aria-hidden="true">↗</span></a></li><li><a href="#premium-hoarder">Acumulador<span aria-hidden="true">↗</span></a></li><li><a href="#premium-portable">MailVault portátil<span aria-hidden="true">↗</span></a></li></ul>
-<a class="mv-button" data-premium-cta href="/pt-br/get-started.html?plan=yearly"><span data-billing-panel="yearly">Comece com o teste anual</span><span data-billing-panel="monthly" hidden>Comece com o Premium mensal</span></a>
-<p class="mv-small">Baixe primeiro e depois escolha seu plano em Configurações → Cobrança. Seu teste começa quando você conclui a compra no app.</p>
+<form class="mv-checkout" method="post" action="/api/billing/checkout-session" data-web-checkout>
+<input type="hidden" name="planId" value="yearly" data-web-checkout-plan>
+<input type="hidden" name="landing" value="pricing">
+<button class="mv-button" type="submit" data-acquisition-event="web_checkout_start" data-acquisition-placement="pricing" data-acquisition-destination="stripe"><span data-billing-panel="yearly">Começar teste grátis</span><span data-billing-panel="monthly" hidden>Assinar mensalmente</span></button>
+</form>
+<p class="mv-small" data-web-checkout-error hidden>Não foi possível iniciar o pagamento. Tente novamente em instantes.</p>
+<p class="mv-small">Pague no site, baixe o MailVault e abra-o a partir da página seguinte: o Premium é ativado sozinho. Cancele quando quiser durante o teste.</p>
+<a class="mv-text-link" data-premium-cta href="/pt-br/get-started.html?plan=yearly">Prefere baixar primeiro? Escolha seu plano em Configurações → Cobrança</a>
 <p class="mv-reassurance">Cancele quando quiser. Seus e-mails salvos continuam sendo seus.</p>
 </article>
 </div>
@@ -212,7 +218,7 @@
 <div class="mv-faq">
 <details>
 <summary>Como inicio o teste?</summary>
-<p>Baixe e abra o MailVault, depois vá para Configurações → Cobrança e escolha Anual. Conclua a compra para iniciar o teste de 14 dias. O teste está disponível na sua primeira assinatura anual; quem está voltando deve conferir a elegibilidade no app.</p>
+<p>Escolha “Começar teste grátis” nesta página, informe seu e-mail e cartão no pagamento, depois baixe o MailVault e abra-o a partir da página seguinte. Você também pode baixar primeiro, abrir Configurações → Cobrança e escolher Anual. O teste de 14 dias vale para a sua primeira assinatura anual; se você já assinou antes com o mesmo e-mail, o teste é dispensado e o plano anual é cobrado na hora.</p>
 </details>
 <details>
 <summary>Quando serei cobrado?</summary>
@@ -276,6 +282,7 @@
 </script>
 <script defer src="/pricing-localize.js?v=20261008-spots">
 </script>
+<script defer src="/assets/web-checkout.js?v=20261026"></script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/premium-features.js"></script>

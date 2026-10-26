@@ -55,6 +55,7 @@ const EXCLUDE = new Set([
   'terms.html',
   'download-stats.html',
   'oauth/yahoo/callback.html',
+  'start.html',          // English-only, noindex ad landing
 ]);
 
 const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
