@@ -141,17 +141,33 @@ mod tests {
     /// The debug file bypass, never the real keychain: the test box has an
     /// installed MailVault whose entry this must not touch.
     fn rig(blob: Option<Value>) -> Rig {
+        rig_with_ids(blob, std::iter::empty::<String>())
+    }
+
+    fn rig_with_ids(blob: Option<Value>, extra_ids: impl IntoIterator<Item = String>) -> Rig {
         let env = credentials::test_env_lock()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let previous_env = std::env::var_os("MAILVAULT_TEST_CREDENTIALS");
         let dir = tempfile::tempdir().unwrap();
         let creds = dir.path().join("credentials.json");
+        let mut ids: std::collections::BTreeSet<String> = extra_ids.into_iter().collect();
         if let Some(blob) = blob {
+            ids.extend(blob.as_object().unwrap().keys().cloned());
             std::fs::write(&creds, blob.to_string()).unwrap();
         }
+        let metadata: Vec<Value> = ids.into_iter().map(|id| json!({"id":id})).collect();
+        std::fs::write(
+            dir.path().join("accounts.json"),
+            json!(metadata).to_string(),
+        )
+        .unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
         let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path()))
+                .unwrap(),
+        );
         Rig {
             _dir: dir,
             state,
@@ -201,9 +217,10 @@ mod tests {
 
     #[tokio::test]
     async fn save_replaces_its_own_records_and_keeps_every_other_account() {
-        let rig = rig(Some(
-            json!({"old": record("old", "keep"), "a": record("a", "stale")}),
-        ));
+        let rig = rig_with_ids(
+            Some(json!({"old": record("old", "keep"), "a": record("a", "stale")})),
+            ["b".to_owned()],
+        );
         let reply = call(
             &rig,
             "credentials.save",
@@ -234,7 +251,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_fresh_install_starts_from_an_empty_blob() {
-        let rig = rig(None);
+        let rig = rig_with_ids(None, ["a".to_owned()]);
         call(
             &rig,
             "credentials.save",
@@ -271,9 +288,12 @@ mod tests {
 
     #[tokio::test]
     async fn update_merges_fields_into_the_stored_record_only() {
-        let rig = rig(Some(
-            json!({"g": json!({"id": "g", "authType": "oauth2", "oauth2RefreshToken": "rt-1", "oauth2ClientId": "c"}).to_string(), "p": record("p", "pp")}),
-        ));
+        let rig = rig_with_ids(
+            Some(
+                json!({"g": json!({"id": "g", "authType": "oauth2", "oauth2RefreshToken": "rt-1", "oauth2ClientId": "c"}).to_string(), "p": record("p", "pp")}),
+            ),
+            ["gone".to_owned()],
+        );
         let reply = call(
             &rig,
             "credentials.update",
@@ -328,7 +348,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn twenty_parallel_saves_to_different_ids_all_survive() {
-        let rig = rig(Some(json!({"old": record("old", "keep")})));
+        let rig = rig_with_ids(
+            Some(json!({"old": record("old", "keep")})),
+            (0..20).map(|i| format!("acct-{i}")),
+        );
         let mut cleanup = SaveTaskDrain(Vec::new());
         let tasks: Vec<_> = (0..20)
             .map(|i| {
@@ -393,7 +416,7 @@ mod tests {
     /// Ids only on the event; no record in a reply, an event or an error.
     #[tokio::test]
     async fn no_secret_reaches_an_event_a_reply_or_an_error() {
-        let rig = rig(Some(json!({"a": record("a", "pa")})));
+        let rig = rig_with_ids(Some(json!({"a": record("a", "pa")})), ["s".to_owned()]);
         let mut rx = rig.state.events.subscribe();
         let reply = call(
             &rig,
@@ -514,7 +537,10 @@ mod tests {
     async fn chain_pair_noops_and_partial_update_shapes_keep_existing_contract() {
         let mut account = oauth_record("RT1", "at-1");
         account["oauth2ExpiresAt"] = json!(300);
-        let rig = rig(Some(json!({"g":account.to_string()})));
+        let rig = rig_with_ids(
+            Some(json!({"g":account.to_string()})),
+            ["absent".to_owned()],
+        );
         let mut events = rig.state.events.subscribe();
         let before = stored(&rig);
         let chain = json!([fp(&account, None)]);
@@ -554,7 +580,7 @@ mod tests {
     /// must not touch the new sign-in.
     #[tokio::test]
     async fn a_stale_grants_update_never_overwrites_a_newer_sign_in() {
-        let rig = rig(None);
+        let rig = rig_with_ids(None, ["g".to_owned()]);
         let grant_a = oauth_record("RT1", "at-1");
         call(
             &rig,
@@ -588,7 +614,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_same_grant_update_saves_a_rotated_pair_and_never_a_foreign_refresh_token() {
-        let rig = rig(None);
+        let rig = rig_with_ids(None, ["g".to_owned()]);
         let record = oauth_record("RT1", "at-1");
         call(
             &rig,
@@ -636,7 +662,10 @@ mod tests {
     /// refused at once, and nothing that write lands overwrites a later one.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_parked_write_makes_the_next_change_busy_and_never_clobbers_a_later_one() {
-        let rig = rig(Some(json!({"old": record("old", "keep")})));
+        let rig = rig_with_ids(
+            Some(json!({"old": record("old", "keep")})),
+            ["a".to_owned(), "b".to_owned(), "c".to_owned()],
+        );
         let mut gate = ParkedWrite::arm();
 
         let first = call(

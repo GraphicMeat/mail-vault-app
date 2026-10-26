@@ -30,6 +30,7 @@ pub use mailvault_core::imap;
 // ONE OAuth2Manager instance in DaemonState (see server.rs), src-tauri no
 // longer references this module at all.
 pub use mailvault_core::oauth2;
+mod account_lifecycle;
 mod account_workflows;
 #[cfg(test)]
 mod draft_contract_tests;
@@ -609,6 +610,7 @@ async fn daemon_main() {
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
         tokens: oauth_tokens::TokenStore::default(),
         account_admission: Default::default(),
+        account_lifecycle: Default::default(),
         snooze: snooze_worker::SnoozeState::default(),
         follow_up: follow_up_worker::FollowUpState::default(),
         auto_tag_worker,
@@ -629,6 +631,10 @@ async fn daemon_main() {
     state.idle.set_daemon(&state);
     // The JMAP sync works through the state (sessions, ledgers, custody).
     state.sync_engine.set_daemon(&state);
+
+    // One owned authoritative seed. A failed read leaves the gate Unready;
+    // lifecycle-aware writers may request a finite retry later.
+    account_lifecycle::start_bootstrap(Arc::clone(&state));
 
     // Custody, before the socket exists (Task 2.9b Step 1): a route that
     // reads an entry must never be served by a store that is not open yet.

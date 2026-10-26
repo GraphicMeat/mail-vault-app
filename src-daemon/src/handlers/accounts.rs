@@ -15,6 +15,7 @@
 //! changed something emits `accounts-changed {ids, version}`: ids only.
 //! Errors are catalog keys (`errors.accounts*`).
 
+use crate::account_lifecycle::{PersistenceAuthority, PersistenceOwner};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::accounts_doc::{self, AccountsError};
@@ -134,23 +135,123 @@ async fn run_owned(
     id: Value,
 ) -> RpcResponse {
     let doc = accounts_doc::shared(&state.app_dir);
-    let mut lease = None;
+    let mut owner: Option<PersistenceOwner> = None;
     let mut preserved = None;
+    let mut recovery = None;
     if accounts_doc::writes(method) {
+        if !state.account_lifecycle.is_ready() {
+            crate::account_lifecycle::start_bootstrap(Arc::clone(state));
+        }
         let read = Arc::clone(&doc);
         let listed = tokio::task::spawn_blocking(move || accounts_doc::list(&read))
             .await
             .ok()
             .and_then(Result::ok);
-        let scope = match scope(listed.as_ref(), method, params) {
+        let Some(listed) = listed else {
+            return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.accountsWriteFailed");
+        };
+        let mut scope = match scope(Some(&listed), method, params) {
             Ok(s) => s,
             Err(e) => return RpcResponse::error(id, ipc::INVALID_PARAMS, e.catalog_key()),
         };
-        let held = match state.account_admission.try_reserve(scope) {
+        if scope.whole_store {
+            scope
+                .ids
+                .extend(accounts_doc::authoritative_ids(&listed.accounts));
+            if method == "accounts.replace_all" {
+                if let Some(entries) = params.get("entries").and_then(Value::as_array) {
+                    scope.ids.extend(accounts_doc::authoritative_ids(entries));
+                }
+            }
+        }
+        let held = match state.account_admission.try_reserve(scope.clone()) {
             Ok(l) => l,
             Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e.catalog_key()),
         };
-        if let Some(listed) = listed {
+        let mut lifecycle_scope = scope;
+        let present = accounts_doc::authoritative_ids(&listed.accounts);
+        if method == "accounts.remove" {
+            lifecycle_scope.ids.retain(|id| present.contains(id));
+        }
+        let mut skipped_put = std::collections::BTreeSet::new();
+        let additions: std::collections::BTreeSet<String> = match method {
+            "accounts.put" => {
+                let entries = params
+                    .get("entries")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_else(|| params.get("entry").cloned().into_iter().collect());
+                let if_absent = params.get("ifAbsent").and_then(Value::as_bool) == Some(true);
+                let mut seen_ids: std::collections::HashSet<String> = listed
+                    .accounts
+                    .iter()
+                    .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
+                    .collect();
+                let mut seen_keys: std::collections::HashSet<String> = listed
+                    .accounts
+                    .iter()
+                    .map(accounts_doc::logical_key)
+                    .collect();
+                let mut added = std::collections::BTreeSet::new();
+                for entry in entries {
+                    let Some(target) = entry.get("id").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let key = accounts_doc::logical_key(&entry);
+                    if if_absent && (seen_ids.contains(target) || seen_keys.contains(&key)) {
+                        skipped_put.insert(target.to_owned());
+                        continue;
+                    }
+                    seen_ids.insert(target.to_owned());
+                    seen_keys.insert(key);
+                    if !present.contains(target) {
+                        added.insert(target.to_owned());
+                    }
+                }
+                added
+            }
+            "accounts.replace_all" => params
+                .get("entries")
+                .and_then(Value::as_array)
+                .map(|entries| {
+                    accounts_doc::authoritative_ids(entries)
+                        .difference(&present)
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default(),
+            _ => Default::default(),
+        };
+        lifecycle_scope.ids.extend(additions.iter().cloned());
+        for skipped in skipped_put {
+            if !present.contains(&skipped) && !additions.contains(&skipped) {
+                lifecycle_scope.ids.remove(&skipped);
+            }
+        }
+        let authority = if additions.is_empty() {
+            PersistenceAuthority::Ordinary
+        } else {
+            match state
+                .account_lifecycle
+                .reserve_creation(&held, &listed, &additions)
+            {
+                Ok(reservation) => PersistenceAuthority::Create(reservation),
+                Err(_) => {
+                    return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")
+                }
+            }
+        };
+        let held_owner =
+            match state
+                .account_lifecycle
+                .try_persistence(held, &lifecycle_scope, authority)
+            {
+                Ok(owner) => owner,
+                Err(_) => {
+                    return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")
+                }
+            };
+        {
             if accounts_doc::legacy_secrets_representable(&listed.accounts) {
                 let records: std::collections::HashMap<_, _> =
                     accounts_doc::legacy_secrets(&listed.accounts)
@@ -161,10 +262,10 @@ async fn run_owned(
                 } else {
                     #[cfg(test)]
                     PRESERVATION_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    match crate::credentials::change_credentials_admitted(
+                    match crate::credentials::change_credentials_admitted_owned(
                         state,
                         crate::credentials::CredChange::SaveIfAbsent(records),
-                        held.clone(),
+                        held_owner.clone(),
                     )
                     .await
                     {
@@ -179,20 +280,55 @@ async fn run_owned(
                 }
             }
         }
-        lease = Some(held);
+        owner = Some(held_owner);
         #[cfg(test)]
         pause_after_preservation(&state.app_dir).await;
+    } else if method == "accounts.list" {
+        if let Some(marker) = state.account_lifecycle.pending_uncertain() {
+            if let Ok(lease) =
+                state
+                    .account_admission
+                    .try_reserve(crate::account_workflows::AccountWriteScope {
+                        whole_store: true,
+                        ..Default::default()
+                    })
+            {
+                recovery = Some((marker, lease));
+            }
+        }
     }
     let method = method.to_owned();
     let params = params.clone();
     let state = Arc::clone(state);
     let joined = tokio::task::spawn_blocking(move || {
-        let _lease = lease;
+        let _owner = owner;
+        #[cfg(test)]
+        let _done = pause_document(&state.app_dir);
         let policy = preserved
             .as_ref()
             .map(accounts_doc::LiveScrub::Preserved)
             .unwrap_or(accounts_doc::LiveScrub::Preserve);
         let out = accounts_doc::run(&doc, &method, &params, policy)?;
+        if let Some((marker, lease)) = recovery {
+            let listing = accounts_doc::Listing {
+                accounts: out.reply["accounts"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default(),
+                version: out.reply["version"].as_u64().unwrap_or_default(),
+                recovered: out
+                    .reply
+                    .get("recovered")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            };
+            let _ = state
+                .account_lifecycle
+                .recover_uncertain_membership(&marker, &lease, &listing);
+        }
+        state
+            .account_lifecycle
+            .apply_committed_membership(_owner.as_ref(), &out.membership);
         if let Some(change) = &out.changed {
             state.events.emit(
                 CHANGED_EVENT,
@@ -214,6 +350,30 @@ async fn run_owned(
             e.catalog_key(),
         ),
     }
+}
+
+#[cfg(test)]
+struct DocumentGate {
+    entered: std::sync::mpsc::Sender<()>,
+    release: std::sync::mpsc::Receiver<()>,
+    done: std::sync::mpsc::Sender<()>,
+}
+#[cfg(test)]
+fn document_gates(
+) -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, DocumentGate>> {
+    static GATES: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, DocumentGate>>,
+    > = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn pause_document(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+    let gate = document_gates().lock().unwrap().remove(path);
+    gate.map(|gate| {
+        let _ = gate.entered.send(());
+        let _ = gate.release.recv();
+        crate::credentials::TestTaskDone(gate.done)
+    })
 }
 
 #[cfg(test)]
@@ -242,6 +402,58 @@ async fn pause_after_preservation(path: &std::path::Path) {
 mod tests {
     use super::*;
     use crate::server::{handle_request_for_test, DaemonState};
+
+    struct DocPause {
+        release: Option<std::sync::mpsc::Sender<()>>,
+        entered: std::sync::mpsc::Receiver<()>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+    impl DocPause {
+        fn arm(state: &Arc<DaemonState>) -> Self {
+            let (release, gate) = std::sync::mpsc::channel();
+            let (entered, notice) = std::sync::mpsc::channel();
+            let (done, finished) = std::sync::mpsc::channel();
+            document_gates().lock().unwrap().insert(
+                state.app_dir.clone(),
+                DocumentGate {
+                    entered,
+                    release: gate,
+                    done,
+                },
+            );
+            Self {
+                release: Some(release),
+                entered: notice,
+                done: Some(finished),
+            }
+        }
+        fn entered(&self) {
+            self.entered
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("real document child entered");
+        }
+        fn finish(&mut self) {
+            self.release.take();
+            self.done
+                .take()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("real document child and event drained");
+        }
+    }
+    impl Drop for DocPause {
+        fn drop(&mut self) {
+            self.release.take();
+            if let Some(done) = self.done.take() {
+                if done
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .is_err()
+                {
+                    std::process::abort();
+                }
+            }
+        }
+    }
 
     struct TestScope {
         dir: tempfile::TempDir,
@@ -273,6 +485,218 @@ mod tests {
             },
             state,
         )
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_n2_new_target_reservation_activates_after_document_commit() {
+        let (dir, state) = rig();
+        std::fs::write(dir.path().join("accounts.json"), "[]").unwrap();
+        state
+            .account_lifecycle
+            .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let mut pause = DocPause::arm(&state);
+        let held = Arc::clone(&state);
+        let pending = tokio::spawn(async move {
+            call(
+                &held,
+                "accounts.put",
+                json!({"entry":{"id":"a","email":"a@example.test"}}),
+            )
+            .await
+        });
+        pause.entered();
+        let before = state.account_lifecycle.capture("a").is_err();
+        pause.finish();
+        let added = pending.await.unwrap();
+        let open = state.account_lifecycle.capture("a").is_ok();
+        let replaced = call(
+            &state,
+            "accounts.replace_all",
+            json!({"entries":[{"id":"b"}]}),
+        )
+        .await;
+        let retired = matches!(
+            state.account_lifecycle.capture("a"),
+            Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))
+        );
+        let b_open = state.account_lifecycle.capture("b").is_ok();
+        let retry = call(&state, "accounts.put", json!({"entry":{"id":"a"}})).await;
+        assert!(before && added.is_ok() && open && replaced.is_ok() && retired && b_open && retry == Err("errors.keychainBusy".into()),
+            "N2 reservation: before={before}, added={}, open={open}, replaced={}, retired={retired}, b_open={b_open}, retry={retry:?}", added.is_ok(), replaced.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_closing_other_legacy_id_refuses_preservation() {
+        let (dir, state) = rig();
+        let metadata = json!([
+            {"id":"a","email":"a@example.test","imapHost":"h"},
+            {"id":"b","email":"b@example.test","imapHost":"h","password":"synthetic-legacy"}
+        ]);
+        std::fs::write(dir.path().join("accounts.json"), metadata.to_string()).unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        state
+            .account_lifecycle
+            .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let mut exact = crate::account_workflows::AccountWriteScope::default();
+        exact.ids.insert("b".into());
+        let claim = state
+            .account_lifecycle
+            .try_close(
+                crate::account_workflows::AccountLease::detached_for_test(exact),
+                "b",
+            )
+            .unwrap();
+        let result = call(
+            &state,
+            "accounts.put",
+            json!({"entry":{"id":"a","name":"forbidden"}}),
+        )
+        .await;
+        let blob: Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join("credentials.json")).unwrap())
+                .unwrap();
+        let preserved_other = blob.get("b").is_some();
+        let document_changed = on_disk(&dir) != metadata;
+        assert!(result.is_err() && !preserved_other && !document_changed,
+            "real N2 route must refuse another Closing legacy ID; preserved_other={preserved_other}, document_changed={document_changed}");
+        assert_eq!(on_disk(&dir), metadata);
+        assert_eq!(blob, json!({}));
+        drop(claim);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_preservation_and_document_child_keep_other_id_owner() {
+        let (dir, state) = rig();
+        std::fs::write(
+            dir.path().join("accounts.json"),
+            json!([
+                {"id":"a","email":"a@example.test","imapHost":"h"},
+                {"id":"b","email":"b@example.test","imapHost":"h","password":"synthetic-legacy"}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        state
+            .account_lifecycle
+            .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let pause = (
+            Arc::new(tokio::sync::Notify::new()),
+            Arc::new(tokio::sync::Notify::new()),
+        );
+        preservation_pauses()
+            .lock()
+            .unwrap()
+            .insert(state.app_dir.clone(), pause.clone());
+        let guard = PauseGuard(state.app_dir.clone(), pause.clone());
+        let state_for_task = Arc::clone(&state);
+        let writing = tokio::spawn(async move {
+            call(
+                &state_for_task,
+                "accounts.put",
+                json!({"entry":{"id":"a","name":"changed"}}),
+            )
+            .await
+        });
+        pause.0.notified().await;
+        let mut exact = crate::account_workflows::AccountWriteScope::default();
+        exact.ids.insert("b".into());
+        let busy_during_preservation = state
+            .account_lifecycle
+            .try_close(
+                crate::account_workflows::AccountLease::detached_for_test(exact.clone()),
+                "b",
+            )
+            .is_err();
+        pause.1.notify_one();
+        drop(guard);
+        let written = writing.await.unwrap();
+        let eligible_after_document = state
+            .account_lifecycle
+            .try_close(
+                crate::account_workflows::AccountLease::detached_for_test(exact),
+                "b",
+            )
+            .is_ok();
+        assert!(written.is_ok() && busy_during_preservation && eligible_after_document,
+            "N2 owner: written_ok={}, busy_during_preservation={busy_during_preservation}, eligible_after_document={eligible_after_document}", written.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_late_document_remove_retires_after_real_child_and_replace_all_retires() {
+        let (dir, state) = rig();
+        std::fs::write(
+            dir.path().join("accounts.json"),
+            json!([
+                {"id":"a","email":"a@example.test","imapHost":"h"},
+                {"id":"b","email":"b@example.test","imapHost":"h"}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        state
+            .account_lifecycle
+            .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let mut pause = DocPause::arm(&state);
+        let state_for_task = Arc::clone(&state);
+        let task = tokio::spawn(async move {
+            call(&state_for_task, "accounts.remove", json!({"id":"a"})).await
+        });
+        pause.entered();
+        let open_before_commit = state.account_lifecycle.capture("a").is_ok();
+        task.abort();
+        let _ = task.await;
+        pause.finish();
+        let retired_after_child = matches!(
+            state.account_lifecycle.capture("a"),
+            Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))
+        );
+        let b_open = state.account_lifecycle.capture("b").is_ok();
+        let document_removed = on_disk(&dir)
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v["id"] != "a");
+        let replaced = call(&state, "accounts.replace_all", json!({"entries":[]})).await;
+        let b_retired = matches!(
+            state.account_lifecycle.capture("b"),
+            Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))
+        );
+        assert!(open_before_commit && retired_after_child && b_open && document_removed && replaced.is_ok() && b_retired,
+            "late membership: open_before_commit={open_before_commit}, retired_after_child={retired_after_child}, b_open={b_open}, document_removed={document_removed}, replaced_ok={}, b_retired={b_retired}", replaced.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_document_noops_reorder_and_metadata_edit_preserve_membership() {
+        let (dir, state) = rig();
+        std::fs::write(
+            dir.path().join("accounts.json"),
+            json!([
+                {"id":"a","email":"a@example.test","imapHost":"h"},
+                {"id":"b","email":"b@example.test","imapHost":"h"}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        state
+            .account_lifecycle
+            .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let missing = call(&state, "accounts.remove", json!({"id":"missing"})).await;
+        let reorder = call(&state, "accounts.reorder", json!({"ids":["b","a"]})).await;
+        let edited = call(
+            &state,
+            "accounts.put",
+            json!({"entry":{"id":"a","name":"metadata"}}),
+        )
+        .await;
+        let a_open = state.account_lifecycle.capture("a").is_ok();
+        let b_open = state.account_lifecycle.capture("b").is_ok();
+        let missing_unknown = matches!(
+            state.account_lifecycle.capture("missing"),
+            Err(crate::account_lifecycle::LifecycleError::Unknown)
+        );
+        assert!(missing.is_ok() && reorder.is_ok() && edited.is_ok() && a_open && b_open && missing_unknown,
+            "document no-ops preserve membership: missing_ok={}, reorder_ok={}, edited_ok={}, a_open={a_open}, b_open={b_open}, missing_unknown={missing_unknown}", missing.is_ok(), reorder.is_ok(), edited.is_ok());
     }
 
     fn on_disk(dir: &tempfile::TempDir) -> Value {
@@ -398,12 +822,18 @@ mod tests {
             let (name, _) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
             assert_ne!(name, CHANGED_EVENT);
         }
-        // Only an explicit fresh caller attempt can preserve B and apply X.
-        let fresh = call(&state, "accounts.list", json!({})).await.unwrap()["version"]
+        // The compatibility writer is outside lifecycle ownership. A fresh
+        // daemon bootstrap sees its now-authoritative B before retrying X.
+        let restarted =
+            DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        restarted
+            .account_lifecycle
+            .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let fresh = call(&restarted, "accounts.list", json!({})).await.unwrap()["version"]
             .as_u64()
             .unwrap();
         call(
-            &state,
+            &restarted,
             "accounts.put",
             json!({"entry":{"id":"x"}, "baseVersion":fresh}),
         )
@@ -588,6 +1018,15 @@ mod tests {
         assert_eq!(read()["b"], b.to_string());
         assert_eq!(on_disk(&dir), json!([{"id":"b","email":"b@x.test"}]));
 
+        drop(read);
+        drop(state);
+        drop(dir);
+        // The second UI order is a separate account lifetime. Restoring an
+        // already-retired ID by editing the file would violate P1 authority.
+        let (dir, state) = rig();
+        let path = dir.path().join("accounts.json");
+        let creds = dir.path().join("credentials.json");
+        let read = || -> Value { serde_json::from_slice(&std::fs::read(&creds).unwrap()).unwrap() };
         std::fs::write(&path, json!([a.clone(), b.clone()]).to_string()).unwrap();
         std::fs::write(&creds, initial.to_string()).unwrap();
         call(&state, "accounts.remove", json!({"ids":["a"]}))

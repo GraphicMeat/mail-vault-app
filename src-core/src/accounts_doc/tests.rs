@@ -32,6 +32,50 @@ fn call(doc: &JsonDoc, method: &str, params: Value) -> Result<Outcome, AccountsE
 }
 
 #[test]
+fn p1_membership_delta_is_exact_and_ignores_scrub_and_ambiguity() {
+    let d = dir();
+    seed(
+        d.path(),
+        json!([{"id":"a","password":"legacy"},{"id":"dup"},{"id":"dup"},{"email":"missing-id"}]),
+    );
+    let doc = doc(d.path());
+    let out = call(
+        &doc,
+        "accounts.replace_all",
+        json!({"entries":[{"id":"b"},{"id":"dup"}]}),
+    )
+    .unwrap();
+    assert_eq!(
+        out.membership.added,
+        ["b".to_owned(), "dup".to_owned()].into()
+    );
+    assert_eq!(out.membership.removed, ["a".to_owned()].into());
+    let skip = call(
+        &doc,
+        "accounts.put",
+        json!({"entry":{"id":"b"},"ifAbsent":true}),
+    )
+    .unwrap();
+    assert_eq!(skip.membership, MembershipDelta::default());
+}
+
+#[test]
+fn p1_failed_write_never_exposes_speculative_membership() {
+    let failed = dir();
+    let doc = doc(failed.path());
+    doc.fail_before_rename
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(matches!(
+        call(&doc, "accounts.put", json!({"entry":{"id":"never"}})),
+        Err(AccountsError::Io(_))
+    ));
+    assert!(
+        !failed.path().join(FILE_NAME).exists(),
+        "failed write must not expose speculative membership"
+    );
+}
+
+#[test]
 fn logical_key_matches_the_shared_fixture() {
     let cases: Value = serde_json::from_str(include_str!(
         "../../tests/fixtures/account-logical-key-cases.json"

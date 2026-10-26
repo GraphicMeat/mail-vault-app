@@ -182,6 +182,7 @@ pub struct DaemonState {
     /// (`oauth_tokens`): every RPC and worker that needs one asks there.
     pub tokens: crate::oauth_tokens::TokenStore,
     pub(crate) account_admission: crate::account_workflows::AccountAdmission,
+    pub(crate) account_lifecycle: crate::account_lifecycle::AccountLifecycle,
     /// Snooze's wake signal and pass lock — `handlers::snooze` pokes it on
     /// create/reschedule and holds the lock for an immediate unsnooze.
     pub snooze: crate::snooze_worker::SnoozeState,
@@ -886,6 +887,15 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
 
 #[cfg(test)]
 pub(crate) async fn handle_request_for_test(state: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
+    // Synthetic fixtures commonly write their authoritative document after
+    // constructing DaemonState. Seed once from that real fixture document.
+    if !state.account_lifecycle.is_ready() {
+        if let Ok(listing) =
+            mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir))
+        {
+            state.account_lifecycle.seed(&listing);
+        }
+    }
     handle_request(state, RpcRequest { method: method.into(), params, id: Some(serde_json::json!(1)) }).await
 }
 
@@ -1041,6 +1051,7 @@ impl DaemonState {
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
             tokens: crate::oauth_tokens::TokenStore::default(),
             account_admission: Default::default(),
+            account_lifecycle: Default::default(),
             snooze: crate::snooze_worker::SnoozeState::default(),
             follow_up: crate::follow_up_worker::FollowUpState::default(),
             auto_tag_worker,

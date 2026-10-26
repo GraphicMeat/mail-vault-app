@@ -11,6 +11,7 @@ use keyring::Entry;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
+use crate::account_lifecycle::PersistenceOwner;
 use crate::account_workflows::{
     check_deadline, AccountLease, AccountSaveInput, AppliedCredentials, CredentialCompletion,
     CredentialOp, LeaseOwner, MutationFailure,
@@ -2040,6 +2041,7 @@ pub(crate) async fn change_credentials(
         state,
         CredentialOp::Change(change),
         None,
+        None,
         Interaction::Interactive,
     )
     .await
@@ -2062,6 +2064,7 @@ pub(crate) async fn change_credentials_admitted(
         state,
         CredentialOp::Change(change),
         Some(lease),
+        None,
         Interaction::Interactive,
     )
     .await
@@ -2072,15 +2075,33 @@ pub(crate) async fn change_credentials_admitted(
 pub(crate) async fn save_account_credentials(
     state: &Arc<DaemonState>,
     input: AccountSaveInput,
-    lease: AccountLease,
+    persistence: PersistenceOwner,
 ) -> Result<CredentialCompletion, MutationFailure> {
     owned_change(
         state,
         CredentialOp::AccountSave(input),
-        Some(lease),
+        Some(persistence.lease.clone()),
+        Some(persistence),
         Interaction::Interactive,
     )
     .await
+}
+
+pub(crate) async fn change_credentials_admitted_owned(
+    state: &Arc<DaemonState>,
+    change: CredChange,
+    persistence: PersistenceOwner,
+) -> Result<(Vec<String>, u64), CredError> {
+    owned_change(
+        state,
+        CredentialOp::Change(change),
+        Some(persistence.lease.clone()),
+        Some(persistence),
+        Interaction::Interactive,
+    )
+    .await
+    .map(|c| (c.applied.ids, c.version))
+    .map_err(MutationFailure::credential)
 }
 
 #[cfg(test)]
@@ -2096,8 +2117,12 @@ async fn owned_change(
     state: &Arc<DaemonState>,
     op: CredentialOp,
     supplied: Option<AccountLease>,
+    preowner: Option<PersistenceOwner>,
     mode: Interaction,
 ) -> Result<CredentialCompletion, MutationFailure> {
+    if !state.account_lifecycle.is_ready() {
+        crate::account_lifecycle::start_bootstrap(Arc::clone(state));
+    }
     if supplied.is_none() && state.account_admission.known_conflict(&op.ids()) {
         return Err(CredError::Busy.into());
     }
@@ -2109,7 +2134,7 @@ async fn owned_change(
             .unwrap_or_else(|e| e.into_inner())
             .remove(&state.app_dir)
             .map(TestTaskDone);
-        change_credentials_mode(&state, op, supplied, mode).await
+        change_credentials_mode(&state, op, supplied, preowner, mode).await
     })
     .await
     .map_err(|_| MutationFailure::Credential(CredError::WriteFailed))?
@@ -2118,6 +2143,7 @@ async fn change_credentials_mode(
     state: &Arc<DaemonState>,
     op: CredentialOp,
     supplied: Option<AccountLease>,
+    preowner: Option<PersistenceOwner>,
     mode: Interaction,
 ) -> Result<CredentialCompletion, MutationFailure> {
     use std::sync::atomic::Ordering::SeqCst;
@@ -2139,15 +2165,17 @@ async fn change_credentials_mode(
     }
     check_deadline(deadline)?;
     let writer_generation = write_generation();
-    let owner: LeaseOwner = Arc::new(std::sync::Mutex::new(supplied.clone()));
+    let owner: LeaseOwner = Arc::new(std::sync::Mutex::new(preowner.clone()));
     let apply_state = Arc::clone(state);
     let apply_owner = Arc::clone(&owner);
+    let apply_preowner = preowner.clone();
     let apply = move |blob: &mut HashMap<String, String>| {
         crate::account_workflows::apply_operation(
             blob,
             &op,
             &apply_state,
             supplied.as_ref(),
+            apply_preowner.as_ref(),
             &apply_owner,
             writer_generation,
         )
@@ -2252,6 +2280,7 @@ pub(crate) async fn change_credentials_quiet(
     owned_change(
         state,
         CredentialOp::Change(change),
+        None,
         None,
         Interaction::Quiet,
     )
@@ -2563,6 +2592,11 @@ mod tests {
                 .to_string(),
         )
         .unwrap();
+        std::fs::write(
+            dir.path().join("accounts.json"),
+            json!([{"id":"a","email":"a@example.test","imapHost":"h"}]).to_string(),
+        )
+        .unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
         let (release, gate) = std::sync::mpsc::channel();
         let (started, entered) = std::sync::mpsc::channel();
@@ -2574,6 +2608,10 @@ mod tests {
         let _drain = TestTaskDrain(completed);
         let release = release;
         let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path()))
+                .unwrap(),
+        );
         let owned = Arc::clone(&state);
         let task = tokio::spawn(async move {
             change_credentials(

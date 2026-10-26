@@ -9,6 +9,7 @@
 //! migration and restore share the same registry rather than running a
 //! second, parallel one (decision 7).
 
+use crate::account_lifecycle::AccountStamp;
 use crate::ipc::{self, RpcResponse};
 use crate::server::{DaemonState, RunTokens};
 use serde_json::Value;
@@ -110,6 +111,21 @@ pub(crate) fn with_mailbox_write<T>(
     f: impl FnOnce(&std::path::Path) -> Result<T, String>,
 ) -> Result<T, String> {
     state.vault_registry.serialized(account_id, mailbox, || with_vault_write(state, f))
+}
+
+/// A finite publication from an earlier account observation. The caller
+/// supplies its original stamp; a completed old fetch never captures anew.
+pub(crate) fn with_stamped_mailbox_write<T>(
+    state: &Arc<DaemonState>,
+    stamp: &AccountStamp,
+    mailbox: &str,
+    f: impl FnOnce(&std::path::Path) -> Result<T, String>,
+) -> Result<T, String> {
+    let _permit = state
+        .account_lifecycle
+        .try_commit(std::slice::from_ref(stamp))
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
+    with_mailbox_write(state, stamp.id(), mailbox, f)
 }
 
 /// A required string param. `Err` names the missing key, as `INVALID_PARAMS`.

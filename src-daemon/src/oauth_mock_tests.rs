@@ -114,6 +114,29 @@ impl Rig {
             .map(|r| (r["id"].as_str().unwrap().to_string(), r.to_string()))
             .collect();
         std::fs::write(&self.creds, serde_json::to_string(&blob).unwrap()).unwrap();
+        if !self.s.account_lifecycle.is_ready() {
+            let metadata: Vec<Value> = records
+                .iter()
+                .map(|record| {
+                    let mut row = (*record).clone();
+                    for field in mailvault_core::accounts_doc::SECRET_FIELDS {
+                        row.as_object_mut().unwrap().remove(field);
+                    }
+                    row
+                })
+                .collect();
+            std::fs::write(
+                self.s.app_dir.join("accounts.json"),
+                json!(metadata).to_string(),
+            )
+            .unwrap();
+            self.s.account_lifecycle.seed(
+                &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(
+                    &self.s.app_dir,
+                ))
+                .unwrap(),
+            );
+        }
     }
 
     /// The account object the app sends: the store's copy, its token stale.

@@ -1950,6 +1950,27 @@ mod tests {
             let state =
                 DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
             store(&state, &[("g", &record)]);
+            let mut metadata = record.clone();
+            for field in mailvault_core::accounts_doc::SECRET_FIELDS {
+                metadata.as_object_mut().unwrap().remove(field);
+            }
+            std::fs::write(
+                state.app_dir.join("accounts.json"),
+                json!([
+                    metadata,
+                    {"id":"b","email":"b@example.test","imapHost":"b.example.test"},
+                    {"id":"c","email":"c@example.test","imapHost":"c.example.test"},
+                    {"id":"other","email":"other@example.test","imapHost":"other"}
+                ])
+                .to_string(),
+            )
+            .unwrap();
+            state.account_lifecycle.seed(
+                &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(
+                    &state.app_dir,
+                ))
+                .unwrap(),
+            );
             Self {
                 _dir: dir,
                 state,
@@ -4150,7 +4171,7 @@ mod tests {
                     snapshot,
                     tokio::time::Instant::now()
                         + Duration::from_secs(if mode != 1 { 75 } else { 2 }),
-                    (true, false),
+                    (true, true),
                 )
                 .await
             });
@@ -4316,7 +4337,7 @@ mod tests {
                 generation: credentials::write_generation(),
             },
             tokio::time::Instant::now() + Duration::from_secs(75),
-            (true, false),
+            (true, true),
         )
         .await
         .ok()
@@ -4339,7 +4360,7 @@ mod tests {
             "g",
             snapshot,
             tokio::time::Instant::now() + Duration::from_secs(75),
-            (true, false),
+            (true, true),
         )
         .await
         .ok()
@@ -4368,7 +4389,7 @@ mod tests {
                 generation: credentials::write_generation(),
             },
             tokio::time::Instant::now() + Duration::from_secs(75),
-            (true, false),
+            (true, true),
         )
         .await
         .ok()
@@ -4395,7 +4416,7 @@ mod tests {
             "g",
             snapshot,
             tokio::time::Instant::now() + Duration::from_secs(75),
-            (true, false),
+            (true, true),
         )
         .await
         .ok()
@@ -4424,7 +4445,7 @@ mod tests {
                 generation: credentials::write_generation(),
             },
             tokio::time::Instant::now() + Duration::from_secs(75),
-            (true, false),
+            (true, true),
         )
         .await
         .ok()
@@ -4468,7 +4489,7 @@ mod tests {
                 generation: credentials::write_generation(),
             },
             tokio::time::Instant::now() + Duration::from_secs(75),
-            (true, false),
+            (true, true),
         )
         .await;
         assert!(matches!(result, Err(TokenError { fallback: None, .. })));

@@ -1,5 +1,6 @@
 //! Native account workflows and persistence. Credential IO stays in the common credential
 //! engine; document IO owns its lease through actual blocking completion.
+use crate::account_lifecycle::{PersistenceAuthority, PersistenceOwner};
 use crate::credentials::{self, CredChange, CredError};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -38,6 +39,10 @@ impl AccountLease {
             || (!scope.whole_store
                 && scope.ids.is_subset(&self.0.ids)
                 && scope.keys.is_subset(&self.0.keys))
+    }
+    #[cfg(test)]
+    pub fn detached_for_test(scope: AccountWriteScope) -> Self {
+        Self(Arc::new(scope))
     }
 }
 impl AccountAdmission {
@@ -247,7 +252,7 @@ pub(crate) struct CredentialCompletion {
     pub applied: AppliedCredentials,
     pub version: u64,
 }
-pub(crate) type LeaseOwner = Arc<Mutex<Option<AccountLease>>>;
+pub(crate) type LeaseOwner = Arc<Mutex<Option<PersistenceOwner>>>;
 
 pub(crate) fn check_deadline(deadline: Option<Instant>) -> Result<(), MutationFailure> {
     if deadline.is_some_and(|d| Instant::now() >= d) {
@@ -588,6 +593,25 @@ fn prepare(
         scope,
     ))
 }
+fn lifecycle_scope_for_save(
+    scope: &AccountWriteScope,
+    proof: &Listing,
+    prepared: &PreparedAccountSave,
+) -> AccountWriteScope {
+    // A skipped input ID is not a document or credential mutation target.
+    // Its logical key remains in the complete lease to fence the mapped row.
+    let mut lifecycle_scope = scope.clone();
+    for skipped in prepared.skipped.keys() {
+        if !proof
+            .accounts
+            .iter()
+            .any(|row| row.get("id").and_then(Value::as_str) == Some(skipped.as_str()))
+        {
+            lifecycle_scope.ids.remove(skipped);
+        }
+    }
+    lifecycle_scope
+}
 impl CredentialOp {
     pub fn deadline(&self) -> Option<Instant> {
         match self {
@@ -617,6 +641,11 @@ fn primitive_scope(
     blob: &HashMap<String, String>,
     change: &CredChange,
 ) -> Result<AccountWriteScope, CredError> {
+    if let CredChange::Save(records) | CredChange::SaveIfAbsent(records) = change {
+        if records.keys().any(String::is_empty) {
+            return Err(CredError::Invalid);
+        }
+    }
     let ids = match change {
         CredChange::Save(r) | CredChange::SaveIfAbsent(r) => r.keys().cloned().collect(),
         CredChange::Update { id, .. } => [id.clone()].into_iter().collect(),
@@ -653,6 +682,7 @@ pub(crate) fn apply_operation(
     op: &CredentialOp,
     state: &Arc<DaemonState>,
     supplied: Option<&AccountLease>,
+    preowner: Option<&PersistenceOwner>,
     owner: &LeaseOwner,
     generation: u64,
 ) -> Result<AppliedCredentials, MutationFailure> {
@@ -679,9 +709,41 @@ pub(crate) fn apply_operation(
     let lease = match supplied {
         Some(l) if l.covers(&scope) => l.clone(),
         Some(_) => return Err(CredError::Busy.into()),
-        None => state.account_admission.try_reserve(scope)?,
+        None => state.account_admission.try_reserve(scope.clone())?,
     };
-    *owner.lock().unwrap_or_else(|e| e.into_inner()) = Some(lease);
+    let lifecycle_scope = match (op, applied.as_ref()) {
+        (CredentialOp::AccountSave(input), Some(applied)) => {
+            lifecycle_scope_for_save(&scope, &input.proof, applied.prepared.as_ref().unwrap())
+        }
+        _ => scope.clone(),
+    };
+    let persistence = match preowner {
+        Some(existing) => {
+            state
+                .account_lifecycle
+                .validate_owner(existing, &lifecycle_scope)
+                .map_err(|_| CredError::Busy)?;
+            existing.clone()
+        }
+        None => {
+            let authority = match op {
+                CredentialOp::Change(CredChange::Delete(_)) => PersistenceAuthority::DeleteOnly,
+                _ => PersistenceAuthority::Ordinary,
+            };
+            state
+                .account_lifecycle
+                .try_persistence(lease.clone(), &scope, authority)
+                .map_err(|_| CredError::Busy)?
+        }
+    };
+    if matches!(
+        &persistence.authority,
+        PersistenceAuthority::DeleteOnly | PersistenceAuthority::Claim(_)
+    ) && !matches!(op, CredentialOp::Change(CredChange::Delete(_)))
+    {
+        return Err(CredError::Busy.into());
+    }
+    *owner.lock().unwrap_or_else(|e| e.into_inner()) = Some(persistence);
     if let CredentialOp::AccountSave(input) = op {
         check_source(blob, input, state, generation)?;
     }
@@ -758,6 +820,9 @@ async fn save_owned(
     reply: &tokio::sync::oneshot::Sender<Result<Value, MutationFailure>>,
     source: Option<AccountSourceProof>,
 ) -> Result<Value, MutationFailure> {
+    if !state.account_lifecycle.is_ready() {
+        crate::account_lifecycle::start_bootstrap(Arc::clone(state));
+    }
     let snapshot = tokio::time::timeout_at(deadline, credentials::read_account_save_snapshot())
         .await
         .map_err(|_| AccountSaveError::WriteFailed)??;
@@ -783,15 +848,46 @@ async fn save_owned(
         proof,
         deadline,
     };
-    let (_, _, scope) = prepare(&snapshot.records, &input)?;
-    let lease = state.account_admission.try_reserve(scope)?;
+    let (_, preview, scope) = prepare(&snapshot.records, &input)?;
+    let lease = state.account_admission.try_reserve(scope.clone())?;
+    let newly_added: BTreeSet<String> = preview
+        .prepared
+        .as_ref()
+        .unwrap()
+        .accepted
+        .iter()
+        .filter(|id| {
+            !input
+                .proof
+                .accounts
+                .iter()
+                .any(|row| row.get("id").and_then(Value::as_str) == Some(id.as_str()))
+        })
+        .cloned()
+        .collect();
+    let authority = if matches!(&input.request, Request::Create { .. }) && !newly_added.is_empty() {
+        PersistenceAuthority::Create(
+            state
+                .account_lifecycle
+                .reserve_creation(&lease, &input.proof, &newly_added)
+                .map_err(|_| CredError::Busy)?,
+        )
+    } else {
+        PersistenceAuthority::Ordinary
+    };
+    let lifecycle_scope =
+        lifecycle_scope_for_save(&scope, &input.proof, preview.prepared.as_ref().unwrap());
+    let persistence = state
+        .account_lifecycle
+        .try_persistence(lease.clone(), &lifecycle_scope, authority)
+        .map_err(|_| CredError::Busy)?;
     let proof = input.proof.clone();
     if Instant::now() >= deadline || reply.is_closed() {
         return Err(AccountSaveError::WriteFailed.into());
     }
     let completion = tokio::time::timeout_at(
         deadline,
-        credentials::save_account_credentials(state, input, lease.clone()),
+        credentials::save_account_credentials(state, input, persistence.clone()),
     )
     .await
     .map_err(|_| AccountSaveError::WriteFailed)??;
@@ -809,10 +905,26 @@ async fn save_owned(
         check_deadline(Some(deadline))?;
         #[cfg(test)]
         let _done = document_pause(&state.app_dir);
-        let _lease = lease;
+        let _owner = persistence;
         let outcome = accounts_doc::commit_prepared(&doc, &proof, &prepared.rows);
+        #[cfg(test)]
+        let outcome = if post_commit_uncertainty_paths()
+            .lock()
+            .unwrap()
+            .remove(&state.app_dir)
+            && outcome.is_ok()
+        {
+            Err(accounts_doc::AccountsError::Io(
+                "synthetic post-commit uncertainty".into(),
+            ))
+        } else {
+            outcome
+        };
         match outcome {
             Ok(out) => {
+                state
+                    .account_lifecycle
+                    .apply_committed_membership(Some(&_owner), &out.membership);
                 if let Some(c) = out.changed {
                     state.events.emit(
                         crate::handlers::accounts::CHANGED_EVENT,
@@ -823,13 +935,27 @@ async fn save_owned(
                     json!({"accounts":prepared.rows,"accepted":prepared.accepted,"skipped":prepared.skipped,"version":out.reply["version"],"credentialVersion":credential_version,"hostChanged":prepared.host_changed}),
                 )
             }
-            Err(_) => Err(AccountSaveError::WriteFailed.into()),
+            Err(error) => {
+                if matches!(error, accounts_doc::AccountsError::Io(_)) {
+                    if let PersistenceAuthority::Create(reservation) = &_owner.authority {
+                        state.account_lifecycle.mark_uncertain(reservation);
+                    }
+                }
+                Err(AccountSaveError::WriteFailed.into())
+            }
         }
     });
     tokio::time::timeout_at(deadline, result)
         .await
         .map_err(|_| AccountSaveError::WriteFailed)?
         .map_err(|_| AccountSaveError::WriteFailed)?
+}
+
+#[cfg(test)]
+fn post_commit_uncertainty_paths() -> &'static Mutex<BTreeSet<std::path::PathBuf>> {
+    static PATHS: std::sync::OnceLock<Mutex<BTreeSet<std::path::PathBuf>>> =
+        std::sync::OnceLock::new();
+    PATHS.get_or_init(Default::default)
 }
 
 #[cfg(test)]
@@ -1360,6 +1486,9 @@ mod tests {
             );
             let state =
                 DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+            state
+                .account_lifecycle
+                .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
             Self {
                 state,
                 dir,
@@ -1402,6 +1531,10 @@ mod tests {
             self.state.tokens.drain_rechecks();
             TEST_REPLY_MS.store(0, std::sync::atomic::Ordering::SeqCst);
             TEST_NOW_MS.store(0, std::sync::atomic::Ordering::SeqCst);
+            post_commit_uncertainty_paths()
+                .lock()
+                .unwrap()
+                .remove(&self.state.app_dir);
         }
     }
     fn row(id: &str, email: &str, host: &str) -> Value {
@@ -1411,6 +1544,331 @@ mod tests {
         let mut s = AccountWriteScope::default();
         s.record(id, &row(id, email, host));
         s
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_closing_refuses_real_save_b_independent() {
+        let a = row("a", "a@example.test", "h");
+        let b = row("b", "b@example.test", "h");
+        let rig = Rig::new(vec![a.clone(), b.clone()], vec![clean(a), clean(b)]);
+        // The claim uses a detached complete lease so AccountAdmission cannot
+        // provide the refusal being tested. Only lifecycle Closing can do so.
+        let claim = rig
+            .state
+            .account_lifecycle
+            .try_close(
+                AccountLease::detached_for_test(scope("a", "a@example.test", "h")),
+                "a",
+            )
+            .unwrap();
+        let before = rig.stored("a");
+        let result = rig
+            .save(json!({"patch":{"id":"a","fields":{"name":"forbidden"}}}))
+            .await;
+        let credential_changed = rig.stored("a") != before;
+        let metadata_changed = rig
+            .meta()
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == "a" && v.get("name").is_some());
+        assert!(result.is_err() && !credential_changed && !metadata_changed,
+            "Closing account's real shared writer must refuse; credential_changed={credential_changed}, metadata_changed={metadata_changed}");
+        assert_eq!(rig.stored("a"), before);
+        let b = rig
+            .save(json!({"patch":{"id":"b","fields":{"name":"allowed"}}}))
+            .await;
+        assert!(b.is_ok(), "unrelated B must remain usable: {b:?}");
+        drop(claim);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_late_backend_keeps_logical_owner_after_reply_timeout() {
+        let mut observations = Vec::new();
+        let mut all_owned = true;
+        for kind in ["debug", "keychain", "sealed"] {
+            let a = row("a", "a@example.test", "h");
+            let rig = Rig::new(vec![a.clone()], vec![clean(a)]);
+            let (_keychain, _sealed) = backend(&rig, kind);
+            let mut pause = credentials::TestWritePause::arm_with_timeout(10);
+            let state = Arc::clone(&rig.state);
+            let task = tokio::spawn(async move {
+                save(
+                    &state,
+                    &json!({"patch":{"id":"a","fields":{"name":"late"}}}),
+                    json!(1),
+                )
+                .await
+            });
+            pause.wait_until_entered();
+            let response = task.await.unwrap();
+            let outer_failed = response.error.is_some();
+            let claimed_while_child_live = rig
+                .state
+                .account_lifecycle
+                .try_close(
+                    AccountLease::detached_for_test(scope("a", "a@example.test", "h")),
+                    "a",
+                )
+                .is_ok();
+            pause.finish();
+            let eligible_after_child = rig
+                .state
+                .account_lifecycle
+                .try_close(
+                    AccountLease::detached_for_test(scope("a", "a@example.test", "h")),
+                    "a",
+                )
+                .is_ok();
+            all_owned &= outer_failed && !claimed_while_child_live && eligible_after_child;
+            observations.push(format!(
+                "kind={kind}, outer_failed={outer_failed}, claimed_while_child_live={claimed_while_child_live}, eligible_after_child={eligible_after_child}"
+            ));
+        }
+        assert!(
+            all_owned,
+            "late real child ownership: {}",
+            observations.join("; ")
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_create_opens_only_after_real_late_document_commit() {
+        let rig = Rig::new(vec![], vec![]);
+        let mut pause = DocumentPause::arm(&rig);
+        TEST_REPLY_MS.store(300, std::sync::atomic::Ordering::SeqCst);
+        let state = Arc::clone(&rig.state);
+        let task = tokio::spawn(async move {
+            save(
+                &state,
+                &json!({"entries":[row("new", "new@example.test", "h")],"ifAbsent":false}),
+                json!(1),
+            )
+            .await
+        });
+        pause.entered();
+        let before_open = rig.state.account_lifecycle.capture("new").is_ok();
+        let live_child_listed = rig.call("accounts.list", json!({})).await.is_ok();
+        let still_not_open = rig.state.account_lifecycle.capture("new").is_err();
+        let outer_failed = task.await.unwrap().error.is_some();
+        pause.finish();
+        let document_committed = rig
+            .meta()
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == "new");
+        let after_open = rig.state.account_lifecycle.capture("new").is_ok();
+        assert!(outer_failed && !before_open && live_child_listed && still_not_open && document_committed && after_open,
+            "late create activation: outer_failed={outer_failed}, before_open={before_open}, live_child_listed={live_child_listed}, still_not_open={still_not_open}, document_committed={document_committed}, after_open={after_open}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_real_document_removal_retires_only_actual_member() {
+        let a = row("a", "a@example.test", "h");
+        let b = row("b", "b@example.test", "h");
+        let rig = Rig::new(vec![a.clone(), b.clone()], vec![clean(a), clean(b)]);
+        let removed = rig.call("accounts.remove", json!({"id":"a"})).await;
+        let document_removed = rig
+            .meta()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v["id"] != "a");
+        let a_open = rig.state.account_lifecycle.capture("a").is_ok();
+        let b_open = rig.state.account_lifecycle.capture("b").is_ok();
+        assert!(removed.is_ok() && document_removed && !a_open && b_open,
+            "real document retire: removed_ok={}, document_removed={document_removed}, a_open={a_open}, b_open={b_open}", removed.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_uncertain_create_recovers_only_from_explicit_fresh_list() {
+        let rig = Rig::new(vec![], vec![]);
+        post_commit_uncertainty_paths()
+            .lock()
+            .unwrap()
+            .insert(rig.state.app_dir.clone());
+        let result = rig
+            .save(json!({"entries":[row("new", "new@example.test", "h")],"ifAbsent":false}))
+            .await;
+        let original_failed = result.is_err();
+        let present = rig
+            .meta()
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == "new");
+        let before_open = rig.state.account_lifecycle.capture("new").is_ok();
+        let blob_before = rig.blob();
+        let document_before = std::fs::read(rig.dir.path().join("accounts.json")).unwrap();
+        let listed = rig.call("accounts.list", json!({})).await;
+        let after_open = rig.state.account_lifecycle.capture("new").is_ok();
+        let replayed_credentials = rig.blob() != blob_before;
+        let replayed_document =
+            std::fs::read(rig.dir.path().join("accounts.json")).unwrap() != document_before;
+        assert!(original_failed && present && !before_open && listed.is_ok() && after_open && !replayed_credentials && !replayed_document,
+            "uncertain create recovery: original_failed={original_failed}, present={present}, before_open={before_open}, listed_ok={}, after_open={after_open}, replayed_credentials={replayed_credentials}, replayed_document={replayed_document}", listed.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_uncertain_create_recovery_waits_for_read_and_complete_admission() {
+        for read_error in [false, true] {
+            let rig = Rig::new(vec![], vec![]);
+            post_commit_uncertainty_paths()
+                .lock()
+                .unwrap()
+                .insert(rig.state.app_dir.clone());
+            let original = rig
+                .save(json!({"entries":[row("new", "new@example.test", "h")],"ifAbsent":false}))
+                .await;
+            assert!(original.is_err());
+            assert!(rig.state.account_lifecycle.capture("new").is_err());
+            let before = std::fs::read(rig.dir.path().join("accounts.json")).unwrap();
+            let path = rig.dir.path().join("accounts.json");
+            let parked = rig.dir.path().join("accounts.fixture-held");
+            let held = if read_error {
+                std::fs::rename(&path, &parked).unwrap();
+                std::fs::create_dir(&path).unwrap();
+                None
+            } else {
+                Some(
+                    rig.state
+                        .account_admission
+                        .try_reserve(AccountWriteScope {
+                            whole_store: true,
+                            ..Default::default()
+                        })
+                        .unwrap(),
+                )
+            };
+            let first = rig.call("accounts.list", json!({})).await;
+            let still_closed = rig.state.account_lifecycle.capture("new").is_err();
+            drop(held);
+            if read_error {
+                std::fs::remove_dir(&path).unwrap();
+                std::fs::rename(&parked, &path).unwrap();
+            }
+            let second = rig.call("accounts.list", json!({})).await;
+            let opened = rig.state.account_lifecycle.capture("new").is_ok();
+            let no_rewrite = std::fs::read(&path).unwrap() == before;
+            assert!(if read_error {
+                first.is_err()
+            } else {
+                first.is_ok()
+            });
+            assert!(still_closed && second.is_ok() && opened && no_rewrite,
+                "recovery read_error={read_error}: still_closed={still_closed}, second_ok={}, opened={opened}, no_rewrite={no_rewrite}", second.is_ok());
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_retired_primitives_refuse_save_update_save_if_absent_but_delete_cleans() {
+        let a = row("a", "a@example.test", "h");
+        let rig = Rig::new(vec![a.clone()], vec![clean(a.clone())]);
+        rig.call("accounts.remove", json!({"id":"a"}))
+            .await
+            .unwrap();
+        let before = rig.blob();
+        let save = rig
+            .call("credentials.save", json!({"records":{"a":a.to_string()}}))
+            .await;
+        let update = rig
+            .call(
+                "credentials.update",
+                json!({"id":"a","fields":{"name":"forbidden"}}),
+            )
+            .await;
+        let if_absent = credentials::change_credentials_admitted(
+            &rig.state,
+            CredChange::SaveIfAbsent([("a".to_owned(), a.to_string())].into()),
+            AccountLease::detached_for_test(scope("a", "a@example.test", "h")),
+        )
+        .await;
+        let unchanged = rig.blob() == before;
+        let deleted = rig.call("credentials.delete", json!({"ids":["a"]})).await;
+        let absent_after_delete = !rig.blob().contains_key("a");
+        assert!(save.is_err() && update.is_err() && if_absent.is_err() && unchanged && deleted.is_ok() && absent_after_delete,
+            "retired primitive fence: save_refused={}, update_refused={}, if_absent_refused={}, unchanged={unchanged}, deleted_ok={}, absent_after_delete={absent_after_delete}", save.is_err(), update.is_err(), if_absent.is_err(), deleted.is_ok());
+        assert!(matches!(
+            rig.state.account_lifecycle.capture("a"),
+            Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_noop_credentials_still_commit_real_metadata_scrub() {
+        let a = row("a", "a@example.test", "h");
+        let rig = Rig::new(vec![a.clone()], vec![a]);
+        let before = rig.blob();
+        let out = rig.save(json!({"patch":{"id":"a","fields":{}}})).await;
+        let credential_noop = rig.blob() == before;
+        let metadata_scrubbed = rig.meta()[0].get("password").is_none();
+        assert!(out.is_ok() && credential_noop && metadata_scrubbed && rig.state.account_lifecycle.capture("a").is_ok(),
+            "no-op credential Prepared metadata: reply_ok={}, credential_noop={credential_noop}, metadata_scrubbed={metadata_scrubbed}", out.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_claim_bound_cleanup_uses_real_delete_only_writer() {
+        let a = row("a", "a@example.test", "h");
+        let rig = Rig::new(vec![a.clone()], vec![clean(a.clone())]);
+        let mut claim = rig
+            .state
+            .account_lifecycle
+            .try_close(
+                AccountLease::detached_for_test(scope("a", "a@example.test", "h")),
+                "a",
+            )
+            .unwrap();
+        let public_delete = rig.call("credentials.delete", json!({"ids":["a"]})).await;
+        let drained = claim
+            .wait_local_until(Instant::now() + Duration::from_secs(5))
+            .await
+            .unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        let exact = AccountWriteScope {
+            ids: ["a".into()].into(),
+            ..Default::default()
+        };
+        let auth = claim.cleanup_authority().unwrap();
+        let mismatched = rig
+            .state
+            .account_lifecycle
+            .try_persistence(
+                AccountLease::detached_for_test(scope("a", "a@example.test", "h")),
+                &exact,
+                auth.clone(),
+            )
+            .unwrap();
+        let before = rig.blob();
+        let mut forged = row("a", "a@example.test", "h");
+        forged["name"] = json!("forbidden");
+        let forbidden_save = credentials::change_credentials_admitted_owned(
+            &rig.state,
+            CredChange::Save([("a".to_owned(), forged.to_string())].into()),
+            mismatched,
+        )
+        .await;
+        let unchanged = rig.blob() == before;
+        let allowed = rig
+            .state
+            .account_lifecycle
+            .try_persistence(
+                AccountLease::detached_for_test(scope("a", "a@example.test", "h")),
+                &exact,
+                auth,
+            )
+            .unwrap();
+        let bound_delete = credentials::change_credentials_admitted_owned(
+            &rig.state,
+            CredChange::Delete(vec!["a".into()]),
+            allowed,
+        )
+        .await;
+        let absent = !rig.blob().contains_key("a");
+        drop(claim);
+        let still_nonopen = rig.state.account_lifecycle.capture("a").is_err();
+        assert!(public_delete.is_err() && forbidden_save.is_err() && unchanged && bound_delete.is_ok() && absent && still_nonopen,
+            "claim-bound real cleanup: public_delete_refused={}, forbidden_save_refused={}, unchanged={unchanged}, bound_delete_ok={}, absent={absent}, still_nonopen={still_nonopen}", public_delete.is_err(), forbidden_save.is_err(), bound_delete.is_ok());
     }
 
     fn backend(
@@ -1622,7 +2080,10 @@ mod tests {
                 row("a", "a@example.test", "h"),
                 row("b", "b@example.test", "other"),
             ],
-            vec![],
+            vec![
+                clean(row("a", "a@example.test", "h")),
+                clean(row("b", "b@example.test", "other")),
+            ],
         );
         let backend =
             credentials::TestKeychainGuard::install(rig.dir.path().join("credentials.json"));

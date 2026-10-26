@@ -18,6 +18,7 @@
 
 use crate::json_doc::{Change, DocError, JsonDoc, Kind, Persistence, Scrub, Spec};
 use serde_json::{json, Map, Value};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -217,6 +218,33 @@ pub enum LiveScrub<'a> {
 struct Mutation {
     change: Change,
     committed: bool,
+    membership: MembershipDelta,
+}
+
+/// Authoritative identity changes from a confirmed document commit. Ambiguous
+/// rows never confer identity authority.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MembershipDelta {
+    pub added: BTreeSet<String>,
+    pub removed: BTreeSet<String>,
+}
+
+pub fn authoritative_ids(rows: &[Value]) -> BTreeSet<String> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for row in rows {
+        if let Some(id) = row
+            .as_object()
+            .and_then(|r| r.get("id"))
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+        {
+            *counts.entry(id.to_owned()).or_default() += 1;
+        }
+    }
+    counts
+        .into_iter()
+        .filter_map(|(id, count)| (count == 1).then_some(id))
+        .collect()
 }
 
 fn mutate(
@@ -243,6 +271,7 @@ fn mutate(
     // The generic engine prepares a clean backup but leaves live values
     // untouched for this comparison under its writer and supported OS lock.
     let mut committed = false;
+    let mut membership = MembershipDelta::default();
     let mut change = doc.write_op_scrubbed(base, Some(scrub(false)), |value| {
         if let Some(proof) = proof {
             if value.as_array() != Some(&proof.accounts) {
@@ -252,6 +281,10 @@ fn mutate(
             }
         }
         let before = value.clone();
+        let before_ids = before
+            .as_array()
+            .map(|rows| authoritative_ids(rows))
+            .unwrap_or_default();
         let mut cleaned = if proof.is_some() {
             scrub_secrets(value)
         } else {
@@ -262,6 +295,14 @@ fn mutate(
             push_unique(&mut changed, &id);
         }
         committed = *value != before;
+        let after_ids = value
+            .as_array()
+            .map(|rows| authoritative_ids(rows))
+            .unwrap_or_default();
+        membership = MembershipDelta {
+            added: after_ids.difference(&before_ids).cloned().collect(),
+            removed: before_ids.difference(&after_ids).cloned().collect(),
+        };
         changed.retain(|id| !id.is_empty());
         if !committed {
             changed.clear();
@@ -273,7 +314,14 @@ fn mutate(
         Ok(changed)
     })?;
     change.changed.retain(|id| !id.is_empty());
-    Ok(Mutation { change, committed })
+    if !committed {
+        membership = MembershipDelta::default();
+    }
+    Ok(Mutation {
+        change,
+        committed,
+        membership,
+    })
 }
 
 fn put(
@@ -500,6 +548,7 @@ fn replace_all(
 pub struct Outcome {
     pub reply: Value,
     pub changed: Option<Change>,
+    pub membership: MembershipDelta,
 }
 
 fn base(params: &Value) -> Option<u64> {
@@ -526,10 +575,18 @@ fn incoming(params: &Value) -> Result<Vec<Value>, AccountsError> {
 }
 
 fn wrote(mutation: Mutation) -> Outcome {
-    let Mutation { change, committed } = mutation;
+    let Mutation {
+        change,
+        committed,
+        membership,
+    } = mutation;
     let reply = json!({"version": change.version, "changed": change.changed});
     let changed = committed.then_some(change);
-    Outcome { reply, changed }
+    Outcome {
+        reply,
+        changed,
+        membership,
+    }
 }
 
 /// The methods both the daemon and the shell's fallback answer.
@@ -570,6 +627,7 @@ pub fn run(
             Ok(Outcome {
                 reply,
                 changed: None,
+                membership: MembershipDelta::default(),
             })
         }
         "accounts.get" => {
@@ -586,6 +644,7 @@ pub fn run(
             Ok(Outcome {
                 reply: json!({"account": account, "version": l.version}),
                 changed: None,
+                membership: MembershipDelta::default(),
             })
         }
         "accounts.put" => {
