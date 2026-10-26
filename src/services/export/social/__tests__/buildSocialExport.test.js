@@ -38,7 +38,7 @@ vi.mock('../../../../utils/privacy/privacyDictionary', async (orig) => {
   return { ...(await orig()), ensurePrivacyDictionary: vi.fn(async () => EMPTY_DICTIONARY) };
 });
 
-const { buildSocialExport } = await import('../buildSocialExport');
+const { buildSocialExport, buildSocialContent } = await import('../buildSocialExport');
 const { SIZE_PRESETS } = await import('../socialLayout');
 const { FIXTURE_MESSAGE, NEEDLES } = await import('../../../../test/privacyFixtures');
 const { usePrivacyStore } = await import('../../../../stores/privacyStore');
@@ -186,6 +186,90 @@ describe('buildSocialExport', () => {
     renderSocialCard.mockClear();
     await buildSocialExport({ message, options });
     expect(renderSocialCard.mock.calls[0][0].hideTo).toBeFalsy();
+  });
+
+  describe('word marks: a click on the image', () => {
+    const plain = { ...options, redact: false };
+
+    it('show leaves a detected word readable in the header and the body, the rest stays masked', async () => {
+      await buildSocialExport({ message, options: { ...options, marks: { 'joanna.k@example.org': 'show' } } });
+      const args = renderSocialCard.mock.calls[0][0];
+      expect(args.message.from.address).toBe('joanna.k@example.org');
+      expect(args.bodyHtml).toContain('joanna.k@example.org');
+      expect(args.bodyHtml).not.toContain('Rokas');
+      expect(args.bodyHtml).not.toContain('612 34567');
+      expect(args.message.from.name).not.toContain('Joanna');
+    });
+
+    it('hide masks a word the detector missed, in the body and the header', async () => {
+      await buildSocialExport({ message: { ...message, subject: 'Project Falcon update', html: '<p>Falcon flies</p>' }, options: { ...options, marks: { falcon: 'hide' } } });
+      const args = renderSocialCard.mock.calls[0][0];
+      expect(args.bodyHtml).not.toContain('Falcon');
+      expect(args.message.subject).not.toContain('Falcon');
+    });
+
+    it('hide works with the redact box off: only that word is masked, nothing else is detected', async () => {
+      const r = await buildSocialExport({ message: { ...message, html: '<p>Falcon flies, mail joanna.k@example.org</p>' }, options: { ...plain, marks: { falcon: 'hide' } } });
+      expect(r.ok).toBe(true);
+      const args = renderSocialCard.mock.calls[0][0];
+      expect(args.bodyHtml).not.toContain('Falcon');
+      expect(args.bodyHtml).toContain('joanna.k@example.org');
+      expect(args.message.from.address).toBe('joanna.k@example.org');
+      expect(args.redactStyle).toBe('blur');
+      expect(typeof args.onCloneNode).toBe('function');
+    });
+
+    it('show with the redact box off changes nothing, and no marks leaves the card unredacted as before', async () => {
+      await buildSocialExport({ message, options: { ...plain, marks: { rokas: 'show' } } });
+      let args = renderSocialCard.mock.calls[0][0];
+      expect(args.redactStyle).toBeUndefined();
+      expect(args.onCloneNode).toBeUndefined();
+      expect(args.bodyHtml).toContain('Rokas');
+      renderSocialCard.mockClear();
+      await buildSocialExport({ message, options: plain });
+      args = renderSocialCard.mock.calls[0][0];
+      expect(args.onCloneNode).toBeUndefined();
+    });
+
+    it('the file name hides what the image hides, and a show mark never reaches it', async () => {
+      const shown = await buildSocialExport({ message, options: { ...options, marks: { joanna: 'show', kowalczyk: 'show' } } });
+      noLeak(shown.file.name);
+      const hid = await buildSocialExport({ message: { ...message, subject: 'Project Falcon' }, options: { ...plain, marks: { falcon: 'hide' } } });
+      expect(hid.file.name).not.toContain('Falcon');
+    });
+
+    it('the app window takes no marks: it is a shot of the live UI', async () => {
+      await buildSocialExport({ message, options: { ...options, content: 'app', marks: { 'joanna.k@example.org': 'show', falcon: 'hide' } } });
+      const dict = captureAppWindow.mock.calls[0][0].dict;
+      expect(dict).not.toHaveProperty('show');
+      expect(dict).not.toHaveProperty('hide');
+    });
+
+    it('a saved image maps no words; the preview\'s content does, resolved to keys and mask state', async () => {
+      await buildSocialExport({ message, options });
+      expect(renderSocialCard.mock.calls[0][0].wantWords).toBe(false);
+      expect(renderSocialCard.mock.calls[0][0].bodyHtml).not.toContain('data-mv-i');
+      renderSocialCard.mockImplementationOnce(async () => ({
+        ...stubCanvas(),
+        mvRaw: { head: [], body: [
+          { mask: 0, ti: 1, text: 'xxxxxxxxxxxxx', rects: [[1, 2, 3, 4]] },
+          { mask: null, ti: 0, text: 'mail', rects: [[5, 6, 7, 8]] },
+        ] },
+      }));
+      const content = await buildSocialContent(message, { content: 'card', redact: true, theme: 'light' });
+      expect(renderSocialCard.mock.calls.at(-1)[0].wantWords).toBe(true);
+      expect(renderSocialCard.mock.calls.at(-1)[0].bodyHtml).toContain('data-mv-i="0"');
+      expect(content.mvWords).toEqual([
+        { k: 'ambrazevičius', on: true, rects: [[1, 2, 3, 4]] },
+        { k: 'mail', on: false, rects: [[5, 6, 7, 8]] },
+      ]);
+      expect(content).not.toHaveProperty('mvRaw');
+    });
+
+    it('a card with no measured words (the alternative renderer) has no hit map', async () => {
+      const content = await buildSocialContent(message, { content: 'card', redact: true, theme: 'light' });
+      expect(content).not.toHaveProperty('mvWords');
+    });
   });
 
   describe('spam sender reveal, sender details and links', () => {

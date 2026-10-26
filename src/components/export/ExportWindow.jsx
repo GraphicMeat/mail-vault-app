@@ -92,9 +92,10 @@ export function ExportWindow() {
   }), [request]);
 
   const social = useMemo(() => ({
-    buildContent: options => request({ ...options, format: 'social' }).then(async ({ base64, name }) => {
+    buildContent: options => request({ ...options, format: 'social' }).then(async ({ base64, name, words }) => {
       const bitmap = await decodePng(base64);
       names.current.set(bitmap, name);
+      if (words) bitmap.mvWords = words;
       return bitmap;
     }),
     save: (options, content) => composeSocialFile({ content, options, name: names.current.get(content) || 'MailVault - social.png' }),

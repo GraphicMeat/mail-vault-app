@@ -51,6 +51,28 @@ describe('renderSocialCard', () => {
     expect(callFor('head').hideTo).toBeFalsy();
   });
 
+  it('wantWords asks both halves for their words and stacks them: the body\'s sit below the header', async () => {
+    renderMessageToCanvas.mockImplementation(async ({ part }) => (part === 'head'
+      ? { ...canvasOf(1640, 200), mvWords: [{ i: 0, text: 'Hi', rects: [[10, 20, 30, 40]] }] }
+      : { ...canvasOf(1640, 3000), mvWords: [{ i: 0, text: 'Yo', mask: null, ti: 0, rects: [[5, 6, 7, 8]] }] }));
+    const out = await renderSocialCard({ message, bodyHtml: '<p>x</p>', wantWords: true });
+    expect(callFor('head').wantWords).toBe(true);
+    expect(callFor('body').wantWords).toBe(true);
+    expect(out.mvRaw.head).toEqual([{ i: 0, text: 'Hi', rects: [[10, 20, 30, 40]] }]);
+    expect(out.mvRaw.body).toEqual([{ i: 0, text: 'Yo', mask: null, ti: 0, rects: [[5, 206, 7, 8]] }]);
+  });
+
+  it('no words asked, or none measured (the alternative renderer): no hit map on the card', async () => {
+    expect((await renderSocialCard({ message, bodyHtml: '<p>x</p>' })).mvRaw).toBeUndefined();
+    expect(callFor('head').wantWords).toBe(false);
+    expect((await renderSocialCard({ message, bodyHtml: '<p>x</p>', wantWords: true })).mvRaw).toBeUndefined();
+  });
+
+  it('dark mail asks its frame for words too', async () => {
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', appearance: 'light', mail: 'dark', wantWords: true });
+    expect(callFor('body').wantWords).toBe(true);
+  });
+
   it('light mail: a plain frame, no scripts, no Dark Reader', async () => {
     await renderSocialCard({ message, bodyHtml: '<p>x</p>', appearance: 'light', mail: 'light' });
     const body = callFor('body');

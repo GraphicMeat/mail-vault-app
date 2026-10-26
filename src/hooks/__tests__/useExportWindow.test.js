@@ -124,6 +124,15 @@ describe('useExportWindow', () => {
     expect(lastReply()).toEqual({ token, requestId: 'r1', ok: true, result: { base64: 'PNG', name: 'x - social.png' } });
   });
 
+  it('sends the card\'s hit map with the PNG, and the clicked words along to the render', async () => {
+    const words = [{ k: 'ana', on: true, rects: [[1, 2, 3, 4]] }];
+    buildSocialContent.mockResolvedValueOnce({ width: 10, height: 10, mvWords: words });
+    const { token } = await opened();
+    await request(token, 'r1', { format: 'social', content: 'card', redact: true, marks: { ana: 'show' } });
+    expect(buildSocialContent).toHaveBeenCalledWith(messages[0], { content: 'card', redact: true, marks: { ana: 'show' } });
+    expect(lastReply()).toEqual({ token, requestId: 'r1', ok: true, result: { base64: 'PNG', name: 'x - social.png', words } });
+  });
+
   it('refuses a Social render without premium, and an app shot once another message is open', async () => {
     const { token } = await opened();
     premium.value = false;

@@ -183,3 +183,59 @@ describe('dictionary reveal', () => {
     expect(EMPTY_DICTIONARY).not.toHaveProperty('reveal');
   });
 });
+
+describe('word marks (a click on a social image)', () => {
+  const ana = buildNameDictionary({ names: ['Ana Brandt'] });
+  const marks = (d, { show = [], hide = [], detect } = {}) => ({
+    ...d, show: new Set(show), hide: new Set(hide), ...(detect === false ? { detect: false } : {}),
+  });
+
+  it('show cuts one word out of a detected name and leaves the rest masked', () => {
+    expect(kinds('Ana Brandt wrote', marks(ana, { show: ['ana'] }))).toEqual([['Brandt', 'name']]);
+    expect(maskString('Ana Brandt wrote', marks(ana, { show: ['ana'] }))).toBe('Ana xxxxxx wrote');
+    expect(kinds('Ana Brandt wrote', marks(ana, { show: ['ana', 'brandt'] }))).toEqual([]);
+  });
+
+  it('show reads a word the way a click does: edge punctuation and case do not matter', () => {
+    expect(kinds('Dear Brandt, hi', marks(ana, { show: ['brandt'] }))).toEqual([]);
+    expect(kinds('write <Ana@X.co>.', marks(ana, { show: ['ana@x.co'] }))).toEqual([]);
+  });
+
+  it('hide masks a word the detector missed, and leaves a detected one as it was', () => {
+    expect(kinds('Project Falcon launches', marks(ana, { hide: ['falcon'] }))).toEqual([['Falcon', 'manual']]);
+    expect(kinds('Ana Brandt wrote', marks(ana, { hide: ['brandt'] }))).toEqual([['Ana Brandt', 'name']]);
+    expect(maskString('Project Falcon, today', marks(ana, { hide: ['falcon'] }))).toBe('Project xxxxxx, today');
+  });
+
+  it('every occurrence of a marked word follows the mark', () => {
+    expect(kinds('Falcon and falcon FALCON', marks(ana, { hide: ['falcon'] })).map(([t]) => t)).toEqual(['Falcon', 'falcon', 'FALCON']);
+  });
+
+  it('detect:false masks only the hide marks: the redact box is off', () => {
+    const off = marks(EMPTY_DICTIONARY, { hide: ['falcon'], detect: false });
+    expect(kinds('mail ana@x.co about Falcon, call +370 612 34567', off)).toEqual([['Falcon', 'manual']]);
+    // Control: without detect:false the same text is found by pattern.
+    expect(kinds('mail ana@x.co', marks(EMPTY_DICTIONARY, { hide: ['falcon'] })).map(([, k]) => k)).toEqual(['email']);
+  });
+
+  it('empty marks change nothing', () => {
+    expect(findPii('Ana Brandt <ana@x.co>', marks(ana))).toEqual(findPii('Ana Brandt <ana@x.co>', ana));
+  });
+
+  it('unionDictionaries carries the marks and detect:false through every path, never mutating an input', () => {
+    const m = marks(EMPTY_DICTIONARY, { show: ['a'], hide: ['b'], detect: false });
+    const u = unionDictionaries(m, ana);
+    expect([...u.show]).toEqual(['a']);
+    expect([...u.hide]).toEqual(['b']);
+    expect(u.detect).toBe(false);
+    expect(u.tokens.has('brandt')).toBe(true);
+    const v = unionDictionaries(ana, marks(EMPTY_DICTIONARY, { hide: ['c'] }));
+    expect([...v.hide]).toEqual(['c']);
+    expect(v.detect).toBeUndefined();
+    const both = unionDictionaries(marks(ana, { hide: ['x'] }), marks(buildNameDictionary({ names: ['Owen Ashcombe'] }), { hide: ['y'], show: ['z'] }));
+    expect([...both.hide].sort()).toEqual(['x', 'y']);
+    expect([...both.show]).toEqual(['z']);
+    expect(EMPTY_DICTIONARY).not.toHaveProperty('hide');
+    expect(unionDictionaries(ana, ana)).not.toHaveProperty('hide');
+  });
+});
