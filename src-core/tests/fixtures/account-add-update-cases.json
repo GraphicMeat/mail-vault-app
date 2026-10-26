@@ -1,0 +1,2393 @@
+{
+  "originalCommit": "d419cc73434ad25805d5ffa751be274ab3819e97",
+  "cases": [
+    {
+      "name": "add-first",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "add-second",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [
+        {
+          "id": "b",
+          "email": "b@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "b",
+              "email": "b@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password"
+            },
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "b",
+          "email": "b@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        },
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-logical",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "A@EXAMPLE.TEST",
+        "imapHost": "H",
+        "password": "synthetic-password"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": null,
+      "error": "errors.duplicateAccount",
+      "effects": [],
+      "persisted": [],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ]
+    },
+    {
+      "name": "same-email-other-host",
+      "kind": "add",
+      "input": {
+        "id": "b",
+        "email": "a@example.test",
+        "imapHost": "other",
+        "password": "synthetic-password"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "b",
+        "email": "a@example.test",
+        "imapHost": "other",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "b",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "b",
+            "email": "a@example.test",
+            "imapHost": "other",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password"
+            },
+            {
+              "id": "b",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "b",
+            "email": "a@example.test",
+            "imapHost": "other",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "b",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        },
+        {
+          "id": "b",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-id-gap",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "other",
+        "password": "synthetic-password"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "other",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "other",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password"
+            },
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "other",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        },
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "no-trim",
+      "kind": "add",
+      "input": {
+        "id": "b",
+        "email": " a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "b",
+        "email": " a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "b",
+              "email": " a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "b",
+            "email": " a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password"
+            },
+            {
+              "id": "b",
+              "email": " a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "b",
+            "email": " a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "b",
+          "email": " a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        },
+        {
+          "id": "b",
+          "email": " a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "security-empty",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "",
+        "createdAt": "caller-time"
+      },
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "count-null",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": null
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": null,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "count-missing",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": {
+        "host": "h"
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": null,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "count-number",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": 3,
+        "fromAddress": "alias@example.test"
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 3,
+          "fromAddress": "alias@example.test"
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "summary-no-host",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": {
+        "messageCount": 3
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": null
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "graph-add",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "authType": "oauth2",
+        "oauth2Transport": "graph",
+        "oauth2AccessToken": "synthetic-at"
+      },
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "authType": "oauth2",
+        "oauth2Transport": "graph",
+        "oauth2AccessToken": "synthetic-at",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": null
+      },
+      "error": null,
+      "effects": [
+        [
+          "graph-sign-in",
+          [
+            "synthetic-at",
+            "a@example.test"
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "authType": "oauth2",
+            "oauth2Transport": "graph",
+            "oauth2AccessToken": "synthetic-at",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "authType": "oauth2",
+              "oauth2Transport": "graph",
+              "oauth2AccessToken": "synthetic-at",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "authType": "oauth2",
+            "oauth2Transport": "graph",
+            "oauth2AccessToken": "synthetic-at",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "authType": "oauth2",
+          "oauth2Transport": "graph",
+          "oauth2AccessToken": "synthetic-at",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "authType": "oauth2",
+          "oauth2Transport": "graph",
+          "oauth2AccessToken": "synthetic-at",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "jmap-basic",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "jmapSessionUrl": "https://jmap.example.test/session",
+        "jmapAuth": "basic",
+        "jmapUsername": "other-login"
+      },
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "jmapSessionUrl": "https://jmap.example.test/session",
+        "jmapAuth": "basic",
+        "jmapUsername": "other-login",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "jmapSessionUrl": "https://jmap.example.test/session",
+              "jmapAuth": "basic",
+              "jmapUsername": "other-login",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "jmapSessionUrl": "https://jmap.example.test/session",
+            "jmapAuth": "basic",
+            "jmapUsername": "other-login",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "jmapSessionUrl": "https://jmap.example.test/session",
+              "jmapAuth": "basic",
+              "jmapUsername": "other-login",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "jmapSessionUrl": "https://jmap.example.test/session",
+            "jmapAuth": "basic",
+            "jmapUsername": "other-login",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "jmapSessionUrl": "https://jmap.example.test/session",
+          "jmapAuth": "basic",
+          "jmapUsername": "other-login",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "jmapSessionUrl": "https://jmap.example.test/session",
+          "jmapAuth": "basic",
+          "jmapUsername": "other-login",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "jmap-bearer",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "jmapSessionUrl": "https://jmap.example.test/session",
+        "jmapAuth": "bearer"
+      },
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "jmapSessionUrl": "https://jmap.example.test/session",
+        "jmapAuth": "bearer",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": {
+          "host": "h",
+          "messageCount": 2,
+          "fromAddress": null
+        }
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "jmapSessionUrl": "https://jmap.example.test/session",
+              "jmapAuth": "bearer",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "jmapSessionUrl": "https://jmap.example.test/session",
+            "jmapAuth": "bearer",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "jmapSessionUrl": "https://jmap.example.test/session",
+              "jmapAuth": "bearer",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "jmapSessionUrl": "https://jmap.example.test/session",
+            "jmapAuth": "bearer",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "jmapSessionUrl": "https://jmap.example.test/session",
+          "jmapAuth": "bearer",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "jmapSessionUrl": "https://jmap.example.test/session",
+          "jmapAuth": "bearer",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "probe-string",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": "string-error",
+      "result": null,
+      "error": "synthetic probe",
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ]
+      ],
+      "persisted": [],
+      "store": []
+    },
+    {
+      "name": "probe-error",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": "error",
+      "result": null,
+      "error": "synthetic probe",
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ]
+      ],
+      "persisted": [],
+      "store": []
+    },
+    {
+      "name": "save-error",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": "save-error",
+      "result": null,
+      "error": "synthetic save",
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [],
+      "store": []
+    },
+    {
+      "name": "activation-pending",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": "activation-pending",
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": null
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "activation-reject",
+      "kind": "add",
+      "input": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password"
+      },
+      "initial": [],
+      "response": "activation-reject",
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "imapSecurity": "ssl",
+        "createdAt": "2026-10-26T00:00:00.000Z",
+        "connectionCheck": null
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "imapSecurity": "ssl",
+              "createdAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "INBOX"
+          ]
+        ],
+        [
+          "aliases",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "imapSecurity": "ssl",
+            "createdAt": "2026-10-26T00:00:00.000Z"
+          }
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "imapSecurity": "ssl",
+          "createdAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "update-missing",
+      "kind": "update",
+      "input": {},
+      "initial": [],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": null,
+      "error": "errors.accountNotFound",
+      "effects": [],
+      "persisted": [],
+      "store": []
+    },
+    {
+      "name": "update-collision",
+      "kind": "update",
+      "input": {
+        "imapHost": "other"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        },
+        {
+          "id": "b",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": null,
+      "error": "errors.duplicateAccount",
+      "effects": [],
+      "persisted": [],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        },
+        {
+          "id": "b",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password"
+        }
+      ]
+    },
+    {
+      "name": "update-own",
+      "kind": "update",
+      "input": {
+        "displayName": "new",
+        "updatedAt": "caller-time"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "displayName": "new",
+        "updatedAt": "2026-10-26T00:00:00.000Z"
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "displayName": "new",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "displayName": "new",
+            "updatedAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "displayName": "new",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "displayName": "new",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "displayName": "new",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "update-active-host",
+      "kind": "update",
+      "input": {
+        "imapHost": "other"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "other",
+        "password": "synthetic-password",
+        "updatedAt": "2026-10-26T00:00:00.000Z"
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "other",
+            "password": "synthetic-password",
+            "updatedAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "Custom"
+          ]
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "update-inactive-host",
+      "kind": "update",
+      "input": {
+        "imapHost": "other"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": "inactive",
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "other",
+        "password": "synthetic-password",
+        "updatedAt": "2026-10-26T00:00:00.000Z"
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "other",
+            "password": "synthetic-password",
+            "updatedAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "update-activation-reject",
+      "kind": "update",
+      "input": {
+        "imapHost": "other"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password"
+        }
+      ],
+      "response": "activation-reject",
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "other",
+        "password": "synthetic-password",
+        "updatedAt": "2026-10-26T00:00:00.000Z"
+      },
+      "error": null,
+      "effects": [
+        [
+          "imap",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "other",
+            "password": "synthetic-password",
+            "updatedAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "other",
+              "password": "synthetic-password",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "activate",
+          [
+            "a",
+            "Custom"
+          ]
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "other",
+          "password": "synthetic-password",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "graph-exchange",
+      "kind": "update",
+      "input": {
+        "oauth2AccessToken": "synthetic-new-at"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "oauth2Transport": "graph"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "oauth2Transport": "graph",
+        "oauth2AccessToken": "synthetic-new-at",
+        "updatedAt": "2026-10-26T00:00:00.000Z"
+      },
+      "error": null,
+      "effects": [
+        [
+          "graph-sign-in",
+          [
+            "synthetic-new-at",
+            "a@example.test"
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "oauth2Transport": "graph",
+            "oauth2AccessToken": "synthetic-new-at",
+            "updatedAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "oauth2Transport": "graph",
+              "oauth2AccessToken": "synthetic-new-at",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "oauth2Transport": "graph",
+          "oauth2AccessToken": "synthetic-new-at",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "oauth2Transport": "graph",
+          "oauth2AccessToken": "synthetic-new-at",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "name": "graph-stored",
+      "kind": "update",
+      "input": {
+        "displayName": "new"
+      },
+      "initial": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "oauth2Transport": "graph"
+        }
+      ],
+      "response": {
+        "host": "h",
+        "messageCount": 2
+      },
+      "result": {
+        "id": "a",
+        "email": "a@example.test",
+        "imapHost": "h",
+        "password": "synthetic-password",
+        "oauth2Transport": "graph",
+        "displayName": "new",
+        "updatedAt": "2026-10-26T00:00:00.000Z"
+      },
+      "error": null,
+      "effects": [
+        [
+          "graph-stored",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "oauth2Transport": "graph",
+              "displayName": "new",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ],
+        [
+          "save",
+          {
+            "id": "a",
+            "email": "a@example.test",
+            "imapHost": "h",
+            "password": "synthetic-password",
+            "oauth2Transport": "graph",
+            "displayName": "new",
+            "updatedAt": "2026-10-26T00:00:00.000Z"
+          }
+        ],
+        [
+          "store",
+          [
+            {
+              "id": "a",
+              "email": "a@example.test",
+              "imapHost": "h",
+              "password": "synthetic-password",
+              "oauth2Transport": "graph",
+              "displayName": "new",
+              "updatedAt": "2026-10-26T00:00:00.000Z"
+            }
+          ]
+        ]
+      ],
+      "persisted": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "oauth2Transport": "graph",
+          "displayName": "new",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ],
+      "store": [
+        {
+          "id": "a",
+          "email": "a@example.test",
+          "imapHost": "h",
+          "password": "synthetic-password",
+          "oauth2Transport": "graph",
+          "displayName": "new",
+          "updatedAt": "2026-10-26T00:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "originalCommit": "d419cc73434ad25805d5ffa751be274ab3819e97",
+  "blobs": {
+    "addAccount": "e7b21ae85aedcfddbce3e7140e1846bd6a193af7",
+    "updateAccount": "170aab3494c6b14aff07027ef1672b625e84b9f6",
+    "accounts": "1b4e980f779c61bd75d94ef3cfe14097ee0f6b8b",
+    "graphConfig": "c3ba1418c98ced06fca6e2f3fe6669ff87ec98d2"
+  },
+  "harness": "9474e896434dfc3fbecb77ca10796fe12c87ec14b53584571589382bf5a17087",
+  "node": "v24.19.0",
+  "lockfile": "e028bb112fa145998cdaaf2a94a20a66b4a56d86895d830207e7330af9871294",
+  "command": "env MV_CAPTURE_ACCOUNT_WORKFLOWS=1 npx vitest run src-core/tests/fixtures/gen/account-add-update-cases.test.js",
+  "output": "31b66a7c26d4e0564ec501440b2e63932906f204019f40cd3412978156d22ca8"
+}
