@@ -961,14 +961,8 @@ fn normalize_candidate(
             json!(url.host_str().unwrap().to_ascii_lowercase()),
         );
     }
-    let mut config_value = candidate.clone();
-    config_value
-        .as_object_mut()
-        .unwrap()
-        .entry("imapHost")
-        .or_insert(json!(""));
-    let config: mailvault_core::imap::ImapConfig =
-        serde_json::from_value(config_value).map_err(|_| AccountSaveError::Invalid)?;
+    let config =
+        credentials::config_from_record(candidate).map_err(|_| AccountSaveError::Invalid)?;
     if graph && !config.is_oauth2()
         || jmap && config.is_oauth2()
         || !graph && config.host.is_empty()
@@ -1195,8 +1189,8 @@ async fn run_account_workflow(
                                 mailvault_core::net::classify_connection_error(&error.message)
                                     .code(),
                             ),
-                            Some(&config.host),
-                            Some(config.effective_port()),
+                            None,
+                            None,
                         ))
                     }
                 }
@@ -2964,6 +2958,9 @@ mod tests {
                     Err(_) => return,
                 }
             };
+            // Windows inherits the listener's nonblocking mode on accept.
+            // This request reader needs the two-second blocking read below.
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
@@ -3088,5 +3085,195 @@ mod tests {
         assert!(!rig.blob().contains_key("a"));
         assert_eq!(rig.stored("b")["password"], "synthetic-competing");
         assert_eq!(rig.meta().as_array().unwrap().len(), 1);
+    }
+    fn s23_fix1_graph_replies(probes: usize) -> Vec<(u16, String)> {
+        let batch = [
+            "inbox",
+            "sentitems",
+            "drafts",
+            "deleteditems",
+            "junkemail",
+            "archive",
+        ]
+        .iter()
+        .map(|id| json!({"id":id,"status":200,"body":{"id":id}}))
+        .collect::<Vec<_>>();
+        (0..probes).flat_map(|_| [
+            (200, json!({"value":[{"id":"inbox","displayName":"Inbox","totalItemCount":0,"unreadItemCount":0}]}).to_string()),
+            (200, json!({"responses":batch}).to_string()),
+        ]).collect()
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_fix1_hostless_graph_add_then_valid_stored_token_metadata_update() {
+        use mock_imap::oauth::{GrantSpec, MockOAuth, TokenAuthority};
+        let rig = Rig::new(vec![], vec![]);
+        let authority = TokenAuthority::new();
+        let signed = authority.sign_in(GrantSpec {
+            rotate: true,
+            ..Default::default()
+        });
+        let oauth = MockOAuth::start(authority.clone());
+        rig.state
+            .oauth2
+            .set_token_endpoint_for_tests(Some(oauth.origin()));
+        let _graph = crate::handlers::graph::test_graph_mock_with(s23_fix1_graph_replies(2));
+        let account = json!({"id":"g","email":"g@example.test","authType":"oauth2","oauth2Provider":"microsoft","oauth2Transport":"graph","oauth2AccessToken":signed.access_token,"oauth2RefreshToken":signed.refresh_token,"oauth2ExpiresAt":signed.expires_at});
+        assert_eq!(
+            rig.call("accounts.add", json!({"account":account}))
+                .await
+                .unwrap()["ok"],
+            true
+        );
+        rig.state.tokens.drain_rechecks();
+        assert!(rig.stored("g").get("imapHost").is_none());
+        assert!(rig.meta()[0].get("imapHost").is_none());
+        let result = account_workflow(&rig.state, &json!({"id":"g","fields":{"displayName":"hostless metadata"},"expected":{"fields":{},"absent":[]}}), json!(1), false).await;
+        assert!(
+            result.error.is_none(),
+            "accepted hostless Graph must support a valid-token metadata update: {}",
+            result
+                .error
+                .as_ref()
+                .map(|e| e.message.as_str())
+                .unwrap_or("none")
+        );
+        assert_eq!(result.result.unwrap()["ok"], true);
+        assert!(rig.stored("g").get("imapHost").is_none());
+        assert!(rig.meta()[0].get("imapHost").is_none());
+        assert_eq!(crate::handlers::graph::test_graph_requests().len(), 4);
+        assert!(authority.posts().is_empty());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_fix1_hostless_graph_expired_update_preserves_one_rotation_through_ack_and_save() {
+        use mock_imap::oauth::{GrantSpec, MockOAuth, TokenAuthority};
+        let rig = Rig::new(vec![], vec![]);
+        let authority = TokenAuthority::new();
+        let signed = authority.sign_in(GrantSpec {
+            rotate: true,
+            ..Default::default()
+        });
+        let oauth = MockOAuth::start(authority.clone());
+        rig.state
+            .oauth2
+            .set_token_endpoint_for_tests(Some(oauth.origin()));
+        let _graph = crate::handlers::graph::test_graph_mock_with(s23_fix1_graph_replies(3));
+        let account = json!({"id":"g","email":"g@example.test","authType":"oauth2","oauth2Provider":"microsoft","oauth2Transport":"graph","oauth2AccessToken":signed.access_token,"oauth2RefreshToken":signed.refresh_token,"oauth2ExpiresAt":signed.expires_at});
+        assert_eq!(
+            rig.call("accounts.add", json!({"account":account}))
+                .await
+                .unwrap()["ok"],
+            true
+        );
+        rig.state.tokens.drain_rechecks();
+        authority.advance(Duration::from_secs(3600));
+        rig.state
+            .tokens
+            .advance_clock_for_tests(Duration::from_secs(3600));
+        let (entered, release) = arm_probe(&rig);
+        let params = json!({"id":"g","fields":{"displayName":"after hostless refresh"},"expected":{"fields":{},"absent":[]}});
+        let workflow = account_workflow(&rig.state, &params, json!(1), false);
+        tokio::pin!(workflow);
+        tokio::select! {
+            notice=entered => notice.unwrap(),
+            result=&mut workflow => {
+                let posts = authority.posts();
+                assert_eq!(posts.len(), 1);
+                assert_eq!(posts[0].status, 200);
+                assert_eq!(posts[0].refresh_token, signed.refresh_token);
+                assert!(result.error.is_none(), "successful consumed hostless Graph rotation must reach its provider probe: {}", result.error.as_ref().map(|e| e.message.as_str()).unwrap_or("none"));
+                panic!("hostless Graph workflow completed without its successful probe barrier");
+            }
+        }
+        assert_eq!(authority.posts().len(), 1);
+        assert_eq!(rig.state.tokens.unsaved().len(), 1);
+        let worker = crate::oauth_tokens::TestPersistenceWorker::start(&rig.state);
+        worker.turn_after(0).await;
+        worker.stop().await;
+        let rotated = rig.stored("g");
+        assert_ne!(rotated["oauth2RefreshToken"], json!(signed.refresh_token));
+        assert!(rotated.get("imapHost").is_none());
+        assert!(
+            rig.state.tokens.unsaved().is_empty(),
+            "exact ACK must complete without inventing a host"
+        );
+        release.send(()).unwrap();
+        let result = workflow.await;
+        assert!(result.error.is_none());
+        assert_eq!(result.result.unwrap()["ok"], true);
+        rig.state.tokens.drain_rechecks();
+        assert!(rig.meta()[0].get("imapHost").is_none());
+        assert!(rig.stored("g").get("imapHost").is_none());
+        let (_, snapshot) = credentials::resolve_account_with_record_quiet("g")
+            .await
+            .unwrap();
+        assert!(snapshot.record.get("imapHost").is_none());
+        assert_eq!(rig.call("accounts.update", json!({"id":"g","fields":{"displayName":"fresh hostless retry"},"expected":{"fields":{},"absent":[]}})).await.unwrap()["ok"], true);
+        assert_eq!(
+            authority.posts().len(),
+            1,
+            "no consumed predecessor replay after ACK/save/read"
+        );
+        assert_eq!(crate::handlers::graph::test_graph_requests().len(), 6);
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_fix1_hostless_graph_real_quiet_read_keeps_snapshot_absence() {
+        let row = json!({"id":"g","email":"g@example.test","authType":"oauth2","oauth2Provider":"microsoft","oauth2Transport":"graph","oauth2AccessToken":"synthetic-at","oauth2RefreshToken":"synthetic-rt","oauth2ExpiresAt":i64::MAX});
+        let rig = Rig::new(vec![row.clone()], vec![clean(row)]);
+        let result = credentials::resolve_account_with_record_quiet("g").await;
+        assert!(
+            result.is_ok(),
+            "accepted hostless Graph must decode for an actual quiet current-record read"
+        );
+        let (config, snapshot) = result.unwrap();
+        assert!(config.uses_graph());
+        assert_eq!(config.host, "");
+        assert!(snapshot.record.get("imapHost").is_none());
+        assert!(rig.stored("g").get("imapHost").is_none());
+    }
+    async fn s23_fix1_failed_oauth_source(graph: bool) {
+        use mock_imap::oauth::{Failure, GrantSpec, MockOAuth, TokenAuthority};
+        let authority = TokenAuthority::new();
+        let signed = authority.sign_in(GrantSpec {
+            rotate: true,
+            ..Default::default()
+        });
+        let mail = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let mut row = json!({"id":"a","email":"a@example.test","imapHost":mail.host(),"imapPort":mail.port(),"imapSecure":false,"authType":"oauth2","oauth2Provider":"google","oauth2AccessToken":signed.access_token,"oauth2RefreshToken":signed.refresh_token,"oauth2ExpiresAt":1});
+        if graph {
+            row["oauth2Transport"] = json!("graph");
+            row["oauth2Provider"] = json!("microsoft");
+        }
+        let rig = Rig::new(vec![row.clone()], vec![clean(row)]);
+        let oauth = MockOAuth::start(authority.clone());
+        rig.state
+            .oauth2
+            .set_token_endpoint_for_tests(Some(oauth.origin()));
+        let _graph = crate::handlers::graph::test_graph_mock_with(vec![]);
+        authority.fail_next(Failure::ServerError);
+        let before_blob = rig.blob();
+        let before_meta = rig.meta();
+        let reply = rig.call("accounts.update", json!({"id":"a","fields":{"displayName":"must not save"},"expected":{"fields":{},"absent":[]}})).await.unwrap();
+        assert_eq!(authority.posts().len(), 1);
+        assert_eq!(authority.posts()[0].status, 503);
+        assert_eq!(mail.connection_count(), 0);
+        assert!(crate::handlers::graph::test_graph_requests().is_empty());
+        assert_eq!(rig.blob(), before_blob);
+        assert_eq!(rig.meta(), before_meta);
+        assert_eq!(reply["ok"], false);
+        assert_eq!(reply["stage"], "probe");
+        assert_eq!(reply["error"], "errors.conn.couldReachMailServerCheck");
+        assert!(reply["errorCode"].is_string());
+        assert!(
+            reply["host"].is_null() && reply["port"].is_null(),
+            "a failed token POST cannot name an unattempted IMAP destination"
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_fix1_failed_graph_oauth_post_has_no_imap_location() {
+        s23_fix1_failed_oauth_source(true).await;
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_fix1_failed_imap_oauth_post_has_no_imap_location() {
+        s23_fix1_failed_oauth_source(false).await;
     }
 }

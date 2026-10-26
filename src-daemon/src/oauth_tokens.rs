@@ -625,8 +625,8 @@ fn same_refresh_source(left: &Value, right: &Value) -> bool {
     // unchanged-record path above retains its original exact comparison.
     grant_of(left).is_some()
         && grant_of(right).is_some()
-        && serde_json::from_value::<ImapConfig>(left.clone()).is_ok()
-        && serde_json::from_value::<ImapConfig>(right.clone()).is_ok()
+        && credentials::config_from_record(left).is_ok()
+        && credentials::config_from_record(right).is_ok()
 }
 
 /// The grant, token and expiry of a stored record; non-OAuth records or
@@ -1028,8 +1028,7 @@ async fn retire_pending(state: &DaemonState, account_id: &str) -> Result<(), Tok
         else {
             return Ok(());
         };
-        serde_json::from_value::<ImapConfig>(pending.source_record.clone())
-            .map_err(|_| stale_snapshot())?
+        credentials::config_from_record(&pending.source_record).map_err(|_| stale_snapshot())?
     };
     #[cfg(test)]
     {
@@ -1216,7 +1215,7 @@ pub(crate) async fn resolve_probe(
                 tokio::time::Instant::now() < deadline && !tx.is_closed()
             })
             .await?;
-            let mut config: ImapConfig = serde_json::from_value(resolved.snapshot.record.clone())
+            let mut config: ImapConfig = credentials::config_from_record(&resolved.snapshot.record)
                 .map_err(|_| stale_snapshot())?;
             config.access_token = resolved.token;
             let mut tuple = resolved.snapshot.record.clone();
@@ -4520,6 +4519,33 @@ mod tests {
         );
         assert!(rig.state.tokens.unsaved().is_empty());
         assert_eq!(test_token_posts().len(), 2);
+    }
+    #[test]
+    fn s23_fix1_hostless_graph_source_comparison_preserves_only_allowed_metadata_differences() {
+        let original = json!({"id":"g","email":"g@example.test","authType":"oauth2","oauth2Provider":"microsoft","oauth2Transport":"graph","oauth2AccessToken":"synthetic-at","oauth2RefreshToken":"synthetic-rt","oauth2ExpiresAt":123});
+        for field in ["updatedAt", "sentFolderOverride"] {
+            let mut changed = original.clone();
+            changed[field] = json!("synthetic-presentation");
+            assert!(
+                same_refresh_source(&original, &changed),
+                "hostless Graph must retain the existing {field} exception"
+            );
+            assert!(original.get("imapHost").is_none() && changed.get("imapHost").is_none());
+        }
+        let mut invented = original.clone();
+        invented["imapHost"] = json!("");
+        assert!(!same_refresh_source(&original, &invented));
+        let mut non_graph = original.clone();
+        non_graph.as_object_mut().unwrap().remove("oauth2Transport");
+        let mut malformed = non_graph.clone();
+        malformed["updatedAt"] = json!("synthetic-presentation");
+        assert!(
+            !same_refresh_source(&non_graph, &malformed),
+            "non-Graph missing-host validation stays strict"
+        );
+        let mut unknown = original.clone();
+        unknown["unknownPresentation"] = json!("changed");
+        assert!(!same_refresh_source(&original, &unknown));
     }
     include!("oauth_persistence_tests.rs");
 }

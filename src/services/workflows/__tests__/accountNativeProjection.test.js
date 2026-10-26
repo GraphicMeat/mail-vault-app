@@ -147,3 +147,17 @@ it('overlapping workflows enter transport before either response settles with co
   expect(h.state.accounts.map(a => a.id).sort()).toEqual(['a', 'b']);
   expect(() => keychain.assertLegacyWriteAllowed()).not.toThrow();
 });
+
+it('OAuth source failures with unknown location keep classification without a mail destination', async () => {
+  for (const errorCode of ['blocked_or_timeout', 'other']) {
+    h.reply = { ok: false, stage: 'probe', error: 'errors.conn.couldReachMailServerCheck', errorCode, host: null, port: null };
+    let failure; try { await addAccount({ id: 'a', email: 'a@example.test', imapHost: 'unattempted.example.test', imapPort: 993 }); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ errorCode, host: null, port: null });
+    const described = describeConnectionError(failure);
+    expect(described.message).not.toContain('unattempted.example.test');
+    expect(described.message).not.toContain('port 993');
+    if (errorCode === 'blocked_or_timeout') expect(described.message).toContain('The server did not answer in time.');
+    expect(h.state.accounts).toEqual([]);
+    expect(() => keychain.assertLegacyWriteAllowed()).not.toThrow();
+  }
+});

@@ -343,8 +343,41 @@ fn account_from_blob(
     let raw = credentials
         .get(account_id)
         .ok_or_else(|| format!("no credentials found for account {account_id}"))?;
-    serde_json::from_str::<ImapConfig>(raw)
-        .map_err(|e| format!("failed to parse credentials for account {account_id}: {e}"))
+    match serde_json::from_str::<ImapConfig>(raw) {
+        Ok(config) => Ok(config),
+        Err(error) => {
+            // Keep the raw typed parser's refusal of duplicate/malformed fields.
+            // Only its missing-host error may describe an accepted Graph record.
+            if error.to_string().starts_with("missing field `imapHost`") {
+                if let Ok(record) = serde_json::from_str::<Value>(raw) {
+                    if record.get("authType").and_then(Value::as_str) == Some("oauth2")
+                        && record.get("oauth2Transport").and_then(Value::as_str) == Some("graph")
+                        && record.get("imapHost").is_none()
+                    {
+                        return config_from_record(&record).map_err(|e| {
+                            format!("failed to parse credentials for account {account_id}: {e}")
+                        });
+                    }
+                }
+            }
+            Err(format!(
+                "failed to parse credentials for account {account_id}: {error}"
+            ))
+        }
+    }
+}
+
+/// Decode a temporary mail config without changing the authoritative record.
+/// Graph has no IMAP destination, and accepted Graph records may omit imapHost.
+/// Every other transport still requires the stored host field.
+pub(crate) fn config_from_record(record: &Value) -> Result<ImapConfig, serde_json::Error> {
+    let mut value = record.clone();
+    if value.get("oauth2Transport").and_then(Value::as_str) == Some("graph") {
+        if let Some(object) = value.as_object_mut() {
+            object.entry("imapHost").or_insert_with(|| json!(""));
+        }
+    }
+    serde_json::from_value(value)
 }
 
 /// `resolve_account_credentials` off the caller's async thread and under a
@@ -3078,6 +3111,31 @@ mod tests {
         assert_eq!(
             std::fs::read(dir.path().join("credentials.sealed")).unwrap(),
             before
+        );
+    }
+
+    #[test]
+    fn s23_fix1_duplicate_stored_fields_keep_typed_parser_refusal() {
+        let mut accepted = Vec::new();
+        for (kind, raw) in [
+            (
+                "imap",
+                r#"{"email":"a@example.test","imapHost":"one.test","imapHost":"two.test"}"#,
+            ),
+            (
+                "graph",
+                r#"{"email":"a@example.test","email":"b@example.test","authType":"oauth2","oauth2Transport":"graph"}"#,
+            ),
+        ] {
+            let blob = HashMap::from([("a".to_string(), raw.to_string())]);
+            match account_from_blob(&blob, "a") {
+                Ok(_) => accepted.push(kind),
+                Err(error) => assert!(error.contains("duplicate field"), "{error}"),
+            }
+        }
+        assert!(
+            accepted.is_empty(),
+            "duplicate fields accepted: {accepted:?}"
         );
     }
 
