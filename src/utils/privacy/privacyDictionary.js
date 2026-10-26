@@ -40,7 +40,25 @@ export function setPrivacyDictionary(dict, { ready }) {
   current = dict || EMPTY_DICTIONARY;
   usePrivacyDictStore.setState(s => ({ version: s.version + 1, ready: !!ready }));
 }
-export const getPrivacyDictionary = () => current;
+// The dictionary with a capture's word marks on it, built once per (dictionary, marks).
+let marked = null;
+export function getPrivacyDictionary() {
+  const marks = usePrivacyStore.getState().captureMarks;
+  if (!marks) return current;
+  if (marked?.base !== current || marked.marks !== marks) {
+    marked = {
+      base: current,
+      marks,
+      dict: {
+        ...current,
+        ...(marks.show?.size ? { show: marks.show } : {}),
+        ...(marks.hide?.size ? { hide: marks.hide } : {}),
+        ...(marks.detect === false ? { detect: false } : {}),
+      },
+    };
+  }
+  return marked.dict;
+}
 export const isPrivacyDictionaryReady = () => usePrivacyDictStore.getState().ready;
 
 // An export waits under its busy spinner; a cold contacts index can take seconds.

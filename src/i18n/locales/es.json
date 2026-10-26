@@ -939,6 +939,7 @@
   "export.social.radius": "Esquinas",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "Usar el radio de esquina de las ventanas de macOS",
+  "export.social.redactTool": "Herramienta de ocultar",
   "export.social.redactForced": "Siempre activado mientras el modo privacidad esté activo.",
   "export.social.revealSender": "Mostrar remitente",
   "export.social.revealSenderHint": "Mantiene visible la dirección del remitente de spam. Tus propios datos siguen ocultos.",

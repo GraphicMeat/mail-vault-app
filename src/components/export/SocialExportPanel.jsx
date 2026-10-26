@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2, Sun, Moon, Palette } from 'lucide-react';
+import { Loader, ImagePlus, Minus, Plus, ExternalLink, PictureInPicture2, Sun, Moon, Palette, EyeOff } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { useT } from '../../i18n/index.js';
@@ -80,6 +80,18 @@ function MailThemeToggle({ dark, onToggle }) {
   );
 }
 
+// The preview's tool: on, a click on a word redacts or reveals it; off, a click does nothing.
+function RedactToolToggle({ on, onToggle }) {
+  const t = useT();
+  return (
+    <button type="button" data-testid="social-redact-tool" aria-pressed={on} aria-label={t('export.social.redactTool')}
+      title={t('export.social.redactTool')} onClick={onToggle}
+      className={`rounded-md border p-1.5 transition-colors ${on ? 'border-mail-accent bg-mail-accent-tint text-mail-text' : 'border-mail-border bg-mail-surface text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'}`}>
+      <EyeOff size={14} aria-hidden="true" />
+    </button>
+  );
+}
+
 function Swatch({ label, selected, style, onClick, children }) {
   return (
     <button type="button" aria-label={label} aria-pressed={selected} onClick={onClick} style={style}
@@ -152,11 +164,12 @@ const sameBackground = (a, b) => a?.type === b?.type && (a.type !== 'gradient' &
  * panel's own choices and busy state); null while that element mounts, and
  * left out, the button sits in the footer.
  *
- * On a card, a click on a word of the preview marks it: a masked word is shown,
- * a readable one hidden, everywhere it appears (`marks`, `{ [wordKey]: 'show' |
- * 'hide' }`, per open like redact, never stored). The card is rebuilt with the
- * marks once the clicks settle; until then the old picture stays up. The app
- * window is a shot of the live UI and takes none.
+ * With the Redact tool on (it starts on), a click on a word of the preview marks
+ * it: a masked word is shown, a readable one hidden, everywhere it appears
+ * (`marks`, `{ [wordKey]: 'show' | 'hide' }`, per open like redact, never
+ * stored). The card or the app window is rebuilt with the marks once the clicks
+ * settle; until then the old picture stays up. With the tool off a click does
+ * nothing.
  * ponytail: `account` and `mailbox` are accepted for parity with the other
  * formats but unused: a social card carries no export footer.
  */
@@ -174,6 +187,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   // Per open, like redact: a spam message names its sender, anything else does not.
   const [revealSender, setRevealSender] = useState(() => initial?.revealSender ?? isSpamMessage(message, useMailStore.getState()));
   const [marks, setMarks] = useState(() => initial?.marks ?? {});
+  const [tool, setTool] = useState(() => initial?.tool ?? true);
   // The marks the card was last asked for: they settle like the Email width.
   const [renderMarks, setRenderMarks] = useState(marks);
   const [zoom, setZoom] = useState('fit');
@@ -216,7 +230,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     const timer = setTimeout(() => setRenderMarks(marks), WIDTH_SETTLE_MS);
     return () => clearTimeout(timer);
   }, [marks]);
-  const wordMarks = isCard && Object.keys(renderMarks).length ? renderMarks : null;
+  const wordMarks = Object.keys(renderMarks).length ? renderMarks : null;
   const markKey = wordMarks ? marksKey(wordMarks) : '';
   const marksSettling = marksKey(marks) !== marksKey(renderMarks);
   const baseKey = useRef('');
@@ -379,7 +393,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
 
   // The word under a pointer on the preview, from the hit map the card carries.
   const wordUnder = (e) => {
-    if (!isCard || !content?.mvWords?.length || !full) return null;
+    if (!tool || !content?.mvWords?.length || !full) return null;
     const box = e.currentTarget.getBoundingClientRect();
     if (!box.width || !box.height) return null;
     const layout = layoutSocial({ contentW: content.width, contentH: content.height, size: SIZE_PRESETS[prefs.size] ?? null, padding: prefs.padding, chrome: prefs.chrome });
@@ -389,7 +403,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
     const word = wordUnder(e);
     if (word) setMarks(m => ({ ...m, [word.k]: word.on ? 'show' : 'hide' }));
   };
-  const hasWords = isCard && content?.mvWords?.length > 0;
+  const hasWords = content?.mvWords?.length > 0;
   const zoomButton = 'h-7 min-w-7 px-1.5 rounded-md border border-mail-border text-xs text-mail-text-muted hover:text-mail-text hover:border-mail-accent/50 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed';
   const preview = (
     <div className={`flex flex-col gap-2 min-w-0 ${filled ? 'flex-1 min-h-0' : ''}`}>
@@ -403,6 +417,9 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
               onClick={clickWord} onMouseMove={(e) => { e.currentTarget.style.cursor = wordUnder(e) ? 'pointer' : ''; }}
               className="m-auto shrink-0 rounded-md" style={background.type === 'transparent' ? { background: CHECKERBOARD } : undefined} />
           )}
+        </div>
+        <div className="absolute top-2 left-2">
+          <RedactToolToggle on={tool} onToggle={() => setTool(v => !v)} />
         </div>
         <div className="absolute top-2 right-2">
           <MailThemeToggle dark={mailTheme === 'dark'} onToggle={() => update({ mailTheme: mailTheme === 'dark' ? 'light' : 'dark' })} />
@@ -426,7 +443,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
           {t('export.social.zoomActual')}
         </button>
       </div>
-      {hasWords && <p className="text-xs text-mail-text-muted">{t('export.social.clickHint')}</p>}
+      {hasWords && tool && <p className="text-xs text-mail-text-muted">{t('export.social.clickHint')}</p>}
       {Object.keys(marks).length > 0 && (
         <div>
           <Button variant="ghost" size="sm" onClick={() => setMarks({})}>{t('export.social.marksReset')}</Button>
@@ -438,7 +455,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
   const handOff = onPopOut ?? onPopIn;
   const windowButton = handOff && (
     <Button variant="ghost" size="sm" className={headerSlot ? '' : 'mr-auto'} disabled={busy}
-      onClick={() => handOff({ redact, revealSender, prefs, ...(Object.keys(marks).length ? { marks } : {}) })}>
+      onClick={() => handOff({ redact, revealSender, prefs, ...(Object.keys(marks).length ? { marks } : {}), ...(tool ? {} : { tool: false }) })}>
       {onPopOut ? <ExternalLink size={14} aria-hidden="true" /> : <PictureInPicture2 size={14} aria-hidden="true" />}
       {onPopOut ? t('export.social.popOut') : t('export.social.popIn')}
     </Button>
@@ -609,7 +626,7 @@ export function SocialExportPanel({ message, onDone, source, detached = false, i
       <div className="flex items-center justify-end gap-2">
         {headerSlot === undefined && windowButton}
         <Button variant="ghost" size="sm" onClick={onDone} disabled={busy}>{detached ? t('common.close') : t('common.cancel')}</Button>
-        <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content || (isCard && (width !== renderWidth || marksSettling))}>
+        <Button variant="primary" size="sm" onClick={save} disabled={busy || loading || !content || (marksSettling || (isCard && width !== renderWidth))}>
           {busy && <Loader size={14} className="animate-spin" />}{t('export.social.save')}
         </Button>
       </div>

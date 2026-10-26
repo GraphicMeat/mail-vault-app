@@ -939,6 +939,7 @@
   "export.social.radius": "Ecken",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "Eckenradius wie bei macOS-Fenstern verwenden",
+  "export.social.redactTool": "Schwärzen-Werkzeug",
   "export.social.redactForced": "Immer an, solange der Privatsphäre-Modus an ist.",
   "export.social.revealSender": "Absender anzeigen",
   "export.social.revealSenderHint": "Lässt die Adresse des Spam-Absenders sichtbar. Eigene Angaben bleiben verborgen.",

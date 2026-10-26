@@ -939,6 +939,7 @@
   "export.social.radius": "角の丸み",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "macOSのウインドウと同じ角の丸みにする",
+  "export.social.redactTool": "隠しツール",
   "export.social.redactForced": "プライバシーモードがオンの間は常にオンです。",
   "export.social.revealSender": "送信者を表示",
   "export.social.revealSenderHint": "迷惑メールの送信者のアドレスは表示したままにします。自分の情報は伏せたままです。",

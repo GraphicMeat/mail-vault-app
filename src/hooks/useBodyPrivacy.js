@@ -76,6 +76,8 @@ export function useBodyPrivacy(iframeRef, contentKey, { message = null, readyTim
   const active = usePrivacyActive();
   const enabled = usePrivacyStore(s => s.enabled);
   const version = usePrivacyDictStore(s => s.version);
+  // A social capture's word marks change what the same document masks.
+  const marks = usePrivacyStore(s => s.captureMarks);
   // Keyed by the names, not the object: callers often pass a fresh merge per render.
   const ownKey = useMemo(() => (message ? collectPrivacyNames({ emails: [message] }).join('\u0000') : ''), [message]);
   const ownDict = useMemo(() => (ownKey ? buildNameDictionary({ names: ownKey.split('\u0000') }) : null), [ownKey]);
@@ -129,7 +131,7 @@ export function useBodyPrivacy(iframeRef, contentKey, { message = null, readyTim
       observer?.disconnect();
       clearTimeout(timer);
     };
-  }, [contentKey, active, version, ownDict, readyTimeoutMs]);
+  }, [contentKey, active, version, ownDict, readyTimeoutMs, marks]);
 
   // Option-hold peek from inside the frame. Its own effect: a peek flips
   // `active` above, and re-running this with it would dispose the listener
