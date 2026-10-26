@@ -180,12 +180,12 @@ for (const rel of ['docs.html','faq.html','blog.html',...files]) {
     }
     return `<!-- help-shell:start --><div class="mv-wrap mv-help-layout">${sidebar(rel)}<!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">${content}${demo(rel)}<!-- help-version:start --><footer class="mv-help-review">${versionInfo}</footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->`;
   });
-  html = html.replace('</head>','<link rel="stylesheet" href="/assets/help-center.css?v=1">\n</head>');
+  html = html.replace('</head>','<link rel="stylesheet" href="/assets/help-center.css?v=2">\n</head>');
   html = html.replace(/<a\b[^>]*href="\/demo\/[^>]*>/g, tag => tag.includes('aria-label=') ? tag : tag.replace(/>$/, ' aria-label="Open the MailVault demo in a new window">'));
   if (isHub && !html.includes('src="/search.js')) html = html.replace('</body>','<script defer src="/search.js?v=1"></script>\n</body>');
   if (isHub) html = html.replace(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g,(block,json) => { try { return JSON.parse(json)['@type'] === 'FAQPage' ? '' : block; } catch { return block; } });
   const lightbox = '<dialog class="mv-help-lightbox" aria-label="Product screenshot"><button type="button">Close screenshot</button><p></p></dialog>';
-  html = html.replace('</body>',`${lightbox}<script defer src="/assets/help-center.js?v=1"></script>\n</body>`);
+  html = html.replace('</body>',`${lightbox}<script defer src="/assets/help-center.js?v=2"></script>\n</body>`);
   // The existing FAQ hash forwarder still reads the preserved question IDs.
   fs.writeFileSync(path.join(ROOT,rel),html);
 }

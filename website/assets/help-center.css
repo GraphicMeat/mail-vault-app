@@ -86,3 +86,8 @@
  .mv-help-search button { padding-inline:12px; }
  .mv-help-main .grid { grid-template-columns:minmax(0,1fr); }
 }
+
+/* In-place article navigation (help-center.js): the old article stays readable while the next one loads. */
+.mv-help-loading { cursor:progress; }
+.mv-help-loading .mv-help-main { opacity:.6; transition:opacity .15s ease; }
+@media (prefers-reduced-motion:reduce) { .mv-help-loading .mv-help-main { transition:none; } }
