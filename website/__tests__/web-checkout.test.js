@@ -380,6 +380,16 @@ describe('mintActivationToken for an email that already has a billing row', () =
     expect(db.state.tokens).toEqual([]);
   });
 
+  // The email checkout presets `customer:` from an unverified email, so the payer
+  // can be the row's own Stripe customer without owning the email.
+  it('refuses a session from the email checkout, even when its customer is the row\'s own', async () => {
+    const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_old' }], subs: [priorSub(5)] });
+    const session = checkoutSession({ customer: 'cus_old', metadata: {} });
+    await expect(web.mintActivationToken({ db, stripe: fakeStripe({ session }), sessionId: SESSION, now: () => NOW, log: quiet }))
+      .rejects.toMatchObject({ code: 'verification_required', status: 409 });
+    expect(db.state.tokens).toEqual([]);
+  });
+
   it('still mints for the payer who owns the row', async () => {
     const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_new' }] });
     const { token } = await mint(db);
