@@ -36,7 +36,11 @@ const bubbleText = () => {
   return '';
 };
 const countText = (s) => (document.querySelector(s)?.textContent || '').trim();
-const lastNumber = (txt) => Number(((txt || '').match(/\d[\d.,  ']*/g) || []).pop()?.replace(/\D/g, '') || NaN);
+// The header reads "<loaded> of <total>" in English and "<total> of <loaded>" in ja/ko/zh: the total is the biggest number.
+const lastNumber = (txt) => {
+  const nums = ((txt || '').match(/\d[\d.,\u00a0\u202f']*/g) || []).map((n) => Number(n.replace(/\D/g, '')));
+  return nums.length ? Math.max(...nums) : NaN;
+};
 
 /** The backup drive: a folder under the run's temp HOME, saved and write-tested like the picker does. */
 async function seedBackupDrive(facts) {
@@ -173,7 +177,8 @@ describe('footage: howto-abd', function () {
       mark('server-list', 'Open the Server view of the account.');
       await take.click(SELECT, 'select-messages');
       await take.waitFor((t) => document.body.innerText.includes(t), 'bulk dialog', 10000, L('bulk.ops.bulkEmailOperations'));
-      const reading = L('bulk.ops.readingAllEmails').split('{{')[0].trim();
+      // The loading line can start with its placeholder (ja, ko): wait on the first fixed words.
+      const reading = L('bulk.ops.readingAllEmails').split(/\{\{[^}]*\}\}/).map((w) => w.trim()).find(Boolean) || '';
       await take.waitFor((r) => !document.body.innerText.includes(r) && [...document.querySelectorAll('[role="dialog"] button')]
         .filter((b) => /^\d{4} \(/.test((b.textContent || '').trim())).length >= 2, 'year buttons', 30000, reading);
       const years = await browser.execute(() => [...document.querySelectorAll('[role="dialog"] button')]
