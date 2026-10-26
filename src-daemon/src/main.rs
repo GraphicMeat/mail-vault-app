@@ -41,6 +41,7 @@ mod insights;
 mod ipc;
 mod jmap_push;
 mod jmap_sessions;
+mod launch_resync;
 #[cfg(test)]
 mod jmap_test_support;
 mod mbox;
@@ -627,6 +628,8 @@ async fn daemon_main() {
     snooze_worker::start(Arc::clone(&state));
     // Follow-up reminders' worker: same catch-up-then-sleep shape.
     follow_up_worker::start(Arc::clone(&state));
+    // Every cached mailbox is synced once, so no row keeps a pre-update cache shape.
+    launch_resync::start(Arc::clone(&state));
     // Watches keychain access so a locked keychain is noticed without waiting
     // for something to ask for credentials; an unlock wakes the queued sends
     // and the snoozes it held back.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Delete everywhere no longer stops with "needs to resync" on a message cached before the update: the mailbox is synced, the message is re-proved by its Message-ID, and the delete runs, while a message whose Message-ID changed is left alone. Every cached mailbox of every account is now synced once shortly after launch, not only the Inbox.
+
 - Keep completed OAuth token rotations across unrelated credential changes, and refresh credential caches reliably after retry.
 
 - Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Full native account workflows and autonomous refreshed-token persistence remain later work.

@@ -298,7 +298,7 @@ async fn custody_write<T: Send + 'static>(
 
 /// Every mailbox of the account with a header cache: a meta row (a synced
 /// folder, even an empty one) or header rows. One index seek per mailbox.
-async fn cached_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Result<HashSet<String>, String> {
+pub(crate) async fn cached_mailboxes(state: &Arc<DaemonState>, account_id: &str) -> Result<HashSet<String>, String> {
     let aid = account_id.to_string();
     custody_read(state, move |c| {
         let mut out: HashSet<String> = cache::mailboxes_with_meta(c, &aid)?.into_iter().collect();
