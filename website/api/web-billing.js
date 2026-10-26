@@ -218,6 +218,12 @@ async function mintActivationToken({ db, stripe, sessionId, now = Date.now, log 
 
   const applied = await applyCheckoutCompleted({ db, stripe, session, log });
   if (!applied) throw new ActivationError('session_incomplete', 409, 'Checkout is not a subscription.');
+  // The email typed at Checkout is unverified. When the payer is only an alias of
+  // an existing row, a token for that row would hand them its Stripe customer id
+  // (and with it its billing portal), so they sign in with the email instead.
+  if (applied.customer.stripe_customer_id !== session.customer) {
+    throw new ActivationError('verification_required', 409, 'Sign in with the email you already use.');
+  }
 
   const token = crypto.randomBytes(32).toString('base64url');
   await db.execute('DELETE FROM billing_activation_tokens WHERE expires_at < ?', [new Date(t - SWEEP_AFTER_MS)]);
