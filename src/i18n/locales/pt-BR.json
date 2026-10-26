@@ -939,6 +939,7 @@
   "export.social.radius": "Cantos",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "Usar o raio de canto das janelas do macOS",
+  "export.social.redactTool": "Ferramenta de ocultar",
   "export.social.redactForced": "Sempre ativo enquanto o modo de privacidade estiver ligado.",
   "export.social.revealSender": "Mostrar remetente",
   "export.social.revealSenderHint": "Mantém visível o endereço do remetente do spam. Seus próprios dados continuam ocultos.",

@@ -11,6 +11,7 @@ let mailThemeDuringCapture = null;
 let revealDuringCapture = null;
 let detailsDuringCapture = null;
 let hideToDuringCapture = null;
+let marksDuringCapture = null;
 // Every rasterizer call: the node as it stood live, and the clone it drew.
 let calls = [];
 // jsdom has no 2d context: a stub that records the composite's draws.
@@ -26,6 +27,7 @@ vi.mock('modern-screenshot', () => ({
     revealDuringCapture = store.getState().captureReveal;
     detailsDuringCapture = store.getState().captureSenderDetails;
     hideToDuringCapture = store.getState().captureHideTo;
+    marksDuringCapture = store.getState().captureMarks;
     const live = node.outerHTML;
     const clone = node.cloneNode(true);
     await opts.onCloneNode?.(clone);
@@ -43,8 +45,8 @@ import { NEEDLES, PEOPLE } from '../../../../test/privacyFixtures';
 import { Private } from '../../../../components/privacy/Private';
 
 afterEach(() => {
-  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; mailThemeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; hideToDuringCapture = null; calls = [];
-  usePrivacyStore.setState({ captureReveal: null, captureSenderDetails: null, captureHideTo: false });
+  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; mailThemeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; hideToDuringCapture = null; marksDuringCapture = null; calls = [];
+  usePrivacyStore.setState({ captureReveal: null, captureSenderDetails: null, captureHideTo: false, captureMarks: null });
   useThemeStore.setState({ theme: 'dark', captureTheme: null, captureMailTheme: null });
   document.documentElement.setAttribute('data-theme', 'dark');
   // The composite also sets fillStyle on it: clear only the spies.
@@ -55,6 +57,26 @@ const noNeedle = (html) => NEEDLES.forEach(n => expect(html, n).not.toContain(n)
 const box = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
 
 describe('captureAppWindow', () => {
+  it('word marks reach the live masking for the length of the shot only, and the hit map rides on the canvas when asked', async () => {
+    document.body.innerHTML = '<div id="root"><span>Hello</span></div>';
+    const dict = { ...buildNameDictionary({ names: ['Joanna Kowalczyk'] }), show: new Set(['joanna']), hide: new Set(['falcon']), detect: false };
+    const shot = await captureAppWindow({ redact: true, dict, wantWords: true });
+    expect(marksDuringCapture).toEqual({ show: new Set(['joanna']), hide: new Set(['falcon']), detect: false });
+    expect(usePrivacyStore.getState().captureMarks).toBeNull();
+    expect(Array.isArray(shot.mvWords)).toBe(true); // jsdom lays nothing out: no rects, no words
+    // The clone pass masks by the same marks: a shown word is not masked again.
+    document.body.innerHTML = '<div id="root"><span>Joanna Kowalczyk and Falcon</span></div>';
+    await captureAppWindow({ redact: true, dict: { ...dict, detect: undefined } });
+    expect(lastClone.textContent).toBe('Joanna xxxxxxxxx and xxxxxx');
+  });
+
+  it('without marks or a hit map the capture sets none and puts none on the canvas', async () => {
+    document.body.innerHTML = '<div id="root"><span>Hello</span></div>';
+    const shot = await captureAppWindow({ redact: false, dict: null });
+    expect(marksDuringCapture).toBeNull();
+    expect(shot).not.toHaveProperty('mvWords');
+  });
+
   it('hideTo holds the reader\'s To row out for the length of the shot only, so live layout and frame rects agree', async () => {
     document.body.innerHTML = '<div id="root"><div>Subject</div></div>';
     await captureAppWindow({ redact: false, dict: null, hideTo: true });
@@ -184,6 +206,15 @@ describe('captureAppWindow', () => {
     expect(lastClone.querySelector('button').textContent).toBe('Search');
     expect(lastClone.querySelector('input').getAttribute('placeholder')).toBe('Search emails...');
     expect(clone).not.toMatch(/Joanna|Kowalczyk|Google/);
+  });
+
+  it('a label the user clicked a word of is masked though it is the app\'s own; the other labels stay', async () => {
+    const dict = { ...buildNameDictionary({ names: ['Joanna Kowalczyk'] }), hide: new Set(['search']) };
+    document.body.innerHTML = '<div id="root"><h2>Search Results</h2><button>Search</button><p>Inbox</p></div>';
+    await captureAppWindow({ redact: true, dict });
+    expect(lastClone.querySelector('h2').textContent).toBe('xxxxxx Results');
+    expect(lastClone.querySelector('button').textContent).toBe('xxxxxx');
+    expect(lastClone.querySelector('p').textContent).toBe('Inbox');
   });
 
   it('embeds fonts (no font:false) and fetches remote images through the daemon', async () => {

@@ -939,6 +939,7 @@
   "export.social.radius": "Coins",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "Utiliser le rayon des coins des fenêtres macOS",
+  "export.social.redactTool": "Outil de masquage",
   "export.social.redactForced": "Toujours activé tant que le mode confidentialité est actif.",
   "export.social.revealSender": "Afficher l'expéditeur",
   "export.social.revealSenderHint": "Laisse visible l'adresse de l'expéditeur du spam. Vos propres informations restent masquées.",

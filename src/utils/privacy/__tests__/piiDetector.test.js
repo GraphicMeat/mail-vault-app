@@ -1,6 +1,6 @@
 // src/utils/privacy/__tests__/piiDetector.test.js
 import { describe, it, expect } from 'vitest';
-import { foldName, buildNameDictionary, findPii, maskText, maskString, unionDictionaries, EMPTY_DICTIONARY } from '../piiDetector';
+import { foldName, buildNameDictionary, findPii, maskText, maskString, markedMask, unionDictionaries, EMPTY_DICTIONARY } from '../piiDetector';
 
 const dict = buildNameDictionary({ names: ['Rokas Ambrazevičius', 'John Smith', 'Mark Post', 'Amélie Dupont'] });
 const kinds = (text, d = dict) => findPii(text, d).map(s => [text.slice(s.start, s.end), s.kind]);
@@ -239,3 +239,25 @@ describe('word marks (a click on a social image)', () => {
     expect(unionDictionaries(ana, ana)).not.toHaveProperty('hide');
   });
 });
+
+describe('markedMask (a value masked whole, under word marks)', () => {
+  it('is maskText without marks', () => {
+    expect(markedMask(EMPTY_DICTIONARY)).toBe(maskText);
+    expect(markedMask({ show: new Set(), hide: new Set() })).toBe(maskText);
+    expect(markedMask(undefined)).toBe(maskText);
+  });
+
+  it('keeps a shown word readable, edge punctuation and all, masking the rest', () => {
+    const mask = markedMask({ show: new Set(['ana', 'ana@x.co']) });
+    expect(mask('Ana Brandt')).toBe('Ana xxxxxx');
+    expect(mask('Ana Brandt <ana@x.co>')).toBe('Ana xxxxxx <ana@x.co>');
+    expect(mask('Bob')).toBe('xxx');
+  });
+
+  it('with detect:false masks only the hide words', () => {
+    const mask = markedMask({ detect: false, show: new Set(), hide: new Set(['brandt']) });
+    expect(mask('Ana Brandt')).toBe('Ana xxxxxx');
+    expect(mask('Ana Smith')).toBe('Ana Smith');
+  });
+});
+

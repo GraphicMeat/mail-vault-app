@@ -330,6 +330,29 @@ export function maskText(s) {
   return String(s ?? '').replace(/[\p{L}\p{N}]\p{M}*/gu, 'x').replace(/\p{M}+/gu, '');
 }
 
+/**
+ * How a value that is masked whole (a party's name or address, a filename) is
+ * masked under the user's word marks: `show` words stay readable, and with
+ * `detect: false` (redact box off) only `hide` words are masked. Without marks
+ * it is maskText itself.
+ */
+export function markedMask(dict) {
+  const { show, hide } = dict ?? {};
+  const only = dict?.detect === false;
+  if (!only && !show?.size) return maskText;
+  return (text) => {
+    const s = String(text ?? '');
+    let out = '';
+    let last = 0;
+    for (const t of wordTokens(s)) {
+      const word = s.slice(t.start, t.end);
+      out += maskText(s.slice(last, t.start)) + ((only ? !hide?.has(t.key) : show.has(t.key)) ? word : maskText(word));
+      last = t.end;
+    }
+    return out + maskText(s.slice(last));
+  };
+}
+
 // `mask`: how a match is filled (an HTML export uses █ runs).
 export function maskString(text, dict = EMPTY_DICTIONARY, mask = maskText) {
   const s = String(text ?? '');
