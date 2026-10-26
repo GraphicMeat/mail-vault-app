@@ -64,38 +64,60 @@ function webSessionParams({ priceId, interval, trialDays, successUrl, cancelUrl,
 
 const emailOf = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
 
+// The row a Stripe customer belongs to: its own, or the one it is an alias of.
+async function findBillingCustomer(db, stripeCustomerId) {
+  const [own] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [stripeCustomerId]);
+  if (own.length > 0) return own[0];
+  const [aliased] = await db.execute(
+    `SELECT bc.* FROM billing_customer_aliases a
+     JOIN billing_customers bc ON bc.id = a.billing_customer_id WHERE a.stripe_customer_id = ?`,
+    [stripeCustomerId]
+  );
+  return aliased[0] || null;
+}
+
 /**
  * The billing_customers row for a Stripe customer, made when it does not exist
  * yet. The email comes from the event, else from Stripe. Returns null while the
  * customer has no email: nothing is written (an empty email would collide on
- * the UNIQUE key), and the next event carries it. A returning email moves onto
- * its new Stripe customer and keeps its row id, so earlier subscriptions stay
- * attached.
+ * the UNIQUE key), and the next event carries it.
+ *
+ * The email typed at Stripe Checkout is unverified, so an existing row is never
+ * handed to another Stripe customer: that would let anyone who knows an address
+ * take over its portal and its webhook updates. A second Stripe customer with
+ * the same email becomes an alias of the existing row instead (its
+ * subscriptions attach to that row; the row keeps its owner).
  */
 async function ensureBillingCustomer(db, stripe, stripeCustomerId, emailHint) {
   if (!stripeCustomerId) return null;
-  const [known] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [stripeCustomerId]);
-  if (known.length > 0) return known[0];
+  const known = await findBillingCustomer(db, stripeCustomerId);
+  if (known) return known;
 
   let email = emailOf(emailHint);
   if (!email) email = emailOf((await stripe.customers.retrieve(stripeCustomerId)).email);
   if (!email) return null;
 
-  await db.execute(
-    `INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE stripe_customer_id = VALUES(stripe_customer_id), updated_at = NOW()`,
-    [email, stripeCustomerId]
-  );
-  const [rows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [stripeCustomerId]);
-  return rows[0] || null;
+  const [sameEmail] = await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email]);
+  if (sameEmail.length > 0) {
+    await db.execute('INSERT IGNORE INTO billing_customer_aliases (stripe_customer_id, billing_customer_id) VALUES (?, ?)', [stripeCustomerId, sameEmail[0].id]);
+    return sameEmail[0];
+  }
+  try {
+    await db.execute('INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)', [email, stripeCustomerId]);
+  } catch (err) {
+    // A concurrent event made the row first; read it instead of failing the webhook.
+    if (err.code !== 'ER_DUP_ENTRY') throw err;
+  }
+  return (await findBillingCustomer(db, stripeCustomerId))
+    || (await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email]))[0][0] || null;
 }
 
 // Upsert a subscription from a Stripe object into the database.
 async function upsertSubscription(db, stripeCustomerId, sub) {
-  const [custRows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [stripeCustomerId]);
-  if (custRows.length === 0) return;
+  const customer = await findBillingCustomer(db, stripeCustomerId);
+  if (!customer) return;
 
-  const billingCustomerId = custRows[0].id;
+  const billingCustomerId = customer.id;
   const priceItem = sub.items?.data?.[0];
   const priceId = priceItem?.price?.id || null;
   const interval = priceItem?.price?.recurring?.interval || null;
