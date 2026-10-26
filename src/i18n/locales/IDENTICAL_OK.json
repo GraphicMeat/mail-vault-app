@@ -88,6 +88,7 @@
   "hook.useKeyboardShortcuts.ctrl",
   "hook.useKeyboardShortcuts.meta",
   "hook.useKeyboardShortcuts.shift",
+  "lifecycle.from",
   "list.hideViewMailOk",
   "menu.file_submenu",
   "menu.open_blog",

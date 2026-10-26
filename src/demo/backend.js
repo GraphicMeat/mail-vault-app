@@ -943,6 +943,9 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
             ? { deliver: false, reason: 'focus-hold' }
             : { deliver: true, reason: 'delivered-default' };
         }
+        // Lifecycle messages (handlers/lifecycle.rs): the demo has no billing.
+        if (method === 'lifecycle.sync') return { rows: [] };
+        if (method === 'lifecycle.mark_seen' || method === 'lifecycle.dismiss') return { ok: true };
         // The settings document (handlers/settings.rs) over the same
         // `settings` object read/write_settings_json use.
         if (method.startsWith('backup.')) {
@@ -1182,6 +1185,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         throw new DemoUnsupportedError(`daemon:${method || 'unknown'}`);
       }
       case 'take_pending_mailto': return null;
+      case 'take_pending_activation': return null;
       case 'take_notification_open': return null;
       case 'take_notification_deletes': return [];
       case ['send', 'notification'].join('_'): return { success: true, simulated: true };

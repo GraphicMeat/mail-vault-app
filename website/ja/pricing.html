@@ -89,7 +89,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261026">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}.mv-price>.mv-tag{align-self:center;font-size:.78rem;font-weight:700;color:var(--mv-accent)}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -194,8 +194,14 @@
 </div>
 <noscript><p class="mv-small">月額 Premium は $4/月で、トライアルはありません。<a href="/ja/get-started.html?plan=monthly">月額プランを選ぶ</a>。</p></noscript>
 <p class="mv-small">無料版のすべてに加えて、次の 18 の機能。選ぶと仕組みを確認できます。</p><ul class="mv-premium-links"><li><a href="#premium-backup-schedule">スケジュール自動バックアップ<span aria-hidden="true">↗</span></a></li><li><a href="#premium-backup-health">バックアップ状態の監視<span aria-hidden="true">↗</span></a></li><li><a href="#premium-cleanup">メールの整理<span aria-hidden="true">↗</span></a></li><li><a href="#premium-time-capsule">タイムカプセル<span aria-hidden="true">↗</span></a></li><li><a href="#premium-tracker-blocking">トラッカーの削除<span aria-hidden="true">↗</span></a></li><li><a href="#premium-auto-cleanup">自動整理ルール<span aria-hidden="true">↗</span></a></li><li><a href="#premium-migration">メールボックス移行<span aria-hidden="true">↗</span></a></li><li><a href="#premium-server-change">サーバー変更をガイド<span aria-hidden="true">↗</span></a></li><li><a href="#premium-export-image">画像または HTML としてエクスポート<span aria-hidden="true">↗</span></a></li><li><a href="#premium-focus-session">集中セッション<span aria-hidden="true">↗</span></a></li><li><a href="#premium-scheduled-send">送信の予約<span aria-hidden="true">↗</span></a></li><li><a href="#premium-follow-up-reminder">返信がないときのリマインダー<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-reminder">添付ファイルのリマインダー<span aria-hidden="true">↗</span></a></li><li><a href="#premium-devices">5 台のデバイス<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-search">添付ファイル検索<span aria-hidden="true">↗</span></a></li><li><a href="#premium-fast-multi-folder-search">複数フォルダーをより高速に検索<span aria-hidden="true">↗</span></a></li><li><a href="#premium-hoarder">すべて保存<span aria-hidden="true">↗</span></a></li><li><a href="#premium-portable">ポータブル版 MailVault<span aria-hidden="true">↗</span></a></li></ul>
-<a class="mv-button" data-premium-cta href="/ja/get-started.html?plan=yearly"><span data-billing-panel="yearly">年額トライアルを始める</span><span data-billing-panel="monthly" hidden>月額 Premium を始める</span></a>
-<p class="mv-small">まずダウンロードし、「設定 → 請求」でプランを選びます。アプリ内で購入を完了するとトライアルが始まります。</p>
+<form class="mv-checkout" method="post" action="/api/billing/checkout-session" data-web-checkout>
+<input type="hidden" name="planId" value="yearly" data-web-checkout-plan>
+<input type="hidden" name="landing" value="pricing">
+<button class="mv-button" type="submit" data-acquisition-event="web_checkout_start" data-acquisition-placement="pricing" data-acquisition-destination="stripe"><span data-billing-panel="yearly">無料トライアルを始める</span><span data-billing-panel="monthly" hidden>月額で購読する</span></button>
+</form>
+<p class="mv-small" data-web-checkout-error hidden>チェックアウトを開始できませんでした。しばらくしてからもう一度お試しください。</p>
+<p class="mv-small">ウェブサイトでお支払いのあと、MailVault をダウンロードし、次のページから開いてください。Premium は自動で有効になります。トライアル期間中はいつでも解約できます。</p>
+<a class="mv-text-link" data-premium-cta href="/ja/get-started.html?plan=yearly">先にダウンロードしますか？ 「設定 → 請求」でプランを選べます</a>
 <p class="mv-reassurance">いつでも解約できます。保存したメールはあなたのものです。</p>
 </article>
 </div>
@@ -212,7 +218,7 @@
 <div class="mv-faq">
 <details>
 <summary>トライアルはどう始めますか？</summary>
-<p>MailVault をダウンロードして開き、「設定 → 請求」で年額を選びます。購入を完了すると 14 日間のトライアルが始まります。トライアルは初回の年額登録で利用できます。再登録の場合はアプリで対象可否を確認してください。</p>
+<p>このページで「無料トライアルを始める」を選び、チェックアウトでメールアドレスとカードを入力してから、MailVault をダウンロードして次のページから開いてください。先にダウンロードして、「設定 → 請求」で「年額」を選ぶこともできます。14 日間のトライアルは初めての年額サブスクリプションが対象です。同じメールアドレスで以前に購読したことがある場合、トライアルは適用されず、年額プランがすぐに請求されます。</p>
 </details>
 <details>
 <summary>いつ請求されますか？</summary>
@@ -276,6 +282,7 @@
 </script>
 <script defer src="/pricing-localize.js?v=20261008-spots">
 </script>
+<script defer src="/assets/web-checkout.js?v=20261026"></script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/premium-features.js"></script>

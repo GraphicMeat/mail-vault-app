@@ -89,7 +89,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261026">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}.mv-price>.mv-tag{align-self:center;font-size:.78rem;font-weight:700;color:var(--mv-accent)}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -194,8 +194,14 @@
 </div>
 <noscript><p class="mv-small">Monthly Premium is $4/month, without a trial. <a href="/get-started.html?plan=monthly">Choose monthly billing</a>.</p></noscript>
 <p class="mv-small">Everything in Free, plus these 18 features. Select one to see how it works.</p><ul class="mv-premium-links"><li><a href="#premium-backup-schedule">Scheduled automatic backups<span aria-hidden="true">↗</span></a></li><li><a href="#premium-backup-health">Backup health monitoring<span aria-hidden="true">↗</span></a></li><li><a href="#premium-cleanup">Email Cleanup<span aria-hidden="true">↗</span></a></li><li><a href="#premium-time-capsule">Time Capsule<span aria-hidden="true">↗</span></a></li><li><a href="#premium-tracker-blocking">Tracker removal<span aria-hidden="true">↗</span></a></li><li><a href="#premium-auto-cleanup">Auto-cleanup rules<span aria-hidden="true">↗</span></a></li><li><a href="#premium-migration">Mailbox migration<span aria-hidden="true">↗</span></a></li><li><a href="#premium-server-change">Guided server change<span aria-hidden="true">↗</span></a></li><li><a href="#premium-export-image">Export as image or HTML<span aria-hidden="true">↗</span></a></li><li><a href="#premium-focus-session">Focus sessions<span aria-hidden="true">↗</span></a></li><li><a href="#premium-scheduled-send">Scheduled Send<span aria-hidden="true">↗</span></a></li><li><a href="#premium-follow-up-reminder">Reminders if nobody replies<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-reminder">Attachment Reminder<span aria-hidden="true">↗</span></a></li><li><a href="#premium-devices">Five devices<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-search">Attachment search<span aria-hidden="true">↗</span></a></li><li><a href="#premium-fast-multi-folder-search">Faster multi-folder search<span aria-hidden="true">↗</span></a></li><li><a href="#premium-hoarder">Hoarder<span aria-hidden="true">↗</span></a></li><li><a href="#premium-portable">Portable MailVault<span aria-hidden="true">↗</span></a></li></ul>
-<a class="mv-button" data-premium-cta href="/get-started.html?plan=yearly"><span data-billing-panel="yearly">Get started with the yearly trial</span><span data-billing-panel="monthly" hidden>Get started with monthly Premium</span></a>
-<p class="mv-small">Download first, then choose your plan in Settings → Billing. Your trial starts when you complete checkout in the app.</p>
+<form class="mv-checkout" method="post" action="/api/billing/checkout-session" data-web-checkout>
+<input type="hidden" name="planId" value="yearly" data-web-checkout-plan>
+<input type="hidden" name="landing" value="pricing">
+<button class="mv-button" type="submit" data-acquisition-event="web_checkout_start" data-acquisition-placement="pricing" data-acquisition-destination="stripe"><span data-billing-panel="yearly">Start free trial</span><span data-billing-panel="monthly" hidden>Subscribe monthly</span></button>
+</form>
+<p class="mv-small" data-web-checkout-error hidden>Checkout could not start. Please try again in a moment.</p>
+<p class="mv-small">Pay on the website, then download MailVault and open it from the page that follows: Premium switches on by itself. Cancel anytime during the trial.</p>
+<a class="mv-text-link" data-premium-cta href="/get-started.html?plan=yearly">Prefer to download first? Choose your plan in Settings → Billing</a>
 <p class="mv-reassurance">Cancel anytime. Your saved mail stays yours.</p>
 </article>
 </div>
@@ -212,7 +218,7 @@
 <div class="mv-faq">
 <details>
 <summary>How do I start the trial?</summary>
-<p>Download and open MailVault, then go to Settings → Billing and choose Yearly. Complete checkout to start your 14-day trial. The trial is available for your first yearly subscription; returning subscribers should check their eligibility in the app.</p>
+<p>Choose Start free trial on this page, enter your email and card in checkout, then download MailVault and open it from the page that follows. You can also download first, open Settings → Billing and choose Yearly. The 14-day trial is for your first yearly subscription; if you have subscribed before with the same email, the trial is skipped and the yearly plan is charged right away.</p>
 </details>
 <details>
 <summary>When will I be charged?</summary>
@@ -276,6 +282,7 @@
 </script>
 <script defer src="/pricing-localize.js?v=20261008-spots">
 </script>
+<script defer src="/assets/web-checkout.js?v=20261026"></script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/premium-features.js"></script>

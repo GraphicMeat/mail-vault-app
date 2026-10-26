@@ -149,6 +149,33 @@ async function initDatabase() {
     )
   `);
 
+  // Extra Stripe customers that belong to an existing billing_customers row (a returning
+  // buyer paying through the web checkout). The row keeps its owner; these only point at it.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS billing_customer_aliases (
+      stripe_customer_id VARCHAR(255) PRIMARY KEY,
+      billing_customer_id INT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_customer (billing_customer_id)
+    )
+  `);
+
+  // One-time tokens that turn a paid web checkout into an activated install.
+  // Only the SHA-256 of the token is stored; used_at is the single-use lock.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS billing_activation_tokens (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      token_hash CHAR(64) NOT NULL UNIQUE,
+      stripe_session_id VARCHAR(255) NOT NULL,
+      billing_customer_id INT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      used_at DATETIME NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_session (stripe_session_id),
+      INDEX idx_expires (expires_at)
+    )
+  `);
+
   // Seed default features if table is empty
   const [rows] = await db.execute('SELECT COUNT(*) as count FROM features');
   if (rows[0].count === 0) {

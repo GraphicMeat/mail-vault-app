@@ -56,6 +56,7 @@ import {
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { HideViewMailButton } from './HideViewMailButton';
 import { FollowUpPinnedRows } from './FollowUpPinnedRows';
+import { LifecyclePinnedRows } from './LifecyclePinnedRows';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
@@ -1401,6 +1402,8 @@ function EmailListComponent({ stacked = false }) {
       <div className="relative flex-1 min-h-0 flex flex-col">
       {/* Due follow-up reminders sit above the list, never in it. */}
       <FollowUpPinnedRows hidden={searchActive} />
+      {/* So do MailVault's own notes about Premium. */}
+      <LifecyclePinnedRows hidden={searchActive} />
       <div
         ref={scrollContainerRef}
         onTouchStart={handleTouchStart}

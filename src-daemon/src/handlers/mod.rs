@@ -53,6 +53,7 @@ pub(crate) mod message;
 pub(crate) mod migration;
 pub(crate) mod net_activity;
 pub(crate) mod notes;
+pub(crate) mod lifecycle;
 pub(crate) mod notify;
 pub(crate) mod oauth2;
 pub(crate) mod pgp;

@@ -288,6 +288,7 @@ export const settingSearchGroups = [
   { id: 'billing', settings: [
     ['settings.billing.manageSubscription', 'billing subscription manage cancel plan payment'],
     ['settings.billing.devices', 'billing devices premium license manage remove'],
+    ['lifecycle.setting.label', 'billing premium messages reminders trial inbox notes from mailvault turn off'],
   ] },
   { id: 'templates', settings: [
     ['settings.templates.templateName', 'email template name create new'],

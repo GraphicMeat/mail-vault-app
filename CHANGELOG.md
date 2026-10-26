@@ -14,6 +14,12 @@
 
 - Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Validated refreshed tokens now persist through the daemon’s quiet native writer, with memory-only retry on failure and no shutdown flush. Complete provider/removal workflows and remaining caller retirement remain later work.
 
+- Show the plans on the thank-you screen at the end of onboarding: yearly and monthly as one choice with yearly selected, the saving, the trial length, three lines on what Premium does and one button that opens the checkout (Start Free Trial, or Upgrade on monthly). Settings > Billing uses the same plan choice. When the plans cannot load, See Premium still leads to Billing; the App Store build still shows no price.
+
+- Add a place for real reviews on the thank-you screen: each quote links to where it was written and opens in your browser. The section stays hidden until there is a quote to show.
+
+- Add short notes from MailVault in your inbox view about Premium: a trial ending in two days, a checkout you left, a plan that ended, and once, four days after onboarding, what Premium adds. They are written on this computer, never sent by email, never counted as unread mail, and can be dismissed or switched off in Settings > Billing.
+
 - Move automatic backup scheduling, retry/limit recovery and automatic Time Capsule manifests into the background helper. Backups continue when a window closes, manual controls reconcile retained results after reconnect, and unavailable backup locations remain pending. Interrupted snapshot creation is reported as uncertain instead of repeated blindly.
 
 - Keep native backup folder access bound to its exact execution through reconnects and cancellation, releasing it only after verified rejection or joined completion.
@@ -34,6 +40,7 @@
 - **Social export: Hide To row.** A switch leaves the To line off the email card's header and out of the App window shot. Cc stays.
 - **Social export: your own branding.** Branding picks the MailVault "made with love by Graphic Meat" lockup, nothing, or any image of your own (kept for next time) under the card.
 - **Social export: Custom colors says what it is.** The custom background swatch is named Custom colors and shows a palette icon, and its two pickers are labelled Start color and End color.
+- **Activate Premium from a link.** After paying on the website, the page that follows opens MailVault through a `mailvault://activate` link and signs it in with the subscription, no email to type. The link works once and expires after 15 minutes; devices still count against the usual five. Signing in with the email you paid with keeps working.
 - **Safer bulk recovery foundation.** The background helper can read pending selections and discard only the matching operation, without automatically replaying work after a restart. Bulk actions and the Resume/Discard prompt keep their current behavior while the worker migration continues.
 - **The experimental Rust email renderer is in the Mac App Store build.** Settings, Appearance has the same switch as the direct download. It stays off until you turn it on.
 - **View builder.** See an email's distinctive words, who else writes about them, and turn them into a view. Click Make a view from this email (the wand beside Sender insights) in the reading pane, pick words, then add them to a saved view or make a new view for that account, or for that folder only. Point at a word to see its top senders and subjects.

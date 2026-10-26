@@ -86,7 +86,6 @@
   "af4e42c0ed12": "ダウンロードの上限",
   "0fa5edab65b1": "アップロードの上限",
   "2e1b284935af": "AIによる<span class=\"lamp-text\">メールクリーンアップ</span>",
-  "03ca8ba644a5": "MailVault Premiumのサブスクリプションが有効になりました。MailVaultアプリに戻り、設定 &rarr; お支払い の<strong class=\"text-white\">Check Status</strong>をクリックして、Premiumの機能を有効にしてください。",
   "46aa7b51f19e": "<a href=\"https://en.wikipedia.org/wiki/Maildir\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Maildir</a>は、メールサーバーが何十年も使ってきた、実績のあるメール保存のディレクトリ構造です。メール1通が1ファイルなので、壊れうる単一のデータベースがありません — 1つのファイルが傷んでも、アーカイブの残りは影響を受けません。.emlとMaildirを合わせることで、メールは将来にわたって読め、持ち運べ、どの単一のアプリケーションにも縛られません。",
   "832558cf7a44": "Proton Mailはメールを端から端まで暗号化するため、IMAPを直接には公開していません。MailVault（やほかの第三者のメールクライアント）につなぐには<a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a>が必要です — Protonが提供するデスクトップアプリで、自分のコンピューター上で動き、暗号化されたメールボックスを<code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">127.0.0.1</code>の標準的なIMAPとSMTPとして見せます。Bridgeには有料のProton Mailのプランが必要で、Protonの無料の枠では使えません。",
   "2e089a56554e": "Protonのウェブサイトから<a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a>をインストールします",
