@@ -702,6 +702,15 @@ export const useSettingsStore = create(
       setBillingProfile: (profile) => set({ billingProfile: profile, billingLastChecked: Date.now() }),
       clearBillingProfile: () => set({ billingProfile: null, billingLastChecked: null, billingEmail: '' }),
 
+      // Lifecycle messages: the notes MailVault writes into the inbox about
+      // Premium (trial ending, a checkout left, a plan ended). Switched on
+      // unless the user turns them off in Billing; `lifecycleCheckoutAt` is
+      // when a checkout page was last opened, which the daemon follows up.
+      lifecycleMessages: true,
+      lifecycleCheckoutAt: null,
+      setLifecycleMessages: (on) => set({ lifecycleMessages: !!on }),
+      noteCheckoutOpened: (at = Date.now()) => set({ lifecycleCheckoutAt: at }),
+
       // Server-resolved premium pricing, shared by every paywall so the Billing
       // tab and the feature overlays can never quote different currencies.
       // { currency, monthly, yearly, pricingMode, fetchedAt } — minor units.

@@ -881,6 +881,19 @@ export async function notifyDecision(ctx) {
   return tauriInvoke('notify.decide', ctx);
 }
 
+// In-app lifecycle messages (`lifecycle.*`, decided in the daemon by
+// src-core/src/lifecycle_mail.rs): `sync` takes the settings the decision reads
+// and answers the rows to show; the other two record what was read or dismissed.
+export async function lifecycleSync(state) {
+  return tauriInvoke('lifecycle.sync', { state });
+}
+export async function lifecycleMarkSeen(id) {
+  return tauriInvoke('lifecycle.mark_seen', { id });
+}
+export async function lifecycleDismiss(id) {
+  return tauriInvoke('lifecycle.dismiss', { id });
+}
+
 export async function previewNotificationSound(sound) {
   return tauriInvoke('preview_notification_sound', { sound });
 }

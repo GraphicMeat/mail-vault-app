@@ -149,7 +149,16 @@ export async function installMockBilling() {
         return Promise.resolve(json(buildStatus(q)));
       }
       if (url.includes('/api/billing/pricing')) {
-        return Promise.resolve(json({ currency: 'eur', currencySource: 'stub', plans: [] }));
+        // No plans unless a spec sets window.__MV_BILLING_PLANS__: the paywall
+        // then falls back to See Premium, as it does when billing is down.
+        return Promise.resolve(json({ currency: 'eur', currencySource: 'stub', plans: window.__MV_BILLING_PLANS__ || [] }));
+      }
+      if (url.includes('/api/billing/checkout-session')) {
+        const body = JSON.parse((init && init.body) || '{}');
+        (window.__MV_CHECKOUT_CALLS__ = window.__MV_CHECKOUT_CALLS__ || []).push({ email: body.email, planId: body.planId });
+        // A scheme the shell plugin refuses, so no browser opens on the runner;
+        // the page's own window.open fallback is stubbed by the spec.
+        return Promise.resolve(json({ url: 'mailvault-e2e://checkout', customerId: 'cus_checkout_mock' }));
       }
       if (url.includes('/api/billing/unregister-client')) {
         return Promise.resolve(json({ ok: true }));
@@ -169,6 +178,12 @@ export const setBillingFault = (fault) =>
 /** The canonical email the mock echoes back when the request carries none. */
 export const setBillingEmail = (email) =>
   browser.execute((m) => { window.__MV_BILLING_EMAIL__ = m; }, email);
+
+/** Plans the stub's /pricing answers with; the checkout-session calls it has seen. */
+export const setBillingPlans = (plans) =>
+  browser.execute((p) => { window.__MV_BILLING_PLANS__ = p; }, plans);
+
+export const checkoutCalls = () => browser.execute(() => window.__MV_CHECKOUT_CALLS__ || []);
 
 export const billingCalls = () => browser.execute(() => window.__MV_BILLING_CALLS__ || []);
 

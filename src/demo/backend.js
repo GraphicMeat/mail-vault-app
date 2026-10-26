@@ -943,6 +943,9 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
             ? { deliver: false, reason: 'focus-hold' }
             : { deliver: true, reason: 'delivered-default' };
         }
+        // Lifecycle messages (handlers/lifecycle.rs): the demo has no billing.
+        if (method === 'lifecycle.sync') return { rows: [] };
+        if (method === 'lifecycle.mark_seen' || method === 'lifecycle.dismiss') return { ok: true };
         // The settings document (handlers/settings.rs) over the same
         // `settings` object read/write_settings_json use.
         if (method.startsWith('backup.')) {
