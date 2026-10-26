@@ -5,6 +5,7 @@
 //! pointing at a uid that was never written is unrepairable), and wakes
 //! `scheduled_send_worker` on anything that changes what it should do next.
 use crate::custody as daemon_custody;
+use crate::account_lifecycle::AccountStamp;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u64_arg, vault_root, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
 use crate::scheduled_send_worker;
@@ -114,6 +115,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
         "scheduled.create" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let original = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             let account = req!(account_arg(&id, params));
             let email = req!(email_arg(&id, params));
             let local_time = req!(str_arg(&id, params, "localTime"));
@@ -124,7 +129,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let state = Arc::clone(state);
             done(
                 id,
-                blocking(move || create(&state, &account_id, &account, &email, &local_time, &tz, fire_at, sent_mailbox.as_deref(), &reminder))
+                blocking(move || create(&state, original, &account_id, &account, &email, &local_time, &tz, fire_at, sent_mailbox.as_deref(), &reminder))
                     .await
                     .and_then(|r| r),
             )
@@ -169,6 +174,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
 fn create(
     state: &Arc<DaemonState>,
+    original: AccountStamp,
     account_id: &str,
     account: &ImapConfig,
     email: &OutgoingEmail,
@@ -179,6 +185,7 @@ fn create(
     reminder: &Reminder,
 ) -> Result<Value, String> {
     let built = smtp::build_draft_mime(account, email)?;
+    let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
 
     // The .eml first, the row second (Global constraint, restated in the
     // plan): an orphan .eml is just a stale draft, a row over a uid that was
@@ -189,6 +196,8 @@ fn create(
         vault_files::store(&state.vault_registry, root, account_id, MAILBOX, uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)?;
         Ok(uid)
     })?;
+    #[cfg(test)]
+    let _create_done = tests::schedule_pause(&state.app_dir);
 
     let row_id = uuid::Uuid::new_v4().to_string();
     let envelope = envelope_json(account, email, sent_mailbox, reminder);
@@ -227,13 +236,19 @@ fn update(
     if rebuild.is_some() && !matches!(existing.status.as_str(), "queued" | "failed") {
         return Err(NOT_EDITABLE.to_string());
     }
-
+    let original = if rebuild.is_some() || reschedule.is_some() {
+        Some(state.account_lifecycle.capture(&existing.account_id).map_err(|_| "errors.keychainBusy".to_owned())?)
+    } else { None };
+    let built = rebuild.as_ref().map(|(account, email, _, _)| smtp::build_draft_mime(account, email)).transpose()?;
+    let _permit = original.map(|stamp| state.account_lifecycle.try_commit(&[stamp]).map_err(|_| "errors.keychainBusy".to_owned())).transpose()?;
     if let Some((account, email, sent_mailbox, reminder)) = rebuild {
-        let built = smtp::build_draft_mime(&account, &email)?;
+        let built = built.expect("rebuild was prepared before admission");
         with_mailbox_write(state, &existing.account_id, &existing.mailbox, |root| {
             vault_files::store(&state.vault_registry, root, &existing.account_id, &existing.mailbox, existing.uid, &built.raw_rfc2822, &DRAFT_FLAGS.map(String::from), true)
                 .map(|_| ())
         })?;
+        #[cfg(test)]
+        let _update_done = tests::schedule_pause(&state.app_dir);
         let envelope = envelope_json(&account, &email, sent_mailbox.as_deref(), &reminder);
         app_db::with(&state.app_dir, |c| {
             c.execute("UPDATE scheduled_sends SET envelope = ?2 WHERE id = ?1", rusqlite::params![row_id, envelope])
@@ -271,9 +286,13 @@ pub(crate) fn cancel(state: &Arc<DaemonState>, row_id: &str) -> Result<Value, St
         "sending" | "sent" => return Err(NOT_EDITABLE.to_string()),
         _ => {}
     }
+    let original = state.account_lifecycle.capture(&row.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+    let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
     let _ = with_mailbox_write(state, &row.account_id, &row.mailbox, |root| {
         Ok(vault_files::delete(&state.vault_registry, root, &row.account_id, &row.mailbox, row.uid).unwrap_or(false))
     });
+    #[cfg(test)]
+    let _cancel_done = tests::schedule_pause(&state.app_dir);
     app_db::with(&state.app_dir, |c| scheduled::cancel(c, row_id))?;
     Ok(Value::Null)
 }
@@ -314,17 +333,16 @@ async fn send_now(state: &Arc<DaemonState>, row_id: &str, id: Value) -> RpcRespo
     if !matches!(row.status.as_str(), "queued" | "failed") {
         return RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Cannot send a schedule that is {}", row.status));
     }
-    // Retry on a `failed` row is the user asking for another round of tries:
-    // one that failed by using them all up would hit the ceiling again on
-    // this very attempt, unsent. (A no-op on a `queued` row.)
-    let app_dir = state.app_dir.clone();
-    let reset_id = row.id.clone();
-    match blocking(move || app_db::with(&app_dir, |c| scheduled::reset_failed_attempts(c, &reset_id))).await {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) | Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+    let original = match state.account_lifecycle.capture(&row.account_id) {
+        Ok(stamp) => stamp,
+        Err(_) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy"),
+    };
+    // The worker's row claim holds this same original stamp through
+    // prompt-capable preparation. It admits once, then resets failed tries
+    // and enters the sending gate under one semantic owner.
+    if let Err(e) = scheduled_send_worker::attempt_row_explicit(state, &row, original).await {
+        return RpcResponse::error(id, ipc::INTERNAL_ERROR, e);
     }
-
-    scheduled_send_worker::attempt_row(state, &row).await;
 
     let app_dir = state.app_dir.clone();
     let final_id = row.id.clone();
@@ -344,10 +362,235 @@ mod tests {
     use mock_imap::{MockImap, Scenario};
     use serde_json::json;
 
+    struct ScheduleGate {
+        entered: std::sync::mpsc::Sender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+        done: std::sync::mpsc::Sender<()>,
+    }
+    fn schedule_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, ScheduleGate>> {
+        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, ScheduleGate>>> = std::sync::OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    pub(super) fn schedule_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+        schedule_gates().lock().unwrap().remove(path).map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv();
+            crate::credentials::TestTaskDone(gate.done)
+        })
+    }
+    struct SchedulePause {
+        release: Option<std::sync::mpsc::Sender<()>>,
+        entered: std::sync::mpsc::Receiver<()>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+    impl SchedulePause {
+        fn arm(state: &Arc<DaemonState>) -> Self {
+            let (release, gate) = std::sync::mpsc::channel();
+            let (entered, notice) = std::sync::mpsc::channel();
+            let (done, finished) = std::sync::mpsc::channel();
+            schedule_gates().lock().unwrap().insert(state.app_dir.clone(), ScheduleGate { entered, release: gate, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn entered(&self) { self.entered.recv_timeout(std::time::Duration::from_secs(5)).expect("actual schedule file stored"); }
+        fn finish(&mut self) {
+            self.release.take();
+            self.done.take().unwrap().recv_timeout(std::time::Duration::from_secs(5)).expect("actual schedule child completed");
+        }
+    }
+    impl Drop for SchedulePause {
+        fn drop(&mut self) {
+            self.release.take();
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(std::time::Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+
+    fn lifecycle_lease(id: &str) -> crate::account_workflows::AccountLease {
+        crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [id.to_owned()].into(), ..Default::default() },
+        )
+    }
+
     fn st() -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-scheduled-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        DaemonState::for_test(dir.clone(), dir, true)
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"acc2"},{"id":"acct1"}]"#).unwrap();
+        let s = DaemonState::for_test(dir.clone(), dir, true);
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+        s
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_local_schedule_compound_child_drains() {
+        let s = st();
+        let pause = SchedulePause::arm(&s);
+        let (handled, handled_rx) = std::sync::mpsc::channel();
+        let st = Arc::clone(&s);
+        let waiter = tokio::spawn(async move {
+            let _ = handled.send(route(&st, "scheduled.create", &create_params("acc1"), json!(1)).await.unwrap());
+        });
+        pause.entered();
+        drop(waiter);
+        let mut claim = Some(s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap());
+        let premature = tokio::time::timeout(std::time::Duration::from_millis(50),
+            claim.as_mut().unwrap().wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5))).await;
+        let retired_early = if let Ok(Ok(drained)) = premature {
+            claim.as_mut().unwrap().mark_effects_started(drained).unwrap();
+            let _ = std::fs::remove_dir_all(s.data_dir.join("Maildir").join("acc1"));
+            claim.take().unwrap().finish_retired().unwrap();
+            true
+        } else { false };
+        let mut pause = pause;
+        pause.finish();
+        let response = handled_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("detached schedule handler completed");
+        let row = response.result.expect("admitted schedule returns a row");
+        let id = row["id"].as_str().unwrap();
+        let stored = app_db::with(&s.app_dir, |c| scheduled::get(c, id)).unwrap().unwrap();
+        if !retired_early {
+            let mut remaining = claim.take().unwrap();
+            let drained = remaining.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            remaining.mark_effects_started(drained).unwrap();
+            remaining.finish_retired().unwrap();
+        }
+        let b = route(&s, "scheduled.create", &create_params("acc2"), json!(1)).await.unwrap();
+        assert!(b.result.is_some(), "B schedules while A closes: {:?}", b.error);
+        assert!(!retired_early,
+            "retirement drained while schedule file-to-row child was parked; late row={} status={}", stored.id, stored.status);
+        assert_eq!(stored.status, "queued");
+    }
+
+    #[tokio::test]
+    async fn p3_retired_schedule_update_cancel_refuse_before_mutation() {
+        let s = st();
+        let edit = call(&s, "scheduled.create", create_params("acc1")).await;
+        let cancel = call(&s, "scheduled.create", create_params("acc1")).await;
+        let edit_id = edit["id"].as_str().unwrap().to_owned();
+        let cancel_id = cancel["id"].as_str().unwrap().to_owned();
+        let cancel_uid = cancel["uid"].as_u64().unwrap() as u32;
+        let edit_before = app_db::with(&s.app_dir, |c| scheduled::get(c, &edit_id)).unwrap().unwrap();
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+
+        let updated = route(&s, "scheduled.update", &json!({
+            "id": edit_id, "localTime": "2026-10-02T09:00", "tz":"Europe/Vilnius", "fireAt": 9_999_999_999_998i64,
+        }), json!(1)).await.unwrap();
+        let cancelled = route(&s, "scheduled.cancel", &json!({"id":cancel_id}), json!(1)).await.unwrap();
+        let edit_after = app_db::with(&s.app_dir, |c| scheduled::get(c, &edit_id)).unwrap().unwrap();
+        let cancel_after = app_db::with(&s.app_dir, |c| scheduled::get(c, &cancel_id)).unwrap().unwrap();
+        let file_exists = vault_files::exists(&s.data_dir, "acc1", MAILBOX, cancel_uid);
+        let b = route(&s, "scheduled.create", &create_params("acc2"), json!(1)).await.unwrap();
+        assert!(b.result.is_some(), "B remains schedulable: {:?}", b.error);
+        assert!(updated.error.is_some() && cancelled.error.is_some()
+            && edit_after.fire_at == edit_before.fire_at && cancel_after.status == "queued" && file_exists,
+            "retired schedule update/cancel changed row or file: before_fire={} after_fire={} cancel_status={} file_exists={} update={updated:?} cancel={cancelled:?}",
+            edit_before.fire_at, edit_after.fire_at, cancel_after.status, file_exists);
+    }
+
+    #[tokio::test]
+    async fn p3_retired_send_now_refuses_before_attempt_reset() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = crate::credentials::TestEnvRestore::capture();
+        let s = st();
+        let server = serve_acc1(&s);
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_owned();
+        app_db::with(&s.app_dir, |c| {
+            c.execute("UPDATE scheduled_sends SET status = 'failed', attempts = ?2 WHERE id = ?1",
+                rusqlite::params![id, scheduled::MAX_ATTEMPTS]).map(|_| ()).map_err(|e| e.to_string())
+        }).unwrap();
+        let before = stored(&s, &id);
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+
+        let retry = route(&s, "scheduled.send_now", &json!({"id":id}), json!(1)).await.unwrap();
+        let after = stored(&s, &id);
+        let b = route(&s, "scheduled.create", &create_params("acc2"), json!(1)).await.unwrap();
+        assert!(b.result.is_some(), "B remains schedulable: {:?}", b.error);
+        assert!(retry.error.is_some() && after.attempts == before.attempts
+            && after.status == before.status && after.fire_at == before.fire_at
+            && server.sent_messages().is_empty(),
+            "retired send_now reset attempts or sent bytes: before={before:?} after={after:?} sent={} response={retry:?}",
+            server.sent_messages().len());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_admitted_schedule_update_child_drains() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_owned();
+        let pause = SchedulePause::arm(&s);
+        let (handled, handled_rx) = std::sync::mpsc::channel();
+        let st = Arc::clone(&s);
+        let waiter = tokio::spawn(async move {
+            let params = json!({"id": id, "account": account_json(), "email": {
+                "to":"partner@example.com", "subject":"Edited", "text":"changed body"
+            }, "remindDays":7});
+            let _ = handled.send(route(&st, "scheduled.update", &params, json!(1)).await.unwrap());
+        });
+        pause.entered();
+        drop(waiter);
+        let mut claim = Some(s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap());
+        let premature = tokio::time::timeout(std::time::Duration::from_millis(50),
+            claim.as_ref().unwrap().wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5))).await;
+        let retired_early = if let Ok(Ok(drained)) = premature {
+            claim.as_mut().unwrap().mark_effects_started(drained).unwrap();
+            claim.take().unwrap().finish_retired().unwrap();
+            true
+        } else { false };
+        let mut pause = pause;
+        pause.finish();
+        let response = handled_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        assert!(response.result.is_some(), "admitted edit completes: {:?}", response.error);
+        if !retired_early {
+            let mut remaining = claim.take().unwrap();
+            let drained = remaining.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            remaining.mark_effects_started(drained).unwrap();
+            remaining.finish_retired().unwrap();
+        }
+        let stored = app_db::with(&s.app_dir, |c| scheduled::get(c, row["id"].as_str().unwrap())).unwrap().unwrap();
+        assert!(!retired_early, "schedule update row changed after premature retirement: {}", stored.envelope);
+        assert!(stored.envelope.contains("\"remindDays\":7"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_admitted_schedule_cancel_child_drains() {
+        let s = st();
+        let row = call(&s, "scheduled.create", create_params("acc1")).await;
+        let id = row["id"].as_str().unwrap().to_owned();
+        let pause = SchedulePause::arm(&s);
+        let (handled, handled_rx) = std::sync::mpsc::channel();
+        let st = Arc::clone(&s);
+        let waiter = tokio::spawn(async move {
+            let _ = handled.send(route(&st, "scheduled.cancel", &json!({"id":id}), json!(1)).await.unwrap());
+        });
+        pause.entered();
+        drop(waiter);
+        let mut claim = Some(s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap());
+        let premature = tokio::time::timeout(std::time::Duration::from_millis(50),
+            claim.as_ref().unwrap().wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5))).await;
+        let retired_early = if let Ok(Ok(drained)) = premature {
+            claim.as_mut().unwrap().mark_effects_started(drained).unwrap();
+            claim.take().unwrap().finish_retired().unwrap();
+            true
+        } else { false };
+        let mut pause = pause;
+        pause.finish();
+        let response = handled_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        assert!(response.result.is_some(), "admitted cancel completes: {:?}", response.error);
+        if !retired_early {
+            let mut remaining = claim.take().unwrap();
+            let drained = remaining.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            remaining.mark_effects_started(drained).unwrap();
+            remaining.finish_retired().unwrap();
+        }
+        let stored = app_db::with(&s.app_dir, |c| scheduled::get(c, row["id"].as_str().unwrap())).unwrap().unwrap();
+        assert!(!retired_early, "schedule cancel row changed after premature retirement: {}", stored.status);
+        assert_eq!(stored.status, "cancelled");
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> Value {
@@ -897,13 +1140,16 @@ mod tests {
     fn st_probed(online: bool) -> (Arc<DaemonState>, Arc<std::sync::atomic::AtomicUsize>) {
         let dir = std::env::temp_dir().join(format!("mv-scheduled-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"}]"#).unwrap();
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counter = Arc::clone(&calls);
         let probe: crate::netgate::Probe = Arc::new(move || {
             counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Box::pin(async move { online })
         });
-        (DaemonState::for_test_with_probe(dir.clone(), dir, true, probe), calls)
+        let s = DaemonState::for_test_with_probe(dir.clone(), dir, true, probe);
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+        (s, calls)
     }
 
     /// A Gmail account whose token expired long ago, stored as `acc1` the
@@ -1019,6 +1265,78 @@ mod tests {
         let last_error = row["lastError"].as_str().unwrap_or("");
         assert!(last_error.contains("may have gone out"), "{last_error}");
         assert_eq!(crate::handlers::graph::test_graph_requests().len(), 1, "one sendMail, never repeated");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_graph_and_jmap_maybe_sent_release_after_terminal_bookkeeping() {
+        let _env_guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = crate::credentials::TestEnvRestore::capture();
+        {
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![(0, String::new()), (202, String::new())]);
+            let s = st();
+            graph_acc1(&s, json!({}));
+            let (id, _) = graph_row(&s, "Graph maybe sent owner").await;
+            let mut pause = crate::scheduled_send_worker::TerminalPause::arm(&s, &id);
+            let (done, completed) = std::sync::mpsc::channel();
+            let st = s.clone();
+            let target = id.clone();
+            let waiter = tokio::spawn(async move {
+                let _ = done.send(call(&st, "scheduled.send_now", json!({"id":target})).await);
+            });
+            pause.entered();
+            drop(waiter);
+            assert_eq!(crate::handlers::graph::test_graph_requests().len(), 1, "Graph request left before bookkeeping pause");
+            assert!(matches!(s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1"), Err(crate::account_lifecycle::LifecycleError::Busy)), "Graph terminal attempt still owns A");
+            pause.finish();
+            let row = completed.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+            assert_eq!(row["status"], json!("failed"));
+            assert!(row["lastError"].as_str().unwrap_or("").contains("may have gone out"));
+            let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+            crate::scheduled_send_worker::process_due(&s).await;
+            assert_eq!(crate::handlers::graph::test_graph_requests().len(), 1, "terminal Graph row was resent");
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        {
+            use crate::jmap_test_support as support;
+            let m = mock_jmap::MockJmap::start(support::scenario());
+            m.mutate(|st| st.faults.push(mock_jmap::Fault::SubmissionReplyLostOnce));
+            let (trap, port) = support::imap_trap();
+            let s = st();
+            let creds = s.app_dir.join("credentials.json");
+            std::fs::write(&creds, json!({"acct1":support::account_json(&m, port).to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+            let mut params = create_params("acct1");
+            params["account"] = support::account_json(&m, port);
+            params["email"] = json!({"to":"bob@example.test","subject":"JMAP maybe sent owner","text":"body"});
+            let row = call(&s, "scheduled.create", params).await;
+            let id = row["id"].as_str().unwrap().to_owned();
+            let mut pause = crate::scheduled_send_worker::TerminalPause::arm(&s, &id);
+            let (done, completed) = std::sync::mpsc::channel();
+            let st = s.clone();
+            let target = id.clone();
+            let waiter = tokio::spawn(async move {
+                let _ = done.send(call(&st, "scheduled.send_now", json!({"id":target})).await);
+            });
+            pause.entered();
+            drop(waiter);
+            assert_eq!(m.submitted().len(), 1, "JMAP submission accepted before reply was lost");
+            assert_eq!(m.count_calls("EmailSubmission/set"), 1);
+            assert!(matches!(s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1"), Err(crate::account_lifecycle::LifecycleError::Busy)), "JMAP terminal attempt still owns A");
+            pause.finish();
+            let row = completed.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+            assert_eq!(row["status"], json!("failed"), "JMAP terminal row: {row:?}");
+            assert!(row["lastError"].as_str().unwrap_or("").contains("may have gone out"), "{row:?}");
+            let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1").unwrap();
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+            crate::scheduled_send_worker::process_due(&s).await;
+            assert_eq!(m.submitted().len(), 1, "terminal JMAP row was resent");
+            assert!(trap.accept().is_err(), "JMAP scheduled send dialled IMAP");
+        }
     }
 
     fn edit_params(id: &str, to: &str) -> Value {

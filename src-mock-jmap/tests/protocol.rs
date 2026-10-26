@@ -325,6 +325,30 @@ fn rejected_submission_is_forbidden_from_and_sends_nothing() {
 }
 
 #[test]
+fn accepted_submission_can_lose_its_reply_once() {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    let m = MockJmap::start(scenario());
+    m.mutate(|s| s.faults.push(Fault::SubmissionReplyLostOnce));
+    let body = json!({"using":[],"methodCalls":[["EmailSubmission/set",{
+        "accountId":"acc1","create":{"s":{"emailId":"e1","identityId":"id1",
+            "envelope":{"rcptTo":[{"email":"bob@example.test"}]}}}
+    },"s"]]}).to_string();
+    let base_url = m.base_url();
+    let host = base_url.strip_prefix("http://").unwrap();
+    let mut stream = TcpStream::connect(host).unwrap();
+    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    write!(stream, "POST /jmap/api HTTP/1.1\r\nHost: {host}\r\nAuthorization: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", basic(), body.len()).unwrap();
+    stream.flush().unwrap();
+    let mut reply = Vec::new();
+    stream.read_to_end(&mut reply).unwrap();
+    assert!(reply.is_empty(), "accepted submission should have no HTTP answer: {reply:?}");
+    assert_eq!(m.submitted().len(), 1, "the server accepted exactly one message");
+    assert_eq!(m.count_calls("EmailSubmission/set"), 1);
+    assert!(!m.read(|s| s.faults.contains(&Fault::SubmissionReplyLostOnce)), "fault is consumed only by the accepted submission");
+}
+
+#[test]
 fn mailbox_set_create_update_destroy_and_changes() {
     let m = MockJmap::start(scenario());
     let since = call(&m, json!([["Mailbox/get",{"accountId":"acc1","ids":[]},"g"]]))["methodResponses"][0][1]["state"].as_str().unwrap().to_string();

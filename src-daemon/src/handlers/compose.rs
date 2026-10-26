@@ -23,6 +23,7 @@
 //! and `E_COMPOSE_STAGE:` (the vault would not take the copy); a failed send
 //! answers the transport's own words, as `smtp_send_email` does.
 use crate::custody as daemon_custody;
+use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::handlers::common::{blocking, opt_str_arg, str_arg, u32_arg, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -62,8 +63,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             if account_id.trim().is_empty() {
                 return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"));
             }
+            let original = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             let app_dir = state.app_dir.clone();
-            let removed = blocking(move || app_db::with(&app_dir, |c| compose_receipts::remove_account(c, &account_id))).await.and_then(|r| r);
+            let st = Arc::clone(state);
+            let removed = blocking(move || {
+                let _permit = st.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
+                app_db::with(&app_dir, |c| compose_receipts::remove_account(c, &account_id))
+            }).await.and_then(|r| r);
             match removed {
                 Ok(n) => RpcResponse::success(id, json!({"removed": n})),
                 Err(e) => {
@@ -75,12 +84,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
         "compose.stage" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let original = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             let account = req!(account_arg(&id, params));
             let email = req!(email_arg(&id, params));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let hints = hints_arg(params);
             let state = Arc::clone(state);
-            let staged = blocking(move || stage(&state, &account_id, &account, &email, &mailbox, &hints)).await.and_then(|r| r);
+            let staged = blocking(move || stage(&state, original, &account_id, &account, &email, &mailbox, &hints)).await.and_then(|r| r);
             match staged {
                 Ok(v) => RpcResponse::success(id, v),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
@@ -89,6 +102,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
         "compose.send" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let original = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             let account = req!(account_arg(&id, params));
             let mut email = req!(email_arg(&id, params));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
@@ -109,18 +126,26 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // Under the id the copy was staged with: the server's copy, and
             // every reply to it, then matches the local one.
             email.message_id = Some(message_id.clone());
+            let operation = match state.account_lifecycle.try_operation(std::slice::from_ref(&original)) {
+                Ok(permit) => permit,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             let (st, id_for_read, mb) = (Arc::clone(state), after.account_id.clone(), after.mailbox.clone());
-            let (staged, own_copy) = match blocking(move || staged_copy(&st, &id_for_read, &mb, uid, &message_id)).await {
+            let read_owner = operation.clone();
+            let (staged, own_copy) = match blocking(move || {
+                let _read_owner = read_owner;
+                staged_copy(&st, &id_for_read, &mb, uid, &message_id)
+            }).await {
                 Ok(StagedCopy::Own(raw, identity)) => (Some(raw), Some(identity)),
                 _ => (None, None),
             };
             after.own_copy = own_copy;
-            let sent = match send_logged(&account, &email, staged).await {
+            let sent = match send_logged(&account, &email, staged, operation.clone()).await {
                 Ok(sent) => sent,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
             // The message is out. Nothing below fails the call.
-            let entry = after_send(state, &account, &email, &sent, after).await;
+            let entry = after_send(state, &account, &email, &sent, after, original, operation).await;
             RpcResponse::success(id, json!({"success": true, "messageId": sent.result.message_id, "entry": entry}))
         }
 
@@ -254,6 +279,7 @@ fn staged_copy(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u
 /// bytes (`staged_copy`), so every attempt sends these very bytes.
 fn stage(
     state: &Arc<DaemonState>,
+    original: AccountStamp,
     account_id: &str,
     account: &ImapConfig,
     email: &OutgoingEmail,
@@ -265,10 +291,13 @@ fn stage(
     let message_id = bracketed_message_id(&raw);
     info!("[send:build_mime] account={} bytes={} messageId={:?}", account.email, raw.len(), message_id);
 
+    let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
     let flags = compose::STAGED_FLAGS.map(String::from);
     with_mailbox_write(state, account_id, mailbox, |root| {
         let uid = vault_files::free_local_uid(root, account_id, mailbox);
         vault_files::store(&state.vault_registry, root, account_id, mailbox, uid, &raw, &flags, true)?;
+        #[cfg(test)]
+        let _stage_done = tests::stage_pause(&state.app_dir);
         info!("[send:stage_local] account={} mailbox={} uid={}", account.email, mailbox, uid);
         let row = compose::staged_row(account, email, uid, message_id.as_deref(), hints, &compose::now_iso());
         let entry = compose::with_flags(&row, false);
@@ -308,7 +337,7 @@ struct AfterSend {
 
 /// Each step logs its own failure and goes on: the mail is already out.
 /// Answers the sent copy's row.
-async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &OutgoingEmail, sent: &crate::handlers::smtp::Sent, after: AfterSend) -> Value {
+async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &OutgoingEmail, sent: &crate::handlers::smtp::Sent, after: AfterSend, original: AccountStamp, operation: OperationPermit) -> Value {
     let AfterSend { account_id, mailbox, uid: staged_uid, own_copy, message_id, sent_mailbox, remind_days, own_addresses, cancel_scheduled_id, hints } = after;
 
     // An edited scheduled email sent now instead: its row must not fire as
@@ -317,7 +346,11 @@ async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &Outg
     if let Some(row_id) = cancel_scheduled_id {
         let st = Arc::clone(state);
         let id_for_cancel = row_id.clone();
-        match blocking(move || crate::handlers::scheduled::cancel(&st, &id_for_cancel)).await.and_then(|r| r) {
+        let child_owner = operation.clone();
+        match blocking(move || {
+            let _child_owner = child_owner;
+            crate::handlers::scheduled::cancel(&st, &id_for_cancel)
+        }).await.and_then(|r| r) {
             Ok(_) => {
                 state.scheduled_send.wake();
                 state.events.emit("scheduled-send", json!({"id": row_id, "status": "cancelled"}));
@@ -332,7 +365,9 @@ async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &Outg
         let own = compose::own_addresses_with_from(&own_addresses, account.from_address());
         let (st, id, raw, to, sm) =
             (Arc::clone(state), account_id.clone(), sent.result.raw_rfc2822.clone(), email.to.clone(), sent_mailbox.clone());
+        let child_owner = operation.clone();
         let recorded = blocking(move || {
+            let _child_owner = child_owner;
             crate::follow_up_worker::record_after_send(&st, &id, &raw, &to, sm.as_deref(), &own, remind_days)
         })
         .await;
@@ -351,7 +386,11 @@ async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &Outg
     let row_template = entry.clone();
     let local_message_id = message_id.clone();
     let archive_identity = own_copy.clone();
+    let archive_stamp = original.clone();
+    let archive_owner = operation.clone();
     let archived = blocking(move || -> Result<(Identity, Value), String> {
+        let _archive_owner = archive_owner;
+        let _local = st.account_lifecycle.try_commit(&[archive_stamp]).map_err(|_| "errors.keychainBusy".to_owned())?;
         let flags = compose::SENT_FLAGS.map(String::from);
         with_mailbox_write(&st, &id, &mb, |root| {
             let scope = Scope::new(&id, &mb, staged_uid, &local_message_id).ok_or("invalid compose scope")?;
@@ -412,19 +451,26 @@ async fn after_send(state: &Arc<DaemonState>, account: &ImapConfig, email: &Outg
     let local_uid = local_copy.as_ref().map(|identity| identity.scope.uid);
     let extra = json!({"vaultAccountId": account_id, "stagedUid": local_uid, "localMailbox": mailbox});
     let st = Arc::clone(state);
-    report_sent_copy(state, account, sent_mailbox, sent, extra, move |landed| async move {
+    let landed_owner = operation.clone();
+    report_sent_copy(state, account, sent_mailbox, sent, operation.clone(), extra, move |landed| async move {
+        let _landed_owner = landed_owner.clone();
         let Some(identity) = local_copy.filter(|_| landed) else {
             return;
         };
         let uid = identity.scope.uid;
         let (id, mb) = (account_id, mailbox);
+        let cleanup_owner = landed_owner.clone();
         let removed = blocking(move || -> Result<(), String> {
+            let _cleanup_owner = cleanup_owner;
+            let _local = st.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
             with_local_ownership(&st, &identity.scope, Some(&identity.sha256), |root, mut proof, raw| {
                 if raw.is_some() {
                     proof.state = State::Cleaned;
                     // Failure keeps the local copy and custody. Transport already
                     // succeeded, so this can only be a logged cleanup failure.
                     app_db::with(&st.app_dir, |c| compose_receipts::save(c, &proof))?;
+                    #[cfg(test)]
+                    let _landed_done = tests::landed_pause(&st.app_dir);
                     vault_files::delete(&st.vault_registry, root, &id, &mb, uid)?;
                     daemon_custody::with_conn(&st, |c| entries::remove(c, &id, &mb, &[uid]))?;
                 }
@@ -448,12 +494,250 @@ mod tests {
     use super::*;
     use mock_imap::{MockImap, Scenario};
 
+    struct StageGate {
+        entered: std::sync::mpsc::Sender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+        done: std::sync::mpsc::Sender<()>,
+    }
+    fn stage_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, StageGate>> {
+        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, StageGate>>> = std::sync::OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    pub(super) fn stage_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+        stage_gates().lock().unwrap().remove(path).map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv();
+            crate::credentials::TestTaskDone(gate.done)
+        })
+    }
+    struct StagePause {
+        release: Option<std::sync::mpsc::Sender<()>>,
+        entered: std::sync::mpsc::Receiver<()>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+    impl StagePause {
+        fn arm(state: &Arc<DaemonState>) -> Self {
+            let (release, gate) = std::sync::mpsc::channel();
+            let (entered, notice) = std::sync::mpsc::channel();
+            let (done, finished) = std::sync::mpsc::channel();
+            stage_gates().lock().unwrap().insert(state.app_dir.clone(), StageGate { entered, release: gate, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn entered(&self) {
+            self.entered.recv_timeout(std::time::Duration::from_secs(5)).expect("actual stage stored file");
+        }
+        fn finish(&mut self) {
+            self.release.take();
+            self.done.take().unwrap().recv_timeout(std::time::Duration::from_secs(5)).expect("actual stage child completed");
+        }
+    }
+    impl Drop for StagePause {
+        fn drop(&mut self) {
+            self.release.take();
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(std::time::Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+
+    struct LandedGate {
+        entered: std::sync::mpsc::Sender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+        done: std::sync::mpsc::Sender<()>,
+    }
+    fn landed_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, LandedGate>> {
+        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, LandedGate>>> = std::sync::OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    pub(super) fn landed_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+        landed_gates().lock().unwrap().remove(path).map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv();
+            crate::credentials::TestTaskDone(gate.done)
+        })
+    }
+    struct LandedPause {
+        release: Option<std::sync::mpsc::Sender<()>>,
+        entered: std::sync::mpsc::Receiver<()>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+    impl LandedPause {
+        fn arm(state: &Arc<DaemonState>) -> Self {
+            let (release, gate) = std::sync::mpsc::channel();
+            let (entered, notice) = std::sync::mpsc::channel();
+            let (done, finished) = std::sync::mpsc::channel();
+            landed_gates().lock().unwrap().insert(state.app_dir.clone(), LandedGate { entered, release: gate, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn entered(&self) { self.entered.recv_timeout(std::time::Duration::from_secs(5)).expect("actual landed cleanup entered"); }
+        fn finish(&mut self) {
+            self.release.take();
+            self.done.take().unwrap().recv_timeout(std::time::Duration::from_secs(5)).expect("actual landed child completed");
+        }
+    }
+    impl Drop for LandedPause {
+        fn drop(&mut self) {
+            self.release.take();
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(std::time::Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+
+    fn lifecycle_lease(id: &str) -> crate::account_workflows::AccountLease {
+        crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [id.to_owned()].into(), ..Default::default() },
+        )
+    }
+
     fn st(mail_dir_ok: bool) -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-compose-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acct-1"},{"id":"acct-2"},{"id":"acct-1-other"}]"#).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir, mail_dir_ok);
         let _ = daemon_custody::open_into(&s);
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         s
+    }
+
+    fn stage_artifacts(s: &Arc<DaemonState>, account_id: &str) -> (usize, usize, usize) {
+        let files = vault_files::list_on_disk(&s.data_dir, account_id, "Sent", None).unwrap().len();
+        let present_receipts = app_db::with(&s.app_dir, |c| {
+            let mut q = c.prepare("SELECT value FROM meta WHERE key LIKE 'compose_receipt:%'").map_err(|e| e.to_string())?;
+            let rows = q.query_map([], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?;
+            let mut count = 0;
+            for row in rows {
+                let receipt: Receipt = serde_json::from_str(&row.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+                if receipt.identity.scope.account_id == account_id && receipt.state == State::Present { count += 1; }
+            }
+            Ok(count)
+        }).unwrap();
+        let custody_rows = daemon_custody::with_conn(s, |c| entries::read(c, account_id, "Sent"))
+            .unwrap().map(|raw| serde_json::from_str::<Vec<Value>>(&raw).unwrap().len()).unwrap_or(0);
+        (files, present_receipts, custody_rows)
+    }
+
+    #[tokio::test]
+    async fn p3_retired_stage_refuses_file_receipt_and_custody() {
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        assert!(proof_of(&s, &staged, None).is_some());
+
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acct-1"), "acct-1")
+            .expect("an already finished stage releases its finite owner");
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+
+        let before = stage_artifacts(&s, "acct-1");
+        let stale = rpc(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let after = stage_artifacts(&s, "acct-1");
+        let mut other = stage_params(account_json(&server));
+        other["accountId"] = json!("acct-2");
+        let b = rpc(&s, "compose.stage", other).await;
+        assert!(b.result.is_some(), "unrelated account still stages: {:?}", b.error);
+        assert!(stage_artifacts(&s, "acct-2").0 > 0);
+        assert!(stale.error.is_some() && before == after,
+            "retired account stage published file, Present receipt or custody: before={before:?} after={after:?} response={stale:?}");
+    }
+
+    #[tokio::test]
+    async fn p3_retired_receipt_cleanup_refuses_before_sql() {
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let _ = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acct-1"), "acct-1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+
+        let before = stage_artifacts(&s, "acct-1");
+        let cleanup = rpc(&s, "compose.receipts.remove_account", json!({"accountId":"acct-1"})).await;
+        let after = stage_artifacts(&s, "acct-1");
+        let mut other = stage_params(account_json(&server));
+        other["accountId"] = json!("acct-2");
+        let b = rpc(&s, "compose.stage", other).await;
+        assert!(b.result.is_some(), "B remains writable: {:?}", b.error);
+        assert!(cleanup.error.is_some() && before == after,
+            "retired account receipt cleanup changed actual Present proof: before={before:?} after={after:?} response={cleanup:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_stage_receipt_child_prevents_early_retirement() {
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+        let pause = StagePause::arm(&s);
+        let (handled, handled_rx) = std::sync::mpsc::channel();
+        let st = Arc::clone(&s);
+        let params = stage_params(account_json(&server));
+        let waiter = tokio::spawn(async move { let _ = handled.send(rpc(&st, "compose.stage", params).await); });
+        pause.entered();
+        drop(waiter); // Losing the reply waiter leaves the real handler and blocking child running.
+
+        let mut claim = Some(s.account_lifecycle.try_close(lifecycle_lease("acct-1"), "acct-1").unwrap());
+        let premature = tokio::time::timeout(std::time::Duration::from_millis(50),
+            claim.as_mut().unwrap().wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5))).await;
+        let retired_early = if let Ok(Ok(drained)) = premature {
+            claim.as_mut().unwrap().mark_effects_started(drained).unwrap();
+            app_db::with(&s.app_dir, |c| compose_receipts::remove_account(c, "acct-1")).unwrap();
+            let _ = std::fs::remove_dir_all(s.data_dir.join("Maildir").join("acct-1"));
+            claim.take().unwrap().finish_retired().unwrap();
+            true
+        } else { false };
+        let mut pause = pause;
+        pause.finish();
+        let response = handled_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("detached handler completed");
+        assert!(response.result.is_some(), "admitted stage finishes: {:?}", response.error);
+        if !retired_early {
+            let mut remaining = claim.take().unwrap();
+            let drained = remaining.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            remaining.mark_effects_started(drained).unwrap();
+            remaining.finish_retired().unwrap();
+        }
+        let actual = stage_artifacts(&s, "acct-1");
+        assert!(!retired_early,
+            "retirement drained while actual stage child was parked; late file/Present/custody={actual:?}");
+        assert_eq!(actual, (1, 1, 1));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_accepted_send_stays_busy_through_landed_child() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        let staged = ok(&s, "compose.stage", stage_params(account_json(&server))).await;
+        let mut append = crate::handlers::smtp::tests::AppendPause::arm(&s);
+        let mut landed = LandedPause::arm(&s);
+        let mut rx = s.events.subscribe();
+        let sent = ok(&s, "compose.send", send_params(account_json(&server), &staged, json!({"sentMailbox":"Sent"}))).await;
+        assert_eq!(sent["success"], json!(true));
+        append.entered();
+        assert_eq!(server.sent_messages().len(), 1, "one actual SMTP transport");
+        let during_append = s.account_lifecycle.try_close(lifecycle_lease("acct-1"), "acct-1");
+        let append_excluded = during_append.is_err();
+        drop(during_append);
+        let mut b_params = stage_params(account_json(&server));
+        b_params["accountId"] = json!("acct-2");
+        let b = rpc(&s, "compose.stage", b_params).await;
+        assert!(b.result.is_some(), "independent B stage: {:?}", b.error);
+        append.release();
+        landed.entered();
+        let during_landed = s.account_lifecycle.try_close(lifecycle_lease("acct-1"), "acct-1");
+        let landed_excluded = during_landed.is_err();
+        drop(during_landed);
+        landed.finish();
+        append.done();
+        let line = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
+        let (event, payload) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
+        assert_eq!(event, "send-server-append-complete");
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_eq!(server.state().find("Sent").unwrap().messages.len(), 1);
+        let actual = stage_artifacts(&s, "acct-1");
+        let finally_closable = s.account_lifecycle.try_close(lifecycle_lease("acct-1"), "acct-1").is_ok();
+        assert!(append_excluded && landed_excluded && finally_closable,
+            "send lost actual child ownership: append={append_excluded} landed={landed_excluded} final={finally_closable} local={actual:?}");
+        assert_eq!(actual, (0, 0, 0), "server copy landed and local proof was cleaned");
     }
 
     /// Through the server's dispatch, so a module never wired in fails here.
@@ -763,14 +1047,16 @@ mod tests {
         email.message_id = Some(staged["messageId"].as_str().unwrap().into());
         let original = raw_of(&s, uid);
         let original_identity = proof_of(&s, &staged, None).unwrap().identity;
-        let sent = send_logged(&account, &email, Some(original.clone())).await.unwrap();
+        let stamp = s.account_lifecycle.capture("acct-1").unwrap();
+        let operation = s.account_lifecycle.try_operation(std::slice::from_ref(&stamp)).unwrap();
+        let sent = send_logged(&account, &email, Some(original.clone()), operation.clone()).await.unwrap();
         let mut foreign = original.clone(); foreign.extend_from_slice(b"SAME MID REPLACEMENT");
         with_mailbox_write(&s, "acct-1", "Sent", |root| vault_files::store(&s.vault_registry, root, "acct-1", "Sent", uid, &foreign, &["seen".into()], true)).unwrap();
         let entry = after_send(&s, &account, &email, &sent, AfterSend {
             account_id: "acct-1".into(), mailbox: "Sent".into(), uid, own_copy: Some(original_identity),
             message_id: staged["messageId"].as_str().unwrap().into(), sent_mailbox: None,
             remind_days: 0, own_addresses: vec![], cancel_scheduled_id: None, hints: RowHints::default(),
-        }).await;
+        }, stamp, operation).await;
         assert_eq!(raw_of(&s, uid), foreign, "the pre-transport read is not mutation authority");
         assert_ne!(entry["uid"], staged["uid"]);
         assert_eq!(raw_of(&s, entry["uid"].as_u64().unwrap() as u32), original);

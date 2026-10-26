@@ -30,7 +30,7 @@ use crate::custody as daemon_custody;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vault_root, with_mailbox_write, with_vault_write};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
-use crate::account_lifecycle::{AccountStamp, LifecycleError, LocalCommitPermit};
+use crate::account_lifecycle::{AccountStamp, LifecycleError, LocalCommitPermit, OperationPermit};
 use mailvault_core::custody::{cache, entries};
 use mailvault_core::{import_rehome, maildir, message_store, vault_files};
 use serde_json::Value;
@@ -64,6 +64,42 @@ macro_rules! req {
 fn commit(state: &DaemonState, stamp: &Result<AccountStamp, LifecycleError>) -> Result<LocalCommitPermit, String> {
     let stamp = stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
     state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())
+}
+
+fn rebind_uids_effect(
+    state: &Arc<DaemonState>,
+    stamp: &Result<AccountStamp, LifecycleError>,
+    account_id: &str,
+    mailbox: &str,
+    pairs: &[(u32, u32)],
+    owner: Option<OperationPermit>,
+) -> Result<Value, String> {
+    let _owner = owner;
+    let _permit = commit(state, stamp)?;
+    let rebound = with_mailbox_write(state, account_id, mailbox, |root| {
+        let rebound = message_store::rebind_uids(root, account_id, mailbox, pairs);
+        if !rebound.is_empty() {
+            state.vault_registry.invalidate(account_id, mailbox);
+            if let Err(e) = daemon_custody::with_conn(state, |c| entries::remap(c, account_id, mailbox, &rebound, &[])) {
+                warn!("vault_rebind_uids: custody remap failed: {}", e);
+            }
+        }
+        Ok(rebound)
+    })?;
+    Ok(serde_json::json!({ "rebound": rebound }))
+}
+
+pub(crate) async fn rebind_uids_owned(
+    state: &Arc<DaemonState>,
+    original: AccountStamp,
+    mailbox: String,
+    pairs: Vec<(u32, u32)>,
+    owner: OperationPermit,
+) -> Result<Value, String> {
+    let account_id = original.id().to_owned();
+    let state = Arc::clone(state);
+    blocking(move || rebind_uids_effect(&state, &Ok(original), &account_id, &mailbox, &pairs, Some(owner)))
+        .await.and_then(|r| r)
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -177,18 +213,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let _permit = commit(&state, &stamp)?;
-                    let rebound = with_mailbox_write(&state, &account_id, &mailbox, |root| {
-                        let rebound = message_store::rebind_uids(root, &account_id, &mailbox, &pairs);
-                        if !rebound.is_empty() {
-                            state.vault_registry.invalidate(&account_id, &mailbox);
-                            if let Err(e) = daemon_custody::with_conn(&state, |c| entries::remap(c, &account_id, &mailbox, &rebound, &[])) {
-                                warn!("vault_rebind_uids: custody remap failed: {}", e);
-                            }
-                        }
-                        Ok(rebound)
-                    })?;
-                    Ok(serde_json::json!({ "rebound": rebound }))
+                    rebind_uids_effect(&state, &stamp, &account_id, &mailbox, &pairs, None)
                 })
                 .await
                 .and_then(|r| r),

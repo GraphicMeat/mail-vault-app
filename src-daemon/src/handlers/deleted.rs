@@ -28,6 +28,7 @@
 //! bin's bytes are imported into the original mailbox
 //! (`JmapSessions::import_raw`), which is made again when it is gone.
 use crate::handlers::common::{blocking, done, vec_arg, with_mailbox_write};
+use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::imap::{self, ImapConfig};
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
@@ -81,14 +82,24 @@ pub(crate) async fn capture(
     uid: u32,
     source: Source<'_>,
 ) -> Result<Option<(String, bool)>, String> {
+    let original = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+    capture_stamped(state, original, account_id, mailbox, uid, source).await
+}
+
+pub(crate) async fn capture_stamped(
+    state: &Arc<DaemonState>,
+    original: AccountStamp,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    source: Source<'_>,
+) -> Result<Option<(String, bool)>, String> {
+    if original.id() != account_id { return Err("errors.keychainBusy".into()); }
     let bound = matches!(&source, Source::Bound { .. });
     let local = if bound {
         None
     } else {
-        crate::raw_message::local_message(state, account_id, mailbox, uid, false)
-            .await
-            .ok()
-            .flatten()
+        crate::raw_message::local_message_stamped(state, &original, mailbox, uid, false).await?
     };
     let (raw, server_flags) = match local {
         Some(raw) => (Some(raw.to_vec()), None),
@@ -176,9 +187,12 @@ pub(crate) async fn capture(
             Source::Graph | Source::Local => return Ok(None),
         },
     };
+    #[cfg(test)]
+    let _capture_done = tests::capture_pause(state);
     let state = Arc::clone(state);
     let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
     blocking(move || {
+        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
         // The row the list showed, else one parsed from the message itself.
         let listed = crate::custody::with_conn(&state, |c| {
             cache::load_by_uids(c, &account_id, &mailbox, &[uid])
@@ -252,19 +266,51 @@ async fn kept_already(state: &Arc<DaemonState>, account_id: &str, mailbox: &str,
 /// retried, and its retry captures again.
 pub(crate) async fn forget(state: &Arc<DaemonState>, id: String) {
     let state = Arc::clone(state);
-    let result = blocking(move || app_db::with(&state.app_dir, |c| bin::remove(c, &state.app_dir, &id))).await.and_then(|r| r);
+    let result = blocking(move || {
+        let Some(row) = app_db::with(&state.app_dir, |c| bin::get(c, &id))? else { return Ok(()); };
+        let original = state.account_lifecycle.capture(&row.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
+        app_db::with(&state.app_dir, |c| bin::remove(c, &state.app_dir, &id))
+    }).await.and_then(|r| r);
     if let Err(e) = result {
         warn!("[deleted] could not drop the capture of a failed delete: {e}");
     }
 }
 
+pub(crate) async fn forget_stamped(state: &Arc<DaemonState>, id: String, original: AccountStamp) {
+    let state = Arc::clone(state);
+    let result = blocking(move || {
+        let Some(row) = app_db::with(&state.app_dir, |c| bin::get(c, &id))? else { return Ok(()); };
+        if row.account_id != original.id() { return Err("deleted bin account changed".into()); }
+        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
+        app_db::with(&state.app_dir, |c| bin::remove(c, &state.app_dir, &id))
+    }).await.and_then(|r| r);
+    if let Err(e) = result { warn!("[deleted] could not drop the capture of a failed delete: {e}"); }
+}
+
 /// Where the delete put the message, for a recover to move it back from.
 pub(crate) async fn landed(state: &Arc<DaemonState>, id: String, trash: Option<String>, trash_uid: Option<u32>) {
     let state = Arc::clone(state);
-    let result = blocking(move || app_db::with(&state.app_dir, |c| bin::set_trash(c, &id, trash.as_deref(), trash_uid))).await.and_then(|r| r);
+    let result = blocking(move || {
+        let Some(row) = app_db::with(&state.app_dir, |c| bin::get(c, &id))? else { return Ok(()); };
+        let original = state.account_lifecycle.capture(&row.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
+        app_db::with(&state.app_dir, |c| bin::set_trash(c, &id, trash.as_deref(), trash_uid))
+    }).await.and_then(|r| r);
     if let Err(e) = result {
         warn!("[deleted] could not record where a delete put the message: {e}");
     }
+}
+
+pub(crate) async fn landed_stamped(state: &Arc<DaemonState>, id: String, trash: Option<String>, trash_uid: Option<u32>, original: AccountStamp) {
+    let state = Arc::clone(state);
+    let result = blocking(move || {
+        let Some(row) = app_db::with(&state.app_dir, |c| bin::get(c, &id))? else { return Ok(()); };
+        if row.account_id != original.id() { return Err("deleted bin account changed".into()); }
+        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
+        app_db::with(&state.app_dir, |c| bin::set_trash(c, &id, trash.as_deref(), trash_uid))
+    }).await.and_then(|r| r);
+    if let Err(e) = result { warn!("[deleted] could not record where a delete put the message: {e}"); }
 }
 
 /// The vault's Maildir flags for a recovered copy: kept (`archived`), plus
@@ -328,9 +374,13 @@ fn mark_local_folder_again(root: &std::path::Path, account_id: &str, mailbox: &s
 /// message of a local folder the user has since deleted brings that folder
 /// back, marked, so it lists again.
 async fn recover_local(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, String> {
+    let original = state.account_lifecycle.capture(&d.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let fetched = if d.has_eml { None } else { Some(from_trash(state, &d).await?) };
+    #[cfg(test)]
+    let _local_done = tests::local_recovery_pause(state);
     let state = Arc::clone(state);
     blocking(move || {
+        let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
         let raw = match fetched {
             Some(raw) => raw,
             None => bin::read_eml(&state.app_dir, &d.id)?,
@@ -397,12 +447,16 @@ async fn from_trash(state: &Arc<DaemonState>, d: &Deleted) -> Result<Vec<u8>, St
 /// still is, else APPENDed to the folder it was deleted from. A byte-less row
 /// has only the Trash copy: gone from there, it cannot come back.
 async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, String> {
+    let original = state.account_lifecycle.capture(&d.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let config = imap_config(state, &d.account_id).await?;
+    let operation = state.account_lifecycle.try_operation(std::slice::from_ref(&original)).map_err(|_| "errors.keychainBusy".to_owned())?;
     let new_uid = if config.uses_jmap() {
-        recover_on_jmap(state, &d, &config).await?
+        recover_on_jmap(state, &d, &config, original.clone(), operation.clone()).await?
     } else {
         recover_on_imap(state, &d, &config).await?
     };
+    #[cfg(test)]
+    let _recovery_done = tests::recovery_pause(state);
 
     // A kept vault copy is filed under the uid the delete retired, and
     // custody says the server lost it. Re-file it under the new uid, or it
@@ -410,14 +464,15 @@ async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, S
     // A JMAP label put back keeps the uid it had (ledger rows are never
     // removed): the copy is filed right already, only its stamp is wrong.
     if let Some(new_uid) = new_uid {
-        let refiled = new_uid == d.uid || {
-            let rebind = json!({ "accountId": d.account_id, "mailbox": d.mailbox, "pairs": [[d.uid, new_uid]] });
-            let rebound = crate::handlers::custody::route(state, "vault_rebind_uids", &rebind, Value::Null).await;
-            rebound.and_then(|r| r.result).is_some_and(|r| r["rebound"].as_array().is_some_and(|a| !a.is_empty()))
+        let refiled = if new_uid == d.uid { true } else {
+            crate::handlers::custody::rebind_uids_owned(state, original.clone(), d.mailbox.clone(), vec![(d.uid, new_uid)], operation.clone())
+                .await.is_ok_and(|r| r["rebound"].as_array().is_some_and(|a| !a.is_empty()))
         };
         if refiled {
             let (st, acct, mb) = (Arc::clone(state), d.account_id.clone(), d.mailbox.clone());
+            let child_owner = operation.clone();
             let restamped = blocking(move || {
+                let _child_owner = child_owner;
                 crate::custody::with_conn(&st, |c| {
                     let text = entries::read(c, &acct, &mb)?.unwrap_or_default();
                     let rows: Vec<Value> = serde_json::from_str(&text).unwrap_or_default();
@@ -441,7 +496,11 @@ async fn recover_server(state: &Arc<DaemonState>, d: Deleted) -> Result<Value, S
     }
 
     let (app_dir, id) = (state.app_dir.clone(), d.id.clone());
-    blocking(move || app_db::with(&app_dir, |c| bin::remove(c, &app_dir, &id))).await.and_then(|r| r)?;
+    let child_owner = operation.clone();
+    blocking(move || {
+        let _child_owner = child_owner;
+        app_db::with(&app_dir, |c| bin::remove(c, &app_dir, &id))
+    }).await.and_then(|r| r)?;
     info!("[deleted] recovered {} to {}/{} (uid {:?})", d.id, d.account_id, d.mailbox, new_uid);
     Ok(json!({ "id": d.id, "accountId": d.account_id, "mailbox": d.mailbox, "uid": new_uid }))
 }
@@ -490,14 +549,13 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
 /// The original mailbox is made again when it is gone
 /// (`migration::ensure_dest_folder_jmap`). Returns the uid the mailbox's
 /// ledger gives the email: the old one for a label put back.
-async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
-    let original = state.account_lifecycle.capture(&d.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
-    crate::handlers::jmap_bridge::with_session_retry(state, config, |acct| recover_jmap_once(state, d, config, acct, original.clone())).await
+async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig, original: AccountStamp, owner: OperationPermit) -> Result<Option<u32>, String> {
+    crate::handlers::jmap_bridge::with_session_retry(state, config, |acct| recover_jmap_once(state, d, config, acct, original.clone(), owner.clone())).await
 }
 
 /// One pass of `recover_on_jmap` on `acct`. Safe to run twice: a second pass
 /// finds the email the first one put back (or imported) and relabels it again.
-async fn recover_jmap_once(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig, acct: Arc<crate::jmap_sessions::AccountJmap>, original: crate::account_lifecycle::AccountStamp) -> Result<Option<u32>, String> {
+async fn recover_jmap_once(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig, acct: Arc<crate::jmap_sessions::AccountJmap>, original: AccountStamp, owner: OperationPermit) -> Result<Option<u32>, String> {
     use mailvault_core::jmap::ImportResult;
     let mailbox_id = crate::migration::ensure_dest_folder_jmap(&acct, &d.mailbox).await.map_err(|e| e.to_string())?;
     let boxes = acct.current().await.map_err(|e| e.to_string())?;
@@ -540,7 +598,9 @@ async fn recover_jmap_once(state: &Arc<DaemonState>, d: &Deleted, config: &ImapC
             }
         }
     };
-    let uids = acct.ids_to_uids(state, original, &d.account_id, &d.mailbox, &[email_id]).await?;
+    #[cfg(test)]
+    let _ledger_done = tests::jmap_ledger_pause(state);
+    let uids = acct.ids_to_uids_owned(state, original, &d.account_id, &d.mailbox, &[email_id], owner).await?;
     Ok(uids.first().copied())
 }
 
@@ -568,6 +628,7 @@ async fn from_trash_jmap(state: &Arc<DaemonState>, config: &ImapConfig, trash: &
 fn purge(state: &DaemonState) -> Result<usize, String> {
     let settings = crate::handlers::imap::read_settings_state(&state.app_dir)?;
     let days = bin::retention_days(&settings);
+    let _owner = state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
     app_db::with(&state.app_dir, |c| bin::purge_expired(c, &state.app_dir, now_ms(), days))
 }
 
@@ -606,6 +667,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     if let Err(e) = purge(&state) {
                         warn!("[deleted] purge before list skipped: {e}");
                     }
+                    let _owner = state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
                     let rows = app_db::with(&state.app_dir, |c| bin::list(c, &state.app_dir))?;
                     serde_json::to_value(rows).map_err(|e| e.to_string())
                 })
@@ -647,9 +709,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || {
+                    let known = app_db::with(&state.app_dir, |c| ids.iter()
+                        .map(|id| bin::get(c, id))
+                        .collect::<Result<Vec<_>, _>>())?;
+                    let account_ids: std::collections::BTreeSet<_> = known.iter().flatten().map(|row| row.account_id.clone()).collect();
+                    let stamps = account_ids.into_iter()
+                        .map(|account| state.account_lifecycle.capture(&account).map_err(|_| "errors.keychainBusy".to_owned()))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let _permit = if stamps.is_empty() { None } else {
+                        Some(state.account_lifecycle.try_commit(&stamps).map_err(|_| "errors.keychainBusy".to_owned())?)
+                    };
                     app_db::with(&state.app_dir, |c| {
-                        for one in &ids {
-                            bin::remove(c, &state.app_dir, one)?;
+                        for one in known.into_iter().flatten() {
+                            bin::remove(c, &state.app_dir, &one.id)?;
                         }
                         Ok(json!({ "discarded": ids.len() }))
                     })
@@ -668,6 +740,111 @@ mod tests {
     use crate::server::handle_request_for_test;
     use mock_imap::state::{Mailbox, Message};
     use mock_imap::{Action, MockImap, Scenario, Trigger};
+    use std::sync::{mpsc, Mutex, OnceLock};
+
+    struct RecoveryGate {
+        entered: mpsc::Sender<()>,
+        release: mpsc::Receiver<()>,
+        done: mpsc::Sender<()>,
+    }
+    fn recovery_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
+        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    fn capture_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
+        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    fn jmap_ledger_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
+        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    fn local_recovery_gates() -> &'static Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>> {
+        static GATES: OnceLock<Mutex<std::collections::HashMap<std::path::PathBuf, RecoveryGate>>> = OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    pub(super) fn local_recovery_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
+        local_recovery_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv();
+            crate::credentials::TestTaskDone(gate.done)
+        })
+    }
+    pub(super) fn jmap_ledger_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
+        jmap_ledger_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv();
+            crate::credentials::TestTaskDone(gate.done)
+        })
+    }
+    pub(super) fn capture_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
+        capture_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv();
+            crate::credentials::TestTaskDone(gate.done)
+        })
+    }
+    pub(super) fn recovery_pause(s: &DaemonState) -> Option<crate::credentials::TestTaskDone> {
+        recovery_gates().lock().unwrap().remove(&s.app_dir).map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv();
+            crate::credentials::TestTaskDone(gate.done)
+        })
+    }
+    struct RecoveryPause {
+        release: Option<mpsc::Sender<()>>,
+        entered: mpsc::Receiver<()>,
+        done: Option<mpsc::Receiver<()>>,
+    }
+    impl RecoveryPause {
+        fn arm(s: &DaemonState) -> Self {
+            let (entered, notice) = mpsc::channel();
+            let (release, resume) = mpsc::channel();
+            let (done, finished) = mpsc::channel();
+            recovery_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn arm_capture(s: &DaemonState) -> Self {
+            let (entered, notice) = mpsc::channel();
+            let (release, resume) = mpsc::channel();
+            let (done, finished) = mpsc::channel();
+            capture_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn arm_jmap_ledger(s: &DaemonState) -> Self {
+            let (entered, notice) = mpsc::channel();
+            let (release, resume) = mpsc::channel();
+            let (done, finished) = mpsc::channel();
+            jmap_ledger_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn arm_local(s: &DaemonState) -> Self {
+            let (entered, notice) = mpsc::channel();
+            let (release, resume) = mpsc::channel();
+            let (done, finished) = mpsc::channel();
+            local_recovery_gates().lock().unwrap().insert(s.app_dir.clone(), RecoveryGate { entered, release: resume, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn entered(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("remote recover accepted"); }
+        fn finish(&mut self) {
+            self.release.take();
+            self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).expect("actual recovery completed");
+        }
+    }
+    impl Drop for RecoveryPause {
+        fn drop(&mut self) {
+            self.release.take();
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+
+    fn lifecycle_lease(id: &str) -> crate::account_workflows::AccountLease {
+        crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [id.to_owned()].into(), ..Default::default() },
+        )
+    }
 
     const RAW: &str = "From: Ann <ann@example.com>\r\nTo: user@example.com\r\nSubject: Keep me\r\n\
                        Date: Thu, 01 Jan 2015 00:00:00 +0000\r\nMessage-ID: <keep1@example.com>\r\n\r\nThe body.\r\n";
@@ -689,6 +866,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-deleted-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir, true);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"other"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         let config: ImapConfig = serde_json::from_value(account(server)).unwrap();
         s.raw_messages.accounts.lock().unwrap().insert("acc1".into(), config);
         // The list row the app showed, as a sync leaves it.
@@ -726,6 +905,55 @@ mod tests {
         assert_eq!(s.vault_registry.uid_sets(&s.data_dir, "acc1", "INBOX").map(|(all, _)| all).unwrap_or_default(), Vec::<u32>::new());
         let folders = crate::custody::with_conn(&s, |c| cache::mailboxes_with_headers(c, None)).unwrap();
         assert_eq!(folders, vec![("acc1".to_string(), "INBOX".to_string())], "only the folder the sync listed");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_capture_refuses_bin_publication_after_original_account_retires() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        with_mailbox_write(&s, "acc1", "INBOX", |root| vault_files::store(&s.vault_registry, root, "acc1", "INBOX", 1, RAW.as_bytes(), &[], false)).unwrap();
+        let mut pause = RecoveryPause::arm_capture(&s);
+        let (done, completed) = mpsc::channel();
+        let st = s.clone();
+        let waiter = tokio::spawn(async move {
+            let result = capture(&st, "acc1", "INBOX", 1, Source::Local).await;
+            let _ = done.send(result);
+        });
+        pause.entered();
+        drop(waiter);
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        let other = s.account_lifecycle.capture("other").unwrap();
+        assert!(s.account_lifecycle.try_commit(&[other]).is_ok(), "unrelated B remains writable");
+        pause.finish();
+        let result = completed.recv_timeout(Duration::from_secs(5)).unwrap();
+        let bin_rows = binned(&s).len();
+        assert!(result.is_err() && bin_rows == 0,
+            "retired capture published bin row or bytes: result={result:?} bin_rows={bin_rows}");
+    }
+
+    #[tokio::test]
+    async fn p3_retired_bin_helpers_and_discard_preserve_exact_copy() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        let row = json!({"uid":1,"messageId":"<keep1@example.com>","subject":"Keep me"});
+        let proof = Capture { account_id: "acc1", mailbox: "INBOX", uid: 1, message_id: Some("<keep1@example.com>"), flags: &[], row: &row, deleted_at: now_ms() };
+        let (id, _) = app_db::with(&s.app_dir, |c| bin::capture(c, &s.app_dir, &proof, Some(RAW.as_bytes()))).unwrap();
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        landed(&s, id.clone(), Some("Trash".into()), Some(9)).await;
+        let after_landed = app_db::with(&s.app_dir, |c| bin::get(c, &id)).unwrap();
+        forget(&s, id.clone()).await;
+        let discarded = handle_request_for_test(&s, "deleted.discard", json!({"ids":[id.clone()]})).await;
+        let retained = app_db::with(&s.app_dir, |c| bin::get(c, &id)).unwrap();
+        let bytes = bin::read_eml(&s.app_dir, &id).ok();
+        assert!(after_landed.as_ref().is_some_and(|row| row.trash.is_none())
+            && discarded.error.is_some() && retained.is_some() && bytes.as_deref() == Some(RAW.as_bytes()),
+            "retired bin helper or discard changed exact copy: after_landed={after_landed:?} discarded={discarded:?} retained={retained:?} bytes={bytes:?}");
     }
 
     #[tokio::test]
@@ -827,6 +1055,48 @@ mod tests {
         assert!(binned(&s).is_empty());
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_server_recovery_owner_survives_provider_and_local_children() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        delete(&s, &server, false).await.result.expect("deleted");
+        let mut pause = RecoveryPause::arm(&s);
+        let (done, completed) = mpsc::channel();
+        let st = s.clone();
+        let waiter = tokio::spawn(async move {
+            let result = recover(&st, "server").await;
+            let _ = done.send(result);
+        });
+        pause.entered();
+        assert_eq!(uids(&server, "INBOX").len(), 1, "provider MOVE accepted before pause");
+        drop(waiter);
+        let mut claim = match s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1") {
+            Ok(claim) => Some(claim),
+            Err(crate::account_lifecycle::LifecycleError::Busy) => None,
+            Err(error) => panic!("unexpected close result: {error:?}"),
+        };
+        let early = if let Some(held) = claim.as_ref() {
+            let premature = tokio::time::timeout(Duration::from_millis(50),
+                held.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5))).await;
+            if let Ok(Ok(drained)) = premature {
+                claim.as_mut().unwrap().mark_effects_started(drained).unwrap();
+                claim.take().unwrap().finish_retired().unwrap();
+                true
+            } else { false }
+        } else { false };
+        let other = s.account_lifecycle.capture("other").unwrap();
+        assert!(s.account_lifecycle.try_commit(&[other]).is_ok(), "unrelated account remains usable");
+        pause.finish();
+        let result = completed.recv_timeout(Duration::from_secs(5)).unwrap();
+        let mut remaining = claim.take().unwrap_or_else(|| s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap());
+        let drained = remaining.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        remaining.mark_effects_started(drained).unwrap();
+        remaining.finish_retired().unwrap();
+        let bin_rows = binned(&s).len();
+        assert!(!early && result["failed"] == json!([]) && bin_rows == 0,
+            "provider recovery escaped account owner: early={early} result={result:?} bin_rows={bin_rows}");
+    }
+
     #[tokio::test]
     async fn a_byte_less_row_gone_from_trash_says_so_and_stays() {
         let server = server(Scenario::new());
@@ -853,6 +1123,33 @@ mod tests {
         let cur = vault_files::cur_path(&s.data_dir, "acc1", "INBOX");
         assert_eq!(std::fs::read(cur.join(name)).unwrap(), RAW.as_bytes());
         assert!(binned(&s).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_local_recovery_rechecks_original_after_trash_download() {
+        let server = server(Scenario::new());
+        let s = state(&server);
+        delete(&s, &server, false).await.result.expect("deleted into Trash");
+        let mut pause = RecoveryPause::arm_local(&s);
+        let (done, completed) = mpsc::channel();
+        let st = s.clone();
+        let waiter = tokio::spawn(async move { let _ = done.send(recover(&st, "local").await); });
+        pause.entered();
+        assert_eq!(server.count_commands("BODY.PEEK[]"), 1, "Trash body downloaded before pause");
+        drop(waiter);
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acc1"), "acc1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        pause.finish();
+        let result = completed.recv_timeout(Duration::from_secs(5)).unwrap();
+        let file = mailvault_core::message_store::read_raw(&s.data_dir, "acc1", "INBOX", 1).unwrap();
+        let custody = crate::custody::with_conn(&s, |c| entries::get(c, "acc1", "INBOX", 1)).unwrap();
+        assert!(result["recovered"] == json!([]) && result["failed"].as_array().is_some_and(|v| v.len() == 1)
+            && file.is_none() && custody.is_none() && binned(&s).len() == 1,
+            "late local recovery published after retirement: result={result:?} file={} custody={custody:?} bin={:?}", file.is_some(), binned(&s));
+        let other = s.account_lifecycle.capture("other").unwrap();
+        assert!(s.account_lifecycle.try_commit(&[other]).is_ok());
     }
 
     #[tokio::test]
@@ -978,6 +1275,60 @@ mod tests {
         assert!(s.jmap.is_own(&support::config(&m, port), &back.id), "never announced as an arrival");
         assert!(binned(&s).is_empty());
         assert!(trap.accept().is_err(), "no IMAP dial");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_jmap_recovery_import_and_relabel_keep_owner_through_ledger_and_bin() {
+        use crate::jmap_test_support as support;
+        for import in [false, true] {
+            let m = mock_jmap::MockJmap::start(support::scenario());
+            let (trap, port) = support::imap_trap();
+            let (s, e1, e2) = jmap_state(&m, port).await;
+            let uid = if import { e2 } else { e1 };
+            handle_request_for_test(&s, "imap_delete_email", json!({
+                "account": support::account_json(&m, port), "uid": uid, "mailbox": "INBOX", "permanent": import
+            })).await.result.expect("deleted before recovery");
+            let mut pause = RecoveryPause::arm_jmap_ledger(&s);
+            let (done, completed) = mpsc::channel();
+            let st = s.clone();
+            let waiter = tokio::spawn(async move { let _ = done.send(recover(&st, "server").await); });
+            pause.entered();
+            drop(waiter);
+            if import {
+                assert_eq!(m.count_calls("Email/import"), 1, "server import accepted before ledger pause");
+                assert!(support::emails_in(&m, "mb-inbox").iter().any(|e| e.raw == support::raw("e2", "two")), "imported body is on server");
+            } else {
+                assert!(jmap_labels(&m, "e1").contains("mb-inbox"), "server relabel accepted before ledger pause");
+                assert_eq!(m.count_calls("Email/import"), 0);
+            }
+            assert_eq!(binned(&s).len(), 1, "bin remains until ledger and local child complete");
+            assert!(matches!(s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1"), Err(crate::account_lifecycle::LifecycleError::Busy)), "JMAP recovery owns account through ledger child");
+            pause.finish();
+            let result = completed.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert_eq!(result["failed"], json!([]), "recovery result: {result:?}");
+            assert!(binned(&s).is_empty(), "bin removed after complete recovery");
+            let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1").unwrap();
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+            assert!(trap.accept().is_err(), "JMAP recovery dialled IMAP");
+        }
+        let m = mock_jmap::MockJmap::start(support::scenario());
+        let (trap, port) = support::imap_trap();
+        let (s, _, e2) = jmap_state(&m, port).await;
+        handle_request_for_test(&s, "imap_delete_email", json!({
+            "account": support::account_json(&m, port), "uid": e2, "mailbox": "INBOX", "permanent": true
+        })).await.result.expect("deleted before close");
+        let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        let before = m.requests().len();
+        let result = recover(&s, "server").await;
+        assert_eq!(result["recovered"], json!([]));
+        assert_eq!(m.requests().len(), before, "retired recovery sent a provider request");
+        assert_eq!(binned(&s).len(), 1, "retired bin remains for later authority");
+        assert!(trap.accept().is_err());
     }
 
     /// A byte-less row of a JMAP account recovers locally from the Trash copy,

@@ -92,6 +92,8 @@ pub enum Fault {
     ImportAlreadyExists,
     /// `EmailSubmission/set` answers `notCreated` with type `forbiddenFrom`.
     SubmissionRejected,
+    /// One successful submission is recorded, then its API connection closes without an answer.
+    SubmissionReplyLostOnce,
     /// After N events (state or ping) an EventSource stream goes silent but stays open: a dead proxy.
     DropEventSourceAfter { events: usize },
     /// An EventSource stream sends one `state` event (the current state) right after its headers and closes: a proxy that hangs up after greeting.

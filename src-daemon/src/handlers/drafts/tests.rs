@@ -17,8 +17,9 @@ impl Harness {
         let app = dir.path().join("app");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(&app).unwrap();
-        std::fs::write(app.join("accounts.json"),json!([{"id":"one","email":"one@example.test","imapHost":"offline.invalid"},{"id":"two","email":"two@example.test","imapHost":"offline.invalid"}]).to_string()).unwrap();
+        std::fs::write(app.join("accounts.json"),json!([{"id":"one","email":"one@example.test","imapHost":"offline.invalid"},{"id":"two","email":"two@example.test","imapHost":"offline.invalid"},{"id":"three","email":"three@example.test","imapHost":"offline.invalid"}]).to_string()).unwrap();
         let s = DaemonState::for_test(root, app, true);
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         Self { _dir: dir, s }
     }
     fn hook(&self, h: impl Fn(&str) -> Result<(), String> + Send + Sync + 'static) {
@@ -29,6 +30,13 @@ impl Harness {
     }
     fn clear(&self) {
         HOOKS.lock().unwrap().remove(&self.s.app_dir);
+    }
+    fn seed_lifecycle(&self) {
+        self.s.account_lifecycle.seed(&mailvault_core::accounts_doc::Listing {
+            accounts: vec![json!({"id":"one"}), json!({"id":"two"}), json!({"id":"three"})],
+            version: 0,
+            recovered: None,
+        });
     }
 }
 impl Drop for Harness {
@@ -58,12 +66,21 @@ fn wait_preparation(
     tokio::sync::oneshot::Receiver<()>,
     Arc<(Mutex<bool>, Condvar)>,
 ) {
+    wait_at(h, "prepared")
+}
+fn wait_at(
+    h: &Harness,
+    held_point: &'static str,
+) -> (
+    tokio::sync::oneshot::Receiver<()>,
+    Arc<(Mutex<bool>, Condvar)>,
+) {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let tx = Mutex::new(Some(tx));
     let release = Arc::new((Mutex::new(false), Condvar::new()));
     let copy = release.clone();
     h.hook(move |point| {
-        if point == "prepared" {
+        if point == held_point {
             let notify = { tx.lock().unwrap().take() };
             if let Some(tx) = notify {
                 let _ = tx.send(());
@@ -87,6 +104,115 @@ fn wait_preparation(
 fn release(gate: Arc<(Mutex<bool>, Condvar)>) {
     *gate.0.lock().unwrap() = true;
     gate.1.notify_all();
+}
+fn lifecycle_lease(id: &str) -> crate::account_workflows::AccountLease {
+    crate::account_workflows::AccountLease::detached_for_test(
+        crate::account_workflows::AccountWriteScope {
+            ids: [id.to_owned()].into(),
+            ..Default::default()
+        },
+    )
+}
+async fn retire_account(s: &Arc<DaemonState>, id: &str) {
+    let mut claim = s.account_lifecycle.try_close(lifecycle_lease(id), id).unwrap();
+    let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+    claim.mark_effects_started(drained).unwrap();
+    claim.finish_retired().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn p3_old_draft_preparation_cannot_publish_after_retirement() {
+    let h = Harness::new();
+    h.seed_lifecycle();
+    let (started, gate) = wait_preparation(&h);
+    let s = h.s.clone();
+    let old = tokio::spawn(async move { rpc(&s, "drafts.save", req("retired-preparation", 1, "late" )).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), started).await.unwrap().unwrap();
+    retire_account(&h.s, "one").await;
+    release(gate);
+    let result = old.await.unwrap();
+    let record = row(&h.s, "retired-preparation");
+    let late_copy = record.current.as_ref().or_else(|| record.pending.as_ref().map(|p| &p.copy));
+    let late_file = late_copy.is_some_and(|copy| {
+        let l = copy.location();
+        message_store::read_raw(&h.s.data_dir, &l.account_id, &l.mailbox, l.uid).unwrap().is_some()
+    });
+    let mut b = req("other-preparation", 1, "ordinary");
+    b["accountId"] = json!("two");
+    let b_result = rpc(&h.s, "drafts.save", b).await;
+    assert!(b_result.is_ok(), "unrelated B draft remains usable: {b_result:?}");
+    assert!(result.is_err() && record.current.is_none() && record.pending.is_none() && !late_file,
+        "retired A draft published: response={result:?} record={record:?} late_file={late_file}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn p3_admitted_draft_child_keeps_complete_account_scope() {
+    let h = Harness::new();
+    h.seed_lifecycle();
+    let first = saved(&h.s, req("move-scope", 1, "original")).await;
+    let (started, gate) = wait_at(&h, "after_prepared_store");
+    let mut moved = req("move-scope", 2, "new account");
+    moved["accountId"] = json!("two");
+    let s = h.s.clone();
+    let (done, completed) = std::sync::mpsc::channel();
+    let waiter = tokio::spawn(async move {
+        let result = rpc(&s, "drafts.save", moved).await;
+        let _ = done.send(result);
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(10), started).await.unwrap().unwrap();
+    drop(waiter);
+    let mut a = Some(h.s.account_lifecycle.try_close(lifecycle_lease("one"), "one").unwrap());
+    let mut b = Some(h.s.account_lifecycle.try_close(lifecycle_lease("two"), "two").unwrap());
+    let a_early = if let Ok(Ok(drained)) = tokio::time::timeout(std::time::Duration::from_millis(50),
+        a.as_ref().unwrap().wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5))).await {
+        a.as_mut().unwrap().mark_effects_started(drained).unwrap();
+        a.take().unwrap().finish_retired().unwrap();
+        true
+    } else { false };
+    let b_early = if let Ok(Ok(drained)) = tokio::time::timeout(std::time::Duration::from_millis(50),
+        b.as_ref().unwrap().wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5))).await {
+        b.as_mut().unwrap().mark_effects_started(drained).unwrap();
+        b.take().unwrap().finish_retired().unwrap();
+        true
+    } else { false };
+    let c = h.s.account_lifecycle.capture("three").unwrap();
+    assert!(h.s.account_lifecycle.try_commit(&[c]).is_ok(), "unrelated C remains usable");
+    release(gate);
+    let result = completed.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+    for claim in [a.take(), b.take()].into_iter().flatten() {
+        let mut claim = claim;
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+    }
+    let record = row(&h.s, "move-scope");
+    let old = first["uid"].as_u64().unwrap() as u32;
+    let old_file = message_store::read_raw(&h.s.data_dir, "one", first["mailbox"].as_str().unwrap(), old).unwrap().is_some();
+    assert!(!a_early && !b_early && result.is_ok() && record.current.as_ref().is_some_and(|c| c.location().account_id == "two") && !old_file,
+        "multi-account draft child escaped close: a_early={a_early} b_early={b_early} result={result:?} record={record:?} old_file={old_file}");
+}
+
+#[tokio::test]
+async fn p3_draft_publication_unwind_releases_all_account_owners() {
+    let h = Harness::new();
+    saved(&h.s, req("unwind-scope", 1, "original")).await;
+    h.hook(|point| {
+        if point == "after_prepared_store" { panic!("injected actual draft publication unwind"); }
+        Ok(())
+    });
+    let mut moved = req("unwind-scope", 2, "new account");
+    moved["accountId"] = json!("two");
+    let result = rpc(&h.s, "drafts.save", moved).await;
+    h.clear();
+    let record = row(&h.s, "unwind-scope");
+    assert!(result.is_err() && record.pending.is_some() && record.current.as_ref().is_some_and(|c| c.location().account_id == "one"),
+        "unwound draft lost retained COW evidence: result={result:?} record={record:?}");
+    for id in ["one", "two"] {
+        let mut claim = h.s.account_lifecycle.try_close(lifecycle_lease(id), id).expect("unwound actual child released account owner");
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+    }
 }
 #[tokio::test]
 async fn drafts_real_save_readback_and_provenance_in_both_formats() {

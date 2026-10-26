@@ -1127,7 +1127,7 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
     let mailbox = mailbox_param(params);
     let permanent = opt_param::<bool>(params, "permanent").unwrap_or(false);
     let binned = if opt_param::<bool>(params, "bin").unwrap_or(true) {
-        match deleted::capture(state, &account_id, &mailbox, uid, Source::Jmap { config: account }).await {
+        match deleted::capture_stamped(state, original.clone(), &account_id, &mailbox, uid, Source::Jmap { config: account }).await {
             Ok(binned) => binned,
             // An expired or revoked session read nothing: answered as itself,
             // so `answer_with_retry` connects again and runs the delete once
@@ -1149,19 +1149,19 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
         Ok(removed) => {
             let bin_id = match binned {
                 Some((id, true)) if !removed.changed => {
-                    deleted::forget(state, id).await;
+                    deleted::forget_stamped(state, id, original.clone()).await;
                     None
                 }
                 other => other.map(|(id, _)| id),
             };
             if let (Some(id), true) = (bin_id.clone(), removed.changed) {
-                deleted::landed(state, id, removed.trash.clone(), removed.trash_uid).await;
+                deleted::landed_stamped(state, id, removed.trash.clone(), removed.trash_uid, original.clone()).await;
             }
             Ok(json!({"success": true, "trash": removed.trash, "trashUid": removed.trash_uid, "binId": bin_id}))
         }
         Err(f) => {
             if let Some((id, true)) = binned.filter(|_| !permanent) {
-                deleted::forget(state, id).await;
+                deleted::forget_stamped(state, id, original.clone()).await;
             }
             Err(f)
         }

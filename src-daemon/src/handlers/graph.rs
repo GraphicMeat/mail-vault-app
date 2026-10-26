@@ -273,11 +273,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // (`handlers::deleted`). Best effort: a Graph delete moves it to
             // Deleted Items, which still holds it.
             let place = (opt_str_arg(params, "accountId"), opt_str_arg(params, "mailbox"), params.get("uid").and_then(Value::as_u64));
+            let mut bin_original = None;
             let binned = match place {
                 (Some(account_id), Some(mailbox), Some(uid)) => {
                     let source = crate::handlers::deleted::Source::Graph;
-                    crate::handlers::deleted::capture(state, &account_id, &mailbox, uid as u32, source)
-                        .await
+                    let captured = match state.account_lifecycle.capture(&account_id) {
+                        Ok(original) => {
+                            bin_original = Some(original.clone());
+                            crate::handlers::deleted::capture_stamped(state, original, &account_id, &mailbox, uid as u32, source).await
+                        }
+                        Err(_) => Err("errors.keychainBusy".to_owned()),
+                    };
+                    captured
                         .unwrap_or_else(|e| {
                             tracing::warn!("[graph_delete] {account_id}/{mailbox} uid {uid} deleted without a bin copy: {e}");
                             None
@@ -288,8 +295,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             match client.delete_message(&message_id).await {
                 Ok(()) => RpcResponse::success(id, binned.map(|(bin_id, _)| json!({ "binId": bin_id })).unwrap_or(Value::Null)),
                 Err(e) => {
-                    if let Some((bin_id, true)) = binned {
-                        crate::handlers::deleted::forget(state, bin_id).await;
+                    if let (Some((bin_id, true)), Some(original)) = (binned, bin_original) {
+                        crate::handlers::deleted::forget_stamped(state, bin_id, original).await;
                     }
                     RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
                 }

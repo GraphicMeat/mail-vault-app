@@ -778,8 +778,17 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // that cannot be captured is refused: the bin would be its only
             // copy. A message already gone from the server has nothing to keep.
             let account_id = params.get("account").and_then(|a| a.get("id")).and_then(Value::as_str);
+            let mut bin_original = None;
             let binned = match account_id.filter(|_| params.get("bin").and_then(Value::as_bool).unwrap_or(true)) {
-                Some(account_id) => match crate::handlers::deleted::capture(state, account_id, &mailbox, uid, crate::handlers::deleted::Source::Imap { config: &account, permanent, priority: true }).await {
+                Some(account_id) => {
+                    let captured = match state.account_lifecycle.capture(account_id) {
+                        Ok(original) => {
+                            bin_original = Some(original.clone());
+                            crate::handlers::deleted::capture_stamped(state, original, account_id, &mailbox, uid, crate::handlers::deleted::Source::Imap { config: &account, permanent, priority: true }).await
+                        }
+                        Err(_) => Err("errors.keychainBusy".to_owned()),
+                    };
+                    match captured {
                     Ok(binned) => binned,
                     Err(e) if permanent => {
                         tracing::error!("[delete_email] uid={} not deleted: could not keep a copy first: {}", uid, e);
@@ -788,6 +797,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     Err(e) => {
                         warn!("[delete_email] uid={} deleted without a bin copy (it moves to Trash): {}", uid, e);
                         None
+                    }
                     }
                 },
                 None => None,
@@ -828,8 +838,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 // `binId` names its bin copy, for an undo the server cannot do.
                 Ok(outcome) => {
                     let bin_id = binned.map(|(bin_id, _)| bin_id);
-                    if let Some(bin_id) = bin_id.clone() {
-                        crate::handlers::deleted::landed(state, bin_id, outcome.trash.clone(), outcome.trash_uid).await;
+                    if let (Some(bin_id), Some(original)) = (bin_id.clone(), bin_original.clone()) {
+                        crate::handlers::deleted::landed_stamped(state, bin_id, outcome.trash.clone(), outcome.trash_uid, original).await;
                     }
                     RpcResponse::success(
                         id,
@@ -841,8 +851,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // A permanent delete keeps its capture: the EXPUNGE may
                     // have landed with its reply lost, and then the retry
                     // finds nothing left to capture. The retry reuses this row.
-                    if let Some((bin_id, true)) = binned.filter(|_| !permanent) {
-                        crate::handlers::deleted::forget(state, bin_id).await;
+                    if let (Some((bin_id, true)), Some(original)) = (binned.filter(|_| !permanent), bin_original) {
+                        crate::handlers::deleted::forget_stamped(state, bin_id, original).await;
                     }
                     RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
                 }

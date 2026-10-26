@@ -12,6 +12,7 @@
 //! loop and `scheduled.send_now` call it, so "fire now" can never drift from
 //! what the periodic pass does.
 
+use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::server::DaemonState;
 use mailvault_core::app_db::{self, scheduled};
 use mailvault_core::imap::ImapConfig;
@@ -157,7 +158,7 @@ async fn next_wait(state: &Arc<DaemonState>) -> Duration {
 
 /// Returns how many rows this pass attempted, so `run` can floor its next
 /// sleep instead of spinning if one of them didn't actually move off `due()`.
-async fn process_due(state: &Arc<DaemonState>) -> usize {
+pub(crate) async fn process_due(state: &Arc<DaemonState>) -> usize {
     let now = now_ms();
     let due = match app_db::with(&state.app_dir, |c| scheduled::due(c, now)) {
         Ok(v) => v,
@@ -209,11 +210,23 @@ enum Outcome {
 /// directly (skipping `due()`'s `fire_at` gate, never its retry/idempotency
 /// gate) so "fire now" is the same send path, not a second one.
 pub(crate) async fn attempt_row(state: &Arc<DaemonState>, snapshot: &scheduled::ScheduledSend) {
+    if let Err(e) = attempt_row_with(state, snapshot, None, false).await {
+        warn!("[scheduled-send] could not admit {}: {e}", snapshot.id);
+    }
+}
+
+/// An explicit retry carries the stamp captured before its row lookup and
+/// resets attempts only after the same attempt owns the account.
+pub(crate) async fn attempt_row_explicit(state: &Arc<DaemonState>, snapshot: &scheduled::ScheduledSend, original: AccountStamp) -> Result<(), String> {
+    attempt_row_with(state, snapshot, Some(original), true).await
+}
+
+async fn attempt_row_with(state: &Arc<DaemonState>, snapshot: &scheduled::ScheduledSend, original: Option<AccountStamp>, reset_failed: bool) -> Result<(), String> {
     let app_dir = state.app_dir.clone();
     let id = snapshot.id.clone();
     let Some(_in_flight) = state.scheduled_send.claim(&id) else {
         info!("[scheduled-send] {id} is already being sent; not sending it twice");
-        return;
+        return Ok(());
     };
     // The row as it is now, read under the claim. `snapshot` came from a
     // `due()` batch read before the rows ahead of it spent seconds each on
@@ -221,21 +234,39 @@ pub(crate) async fn attempt_row(state: &Arc<DaemonState>, snapshot: &scheduled::
     // win, not be overwritten by `sending` and sent from a stale envelope.
     let row = match app_db::with(&app_dir, |c| scheduled::get(c, &id)) {
         Ok(Some(row)) => row,
-        Ok(None) => return,
+        Ok(None) => return Ok(()),
         Err(e) => {
             warn!("[scheduled-send] could not re-read {id} before sending: {e}");
-            return;
+            return Ok(());
         }
     };
-    if !matches!(row.status.as_str(), "queued" | "sending" | "failed") {
-        return;
+    if !matches!(row.status.as_str(), "queued" | "sending" | "failed")
+        || (reset_failed && !matches!(row.status.as_str(), "queued" | "failed")) {
+        return Ok(());
     }
     // Moved later since the batch was read: not due any more. (`send_now`
     // hands in a fresh read, so its own `fire_at` never differs.)
     if row.fire_at != snapshot.fire_at && row.fire_at > now_ms() {
-        return;
+        return Ok(());
     }
     let row = &row;
+    let original = match original {
+        Some(stamp) if stamp.id() == row.account_id => stamp,
+        Some(_) => return Err("errors.keychainBusy".to_owned()),
+        None => state.account_lifecycle.capture(&row.account_id).map_err(|_| "errors.keychainBusy".to_owned())?,
+    };
+    // Credential/keychain and OAuth preparation can prompt or wait. Only the
+    // revocable original stamp crosses this seam; no semantic owner does.
+    let prepared = prepare_send(state, row).await;
+    let operation = state.account_lifecycle.try_operation(std::slice::from_ref(&original))
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
+    if reset_failed {
+        let (reset_app, reset_id, reset_owner) = (app_dir.clone(), id.clone(), operation.clone());
+        crate::handlers::common::blocking(move || {
+            let _reset_owner = reset_owner;
+            app_db::with(&reset_app, |c| scheduled::reset_failed_attempts(c, &reset_id))
+        }).await.and_then(|r| r)?;
+    }
     let gate = app_db::with(&app_dir, |c| {
         scheduled::set_status(c, &id, "sending", "")?;
         scheduled::attempt_before_send(c, &id)
@@ -244,19 +275,28 @@ pub(crate) async fn attempt_row(state: &Arc<DaemonState>, snapshot: &scheduled::
         Ok(scheduled::AttemptOutcome::Send { attempt }) => attempt,
         Ok(scheduled::AttemptOutcome::CeilingExceeded) => {
             emit(state, &id, "failed");
-            return;
+            return Ok(());
         }
         Err(e) => {
             warn!("[scheduled-send] could not gate {id}: {e}");
-            return;
+            return Ok(());
         }
     };
 
-    let (status, error) = match send_one(state, row).await {
+    let outcome = match prepared {
+        Ok((account, stored)) => send_one(state, row, account, stored, operation.clone()).await,
+        Err(outcome) => outcome,
+    };
+    #[cfg(test)]
+    let _terminal_done = terminal_pause(&app_dir, &id).await;
+    let (status, error) = match outcome {
         Outcome::Sent => {
             // The delete can list the mailbox under its lock: off the runtime.
             let (st, account_id, mailbox, uid) = (Arc::clone(state), row.account_id.clone(), row.mailbox.clone(), row.uid);
+            let (child_owner, child_stamp) = (operation.clone(), original.clone());
             let removed = crate::handlers::common::blocking(move || {
+                let _child_owner = child_owner;
+                let _local = st.account_lifecycle.try_commit(&[child_stamp]).map_err(|_| "errors.keychainBusy".to_owned())?;
                 crate::handlers::common::with_mailbox_write(&st, &account_id, &mailbox, |root| {
                     vault_files::delete(&st.vault_registry, root, &account_id, &mailbox, uid)
                 })
@@ -298,6 +338,58 @@ pub(crate) async fn attempt_row(state: &Arc<DaemonState>, snapshot: &scheduled::
         warn!("[scheduled-send] could not record '{status}' for {id}: {e}");
     }
     emit(state, &id, status);
+    Ok(())
+}
+
+#[cfg(test)]
+struct TerminalGate {
+    entered: std::sync::mpsc::Sender<()>,
+    release: tokio::sync::oneshot::Receiver<()>,
+    done: std::sync::mpsc::Sender<()>,
+}
+#[cfg(test)]
+fn terminal_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<(std::path::PathBuf, String), TerminalGate>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<(std::path::PathBuf, String), TerminalGate>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+async fn terminal_pause(path: &std::path::Path, id: &str) -> Option<crate::credentials::TestTaskDone> {
+    let gate = terminal_gates().lock().unwrap().remove(&(path.to_path_buf(), id.to_owned()));
+    if let Some(gate) = gate {
+        let _ = gate.entered.send(());
+        let _ = gate.release.await;
+        Some(crate::credentials::TestTaskDone(gate.done))
+    } else { None }
+}
+#[cfg(test)]
+pub(crate) struct TerminalPause {
+    release: Option<tokio::sync::oneshot::Sender<()>>,
+    entered: std::sync::mpsc::Receiver<()>,
+    done: Option<std::sync::mpsc::Receiver<()>>,
+}
+#[cfg(test)]
+impl TerminalPause {
+    pub(crate) fn arm(state: &Arc<DaemonState>, id: &str) -> Self {
+        let (release, gate) = tokio::sync::oneshot::channel();
+        let (entered, notice) = std::sync::mpsc::channel();
+        let (done, finished) = std::sync::mpsc::channel();
+        terminal_gates().lock().unwrap().insert((state.app_dir.clone(), id.to_owned()), TerminalGate { entered, release: gate, done });
+        Self { release: Some(release), entered: notice, done: Some(finished) }
+    }
+    pub(crate) fn entered(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("actual terminal transport completed"); }
+    pub(crate) fn finish(&mut self) {
+        let _ = self.release.take().unwrap().send(());
+        self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).expect("terminal bookkeeping and child completed");
+    }
+}
+#[cfg(test)]
+impl Drop for TerminalPause {
+    fn drop(&mut self) {
+        if let Some(release) = self.release.take() { let _ = release.send(()); }
+        if let Some(done) = self.done.take() {
+            if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+        }
+    }
 }
 
 fn emit(state: &Arc<DaemonState>, id: &str, status: &str) {
@@ -365,7 +457,7 @@ async fn with_fresh_token(
     }
 }
 
-async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> Outcome {
+async fn prepare_send(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> Result<(ImapConfig, StoredEnvelope), Outcome> {
     // Resolved fresh at fire time, not carried in the row: credentials
     // (an OAuth2 token especially) can rotate between scheduling and firing,
     // and this is the exact seam `sync.now`/`sync.watch` already use to keep
@@ -377,27 +469,30 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
             // Waiting on the user to unlock the keychain is not a failure of
             // this row: like offline, it stays queued and keeps its tries.
             if crate::credentials::GATE.is_blocked() {
-                return Outcome::Offline(msg);
+                return Err(Outcome::Offline(msg));
             }
-            return if within_credential_grace() { Outcome::Transient(msg) } else { Outcome::Terminal(msg) };
+            return Err(if within_credential_grace() { Outcome::Transient(msg) } else { Outcome::Terminal(msg) });
         }
     };
     let account = match with_fresh_token(state, &row.account_id, account, &record).await {
         Ok(a) => a,
-        Err(e) if is_terminal_smtp_error(&e) => return Outcome::Terminal(e),
+        Err(e) if is_terminal_smtp_error(&e) => return Err(Outcome::Terminal(e)),
         // A renewal that got no answer always asks the probe, not
         // `note_failure`, whose needles only guess from the wording: the
         // cause can be in the system's language (Windows) or missing. An
         // expired token at wake, before the Wi-Fi joins, otherwise read as
         // online and spent the row's tries in 90 seconds.
-        Err(e) => return if state.net.confirm_online().await { Outcome::Transient(e) } else { Outcome::Offline(e) },
+        Err(e) => return Err(if state.net.confirm_online().await { Outcome::Transient(e) } else { Outcome::Offline(e) }),
     };
 
     let stored: StoredEnvelope = match serde_json::from_str(&row.envelope) {
         Ok(v) => v,
-        Err(e) => return Outcome::Terminal(format!("The scheduled message's envelope is corrupt: {e}")),
+        Err(e) => return Err(Outcome::Terminal(format!("The scheduled message's envelope is corrupt: {e}"))),
     };
+    Ok((account, stored))
+}
 
+async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend, account: ImapConfig, stored: StoredEnvelope, operation: OperationPermit) -> Outcome {
     let root = match crate::handlers::common::vault_root(state) {
         // The vault being unreachable (an external drive unplugged) is not a
         // network problem and not unfixable — it is worth another try later.
@@ -406,7 +501,9 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
     };
     // Resolving can list the mailbox and reads SQLite: off the runtime.
     let (read_state, account_id, mailbox, uid) = (Arc::clone(state), row.account_id.clone(), row.mailbox.clone(), row.uid);
+    let read_owner = operation.clone();
     let read = crate::handlers::common::blocking(move || {
+        let _read_owner = read_owner;
         vault_files::read_eml(&read_state.vault_registry, &root, &account_id, &mailbox, uid)
     });
     let raw = match read.await.and_then(|r| r) {
@@ -434,7 +531,7 @@ async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> O
                     stored.remind_days,
                 );
             }
-            append_to_sent(state, &account, &row.account_id, stored.sent_mailbox, &result);
+            append_to_sent(state, &account, &row.account_id, stored.sent_mailbox, &result, operation.clone());
             Outcome::Sent
         }
         // Ahead of the network probe: a Graph send that may have gone out
@@ -466,6 +563,7 @@ fn append_to_sent(
     account_id: &str,
     sent_mailbox: Option<String>,
     result: &smtp::SendResult,
+    operation: OperationPermit,
 ) {
     // Microsoft Graph filed its own Sent copy, and a Graph account has no
     // IMAP. (Nothing local was staged for a scheduled send, so there is no
@@ -480,6 +578,9 @@ fn append_to_sent(
     let account_id = account_id.to_string();
     let message_id = result.message_id.clone();
     tokio::spawn(async move {
+        let _actual_owner = operation;
+        #[cfg(test)]
+        let _append_done = tests::append_pause(&state.app_dir).await;
         let mailbox_for_closure = mailbox.clone();
         let verified: Result<Result<(u32, u32, Option<u32>), String>, _> = tokio::time::timeout(
             Duration::from_secs(60),
@@ -512,11 +613,162 @@ mod tests {
     use super::*;
     use serde_json::{json, Value};
 
+    struct AppendGate {
+        entered: std::sync::mpsc::Sender<()>,
+        release: tokio::sync::oneshot::Receiver<()>,
+        done: std::sync::mpsc::Sender<()>,
+    }
+    fn append_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>> {
+        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>>> = std::sync::OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    pub(super) async fn append_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+        let gate = append_gates().lock().unwrap().remove(path);
+        if let Some(gate) = gate {
+            let _ = gate.entered.send(());
+            let _ = gate.release.await;
+            Some(crate::credentials::TestTaskDone(gate.done))
+        } else { None }
+    }
+    struct AppendPause {
+        release: Option<tokio::sync::oneshot::Sender<()>>,
+        entered: std::sync::mpsc::Receiver<()>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+    impl AppendPause {
+        fn arm(state: &Arc<DaemonState>) -> Self {
+            let (release, gate) = tokio::sync::oneshot::channel();
+            let (entered, notice) = std::sync::mpsc::channel();
+            let (done, finished) = std::sync::mpsc::channel();
+            append_gates().lock().unwrap().insert(state.app_dir.clone(), AppendGate { entered, release: gate, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn entered(&self) { self.entered.recv_timeout(Duration::from_secs(5)).expect("actual scheduled append child entered"); }
+        fn finish(&mut self) {
+            let _ = self.release.take().unwrap().send(());
+            self.done.take().unwrap().recv_timeout(Duration::from_secs(10)).expect("actual scheduled append child completed");
+        }
+    }
+    impl Drop for AppendPause {
+        fn drop(&mut self) {
+            if let Some(release) = self.release.take() { let _ = release.send(()); }
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(Duration::from_secs(10)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+
     fn st() -> Arc<DaemonState> {
         let dir =
             std::env::temp_dir().join(format!("mv-scheduled-worker-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        DaemonState::for_test(dir.clone(), dir, true)
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"acct1"},{"id":"b"}]"#).unwrap();
+        let s = DaemonState::for_test(dir.clone(), dir, true);
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+        s
+    }
+
+    #[tokio::test]
+    async fn p3_stale_due_row_refuses_before_sending_gate() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = crate::credentials::TestEnvRestore::capture();
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")),
+        );
+        let s = st();
+        let account = json!({
+            "email":"luke@mock.test", "password":"hunter2",
+            "imapHost":server.host(), "imapPort":server.port(),
+            "smtpHost":server.host(), "smtpPort":server.smtp_port(), "smtpSecure":false,
+        });
+        let creds = s.app_dir.join("credentials.json");
+        std::fs::write(&creds, json!({"acc1":account.to_string()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        let params = json!({
+            "accountId":"acc1", "account":account,
+            "email":{"to":"partner@example.com", "subject":"Due", "text":"body"},
+            "localTime":"2026-10-01T09:00", "tz":"Europe/Vilnius", "fireAt":1,
+        });
+        let created = crate::handlers::scheduled::route(&s, "scheduled.create", &params, json!(1)).await.unwrap();
+        let row = created.result.expect("real scheduled row");
+        let id = row["id"].as_str().unwrap();
+        let before = app_db::with(&s.app_dir, |c| scheduled::get(c, id)).unwrap().unwrap();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = s.account_lifecycle.try_close(lease, "acc1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+
+        attempt_row(&s, &before).await;
+        let after = app_db::with(&s.app_dir, |c| scheduled::get(c, id)).unwrap().unwrap();
+        assert!(s.account_lifecycle.try_operation(&[s.account_lifecycle.capture("b").unwrap()]).is_ok());
+        assert!(after.status == before.status && after.attempts == before.attempts
+            && after.fire_at == before.fire_at && server.sent_messages().is_empty(),
+            "stale due row changed sending gate or sent bytes: before={before:?} after={after:?} sent={}",
+            server.sent_messages().len());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_scheduled_append_outlives_row_and_blocks_close() {
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = crate::credentials::TestEnvRestore::capture();
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")),
+        );
+        let s = st();
+        let account = json!({
+            "email":"luke@mock.test", "password":"hunter2",
+            "imapHost":server.host(), "imapPort":server.port(),
+            "smtpHost":server.host(), "smtpPort":server.smtp_port(), "smtpSecure":false,
+        });
+        let creds = s.app_dir.join("credentials.json");
+        std::fs::write(&creds, json!({"acc1":account.to_string()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        let params = json!({
+            "accountId":"acc1", "account":account,
+            "email":{"to":"partner@example.com", "subject":"Due", "text":"body"},
+            "localTime":"2026-10-01T09:00", "tz":"Europe/Vilnius", "fireAt":1,
+            "sentMailbox":"Sent",
+        });
+        let created = crate::handlers::scheduled::route(&s, "scheduled.create", &params, json!(1)).await.unwrap();
+        let row = created.result.expect("real scheduled row");
+        let id = row["id"].as_str().unwrap();
+        let uid = row["uid"].as_u64().unwrap() as u32;
+        let mut append = AppendPause::arm(&s);
+        let mut rx = s.events.subscribe();
+        let sent = crate::handlers::scheduled::route(&s, "scheduled.send_now", &json!({"id":id}), json!(1)).await.unwrap();
+        assert_eq!(sent.result.as_ref().unwrap()["status"], json!("sent"));
+        append.entered();
+        assert_eq!(server.sent_messages().len(), 1, "one actual transport");
+        assert!(!vault_files::exists(&s.data_dir, "acc1", "Scheduled", uid), "frozen file removed after send");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() },
+        );
+        let early = s.account_lifecycle.try_close(lease, "acc1");
+        let excluded = early.is_err();
+        drop(early);
+        assert!(s.account_lifecycle.try_operation(&[s.account_lifecycle.capture("b").unwrap()]).is_ok());
+        append.finish();
+        let payload = loop {
+            let line = tokio::time::timeout(Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
+            let (event, payload) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
+            if event == "send-server-append-complete" { break payload; }
+        };
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_eq!(server.state().find("Sent").unwrap().messages.len(), 1);
+        attempt_row(&s, &app_db::with(&s.app_dir, |c| scheduled::get(c, id)).unwrap().unwrap()).await;
+        assert_eq!(server.sent_messages().len(), 1, "sent row never fires twice while append finishes");
+        assert!(excluded, "scheduled row returned sent before actual append child stopped excluding close");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() },
+        );
+        assert!(s.account_lifecycle.try_close(lease, "acc1").is_ok());
     }
 
     /// A stored OAuth2 record whose token expired long ago, with `extra`
@@ -561,6 +813,7 @@ mod tests {
         let _restore = crate::credentials::TestEnvRestore::capture();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("credentials.json");
+        std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"g"}]"#).unwrap();
         let mut record = json!({"id":"g","email":"me@gmail.test","imapHost":"imap.gmail.com","authType":"oauth2","oauth2Provider":"google","oauth2ClientId":mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID,"oauth2AccessToken":"synthetic-old-token","oauth2RefreshToken":"synthetic-old-refresh","oauth2ExpiresAt":chrono::Utc::now().timestamp_millis()+3_600_000});
         std::fs::write(&path, json!({"g":record.to_string()}).to_string()).unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
@@ -778,7 +1031,13 @@ mod tests {
             .unwrap()
             .expect("the row");
 
-        let sent = send_one(&s, &row).await;
+        let (account, envelope) = match prepare_send(&s, &row).await {
+            Ok(prepared) => prepared,
+            Err(_) => panic!("test credentials and envelope are valid"),
+        };
+        let stamp = s.account_lifecycle.capture("acct1").unwrap();
+        let operation = s.account_lifecycle.try_operation(&[stamp]).unwrap();
+        let sent = send_one(&s, &row, account, envelope, operation).await;
         let reminders = app_db::with(&s.app_dir, |c| follow_up::list(c, Some("acct1"))).unwrap();
         let checked = match reminders.first() {
             Some(reminder) => Some(crate::follow_up_worker::check_row(&s, reminder).await),

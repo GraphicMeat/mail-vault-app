@@ -21,6 +21,7 @@
 //! ...)` picks this up unchanged — same payload shape, same event name, no
 //! JS change needed for the event itself.
 use crate::imap::{self, ImapConfig};
+use crate::account_lifecycle::OperationPermit;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::smtp;
@@ -191,7 +192,7 @@ pub(crate) struct Sent {
 /// log lines every send writes, or `smtp::send_staged` when the caller holds
 /// the message's bytes already. `smtp_send_email` and `compose.send` both
 /// come through here, so the log reads the same for either.
-pub(crate) async fn send_logged(account: &ImapConfig, email: &smtp::OutgoingEmail, staged: Option<Vec<u8>>) -> Result<Sent, String> {
+pub(crate) async fn send_logged(account: &ImapConfig, email: &smtp::OutgoingEmail, staged: Option<Vec<u8>>, _operation: OperationPermit) -> Result<Sent, String> {
     let account_id_for_log = account.email.clone();
     info!("[send:smtp_start] account={} staged={}", account_id_for_log, staged.is_some());
 
@@ -263,6 +264,7 @@ pub(crate) async fn report_sent_copy<F, Fut>(
     account: &ImapConfig,
     sent_mailbox: Option<String>,
     sent: &Sent,
+    operation: OperationPermit,
     extra: Value,
     landed: F,
 ) where
@@ -306,6 +308,11 @@ pub(crate) async fn report_sent_copy<F, Fut>(
         let message_id_bg = result.message_id.clone();
         let message_id_header_bg = sent.message_id_header.clone();
         tokio::spawn(async move {
+            let _actual_owner = operation;
+            #[cfg(test)]
+            let _append_done = tests::append_pause(&state_clone.app_dir).await;
+            #[cfg(test)]
+            tests::append_unwind(&state_clone.app_dir);
             let mailbox_for_log = mailbox.clone();
             info!(
                 "[send:server_append_start] account={} mailbox={} bytes={} messageId_header={:?}",
@@ -370,7 +377,11 @@ pub(crate) async fn report_sent_copy<F, Fut>(
             // (Hostinger went silent 15s+ and still filed it). Ask it.
             // A failure reported for a message it holds left the
             // staged local copy beside the server's for good.
+            #[cfg(test)]
+            let mut _recovery_done = None;
             if !ok {
+                #[cfg(test)]
+                { _recovery_done = tests::recovery_pause(&state_clone.app_dir).await; }
                 if let Some(mid) = message_id_header_bg.as_deref() {
                     if let Some(uid) = sent_copy_uid(&state_clone.imap_pool, &account_clone, &mailbox_for_log, mid).await {
                         info!(
@@ -470,12 +481,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(resp) => return Some(resp),
             };
             let sent_mailbox = params.get("sentMailbox").and_then(Value::as_str).map(str::to_owned);
-            let sent = match send_logged(&account, &email, None).await {
+            let operation = match state.account_lifecycle.try_unscoped_operation() {
+                Ok(permit) => permit,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
+            let sent = match send_logged(&account, &email, None, operation.clone()).await {
                 Ok(sent) => sent,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
             let message_id_for_response = sent.result.message_id.clone();
-            report_sent_copy(state, &account, sent_mailbox, &sent, json!({}), |_| async {}).await;
+            report_sent_copy(state, &account, sent_mailbox, &sent, operation.clone(), json!({}), |_| async {}).await;
             RpcResponse::success(id, json!({"success": true, "messageId": message_id_for_response}))
         }
 
@@ -484,14 +499,197 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use mock_imap::{MockImap, Scenario};
+
+    struct AppendGate {
+        entered: std::sync::mpsc::Sender<()>,
+        release: tokio::sync::oneshot::Receiver<()>,
+        done: std::sync::mpsc::Sender<()>,
+    }
+    fn append_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>> {
+        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>>> = std::sync::OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    fn append_unwinds() -> &'static std::sync::Mutex<std::collections::BTreeSet<std::path::PathBuf>> {
+        static PATHS: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeSet<std::path::PathBuf>>> = std::sync::OnceLock::new();
+        PATHS.get_or_init(Default::default)
+    }
+    pub(super) fn append_unwind(path: &std::path::Path) {
+        if append_unwinds().lock().unwrap().remove(path) {
+            panic!("injected actual Sent APPEND child unwind");
+        }
+    }
+    pub(super) async fn append_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+        let gate = append_gates().lock().unwrap().remove(path);
+        if let Some(gate) = gate {
+            let _ = gate.entered.send(());
+            let _ = gate.release.await;
+            Some(crate::credentials::TestTaskDone(gate.done))
+        } else { None }
+    }
+    fn recovery_gates() -> &'static std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>> {
+        static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<std::path::PathBuf, AppendGate>>> = std::sync::OnceLock::new();
+        GATES.get_or_init(Default::default)
+    }
+    pub(super) async fn recovery_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+        let gate = recovery_gates().lock().unwrap().remove(path);
+        if let Some(gate) = gate {
+            let _ = gate.entered.send(());
+            let _ = gate.release.await;
+            Some(crate::credentials::TestTaskDone(gate.done))
+        } else { None }
+    }
+    pub(crate) struct AppendPause {
+        release: Option<tokio::sync::oneshot::Sender<()>>,
+        entered: std::sync::mpsc::Receiver<()>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+    impl AppendPause {
+        pub(crate) fn arm(state: &Arc<DaemonState>) -> Self {
+            let (release, gate) = tokio::sync::oneshot::channel();
+            let (entered, notice) = std::sync::mpsc::channel();
+            let (done, finished) = std::sync::mpsc::channel();
+            append_gates().lock().unwrap().insert(state.app_dir.clone(), AppendGate { entered, release: gate, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        fn arm_recovery(state: &Arc<DaemonState>) -> Self {
+            let (release, gate) = tokio::sync::oneshot::channel();
+            let (entered, notice) = std::sync::mpsc::channel();
+            let (done, finished) = std::sync::mpsc::channel();
+            recovery_gates().lock().unwrap().insert(state.app_dir.clone(), AppendGate { entered, release: gate, done });
+            Self { release: Some(release), entered: notice, done: Some(finished) }
+        }
+        pub(crate) fn entered(&self) { self.entered.recv_timeout(std::time::Duration::from_secs(5)).expect("actual append child entered"); }
+        pub(crate) fn release(&mut self) { let _ = self.release.take().unwrap().send(()); }
+        pub(crate) fn done(&mut self) {
+            self.done.take().unwrap().recv_timeout(std::time::Duration::from_secs(10)).expect("actual append child completed");
+        }
+        fn finish(&mut self) { self.release(); self.done(); }
+    }
+    impl Drop for AppendPause {
+        fn drop(&mut self) {
+            if let Some(release) = self.release.take() { let _ = release.send(()); }
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(std::time::Duration::from_secs(10)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+
+    fn lifecycle_lease(id: &str) -> crate::account_workflows::AccountLease {
+        crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [id.to_owned()].into(), ..Default::default() },
+        )
+    }
 
     fn st(mail_dir_ok: bool) -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-smtp-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        DaemonState::for_test(dir.clone(), dir, mail_dir_ok)
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        let s = DaemonState::for_test(dir.clone(), dir, mail_dir_ok);
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+        s
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_unscoped_legacy_send_excludes_closing_in_both_orders() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        let mut pause = AppendPause::arm(&s);
+        let mut rx = s.events.subscribe();
+        let sent = call(&s, "smtp_send_email", json!({
+            "account": account_json(&server), "email": outgoing_email("partner@example.com"), "sentMailbox":"Sent",
+        })).await;
+        assert!(sent.result.is_some(), "actual SMTP transport accepted: {:?}", sent.error);
+        pause.entered();
+        assert_eq!(server.sent_messages().len(), 1, "one actual SMTP send");
+        let a = s.account_lifecycle.try_close(lifecycle_lease("a"), "a");
+        let b = s.account_lifecycle.try_close(lifecycle_lease("b"), "b");
+        let excluded_while_append = a.is_err() && b.is_err();
+        drop(a);
+        drop(b);
+        pause.finish();
+        let line = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
+        let (event, payload) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
+        assert_eq!(event, "send-server-append-complete");
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_eq!(server.state().find("Sent").unwrap().messages.len(), 1);
+        let first = s.account_lifecycle.try_close(lifecycle_lease("a"), "a").unwrap();
+        let denied = call(&s, "smtp_send_email", json!({
+            "account": account_json(&server), "email": outgoing_email("again@example.com"),
+        })).await;
+        let close_first_refused = denied.error.is_some() && server.sent_messages().len() == 1;
+        drop(first);
+        assert!(excluded_while_append && close_first_refused,
+            "legacy send ownership failed: excluded_while_append={excluded_while_append} close_first_refused={close_first_refused} sent_count={} response={denied:?}",
+            server.sent_messages().len());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_append_recovery_and_event_keep_actual_owner() {
+        plaintext();
+        let server = MockImap::start(
+            Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent"))
+                .fault(mock_imap::Trigger::on("APPEND"), mock_imap::Action::Respond("NO".into(), "Try again later".into())),
+        );
+        let s = st(true);
+        let mut recovery = AppendPause::arm_recovery(&s);
+        let mut rx = s.events.subscribe();
+        let mut email = outgoing_email("partner@example.com");
+        email["messageId"] = json!("<p3.recovered@mock.test>");
+        let sent = call(&s, "smtp_send_email", json!({
+            "account": account_json(&server), "email": email, "sentMailbox":"Sent",
+        })).await;
+        assert!(sent.result.is_some(), "accepted transport: {:?}", sent.error);
+        recovery.entered();
+        assert_eq!(server.sent_messages().len(), 1);
+        assert_eq!(server.state().find("Sent").unwrap().messages.len(), 1, "APPEND happened before the lost answer");
+        let a = s.account_lifecycle.try_close(lifecycle_lease("a"), "a");
+        let b = s.account_lifecycle.try_close(lifecycle_lease("b"), "b");
+        let excluded = a.is_err() && b.is_err();
+        drop(a);
+        drop(b);
+        recovery.finish();
+        let line = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await.unwrap().unwrap();
+        let (event, payload) = mailvault_core::daemon_ipc::parse_event(&line).unwrap();
+        assert_eq!(event, "send-server-append-complete");
+        assert_eq!(payload["ok"], json!(true), "{payload}");
+        assert_eq!(payload["verify"]["recovered"], json!(true), "{payload}");
+        assert!(payload["verify"]["foundUid"].as_u64().is_some(), "{payload}");
+        assert!(excluded, "append recovery child released closing exclusion before recovered UID and event");
+        assert!(s.account_lifecycle.try_close(lifecycle_lease("a"), "a").is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p3_append_unwind_releases_unscoped_owner() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(mock_imap::state::Mailbox::new("Sent")));
+        let s = st(true);
+        append_unwinds().lock().unwrap().insert(s.app_dir.clone());
+        let mut pause = AppendPause::arm(&s);
+        let mut rx = s.events.subscribe();
+        let sent = call(&s, "smtp_send_email", json!({
+            "account": account_json(&server), "email": outgoing_email("partner@example.com"), "sentMailbox":"Sent",
+        })).await;
+        assert!(sent.result.is_some(), "transport accepted before append child: {:?}", sent.error);
+        pause.entered();
+        assert_eq!(server.sent_messages().len(), 1);
+        assert!(matches!(s.account_lifecycle.try_close(lifecycle_lease("a"), "a"), Err(crate::account_lifecycle::LifecycleError::Busy)));
+        pause.finish();
+        // The pause guard drops during unwinding, before the spawned task
+        // releases its operation owner. Observe the actual owner release.
+        let a_close = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if let Ok(claim) = s.account_lifecycle.try_close(lifecycle_lease("a"), "a") { break claim; }
+                tokio::task::yield_now().await;
+            }
+        }).await.expect("actual unwound child released A");
+        drop(a_close);
+        assert!(s.account_lifecycle.try_close(lifecycle_lease("b"), "b").is_ok(), "actual unwound child released B");
+        assert!(server.state().find("Sent").unwrap().messages.is_empty(), "APPEND panicked before server effect");
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await.is_err(), "unwound append must not emit false success");
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {

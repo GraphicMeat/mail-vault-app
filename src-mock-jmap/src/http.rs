@@ -5,7 +5,7 @@
 
 use crate::methods::{self, SESSION_STATE};
 use crate::state::State;
-use crate::RecordedRequest;
+use crate::{Fault, RecordedRequest};
 use serde_json::{json, Map, Value};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -350,7 +350,14 @@ fn api(stream: &TcpStream, shared: &Shared, auth: Option<&str>, req: &Request) -
         return problem_response(stream, 429, &p, &[("Retry-After", secs.to_string())]);
     }
     let before = st.seq_sum();
+    let submissions_before = st.submitted.len();
     let out = methods::handle_request(&mut st, &acc, &req.body);
+    let lose_reply = if st.submitted.len() > submissions_before {
+        if let Some(index) = st.faults.iter().position(|fault| matches!(fault, Fault::SubmissionReplyLostOnce)) {
+            st.faults.remove(index);
+            true
+        } else { false }
+    } else { false };
     let changed = st.seq_sum() != before;
     if changed {
         st.notify_gen += 1;
@@ -358,6 +365,9 @@ fn api(stream: &TcpStream, shared: &Shared, auth: Option<&str>, req: &Request) -
     drop(st);
     if changed {
         shared.notify();
+    }
+    if lose_reply {
+        return Ok(());
     }
     match out {
         Ok(v) => json_response(stream, 200, &v),

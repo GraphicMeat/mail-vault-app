@@ -309,12 +309,37 @@ impl AccountJmap {
         mailbox: &str,
         ids: &[String],
     ) -> Result<Vec<u32>, String> {
+        self.ids_to_uids_with_owner(state, original, account_id, mailbox, ids, None).await
+    }
+
+    pub(crate) async fn ids_to_uids_owned(
+        &self,
+        state: &Arc<DaemonState>,
+        original: crate::account_lifecycle::AccountStamp,
+        account_id: &str,
+        mailbox: &str,
+        ids: &[String],
+        owner: crate::account_lifecycle::OperationPermit,
+    ) -> Result<Vec<u32>, String> {
+        self.ids_to_uids_with_owner(state, original, account_id, mailbox, ids, Some(owner)).await
+    }
+
+    async fn ids_to_uids_with_owner(
+        &self,
+        state: &Arc<DaemonState>,
+        original: crate::account_lifecycle::AccountStamp,
+        account_id: &str,
+        mailbox: &str,
+        ids: &[String],
+        owner: Option<crate::account_lifecycle::OperationPermit>,
+    ) -> Result<Vec<u32>, String> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
         let listed: Vec<(String, Option<String>)> = ids.iter().map(|id| (id.clone(), None)).collect();
         let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
         tokio::task::spawn_blocking(move || {
+            let _owner = owner;
             let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
             with_vault_write(&state, |root| {
                 let ledger = jmap_ledger_path(root, &account_id, &mailbox);

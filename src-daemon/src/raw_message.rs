@@ -196,7 +196,7 @@ pub(crate) async fn local_message(state: &Arc<DaemonState>, account_id: &str, ma
     local_message_stamped(state, &stamp, mailbox, uid, readable).await
 }
 
-async fn local_message_stamped(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str, uid: u32, readable: bool) -> Result<Option<Arc<[u8]>>, String> {
+pub(crate) async fn local_message_stamped(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str, uid: u32, readable: bool) -> Result<Option<Arc<[u8]>>, String> {
     let account_id = stamp.id();
     if let Some(raw) = from_vault(state, account_id, mailbox, uid, readable).await? {
         state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;

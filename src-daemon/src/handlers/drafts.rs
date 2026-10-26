@@ -1,6 +1,7 @@
 //! Local-only drafts. Heavy preparation precedes the draft commit lock; all
 //! file effects use existing mailbox -> vault -> custody units on workers.
 use crate::{
+    account_lifecycle::AccountStamp,
     custody,
     handlers::common::{self, blocking, with_mailbox_write},
     ipc::{self, RpcResponse},
@@ -19,7 +20,7 @@ use mailvault_core::{
 };
 use serde_json::{json, Value};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{atomic::AtomicBool, Arc, LazyLock, Mutex, Weak},
 };
@@ -42,6 +43,36 @@ fn load(s: &DaemonState, id: &str) -> Result<Record, String> {
 }
 fn persist(s: &DaemonState, r: &Record) -> Result<(), String> {
     app_db::with(&s.app_dir, |c| db::save(c, r))
+}
+fn affected_accounts(r: &Record, requested: Option<&str>, previous: Option<&Location>) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
+    if let Some(id) = requested { ids.insert(id.to_owned()); }
+    if let Some(location) = previous { ids.insert(location.account_id.clone()); }
+    for copy in r.current.iter().chain(&r.cleanup) {
+        ids.insert(copy.identity.scope.account_id.clone());
+    }
+    if let Some(pending) = &r.pending {
+        ids.insert(pending.copy.identity.scope.account_id.clone());
+        ids.insert(pending.prepared.identity.scope.account_id.clone());
+    }
+    ids
+}
+fn original_stamps(s: &DaemonState, r: &Record, requested: Option<&str>, previous: Option<&Location>) -> Result<Vec<AccountStamp>, String> {
+    affected_accounts(r, requested, previous).into_iter()
+        .map(|id| s.account_lifecycle.capture(&id).map_err(|_| "errors.keychainBusy".to_owned()))
+        .collect()
+}
+fn scope_matches(r: &Record, stamps: &[AccountStamp]) -> Result<(), String> {
+    let captured: BTreeSet<_> = stamps.iter().map(AccountStamp::id).collect();
+    if affected_accounts(r, None, None).iter().all(|id| captured.contains(id.as_str())) {
+        Ok(())
+    } else {
+        Err("draft account changed during preparation; retry".into())
+    }
+}
+fn admit_scoped(s: &DaemonState, r: &Record, stamps: &[AccountStamp]) -> Result<crate::account_lifecycle::LocalCommitPermit, String> {
+    scope_matches(r, stamps)?;
+    s.account_lifecycle.try_commit(stamps).map_err(|_| "errors.keychainBusy".to_owned())
 }
 fn account(
     s: &DaemonState,
@@ -609,17 +640,22 @@ fn abort_uninstalled(s: &Arc<DaemonState>, id: &str, pending: &Intent) -> Result
     Err("draft pre-install attempt aborted; retry complete snapshot".into())
 }
 
-fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
+fn recover(s: &Arc<DaemonState>, id: &str, original: Option<&[AccountStamp]>) -> Result<(), String> {
     let pending = {
         let lock = draft_lock(s, id);
         let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
         let mut r = load(s, id)?;
         if r.discarded {
+            if r.cleanup.is_empty() { return Ok(()); }
+            let stamps = match original { Some(stamps) => stamps.to_vec(), None => original_stamps(s, &r, None, None)? };
+            let _permit = admit_scoped(s, &r, &stamps)?;
             return cleanup(s, &mut r);
         }
         r.pending
     };
     let Some(p) = pending else { return Ok(()) };
+    let initial = load(s, id)?;
+    let stamps = match original { Some(stamps) => stamps.to_vec(), None => original_stamps(s, &initial, None, None)? };
     // Copy publication requires current local account membership. Terminal
     // cleanup remains independent of account configuration above this branch.
     let _ = account(
@@ -630,6 +666,8 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
     )?;
     // Restart/retry preparation uses retained vault bytes, outside draft locks.
     let Some(raw) = pending_raw(s, &p)? else {
+        let current = load(s, id)?;
+        let _permit = admit_scoped(s, &current, &stamps)?;
         return abort_uninstalled(s, id, &p);
     };
     let stage = p.prepared.location();
@@ -654,9 +692,11 @@ fn recover(s: &Arc<DaemonState>, id: &str) -> Result<(), String> {
     let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
     let mut r = load(s, id)?;
     if r.discarded {
+        let _permit = admit_scoped(s, &r, &stamps)?;
         return cleanup(s, &mut r);
     }
     if same_attempt(&r, &p) {
+        let _permit = admit_scoped(s, &r, &stamps)?;
         install(s, id, &p, &p.prepared, &stage_ready, &["seen".into()])?;
         finish(s, &mut r, &ready)?;
     }
@@ -737,7 +777,10 @@ fn resolve_attachments(s: &Arc<DaemonState>, r: &mut Save) -> Result<(), String>
 }
 fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     let request_hash = request.request_hash();
-    recover(s, &request.draft_id)?;
+    let original_record = load(s, &request.draft_id)?;
+    let previous = if original_record.current.is_none() { request.previous_identity.as_ref() } else { None };
+    let original = original_stamps(s, &original_record, Some(&request.account_id), previous)?;
+    recover(s, &request.draft_id, Some(&original))?;
     // Retry first reconciles retained bytes, never regenerates the pending MIME.
     {
         let lock = draft_lock(s, &request.draft_id);
@@ -749,7 +792,10 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
         if r.pending.is_some() {
             return Err("draft pending retry".into());
         }
-        cleanup(s, &mut r)?;
+        if !r.cleanup.is_empty() {
+            let _permit = admit_scoped(s, &r, &original)?;
+            cleanup(s, &mut r)?;
+        }
         // An aborted higher complete revision remains immutable. A lower save
         // must not reach finish and clear that durable retry constraint.
         if r.retry
@@ -863,6 +909,7 @@ fn save(s: &Arc<DaemonState>, mut request: Save) -> Result<Value, String> {
     if current_account.email != config.email {
         return Err("draft account changed during preparation".into());
     }
+    let _permit = admit_scoped(s, &r, &original)?;
     cleanup(s, &mut r)?;
     if !r.cleanup.is_empty() {
         return Err("draft cleanup pending".into());
@@ -948,6 +995,14 @@ fn discard(s: &Arc<DaemonState>, id: &str, through_revision: Option<u64>) -> Res
         outcome["throughRevision"] = json!(through_revision);
         return Ok(outcome);
     }
+    if r.discarded && r.cleanup.is_empty() {
+        return Ok(json!({"draftId":id,"discarded":true,"cleanup":"complete","cleanupIdentities":[]}));
+    }
+    let stamps = original_stamps(s, &r, None, None)?;
+    let _scoped = if stamps.is_empty() { None } else { Some(admit_scoped(s, &r, &stamps)?) };
+    let _unscoped = if stamps.is_empty() {
+        Some(s.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?)
+    } else { None };
     r.discarded = true;
     if let Some(c) = r.current.take() {
         r.cleanup.push(c);
@@ -1001,7 +1056,7 @@ fn list_id(
     }
     if content && !record.discarded {
         // Recovery failure leaves the accepted copy and pending facts usable.
-        let _ = recover(s, id);
+        let _ = recover(s, id, None);
         record = load(s, id)?;
         if let Some(location) = exact {
             validate_open_tuple(s, id, &record, location)?;
@@ -1080,6 +1135,8 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
                 let lock = draft_lock(s, &id);
                 let _held = lock.lock().unwrap_or_else(|p| p.into_inner());
                 let mut r = Record::new(&id);
+                let original = s.account_lifecycle.capture(&l.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+                let _permit = s.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
                 match adopt(s, &mut r, &l) {
                     Ok(()) => {}
                     Err(error) if error == "draft body missing" => {
@@ -1143,7 +1200,7 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
             continue;
         }
         if content {
-            let _ = recover(s, &r.draft_id);
+            let _ = recover(s, &r.draft_id, None);
             *r = load(s, &r.draft_id)?;
         }
         let mut view = response(r, "unchanged");
