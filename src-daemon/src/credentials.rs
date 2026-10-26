@@ -46,11 +46,17 @@ fn test_credentials_path() -> Option<PathBuf> {
 pub(crate) const E_PORTABLE_LOCKED: &str = "E_PORTABLE_LOCKED";
 
 pub(crate) fn sealed_store_path(root: Option<&std::path::Path>) -> Option<PathBuf> {
-    root.map(|r| mailvault_core::paths::portable_data_dir(r).join(mailvault_core::portable::SEALED_FILE))
+    root.map(|r| {
+        mailvault_core::paths::portable_data_dir(r).join(mailvault_core::portable::SEALED_FILE)
+    })
 }
 
 /// This copy's sealed store, `None` in an installed one.
 pub(crate) fn sealed() -> Option<&'static SealedStore> {
+    #[cfg(test)]
+    if let Some(store) = *TEST_SEALED_STORE.lock().unwrap_or_else(|e| e.into_inner()) {
+        return Some(store);
+    }
     static STORE: std::sync::OnceLock<Option<SealedStore>> = std::sync::OnceLock::new();
     STORE
         .get_or_init(|| {
@@ -60,7 +66,44 @@ pub(crate) fn sealed() -> Option<&'static SealedStore> {
         .as_ref()
 }
 
-type Opened = (zeroize::Zeroizing<String>, mailvault_core::portable::Secrets);
+#[cfg(test)]
+static TEST_SEALED_STORE: std::sync::Mutex<Option<&'static SealedStore>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub(crate) struct TestSealedGuard(pub &'static SealedStore);
+
+#[cfg(test)]
+impl TestSealedGuard {
+    pub(crate) fn install(path: PathBuf) -> Self {
+        let store: &'static SealedStore = Box::leak(Box::new(SealedStore::new(
+            path,
+            mailvault_core::transfer::crypto::Params {
+                m_kib: mailvault_core::transfer::crypto::MIN_M_KIB,
+                t: 1,
+                p: 1,
+            },
+        )));
+        *TEST_SEALED_STORE.lock().unwrap_or_else(|e| e.into_inner()) = Some(store);
+        Self(store)
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestSealedGuard {
+    fn drop(&mut self) {
+        self.0.lock();
+        TEST_SEALED_STORE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+    }
+}
+
+type Opened = (
+    zeroize::Zeroizing<String>,
+    mailvault_core::portable::Secrets,
+);
 
 pub(crate) struct SealedStore {
     path: PathBuf,
@@ -70,7 +113,11 @@ pub(crate) struct SealedStore {
 
 impl SealedStore {
     pub(crate) fn new(path: PathBuf, params: mailvault_core::transfer::crypto::Params) -> Self {
-        Self { path, params, open: std::sync::Mutex::new(None) }
+        Self {
+            path,
+            params,
+            open: std::sync::Mutex::new(None),
+        }
     }
 
     fn opened(&self) -> std::sync::MutexGuard<'_, Option<Opened>> {
@@ -104,14 +151,19 @@ impl SealedStore {
     }
 
     pub(crate) fn secrets(&self) -> Result<mailvault_core::portable::Secrets, String> {
-        self.opened().as_ref().map(|(_, s)| s.clone()).ok_or_else(|| E_PORTABLE_LOCKED.to_string())
+        self.opened()
+            .as_ref()
+            .map(|(_, s)| s.clone())
+            .ok_or_else(|| E_PORTABLE_LOCKED.to_string())
     }
 
     /// Locked refuses: the caller's copy may be the empty one it got while
     /// locked, and sealing that would drop every other account.
     fn update(&self, f: impl FnOnce(&mut mailvault_core::portable::Secrets)) -> Result<(), String> {
         let mut guard = self.opened();
-        let Some((passphrase, current)) = guard.as_mut() else { return Err(E_PORTABLE_LOCKED.to_string()) };
+        let Some((passphrase, current)) = guard.as_mut() else {
+            return Err(E_PORTABLE_LOCKED.to_string());
+        };
         let mut next = current.clone();
         f(&mut next);
         mailvault_core::portable::write_sealed(&self.path, passphrase, &next, self.params)?;
@@ -153,7 +205,8 @@ fn load_credentials_blob(interactive: bool) -> Result<HashMap<String, String>, S
             .map_err(|e| format!("failed to parse test credentials: {}", e));
     }
 
-    keychain_blob(interactive)?.ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))
+    keychain_blob(interactive)?
+        .ok_or_else(|| format!("failed to read keychain: {}", keyring::Error::NoEntry))
 }
 
 /// The keychain's blob; `None` when nothing was ever stored.
@@ -167,15 +220,20 @@ fn keychain_blob(interactive: bool) -> Result<Option<HashMap<String, String>>, S
     };
     // Parts of a split blob (Windows) are plain reads: only the primary item
     // feeds the gate.
-    let json = mailvault_core::keychain::join_secret(CREDENTIALS_KEY, &json, &mut |name| {
-        match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.get_password()) {
-            Ok(value) => Ok(Some(value)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(e.to_string()),
-        }
-    })
-    .map_err(|e| format!("failed to read keychain: {}", e))?;
-    serde_json::from_str(&json).map(Some).map_err(|e| format!("failed to parse credentials: {}", e))
+    let json =
+        mailvault_core::keychain::join_secret(
+            CREDENTIALS_KEY,
+            &json,
+            &mut |name| match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.get_password()) {
+                Ok(value) => Ok(Some(value)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(e) => Err(e.to_string()),
+            },
+        )
+        .map_err(|e| format!("failed to read keychain: {}", e))?;
+    serde_json::from_str(&json)
+        .map(Some)
+        .map_err(|e| format!("failed to parse credentials: {}", e))
 }
 
 /// Every secret this host holds for MailVault, for a portable copy's sealed
@@ -186,7 +244,8 @@ pub(crate) async fn read_host_secrets() -> Result<mailvault_core::portable::Secr
         CREDENTIALS_KEY,
         unshared(|| match test_credentials_path() {
             Some(path) => match std::fs::read_to_string(&path) {
-                Ok(json) => serde_json::from_str(&json).map_err(|e| format!("failed to parse test credentials: {e}")),
+                Ok(json) => serde_json::from_str(&json)
+                    .map_err(|e| format!("failed to parse test credentials: {e}")),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
                 Err(e) => Err(format!("failed to read test credentials {path:?}: {e}")),
             },
@@ -196,7 +255,10 @@ pub(crate) async fn read_host_secrets() -> Result<mailvault_core::portable::Secr
     )
     .await?;
     let ai_endpoint_key = resolve_ai_endpoint_key_guarded().await?;
-    Ok(mailvault_core::portable::Secrets { credentials, ai_endpoint_key })
+    Ok(mailvault_core::portable::Secrets {
+        credentials,
+        ai_endpoint_key,
+    })
 }
 
 /// `delete_host_secrets` off the async workers, never prompting, under a
@@ -207,7 +269,10 @@ pub(crate) async fn delete_host_secrets_guarded() -> Result<(), String> {
     match tokio::time::timeout(AI_KEY_TIMEOUT, delete).await {
         Ok(Ok(result)) => result,
         Ok(Err(e)) => Err(format!("the keychain delete panicked: {e}")),
-        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+        Err(_) => Err(
+            "the keychain did not answer in time (it may be locked or waiting on a prompt)"
+                .to_string(),
+        ),
     }
 }
 
@@ -226,18 +291,29 @@ fn delete_host_secrets() -> Result<(), String> {
         }
         return test_ai_key_path().map_or(Ok(()), |p| gone(std::fs::remove_file(p)));
     }
-    let delete = |name: &str| match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.delete_credential()) {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("could not remove {name} from the keychain: {e}")),
+    let delete =
+        |name: &str| match Entry::new(KEYRING_SERVICE, name).and_then(|e| e.delete_credential()) {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(format!("could not remove {name} from the keychain: {e}")),
+        };
+    let primary = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
+        .and_then(|e| e.get_password())
+        .ok();
+    let nothing = mailvault_core::keychain::SplitSecret {
+        primary: String::new(),
+        parts: Vec::new(),
     };
-    let primary = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY).and_then(|e| e.get_password()).ok();
-    let nothing = mailvault_core::keychain::SplitSecret { primary: String::new(), parts: Vec::new() };
-    for part in mailvault_core::keychain::stale_parts(CREDENTIALS_KEY, primary.as_deref(), &nothing) {
+    for part in mailvault_core::keychain::stale_parts(CREDENTIALS_KEY, primary.as_deref(), &nothing)
+    {
         delete(&part)?;
     }
     delete(CREDENTIALS_KEY)?;
-    let pgp_primary = Entry::new(KEYRING_SERVICE, PGP_KEYS_ENTRY).and_then(|e| e.get_password()).ok();
-    for part in mailvault_core::keychain::stale_parts(PGP_KEYS_ENTRY, pgp_primary.as_deref(), &nothing) {
+    let pgp_primary = Entry::new(KEYRING_SERVICE, PGP_KEYS_ENTRY)
+        .and_then(|e| e.get_password())
+        .ok();
+    for part in
+        mailvault_core::keychain::stale_parts(PGP_KEYS_ENTRY, pgp_primary.as_deref(), &nothing)
+    {
         delete(&part)?;
     }
     delete(PGP_KEYS_ENTRY)?;
@@ -256,7 +332,10 @@ fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, String> {
     account_from_blob(&load_credentials_blob(true)?, account_id)
 }
 
-fn account_from_blob(credentials: &HashMap<String, String>, account_id: &str) -> Result<ImapConfig, String> {
+fn account_from_blob(
+    credentials: &HashMap<String, String>,
+    account_id: &str,
+) -> Result<ImapConfig, String> {
     let raw = credentials
         .get(account_id)
         .ok_or_else(|| format!("no credentials found for account {account_id}"))?;
@@ -288,6 +367,25 @@ pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<Ima
 pub(crate) struct RecordSnapshot {
     pub record: Value,
     pub generation: u64,
+}
+
+/// Quiet acknowledgement provenance. Null means a successful absent-record
+/// observation only; malformed stored records remain errors.
+pub(crate) async fn optional_record_quiet(account_id: &str) -> Result<RecordSnapshot, String> {
+    let generation = BLOB_READ.generation();
+    let blob = guarded(CREDENTIALS_KEY, raw_read(false, generation), AI_KEY_TIMEOUT).await?;
+    let record = match blob.as_ref().and_then(|blob| blob.get(account_id)) {
+        None => Value::Null,
+        Some(raw) => {
+            let record: Value = serde_json::from_str(raw)
+                .map_err(|_| "invalid stored credential record".to_string())?;
+            if !record.is_object() {
+                return Err("invalid stored credential record".to_string());
+            }
+            record
+        }
+    };
+    Ok(RecordSnapshot { record, generation })
 }
 
 /// `resolve_account_credentials_guarded` plus the account's whole stored
@@ -343,8 +441,11 @@ pub async fn resolve_account_credentials_quiet(account_id: &str) -> Result<ImapC
 /// `accounts.json` does not list it.
 pub async fn resolve_account_record_quiet(account_id: &str) -> Result<serde_json::Value, String> {
     let blob = guarded(CREDENTIALS_KEY, blob_read(false), AI_KEY_TIMEOUT).await?;
-    let raw = blob.get(account_id).ok_or_else(|| format!("no credentials found for account {account_id}"))?;
-    serde_json::from_str(raw).map_err(|e| format!("failed to parse credentials for account {account_id}: {e}"))
+    let raw = blob
+        .get(account_id)
+        .ok_or_else(|| format!("no credentials found for account {account_id}"))?;
+    serde_json::from_str(raw)
+        .map_err(|e| format!("failed to parse credentials for account {account_id}: {e}"))
 }
 
 /// macOS's password prompt shows once per blocked episode: only a read that
@@ -357,10 +458,17 @@ fn may_prompt() -> bool {
 
 /// A shared item read under `limit`. Giving up blocks that item as "timeout";
 /// the read itself keeps going and settles the item when it returns.
-async fn guarded<T>(key: &'static str, read: impl std::future::Future<Output = Result<T, String>>, limit: Duration) -> Result<T, String> {
+async fn guarded<T>(
+    key: &'static str,
+    read: impl std::future::Future<Output = Result<T, String>>,
+    limit: Duration,
+) -> Result<T, String> {
     tokio::time::timeout(limit, read).await.unwrap_or_else(|_| {
         GATE.block(key, "timeout");
-        Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
+        Err(
+            "the keychain did not answer in time (it may be locked or waiting on a prompt)"
+                .to_string(),
+        )
     })
 }
 
@@ -433,6 +541,96 @@ impl TestSharedBlobRead {
 pub(crate) static TEST_SHARED_BLOB_READ: std::sync::Mutex<Option<Arc<TestSharedBlobRead>>> =
     std::sync::Mutex::new(None);
 
+/// Synthetic OS-backend boundary. Captured Arcs never fall through to keyring,
+/// including when a parked task outlives the fixture's installed hook.
+#[cfg(test)]
+pub(crate) struct TestKeychainBackend {
+    pub shared: Arc<TestSharedBlobRead>,
+    pub modes: std::sync::Mutex<Vec<(&'static str, bool)>>,
+    pub denied: std::sync::atomic::AtomicBool,
+    pub fail_write: std::sync::atomic::AtomicBool,
+}
+
+#[cfg(test)]
+static TEST_KEYCHAIN_BACKEND: std::sync::Mutex<Option<Arc<TestKeychainBackend>>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub(crate) struct TestKeychainGuard(pub Arc<TestKeychainBackend>);
+
+#[cfg(test)]
+impl TestKeychainGuard {
+    pub(crate) fn install(path: PathBuf) -> Self {
+        let backend = Arc::new(TestKeychainBackend {
+            shared: Arc::new(TestSharedBlobRead {
+                path,
+                gate: Default::default(),
+                captured: Default::default(),
+                finished: Default::default(),
+                joined: Default::default(),
+                starts: 0.into(),
+                active: 0.into(),
+                max_active: 0.into(),
+            }),
+            modes: Default::default(),
+            denied: false.into(),
+            fail_write: false.into(),
+        });
+        *TEST_KEYCHAIN_BACKEND
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&backend));
+        Self(backend)
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestKeychainGuard {
+    fn drop(&mut self) {
+        TEST_KEYCHAIN_BACKEND
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+    }
+}
+
+#[cfg(test)]
+fn test_keychain_backend() -> Option<Arc<TestKeychainBackend>> {
+    let path = test_credentials_path()?;
+    TEST_KEYCHAIN_BACKEND
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .filter(|b| b.shared.path == path)
+        .cloned()
+}
+
+#[cfg(test)]
+impl TestKeychainBackend {
+    fn load(&self, interactive: bool) -> Result<Option<HashMap<String, String>>, String> {
+        self.modes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(("read", interactive));
+        if self.denied.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("synthetic credential read refused".to_string());
+        }
+        self.shared.load()
+    }
+
+    fn write(&self, json: &str, interactive: bool) -> Result<(), String> {
+        self.modes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(("write", interactive));
+        if self.fail_write.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("synthetic credential write refused".to_string());
+        }
+        test_pause_write();
+        mailvault_core::fsx::write_atomic(&self.shared.path, json.as_bytes())
+            .map_err(|_| "synthetic credential write failed".to_string())
+    }
+}
+
 #[cfg(test)]
 fn test_shared_blob_read() -> Option<Arc<TestSharedBlobRead>> {
     let path = test_credentials_path()?;
@@ -488,14 +686,24 @@ fn blob_read(interactive: bool) -> BoxFuture<'static, Result<HashMap<String, Str
     // different files: its read is never shared with anyone else's.
     #[cfg(test)]
     let shared_test = test_shared_blob_read();
+    #[cfg(test)]
+    let synthetic = test_keychain_backend();
     let unshared_debug = test_credentials_path().is_some();
     #[cfg(test)]
-    let unshared_debug = unshared_debug && shared_test.is_none();
+    let unshared_debug = unshared_debug && shared_test.is_none() && synthetic.is_none();
     if unshared_debug {
         return unshared(move || load_credentials_blob(interactive)).boxed();
     }
     BLOB_READ
         .read_since(since, interactive, move |interactive| {
+            #[cfg(test)]
+            if sealed().is_some() {
+                return load_blob_raw(interactive);
+            }
+            #[cfg(test)]
+            if let Some(backend) = synthetic {
+                return backend.load(interactive);
+            }
             #[cfg(test)]
             if let Some(test) = shared_test {
                 return test.load();
@@ -543,11 +751,32 @@ fn raw_read(
     interactive: bool,
     since: u64,
 ) -> BoxFuture<'static, Result<Option<HashMap<String, String>>, String>> {
-    if test_credentials_path().is_some() {
+    #[cfg(test)]
+    let synthetic = test_keychain_backend();
+    #[cfg(test)]
+    let shared_test = test_shared_blob_read();
+    let unshared_debug = test_credentials_path().is_some();
+    #[cfg(test)]
+    let unshared_debug = unshared_debug && synthetic.is_none() && shared_test.is_none();
+    if unshared_debug {
         return unshared(move || load_blob_raw(interactive)).boxed();
     }
     BLOB_READ
-        .read_since(since, interactive, load_blob_raw)
+        .read_since(since, interactive, move |interactive| {
+            #[cfg(test)]
+            if sealed().is_some() {
+                return load_blob_raw(interactive);
+            }
+            #[cfg(test)]
+            if let Some(backend) = synthetic {
+                return backend.load(interactive);
+            }
+            #[cfg(test)]
+            if let Some(test) = shared_test {
+                return test.load();
+            }
+            load_blob_raw(interactive)
+        })
         .boxed()
 }
 
@@ -555,7 +784,9 @@ fn ai_key_read(interactive: bool) -> BoxFuture<'static, Result<Option<String>, S
     if test_ai_key_path().is_some() {
         return unshared(move || resolve_ai_endpoint_key(interactive)).boxed();
     }
-    AI_KEY_READ.read(interactive, resolve_ai_endpoint_key).boxed()
+    AI_KEY_READ
+        .read(interactive, resolve_ai_endpoint_key)
+        .boxed()
 }
 
 // ── Single-flight item reads ────────────────────────────────────────────────
@@ -666,7 +897,9 @@ impl<T: Clone + Send + Sync + 'static> SingleFlight<T> {
     }
 }
 
-fn unshared<T: Clone + Send + Sync + 'static>(read: impl FnOnce() -> Result<T, String> + Send + 'static) -> SharedRead<T> {
+fn unshared<T: Clone + Send + Sync + 'static>(
+    read: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> SharedRead<T> {
     tokio::task::spawn_blocking(read)
         .map(|joined| joined.unwrap_or_else(|e| Err(format!("the keychain read panicked: {e}"))))
         .boxed()
@@ -740,16 +973,25 @@ impl KeychainGate {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as i64)
                 .unwrap_or(0);
-            blocked.push(Blocked { item, reason, since_ms });
+            blocked.push(Blocked {
+                item,
+                reason,
+                since_ms,
+            });
             self.newly_blocked.notify_one();
             if blocked.len() > 1 {
                 return;
             }
         }
-        let status = os_status.map(|c| format!(", OSStatus {c}")).unwrap_or_default();
+        let status = os_status
+            .map(|c| format!(", OSStatus {c}"))
+            .unwrap_or_default();
         warn!("[keychain] blocked ({item}: {reason}{status}); sync and scheduled sends wait for an unlock");
         let Some(bus) = self.events.get() else { return };
-        if !bus.emit("keychain-status", json!({"blocked": true, "reason": reason})) {
+        if !bus.emit(
+            "keychain-status",
+            json!({"blocked": true, "reason": reason}),
+        ) {
             self.banner();
         }
     }
@@ -774,15 +1016,29 @@ impl KeychainGate {
     }
 
     fn blocked_items(&self) -> Vec<&'static str> {
-        self.blocked.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|b| b.item).collect()
+        self.blocked
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .map(|b| b.item)
+            .collect()
     }
 
     pub(crate) fn is_blocked(&self) -> bool {
-        !self.blocked.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
+        !self
+            .blocked
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty()
     }
 
     pub(crate) fn status(&self) -> Value {
-        match self.blocked.lock().unwrap_or_else(|e| e.into_inner()).first() {
+        match self
+            .blocked
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .first()
+        {
             Some(b) => json!({"blocked": true, "reason": b.reason, "since": b.since_ms}),
             None => json!({"blocked": false}),
         }
@@ -807,7 +1063,11 @@ impl KeychainGate {
 /// `Ok(None)` is `NoEntry`. A non-interactive read of an item that needs a
 /// prompt fails with errSecInteractionNotAllowed, which leaves an already
 /// blocked item blocked with its first reason.
-fn read_entry(entry: &Entry, item: &'static str, interactive: bool) -> keyring::Result<Option<String>> {
+fn read_entry(
+    entry: &Entry,
+    item: &'static str,
+    interactive: bool,
+) -> keyring::Result<Option<String>> {
     match with_interaction(interactive, || entry.get_password()) {
         Ok(pw) => {
             GATE.clear(item);
@@ -842,7 +1102,8 @@ fn with_interaction<R>(interactive: bool, read: impl FnOnce() -> R) -> R {
     static SWITCH: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _held = SWITCH.lock().unwrap_or_else(|e| e.into_inner());
     // Restores prompts on drop, before the lock is released.
-    let _quiet = (!interactive).then(security_framework::os::macos::keychain::SecKeychain::disable_user_interaction);
+    let _quiet = (!interactive)
+        .then(security_framework::os::macos::keychain::SecKeychain::disable_user_interaction);
     read()
 }
 
@@ -855,9 +1116,9 @@ fn with_interaction<R>(_interactive: bool, read: impl FnOnce() -> R) -> R {
 #[cfg(target_os = "macos")]
 fn os_status(e: &keyring::Error) -> Option<i32> {
     match e {
-        keyring::Error::PlatformFailure(b) | keyring::Error::NoStorageAccess(b) => {
-            b.downcast_ref::<security_framework::base::Error>().map(|e| e.code())
-        }
+        keyring::Error::PlatformFailure(b) | keyring::Error::NoStorageAccess(b) => b
+            .downcast_ref::<security_framework::base::Error>()
+            .map(|e| e.code()),
         _ => None,
     }
 }
@@ -890,8 +1151,12 @@ pub(crate) fn start_watcher(on_clear: impl Fn() + Send + 'static) {
 async fn probe(item: &'static str, interactive: bool) {
     // The result does not matter here: the read settles its own item.
     let _ = match item {
-        CREDENTIALS_KEY => guarded(item, blob_read(interactive), AI_KEY_TIMEOUT).await.map(|_| ()),
-        _ => guarded(item, ai_key_read(interactive), AI_KEY_TIMEOUT).await.map(|_| ()),
+        CREDENTIALS_KEY => guarded(item, blob_read(interactive), AI_KEY_TIMEOUT)
+            .await
+            .map(|_| ()),
+        _ => guarded(item, ai_key_read(interactive), AI_KEY_TIMEOUT)
+            .await
+            .map(|_| ()),
     };
 }
 
@@ -932,14 +1197,22 @@ where
 /// after the user cancels a prompt, macOS does not prompt that process again
 /// for the item reads, so without this an Unlock could never bring one back.
 pub(crate) async fn retry() -> Value {
-    let unlock = tokio::time::timeout(RETRY_TIMEOUT, UNLOCK.read(true, |_| unlock_default_keychain()));
+    let unlock = tokio::time::timeout(
+        RETRY_TIMEOUT,
+        UNLOCK.read(true, |_| unlock_default_keychain()),
+    );
     let reads = async {
         let _ = tokio::join!(
             guarded(CREDENTIALS_KEY, blob_read(true), RETRY_TIMEOUT),
             guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(true), RETRY_TIMEOUT),
         );
     };
-    retry_with(&GATE, async { unlock.await.unwrap_or_else(|_| Err("timeout".to_string())) }, reads).await
+    retry_with(
+        &GATE,
+        async { unlock.await.unwrap_or_else(|_| Err("timeout".to_string())) },
+        reads,
+    )
+    .await
 }
 
 /// The unlock dialog, one at a time however often Unlock is pressed.
@@ -978,7 +1251,12 @@ fn unlock_default_keychain() -> Result<(), String> {
     extern "C" {
         // NULL keychain = the default keychain, for both.
         fn SecKeychainGetStatus(keychain: *const c_void, status: *mut u32) -> i32;
-        fn SecKeychainUnlock(keychain: *const c_void, password_length: u32, password: *const c_void, use_password: u8) -> i32;
+        fn SecKeychainUnlock(
+            keychain: *const c_void,
+            password_length: u32,
+            password: *const c_void,
+            use_password: u8,
+        ) -> i32;
     }
     const UNLOCKED: u32 = 1; // kSecUnlockStateStatus
 
@@ -995,8 +1273,11 @@ fn unlock_default_keychain() -> Result<(), String> {
         if code == 0 {
             return Ok(());
         }
-        let reason = mailvault_core::keychain::keychain_block_reason(Some(code), false).unwrap_or("error");
-        warn!("[keychain] retry: unlocking the default keychain failed ({reason}, OSStatus {code})");
+        let reason =
+            mailvault_core::keychain::keychain_block_reason(Some(code), false).unwrap_or("error");
+        warn!(
+            "[keychain] retry: unlocking the default keychain failed ({reason}, OSStatus {code})"
+        );
         Err(reason.to_string())
     })
 }
@@ -1020,18 +1301,24 @@ mod banner {
     use objc2::runtime::Bool;
     use objc2_foundation::{NSBundle, NSError, NSLocale, NSString};
     use objc2_user_notifications::{
-        UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationRequest, UNUserNotificationCenter,
+        UNAuthorizationOptions, UNMutableNotificationContent, UNNotificationRequest,
+        UNUserNotificationCenter,
     };
     use tracing::warn;
 
     pub fn post() {
         objc2::rc::autoreleasepool(|_| {
             let bundle = NSBundle::mainBundle();
-            if !bundle.bundlePath().to_string().ends_with(".app") || bundle.bundleIdentifier().is_none() {
+            if !bundle.bundlePath().to_string().ends_with(".app")
+                || bundle.bundleIdentifier().is_none()
+            {
                 warn!("[keychain] not inside an app bundle; no banner posted");
                 return;
             }
-            let lang = NSLocale::preferredLanguages().firstObject().map(|l| l.to_string()).unwrap_or_default();
+            let lang = NSLocale::preferredLanguages()
+                .firstObject()
+                .map(|l| l.to_string())
+                .unwrap_or_default();
             let (title, body) = mailvault_core::keychain::keychain_banner_text(&lang);
             let content = UNMutableNotificationContent::new();
             content.setTitle(&NSString::from_str(title));
@@ -1049,10 +1336,11 @@ mod banner {
                     warn!("[keychain] notifications not authorized; banner dropped");
                 }
             });
-            UNUserNotificationCenter::currentNotificationCenter().requestAuthorizationWithOptions_completionHandler(
-                UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
-                &deliver,
-            );
+            UNUserNotificationCenter::currentNotificationCenter()
+                .requestAuthorizationWithOptions_completionHandler(
+                    UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
+                    &deliver,
+                );
         });
     }
 }
@@ -1106,10 +1394,14 @@ fn store_ai_endpoint_key(key: &str) -> Result<(), String> {
         return store.set_ai_key(Some(key.to_string()));
     }
     if let Some(path) = test_ai_key_path() {
-        return std::fs::write(&path, key).map_err(|e| format!("failed to write test ai key file: {e}"));
+        return std::fs::write(&path, key)
+            .map_err(|e| format!("failed to write test ai key file: {e}"));
     }
-    let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
-    entry.set_password(key).map_err(|e| format!("failed to write keychain: {e}"))
+    let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY)
+        .map_err(|e| format!("failed to create keyring entry: {e}"))?;
+    entry
+        .set_password(key)
+        .map_err(|e| format!("failed to write keychain: {e}"))
 }
 
 /// `Ok(None)` (not an error) means nothing has been stored yet — the normal
@@ -1125,8 +1417,10 @@ fn resolve_ai_endpoint_key(interactive: bool) -> Result<Option<String>, String> 
             Err(e) => Err(format!("failed to read test ai key file: {e}")),
         };
     }
-    let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
-    read_entry(&entry, AI_ENDPOINT_KEY_ENTRY, interactive).map_err(|e| format!("failed to read keychain: {e}"))
+    let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY)
+        .map_err(|e| format!("failed to create keyring entry: {e}"))?;
+    read_entry(&entry, AI_ENDPOINT_KEY_ENTRY, interactive)
+        .map_err(|e| format!("failed to read keychain: {e}"))
 }
 
 /// A keychain ACL can prompt the user and then block the reader until
@@ -1136,7 +1430,12 @@ fn resolve_ai_endpoint_key(interactive: bool) -> Result<Option<String>, String> 
 /// wrappers instead, which mirror `scheduled_send_worker::resolve_credentials`'s
 /// spawn_blocking + timeout shape.
 pub async fn resolve_ai_endpoint_key_guarded() -> Result<Option<String>, String> {
-    guarded(AI_ENDPOINT_KEY_ENTRY, ai_key_read(may_prompt()), AI_KEY_TIMEOUT).await
+    guarded(
+        AI_ENDPOINT_KEY_ENTRY,
+        ai_key_read(may_prompt()),
+        AI_KEY_TIMEOUT,
+    )
+    .await
 }
 
 pub async fn store_ai_endpoint_key_guarded(key: String) -> Result<(), String> {
@@ -1144,7 +1443,10 @@ pub async fn store_ai_endpoint_key_guarded(key: String) -> Result<(), String> {
     match tokio::time::timeout(AI_KEY_TIMEOUT, write).await {
         Ok(Ok(result)) => result,
         Ok(Err(e)) => Err(format!("the keychain write panicked: {e}")),
-        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+        Err(_) => Err(
+            "the keychain did not answer in time (it may be locked or waiting on a prompt)"
+                .to_string(),
+        ),
     }
 }
 
@@ -1182,7 +1484,8 @@ fn read_pgp_keys(interactive: bool) -> Result<Vec<mailvault_core::pgp::StoredKey
             Err(e) => return Err(format!("failed to read test pgp keys: {e}")),
         },
         None => {
-            let entry = Entry::new(KEYRING_SERVICE, PGP_KEYS_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
+            let entry = Entry::new(KEYRING_SERVICE, PGP_KEYS_ENTRY)
+                .map_err(|e| format!("failed to create keyring entry: {e}"))?;
             // A plain read, not `read_entry`: this item stays out of the gate.
             let primary = match with_interaction(interactive, || entry.get_password()) {
                 Ok(primary) => primary,
@@ -1211,19 +1514,34 @@ fn write_pgp_keys(keys: &[mailvault_core::pgp::StoredKey]) -> Result<(), String>
     }
     let json = serde_json::to_string(keys).map_err(|e| e.to_string())?;
     if let Some(path) = test_pgp_keys_path() {
-        return std::fs::write(&path, json).map_err(|e| format!("failed to write test pgp keys: {e}"));
+        return std::fs::write(&path, json)
+            .map_err(|e| format!("failed to write test pgp keys: {e}"));
     }
-    let entry = |name: &str| Entry::new(KEYRING_SERVICE, name).map_err(|e| format!("failed to create keyring entry: {e}"));
+    let entry = |name: &str| {
+        Entry::new(KEYRING_SERVICE, name)
+            .map_err(|e| format!("failed to create keyring entry: {e}"))
+    };
     let primary = entry(PGP_KEYS_ENTRY)?;
     let old = primary.get_password().ok();
-    let generation = format!("{:x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let generation = format!(
+        "{:x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
     let split = split_secret(PGP_KEYS_ENTRY, &json, secret_limit(), &generation);
     for (name, value) in &split.parts {
-        entry(name)?.set_password(value).map_err(|e| format!("failed to write keychain: {e}"))?;
+        entry(name)?
+            .set_password(value)
+            .map_err(|e| format!("failed to write keychain: {e}"))?;
     }
-    primary.set_password(&split.primary).map_err(|e| format!("failed to write keychain: {e}"))?;
+    primary
+        .set_password(&split.primary)
+        .map_err(|e| format!("failed to write keychain: {e}"))?;
     for name in stale_parts(PGP_KEYS_ENTRY, old.as_deref(), &split) {
-        if let Err(e) = entry(&name).and_then(|e| e.delete_credential().map_err(|e| e.to_string())) {
+        if let Err(e) = entry(&name).and_then(|e| e.delete_credential().map_err(|e| e.to_string()))
+        {
             warn!("[pgp] could not remove stale keychain part {name}: {e}");
         }
     }
@@ -1232,7 +1550,9 @@ fn write_pgp_keys(keys: &[mailvault_core::pgp::StoredKey]) -> Result<(), String>
 
 static PGP_KEYS_READ: SingleFlight<Vec<mailvault_core::pgp::StoredKey>> = SingleFlight::new();
 
-fn pgp_keys_read(interactive: bool) -> BoxFuture<'static, Result<Vec<mailvault_core::pgp::StoredKey>, String>> {
+fn pgp_keys_read(
+    interactive: bool,
+) -> BoxFuture<'static, Result<Vec<mailvault_core::pgp::StoredKey>, String>> {
     if test_pgp_keys_path().is_some() {
         return unshared(move || read_pgp_keys(interactive)).boxed();
     }
@@ -1244,9 +1564,14 @@ fn pgp_keys_read(interactive: bool) -> BoxFuture<'static, Result<Vec<mailvault_c
 /// effort, and neither the watcher nor `keychain.retry` re-reads this item,
 /// so a block here would hold sync and scheduled sends with nothing to clear it.
 pub async fn resolve_pgp_keys_guarded() -> Result<Vec<mailvault_core::pgp::StoredKey>, String> {
-    tokio::time::timeout(AI_KEY_TIMEOUT, pgp_keys_read(false)).await.unwrap_or_else(|_| {
-        Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string())
-    })
+    tokio::time::timeout(AI_KEY_TIMEOUT, pgp_keys_read(false))
+        .await
+        .unwrap_or_else(|_| {
+            Err(
+                "the keychain did not answer in time (it may be locked or waiting on a prompt)"
+                    .to_string(),
+            )
+        })
 }
 
 /// Read, change and write back the key list, one change at a time so two
@@ -1256,7 +1581,10 @@ pub async fn update_pgp_keys(
     change: impl FnOnce(&mut Vec<mailvault_core::pgp::StoredKey>) -> Result<(), String>,
 ) -> Result<Vec<mailvault_core::pgp::StoredKey>, String> {
     static ONE_AT_A_TIME: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
-    let _held = ONE_AT_A_TIME.get_or_init(|| tokio::sync::Mutex::new(())).lock().await;
+    let _held = ONE_AT_A_TIME
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
     let mut keys = resolve_pgp_keys_guarded().await?;
     change(&mut keys)?;
     let to_write = keys.clone();
@@ -1264,7 +1592,12 @@ pub async fn update_pgp_keys(
     match tokio::time::timeout(AI_KEY_TIMEOUT, write).await {
         Ok(Ok(result)) => result?,
         Ok(Err(e)) => return Err(format!("the keychain write panicked: {e}")),
-        Err(_) => return Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+        Err(_) => {
+            return Err(
+                "the keychain did not answer in time (it may be locked or waiting on a prompt)"
+                    .to_string(),
+            )
+        }
     }
     Ok(keys)
 }
@@ -1320,7 +1653,7 @@ impl CredError {
 }
 
 /// One change the app asks for.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) enum CredChange {
     /// Each record replaces the one stored under its id (or is added). A
     /// record is the JSON text of an account object, stored as given.
@@ -1338,6 +1671,8 @@ pub(crate) enum CredChange {
         fields: serde_json::Map<String, Value>,
         chain: Option<Vec<String>>,
     },
+    /// A validated native snapshot; never deserialized from a public request.
+    Refreshed(crate::oauth_tokens::PersistablePair),
     Delete(Vec<String>),
 }
 
@@ -1358,6 +1693,19 @@ pub(crate) fn apply_change(
 ) -> Result<Vec<String>, CredError> {
     let mut changed = Vec::new();
     match change {
+        CredChange::Refreshed(pair) => {
+            let Some(raw) = blob.get(&pair.account_id) else {
+                return Ok(changed);
+            };
+            let record: Value = serde_json::from_str(raw).map_err(|_| CredError::Unavailable)?;
+            if !record.is_object() {
+                return Err(CredError::Unavailable);
+            }
+            if !pair.matches_record(&record) {
+                return Err(CredError::StaleGrant);
+            }
+            return apply_change(blob, &pair.change());
+        }
         CredChange::Save(records) | CredChange::SaveIfAbsent(records) => {
             valid_records(records)?;
             let only_new = matches!(change, CredChange::SaveIfAbsent(_));
@@ -1389,6 +1737,23 @@ pub(crate) fn apply_change(
                     .is_some_and(|fp| chain.contains(&fp))
                 {
                     return Err(CredError::StaleGrant);
+                }
+                // Both the retained app writer and native worker reach this
+                // fresh-blob guard. Partial/non-pair updates retain their API.
+                if fields
+                    .get("oauth2AccessToken")
+                    .and_then(Value::as_str)
+                    .is_some_and(|s| !s.is_empty())
+                {
+                    if let Some(proposed) = fields.get("oauth2ExpiresAt").and_then(Value::as_f64) {
+                        if record
+                            .get("oauth2ExpiresAt")
+                            .and_then(Value::as_f64)
+                            .is_some_and(|stored| stored > proposed)
+                        {
+                            return Ok(changed);
+                        }
+                    }
                 }
                 let sent = fields
                     .get("oauth2RefreshToken")
@@ -1553,19 +1918,41 @@ pub(crate) async fn change_credentials(
     state: &Arc<DaemonState>,
     change: CredChange,
 ) -> Result<(Vec<String>, u64), CredError> {
+    change_credentials_mode(state, change, Interaction::Interactive).await
+}
+
+#[derive(Clone, Copy)]
+enum Interaction {
+    Interactive,
+    Quiet,
+}
+
+async fn change_credentials_mode(
+    state: &Arc<DaemonState>,
+    change: CredChange,
+    mode: Interaction,
+) -> Result<(Vec<String>, u64), CredError> {
     use std::sync::atomic::Ordering::SeqCst;
+    let interactive = matches!(mode, Interaction::Interactive);
     if WRITE_PARKED.load(SeqCst) {
         return Err(CredError::Busy);
     }
-    let Ok(held) = tokio::time::timeout(APP_LOCK_WAIT, APP_WRITE.lock()).await else {
-        return Err(CredError::Busy);
+    let held = if interactive {
+        tokio::time::timeout(APP_LOCK_WAIT, APP_WRITE.lock())
+            .await
+            .map_err(|_| CredError::Busy)?
+    } else {
+        APP_WRITE.try_lock().map_err(|_| CredError::Busy)?
     };
     if WRITE_PARKED.load(SeqCst) {
         return Err(CredError::Busy);
     }
+    let debug_path = test_credentials_path();
+    #[cfg(test)]
+    let debug_path = debug_path.filter(|_| test_keychain_backend().is_none());
     let job: Job = if let Some(store) = sealed() {
         Box::new(move || store.change_credentials(|blob| apply_change(blob, &change)))
-    } else if let Some(path) = test_credentials_path() {
+    } else if let Some(path) = debug_path {
         Box::new(move || change_test_file(&path, &change))
     } else {
         // A blocked gate would only answer a quiet read's failure: fail fast,
@@ -1574,7 +1961,13 @@ pub(crate) async fn change_credentials(
             return Err(CredError::Unavailable);
         }
         let since = BLOB_READ.generation();
-        let mut blob = match guarded(CREDENTIALS_KEY, raw_read(true, since), AI_KEY_TIMEOUT).await {
+        let mut blob = match guarded(
+            CREDENTIALS_KEY,
+            raw_read(interactive, since),
+            AI_KEY_TIMEOUT,
+        )
+        .await
+        {
             Ok(blob) => blob.unwrap_or_default(),
             Err(_) => return Err(CredError::Unavailable),
         };
@@ -1583,20 +1976,33 @@ pub(crate) async fn change_credentials(
             return Ok((changed, since));
         }
         let json = serde_json::to_string(&blob).map_err(|_| CredError::WriteFailed)?;
+        #[cfg(test)]
+        let synthetic = test_keychain_backend();
         Box::new(move || {
-            with_interaction(true, || write_keychain_blob(&json))
-                .map(|()| changed)
-                .map_err(|e| {
-                    warn!("[keychain] the credentials write failed: {e}");
-                    CredError::WriteFailed
-                })
+            with_interaction(interactive, || {
+                #[cfg(test)]
+                if let Some(backend) = synthetic {
+                    return backend.write(&json, interactive);
+                }
+                write_keychain_blob(&json)
+            })
+            .map(|()| changed)
+            .map_err(|e| {
+                warn!("[keychain] the credentials write failed: {e}");
+                CredError::WriteFailed
+            })
         })
     };
     let mut task = tokio::task::spawn_blocking(job);
     let finished = tokio::time::timeout(write_timeout(), &mut task).await;
     match finished {
         Ok(result) => {
-            finish_credential_change(state, result.unwrap_or(Err(CredError::WriteFailed)))
+            let result =
+                finish_credential_change(state, result.unwrap_or(Err(CredError::WriteFailed)));
+            drop(held);
+            #[cfg(test)]
+            test_write_finished();
+            result
         }
         Err(_) => {
             warn!("[keychain] the credentials write did not finish in time; changes wait until it returns");
@@ -1608,17 +2014,19 @@ pub(crate) async fn change_credentials(
                 WRITE_PARKED.store(false, SeqCst);
                 drop(held);
                 #[cfg(test)]
-                if let Some(done) = TEST_WRITE_FINISHED
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .take()
-                {
-                    let _ = done.send(());
-                }
+                test_write_finished();
             });
             Err(CredError::WriteFailed)
         }
     }
+}
+
+/// Same serializer, backends, clocks and finalizer; quiet admission never queues.
+pub(crate) async fn change_credentials_quiet(
+    state: &Arc<DaemonState>,
+    change: CredChange,
+) -> Result<(Vec<String>, u64), CredError> {
+    change_credentials_mode(state, change, Interaction::Quiet).await
 }
 
 /// The debug file bypass: the same compact `{id: record}` JSON the app's
@@ -1635,24 +2043,38 @@ fn change_test_file(path: &std::path::Path, change: &CredChange) -> Result<Vec<S
     }
     let json = serde_json::to_string(&blob).map_err(|_| CredError::WriteFailed)?;
     #[cfg(test)]
-    {
-        let gate = TEST_WRITE_GATE
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take();
-        if let Some(gate) = gate {
-            if let Some(entered) = TEST_WRITE_ENTERED
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .take()
-            {
-                let _ = entered.send(());
-            }
-            let _ = gate.recv();
-        }
-    }
+    test_pause_write();
     mailvault_core::fsx::write_atomic(path, json.as_bytes()).map_err(|_| CredError::WriteFailed)?;
     Ok(changed)
+}
+
+#[cfg(test)]
+fn test_pause_write() {
+    let gate = TEST_WRITE_GATE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(gate) = gate {
+        if let Some(entered) = TEST_WRITE_ENTERED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            let _ = entered.send(());
+        }
+        let _ = gate.recv();
+    }
+}
+
+#[cfg(test)]
+fn test_write_finished() {
+    if let Some(done) = TEST_WRITE_FINISHED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
+        let _ = done.send(());
+    }
 }
 
 /// The blob into the keychain, parts first (Windows), in the order the
@@ -1741,6 +2163,10 @@ pub(crate) struct TestWritePause {
 #[cfg(test)]
 impl TestWritePause {
     pub(crate) fn arm() -> Self {
+        Self::arm_with_timeout(300)
+    }
+
+    pub(crate) fn arm_with_timeout(timeout_ms: u64) -> Self {
         use crate::credentials::{
             TEST_WRITE_ENTERED, TEST_WRITE_FINISHED, TEST_WRITE_GATE, TEST_WRITE_TIMEOUT_MS,
         };
@@ -1752,7 +2178,7 @@ impl TestWritePause {
         *TEST_WRITE_FINISHED
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = Some(finished);
-        TEST_WRITE_TIMEOUT_MS.store(300, std::sync::atomic::Ordering::SeqCst);
+        TEST_WRITE_TIMEOUT_MS.store(timeout_ms, std::sync::atomic::Ordering::SeqCst);
         Self {
             release: Some(release),
             entered,
@@ -1841,6 +2267,27 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn quiet_credential_admission_is_immediate_busy_without_backend_io() {
+        let _env = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = TestEnvRestore::capture();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        std::fs::write(&path, json!({"acct-1":sample_account_json()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let backend = TestKeychainGuard::install(path);
+        let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        let held = APP_WRITE.lock().await;
+        let result = tokio::time::timeout(
+            Duration::from_millis(100),
+            change_credentials_quiet(&state, CredChange::Delete(vec!["acct-1".to_string()])),
+        )
+        .await;
+        drop(held);
+        assert!(matches!(result, Ok(Err(CredError::Busy))));
+        assert!(backend.0.modes.lock().unwrap().is_empty());
+    }
+
     /// Mirrors the shape the app (`store_credentials`) and the e2e harness
     /// (`tests/e2e/mockImap.js` `mockAccount()`/`seedAccounts()`) actually
     /// write: `{ accountId: JSON.stringify(account) }`, where the account
@@ -1894,7 +2341,10 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
 
-    fn gate_with_events() -> (KeychainGate, tokio::sync::broadcast::Receiver<std::sync::Arc<str>>) {
+    fn gate_with_events() -> (
+        KeychainGate,
+        tokio::sync::broadcast::Receiver<std::sync::Arc<str>>,
+    ) {
         let gate = KeychainGate::new();
         let bus = EventBus::new(crate::events::CAPACITY);
         let _ = gate.events.set(bus.clone());
@@ -1904,7 +2354,11 @@ mod tests {
 
     fn payloads(rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<str>>) -> Vec<Value> {
         std::iter::from_fn(|| rx.try_recv().ok())
-            .map(|line| mailvault_core::daemon_ipc::parse_event(&line).expect("an event line").1)
+            .map(|line| {
+                mailvault_core::daemon_ipc::parse_event(&line)
+                    .expect("an event line")
+                    .1
+            })
             .collect()
     }
 
@@ -1921,7 +2375,13 @@ mod tests {
         gate.clear(CREDENTIALS_KEY);
         gate.clear(CREDENTIALS_KEY);
 
-        assert_eq!(payloads(&mut rx), vec![json!({"blocked": true, "reason": "locked"}), json!({"blocked": false})]);
+        assert_eq!(
+            payloads(&mut rx),
+            vec![
+                json!({"blocked": true, "reason": "locked"}),
+                json!({"blocked": false})
+            ]
+        );
         assert_eq!(gate.status(), json!({"blocked": false}));
     }
 
@@ -1935,14 +2395,24 @@ mod tests {
         gate.block(CREDENTIALS_KEY, "denied");
         gate.clear(AI_ENDPOINT_KEY_ENTRY);
         assert!(gate.is_blocked(), "the blob is still refused");
-        assert_eq!(payloads(&mut rx), vec![json!({"blocked": true, "reason": "denied"})]);
+        assert_eq!(
+            payloads(&mut rx),
+            vec![json!({"blocked": true, "reason": "denied"})]
+        );
 
         gate.block(AI_ENDPOINT_KEY_ENTRY, "timeout");
-        assert_eq!(gate.status()["reason"], json!("denied"), "the earliest item's reason");
+        assert_eq!(
+            gate.status()["reason"],
+            json!("denied"),
+            "the earliest item's reason"
+        );
         gate.clear(CREDENTIALS_KEY);
         assert!(gate.is_blocked());
         assert_eq!(gate.status()["reason"], json!("timeout"));
-        assert!(payloads(&mut rx).is_empty(), "no flip while any item stays blocked");
+        assert!(
+            payloads(&mut rx).is_empty(),
+            "no flip while any item stays blocked"
+        );
 
         gate.clear(AI_ENDPOINT_KEY_ENTRY);
         assert!(!gate.is_blocked());
@@ -1982,14 +2452,28 @@ mod tests {
             clears.fetch_add(1, Ordering::SeqCst);
         }));
 
-        until_clear().await.expect("the watcher clears the gate once the reader answers");
+        until_clear()
+            .await
+            .expect("the watcher clears the gate once the reader answers");
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(probes.load(Ordering::SeqCst), 3);
-        assert_eq!(prompted.load(Ordering::SeqCst), 0, "a probe while blocked must not raise macOS's prompt");
-        assert_eq!(clears.load(Ordering::SeqCst), 1, "the clear wakes the scheduled worker once");
+        assert_eq!(
+            prompted.load(Ordering::SeqCst),
+            0,
+            "a probe while blocked must not raise macOS's prompt"
+        );
+        assert_eq!(
+            clears.load(Ordering::SeqCst),
+            1,
+            "the clear wakes the scheduled worker once"
+        );
 
         tokio::time::sleep(Duration::from_millis(150)).await;
-        assert_eq!(probes.load(Ordering::SeqCst), 3, "no polling while the gate is clear");
+        assert_eq!(
+            probes.load(Ordering::SeqCst),
+            3,
+            "no polling while the gate is clear"
+        );
 
         gate.block("blob", "denied");
         until_clear().await.expect("a new block wakes the watcher");
@@ -2007,7 +2491,10 @@ mod tests {
         let gate = KeychainGate::new();
         let result = retry_with(
             &gate,
-            async { order.lock().unwrap().push("unlock"); Ok(()) },
+            async {
+                order.lock().unwrap().push("unlock");
+                Ok(())
+            },
             async { order.lock().unwrap().push("read") },
         )
         .await;
@@ -2018,15 +2505,26 @@ mod tests {
         gate.block("blob", "timeout");
         let result = retry_with(
             &gate,
-            async { order.lock().unwrap().push("unlock"); Err("denied".to_string()) },
+            async {
+                order.lock().unwrap().push("unlock");
+                Err("denied".to_string())
+            },
             async { order.lock().unwrap().push("read") },
         )
         .await;
-        assert_eq!(*order.lock().unwrap(), vec!["unlock"], "a cancelled unlock reads nothing");
+        assert_eq!(
+            *order.lock().unwrap(),
+            vec!["unlock"],
+            "a cancelled unlock reads nothing"
+        );
         assert_eq!(result, json!({"ok": false, "reason": "denied"}));
 
         let result = retry_with(&gate, async { Ok(()) }, async {}).await;
-        assert_eq!(result, json!({"ok": false, "reason": "timeout"}), "unlocked, but an item still refuses");
+        assert_eq!(
+            result,
+            json!({"ok": false, "reason": "timeout"}),
+            "unlocked, but an item still refuses"
+        );
     }
 
     /// Only the read that finds the gate clear may prompt; once blocked,
@@ -2079,10 +2577,22 @@ mod tests {
 
         release.send(()).unwrap();
         assert_eq!(first.await.unwrap(), Ok(7));
-        assert_eq!(second.await.unwrap(), Ok(7), "the probe shares the first read's result");
-        assert_eq!(*started.lock().unwrap(), vec![true], "one blocking thread, not two");
+        assert_eq!(
+            second.await.unwrap(),
+            Ok(7),
+            "the probe shares the first read's result"
+        );
+        assert_eq!(
+            *started.lock().unwrap(),
+            vec![true],
+            "one blocking thread, not two"
+        );
 
-        assert_eq!(flight.read(false, |_| Ok(9)).await, Ok(9), "once it returned, the next read is a fresh one");
+        assert_eq!(
+            flight.read(false, |_| Ok(9)).await,
+            Ok(9),
+            "once it returned, the next read is a fresh one"
+        );
     }
 
     /// A retry the user asked for gets its prompt even when a background
@@ -2106,11 +2616,18 @@ mod tests {
             Ok(2)
         }));
         tokio::time::sleep(Duration::from_millis(50)).await;
-        assert!(!retry.is_finished(), "one read per item at a time, even for a retry");
+        assert!(
+            !retry.is_finished(),
+            "one read per item at a time, even for a retry"
+        );
 
         release.send(()).unwrap();
         assert_eq!(probe.await.unwrap(), Ok(1));
-        assert_eq!(retry.await.unwrap(), Ok(2), "the retry's own read, not the probe's answer");
+        assert_eq!(
+            retry.await.unwrap(),
+            Ok(2),
+            "the retry's own read, not the probe's answer"
+        );
         assert_eq!(*started.lock().unwrap(), vec![false, true]);
     }
 
@@ -2178,13 +2695,26 @@ mod tests {
     use mailvault_core::portable::{read_sealed, write_sealed, Secrets};
     use mailvault_core::transfer::crypto::{Params, MIN_M_KIB};
 
-    const CHEAP: Params = Params { m_kib: MIN_M_KIB, t: 1, p: 1 };
+    const CHEAP: Params = Params {
+        m_kib: MIN_M_KIB,
+        t: 1,
+        p: 1,
+    };
 
     fn sealed_with_one_account(dir: &std::path::Path) -> SealedStore {
         let path = dir.join("credentials.sealed");
         let mut credentials = HashMap::new();
         credentials.insert("acct-1".to_string(), sample_account_json());
-        write_sealed(&path, "drive passphrase", &Secrets { credentials, ai_endpoint_key: None }, CHEAP).unwrap();
+        write_sealed(
+            &path,
+            "drive passphrase",
+            &Secrets {
+                credentials,
+                ai_endpoint_key: None,
+            },
+            CHEAP,
+        )
+        .unwrap();
         SealedStore::new(path, CHEAP)
     }
 
@@ -2260,8 +2790,14 @@ mod tests {
         // A write now would replace every account with whatever the caller
         // happened to hold: refused, and the file is untouched.
         let before = std::fs::read(dir.path().join("credentials.sealed")).unwrap();
-        assert!(store.set_credentials(HashMap::new()).unwrap_err().starts_with(E_PORTABLE_LOCKED));
-        assert_eq!(std::fs::read(dir.path().join("credentials.sealed")).unwrap(), before);
+        assert!(store
+            .set_credentials(HashMap::new())
+            .unwrap_err()
+            .starts_with(E_PORTABLE_LOCKED));
+        assert_eq!(
+            std::fs::read(dir.path().join("credentials.sealed")).unwrap(),
+            before
+        );
     }
 
     #[test]
@@ -2269,13 +2805,22 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = sealed_with_one_account(dir.path());
         let err = store.unlock("wrong passphrase").unwrap_err();
-        assert!(err.starts_with(mailvault_core::portable::E_PASSPHRASE), "{err}");
+        assert!(
+            err.starts_with(mailvault_core::portable::E_PASSPHRASE),
+            "{err}"
+        );
         assert!(store.is_locked());
 
         store.unlock("drive passphrase").unwrap();
         assert!(!store.is_locked());
         let blob = store.secrets().unwrap().credentials;
-        assert_eq!(account_from_blob(&blob, "acct-1").unwrap().password.as_deref(), Some("hunter2"));
+        assert_eq!(
+            account_from_blob(&blob, "acct-1")
+                .unwrap()
+                .password
+                .as_deref(),
+            Some("hunter2")
+        );
 
         store.lock();
         assert!(store.is_locked(), "lock forgets the key");
@@ -2291,7 +2836,8 @@ mod tests {
         store.set_credentials(blob).unwrap();
         store.set_ai_key(Some("sk-portable".to_string())).unwrap();
 
-        let on_disk = read_sealed(&dir.path().join("credentials.sealed"), "drive passphrase").unwrap();
+        let on_disk =
+            read_sealed(&dir.path().join("credentials.sealed"), "drive passphrase").unwrap();
         assert_eq!(on_disk.credentials.len(), 2);
         assert_eq!(on_disk.ai_endpoint_key.as_deref(), Some("sk-portable"));
     }
@@ -2300,12 +2846,22 @@ mod tests {
     fn changing_the_passphrase_needs_the_old_one_and_reseals() {
         let dir = tempfile::tempdir().unwrap();
         let store = sealed_with_one_account(dir.path());
-        assert!(store.change_passphrase("wrong passphrase", "new passphrase").is_err());
-        store.change_passphrase("drive passphrase", "new passphrase").unwrap();
+        assert!(store
+            .change_passphrase("wrong passphrase", "new passphrase")
+            .is_err());
+        store
+            .change_passphrase("drive passphrase", "new passphrase")
+            .unwrap();
 
         let path = dir.path().join("credentials.sealed");
         assert!(read_sealed(&path, "drive passphrase").is_err());
-        assert_eq!(read_sealed(&path, "new passphrase").unwrap().credentials.len(), 1);
+        assert_eq!(
+            read_sealed(&path, "new passphrase")
+                .unwrap()
+                .credentials
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -2326,10 +2882,19 @@ mod tests {
         let path = dir.path().join("ai_key");
         std::env::set_var("MAILVAULT_TEST_AI_KEY", &path);
 
-        assert_eq!(resolve_ai_endpoint_key_guarded().await.unwrap(), None, "nothing stored yet reads as None, not an error");
+        assert_eq!(
+            resolve_ai_endpoint_key_guarded().await.unwrap(),
+            None,
+            "nothing stored yet reads as None, not an error"
+        );
 
-        store_ai_endpoint_key_guarded("sk-test-123".to_string()).await.unwrap();
-        assert_eq!(resolve_ai_endpoint_key_guarded().await.unwrap().as_deref(), Some("sk-test-123"));
+        store_ai_endpoint_key_guarded("sk-test-123".to_string())
+            .await
+            .unwrap();
+        assert_eq!(
+            resolve_ai_endpoint_key_guarded().await.unwrap().as_deref(),
+            Some("sk-test-123")
+        );
 
         std::env::remove_var("MAILVAULT_TEST_AI_KEY");
     }

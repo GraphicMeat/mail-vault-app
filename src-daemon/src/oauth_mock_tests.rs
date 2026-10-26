@@ -50,7 +50,9 @@ struct Rig {
 
 impl Rig {
     fn new(scenario: Scenario) -> Rig {
-        let env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let env = crate::credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
         std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
         let dir = std::env::temp_dir().join(format!("mv-oauth-mock-{}", uuid::Uuid::new_v4()));
@@ -63,12 +65,31 @@ impl Rig {
         let creds = dir.join("credentials.json");
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
         let rx = s.events.subscribe();
-        Rig { s, auth, _oauth: oauth, imap, creds, rx, seen: Vec::new(), all_events: Vec::new(), _env: env }
+        Rig {
+            s,
+            auth,
+            _oauth: oauth,
+            imap,
+            creds,
+            rx,
+            seen: Vec::new(),
+            all_events: Vec::new(),
+            _env: env,
+        }
     }
 
     fn sign_in(&self, scope: &str, rotate: bool) -> SignIn {
-        let client_id = if scope == GOOGLE_SCOPE { GOOGLE_THUNDERBIRD_CLIENT_ID.to_string() } else { String::new() };
-        self.auth.sign_in(GrantSpec { client_id, scope: scope.to_string(), expires_in: 3600, rotate })
+        let client_id = if scope == GOOGLE_SCOPE {
+            GOOGLE_THUNDERBIRD_CLIENT_ID.to_string()
+        } else {
+            String::new()
+        };
+        self.auth.sign_in(GrantSpec {
+            client_id,
+            scope: scope.to_string(),
+            expires_in: 3600,
+            rotate,
+        })
     }
 
     /// The stored record of a signed-in OAuth2 account on the mock servers.
@@ -88,8 +109,10 @@ impl Rig {
     }
 
     fn store(&self, records: &[&Value]) {
-        let blob: std::collections::HashMap<String, String> =
-            records.iter().map(|r| (r["id"].as_str().unwrap().to_string(), r.to_string())).collect();
+        let blob: std::collections::HashMap<String, String> = records
+            .iter()
+            .map(|r| (r["id"].as_str().unwrap().to_string(), r.to_string()))
+            .collect();
         std::fs::write(&self.creds, serde_json::to_string(&blob).unwrap()).unwrap();
     }
 
@@ -110,7 +133,8 @@ impl Rig {
     async fn rpc(&mut self, method: &str, params: Value) -> RpcResponse {
         let r = handle_request_for_test(&self.s, method, params).await;
         if method != "oauth2.take_refreshed" {
-            self.seen.push(serde_json::to_string(&r).unwrap_or_default());
+            self.seen
+                .push(serde_json::to_string(&r).unwrap_or_default());
         }
         r
     }
@@ -119,7 +143,8 @@ impl Rig {
         let events: Vec<(String, Value)> = std::iter::from_fn(|| self.rx.try_recv().ok())
             .filter_map(|line| mailvault_core::daemon_ipc::parse_event(&line))
             .collect();
-        self.seen.extend(events.iter().map(|(n, p)| format!("{n} {p}")));
+        self.seen
+            .extend(events.iter().map(|(n, p)| format!("{n} {p}")));
         self.all_events.extend(events.iter().cloned());
         events
     }
@@ -128,7 +153,9 @@ impl Rig {
     /// RPC answers since the rig started. Must stay empty.
     fn leaks(&mut self) -> Vec<String> {
         let _ = self.events();
-        let logged = String::from_utf8_lossy(&captured_logs().lock().unwrap_or_else(|p| p.into_inner())).to_string();
+        let logged =
+            String::from_utf8_lossy(&captured_logs().lock().unwrap_or_else(|p| p.into_inner()))
+                .to_string();
         let mut found = Vec::new();
         for token in self.auth.issued() {
             if logged.contains(&token) || self.seen.iter().any(|t| t.contains(&token)) {
@@ -149,19 +176,100 @@ impl Drop for Rig {
     }
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_refresh_persists_without_app() {
+    let mut rig = Rig::new(inbox());
+    let signed = rig.sign_in(GOOGLE_SCOPE, true);
+    let record = rig.record(
+        "g",
+        "g@gmail.test",
+        &signed,
+        json!({"displayName":"preserved"}),
+    );
+    let unrelated = json!({"id":"unrelated","password":"synthetic-unrelated","displayName":"keep exact record bytes"});
+    rig.store(&[&record, &unrelated]);
+    rig.advance(HOUR);
+    let response = rig
+        .rpc(
+            "imap_get_mailboxes",
+            json!({"account": Rig::param(&record)}),
+        )
+        .await;
+    assert!(ok(&response));
+    let issued = rig.auth.issued();
+    let worker = crate::oauth_tokens::TestPersistenceWorker::start(&rig.s);
+    worker.turn_after(0).await;
+    worker.stop().await;
+    let blob: std::collections::HashMap<String, String> =
+        serde_json::from_str(&std::fs::read_to_string(&rig.creds).unwrap()).unwrap();
+    let stored: Value = serde_json::from_str(&blob["g"]).unwrap();
+    assert_ne!(
+        stored["oauth2RefreshToken"], record["oauth2RefreshToken"],
+        "native lifecycle must store the actual rotated refresh token without an app saver"
+    );
+    assert!(issued.contains(&stored["oauth2RefreshToken"].as_str().unwrap().to_string()));
+    assert_eq!(stored["displayName"], record["displayName"]);
+    assert_eq!(blob["unrelated"], unrelated.to_string());
+    let mut expected = record.clone();
+    for field in ["oauth2AccessToken", "oauth2RefreshToken", "oauth2ExpiresAt"] {
+        expected[field] = stored[field].clone();
+    }
+    assert_eq!(stored, expected);
+    assert_eq!(
+        rig.events()
+            .iter()
+            .filter(|(name, _)| name == crate::handlers::credentials::CHANGED_EVENT)
+            .count(),
+        1
+    );
+    let duplicate = rig.rpc("credentials.update", json!({"id":"g","fields":{
+        "oauth2AccessToken":stored["oauth2AccessToken"],"oauth2RefreshToken":stored["oauth2RefreshToken"],"oauth2ExpiresAt":stored["oauth2ExpiresAt"]},
+        "chain":[crate::oauth_tokens::record_fingerprint(&stored, None).unwrap()]})).await;
+    assert_eq!(duplicate.result.unwrap()["updated"], json!(false));
+    assert!(rig
+        .events()
+        .iter()
+        .all(|(name, _)| name != crate::handlers::credentials::CHANGED_EVENT));
+    let restarted = DaemonState::for_test(rig.s.app_dir.clone(), rig.s.app_dir.clone(), true);
+    restarted
+        .oauth2
+        .set_token_endpoint_for_tests(Some(rig._oauth.origin()));
+    restarted.tokens.advance_clock_for_tests(HOUR * 2);
+    rig.auth.advance(HOUR);
+    assert!(
+        crate::oauth_tokens::access_token(&restarted, "g", crate::oauth_tokens::Read::Quiet)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        rig.auth.posts().last().unwrap().refresh_token,
+        stored["oauth2RefreshToken"].as_str().unwrap(),
+        "a fresh daemon uses the durably rotated grant on its next actual provider request"
+    );
+    assert!(rig.leaks().is_empty());
+}
+
 fn ok(r: &RpcResponse) -> bool {
     r.error.is_none()
 }
 
 fn message(r: &RpcResponse) -> String {
-    r.error.as_ref().map(|e| e.message.clone()).unwrap_or_default()
+    r.error
+        .as_ref()
+        .map(|e| e.message.clone())
+        .unwrap_or_default()
 }
 
 /// A take of the pairs the daemon refreshed, saved as the app's
 /// `oauthTokenSync` saves them (`updateOAuth2Tokens`: three fields over the
 /// stored record), then `oauth2.credentials_changed`.
 async fn app_saves_what_the_daemon_refreshed(rig: &mut Rig, records: &mut [Value]) -> usize {
-    let taken = rig.rpc("oauth2.take_refreshed", json!({})).await.result.unwrap();
+    let taken = rig
+        .rpc("oauth2.take_refreshed", json!({}))
+        .await
+        .result
+        .unwrap();
     let pairs = taken["tokens"].as_array().cloned().unwrap_or_default();
     for pair in &pairs {
         if let Some(r) = records.iter_mut().find(|r| r["id"] == pair["accountId"]) {
@@ -177,13 +285,18 @@ async fn app_saves_what_the_daemon_refreshed(rig: &mut Rig, records: &mut [Value
 }
 
 fn inbox() -> Scenario {
-    Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)).mailbox(synthetic_mailbox("Sent", 0))
+    Scenario::new()
+        .mailbox(synthetic_mailbox("INBOX", 3))
+        .mailbox(synthetic_mailbox("Sent", 0))
 }
 
 async fn wait_until(what: &str, secs: u64, mut f: impl FnMut() -> bool) {
     let deadline = std::time::Instant::now() + Duration::from_secs(secs);
     while !f() {
-        assert!(std::time::Instant::now() < deadline, "timed out waiting for {what}");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for {what}"
+        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
@@ -197,7 +310,10 @@ async fn backup_finished(rig: &mut Rig) -> Value {
                 return payload;
             }
         }
-        assert!(std::time::Instant::now() < deadline, "the backup never finished");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the backup never finished"
+        );
         tokio::time::sleep(Duration::from_millis(30)).await;
     }
 }
@@ -216,9 +332,24 @@ async fn checklist_1_an_expired_token_is_refreshed_once_for_inbox_send_and_backu
     rig.advance(HOUR + Duration::from_secs(60));
     let account = Rig::param(&records[0]);
 
-    let inbox = rig.rpc("imap_get_emails", json!({"account": account, "mailbox": "INBOX"})).await;
-    let sent = rig.rpc("smtp_send_email", json!({"account": account, "email": {"to": "you@x.test", "subject": "s", "text": "t"}})).await;
-    let backup = rig.rpc("backup_run_account", json!({"accountId": "g1", "accountJson": account.to_string()})).await;
+    let inbox = rig
+        .rpc(
+            "imap_get_emails",
+            json!({"account": account, "mailbox": "INBOX"}),
+        )
+        .await;
+    let sent = rig
+        .rpc(
+            "smtp_send_email",
+            json!({"account": account, "email": {"to": "you@x.test", "subject": "s", "text": "t"}}),
+        )
+        .await;
+    let backup = rig
+        .rpc(
+            "backup_run_account",
+            json!({"accountId": "g1", "accountJson": account.to_string()}),
+        )
+        .await;
     let finished = backup_finished(&mut rig).await;
 
     assert!(ok(&inbox), "{}", message(&inbox));
@@ -230,14 +361,27 @@ async fn checklist_1_an_expired_token_is_refreshed_once_for_inbox_send_and_backu
     assert_eq!(posts[0].refresh_token, signed.refresh_token);
     assert_eq!(posts[0].client_id, GOOGLE_THUNDERBIRD_CLIENT_ID);
     assert_eq!(posts[0].scope, GOOGLE_SCOPE);
-    assert!(rig.auth.auth_log().iter().all(|a| a.accepted), "the app's stale token never reached a server");
+    assert!(
+        rig.auth.auth_log().iter().all(|a| a.accepted),
+        "the app's stale token never reached a server"
+    );
     let _ = rig.events();
-    let announced: Vec<Value> =
-        rig.all_events.iter().filter(|(n, _)| n == "oauth2-tokens-refreshed").map(|(_, p)| p.clone()).collect();
+    let announced: Vec<Value> = rig
+        .all_events
+        .iter()
+        .filter(|(n, _)| n == "oauth2-tokens-refreshed")
+        .map(|(_, p)| p.clone())
+        .collect();
     assert_eq!(announced, vec![json!({"accountId": "g1"})]);
 
-    assert_eq!(app_saves_what_the_daemon_refreshed(&mut rig, &mut records).await, 1);
-    assert!(rig.s.tokens.unsaved().is_empty(), "saved, no longer offered");
+    assert_eq!(
+        app_saves_what_the_daemon_refreshed(&mut rig, &mut records).await,
+        1
+    );
+    assert!(
+        rig.s.tokens.unsaved().is_empty(),
+        "saved, no longer offered"
+    );
     assert_ne!(records[0]["oauth2AccessToken"], json!(signed.access_token));
     assert_eq!(rig.leaks(), Vec::<String>::new());
 }
@@ -255,26 +399,45 @@ async fn checklist_2_a_revoked_grant_asks_for_a_sign_in_once_and_a_new_one_works
     let record = rig.record("g1", "me@gmail.test", &signed, json!({}));
     rig.store(&[&record]);
     let account = Rig::param(&record);
-    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": account})).await));
+    assert!(ok(&rig
+        .rpc("imap_get_mailboxes", json!({"account": account}))
+        .await));
 
     rig.auth.revoke(&signed.refresh_token);
     // Gmail keeps a session that is already signed in: the revoke shows on
     // the next new connection. The pool's sessions end (an idle timeout, a
     // network change) and the app asks again.
     rig.s.imap_pool.shutdown().await;
-    let first = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
-    assert!(message(&first).contains("XOAUTH2 auth failed"), "the sign-in-again state at once: {}", message(&first));
+    let first = rig
+        .rpc("imap_get_mailboxes", json!({"account": account}))
+        .await;
+    assert!(
+        message(&first).contains("XOAUTH2 auth failed"),
+        "the sign-in-again state at once: {}",
+        message(&first)
+    );
     for _ in 0..50 {
-        let again = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
+        let again = rig
+            .rpc("imap_get_mailboxes", json!({"account": account}))
+            .await;
         assert!(!ok(&again));
     }
-    assert!(rig.posts() <= 1, "{} token requests in one cooldown", rig.posts());
+    assert!(
+        rig.posts() <= 1,
+        "{} token requests in one cooldown",
+        rig.posts()
+    );
 
     let reconnect = rig.sign_in(GOOGLE_SCOPE, false);
     let record = rig.record("g1", "me@gmail.test", &reconnect, json!({}));
     rig.store(&[&record]);
     assert!(ok(&rig.rpc("oauth2.credentials_changed", json!({})).await));
-    let after = rig.rpc("imap_get_mailboxes", json!({"account": Rig::param(&record)})).await;
+    let after = rig
+        .rpc(
+            "imap_get_mailboxes",
+            json!({"account": Rig::param(&record)}),
+        )
+        .await;
     assert!(ok(&after), "{}", message(&after));
     assert_eq!(rig.leaks(), Vec::<String>::new());
 }
@@ -292,9 +455,17 @@ async fn checklist_3_the_idle_watcher_renews_the_token_and_the_relaunched_app_ta
     rig.store(&[&records[0]]);
     let mut config = Rig::param(&records[0]);
     config.as_object_mut().unwrap().remove("oauth2AccessToken");
-    let watch = rig.rpc("sync.watch", json!({"account": {"id": "g1", "email": "me@gmail.test", "imapConfig": config}})).await;
+    let watch = rig
+        .rpc(
+            "sync.watch",
+            json!({"account": {"id": "g1", "email": "me@gmail.test", "imapConfig": config}}),
+        )
+        .await;
     assert!(ok(&watch), "{}", message(&watch));
-    wait_until("the first IDLE", 10, || rig.imap.count_commands("IDLE") >= 1).await;
+    wait_until("the first IDLE", 10, || {
+        rig.imap.count_commands("IDLE") >= 1
+    })
+    .await;
     assert_eq!(rig.posts(), 0);
 
     // The app is closed. Overnight, mail arrives after the token expired.
@@ -312,9 +483,21 @@ async fn checklist_3_the_idle_watcher_renews_the_token_and_the_relaunched_app_ta
     wait_until("IDLE again", 10, || rig.imap.count_commands("IDLE") >= 2).await;
 
     // The app opens: it takes the pair, and using the account refreshes nothing.
-    assert_eq!(app_saves_what_the_daemon_refreshed(&mut rig, &mut records).await, 1);
-    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": Rig::param(&records[0])})).await));
-    assert_eq!(rig.posts(), 1, "no second refresh after the app saved the pair");
+    assert_eq!(
+        app_saves_what_the_daemon_refreshed(&mut rig, &mut records).await,
+        1
+    );
+    assert!(ok(&rig
+        .rpc(
+            "imap_get_mailboxes",
+            json!({"account": Rig::param(&records[0])})
+        )
+        .await));
+    assert_eq!(
+        rig.posts(),
+        1,
+        "no second refresh after the app saved the pair"
+    );
     let _ = rig.rpc("sync.unwatch", json!({"accountId": "g1"})).await;
     assert_eq!(rig.leaks(), Vec::<String>::new());
 }
@@ -335,25 +518,51 @@ async fn checklist_4_a_reconnect_right_after_a_rotating_refresh_keeps_the_new_gr
     let record = rig.record("o1", "me@outlook.test", &imap_grant, outlook.clone());
     rig.store(&[&record]);
     rig.advance(HOUR + Duration::from_secs(60));
-    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": Rig::param(&record)})).await));
-    assert_eq!(rig.s.tokens.unsaved().len(), 1, "the rotated pair, not saved yet");
+    assert!(ok(&rig
+        .rpc(
+            "imap_get_mailboxes",
+            json!({"account": Rig::param(&record)})
+        )
+        .await));
+    assert_eq!(
+        rig.s.tokens.unsaved().len(),
+        1,
+        "the rotated pair, not saved yet"
+    );
 
     // Reconnect: a new sign-in, Graph this time, expiring in 30 minutes.
-    let graph_grant = rig.auth.sign_in(GrantSpec { client_id: String::new(), scope: GRAPH_SCOPE.into(), expires_in: 1800, rotate: true });
+    let graph_grant = rig.auth.sign_in(GrantSpec {
+        client_id: String::new(),
+        scope: GRAPH_SCOPE.into(),
+        expires_in: 1800,
+        rotate: true,
+    });
     let mut moved = outlook;
     moved["oauth2Transport"] = json!("graph");
     let reconnected = rig.record("o1", "me@outlook.test", &graph_grant, moved);
     rig.store(&[&reconnected]);
     assert!(ok(&rig.rpc("oauth2.credentials_changed", json!({})).await));
     crate::oauth_tokens::recheck_unsaved(&rig.s).await;
-    let offered = rig.rpc("oauth2.take_refreshed", json!({})).await.result.unwrap();
-    assert_eq!(offered["tokens"], json!([]), "the old grant's pair is not offered over the new sign-in");
+    let offered = rig
+        .rpc("oauth2.take_refreshed", json!({}))
+        .await
+        .result
+        .unwrap();
+    assert_eq!(
+        offered["tokens"],
+        json!([]),
+        "the old grant's pair is not offered over the new sign-in"
+    );
 
     rig.advance(Duration::from_secs(90 * 60));
-    let token = crate::oauth_tokens::access_token(&rig.s, "o1", crate::oauth_tokens::Read::Quiet).await;
+    let token =
+        crate::oauth_tokens::access_token(&rig.s, "o1", crate::oauth_tokens::Read::Quiet).await;
     let posts = rig.auth.posts();
     let last = posts.last().unwrap();
-    assert_eq!(last.refresh_token, graph_grant.refresh_token, "the new grant's refresh token");
+    assert_eq!(
+        last.refresh_token, graph_grant.refresh_token,
+        "the new grant's refresh token"
+    );
     assert_eq!(last.scope, GRAPH_SCOPE);
     assert_eq!(last.status, 200);
     assert!(rig.auth.is_valid(&token.ok().flatten().unwrap()));
@@ -375,8 +584,16 @@ async fn checklist_5_an_unreadable_store_answers_the_keychain_code_never_missing
     rig.store(&[]);
     let missing = rig.rpc("graph_list_folders", call).await;
 
-    assert!(message(&unreadable).starts_with("E_OAUTH_KEYCHAIN_UNAVAILABLE:"), "{}", message(&unreadable));
-    assert!(message(&missing).starts_with("E_OAUTH_SIGN_IN_NEEDED:"), "{}", message(&missing));
+    assert!(
+        message(&unreadable).starts_with("E_OAUTH_KEYCHAIN_UNAVAILABLE:"),
+        "{}",
+        message(&unreadable)
+    );
+    assert!(
+        message(&missing).starts_with("E_OAUTH_SIGN_IN_NEEDED:"),
+        "{}",
+        message(&missing)
+    );
     for r in [&unreadable, &missing] {
         assert!(!message(r).contains("Missing accessToken"));
     }
@@ -397,13 +614,17 @@ async fn checklist_7_a_server_refusing_valid_tokens_costs_one_refresh_a_minute()
     let account = Rig::param(&record);
 
     for _ in 0..200 {
-        let r = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
+        let r = rig
+            .rpc("imap_get_mailboxes", json!({"account": account}))
+            .await;
         assert!(!ok(&r));
     }
     let first_minute = rig.posts();
     rig.advance(Duration::from_secs(61));
     for _ in 0..50 {
-        let _ = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
+        let _ = rig
+            .rpc("imap_get_mailboxes", json!({"account": account}))
+            .await;
     }
 
     assert_eq!(first_minute, 1, "one refresh for 200 refused requests");
@@ -429,15 +650,28 @@ async fn a_pooled_session_ended_for_its_expired_token_costs_no_failed_request() 
     rig.store(&[&record]);
     let account = Rig::param(&record);
 
-    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": account})).await), "signs in, the session is pooled");
+    assert!(
+        ok(&rig
+            .rpc("imap_get_mailboxes", json!({"account": account}))
+            .await),
+        "signs in, the session is pooled"
+    );
     rig.advance(Duration::from_secs(56 * 60));
-    let at_refresh = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
+    let at_refresh = rig
+        .rpc("imap_get_mailboxes", json!({"account": account}))
+        .await;
     rig.advance(Duration::from_secs(5 * 60));
-    let after_old_expiry = rig.rpc("imap_get_mailboxes", json!({"account": account})).await;
+    let after_old_expiry = rig
+        .rpc("imap_get_mailboxes", json!({"account": account}))
+        .await;
 
     assert!(ok(&at_refresh), "{}", message(&at_refresh));
     assert_eq!(rig.posts(), 1, "refreshed inside the margin");
-    assert!(ok(&after_old_expiry), "the old token's session must not be used: {}", message(&after_old_expiry));
+    assert!(
+        ok(&after_old_expiry),
+        "the old token's session must not be used: {}",
+        message(&after_old_expiry)
+    );
 }
 
 // ── also ────────────────────────────────────────────────────────────────────
@@ -455,11 +689,17 @@ async fn twenty_parallel_requests_at_expiry_share_one_refresh() {
     let s = Arc::clone(&rig.s);
     let calls = (0..20).map(|_| {
         let (s, account) = (Arc::clone(&s), account.clone());
-        async move { handle_request_for_test(&s, "imap_get_mailboxes", json!({"account": account})).await }
+        async move {
+            handle_request_for_test(&s, "imap_get_mailboxes", json!({"account": account})).await
+        }
     });
     let answers = futures::future::join_all(calls).await;
 
-    assert!(answers.iter().all(ok), "{:?}", answers.iter().map(message).collect::<Vec<_>>());
+    assert!(
+        answers.iter().all(ok),
+        "{:?}",
+        answers.iter().map(message).collect::<Vec<_>>()
+    );
     assert_eq!(rig.posts(), 1);
 }
 
@@ -468,19 +708,40 @@ async fn twenty_parallel_requests_at_expiry_share_one_refresh() {
 #[tokio::test]
 async fn two_accounts_with_one_address_keep_their_own_tokens() {
     let mut rig = Rig::new(inbox());
-    let (a, b) = (rig.sign_in(GOOGLE_SCOPE, false), rig.sign_in(GOOGLE_SCOPE, false));
+    let (a, b) = (
+        rig.sign_in(GOOGLE_SCOPE, false),
+        rig.sign_in(GOOGLE_SCOPE, false),
+    );
     let ra = rig.record("a1", "me@gmail.test", &a, json!({}));
     let rb = rig.record("a2", "me@gmail.test", &b, json!({}));
     rig.store(&[&ra, &rb]);
     rig.advance(HOUR + Duration::from_secs(60));
 
-    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": Rig::param(&ra)})).await));
-    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": Rig::param(&rb)})).await));
-    let posted: Vec<String> = rig.auth.posts().into_iter().map(|p| p.refresh_token).collect();
+    assert!(ok(&rig
+        .rpc("imap_get_mailboxes", json!({"account": Rig::param(&ra)}))
+        .await));
+    assert!(ok(&rig
+        .rpc("imap_get_mailboxes", json!({"account": Rig::param(&rb)}))
+        .await));
+    let posted: Vec<String> = rig
+        .auth
+        .posts()
+        .into_iter()
+        .map(|p| p.refresh_token)
+        .collect();
     let pairs = rig.s.tokens.unsaved();
-    let pair = |id: &str| pairs.iter().find(|p| p["accountId"] == json!(id)).cloned().unwrap();
+    let pair = |id: &str| {
+        pairs
+            .iter()
+            .find(|p| p["accountId"] == json!(id))
+            .cloned()
+            .unwrap()
+    };
 
-    assert_eq!(posted, vec![a.refresh_token.clone(), b.refresh_token.clone()]);
+    assert_eq!(
+        posted,
+        vec![a.refresh_token.clone(), b.refresh_token.clone()]
+    );
     assert_eq!(pair("a1")["refreshToken"], json!(a.refresh_token));
     assert_eq!(pair("a2")["refreshToken"], json!(b.refresh_token));
     assert_ne!(pair("a1")["accessToken"], pair("a2")["accessToken"]);
@@ -496,8 +757,16 @@ async fn the_token_goes_only_to_the_host_the_account_names() {
     let record = rig.record("g1", "me@gmail.test", &signed, json!({}));
     rig.store(&[&record]);
 
-    assert!(ok(&rig.rpc("imap_get_mailboxes", json!({"account": Rig::param(&record)})).await));
+    assert!(ok(&rig
+        .rpc(
+            "imap_get_mailboxes",
+            json!({"account": Rig::param(&record)})
+        )
+        .await));
     assert!(rig.imap.connection_count() >= 1);
     assert_eq!(elsewhere.connection_count(), 0);
-    assert!(rig.auth.auth_log().iter().all(|a| a.accepted), "the stale token in the request was never sent");
+    assert!(
+        rig.auth.auth_log().iter().all(|a| a.accepted),
+        "the stale token in the request was never sent"
+    );
 }

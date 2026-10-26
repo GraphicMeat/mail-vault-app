@@ -11,13 +11,10 @@
 //! tenant, Graph scopes). A refresh always posts a refresh token together with
 //! the client that issued it, both from the same source.
 //!
-//! Where tokens are stored does not change: the app remains the normal
-//! credential persistence orchestrator (the existing keychain item or sealed
-//! store). This token module never writes credentials itself. After a refresh
-//! this module emits `REFRESHED_EVENT` with
-//! the account id and nothing else; the app takes the new pair
-//! (`oauth2.take_refreshed`) and saves it through its own `updateOAuth2Tokens`
-//! path, then says it wrote (`oauth2.credentials_changed`).
+//! A coalesced native worker quietly persists validated refreshed pairs through
+//! the existing credential serializer. Failed pairs stay in memory for retry;
+//! process exit can still lose them. The app's take/save compatibility path
+//! remains, sharing the same fresh grant/expiry guards. Events carry ids only.
 //!
 //! The stored record and the held entry are reconciled on every read of the
 //! record: the one with the later expiry wins. A stale whole-blob write by the
@@ -180,6 +177,39 @@ struct Entry {
     rejection_backoff: Duration,
 }
 
+/// Captured only from validated ordinary unsaved state. Never log or Debug it.
+#[derive(Clone)]
+pub(crate) struct PersistablePair {
+    pub account_id: String,
+    grant: Grant,
+    lineage: Vec<String>,
+    access_token: String,
+    expires_at: i64,
+}
+
+impl PersistablePair {
+    pub(crate) fn matches_record(&self, record: &Value) -> bool {
+        grant_of(record).is_some_and(|(grant, _, _)| self.grant.same_grant(&self.lineage, &grant))
+    }
+
+    pub(crate) fn change(&self) -> credentials::CredChange {
+        credentials::CredChange::Update {
+            id: self.account_id.clone(),
+            fields: json!({"oauth2AccessToken":self.access_token,
+                "oauth2RefreshToken":self.grant.refresh_token,"oauth2ExpiresAt":self.expires_at})
+            .as_object()
+            .unwrap()
+            .clone(),
+            chain: Some(
+                self.lineage
+                    .iter()
+                    .map(|rt| self.grant.fingerprint(rt))
+                    .collect(),
+            ),
+        }
+    }
+}
+
 impl Entry {
     fn needs_refresh(&self, now: i64) -> bool {
         self.rejected
@@ -208,11 +238,365 @@ impl Entry {
 pub(crate) struct TokenStore {
     entries: Mutex<HashMap<String, Entry>>,
     flights: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    persistence: PersistenceControl,
+    #[cfg(test)]
+    rechecks: (Mutex<usize>, std::sync::Condvar),
     /// Debug builds only: how far a test moved this store's clock, so token
     /// lifetimes and cooldowns pass without sleeping and without touching the
     /// system clock. A release build has no such field.
     #[cfg(debug_assertions)]
     clock_offset_ms: std::sync::atomic::AtomicI64,
+}
+
+#[derive(Default)]
+struct PersistenceControl {
+    wake: tokio::sync::Notify,
+    running: std::sync::atomic::AtomicBool,
+    stop: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    turns: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    turn_done: tokio::sync::Notify,
+    #[cfg(test)]
+    started: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    waits: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    monotonic_offset_ms: std::sync::atomic::AtomicU64,
+    #[cfg(test)]
+    clock_changed: tokio::sync::Notify,
+}
+
+impl PersistenceControl {
+    fn now(&self) -> tokio::time::Instant {
+        let now = tokio::time::Instant::now();
+        #[cfg(test)]
+        let now = now
+            + Duration::from_millis(
+                self.monotonic_offset_ms
+                    .load(std::sync::atomic::Ordering::SeqCst),
+            );
+        now
+    }
+
+    async fn wait(&self, deadline: Option<tokio::time::Instant>) -> PersistenceWake {
+        #[cfg(test)]
+        {
+            self.waits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.turn_done.notify_waiters();
+        }
+        let timer = async {
+            if let Some(deadline) = deadline {
+                tokio::time::sleep(deadline.saturating_duration_since(self.now())).await;
+            } else {
+                std::future::pending::<()>().await;
+            }
+        };
+        #[cfg(test)]
+        {
+            tokio::select! {
+                _ = self.wake.notified() => PersistenceWake::Requested,
+                _ = self.clock_changed.notified() => PersistenceWake::Clock,
+                _ = timer => PersistenceWake::Due,
+            }
+        }
+        #[cfg(not(test))]
+        {
+            tokio::select! {
+                _ = self.wake.notified() => PersistenceWake::Requested,
+                _ = timer => PersistenceWake::Due,
+            }
+        }
+    }
+}
+
+enum PersistenceWake {
+    Requested,
+    Due,
+    #[cfg(test)]
+    Clock,
+}
+
+impl TokenStore {
+    pub(crate) fn wake_persistence(&self) {
+        self.persistence.wake.notify_one();
+    }
+
+    pub(crate) fn stop_persistence(&self) {
+        self.persistence
+            .stop
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.wake_persistence();
+    }
+
+    fn persistable_ids(&self) -> Vec<String> {
+        let mut ids: Vec<_> = self
+            .entries()
+            .iter()
+            .filter(|(_, e)| e.unsaved && e.pending.is_none())
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    fn persistable(&self, id: &str) -> Option<PersistablePair> {
+        let entries = self.entries();
+        let entry = entries
+            .get(id)
+            .filter(|e| e.unsaved && e.pending.is_none())?;
+        Some(PersistablePair {
+            account_id: id.to_string(),
+            grant: entry.grant.clone(),
+            lineage: entry.lineage.clone(),
+            access_token: entry.access_token.clone(),
+            expires_at: entry.expires_at,
+        })
+    }
+
+    fn acknowledge(&self, id: &str, snapshot: &credentials::RecordSnapshot) -> bool {
+        // The provider's originating Entry must survive until retain_refresh.
+        // Never wait for that flight, and never carry it across storage I/O.
+        let flight = self.flight(id);
+        let Ok(_flight) = flight.try_lock() else {
+            return false;
+        };
+        let mut entries = self.entries();
+        if snapshot.generation != credentials::write_generation() {
+            return false;
+        }
+        let Some(entry) = entries.get_mut(id) else {
+            return true;
+        };
+        if entry.pending.is_some() {
+            return false;
+        }
+        if snapshot.record.is_null() {
+            entries.remove(id);
+            return true;
+        }
+        let Some((grant, access, expiry)) = grant_of(&snapshot.record) else {
+            if snapshot
+                .record
+                .get("authType")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind != "oauth2")
+            {
+                entries.remove(id);
+                return true;
+            }
+            return false;
+        };
+        if !entry.grant.same_grant(&entry.lineage, &grant) || expiry > entry.expires_at {
+            entries.remove(id);
+            return true;
+        }
+        if entry.grant.refresh_token == grant.refresh_token
+            && entry.access_token == access
+            && entry.expires_at == expiry
+        {
+            entry.unsaved = false;
+            entry.checked = true;
+            return true;
+        }
+        false
+    }
+
+    #[cfg(test)]
+    pub(crate) fn drain_rechecks(&self) {
+        let (active, finished) = &self.rechecks;
+        let active = active.lock().unwrap_or_else(|e| e.into_inner());
+        let (active, _) = finished
+            .wait_timeout_while(active, Duration::from_secs(5), |n| *n != 0)
+            .unwrap_or_else(|e| e.into_inner());
+        if *active != 0 {
+            eprintln!("native rechecks did not drain; refusing fixture teardown");
+            std::process::abort();
+        }
+    }
+}
+
+async fn persist_one(state: &Arc<DaemonState>, pair: PersistablePair) -> bool {
+    let id = pair.account_id.clone();
+    #[cfg(test)]
+    tests::before_persistence_mutation(&id);
+    match credentials::change_credentials_quiet(state, credentials::CredChange::Refreshed(pair))
+        .await
+    {
+        Ok(_) | Err(credentials::CredError::StaleGrant) => {}
+        Err(_) => return false,
+    }
+    let Ok(snapshot) = credentials::optional_record_quiet(&id).await else {
+        return false;
+    };
+    #[cfg(test)]
+    tests::before_persistence_ack(&id);
+    state.tokens.acknowledge(&id, &snapshot)
+}
+
+/// One bounded unit at a time, with no provider work or locks across storage.
+pub(crate) fn start_persistence(state: Arc<DaemonState>) -> Option<tokio::task::JoinHandle<()>> {
+    use std::sync::atomic::Ordering::SeqCst;
+    if state.tokens.persistence.running.swap(true, SeqCst) {
+        return None;
+    }
+    state.tokens.persistence.stop.store(false, SeqCst);
+    Some(tokio::spawn(async move {
+        let mut cursor: Option<String> = None;
+        let mut retry_at: Option<tokio::time::Instant> = None;
+        let mut failure_floor: Option<tokio::time::Instant> = None;
+        let mut backoff = Duration::from_secs(5);
+        loop {
+            let control = &state.tokens.persistence;
+            if control.stop.load(SeqCst) {
+                break;
+            }
+            let ids = state.tokens.persistable_ids();
+            if ids.is_empty() {
+                retry_at = None;
+                backoff = Duration::from_secs(5);
+                control.wait(None).await;
+                continue;
+            }
+            if retry_at.is_none() {
+                retry_at = failure_floor.filter(|floor| *floor > control.now());
+            }
+            if let Some(deadline) = retry_at.filter(|deadline| *deadline > control.now()) {
+                if matches!(
+                    control.wait(Some(deadline)).await,
+                    PersistenceWake::Requested
+                ) {
+                    retry_at = Some(
+                        failure_floor
+                            .unwrap_or_else(|| control.now())
+                            .max(control.now()),
+                    );
+                }
+                continue;
+            }
+            // A preexisting permit is already represented by this fresh scan.
+            let _ = futures::FutureExt::now_or_never(control.wake.notified());
+            let id = ids
+                .iter()
+                .find(|id| cursor.as_ref().is_none_or(|cursor| *id > cursor))
+                .unwrap_or(&ids[0])
+                .clone();
+            cursor = Some(id.clone());
+            let Some(pair) = state.tokens.persistable(&id) else {
+                tokio::task::yield_now().await;
+                continue;
+            };
+            if control.stop.load(SeqCst) {
+                break;
+            }
+            #[cfg(test)]
+            {
+                control.started.fetch_add(1, SeqCst);
+                control.turn_done.notify_waiters();
+            }
+            let progressed = persist_one(&state, pair).await;
+            if progressed {
+                retry_at = None;
+                failure_floor = None;
+                backoff = Duration::from_secs(5);
+            } else {
+                let now = control.now();
+                retry_at = Some(now + backoff);
+                failure_floor = Some(now + Duration::from_secs(1));
+                backoff = backoff.saturating_mul(2).min(Duration::from_secs(300));
+            }
+            #[cfg(test)]
+            {
+                control.turns.fetch_add(1, SeqCst);
+                control.turn_done.notify_waiters();
+            }
+            tokio::task::yield_now().await;
+        }
+        state.tokens.persistence.running.store(false, SeqCst);
+    }))
+}
+
+#[cfg(test)]
+pub(crate) struct TestPersistenceWorker {
+    state: Arc<DaemonState>,
+    task: Option<tokio::task::JoinHandle<()>>,
+    done: Option<std::sync::mpsc::Receiver<()>>,
+}
+
+#[cfg(test)]
+impl TestPersistenceWorker {
+    pub(crate) fn start(state: &Arc<DaemonState>) -> Self {
+        let task = start_persistence(Arc::clone(state)).expect("one persistence owner");
+        let (done, drained) = std::sync::mpsc::channel();
+        let task = tokio::spawn(async move {
+            let _done = credentials::TestTaskDone(done);
+            task.await.expect("native persistence task");
+        });
+        Self {
+            state: Arc::clone(state),
+            task: Some(task),
+            done: Some(drained),
+        }
+    }
+
+    pub(crate) async fn turn_after(&self, after: usize) -> usize {
+        self.counter_after(&self.state.tokens.persistence.turns, after)
+            .await
+    }
+
+    async fn counter_after(&self, count: &std::sync::atomic::AtomicUsize, after: usize) -> usize {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let notice = self.state.tokens.persistence.turn_done.notified();
+                let turns = count.load(std::sync::atomic::Ordering::SeqCst);
+                if turns > after {
+                    return turns;
+                }
+                notice.await;
+            }
+        })
+        .await
+        .expect("native persistence turn completed")
+    }
+
+    async fn wait_after(&self, after: usize) -> usize {
+        self.counter_after(&self.state.tokens.persistence.waits, after)
+            .await
+    }
+
+    fn advance(&self, by: Duration) {
+        self.state
+            .tokens
+            .persistence
+            .monotonic_offset_ms
+            .fetch_add(by.as_millis() as u64, std::sync::atomic::Ordering::SeqCst);
+        self.state.tokens.persistence.clock_changed.notify_one();
+    }
+
+    pub(crate) async fn stop(mut self) {
+        self.state.tokens.stop_persistence();
+        self.task
+            .take()
+            .unwrap()
+            .await
+            .expect("persistence owner drained");
+        self.done.take().unwrap().recv().unwrap();
+        self.state.tokens.drain_rechecks();
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestPersistenceWorker {
+    fn drop(&mut self) {
+        self.state.tokens.stop_persistence();
+        if let Some(done) = self.done.take() {
+            if done.recv_timeout(Duration::from_secs(5)).is_err() {
+                eprintln!("native persistence owner did not drain; refusing fixture teardown");
+                std::process::abort();
+            }
+        }
+        self.state.tokens.drain_rechecks();
+    }
 }
 
 fn now_ms() -> i64 {
@@ -371,6 +755,7 @@ impl TokenStore {
                     completed.checked = true;
                     *held = *completed;
                     events.emit(REFRESHED_EVENT, json!({ "accountId": account_id }));
+                    self.wake_persistence();
                     return Ok(Some(held.clone()));
                 } else {
                     // A changed same-grant tuple does not acknowledge this
@@ -379,8 +764,12 @@ impl TokenStore {
                 }
             }
             let same_grant = held.grant.same_grant(&held.lineage, &grant);
-            let saved = held.access_token == access_token && held.expires_at == expires_at;
-            if same_grant && (saved || held.expires_at > expires_at) {
+            let same_access_expiry =
+                held.access_token == access_token && held.expires_at == expires_at;
+            let saved = same_access_expiry && held.grant.refresh_token == grant.refresh_token;
+            if same_grant
+                && (saved || held.expires_at > expires_at || (held.unsaved && same_access_expiry))
+            {
                 if saved {
                     held.unsaved = false;
                 }
@@ -839,12 +1228,20 @@ pub(crate) static TEST_RECHECK_DONE: Mutex<Option<(usize, std::sync::mpsc::Sende
     Mutex::new(None);
 
 #[cfg(test)]
-pub(crate) struct RecheckCompletion(std::sync::mpsc::Sender<()>);
+pub(crate) struct RecheckCompletion {
+    state: Arc<DaemonState>,
+    done: Option<std::sync::mpsc::Sender<()>>,
+}
 
 #[cfg(test)]
 impl Drop for RecheckCompletion {
     fn drop(&mut self) {
-        let _ = self.0.send(());
+        let (active, finished) = &self.state.tokens.rechecks;
+        *active.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        finished.notify_all();
+        if let Some(done) = self.done.take() {
+            let _ = done.send(());
+        }
     }
 }
 
@@ -853,14 +1250,24 @@ impl Drop for RecheckCompletion {
 #[cfg(test)]
 pub(crate) fn recheck_completion_for_test(state: &Arc<DaemonState>) -> Option<RecheckCompletion> {
     let mut hook = TEST_RECHECK_DONE.lock().unwrap_or_else(|e| e.into_inner());
-    if hook
+    let done = if hook
         .as_ref()
         .is_some_and(|(owner, _)| *owner == Arc::as_ptr(state) as usize)
     {
-        hook.take().map(|(_, done)| RecheckCompletion(done))
+        hook.take().map(|(_, done)| done)
     } else {
         None
-    }
+    };
+    *state
+        .tokens
+        .rechecks
+        .0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) += 1;
+    Some(RecheckCompletion {
+        state: Arc::clone(state),
+        done,
+    })
 }
 
 /// After the app wrote credentials: read the record of every account with a
@@ -1195,6 +1602,8 @@ mod tests {
     static PUBLICATION_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static REFRESH_RESULT_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static RETIREMENT_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+    static PERSISTENCE_MUTATION_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+    static PERSISTENCE_ACK_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
 
     fn run_read_hook(hook: &Mutex<Option<ReadHook>>, id: &str) {
         let taken = {
@@ -1237,6 +1646,12 @@ mod tests {
     }
     pub(super) fn before_pending_retirement(id: &str) {
         run_read_hook(&RETIREMENT_HOOK, id);
+    }
+    pub(super) fn before_persistence_mutation(id: &str) {
+        run_read_hook(&PERSISTENCE_MUTATION_HOOK, id);
+    }
+    pub(super) fn before_persistence_ack(id: &str) {
+        run_read_hook(&PERSISTENCE_ACK_HOOK, id);
     }
 
     struct FreshRig {
@@ -1387,6 +1802,33 @@ mod tests {
             json!({"id":"g","oauth2RefreshToken":rt,"oauth2AccessToken":token,"oauth2ExpiresAt":now_ms()+3_600_000}),
         )
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn rotated_refresh_token_must_be_stored_before_ack() {
+        let mut original = fresh_grant("synthetic-original-rt", "synthetic-expired-at");
+        original["oauth2ExpiresAt"] = json!(1);
+        let mut rig = FreshRig::new(original.clone());
+        let _mock = test_token_mock(vec![granted(
+            "synthetic-refreshed-at",
+            Some("synthetic-rotated-rt"),
+        )]);
+        assert!(recv(&rig.access()).is_ok());
+        let offered = rig.state.tokens.unsaved().pop().unwrap();
+        original["oauth2AccessToken"] = offered["accessToken"].clone();
+        original["oauth2ExpiresAt"] = offered["expiresAt"].clone();
+        std::fs::write(
+            rig.state.app_dir.join("credentials.json"),
+            json!({"g":original.to_string()}).to_string(),
+        )
+        .unwrap();
+        recheck_unsaved(&rig.state).await;
+        let still_offered = rig.state.tokens.unsaved();
+        assert_eq!(still_offered.len(), 1, "matching access/expiry with an old lineage RT is not a durable rotated-pair acknowledgement");
+        assert_eq!(
+            still_offered[0]["refreshToken"],
+            json!("synthetic-rotated-rt")
+        );
+    }
     fn changed_request(record: &Value, delete: bool) -> (&'static str, Value) {
         if delete {
             ("credentials.delete", json!({"ids":["g"]}))
@@ -1454,6 +1896,14 @@ mod tests {
                 .unwrap_or_else(|e| e.into_inner())
                 .take();
             REFRESH_RESULT_HOOK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            PERSISTENCE_MUTATION_HOOK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            PERSISTENCE_ACK_HOOK
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .take();
@@ -3259,4 +3709,6 @@ mod tests {
     async fn compose_prep_reply_rejects_oauth_fields_before_credentials() {
         compose_prep_rejected_fields("compose.reply_context").await;
     }
+
+    include!("oauth_persistence_tests.rs");
 }

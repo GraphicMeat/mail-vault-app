@@ -30,24 +30,56 @@
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::oauth2::{
-    own_google_client_available, own_google_client_id, DEFAULT_NEW_GOOGLE_CLIENT, GOOGLE_THUNDERBIRD_CLIENT_ID,
+    own_google_client_available, own_google_client_id, DEFAULT_NEW_GOOGLE_CLIENT,
+    GOOGLE_THUNDERBIRD_CLIENT_ID,
 };
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
+pub(crate) async fn route(
+    state: &Arc<DaemonState>,
+    method: &str,
+    params: &Value,
+    id: Value,
+) -> Option<RpcResponse> {
     Some(match method {
         "oauth2_auth_url" => {
-            let email = params.get("email").and_then(Value::as_str).map(str::to_owned);
-            let provider = params.get("provider").and_then(Value::as_str).map(str::to_owned);
-            let custom_client_id = params.get("customClientId").and_then(Value::as_str).map(str::to_owned);
-            let tenant_id = params.get("tenantId").and_then(Value::as_str).map(str::to_owned);
-            let use_graph = params.get("useGraph").and_then(Value::as_bool).unwrap_or(false);
+            let email = params
+                .get("email")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let provider = params
+                .get("provider")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let custom_client_id = params
+                .get("customClientId")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let tenant_id = params
+                .get("tenantId")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let use_graph = params
+                .get("useGraph")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             // Which Google app a NEW sign-in goes through: "thunderbird" or
             // "mailvault". Absent means the default (Thunderbird's for now).
             let google_client = params.get("googleClient").and_then(Value::as_str);
 
-            match state.oauth2.generate_auth_url(email, provider, custom_client_id, tenant_id, use_graph, google_client).await {
+            match state
+                .oauth2
+                .generate_auth_url(
+                    email,
+                    provider,
+                    custom_client_id,
+                    tenant_id,
+                    use_graph,
+                    google_client,
+                )
+                .await
+            {
                 Ok(result) => RpcResponse::success(
                     id,
                     json!({"success": true, "authUrl": result.auth_url, "state": result.state}),
@@ -81,15 +113,17 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 // claim, or `clientId`, the OAuth client the account must be
                 // stamped with) reaches the caller without a second edit here.
                 Ok(result) => {
-                    let mut reply = serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true}));
+                    let mut reply =
+                        serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true}));
                     // `expectEmail`, the address the user typed: whether the
                     // mailbox they signed into is that one, by identity
                     // (`normalize_identity`: Gmail ignores dots and `+tags`),
                     // never by bytes. Absent when the provider names no
                     // address (Microsoft returns no id_token).
-                    if let (Some(expected), Some(signed_in)) =
-                        (params.get("expectEmail").and_then(Value::as_str), result.email.as_deref())
-                    {
+                    if let (Some(expected), Some(signed_in)) = (
+                        params.get("expectEmail").and_then(Value::as_str),
+                        result.email.as_deref(),
+                    ) {
                         reply["emailMatches"] = json!(
                             mailvault_core::notes_to_self::normalize_identity(expected)
                                 == mailvault_core::notes_to_self::normalize_identity(signed_in)
@@ -104,17 +138,49 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "oauth2_refresh" => {
             let refresh_token = match params.get("refreshToken").and_then(Value::as_str) {
                 Some(s) => s,
-                None => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing refreshToken")),
+                None => {
+                    return Some(RpcResponse::error(
+                        id,
+                        ipc::INVALID_PARAMS,
+                        "Missing refreshToken",
+                    ))
+                }
             };
-            let provider = params.get("provider").and_then(Value::as_str).map(str::to_owned);
-            let custom_client_id = params.get("customClientId").and_then(Value::as_str).map(str::to_owned);
-            let tenant_id = params.get("tenantId").and_then(Value::as_str).map(str::to_owned);
-            let use_graph = params.get("useGraph").and_then(Value::as_bool).unwrap_or(false);
+            let provider = params
+                .get("provider")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let custom_client_id = params
+                .get("customClientId")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let tenant_id = params
+                .get("tenantId")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let use_graph = params
+                .get("useGraph")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             // The Google client that issued this refresh token (the account's
             // `oauth2ClientId`); absent for an account that predates it.
-            let client_id = params.get("clientId").and_then(Value::as_str).map(str::to_owned);
+            let client_id = params
+                .get("clientId")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
 
-            match state.oauth2.refresh_token(refresh_token, provider, custom_client_id, tenant_id, use_graph, client_id).await {
+            match state
+                .oauth2
+                .refresh_token(
+                    refresh_token,
+                    provider,
+                    custom_client_id,
+                    tenant_id,
+                    use_graph,
+                    client_id,
+                )
+                .await
+            {
                 Ok(result) => RpcResponse::success(
                     id,
                     serde_json::to_value(&result).unwrap_or_else(|_| json!({"success": true})),
@@ -127,7 +193,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // stored credentials do not show yet, for the app to save through its
         // own writer: `{tokens: [{accountId, accessToken, refreshToken,
         // expiresAt}]}`. Offered again until a read shows them saved.
-        "oauth2.take_refreshed" => RpcResponse::success(id, json!({ "tokens": state.tokens.unsaved() })),
+        "oauth2.take_refreshed" => {
+            RpcResponse::success(id, json!({ "tokens": state.tokens.unsaved() }))
+        }
 
         // The app wrote the credentials blob: no held token is trusted before
         // the stored record is read again (a new sign-in, a removed account),
@@ -150,6 +218,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// for a token look again at once.
 pub(crate) fn credentials_written(state: &Arc<DaemonState>) {
     state.tokens.credentials_changed();
+    state.tokens.wake_persistence();
     state.abd.wake_token_waits();
     let st = Arc::clone(state);
     #[cfg(test)]
@@ -211,7 +280,8 @@ mod tests {
     // sharing one `MAILVAULT_GRAPH_BASE` mock; `TEST_LOCK` serializes this
     // module's tests over the shared response queue.
     static TEST_LOCK: Mutex<()> = Mutex::new(());
-    static QUEUE: Mutex<std::collections::VecDeque<(u16, String)>> = Mutex::new(std::collections::VecDeque::new());
+    static QUEUE: Mutex<std::collections::VecDeque<(u16, String)>> =
+        Mutex::new(std::collections::VecDeque::new());
     /// Form bodies the mock has received, oldest first.
     pub(super) static POSTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -247,7 +317,11 @@ mod tests {
             if let Some((head, body)) = text.split_once("\r\n\r\n") {
                 let want = head
                     .lines()
-                    .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                    .find_map(|l| {
+                        l.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                    })
                     .unwrap_or(0);
                 if body.len() >= want {
                     break body.to_string();
@@ -255,8 +329,16 @@ mod tests {
             }
         };
         POSTED.lock().unwrap().push(body);
-        let (status, body) = QUEUE.lock().unwrap().pop_front().unwrap_or((500, "no response queued".into()));
-        let reason = if (200..300).contains(&status) { "OK" } else { "Mock Error" };
+        let (status, body) = QUEUE
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or((500, "no response queued".into()));
+        let reason = if (200..300).contains(&status) {
+            "OK"
+        } else {
+            "Mock Error"
+        };
         let resp = format!(
             "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
@@ -277,7 +359,9 @@ mod tests {
     /// `mock_token_response` for a caller outside this module: the queue and
     /// the form-body log start empty, so whatever an earlier test left behind
     /// is not this caller's.
-    pub(super) fn mock_token_responses(responses: Vec<(u16, String)>) -> std::sync::MutexGuard<'static, ()> {
+    pub(super) fn mock_token_responses(
+        responses: Vec<(u16, String)>,
+    ) -> std::sync::MutexGuard<'static, ()> {
         let guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         mock_server_port();
         let mut queue = QUEUE.lock().unwrap();
@@ -307,7 +391,11 @@ mod tests {
         mock_server_port();
         POSTED.lock().unwrap().clear();
         // Bound, read and released: a loopback port nothing listens on.
-        let closed = TcpListener::bind("127.0.0.1:0").expect("bind a port to close").local_addr().unwrap().port();
+        let closed = TcpListener::bind("127.0.0.1:0")
+            .expect("bind a port to close")
+            .local_addr()
+            .unwrap()
+            .port();
         let base = format!("http://127.0.0.1:{closed}");
         std::env::set_var("MAILVAULT_MS_TOKEN_ENDPOINT", &base);
         std::env::set_var("MAILVAULT_GOOGLE_TOKEN_ENDPOINT", &base);
@@ -316,7 +404,9 @@ mod tests {
 
     /// One field of the oldest form body the mock has not been asked about yet.
     fn posted_field(body: &str, key: &str) -> Option<String> {
-        url::form_urlencoded::parse(body.as_bytes()).find(|(k, _)| k == key).map(|(_, v)| v.to_string())
+        url::form_urlencoded::parse(body.as_bytes())
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.to_string())
     }
 
     /// Take the oldest request body the mock recorded.
@@ -345,7 +435,10 @@ mod tests {
         let result = resp.result.expect("success");
         assert_eq!(result["success"], json!(true));
         let auth_url = result["authUrl"].as_str().expect("authUrl present");
-        assert!(auth_url.starts_with("https://login.microsoftonline.com/"), "{auth_url}");
+        assert!(
+            auth_url.starts_with("https://login.microsoftonline.com/"),
+            "{auth_url}"
+        );
         assert!(!result["state"].as_str().expect("state present").is_empty());
     }
 
@@ -355,12 +448,16 @@ mod tests {
         let resp = call(&s, "oauth2_auth_url", json!({"provider": "google"})).await;
         let result = resp.result.expect("success");
         let auth_url = result["authUrl"].as_str().expect("authUrl present");
-        assert!(auth_url.starts_with("https://accounts.google.com/"), "{auth_url}");
+        assert!(
+            auth_url.starts_with("https://accounts.google.com/"),
+            "{auth_url}"
+        );
     }
 
     /// The `client_id` an auth URL was built with.
     fn url_client_id(auth_url: &str) -> String {
-        posted_field(auth_url.split('?').nth(1).unwrap_or(""), "client_id").expect("client_id in the auth URL")
+        posted_field(auth_url.split('?').nth(1).unwrap_or(""), "client_id")
+            .expect("client_id in the auth URL")
     }
 
     // MailVault's own Google client is still in Google's review, so a new
@@ -374,25 +471,49 @@ mod tests {
             json!({"provider": "google", "googleClient": "something-unknown"}),
         ] {
             let resp = call(&s, "oauth2_auth_url", params.clone()).await;
-            let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
-            assert_eq!(url_client_id(&auth_url), GOOGLE_THUNDERBIRD_CLIENT_ID, "{params}");
+            let auth_url = resp.result.expect("success")["authUrl"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            assert_eq!(
+                url_client_id(&auth_url),
+                GOOGLE_THUNDERBIRD_CLIENT_ID,
+                "{params}"
+            );
         }
     }
 
     #[tokio::test]
     async fn auth_url_for_google_honours_a_mailvault_client_choice_or_refuses_it() {
         let s = st();
-        let resp = call(&s, "oauth2_auth_url", json!({"provider": "google", "googleClient": "mailvault"})).await;
+        let resp = call(
+            &s,
+            "oauth2_auth_url",
+            json!({"provider": "google", "googleClient": "mailvault"}),
+        )
+        .await;
         match own_google_client_id() {
             Some(own_id) => {
-                let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+                let auth_url = resp.result.expect("success")["authUrl"]
+                    .as_str()
+                    .unwrap()
+                    .to_string();
                 assert_eq!(url_client_id(&auth_url), own_id);
             }
             None => {
-                assert!(resp.result.is_none(), "a build without our client must not fall back");
+                assert!(
+                    resp.result.is_none(),
+                    "a build without our client must not fall back"
+                );
                 let message = resp.error.expect("error").message;
-                assert!(message.starts_with("E_GOOGLE_OWN_CLIENT_UNAVAILABLE"), "{message}");
-                assert!(message.contains("does not include its own Google sign-in"), "{message}");
+                assert!(
+                    message.starts_with("E_GOOGLE_OWN_CLIENT_UNAVAILABLE"),
+                    "{message}"
+                );
+                assert!(
+                    message.contains("does not include its own Google sign-in"),
+                    "{message}"
+                );
             }
         }
     }
@@ -400,24 +521,43 @@ mod tests {
     #[tokio::test]
     async fn the_google_client_choice_does_not_touch_microsoft() {
         let s = st();
-        let resp = call(&s, "oauth2_auth_url", json!({"provider": "microsoft", "googleClient": "mailvault"})).await;
-        let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
-        assert!(auth_url.starts_with("https://login.microsoftonline.com/"), "{auth_url}");
+        let resp = call(
+            &s,
+            "oauth2_auth_url",
+            json!({"provider": "microsoft", "googleClient": "mailvault"}),
+        )
+        .await;
+        let auth_url = resp.result.expect("success")["authUrl"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            auth_url.starts_with("https://login.microsoftonline.com/"),
+            "{auth_url}"
+        );
     }
 
     #[tokio::test]
     async fn google_clients_reports_what_this_build_offers() {
         let s = st();
-        let result = call(&s, "oauth2_google_clients", json!({})).await.result.expect("success");
+        let result = call(&s, "oauth2_google_clients", json!({}))
+            .await
+            .result
+            .expect("success");
         assert_eq!(result["mailvault"], json!(own_google_client_available()));
         assert_eq!(result["default"], json!("thunderbird"));
-        assert_eq!(result["thunderbirdClientId"], json!(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        assert_eq!(
+            result["thunderbirdClientId"],
+            json!(GOOGLE_THUNDERBIRD_CLIENT_ID)
+        );
         match own_google_client_id() {
             Some(id) => assert_eq!(result["mailvaultClientId"], json!(id)),
             None => assert!(result["mailvaultClientId"].is_null()),
         }
         // No secret ever crosses the RPC.
-        assert!(!result.to_string().contains(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
+        assert!(!result
+            .to_string()
+            .contains(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
     }
 
     // Track B / Q3: Google add-account requests the id_token's email claim so
@@ -426,7 +566,10 @@ mod tests {
     async fn auth_url_requests_the_openid_email_scope_for_google() {
         let s = st();
         let resp = call(&s, "oauth2_auth_url", json!({"provider": "google"})).await;
-        let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+        let auth_url = resp.result.expect("success")["authUrl"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let query = auth_url.split('?').nth(1).unwrap_or("");
         let scope = url::form_urlencoded::parse(query.as_bytes())
             .find(|(k, _)| k == "scope")
@@ -441,7 +584,10 @@ mod tests {
     async fn auth_url_does_not_request_openid_for_microsoft() {
         let s = st();
         let resp = call(&s, "oauth2_auth_url", json!({})).await;
-        let auth_url = resp.result.expect("success")["authUrl"].as_str().unwrap().to_string();
+        let auth_url = resp.result.expect("success")["authUrl"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let query = auth_url.split('?').nth(1).unwrap_or("");
         let scope = url::form_urlencoded::parse(query.as_bytes())
             .find(|(k, _)| k == "scope")
@@ -453,22 +599,36 @@ mod tests {
     #[tokio::test]
     async fn auth_url_rejects_an_unknown_provider() {
         let s = st();
-        let resp = call(&s, "oauth2_auth_url", json!({"provider": "not-a-real-provider"})).await;
-        assert!(resp.result.is_none(), "an unknown provider must not succeed");
+        let resp = call(
+            &s,
+            "oauth2_auth_url",
+            json!({"provider": "not-a-real-provider"}),
+        )
+        .await;
+        assert!(
+            resp.result.is_none(),
+            "an unknown provider must not succeed"
+        );
     }
 
     #[tokio::test]
     async fn exchange_with_no_pending_flow_for_that_state_is_an_error_not_a_panic() {
         let s = st();
         let resp = call(&s, "oauth2_exchange", json!({"state": "never-issued"})).await;
-        assert!(resp.result.is_none(), "exchanging an unknown state must fail");
+        assert!(
+            resp.result.is_none(),
+            "exchanging an unknown state must fail"
+        );
     }
 
     #[tokio::test]
     async fn exchange_reuses_the_state_generate_auth_url_issued() {
         let s = st();
         let auth_resp = call(&s, "oauth2_auth_url", json!({})).await;
-        let issued_state = auth_resp.result.expect("success")["state"].as_str().unwrap().to_string();
+        let issued_state = auth_resp.result.expect("success")["state"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         // No callback has landed, so this call blocks on the pending
         // oneshot — exercise it with a short timeout instead of awaiting it
@@ -480,7 +640,10 @@ mod tests {
             call(&s, "oauth2_exchange", json!({"state": issued_state})),
         )
         .await;
-        assert!(outcome.is_err(), "no callback has landed yet, so exchange must still be waiting, not already failed");
+        assert!(
+            outcome.is_err(),
+            "no callback has landed yet, so exchange must still be waiting, not already failed"
+        );
     }
 
     #[tokio::test]
@@ -530,7 +693,10 @@ mod tests {
             json!({"refreshToken": "expired-refresh-token", "provider": "google"}),
         )
         .await;
-        assert!(resp.result.is_none(), "a provider-reported invalid_grant must not report success");
+        assert!(
+            resp.result.is_none(),
+            "a provider-reported invalid_grant must not report success"
+        );
         let msg = resp.error.expect("error").message;
         assert!(msg.contains("Token expired"), "{msg}");
     }
@@ -550,8 +716,14 @@ mod tests {
         .await;
         let result = resp.result.expect("success");
         let body = take_posted();
-        assert_eq!(posted_field(&body, "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
-        assert_eq!(posted_field(&body, "client_secret").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
+        assert_eq!(
+            posted_field(&body, "client_id").as_deref(),
+            Some(GOOGLE_THUNDERBIRD_CLIENT_ID)
+        );
+        assert_eq!(
+            posted_field(&body, "client_secret").as_deref(),
+            Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET)
+        );
         assert_eq!(result["clientId"], json!(GOOGLE_THUNDERBIRD_CLIENT_ID));
     }
 
@@ -560,11 +732,22 @@ mod tests {
         let _g = mock_token_response(200, r#"{"access_token":"at","expires_in":3600}"#);
         POSTED.lock().unwrap().clear();
         let s = st();
-        let resp = call(&s, "oauth2_refresh", json!({"refreshToken": "rt", "provider": "google"})).await;
+        let resp = call(
+            &s,
+            "oauth2_refresh",
+            json!({"refreshToken": "rt", "provider": "google"}),
+        )
+        .await;
         let result = resp.result.expect("success");
         let body = take_posted();
-        assert_eq!(posted_field(&body, "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
-        assert_eq!(posted_field(&body, "client_secret").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET));
+        assert_eq!(
+            posted_field(&body, "client_id").as_deref(),
+            Some(GOOGLE_THUNDERBIRD_CLIENT_ID)
+        );
+        assert_eq!(
+            posted_field(&body, "client_secret").as_deref(),
+            Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET)
+        );
         assert_eq!(result["clientId"], json!(GOOGLE_THUNDERBIRD_CLIENT_ID));
     }
 
@@ -582,10 +765,16 @@ mod tests {
             json!({"refreshToken": "rt", "provider": "google", "clientId": "unknown.apps.googleusercontent.com"}),
         )
         .await;
-        assert!(resp.result.is_none(), "an unpairable client must not report success");
+        assert!(
+            resp.result.is_none(),
+            "an unpairable client must not report success"
+        );
         let msg = resp.error.expect("error").message;
         assert!(msg.contains("unknown.apps.googleusercontent.com"), "{msg}");
-        assert!(POSTED.lock().unwrap().is_empty(), "nothing may be posted with a guessed client");
+        assert!(
+            POSTED.lock().unwrap().is_empty(),
+            "nothing may be posted with a guessed client"
+        );
     }
 
     #[tokio::test]
@@ -599,9 +788,15 @@ mod tests {
             json!({"refreshToken": "rt", "provider": "microsoft", "clientId": "unknown.apps.googleusercontent.com"}),
         )
         .await;
-        assert!(resp.result.is_some(), "Microsoft has one client, a stamp is not its concern");
+        assert!(
+            resp.result.is_some(),
+            "Microsoft has one client, a stamp is not its concern"
+        );
         let body = take_posted();
-        assert_ne!(posted_field(&body, "client_id").as_deref(), Some("unknown.apps.googleusercontent.com"));
+        assert_ne!(
+            posted_field(&body, "client_id").as_deref(),
+            Some("unknown.apps.googleusercontent.com")
+        );
         assert!(posted_field(&body, "client_secret").is_none());
     }
 
@@ -615,16 +810,30 @@ mod tests {
         );
         POSTED.lock().unwrap().clear();
         let s = st();
-        let auth = call(&s, "oauth2_auth_url", json!({"provider": "google"})).await.result.expect("success");
+        let auth = call(&s, "oauth2_auth_url", json!({"provider": "google"}))
+            .await
+            .result
+            .expect("success");
         let auth_url = auth["authUrl"].as_str().unwrap().to_string();
         let issued_state = auth["state"].as_str().unwrap().to_string();
-        let url_client = posted_field(auth_url.split('?').nth(1).unwrap(), "client_id").expect("client_id in the auth URL");
+        let url_client = posted_field(auth_url.split('?').nth(1).unwrap(), "client_id")
+            .expect("client_id in the auth URL");
 
-        assert!(s.oauth2.deliver_code_for_tests(&issued_state, "the-code").await);
-        let result = call(&s, "oauth2_exchange", json!({"state": issued_state})).await.result.expect("success");
+        assert!(
+            s.oauth2
+                .deliver_code_for_tests(&issued_state, "the-code")
+                .await
+        );
+        let result = call(&s, "oauth2_exchange", json!({"state": issued_state}))
+            .await
+            .result
+            .expect("success");
 
         let body = take_posted();
-        assert_eq!(posted_field(&body, "client_id").as_deref(), Some(url_client.as_str()));
+        assert_eq!(
+            posted_field(&body, "client_id").as_deref(),
+            Some(url_client.as_str())
+        );
         assert_eq!(result["clientId"], json!(url_client));
         assert_eq!(result["refreshToken"], json!("rt"));
         assert!(posted_field(&body, "client_secret").is_some());
@@ -637,28 +846,54 @@ mod tests {
     async fn exchange_says_whether_the_signed_in_mailbox_is_the_typed_one() {
         use base64::Engine;
         let enc = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-        let id_token = format!("{}.{}.sig", enc.encode(b"{}"), enc.encode(br#"{"email":"johndoe@gmail.com"}"#));
-        let body = format!(r#"{{"access_token":"at","refresh_token":"rt","expires_in":3600,"id_token":"{id_token}"}}"#);
-        for (typed, want) in [(Some("John.Doe+news@googlemail.com"), Some(true)), (Some("jane@gmail.com"), Some(false)), (None, None)] {
+        let id_token = format!(
+            "{}.{}.sig",
+            enc.encode(b"{}"),
+            enc.encode(br#"{"email":"johndoe@gmail.com"}"#)
+        );
+        let body = format!(
+            r#"{{"access_token":"at","refresh_token":"rt","expires_in":3600,"id_token":"{id_token}"}}"#
+        );
+        for (typed, want) in [
+            (Some("John.Doe+news@googlemail.com"), Some(true)),
+            (Some("jane@gmail.com"), Some(false)),
+            (None, None),
+        ] {
             let _g = mock_token_response(200, &body);
             POSTED.lock().unwrap().clear();
             let s = st();
-            let auth = call(&s, "oauth2_auth_url", json!({"provider": "google"})).await.result.expect("success");
+            let auth = call(&s, "oauth2_auth_url", json!({"provider": "google"}))
+                .await
+                .result
+                .expect("success");
             let issued_state = auth["state"].as_str().unwrap().to_string();
-            assert!(s.oauth2.deliver_code_for_tests(&issued_state, "the-code").await);
+            assert!(
+                s.oauth2
+                    .deliver_code_for_tests(&issued_state, "the-code")
+                    .await
+            );
             let mut params = json!({"state": issued_state});
             if let Some(typed) = typed {
                 params["expectEmail"] = json!(typed);
             }
-            let result = call(&s, "oauth2_exchange", params).await.result.expect("success");
+            let result = call(&s, "oauth2_exchange", params)
+                .await
+                .result
+                .expect("success");
             assert_eq!(result["email"], json!("johndoe@gmail.com"));
-            assert_eq!(result.get("emailMatches").and_then(Value::as_bool), want, "typed {typed:?}");
+            assert_eq!(
+                result.get("emailMatches").and_then(Value::as_bool),
+                want,
+                "typed {typed:?}"
+            );
         }
     }
 
     #[tokio::test]
     async fn another_domains_method_is_not_routed_here() {
         let s = st();
-        assert!(route(&s, "imap_get_mailboxes", &json!({}), json!(1)).await.is_none());
+        assert!(route(&s, "imap_get_mailboxes", &json!({}), json!(1))
+            .await
+            .is_none());
     }
 }

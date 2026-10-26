@@ -439,6 +439,116 @@ mod tests {
         crate::oauth_tokens::record_fingerprint(record, rt).unwrap()
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn native_refresh_quiet_mode_reaches_both_backend_legs() {
+        let rig = rig(Some(
+            json!({"g":oauth_record("RT1", "old-access").to_string()}),
+        ));
+        let backend = credentials::TestKeychainGuard::install(rig.creds.clone());
+        let change = CredChange::Update {
+            id: "g".to_string(),
+            chain: None,
+            fields: json!({"oauth2AccessToken":"new-access"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        };
+        let result = credentials::change_credentials_quiet(&rig.state, change).await;
+        assert!(result.is_ok());
+        assert_eq!(*backend.0.modes.lock().unwrap(), vec![("read", false), ("write", false)], "the actual shared credential operation must suppress interaction for both backend legs");
+        backend.0.modes.lock().unwrap().clear();
+        assert!(call(
+            &rig,
+            "credentials.update",
+            json!({"id":"g","fields":{"oauth2AccessToken":"interactive-access"}})
+        )
+        .await
+        .is_ok());
+        assert_eq!(
+            *backend.0.modes.lock().unwrap(),
+            vec![("read", true), ("write", true)],
+            "the public wrapper retains interactive mode"
+        );
+        rig.state.tokens.drain_rechecks();
+    }
+
+    #[tokio::test]
+    async fn chain_update_cannot_downgrade_newer_stored_expiry() {
+        for same_token in [false, true] {
+            let original = oauth_record("RT1", "older-access");
+            let rig = rig(Some(json!({"g": original.to_string()})));
+            // The retained JS writer has already read this older grant.
+            let chain = json!([fp(&original, None)]);
+            let mut newer = original.clone();
+            newer["oauth2AccessToken"] = json!("newer-access");
+            newer["oauth2ExpiresAt"] = json!(300);
+            call(
+                &rig,
+                "credentials.save",
+                json!({"records":{"g":newer.to_string()}}),
+            )
+            .await
+            .unwrap();
+            let mut events = rig.state.events.subscribe();
+            let before = stored(&rig);
+            let response = call(
+                &rig,
+                "credentials.update",
+                json!({"id":"g","fields":{
+                "oauth2AccessToken":if same_token { "newer-access" } else { "older-access" },
+                "oauth2RefreshToken":"RT1","oauth2ExpiresAt":200},"chain":chain}),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                response["updated"],
+                json!(false),
+                "fresh mutation must refuse a lower expiry, including identical access bytes"
+            );
+            assert_eq!(stored(&rig), before);
+            assert!(events.try_recv().is_err());
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn chain_pair_noops_and_partial_update_shapes_keep_existing_contract() {
+        let mut account = oauth_record("RT1", "at-1");
+        account["oauth2ExpiresAt"] = json!(300);
+        let rig = rig(Some(json!({"g":account.to_string()})));
+        let mut events = rig.state.events.subscribe();
+        let before = stored(&rig);
+        let chain = json!([fp(&account, None)]);
+        let duplicate = call(&rig, "credentials.update", json!({"id":"g","fields":{
+            "oauth2AccessToken":"at-1","oauth2RefreshToken":"RT1","oauth2ExpiresAt":300},"chain":chain})).await.unwrap();
+        assert_eq!(duplicate["updated"], json!(false));
+        let missing = call(&rig, "credentials.update", json!({"id":"absent","fields":{
+            "oauth2AccessToken":"at-1","oauth2RefreshToken":"RT1","oauth2ExpiresAt":300},"chain":chain})).await.unwrap();
+        assert_eq!(missing["updated"], json!(false));
+        assert_eq!(stored(&rig), before);
+        assert!(events.try_recv().is_err());
+        let partial = call(
+            &rig,
+            "credentials.update",
+            json!({"id":"g","fields":{"displayName":"updated"},"chain":chain}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(partial["updated"], json!(true));
+        let explicit = call(
+            &rig,
+            "credentials.update",
+            json!({"id":"g","fields":{"oauth2AccessToken":"manual","oauth2ExpiresAt":100}}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            explicit["updated"],
+            json!(true),
+            "the new guard is confined to a chain-bearing nonempty access/numeric-expiry pair"
+        );
+        rig.state.tokens.drain_rechecks();
+    }
+
     /// Window A holds grant A; window B reconnects (grant B, RT2). The pair
     /// the daemon refreshed for grant A, saved late from A's stale copy,
     /// must not touch the new sign-in.

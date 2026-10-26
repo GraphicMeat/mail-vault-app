@@ -5,24 +5,24 @@
 
 mod abd_local;
 mod abd_worker;
-mod bulk_worker;
-mod cleanup_worker;
-mod backup_worker;
 mod ai_gate;
 mod attachment_extract;
 mod auth;
 mod auto_tag_worker;
+mod backup_worker;
+mod backup_zip;
 #[cfg(feature = "blitz-render")]
 mod blitz;
-mod eviction_worker;
-mod hoarder_worker;
-mod backup_zip;
+mod bulk_worker;
 mod channel;
 pub mod classification;
 mod classification_worker;
+mod cleanup_worker;
 pub mod contacts_index;
 pub mod credentials;
 pub mod custody;
+mod eviction_worker;
+mod hoarder_worker;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::graph;
 pub use mailvault_core::imap;
@@ -34,6 +34,8 @@ pub use mailvault_core::oauth2;
 mod draft_contract_tests;
 mod events;
 mod export_fetch;
+mod follow_up_worker;
+mod format_migration_job;
 mod handlers;
 mod idle_watch;
 mod inference;
@@ -43,29 +45,27 @@ mod jmap_push;
 mod jmap_sessions;
 #[cfg(test)]
 mod jmap_test_support;
+pub mod llm;
 mod mbox;
 mod mbox_upload;
 mod mbox_upload_job;
 mod migration;
 mod netgate;
-mod oauth_tokens;
 #[cfg(test)]
 mod oauth_mock_tests;
+mod oauth_tokens;
 mod people_index;
 mod people_snapshot;
 mod raw_message;
-pub mod llm;
 mod restore;
 mod scheduled_send_worker;
-mod server;
 pub mod search_index;
+mod server;
 mod snapshot;
 mod snooze_worker;
-mod follow_up_worker;
-mod format_migration_job;
-mod vault_gap;
 pub mod sync_engine;
 mod sync_jmap;
+mod vault_gap;
 
 // Note: backup, external_location modules require tauri::AppHandle for data
 // dirs and event emission (backup is Phase 3's still-open remainder, blocked
@@ -78,19 +78,20 @@ mod sync_jmap;
 #[cfg(target_os = "macos")]
 embed_plist::embed_info_plist!("../Info.plist");
 
+use mailvault_core::log_redact;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn, error, Level};
-use mailvault_core::log_redact;
+use tracing::{error, info, warn, Level};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::prelude::*;
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
 /// The app data dir, resolved by the same `mailvault_core::paths` the app
 /// uses, so both processes open the same `app.db`, logs and pid file.
 fn get_data_dir() -> PathBuf {
-    mailvault_core::paths::app_data_dir().unwrap_or_else(|_| PathBuf::from(".").join(mailvault_core::paths::APP_IDENTIFIER))
+    mailvault_core::paths::app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from(".").join(mailvault_core::paths::APP_IDENTIFIER))
 }
 
 /// Where the mail itself lives. Defaults to the app data dir; follows the
@@ -136,7 +137,9 @@ fn resolve_vault_location(app_dir: &PathBuf) -> VaultLocationInfo {
     // `app.db`'s `vault` slot — the app writes it when the user relocates the
     // vault (it was `vault-meta.json`, which `app_db`'s import retires).
     let path = match mailvault_core::app_db::with(app_dir, |conn| {
-        Ok(mailvault_core::app_db::locations::display_path(conn, "vault"))
+        Ok(mailvault_core::app_db::locations::display_path(
+            conn, "vault",
+        ))
     }) {
         Ok(Some(p)) => p,
         _ => return default(),
@@ -146,12 +149,29 @@ fn resolve_vault_location(app_dir: &PathBuf) -> VaultLocationInfo {
     // app uses, so the two processes never disagree about a folder that holds
     // e.g. only `custody/` — with custody opening here (Task 2.9a/b), that
     // divergence used to decide where a second, orphaned store could open.
-    if mailvault_core::vault_layout::read_marker(&dir).is_some() || mailvault_core::vault_layout::looks_like_vault(&dir) {
-        return VaultLocationInfo { dir, ok: true, display_path: path, is_custom: true, last_error: None };
+    if mailvault_core::vault_layout::read_marker(&dir).is_some()
+        || mailvault_core::vault_layout::looks_like_vault(&dir)
+    {
+        return VaultLocationInfo {
+            dir,
+            ok: true,
+            display_path: path,
+            is_custom: true,
+            last_error: None,
+        };
     }
-    warn!("Configured mail storage {} is not reachable — mail operations disabled until it is back", path);
+    warn!(
+        "Configured mail storage {} is not reachable — mail operations disabled until it is back",
+        path
+    );
     let last_error = "The folder is reachable but does not contain your mail. If the drive was remounted elsewhere, choose the folder again.".to_string();
-    VaultLocationInfo { dir: app_dir.clone(), ok: false, display_path: path, is_custom: true, last_error: Some(last_error) }
+    VaultLocationInfo {
+        dir: app_dir.clone(),
+        ok: false,
+        display_path: path,
+        is_custom: true,
+        last_error: Some(last_error),
+    }
 }
 
 // Phase 6: production code calls `resolve_vault_location` directly now (it
@@ -167,7 +187,8 @@ fn resolve_mail_dir(app_dir: &PathBuf) -> (PathBuf, bool) {
 /// shared with the app. Inside the App Sandbox the home is the container
 /// home, which the app and this sidecar both see.
 fn ipc_dir() -> PathBuf {
-    let dir = mailvault_core::paths::ipc_dir().unwrap_or_else(|_| PathBuf::from(".").join(".mailvault"));
+    let dir =
+        mailvault_core::paths::ipc_dir().unwrap_or_else(|_| PathBuf::from(".").join(".mailvault"));
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -202,12 +223,17 @@ fn setup_logging(data_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGu
     let tee = non_blocking.and(std::io::stderr);
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
-        .with_writer(move || log_redact::RedactingWriter { inner: MakeWriter::make_writer(&tee), salt })
+        .with_writer(move || log_redact::RedactingWriter {
+            inner: MakeWriter::make_writer(&tee),
+            salt,
+        })
         .with_ansi(false)
         .with_target(true)
         .with_thread_ids(true)
         .finish()
-        .with(tracing_subscriber::filter::filter_fn(|m| *m.level() <= log_redact::max_level()))
+        .with(tracing_subscriber::filter::filter_fn(|m| {
+            *m.level() <= log_redact::max_level()
+        }))
         .init();
 
     info!("Daemon logging initialized at {:?}", log_dir);
@@ -239,7 +265,10 @@ fn acquire_singleton_lock(data_dir: &PathBuf) -> Option<std::fs::File> {
 
     let lock_path = data_dir.join("daemon.lock");
     let file = match std::fs::OpenOptions::new()
-        .read(true).write(true).create(true).truncate(false)
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
         .open(&lock_path)
     {
         Ok(f) => f,
@@ -330,7 +359,10 @@ fn main() {
     if std::env::args().nth(1).as_deref() == Some("--extract-pdf") {
         std::process::exit(extract_pdf_subprocess_main());
     }
-    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("mailvault-daemon: cannot start the async runtime: {e}");
@@ -347,7 +379,10 @@ fn main() {
 ///
 /// Known ceiling, unchanged by this fix: the sweep runs only here, so a drive
 /// mounted after the daemon started waits for the next daemon restart.
-fn startup_eml_migration(mail_dir: &Path, mail_dir_ok: bool) -> mailvault_core::maildir::EmlMigrationStats {
+fn startup_eml_migration(
+    mail_dir: &Path,
+    mail_dir_ok: bool,
+) -> mailvault_core::maildir::EmlMigrationStats {
     if !mail_dir_ok {
         info!("Maildir .eml migration skipped: the mail storage folder is not reachable");
         return Default::default();
@@ -381,7 +416,10 @@ async fn daemon_main() {
         std::process::id()
     );
     info!("Data directory: {:?}", data_dir);
-    info!("Mail directory: {:?} (available: {})", mail_dir, mail_dir_ok);
+    info!(
+        "Mail directory: {:?} (available: {})",
+        mail_dir, mail_dir_ok
+    );
 
     // Singleton guard — exit if another daemon owns the lock. A daemon that was
     // just told to shut down (`daemon.shutdown`) may still hold the lock for a
@@ -495,13 +533,25 @@ async fn daemon_main() {
     // Network Activity: each recorded event goes to the app live and to the
     // store in app.db (`handlers::net_activity::listener`).
     let net_log = Arc::new(mailvault_core::net_log::NetLog::start(&data_dir));
-    mailvault_core::net_activity::subscribe(Box::new(handlers::net_activity::listener(events.clone(), Arc::clone(&net_log))));
-    let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), data_dir.clone(), mail_dir_ok, events.clone());
+    mailvault_core::net_activity::subscribe(Box::new(handlers::net_activity::listener(
+        events.clone(),
+        Arc::clone(&net_log),
+    )));
+    let search_index_state = search_index::SearchIndexState::new(
+        mail_dir.clone(),
+        data_dir.clone(),
+        mail_dir_ok,
+        events.clone(),
+    );
 
     // Keyed by the CONFIGURED vault, not `mail_dir`: an unplugged drive falls
     // back to `data_dir`, and opening the registry under that root would wipe
     // the real vault's rows for a session that cannot read them anyway.
-    let vault_registry = server::open_vault_registry(&data_dir, Path::new(&vault_location.display_path), &search_index_state);
+    let vault_registry = server::open_vault_registry(
+        &data_dir,
+        Path::new(&vault_location.display_path),
+        &search_index_state,
+    );
 
     let custody = custody::CustodyState::default();
     sync_eng.attach_custody_db(Arc::clone(&custody.db));
@@ -509,7 +559,12 @@ async fn daemon_main() {
     contacts.attach_db(Arc::clone(&custody.db));
     #[cfg(feature = "blitz-render")]
     let blitz = {
-        let pool = Arc::new(blitz::RenderPool::new(|| blitz::RenderHost::new(events.clone(), blitz::WorkerCommand::current_exe().expect("current_exe"))));
+        let pool = Arc::new(blitz::RenderPool::new(|| {
+            blitz::RenderHost::new(
+                events.clone(),
+                blitz::WorkerCommand::current_exe().expect("current_exe"),
+            )
+        }));
         blitz::spawn_reaper(Arc::clone(&pool));
         pool
     };
@@ -608,7 +663,11 @@ async fn daemon_main() {
             Err(join_err) => {
                 let msg = format!("custody store: startup open panicked: {join_err}");
                 error!("{msg}");
-                *state.custody.error.lock().unwrap_or_else(|p| p.into_inner()) = Some(msg);
+                *state
+                    .custody
+                    .error
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner()) = Some(msg);
             }
         }
     }
@@ -627,6 +686,7 @@ async fn daemon_main() {
     snooze_worker::start(Arc::clone(&state));
     // Follow-up reminders' worker: same catch-up-then-sleep shape.
     follow_up_worker::start(Arc::clone(&state));
+    let _ = oauth_tokens::start_persistence(Arc::clone(&state));
     // Watches keychain access so a locked keychain is noticed without waiting
     // for something to ask for credentials; an unlock wakes the queued sends
     // and the snoozes it held back.
@@ -636,6 +696,7 @@ async fn daemon_main() {
             state.scheduled_send.wake();
             state.snooze.wake();
             state.follow_up.wake();
+            state.tokens.wake_persistence();
         });
     }
     // A portable copy watches the drive it runs from.
@@ -735,7 +796,8 @@ async fn daemon_main() {
         #[cfg(unix)]
         {
             use tokio::signal::unix::{signal, SignalKind};
-            let mut sigterm = signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
 
             tokio::select! {
                 _ = ctrl_c => info!("Received SIGINT"),
@@ -752,6 +814,7 @@ async fn daemon_main() {
             }
         }
 
+        uploads_cleanup.tokens.stop_persistence();
         // Stop the IDLE watchers first: a session parked in IDLE answers
         // nothing, so it would eat the whole 2s LOGOUT budget below.
         idle_cleanup.shutdown().await;
@@ -767,8 +830,14 @@ async fn daemon_main() {
         // message is milliseconds), its journal left `running` so the next
         // start carries on.
         let uploads = tokio::task::spawn_blocking(move || {
-            format_migration_job::pause_all_and_wait(&uploads_cleanup, std::time::Duration::from_millis(600));
-            mbox_upload_job::pause_all_and_wait(&uploads_cleanup, std::time::Duration::from_millis(1200))
+            format_migration_job::pause_all_and_wait(
+                &uploads_cleanup,
+                std::time::Duration::from_millis(600),
+            );
+            mbox_upload_job::pause_all_and_wait(
+                &uploads_cleanup,
+                std::time::Duration::from_millis(1200),
+            )
         });
         let _ = tokio::join!(
             tokio::time::timeout(std::time::Duration::from_secs(2), pool_cleanup.shutdown()),
@@ -970,7 +1039,11 @@ mod tests {
             serde_json::json!({"app": "mailvault", "vaultId": "abc", "createdAt": 1}).to_string(),
         )
         .unwrap();
-        std::fs::write(app.join("vault-meta.json"), serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string()).unwrap();
+        std::fs::write(
+            app.join("vault-meta.json"),
+            serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
+        )
+        .unwrap();
 
         let info = resolve_vault_location(&app);
         assert!(info.ok);
@@ -985,14 +1058,25 @@ mod tests {
     fn resolve_vault_location_keeps_the_configured_display_path_when_unreachable() {
         let app = scratch("loc-missing-app");
         let vault = scratch("loc-missing-vault");
-        std::fs::write(app.join("vault-meta.json"), serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string()).unwrap();
+        std::fs::write(
+            app.join("vault-meta.json"),
+            serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
+        )
+        .unwrap();
         let _ = std::fs::remove_dir_all(&vault);
 
         let info = resolve_vault_location(&app);
         assert!(!info.ok);
         assert!(info.is_custom);
-        assert_eq!(info.dir, app, "the daemon's own working root falls back to app_dir");
-        assert_eq!(info.display_path, vault.to_string_lossy(), "the user must still see which folder is missing");
+        assert_eq!(
+            info.dir, app,
+            "the daemon's own working root falls back to app_dir"
+        );
+        assert_eq!(
+            info.display_path,
+            vault.to_string_lossy(),
+            "the user must still see which folder is missing"
+        );
         assert!(info.last_error.is_some());
         let _ = std::fs::remove_dir_all(&app);
     }
@@ -1007,7 +1091,9 @@ mod tests {
         let app = scratch("contacts-flush-closed-app");
         let state = server::DaemonState::for_test(mail.clone(), app.clone(), true);
         state.contacts.seed_dirty_for_test("acc1");
-        state.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+        state
+            .vault_closed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
 
         flush_contacts_if_open(&state);
 
@@ -1025,7 +1111,9 @@ mod tests {
 
         // Control: with the vault open, the same dirty entry does get
         // written — proves the gate, not something else, is what refused it.
-        state.vault_closed.store(false, std::sync::atomic::Ordering::SeqCst);
+        state
+            .vault_closed
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         state.contacts.seed_dirty_for_test("acc1");
         flush_contacts_if_open(&state);
         assert_eq!(stored(&state), 1);

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Persist refreshed OAuth token pairs quietly in the daemon, with guarded writes and retries even when no app saver is listening. Failed or unfinished saves remain memory-only until confirmed.
+
 - Keep completed OAuth token rotations across unrelated credential changes, and refresh credential caches reliably after retry.
 
 - Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Full native account workflows and autonomous refreshed-token persistence remain later work.
