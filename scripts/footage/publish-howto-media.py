@@ -25,7 +25,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("help_media", Path(__file__).with_name("publish-help-media.py"))
@@ -64,6 +64,67 @@ def to_output(t, cut):
     if not cut or t <= cut[0]:
         return t
     return t - (cut[1] - cut[0])
+
+
+def sprites(tmp):
+    """A click ripple (18 frames, 0.6 s at 30 fps) and a cursor arrow, drawn supersampled at output size."""
+    k = WIDTH / 3072  # source pixels -> output pixels
+    half, frames, ss = round(120 * k), 18, 4
+    for i in range(frames):
+        u = i / (frames - 1)
+        side = 2 * half * ss
+        im = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        c = side / 2
+        r = (26 + u * 84) * k * ss
+        a = int(255 * (1 - u) ** 1.4)
+        d.ellipse((c - r, c - r, c + r, c + r), fill=(124, 108, 240, int(a * 0.28)), outline=(255, 255, 255, a), width=round(7 * k * ss))
+        core = 22 * (1 - u * 0.5) * k * ss
+        d.ellipse((c - core, c - core, c + core, c + core), fill=(124, 108, 240, int(255 * (1 - u) ** 0.8)))
+        im.resize((2 * half, 2 * half), Image.Resampling.LANCZOS).save(tmp / f"ripple_{i:02d}.png")
+    arrow = Image.new("RGBA", (80 * ss, 110 * ss), (0, 0, 0, 0))
+    d = ImageDraw.Draw(arrow)
+    pts = [(x * ss, y * ss) for x, y in [(4, 4), (4, 84), (24, 66), (38, 98), (52, 92), (38, 60), (64, 60)]]
+    d.polygon(pts, fill=(255, 255, 255, 255))
+    d.line(pts + [pts[0]], fill=(20, 20, 20, 255), width=4 * ss, joint="curve")
+    arrow.resize((round(80 * k), round(110 * k)), Image.Resampling.LANCZOS).save(tmp / "cursor.png")
+    return half
+
+
+def click_overlay(actions, tmp, first_input):
+    """Inputs and a filter graph that draw the recorded cursor path and clicks on [0:v] (30 fps, output size) as [ov]."""
+    window = actions["window"]
+    px = WIDTH / window["pixelW"] * window["scale"]  # window points -> output pixels
+    half = sprites(tmp)
+    events = actions["events"]
+    clicks = [e for e in events if e["type"] == "click"]
+    moves = [e for e in events if e["type"] == "move"]
+    inputs, graph, last = [], [f"[0:v]fps=30,scale={WIDTH}:{HEIGHT}:flags=lanczos[b0]"], "b0"
+    for k, c in enumerate(clicks):
+        inputs += ["-framerate", "30", "-i", str(tmp / "ripple_%02d.png")]
+        graph.append(f"[{first_input + k}:v]format=rgba,setpts=PTS+{c['t']}/TB[r{k}]")
+        graph.append(f"[{last}][r{k}]overlay=x={c['x'] * px - half:.1f}:y={c['y'] * px - half:.1f}:eof_action=pass:eval=init[o{k}]")
+        last = f"o{k}"
+    if moves:
+        segments, previous = [], None
+        for m in moves:
+            here = (m["x"] * px, m["y"] * px)
+            segments.append((m["t"], m["t"] + m["dur"], previous or here, here))
+            previous = here
+
+        def position(axis):
+            expr = f"{segments[-1][3][axis]:.1f}"
+            for t0, t1, a, b in reversed(segments):
+                u = f"((t-{t0:.3f})/{t1 - t0:.3f})"
+                expr = (f"if(lt(t,{t0:.3f}),{a[axis]:.1f},if(lt(t,{t1:.3f}),{a[axis]:.1f}+({b[axis]:.1f}-{a[axis]:.1f})*(0.5-0.5*cos(PI*{u})),{expr}))")
+            return expr
+        inputs += ["-loop", "1", "-i", str(tmp / "cursor.png")]
+        ci = first_input + len(clicks)
+        graph.append(f"[{ci}:v]format=rgba[cur]")
+        graph.append(f"[{last}][cur]overlay=x='{position(0)}':y='{position(1)}':enable='gte(t,{moves[0]['t']:.3f})':eval=frame[ov]")
+    else:
+        graph.append(f"[{last}]null[ov]")
+    return inputs, ";".join(graph)
 
 
 def captions_for(locale):
@@ -142,15 +203,19 @@ def publish_locale(locale, source, version, commit, manifest, evidence):
             footer = tmp / "footer.png"
             base.stamp(WIDTH, label).save(footer)
             video = out / f"{clip}.mp4"
+            actions = base.read(source / f"{clip}.actions.json")
+            if actions["window"]["scale"] != 2 or actions["window"]["pixelW"] != 3072:
+                raise ValueError(f"unexpected window geometry for the click overlay: {clip}")
+            extra, overlay = click_overlay(actions, tmp, 2)
             if len(intervals) == 1:
-                head = f"[0:v]trim=0:{intervals[0][1]},setpts=PTS-STARTPTS[c]"
+                head = f"[ov]trim=0:{intervals[0][1]},setpts=PTS-STARTPTS[c]"
             else:
                 (a0, a1), (b0, b1) = intervals
-                head = (f"[0:v]split=2[a][b];[a]trim={a0}:{a1},setpts=PTS-STARTPTS[v0];"
+                head = (f"[ov]split=2[a][b];[a]trim={a0}:{a1},setpts=PTS-STARTPTS[v0];"
                         f"[b]trim={b0}:{b1},setpts=PTS-STARTPTS[v1];[v0][v1]concat=n=2:v=1:a=0[c]")
-            fc = (f"{head};[c]fps=30,scale={WIDTH}:{HEIGHT}:flags=lanczos,pad=iw:ih+{round(WIDTH * 44 / 960)}:0:0:color=0x171717[p];"
+            fc = (f"{overlay};{head};[c]pad=iw:ih+{round(WIDTH * 44 / 960)}:0:0:color=0x171717[p];"
                   f"[p][1:v]overlay=0:H-h:format=auto,format=yuv420p[v]")
-            run("ffmpeg", "-y", "-v", "error", "-i", mov, "-i", footer, "-filter_complex", fc, "-map", "[v]", "-an",
+            run("ffmpeg", "-y", "-v", "error", "-i", mov, "-i", footer, *extra, "-filter_complex", fc, "-map", "[v]", "-an",
                 "-c:v", "libx264", "-crf", "24", "-preset", "slow", "-movflags", "+faststart", video)
             probe = json.loads(run("ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", video))
             stream = probe["streams"][0]
