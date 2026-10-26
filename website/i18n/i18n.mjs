@@ -442,9 +442,13 @@ function shotsFor(dir) {
  * posters follow the same names). The files live on the website host, outside git
  * (scripts/website-clips-upload.sh), so every locale page names them without checking.
  */
+function helpMediaExists(loc, file) {
+  return fs.existsSync(path.join(ROOT, 'assets/help-media', loc.dir, file));
+}
 export function localizeShot(abs, loc) {
   const help = /^\/assets\/help-media\/en\/([^/]+)$/.exec(abs);
-  if (help) return `/assets/help-media/${loc.dir}/${help[1]}`;
+  // A recording made in English only (the how-to takes) stays English on every locale page.
+  if (help) return helpMediaExists(loc, help[1]) ? `/assets/help-media/${loc.dir}/${help[1]}` : abs;
   const guide = /^\/assets\/videos\/guides\/([^/]+\.(?:mp4|jpg|vtt))$/.exec(abs);
   if (guide) return `/assets/videos/guides/${loc.dir}/${guide[1]}`;
   const clip = /^\/assets\/clips\/en\/([^/]+)$/.exec(abs);
@@ -597,7 +601,8 @@ export function render(html, pageRel, loc, dict) {
     }
 
     // Guide tracks follow the localized recording; name them correctly in the player.
-    if (tag.name === 'track' && /^\/assets\/(?:videos\/guides|help-media\/en)\/[^/]+\.vtt$/.test(a.src?.value || '')) {
+    if (tag.name === 'track' && /^\/assets\/(?:videos\/guides|help-media\/en)\/[^/]+\.vtt$/.test(a.src?.value || '')
+      && (!a.src.value.startsWith('/assets/help-media/en/') || helpMediaExists(loc, a.src.value.split('/').pop()))) {
       for (const [name, value] of [['srclang', loc.htmlLang], ['label', loc.name]]) {
         if (a[name]?.vs >= 0) edits.push({ start: a[name].vs, end: a[name].ve, text: value });
       }

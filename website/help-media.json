@@ -11,7 +11,8 @@
     "The capture build enables webdriver; the harness hides the sidebar version and button focus rings. No app UI is redrawn.",
     "Search is prepared with a local archive and cut between query entry and results. Backup destination is a write-tested temporary folder, not a physical external drive; setup is off camera, and longer waits may be cut.",
     "Images and posters are decoded from these new raw recordings at a representative moment; the manifest records the source time and crop. Search stills retain the query panel alongside the results. MP4s use the feature-card crops and trims from those same recordings. A version/locale footer is added below the UI.",
-    "The Mac mini display was temporarily switched to its existing 2x mode before recording; the adjustment log is retained with the evidence."
+    "The Mac mini display was temporarily switched to its existing 2x mode before recording; the adjustment log is retained with the evidence.",
+    "How-to recordings (bulk-* and settings-* archive and delete): ScreenCaptureKit takes of the real app on the Mac mini at 2x; stills are decoded at recorded step moments; a long progress wait is cut from the videos and captioned as shortened."
   ],
   "locales": {
     "en": {
@@ -144,6 +145,928 @@
             "webp": "a1edda45d4e536c813c3931edfd05d23915a18d66282a9a1222748e079ca2690",
             "jpg": "ac830f54dccde7346a2822789a6d5230ff3ca9199c7ae8b7de5df9d2944b17f9",
             "vtt": "0418f00617bdb62498102aa6a6bdab4a4d62581097a103c0923477269a027106"
+          }
+        },
+        "bulk-archive-delete-server-list": {
+          "image": "/assets/help-media/en/bulk-archive-delete-server-list.webp",
+          "imageAlt": "Open the Server view of the account. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 0.92,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "53d91424b125ebe6ea39401d1cbe5416e4f49ee9e82b3a4773a63cb7d08016f6"
+          }
+        },
+        "bulk-archive-delete-bulk-dialog": {
+          "image": "/assets/help-media/en/bulk-archive-delete-bulk-dialog.webp",
+          "imageAlt": "Bulk Email Operations lists the years. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 3.118,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "31c2638767d0544998ec6a7d449be5183e046fec6b800c5f3464026461cba30e"
+          }
+        },
+        "bulk-archive-delete-year-picked": {
+          "image": "/assets/help-media/en/bulk-archive-delete-year-picked.webp",
+          "imageAlt": "Pick a year and see how many emails it selects. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 4.937,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "551c81169035a2798c689e9d73e3cd3c212a45dfc101960f887a190521fb65a2"
+          }
+        },
+        "bulk-archive-delete-choose-action": {
+          "image": "/assets/help-media/en/bulk-archive-delete-choose-action.webp",
+          "imageAlt": "Choose the action. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 6.742,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "30467d9d9e4cf1c71e18d91ac29b9f3e2364a64eb9b9fd468df62409232e0e16"
+          }
+        },
+        "bulk-archive-delete-action-chosen": {
+          "image": "/assets/help-media/en/bulk-archive-delete-action-chosen.webp",
+          "imageAlt": "The option explains what it will do before you start. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.131,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "e054912bd49e447d70070098e125554976155f8a252a242f0133068cae3d1835"
+          }
+        },
+        "bulk-archive-delete-confirm": {
+          "image": "/assets/help-media/en/bulk-archive-delete-confirm.webp",
+          "imageAlt": "Read the confirmation, then confirm. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.217,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "4cacc194a805d856c6b6707ce13337c883f23e785f11f743950cf6de6aec2349"
+          }
+        },
+        "bulk-archive-delete-progress": {
+          "image": "/assets/help-media/en/bulk-archive-delete-progress.webp",
+          "imageAlt": "Progress runs in the corner of the window. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 14.924,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "2cebb53904e47bfda5f3579f9bc1d7aad18f87b2c0e58bc84234e2fe991e9e4c"
+          }
+        },
+        "bulk-archive-delete-done": {
+          "image": "/assets/help-media/en/bulk-archive-delete-done.webp",
+          "imageAlt": "Operation Complete, and the Server count drops. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 49.234,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "d77a9fbfa25ea8bddadf4be934650d9f1aaa21823d8576a6d539b59f15354e7e"
+          }
+        },
+        "bulk-archive-delete-vault": {
+          "image": "/assets/help-media/en/bulk-archive-delete-vault.webp",
+          "imageAlt": "The Vault view still holds the archived emails. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 52.687,
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "webp": "c7a266202630a1783bf6222b40bfe1ed46be75719f6fc96be823c5c861716017"
+          }
+        },
+        "bulk-archive-delete": {
+          "video": "/assets/help-media/en/bulk-archive-delete.mp4",
+          "videoLabel": "Archive and delete from the server for selected emails · MailVault version 2.20.0 en",
+          "poster": "/assets/help-media/en/bulk-archive-delete.jpg",
+          "posterAlt": "Archive and delete from the server for selected emails · MailVault version 2.20.0 en",
+          "captions": "/assets/help-media/en/bulk-archive-delete.vtt",
+          "transcript": [
+            "Open the Server view of the account.",
+            "Bulk Email Operations lists the years.",
+            "Pick a year and see how many emails it selects.",
+            "Choose the action.",
+            "The option explains what it will do before you start.",
+            "Read the confirmation, then confirm.",
+            "Progress runs in the corner of the window. The wait is shortened here.",
+            "Operation Complete, and the Server count drops.",
+            "The Vault view still holds the archived emails."
+          ],
+          "duration": 25.2,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 1133,
+          "sourceSeconds": 54.483333,
+          "cutSourceSeconds": [
+            17.924,
+            47.234
+          ],
+          "sourceSHA256": "1badbc7ea719703f6841951e192a800027eee28544ded4d24570660ac2728ee7",
+          "sha256": {
+            "mp4": "121821b7e7183a99179f72f5edca7198fe9db13731c61fd65e4a9201e75e024f",
+            "jpg": "0c91cf08c09c7edae1ca5bc676ff9bcd4ca2bc46a6c9be880936003943e093cd",
+            "vtt": "4fa40363640353b6bd36be54d9e45fb2ba3230e839d25bc8905e403692c1f323"
+          }
+        },
+        "bulk-archive-backup-delete-server-list": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-server-list.webp",
+          "imageAlt": "Open the Server view of the account. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 0.918,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "92ed4da9ad9e6af783debee23cf248991efce4d0a86f194a977f51053cd747aa"
+          }
+        },
+        "bulk-archive-backup-delete-bulk-dialog": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-bulk-dialog.webp",
+          "imageAlt": "Bulk Email Operations lists the years. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 3.169,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "f8b681fea24b8e76036efe3959836ca50b2d87ab5e4cec721d6dc3370c86c194"
+          }
+        },
+        "bulk-archive-backup-delete-year-picked": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-year-picked.webp",
+          "imageAlt": "Pick a year and see how many emails it selects. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 4.995,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "d39bbb608ac5f85bb7a3aac424af6755ab73b5e83adaecd2694eef9ecb983ca4"
+          }
+        },
+        "bulk-archive-backup-delete-choose-action": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-choose-action.webp",
+          "imageAlt": "Choose the action. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 6.795,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "3838499b80a92a9e9c7e68567596c6a794075cb34029490151c7ac429740d8bb"
+          }
+        },
+        "bulk-archive-backup-delete-action-chosen": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-action-chosen.webp",
+          "imageAlt": "The option explains what it will do before you start. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 9.182,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "3855dd320cac65b6b00219607fbb500bfa76f9cd1d9be127e35df10ebf9724d5"
+          }
+        },
+        "bulk-archive-backup-delete-confirm": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-confirm.webp",
+          "imageAlt": "Read the confirmation, then confirm. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 12.269,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "fcef2b6535b4fcb34e9891ce079b819449674377c4757467a62075306e88b608"
+          }
+        },
+        "bulk-archive-backup-delete-progress": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-progress.webp",
+          "imageAlt": "Progress runs in the corner of the window. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 15.009,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "4e89e90e224404b24915eb33e225a14a120db2cb30b075913b6082b0c0131fa9"
+          }
+        },
+        "bulk-archive-backup-delete-done": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-done.webp",
+          "imageAlt": "Operation Complete, and the Server count drops. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 48.538,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "138bca05759427dc86230151ebd604cfacacae816d4ef2472a5b74a7e7d8f839"
+          }
+        },
+        "bulk-archive-backup-delete-vault": {
+          "image": "/assets/help-media/en/bulk-archive-backup-delete-vault.webp",
+          "imageAlt": "The Vault view still holds the archived emails. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 51.952,
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "webp": "cc290a9961a85389d97ce9644944e54edc9b6c736d12b1c5393e5a43d7f1d3bd"
+          }
+        },
+        "bulk-archive-backup-delete": {
+          "video": "/assets/help-media/en/bulk-archive-backup-delete.mp4",
+          "videoLabel": "Archive, back up and delete from the server for selected emails · MailVault version 2.20.0 en",
+          "poster": "/assets/help-media/en/bulk-archive-backup-delete.jpg",
+          "posterAlt": "Archive, back up and delete from the server for selected emails · MailVault version 2.20.0 en",
+          "captions": "/assets/help-media/en/bulk-archive-backup-delete.vtt",
+          "transcript": [
+            "Open the Server view of the account.",
+            "Bulk Email Operations lists the years.",
+            "Pick a year and see how many emails it selects.",
+            "Choose the action.",
+            "The option explains what it will do before you start.",
+            "Read the confirmation, then confirm.",
+            "Progress runs in the corner of the window. The wait is shortened here.",
+            "Operation Complete, and the Server count drops.",
+            "The Vault view still holds the archived emails."
+          ],
+          "duration": 25.233333,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 1137,
+          "sourceSeconds": 53.75,
+          "cutSourceSeconds": [
+            18.009,
+            46.538
+          ],
+          "sourceSHA256": "47dd31454a075942f14581d22db50b644eb8b8e39a170aa9bdaa13289acdc44e",
+          "sha256": {
+            "mp4": "b6e078ed19bd1b924a2c45ff956967230e27887996012f2fa08501f521dfb5c0",
+            "jpg": "fcfad2b6c53b1019d253ea84e5341afddab47067aad415757e4d4e057ff505c2",
+            "vtt": "a85cc00d8f3e02ebc664d8def45f8ab4cde308fed75876c23e12e7d3a5599a01"
+          }
+        },
+        "settings-archive-delete-settings": {
+          "image": "/assets/help-media/en/settings-archive-delete-settings.webp",
+          "imageAlt": "Open Settings. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 2.397,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "5dc658e7854cbe905dec3e61098939f9a0643ee50c45f8e12dc390bda011c1eb"
+          }
+        },
+        "settings-archive-delete-abd-section": {
+          "image": "/assets/help-media/en/settings-archive-delete-abd-section.webp",
+          "imageAlt": "Archive & delete holds both jobs. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 5.751,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "4506cf928a0b536429e26424b6b3e689001b3927613a918cc190b3017380da92"
+          }
+        },
+        "settings-archive-delete-setup-folders": {
+          "image": "/assets/help-media/en/settings-archive-delete-setup-folders.webp",
+          "imageAlt": "Tick the folders to clear. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 7.933,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "d3b8f0d525aa7cef2dcb4701477480d524149b431734a1e8dcea6978087ac308"
+          }
+        },
+        "settings-archive-delete-setup-dates": {
+          "image": "/assets/help-media/en/settings-archive-delete-setup-dates.webp",
+          "imageAlt": "Choose the years. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 10.426,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "037eab91872280e5594e7c6c0bff18373473b0eed16fbf1b9a9125c8850ad8af"
+          }
+        },
+        "settings-archive-delete-setup-delete-options": {
+          "image": "/assets/help-media/en/settings-archive-delete-setup-delete-options.webp",
+          "imageAlt": "Choose when and how to delete. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 14.325,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "84da54f7db212ce35d5164e81ef3e99ca48d2ac340c42e81faedc21a7ed80992"
+          }
+        },
+        "settings-archive-delete-setup-summary": {
+          "image": "/assets/help-media/en/settings-archive-delete-setup-summary.webp",
+          "imageAlt": "The summary shows what will be removed. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 17.051,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "d43e84d9aa1b02d439f81136b7ec4edc759f82aa08403cca7414f8f1c218ca6b"
+          }
+        },
+        "settings-archive-delete-setup-confirm": {
+          "image": "/assets/help-media/en/settings-archive-delete-setup-confirm.webp",
+          "imageAlt": "Tick the confirmation and Start. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 18.626,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "c2d7383888f8b2505efc5be57473773c5951a81793a401dfc4b403a7605eceab"
+          }
+        },
+        "settings-archive-delete-job-running": {
+          "image": "/assets/help-media/en/settings-archive-delete-job-running.webp",
+          "imageAlt": "The job starts and runs in the background. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 20.805,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "d0f29b1aa25da4067a168be8b1315daf4c2f5d2d2646cb7099b2b904e5f99ef5"
+          }
+        },
+        "settings-archive-delete-progress": {
+          "image": "/assets/help-media/en/settings-archive-delete-progress.webp",
+          "imageAlt": "The progress panel follows the job. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 22.656,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "0f5afc8de7185d5ee85a3d8a50d1f02390f22bd831a4a35469123f139092d2e5"
+          }
+        },
+        "settings-archive-delete-job-complete": {
+          "image": "/assets/help-media/en/settings-archive-delete-job-complete.webp",
+          "imageAlt": "The job finishes. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 128.126,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "78e863078f893a3eb9cf6f54129f4bdec1d8528ebb79e1caefd9e5d43546874b"
+          }
+        },
+        "settings-archive-delete-vault": {
+          "image": "/assets/help-media/en/settings-archive-delete-vault.webp",
+          "imageAlt": "The Vault view still holds the archived emails. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 132.297,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "72c5cbde86d766b79f86edbb1da374162e7e62532acc9eef3403e546bd24f8a9"
+          }
+        },
+        "settings-archive-delete-server-after": {
+          "image": "/assets/help-media/en/settings-archive-delete-server-after.webp",
+          "imageAlt": "The Server view no longer lists them. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 137.244,
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "webp": "6f61fbc589efef7236061b7b73b5c633d6cdfa750971bc2802d8d4a7246e2755"
+          }
+        },
+        "settings-archive-delete": {
+          "video": "/assets/help-media/en/settings-archive-delete.mp4",
+          "videoLabel": "Archive and delete from the server for a whole account in Settings · MailVault version 2.20.0 en",
+          "poster": "/assets/help-media/en/settings-archive-delete.jpg",
+          "posterAlt": "Archive and delete from the server for a whole account in Settings · MailVault version 2.20.0 en",
+          "captions": "/assets/help-media/en/settings-archive-delete.vtt",
+          "transcript": [
+            "Open Settings.",
+            "Archive & delete holds both jobs.",
+            "Tick the folders to clear.",
+            "Choose the years.",
+            "Choose when and how to delete.",
+            "The summary shows what will be removed.",
+            "Tick the confirmation and Start.",
+            "The job starts and runs in the background.",
+            "The progress panel follows the job. The wait is shortened here.",
+            "The job finishes.",
+            "The Vault view still holds the archived emails.",
+            "The Server view no longer lists them."
+          ],
+          "duration": 40.333333,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 967,
+          "sourceSeconds": 138.8,
+          "cutSourceSeconds": [
+            27.656,
+            126.126
+          ],
+          "sourceSHA256": "c42963104fe8c30d857c8270b448cf233defd7c2b7d6dbd83bcc61e343f5de64",
+          "sha256": {
+            "mp4": "fae56531aa2e6b29aa414c48e42616911fa8bdba021ffcc8fef7fa52c2a33f49",
+            "jpg": "69f57a43b7814f3e22a33c41de32fb6d6e380463ae850a6a6882b59d47ccd6d8",
+            "vtt": "864d184da4a2aad4787e6d94001a8c6ff3a31d57ee54b76609aa7edd36d35a05"
+          }
+        },
+        "settings-archive-backup-delete-settings": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-settings.webp",
+          "imageAlt": "Open Settings. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 2.32,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "74ab389c55f0fde398f1337089978d79c775f3177da0dc7e1709464c453b1e70"
+          }
+        },
+        "settings-archive-backup-delete-abd-section": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-abd-section.webp",
+          "imageAlt": "Archive & delete holds both jobs. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 5.67,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "a9171398444967722294a47d4ac4560d871a54e403d75023e719cc6780b51a9e"
+          }
+        },
+        "settings-archive-backup-delete-setup-folders": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-setup-folders.webp",
+          "imageAlt": "Tick the folders to clear. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 7.848,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "134ea56275f14bdb8a74963282ce4d7eae71e4ccf36936593f99850c77ea62f6"
+          }
+        },
+        "settings-archive-backup-delete-setup-dates": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-setup-dates.webp",
+          "imageAlt": "Choose the years. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 10.396,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "9dc42366ef5b866fb408feae97636c615cfa8e39faf3bc587572c399de4e40d3"
+          }
+        },
+        "settings-archive-backup-delete-setup-delete-options": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-setup-delete-options.webp",
+          "imageAlt": "Choose when and how to delete. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 14.282,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "22450a7d220846aa5bc41f3eef2410e262fb7da679e53fb209d40e8a220518b2"
+          }
+        },
+        "settings-archive-backup-delete-setup-summary": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-setup-summary.webp",
+          "imageAlt": "The summary shows what will be removed. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 17.006,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "b3fea16e192a10b08fb66142d0816b413cf23a2dbfb135f42a6e89c1adae937c"
+          }
+        },
+        "settings-archive-backup-delete-setup-confirm": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-setup-confirm.webp",
+          "imageAlt": "Tick the confirmation and Start. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 18.564,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "ea104efba0d0c8da1ce47028d8dd4b3c9e08de25a32bc545f898453379a78b31"
+          }
+        },
+        "settings-archive-backup-delete-job-running": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-job-running.webp",
+          "imageAlt": "The job starts and runs in the background. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 20.736,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "86e99a7b79f21dc7541d591d9d4a19d7cb63002937e11c7de6e8014903257d52"
+          }
+        },
+        "settings-archive-backup-delete-progress": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-progress.webp",
+          "imageAlt": "The progress panel follows the job. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 22.586,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "6239bef09a59764ef5861a3bcb417cbe02740c16e015e91b584b9b7906187af9"
+          }
+        },
+        "settings-archive-backup-delete-job-complete": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-job-complete.webp",
+          "imageAlt": "The job finishes. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 154.535,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "fb3da5c96ff30432a5e4260c16e45be1a0051c3a8e57e181a17e1936b1300e30"
+          }
+        },
+        "settings-archive-backup-delete-vault": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-vault.webp",
+          "imageAlt": "The Vault view still holds the archived emails. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 158.749,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "ac224ad5ee995a64bc4245737e426884c9b85c5524d6352c5bb2a966599532a1"
+          }
+        },
+        "settings-archive-backup-delete-server-after": {
+          "image": "/assets/help-media/en/settings-archive-backup-delete-server-after.webp",
+          "imageAlt": "The Server view no longer lists them. · MailVault version 2.20.0 en",
+          "imageSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "sourceFrameSeconds": 163.45,
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "webp": "7873816c6cd78953482378f042408f8f58b32af666e7b3c2746d1c8c9b7c70f7"
+          }
+        },
+        "settings-archive-backup-delete": {
+          "video": "/assets/help-media/en/settings-archive-backup-delete.mp4",
+          "videoLabel": "Archive, back up and delete from the server for a whole account in Settings · MailVault version 2.20.0 en",
+          "poster": "/assets/help-media/en/settings-archive-backup-delete.jpg",
+          "posterAlt": "Archive, back up and delete from the server for a whole account in Settings · MailVault version 2.20.0 en",
+          "captions": "/assets/help-media/en/settings-archive-backup-delete.vtt",
+          "transcript": [
+            "Open Settings.",
+            "Archive & delete holds both jobs.",
+            "Tick the folders to clear.",
+            "Choose the years.",
+            "Choose when and how to delete.",
+            "The summary shows what will be removed.",
+            "Tick the confirmation and Start.",
+            "The job starts and runs in the background.",
+            "The progress panel follows the job. The wait is shortened here.",
+            "The job finishes.",
+            "The Vault view still holds the archived emails.",
+            "The Server view no longer lists them."
+          ],
+          "duration": 40.0,
+          "videoSize": [
+            1440,
+            966
+          ],
+          "stamp": "MailVault version 2.20.0 en",
+          "captureVersion": "2.20.0",
+          "captureCommit": "386f98aa79568972592ed37ab4cd49de64f3f836",
+          "captureLocale": "en",
+          "recordingVerified": true,
+          "recordingFrames": 1186,
+          "sourceSeconds": 164.95,
+          "cutSourceSeconds": [
+            27.586,
+            152.535
+          ],
+          "sourceSHA256": "908777ae11f80aae2fb2e277c426e498dc00d35f0da4c4573b21c2b8587976ef",
+          "sha256": {
+            "mp4": "39ef075587a1a001e8769781ace450706cb31fc9f49d089d4e9d2b1455de8f01",
+            "jpg": "5da2f3cea495b44bb2f9181a80370a0e49c2bd153611d85cf80d186d10243307",
+            "vtt": "e4d4ca7d61551a97c89069e25c0bd65462466b0565f9205e81bcbbef8a13892e"
           }
         }
       }
