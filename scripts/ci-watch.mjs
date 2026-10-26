@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Watch the CI run that covers a commit on main:
 //   node scripts/ci-watch.mjs [sha]   (default HEAD)
-// CI on main never cancels a running build, but a pending run is replaced when
-// a newer push lands, so the commit's own run can end as cancelled. The run
-// that covers it is the oldest one, not cancelled, whose head contains it.
-// Exits with that run's result.
+// Main is tested by the nightly schedule or a manual dispatch
+// (`gh workflow run ci.yml --ref main`, `-f force=true` skips the change
+// gate), not per push. The run that covers a commit is the oldest one, not
+// cancelled, whose head contains it. Exits with that run's result.
 import { execFileSync, spawnSync } from 'node:child_process';
 
 const GIVE_UP_MS = 5 * 60 * 1000;
@@ -26,11 +26,12 @@ if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) {
   for (;;) {
     sh('git', ['fetch', '-q', 'origin', 'main']);
     const runs = JSON.parse(sh('gh', ['run', 'list', '--workflow', 'ci.yml', '--branch', 'main',
-      '--event', 'push', '--limit', '50', '--json', 'databaseId,headSha,createdAt,status,conclusion']));
+      '--limit', '50', '--json', 'databaseId,headSha,createdAt,status,conclusion,event']))
+      .filter((r) => r.event !== 'pull_request');
     const run = coveringRun(runs, (head) => isAncestor(sha, head));
     if (!run) {
       if (Date.now() - started > GIVE_UP_MS) {
-        console.error(`ci-watch: no CI run covers ${sha.slice(0, 9)}; it touched no CI path and nothing since has`);
+        console.error(`ci-watch: no CI run covers ${sha.slice(0, 9)}; main is tested nightly: dispatch one with gh workflow run ci.yml --ref main`);
         process.exit(2);
       }
       spawnSync('sleep', ['20']);

@@ -1,32 +1,25 @@
 name: CI
 
-# Main: never cancel a running build. GitHub holds one pending run per group
-# and a newer push replaces it, so pushes landing mid-run batch into one run on
-# the newest commit. A superseded pending run shows as cancelled; the newer run
-# covers its commit. PRs: a new push makes the old build worthless, cancel it.
+# Main is tested once a night, not on every push (Actions minutes), and only
+# when a tested path changed since the last scheduled or manual run (the gate
+# job). PRs run on every push. A running build is never cancelled on main; PRs:
+# a new push makes the old build worthless, cancel it.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'src-core/**'
-      - 'src-daemon/**'
-      - 'src-mock-imap/**'
-      - 'src-render/**'
-      - 'src-tauri/**'
-      - 'tests/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'vite.config.*'
-      - 'vitest.config.*'
-      - 'scripts/check-blitz-removal.sh'
-      - '.github/workflows/ci.yml'
+  schedule:
+    # 21:17 UTC: ends well before the 23:47 UTC nightly build. An odd minute
+    # dodges the top-of-the-hour queue (see nightly.yml).
+    - cron: '17 21 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Test even if no tested path changed since the last run'
+        required: false
+        type: boolean
+        default: false
   pull_request:
     branches: [main]
     paths:
@@ -46,7 +39,51 @@ on:
       - 'scripts/check-blitz-removal.sh'
       - '.github/workflows/ci.yml'
 jobs:
+  # Scheduled and manual runs test main only when a tested path changed since
+  # the last such run (whatever its result, so a red commit is not retried every
+  # night; cancelled runs do not count). Keep PATHS in sync with the
+  # pull_request filter above.
+  gate:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      changed: ${{ steps.gate.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Compare HEAD with the last tested commit
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ inputs.force }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          PATHS=(src src-core src-daemon src-mock-imap src-render src-tauri tests
+            package.json package-lock.json Cargo.toml Cargo.lock
+            ':(glob)vite.config.*' ':(glob)vitest.config.*'
+            scripts/check-blitz-removal.sh .github/workflows/ci.yml)
+          if [ "$EVENT" = "pull_request" ] || [ "$FORCE" = "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          LAST=$(gh run list --workflow ci.yml --branch "$GITHUB_REF_NAME" --limit 50 \
+            --json databaseId,headSha,event,conclusion \
+            --jq "[.[] | select(.event != \"pull_request\" and (.conclusion == \"success\" or .conclusion == \"failure\") and .databaseId != $GITHUB_RUN_ID)][0].headSha // \"\"")
+          if [ -n "$LAST" ] && git cat-file -e "${LAST}^{commit}" 2>/dev/null \
+             && git diff --quiet "$LAST" "$GITHUB_SHA" -- "${PATHS[@]}"; then
+            echo "No tested path changed since ${LAST}; nothing to do"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Last tested: ${LAST:-none}; HEAD: ${GITHUB_SHA}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   unit-integration:
+    needs: gate
+    if: needs.gate.outputs.changed == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -63,6 +100,8 @@ jobs:
   # IMAP client behavior against the scriptable mock server. Deterministic and
   # offline — this is the suite that gates every push.
   imap-mock:
+    needs: gate
+    if: needs.gate.outputs.changed == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -101,6 +140,8 @@ jobs:
   # Blitz email renderer crate. Font discovery (fontique) differs per OS, so
   # the crate's tests run on all three; the imap-mock job above is ubuntu-only.
   render-crate:
+    needs: gate
+    if: needs.gate.outputs.changed == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -130,6 +171,8 @@ jobs:
   # and build and test what is left (scripts/check-blitz-removal.sh). Needs the
   # same Tauri shell deps as the e2e job, since it runs `cargo check -p mailvault`.
   blitz-removable:
+    needs: gate
+    if: needs.gate.outputs.changed == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -161,7 +204,8 @@ jobs:
 
   e2e:
     runs-on: ubuntu-22.04
-    needs: unit-integration
+    needs: [gate, unit-integration]
+    if: needs.gate.outputs.changed == 'true'
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
