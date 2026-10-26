@@ -1185,6 +1185,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         throw new DemoUnsupportedError(`daemon:${method || 'unknown'}`);
       }
       case 'take_pending_mailto': return null;
+      case 'take_pending_activation': return null;
       case 'take_notification_open': return null;
       case 'take_notification_deletes': return [];
       case ['send', 'notification'].join('_'): return { success: true, simulated: true };

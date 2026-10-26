@@ -2,9 +2,9 @@
 Type=Application
 Name=MailVault
 Comment=Privacy-first desktop email client with local Maildir storage
-Exec=mailvault
+Exec=mailvault %u
 Icon=${SNAP}/meta/gui/mailvault.png
 Categories=Network;Email;Office;
-MimeType=x-scheme-handler/mailto;
+MimeType=x-scheme-handler/mailto;x-scheme-handler/mailvault;
 StartupWMClass=MailVault
 Terminal=false
