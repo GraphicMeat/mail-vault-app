@@ -139,13 +139,26 @@ impl Grant {
             self.tenant_id.as_deref().unwrap_or(""),
             self.custom_client_id.as_deref().unwrap_or(""),
         ]);
-        Sha256::digest(named.to_string().as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+        Sha256::digest(named.to_string().as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
+}
+
+/// One completed provider response awaiting current-account proof. Private
+/// retention prevents both loss of its rotated secret and another refresh.
+#[derive(Clone)]
+struct PendingRefresh {
+    source_record: Value,
+    predecessor_record: Option<Value>,
+    entry: Box<Entry>,
 }
 
 #[derive(Clone)]
 struct Entry {
     grant: Grant,
+    pending: Option<PendingRefresh>,
     /// Every refresh token this grant has had here, the record's first: a
     /// stale write of the record still names one of them.
     lineage: Vec<String>,
@@ -169,15 +182,23 @@ struct Entry {
 
 impl Entry {
     fn needs_refresh(&self, now: i64) -> bool {
-        self.rejected || self.access_token.is_empty() || (self.expires_at > 0 && now >= self.expires_at - REFRESH_MARGIN_MS)
+        self.rejected
+            || self.access_token.is_empty()
+            || (self.expires_at > 0 && now >= self.expires_at - REFRESH_MARGIN_MS)
     }
 
     fn still_valid(&self, now: i64) -> bool {
-        !self.rejected && !self.access_token.is_empty() && (self.expires_at == 0 || now < self.expires_at)
+        !self.rejected
+            && !self.access_token.is_empty()
+            && (self.expires_at == 0 || now < self.expires_at)
     }
 
     fn failure(&self, kind: FailKind, message: String) -> TokenError {
-        TokenError { kind, message, fallback: (!self.access_token.is_empty()).then(|| self.access_token.clone()) }
+        TokenError {
+            kind,
+            message,
+            fallback: (!self.access_token.is_empty()).then(|| self.access_token.clone()),
+        }
     }
 }
 
@@ -195,14 +216,23 @@ pub(crate) struct TokenStore {
 }
 
 fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// The grant, token and expiry of a stored record, or `None` when the daemon
 /// does not manage its token: not OAuth2, or no refresh token (the app left
 /// such an account untouched too).
 fn grant_of(record: &Value) -> Option<(Grant, String, i64)> {
-    let text = |k: &str| record.get(k).and_then(Value::as_str).filter(|v| !v.is_empty()).map(str::to_owned);
+    let text = |k: &str| {
+        record
+            .get(k)
+            .and_then(Value::as_str)
+            .filter(|v| !v.is_empty())
+            .map(str::to_owned)
+    };
     if record.get("authType").and_then(Value::as_str) != Some("oauth2") {
         return None;
     }
@@ -240,7 +270,13 @@ pub(crate) fn record_fingerprint(record: &Value, refresh_token: Option<&str>) ->
 /// is, nothing can renew it.
 fn unrefreshable_token(record: &Value) -> Option<String> {
     (record.get("authType").and_then(Value::as_str) == Some("oauth2"))
-        .then(|| record.get("oauth2AccessToken").and_then(Value::as_str).filter(|t| !t.is_empty()).map(str::to_owned))
+        .then(|| {
+            record
+                .get("oauth2AccessToken")
+                .and_then(Value::as_str)
+                .filter(|t| !t.is_empty())
+                .map(str::to_owned)
+        })
         .flatten()
 }
 
@@ -296,7 +332,7 @@ impl TokenStore {
     fn cached(&self, account_id: &str, now: i64) -> Option<String> {
         self.entries()
             .get(account_id)
-            .filter(|e| e.checked && !e.needs_refresh(now))
+            .filter(|e| e.pending.is_none() && e.checked && !e.needs_refresh(now))
             .map(|e| e.access_token.clone())
     }
 
@@ -306,6 +342,7 @@ impl TokenStore {
         &self,
         account_id: &str,
         snapshot: &credentials::RecordSnapshot,
+        events: &crate::events::EventBus,
     ) -> Result<Option<Entry>, TokenError> {
         #[cfg(test)]
         tests::before_publication(account_id);
@@ -319,6 +356,28 @@ impl TokenStore {
             return Ok(None);
         };
         if let Some(held) = entries.get_mut(account_id) {
+            if let Some(pending) = &held.pending {
+                if !pending
+                    .entry
+                    .grant
+                    .same_grant(&pending.entry.lineage, &grant)
+                {
+                    // A definitive new sign-in supersedes the old completion.
+                    held.pending = None;
+                } else if pending.source_record == *record
+                    || pending.predecessor_record.as_ref() == Some(record)
+                {
+                    let mut completed = held.pending.take().unwrap().entry;
+                    completed.checked = true;
+                    *held = *completed;
+                    events.emit(REFRESHED_EVENT, json!({ "accountId": account_id }));
+                    return Ok(Some(held.clone()));
+                } else {
+                    // A changed same-grant tuple does not acknowledge this
+                    // exact rotation. Retain privately, without replay.
+                    return Err(stale_snapshot());
+                }
+            }
             let same_grant = held.grant.same_grant(&held.lineage, &grant);
             let saved = held.access_token == access_token && held.expires_at == expires_at;
             if same_grant && (saved || held.expires_at > expires_at) {
@@ -334,6 +393,7 @@ impl TokenStore {
         let lineage = vec![grant.refresh_token.clone()];
         let entry = Entry {
             grant,
+            pending: None,
             lineage,
             access_token,
             expires_at,
@@ -392,7 +452,7 @@ impl TokenStore {
     pub(crate) fn unsaved(&self) -> Vec<Value> {
         self.entries()
             .iter()
-            .filter(|(_, e)| e.unsaved)
+            .filter(|(_, e)| e.unsaved && e.pending.is_none())
             .map(|(id, e)| {
                 json!({
                     "accountId": id,
@@ -420,55 +480,54 @@ impl TokenStore {
     fn unsaved_ids(&self) -> Vec<String> {
         self.entries()
             .iter()
-            .filter(|(_, e)| e.unsaved)
+            .filter(|(_, e)| e.unsaved || e.pending.is_some())
             .map(|(id, _)| id.clone())
             .collect()
     }
 
-    fn store_refresh(
+    fn retain_refresh(
         &self,
         account_id: &str,
-        grant: &Grant,
+        mut completed: Entry,
+        source_record: &Value,
+        predecessor_record: Option<Value>,
         access_token: String,
         refresh_token: Option<String>,
         expires_at: i64,
-        generation: u64,
-        events: &crate::events::EventBus,
-    ) -> Result<(), TokenError> {
+    ) {
         let now = self.now();
-        let mut entries = self.entries();
-        if generation != credentials::write_generation() {
-            return Err(stale_snapshot());
-        }
-        let Some(entry) = entries.get_mut(account_id) else {
-            return Err(stale_snapshot());
-        };
-        if entry.rejected {
-            let wait = if entry.rejection_backoff.is_zero() {
+        if completed.rejected {
+            let wait = if completed.rejection_backoff.is_zero() {
                 REJECTION_BACKOFF
             } else {
-                (entry.rejection_backoff * 2).min(REJECTION_BACKOFF_CAP)
+                (completed.rejection_backoff * 2).min(REJECTION_BACKOFF_CAP)
             };
-            entry.rejection_backoff = wait;
-            entry.rejection_quiet_until = Some(now + wait.as_millis() as i64);
+            completed.rejection_backoff = wait;
+            completed.rejection_quiet_until = Some(now + wait.as_millis() as i64);
         }
-        // The refresh token goes with the client it was posted with: only
-        // the token itself rotates.
-        entry.grant = grant.clone();
         if let Some(rt) = refresh_token.filter(|rt| !rt.is_empty()) {
-            if !entry.lineage.contains(&rt) {
-                entry.lineage.push(rt.clone());
+            if !completed.lineage.contains(&rt) {
+                completed.lineage.push(rt.clone());
             }
-            entry.grant.refresh_token = rt;
+            completed.grant.refresh_token = rt;
         }
-        entry.access_token = access_token;
-        entry.expires_at = expires_at;
-        entry.unsaved = true;
-        entry.rejected = false;
-        entry.cooldown = None;
-        // Publication and its event precede any completed invalidation.
-        events.emit(REFRESHED_EVENT, json!({ "accountId": account_id }));
-        Ok(())
+        completed.access_token = access_token;
+        completed.expires_at = expires_at;
+        completed.unsaved = true;
+        completed.checked = false;
+        completed.rejected = false;
+        completed.cooldown = None;
+        // The account flight excludes reconciliation and another provider
+        // request. Retain before retirement or any fallible current read.
+        let mut entries = self.entries();
+        if let Some(entry) = entries.get_mut(account_id) {
+            entry.checked = false;
+            entry.pending = Some(PendingRefresh {
+                source_record: source_record.clone(),
+                predecessor_record,
+                entry: Box::new(completed),
+            });
+        }
     }
 
     fn store_failure(
@@ -514,18 +573,54 @@ async fn read_record(
 /// `Ok(None)`: not an OAuth2 account (a password or JMAP one). An OAuth2 one
 /// with no refresh token gets its stored token, never refreshed. `Err`: the token has
 /// expired and could not be renewed, or the record could not be read.
-pub(crate) async fn access_token(state: &DaemonState, account_id: &str, read: Read) -> Result<Option<String>, TokenError> {
+pub(crate) async fn access_token(
+    state: &DaemonState,
+    account_id: &str,
+    read: Read,
+) -> Result<Option<String>, TokenError> {
     if let Some(token) = state.tokens.cached(account_id, state.tokens.now()) {
         return Ok(Some(token));
     }
-    let (_, record) = read_record(account_id, read)
-        .await
-        .map_err(|e| {
-            // `account_from_blob`'s words for an account the store does not hold.
-            let kind = if e.starts_with("no credentials found") { FailKind::NoRecord } else { FailKind::Unreadable };
-            TokenError { kind, message: e, fallback: None }
-        })?;
+    let (_, record) = read_record(account_id, read).await.map_err(|e| {
+        // `account_from_blob`'s words for an account the store does not hold.
+        let kind = if e.starts_with("no credentials found") {
+            FailKind::NoRecord
+        } else {
+            FailKind::Unreadable
+        };
+        TokenError {
+            kind,
+            message: e,
+            fallback: None,
+        }
+    })?;
     for_record(state, account_id, &record).await
+}
+
+/// Retirement is idempotent and uses the completion's original config.
+/// Call with the account flight held, outside entries ownership. A cancelled
+/// original waiter leaves private pending state; its next reader retires too.
+async fn retire_pending(state: &DaemonState, account_id: &str) -> Result<(), TokenError> {
+    let config = {
+        let entries = state.tokens.entries();
+        let Some(pending) = entries
+            .get(account_id)
+            .and_then(|entry| entry.pending.as_ref())
+        else {
+            return Ok(());
+        };
+        serde_json::from_value::<ImapConfig>(pending.source_record.clone())
+            .map_err(|_| stale_snapshot())?
+    };
+    #[cfg(test)]
+    {
+        tests::before_pending_retirement(account_id);
+        tokio::task::yield_now().await;
+    }
+    if !config.uses_graph() && !config.uses_jmap() {
+        state.imap_pool.retire_idle(&config).await;
+    }
+    Ok(())
 }
 
 /// `access_token` for a caller that has just read the record itself.
@@ -536,9 +631,10 @@ pub(crate) async fn for_record(
 ) -> Result<Option<String>, TokenError> {
     let flight = state.tokens.flight(account_id);
     let _one_refresh = flight.lock().await;
+    retire_pending(state, account_id).await?;
     // A refresh that finished while this caller waited wins here: its expiry
     // is later than the record this caller read.
-    let Some(entry) = state.tokens.reconcile(account_id, record)? else {
+    let Some(entry) = state.tokens.reconcile(account_id, record, &state.events)? else {
         return Ok(unrefreshable_token(&record.record));
     };
     let now = state.tokens.now();
@@ -554,16 +650,7 @@ pub(crate) async fn for_record(
             Err(entry.failure(kind, message))
         };
     }
-    let config = serde_json::from_value::<ImapConfig>(record.record.clone()).ok();
-    refresh(
-        state,
-        account_id,
-        entry,
-        now,
-        config.as_ref(),
-        record.generation,
-    )
-    .await
+    refresh(state, account_id, entry, now, record).await
 }
 
 async fn refresh(
@@ -571,8 +658,7 @@ async fn refresh(
     account_id: &str,
     entry: Entry,
     now: i64,
-    config: Option<&ImapConfig>,
-    generation: u64,
+    record: &credentials::RecordSnapshot,
 ) -> Result<Option<String>, TokenError> {
     let grant = &entry.grant;
     // Network Activity shows the refresh as the account's, from a worker too.
@@ -589,28 +675,54 @@ async fn refresh(
     tests::before_refresh_publication(account_id);
     let failure = match result {
         Ok(tokens) if !tokens.access_token.is_empty() => {
-            let token = tokens.access_token.clone();
+            // Only the exact earlier offered tuple proves a concurrent
+            // predecessor save; all original config/metadata fields match.
+            let predecessor_record = entry.unsaved.then(|| {
+                let mut predecessor = record.record.clone();
+                predecessor["oauth2AccessToken"] = json!(entry.access_token);
+                predecessor["oauth2RefreshToken"] = json!(entry.grant.refresh_token);
+                predecessor["oauth2ExpiresAt"] = json!(entry.expires_at);
+                predecessor
+            });
             // The provider's lifetime counted on this store's clock (the core
             // stamps the system clock, which a debug test may have moved past).
             let expires_at = tokens.expires_at as i64 + (state.tokens.now() - now_ms());
-            // Pooled IMAP sessions signed in with the old token would be
-            // ended under a request once it expires (Outlook): sign in anew.
-            if let Some(config) = config.filter(|c| !c.uses_graph() && !c.uses_jmap()) {
-                state.imap_pool.retire_idle(config).await;
-            }
-            // Retiring sessions can await; publish only after it, then emit
-            // under the same short cache critical section as invalidation.
-            state.tokens.store_refresh(
+            state.tokens.retain_refresh(
                 account_id,
-                grant,
+                entry.clone(),
+                &record.record,
+                predecessor_record.clone(),
                 tokens.access_token,
                 tokens.refresh_token,
                 expires_at,
-                generation,
-                &state.events,
-            )?;
-            info!("[oauth] refreshed the access token of {}", grant.email);
-            return Ok(Some(token));
+            );
+            // Pooled sessions must retire before either original or recovered
+            // pending responses can become trusted or publicly offered.
+            retire_pending(state, account_id).await?;
+            // Preserve retire-before-publish. Generation and adoption share
+            // entries ownership; storage I/O stays outside that short lock.
+            if let Ok(Some(completed)) = state.tokens.reconcile(account_id, record, &state.events) {
+                info!("[oauth] refreshed the access token of {}", grant.email);
+                return Ok(Some(completed.access_token));
+            }
+            // Exactly one bounded quiet current read. Failure or another
+            // generation change leaves the sole successful response private.
+            let (_, current) = read_record(account_id, Read::Quiet)
+                .await
+                .map_err(|_| stale_snapshot())?;
+            let coherent_config = current.record == record.record
+                || predecessor_record.as_ref() == Some(&current.record);
+            let completed = state
+                .tokens
+                .reconcile(account_id, &current, &state.events)?;
+            if !coherent_config {
+                // A later caller may use a reconciled new sign-in; this one
+                // still carries the original configuration and must refuse.
+                return Err(stale_snapshot());
+            }
+            return completed
+                .map(|e| Some(e.access_token))
+                .ok_or_else(stale_snapshot);
         }
         Ok(_) => "the refresh returned no token".to_string(),
         Err(e) => e,
@@ -623,7 +735,7 @@ async fn refresh(
     let message = scrub(&failure, &[&grant.refresh_token, &entry.access_token]);
     state
         .tokens
-        .store_failure(account_id, kind, &message, generation)?;
+        .store_failure(account_id, kind, &message, record.generation)?;
     if entry.still_valid(now) {
         warn!("[oauth] could not refresh the token of {}: {message}; using the stored one, still valid", grant.email);
         return Ok(Some(entry.access_token));
@@ -759,7 +871,10 @@ pub(crate) async fn recheck_unsaved(state: &DaemonState) {
         if let Ok((_, record)) = read_record(&account_id, Read::Quiet).await {
             let flight = state.tokens.flight(&account_id);
             let _held = flight.lock().await;
-            let _ = state.tokens.reconcile(&account_id, &record);
+            if retire_pending(state, &account_id).await.is_err() {
+                continue;
+            }
+            let _ = state.tokens.reconcile(&account_id, &record, &state.events);
         }
     }
 }
@@ -777,12 +892,22 @@ pub(crate) struct Injected {
 
 /// The daemon's token for `account_id`, when it holds one issued for `email`
 /// (a request may name an id the store holds for another address).
-async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>) -> Result<String, NoToken> {
+async fn daemon_token(
+    state: &DaemonState,
+    account_id: &str,
+    email: Option<&str>,
+) -> Result<String, NoToken> {
     let token = match access_token(state, account_id, Read::Guarded).await {
         Ok(Some(token)) => token,
         Ok(None) => return Err(NoToken::SignIn),
-        Err(TokenError { fallback: Some(token), .. }) => token,
-        Err(TokenError { kind: FailKind::Unreadable, .. }) => return Err(NoToken::Keychain),
+        Err(TokenError {
+            fallback: Some(token),
+            ..
+        }) => token,
+        Err(TokenError {
+            kind: FailKind::Unreadable,
+            ..
+        }) => return Err(NoToken::Keychain),
         Err(_) => return Err(NoToken::SignIn),
     };
     if let Some(email) = email.filter(|e| !e.is_empty()) {
@@ -804,17 +929,36 @@ async fn daemon_token(state: &DaemonState, account_id: &str, email: Option<&str>
 
 /// A list batch binds the configuration and token from one stored record.
 /// Reading a separate configuration after token resolution could name a later account edit.
-async fn daemon_list_token(state: &DaemonState, account_id: &str, email: Option<&str>) -> Result<(String, Option<String>), NoToken> {
-    let (config, record) = read_record(account_id, Read::Guarded).await.map_err(|_| NoToken::Keychain)?;
-    if email.filter(|s| !s.is_empty()).is_some_and(|e| !config.email.eq_ignore_ascii_case(e)) {
+async fn daemon_list_token(
+    state: &DaemonState,
+    account_id: &str,
+    email: Option<&str>,
+) -> Result<(String, Option<String>), NoToken> {
+    let (config, record) = read_record(account_id, Read::Guarded)
+        .await
+        .map_err(|_| NoToken::Keychain)?;
+    if email
+        .filter(|s| !s.is_empty())
+        .is_some_and(|e| !config.email.eq_ignore_ascii_case(e))
+    {
         return Err(NoToken::SignIn);
     }
     let token = match for_record(state, account_id, &record).await {
-        Ok(Some(token)) | Err(TokenError { fallback: Some(token), .. }) => token,
-        Err(TokenError { kind: FailKind::Unreadable, .. }) => return Err(NoToken::Keychain),
+        Ok(Some(token))
+        | Err(TokenError {
+            fallback: Some(token),
+            ..
+        }) => token,
+        Err(TokenError {
+            kind: FailKind::Unreadable,
+            ..
+        }) => return Err(NoToken::Keychain),
         _ => return Err(NoToken::SignIn),
     };
-    Ok((token, Some(mailvault_core::bulk_worker::origin_hash(&config))))
+    Ok((
+        token,
+        Some(mailvault_core::bulk_worker::origin_hash(&config)),
+    ))
 }
 
 /// Why the daemon has no token for a request.
@@ -843,7 +987,11 @@ impl NoToken {
 
 /// The daemon's token into one account a request carries (`slot`, an object
 /// or its JSON text), identified by its own `id` or else `fallback_id`.
-async fn inject_account(state: &DaemonState, slot: &mut Value, fallback_id: Option<&str>) -> Option<Injected> {
+async fn inject_account(
+    state: &DaemonState,
+    slot: &mut Value,
+    fallback_id: Option<&str>,
+) -> Option<Injected> {
     let as_text = slot.is_string();
     let mut account = match &*slot {
         Value::String(text) => serde_json::from_str::<Value>(text).ok()?,
@@ -852,21 +1000,42 @@ async fn inject_account(state: &DaemonState, slot: &mut Value, fallback_id: Opti
     if account.get("authType").and_then(Value::as_str) != Some("oauth2") {
         return None;
     }
-    let own_id = account.get("id").and_then(Value::as_str).filter(|a| !a.is_empty()).map(str::to_owned);
+    let own_id = account
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|a| !a.is_empty())
+        .map(str::to_owned);
     let account_id = own_id.or_else(|| fallback_id.map(str::to_owned))?;
-    let email = account.get("email").and_then(Value::as_str).map(str::to_owned);
-    let token = daemon_token(state, &account_id, email.as_deref()).await.ok()?;
+    let email = account
+        .get("email")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let token = daemon_token(state, &account_id, email.as_deref())
+        .await
+        .ok()?;
     // A sign-in that just happened (Reconnect testing its new token before
     // saving it) carries a later expiry than anything held: it is newer than
     // the daemon's, the same rule `reconcile` applies to the store.
-    let sent = account.get("oauth2AccessToken").and_then(Value::as_str).filter(|t| !t.is_empty());
-    let sent_expiry = account.get("oauth2ExpiresAt").and_then(Value::as_f64).map(|v| v as i64);
+    let sent = account
+        .get("oauth2AccessToken")
+        .and_then(Value::as_str)
+        .filter(|t| !t.is_empty());
+    let sent_expiry = account
+        .get("oauth2ExpiresAt")
+        .and_then(Value::as_f64)
+        .map(|v| v as i64);
     let held_expiry = state.tokens.expires_at(&account_id);
-    if sent.is_some() && matches!((sent_expiry, held_expiry), (Some(sent), Some(held)) if sent > held) {
+    if sent.is_some()
+        && matches!((sent_expiry, held_expiry), (Some(sent), Some(held)) if sent > held)
+    {
         return None;
     }
     account["oauth2AccessToken"] = json!(token);
-    *slot = if as_text { Value::String(account.to_string()) } else { account };
+    *slot = if as_text {
+        Value::String(account.to_string())
+    } else {
+        account
+    };
     Some(Injected { account_id, token })
 }
 
@@ -911,7 +1080,10 @@ pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value
     }
     if let Some(Value::Array(targets)) = obj.get_mut("targets") {
         for target in targets.iter_mut() {
-            let target_account = target.get("accountId").and_then(Value::as_str).map(str::to_owned);
+            let target_account = target
+                .get("accountId")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
             if let Some(slot) = target.get_mut("account") {
                 injected.extend(inject_account(state, slot, target_account.as_deref()).await);
             }
@@ -922,19 +1094,31 @@ pub(crate) async fn inject(state: &DaemonState, method: &str, params: &mut Value
     if method.starts_with("graph_") && method != "graph_allocate_uids" {
         obj.remove("_nativeOriginHash");
         if let Some(account_id) = request_account {
-            let email = obj.get("accountEmail").and_then(Value::as_str).map(str::to_owned);
+            let email = obj
+                .get("accountEmail")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
             let resolved = if method == "graph_list_messages" {
                 daemon_list_token(state, &account_id, email.as_deref()).await
             } else {
-                daemon_token(state, &account_id, email.as_deref()).await.map(|token| (token, None))
+                daemon_token(state, &account_id, email.as_deref())
+                    .await
+                    .map(|token| (token, None))
             };
             match resolved {
                 Ok((token, origin)) => {
-                    if let Some(origin) = origin { obj.insert("_nativeOriginHash".into(), json!(origin)); }
+                    if let Some(origin) = origin {
+                        obj.insert("_nativeOriginHash".into(), json!(origin));
+                    }
                     obj.insert("accessToken".to_string(), json!(token));
                     injected.push(Injected { account_id, token });
                 }
-                Err(why) if obj.get("accessToken").and_then(Value::as_str).map_or(true, str::is_empty) => {
+                Err(why)
+                    if obj
+                        .get("accessToken")
+                        .and_then(Value::as_str)
+                        .map_or(true, str::is_empty) =>
+                {
                     refusal = Some(why.message().to_string());
                 }
                 Err(_) => {}
@@ -955,7 +1139,8 @@ pub(crate) struct Injection {
 /// A request answered with a sign-in refusal: the tokens it carried are not
 /// handed out again, the next use refreshes first.
 pub(crate) fn note_refusal(state: &DaemonState, injected: &[Injected], error: &str) {
-    let refused = error.contains("XOAUTH2 auth failed") || mailvault_core::graph::GraphClient::is_token_expired(error);
+    let refused = error.contains("XOAUTH2 auth failed")
+        || mailvault_core::graph::GraphClient::is_token_expired(error);
     if refused {
         for i in injected {
             state.tokens.rejected(&i.account_id, &i.token);
@@ -1009,6 +1194,7 @@ mod tests {
     static RECORD_READ_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static PUBLICATION_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static REFRESH_RESULT_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+    static RETIREMENT_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
 
     fn run_read_hook(hook: &Mutex<Option<ReadHook>>, id: &str) {
         let taken = {
@@ -1048,6 +1234,9 @@ mod tests {
     }
     pub(super) fn before_refresh_publication(id: &str) {
         run_read_hook(&REFRESH_RESULT_HOOK, id);
+    }
+    pub(super) fn before_pending_retirement(id: &str) {
+        run_read_hook(&RETIREMENT_HOOK, id);
     }
 
     struct FreshRig {
@@ -1257,6 +1446,10 @@ mod tests {
                 .unwrap_or_else(|e| e.into_inner())
                 .take();
             PUBLICATION_HOOK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            RETIREMENT_HOOK
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .take();
@@ -1504,6 +1697,414 @@ mod tests {
         }
     }
 
+    // These controls exercise actual consumers, native mutations and provider
+    // responses. Dropping a completed rotation at the blob-generation fence
+    // loses these offers; replaying the old grant adds a forbidden POST.
+    async fn rotation_after_other_account_change(already_unsaved: bool, persist_predecessor: bool) {
+        let mut original = fresh_grant("synthetic-r0", "synthetic-expired");
+        original["oauth2ExpiresAt"] = json!(1);
+        let mut rig = FreshRig::new(original.clone());
+        let mut responses = vec![];
+        if already_unsaved {
+            responses.push(granted("synthetic-a1", Some("synthetic-r1")));
+        }
+        responses.push(granted("synthetic-a2", Some("synthetic-r2")));
+        let _mock = test_token_mock(responses);
+        if already_unsaved {
+            assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-a1"));
+            rig.state
+                .tokens
+                .advance_clock_for_tests(Duration::from_secs(3600));
+        }
+        let mut announced = rig.state.events.subscribe();
+        let reached = rig.hook(&REFRESH_RESULT_HOOK, true);
+        let pending = rig.access();
+        recv(&reached);
+        rig.quiet_notice();
+        let records = if persist_predecessor {
+            let offer = rig.state.tokens.unsaved();
+            let mut predecessor = original.clone();
+            predecessor["oauth2AccessToken"] = offer[0]["accessToken"].clone();
+            predecessor["oauth2RefreshToken"] = offer[0]["refreshToken"].clone();
+            predecessor["oauth2ExpiresAt"] = offer[0]["expiresAt"].clone();
+            json!({"g":predecessor.to_string()})
+        } else {
+            json!({"b":"{\"id\":\"b\",\"password\":\"synthetic-b\"}"})
+        };
+        assert!(
+            recv(&rig.request("credentials.save", json!({"records":records})))
+                .error
+                .is_none()
+        );
+        rig.release_all();
+        let answer = recv(&pending);
+        rig.finish_quiet();
+        assert!(
+            answer.ok().flatten().as_deref() == Some("synthetic-a2"),
+            "unchanged A must keep its completed rotation after B changes"
+        );
+        assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-a2"));
+        let offer = rig.state.tokens.unsaved();
+        assert_eq!(offer.len(), 1);
+        assert!(offer[0]["accessToken"] == "synthetic-a2");
+        assert!(offer[0]["refreshToken"] == "synthetic-r2");
+        let expected: Vec<_> = if already_unsaved {
+            vec!["synthetic-r0", "synthetic-r1", "synthetic-r2"]
+        } else {
+            vec!["synthetic-r0", "synthetic-r2"]
+        };
+        let chain: Vec<_> = expected
+            .into_iter()
+            .map(|rt| record_fingerprint(&original, Some(rt)).unwrap())
+            .collect();
+        assert!(
+            offer[0]["chain"] == json!(chain),
+            "full originating lineage survives"
+        );
+        let refreshes: Vec<_> = events(&mut announced)
+            .into_iter()
+            .filter(|(name, _)| name == REFRESHED_EVENT)
+            .collect();
+        assert_eq!(
+            refreshes,
+            vec![(REFRESHED_EVENT.into(), json!({"accountId":"g"}))]
+        );
+        let posts = test_token_posts();
+        assert_eq!(posts.len(), if already_unsaved { 2 } else { 1 });
+        assert!(field(&posts[0], "refresh_token").as_deref() == Some("synthetic-r0"));
+        if already_unsaved {
+            assert!(field(&posts[1], "refresh_token").as_deref() == Some("synthetic-r1"));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_survives_unrelated_write_saved() {
+        rotation_after_other_account_change(false, false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_survives_unrelated_write_unsaved() {
+        rotation_after_other_account_change(true, false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_survives_known_predecessor_save() {
+        rotation_after_other_account_change(true, true).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_survives_unreadable_revalidation() {
+        let mut original = fresh_grant("synthetic-r0", "synthetic-expired");
+        original["oauth2ExpiresAt"] = json!(1);
+        let mut rig = FreshRig::new(original.clone());
+        let _mock = test_token_mock(vec![granted("synthetic-a1", Some("synthetic-r1"))]);
+        let reached = rig.hook(&REFRESH_RESULT_HOOK, true);
+        let pending = rig.access();
+        recv(&reached);
+        rig.quiet_notice();
+        assert!(recv(&rig.request(
+            "credentials.save",
+            json!({"records":{"b":"{\"id\":\"b\"}"}})
+        ))
+        .error
+        .is_none());
+        rig.finish_quiet();
+        // A malformed synthetic record fails before any keyring fallback.
+        store(
+            &rig.state,
+            &[("g", &json!({"authType":"oauth2","imapPort":"malformed"}))],
+        );
+        let mut announced = rig.state.events.subscribe();
+        rig.release_all();
+        assert!(stale(&recv(&pending)));
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"));
+        assert!(rig.state.tokens.unsaved().is_empty());
+        assert!(events(&mut announced)
+            .into_iter()
+            .all(|(name, _)| name != REFRESHED_EVENT));
+        store(&rig.state, &[("g", &original)]);
+        let state = Arc::clone(&rig.state);
+        recv(&rig.spawn(async move { recheck_unsaved(&state).await }));
+        assert_eq!(
+            rig.state.tokens.unsaved().len(),
+            1,
+            "later quiet recheck recovers the sole rotated pair"
+        );
+        assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-a1"));
+        assert_eq!(test_token_posts().len(), 1, "consumed R0 is never replayed");
+        assert_eq!(
+            events(&mut announced)
+                .into_iter()
+                .filter(|(name, _)| name == REFRESHED_EVENT)
+                .collect::<Vec<_>>(),
+            vec![(REFRESHED_EVENT.into(), json!({"accountId":"g"}))]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_waits_for_current_generation() {
+        let mut original = fresh_grant("synthetic-r0", "synthetic-expired");
+        original["oauth2ExpiresAt"] = json!(1);
+        let mut rig = FreshRig::new(original);
+        let _mock = test_token_mock(vec![granted("synthetic-a1", Some("synthetic-r1"))]);
+        let reached = rig.hook(&REFRESH_RESULT_HOOK, true);
+        let pending = rig.access();
+        recv(&reached);
+        rig.quiet_notice();
+        assert!(recv(&rig.request(
+            "credentials.save",
+            json!({"records":{"b":"{\"id\":\"b\"}"}})
+        ))
+        .error
+        .is_none());
+        rig.finish_quiet();
+        let reread = rig.hook(&RECORD_READ_HOOK, true);
+        rig.releases.remove(0);
+        recv(&reread);
+        let current_recheck = rig.hook(&RECORD_READ_HOOK, true);
+        rig.quiet_notice();
+        assert!(recv(&rig.request(
+            "credentials.save",
+            json!({"records":{"c":"{\"id\":\"c\"}"}})
+        ))
+        .error
+        .is_none());
+        recv(&current_recheck);
+        let mut announced = rig.state.events.subscribe();
+        rig.releases.remove(0);
+        assert!(stale(&recv(&pending)));
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"));
+        assert!(rig.state.tokens.unsaved().is_empty());
+        let initial_posts = test_token_posts();
+        assert_eq!(initial_posts.len(), 1);
+        assert!(field(&initial_posts[0], "refresh_token").as_deref() == Some("synthetic-r0"));
+        assert!(events(&mut announced)
+            .into_iter()
+            .all(|(name, _)| name != REFRESHED_EVENT));
+        rig.release_all();
+        rig.finish_quiet();
+        assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-a1"));
+        assert!(
+            test_token_posts().is_empty(),
+            "recovery must not POST a consumed refresh token again"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_cannot_cross_changed_grant_or_removal() {
+        for change in [
+            "oauth2RefreshToken",
+            "oauth2ClientId",
+            "oauth2CustomClientId",
+            "oauth2TenantId",
+            "oauth2Provider",
+            "email",
+            "oauth2Transport",
+            "authType",
+            "delete",
+        ] {
+            let mut original = fresh_grant("synthetic-r0", "synthetic-expired");
+            original["oauth2ExpiresAt"] = json!(1);
+            let mut rig = FreshRig::new(original.clone());
+            let _mock = test_token_mock(vec![granted(
+                "synthetic-obsolete",
+                Some("synthetic-obsolete-rt"),
+            )]);
+            let reached = rig.hook(&REFRESH_RESULT_HOOK, true);
+            let state = Arc::clone(&rig.state);
+            let pending = rig.spawn(async move { resolve(&state, "g", Read::Quiet).await });
+            recv(&reached);
+            let mut new = fresh_grant("synthetic-r0", "synthetic-new-token");
+            new[change] = json!(match change {
+                "oauth2Transport" => "graph",
+                "authType" => "password",
+                "email" => "new@x.test",
+                _ => "synthetic-new-grant",
+            });
+            let (method, params) = changed_request(&new, change == "delete");
+            let mut announced = rig.state.events.subscribe();
+            rig.quiet_notice();
+            assert!(recv(&rig.request(method, params)).error.is_none());
+            rig.finish_quiet();
+            rig.release_all();
+            assert!(
+                recv(&pending).is_err(),
+                "an old consumer cannot mix changed config and old response"
+            );
+            assert!(
+                rig.state
+                    .tokens
+                    .cached("g", rig.state.tokens.now())
+                    .as_deref()
+                    != Some("synthetic-obsolete")
+            );
+            assert!(rig.state.tokens.unsaved().is_empty());
+            assert!(events(&mut announced)
+                .into_iter()
+                .all(|(name, _)| name != REFRESHED_EVENT));
+            if change == "delete" {
+                assert!(recv(&rig.access()).is_err());
+                let replacement = fresh_grant("synthetic-recreated", "synthetic-new-token");
+                rig.quiet_notice();
+                assert!(recv(&rig.request(
+                    "credentials.save",
+                    json!({"records":{"g":replacement.to_string()}})
+                ))
+                .error
+                .is_none());
+                rig.finish_quiet();
+            }
+            if change == "authType" {
+                assert!(recv(&rig.access()).ok().flatten().is_none());
+            } else {
+                assert!(
+                    recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-new-token")
+                );
+            }
+            assert_eq!(test_token_posts().len(), 1);
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_survives_stale_queued_recheck() {
+        let mut original = fresh_grant("synthetic-r0", "synthetic-expired");
+        original["oauth2ExpiresAt"] = json!(1);
+        let mut rig = FreshRig::new(original.clone());
+        let _mock = test_token_mock(vec![granted("synthetic-a1", Some("synthetic-r1"))]);
+        let reached = rig.hook(&REFRESH_RESULT_HOOK, true);
+        let pending = rig.access();
+        recv(&reached);
+        rig.quiet_notice();
+        assert!(recv(&rig.request(
+            "credentials.save",
+            json!({"records":{"b":"{\"id\":\"b\"}"}})
+        ))
+        .error
+        .is_none());
+        rig.finish_quiet();
+        store(&rig.state, &[("g", &json!({"imapPort":"malformed"}))]);
+        rig.release_all();
+        assert!(stale(&recv(&pending)));
+        store(&rig.state, &[("g", &original)]);
+        let flight = rig.state.tokens.flight("g");
+        let held = flight.lock().await;
+        let read = rig.hook(&RECORD_READ_HOOK, false);
+        let state = Arc::clone(&rig.state);
+        let stale_recheck = rig.spawn(async move { recheck_unsaved(&state).await });
+        recv(&read);
+        let current = rig.hook(&RECORD_READ_HOOK, true);
+        rig.quiet_notice();
+        assert!(recv(&rig.request(
+            "credentials.save",
+            json!({"records":{"c":"{\"id\":\"c\"}"}})
+        ))
+        .error
+        .is_none());
+        recv(&current);
+        drop(held);
+        recv(&stale_recheck);
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"));
+        assert!(rig.state.tokens.unsaved().is_empty());
+        let initial_posts = test_token_posts();
+        assert_eq!(initial_posts.len(), 1);
+        assert!(field(&initial_posts[0], "refresh_token").as_deref() == Some("synthetic-r0"));
+        rig.release_all();
+        rig.finish_quiet();
+        assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-a1"));
+        assert!(rig.state.tokens.unsaved()[0]["refreshToken"] == "synthetic-r1");
+        assert!(
+            test_token_posts().is_empty(),
+            "recovery must not POST a consumed refresh token again"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_recovers_after_cancelled_retirement_waiter() {
+        let mut original = fresh_grant("synthetic-r0", "synthetic-expired");
+        original["oauth2ExpiresAt"] = json!(1);
+        let mut rig = FreshRig::new(original);
+        let _mock = test_token_mock(vec![granted("synthetic-a1", Some("synthetic-r1"))]);
+        let mut announced = rig.state.events.subscribe();
+        let reached = rig.hook(&RETIREMENT_HOOK, true);
+        let pending = rig.access();
+        recv(&reached);
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"));
+        assert!(rig.state.tokens.unsaved().is_empty());
+        let (task, done) = rig.tasks.pop().unwrap();
+        task.abort();
+        rig.release_all();
+        recv(&done);
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(pending.recv_timeout(Duration::from_secs(5)).is_err());
+        let recovery_retirement = rig.hook(&RETIREMENT_HOOK, true);
+        let recovered = rig.access();
+        recv(&recovery_retirement);
+        assert!(!rig.state.tokens.has_trusted_token_for_test("g"));
+        assert!(rig.state.tokens.unsaved().is_empty());
+        assert!(events(&mut announced).is_empty());
+        rig.release_all();
+        assert!(recv(&recovered).ok().flatten().as_deref() == Some("synthetic-a1"));
+        assert!(rig.state.tokens.unsaved()[0]["refreshToken"] == "synthetic-r1");
+        assert_eq!(test_token_posts().len(), 1);
+        assert_eq!(
+            events(&mut announced),
+            vec![(REFRESHED_EVENT.into(), json!({"accountId":"g"}))]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_rotation_does_not_acknowledge_changed_same_grant() {
+        for later in [false, true] {
+            let mut original = fresh_grant("synthetic-r0", "synthetic-expired");
+            original["oauth2ExpiresAt"] = json!(1);
+            let mut rig = FreshRig::new(original.clone());
+            let _mock = test_token_mock(vec![granted("synthetic-a1", Some("synthetic-r1"))]);
+            let reached = rig.hook(&RETIREMENT_HOOK, true);
+            let pending = rig.access();
+            recv(&reached);
+            let expiry = rig
+                .state
+                .tokens
+                .entries()
+                .get("g")
+                .unwrap()
+                .pending
+                .as_ref()
+                .unwrap()
+                .entry
+                .expires_at
+                + if later { 3_600_000 } else { 0 };
+            let changed = gmail(
+                json!({"id":"g","oauth2RefreshToken":"synthetic-r0","oauth2AccessToken":"synthetic-a1","oauth2ExpiresAt":expiry}),
+            );
+            rig.quiet_notice();
+            assert!(recv(&rig.request(
+                "credentials.save",
+                json!({"records":{"g":changed.to_string()}})
+            ))
+            .error
+            .is_none());
+            rig.release_all();
+            assert!(stale(&recv(&pending)));
+            rig.finish_quiet();
+            assert!(rig.state.tokens.unsaved().is_empty());
+            assert!(
+                stale(&recv(&rig.access())),
+                "ambiguous tuple must not replace the retained rotation"
+            );
+            let initial_posts = test_token_posts();
+            assert_eq!(initial_posts.len(), 1);
+            assert!(field(&initial_posts[0], "refresh_token").as_deref() == Some("synthetic-r0"));
+            store(&rig.state, &[("g", &original)]);
+            assert!(recv(&rig.access()).ok().flatten().as_deref() == Some("synthetic-a1"));
+            assert!(rig.state.tokens.unsaved()[0]["refreshToken"] == "synthetic-r1");
+            assert!(
+                test_token_posts().is_empty(),
+                "recovery must not POST a consumed refresh token again"
+            );
+        }
+    }
+
     // Every test here takes `credentials::test_env_lock` first and the token
     // mock's lock second, the order every other test that takes both uses.
 
@@ -1515,7 +2116,10 @@ mod tests {
 
     /// The credentials blob the app writes, in the debug file bypass.
     fn store(s: &Arc<DaemonState>, records: &[(&str, &Value)]) {
-        let blob: HashMap<String, String> = records.iter().map(|(id, r)| (id.to_string(), r.to_string())).collect();
+        let blob: HashMap<String, String> = records
+            .iter()
+            .map(|(id, r)| (id.to_string(), r.to_string()))
+            .collect();
         let path = s.app_dir.join("credentials.json");
         std::fs::write(&path, serde_json::to_string(&blob).unwrap()).unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
@@ -1549,7 +2153,9 @@ mod tests {
     }
 
     fn field(body: &str, key: &str) -> Option<String> {
-        url::form_urlencoded::parse(body.as_bytes()).find(|(k, _)| k == key).map(|(_, v)| v.to_string())
+        url::form_urlencoded::parse(body.as_bytes())
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.to_string())
     }
 
     fn events(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>) -> Vec<(String, Value)> {
@@ -1649,12 +2255,28 @@ mod tests {
         let posts = test_token_posts();
 
         assert_eq!(token.ok().flatten().as_deref(), Some("at-fresh-0002"));
-        assert_eq!(again.ok().flatten().as_deref(), Some("at-fresh-0002"), "held, not refreshed twice");
+        assert_eq!(
+            again.ok().flatten().as_deref(),
+            Some("at-fresh-0002"),
+            "held, not refreshed twice"
+        );
         assert_eq!(posts.len(), 1, "{posts:?}");
-        assert_eq!(field(&posts[0], "grant_type").as_deref(), Some("refresh_token"));
-        assert_eq!(field(&posts[0], "refresh_token").as_deref(), Some("rt-stored-0001"));
-        assert_eq!(field(&posts[0], "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
-        assert_eq!(events(&mut rx), vec![(REFRESHED_EVENT.to_string(), json!({"accountId": "g1"}))]);
+        assert_eq!(
+            field(&posts[0], "grant_type").as_deref(),
+            Some("refresh_token")
+        );
+        assert_eq!(
+            field(&posts[0], "refresh_token").as_deref(),
+            Some("rt-stored-0001")
+        );
+        assert_eq!(
+            field(&posts[0], "client_id").as_deref(),
+            Some(GOOGLE_THUNDERBIRD_CLIENT_ID)
+        );
+        assert_eq!(
+            events(&mut rx),
+            vec![(REFRESHED_EVENT.to_string(), json!({"accountId": "g1"}))]
+        );
     }
 
     #[tokio::test]
@@ -1692,7 +2314,10 @@ mod tests {
         let no_refresh = gmail(json!({"id": "n1", "oauth2RefreshToken": ""}));
         let mut no_expiry = gmail(json!({"id": "e1"}));
         no_expiry.as_object_mut().unwrap().remove("oauth2ExpiresAt");
-        store(&s, &[("p1", &password), ("n1", &no_refresh), ("e1", &no_expiry)]);
+        store(
+            &s,
+            &[("p1", &password), ("n1", &no_refresh), ("e1", &no_expiry)],
+        );
 
         let p = access_token(&s, "p1", Read::Quiet).await;
         let n = access_token(&s, "n1", Read::Quiet).await;
@@ -1700,8 +2325,16 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         assert!(matches!(p, Ok(None)), "password account");
-        assert_eq!(n.ok().flatten().as_deref(), Some("at-stored-0001"), "no refresh token");
-        assert_eq!(e.ok().flatten().as_deref(), Some("at-stored-0001"), "no expiry on record");
+        assert_eq!(
+            n.ok().flatten().as_deref(),
+            Some("at-stored-0001"),
+            "no refresh token"
+        );
+        assert_eq!(
+            e.ok().flatten().as_deref(),
+            Some("at-stored-0001"),
+            "no expiry on record"
+        );
         assert!(test_token_posts().is_empty());
     }
 
@@ -1744,22 +2377,38 @@ mod tests {
         let mut rx = s.events.subscribe();
         store(&s, &[("g1", &gmail(json!({})))]);
 
-        let failed = access_token(&s, "g1", Read::Quiet).await.expect_err("an expired token that was refused");
-        let again = access_token(&s, "g1", Read::Quiet).await.expect_err("still refused");
+        let failed = access_token(&s, "g1", Read::Quiet)
+            .await
+            .expect_err("an expired token that was refused");
+        let again = access_token(&s, "g1", Read::Quiet)
+            .await
+            .expect_err("still refused");
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         assert_eq!(failed.kind, FailKind::Refused);
-        assert!(failed.message.contains("invalid_grant"), "{}", failed.message);
+        assert!(
+            failed.message.contains("invalid_grant"),
+            "{}",
+            failed.message
+        );
         for secret in ["rt-stored-0001", "at-stored-0001"] {
             assert!(!failed.message.contains(secret), "{}", failed.message);
             assert!(!again.message.contains(secret), "{}", again.message);
-            let logged = String::from_utf8_lossy(&logs.lock().unwrap_or_else(|p| p.into_inner())).to_string();
+            let logged = String::from_utf8_lossy(&logs.lock().unwrap_or_else(|p| p.into_inner()))
+                .to_string();
             assert!(!logged.contains(secret), "a token reached the log");
         }
         assert!(!failed.message.contains('\u{2014}'), "{}", failed.message);
         assert_eq!(failed.fallback.as_deref(), Some("at-stored-0001"));
-        assert!(events(&mut rx).is_empty(), "nothing announced for a failure");
-        assert_eq!(test_token_posts().len(), 1, "a refusal is not retried at once");
+        assert!(
+            events(&mut rx).is_empty(),
+            "nothing announced for a failure"
+        );
+        assert_eq!(
+            test_token_posts().len(),
+            1,
+            "a refusal is not retried at once"
+        );
     }
 
     #[tokio::test]
@@ -1784,7 +2433,11 @@ mod tests {
 
         assert_eq!(first.ok().flatten().as_deref(), Some("at-stored-0001"));
         assert_eq!(second.ok().flatten().as_deref(), Some("at-stored-0001"));
-        assert_eq!(test_token_posts().len(), 1, "no second round trip inside the cooldown");
+        assert_eq!(
+            test_token_posts().len(),
+            1,
+            "no second round trip inside the cooldown"
+        );
     }
 
     /// The app writes its whole blob from its own copy, which still holds the
@@ -1843,10 +2496,19 @@ mod tests {
         let posts = test_token_posts();
 
         assert_eq!(signed_in.ok().flatten().as_deref(), Some("at-signin-0007"));
-        assert_eq!(after_rejection.ok().flatten().as_deref(), Some("at-after-0007"));
+        assert_eq!(
+            after_rejection.ok().flatten().as_deref(),
+            Some("at-after-0007")
+        );
         assert_eq!(posts.len(), 2, "{posts:?}");
-        assert_eq!(field(&posts[1], "refresh_token").as_deref(), Some("rt-signin-0007"));
-        assert_eq!(field(&posts[1], "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        assert_eq!(
+            field(&posts[1], "refresh_token").as_deref(),
+            Some("rt-signin-0007")
+        );
+        assert_eq!(
+            field(&posts[1], "client_id").as_deref(),
+            Some(GOOGLE_THUNDERBIRD_CLIENT_ID)
+        );
     }
 
     /// The pair is offered for the app to save until a read of the stored
@@ -1865,12 +2527,21 @@ mod tests {
         let offered = s.tokens.unsaved();
         recheck_unsaved(&s).await;
         let after_failed_save = s.tokens.unsaved();
-        let expires_at = offered.first().map(|o| o["expiresAt"].clone()).unwrap_or(Value::Null);
-        store(&s, &[("g1", &gmail(json!({
-            "oauth2AccessToken": "at-fresh-0008",
-            "oauth2RefreshToken": "rt-rotated-0008",
-            "oauth2ExpiresAt": expires_at,
-        })))]);
+        let expires_at = offered
+            .first()
+            .map(|o| o["expiresAt"].clone())
+            .unwrap_or(Value::Null);
+        store(
+            &s,
+            &[(
+                "g1",
+                &gmail(json!({
+                    "oauth2AccessToken": "at-fresh-0008",
+                    "oauth2RefreshToken": "rt-rotated-0008",
+                    "oauth2ExpiresAt": expires_at,
+                })),
+            )],
+        );
         s.tokens.credentials_changed();
         recheck_unsaved(&s).await;
         let after_save = s.tokens.unsaved();
@@ -1879,11 +2550,25 @@ mod tests {
         assert_eq!(offered.len(), 1, "{offered:?}");
         let mut keys: Vec<&String> = offered[0].as_object().unwrap().keys().collect();
         keys.sort();
-        assert_eq!(keys, vec!["accessToken", "accountId", "chain", "expiresAt", "refreshToken"], "never the client id");
+        assert_eq!(
+            keys,
+            vec![
+                "accessToken",
+                "accountId",
+                "chain",
+                "expiresAt",
+                "refreshToken"
+            ],
+            "never the client id"
+        );
         assert_eq!(offered[0]["accountId"], json!("g1"));
         assert_eq!(offered[0]["accessToken"], json!("at-fresh-0008"));
         assert_eq!(offered[0]["refreshToken"], json!("rt-rotated-0008"));
-        assert_eq!(after_failed_save.len(), 1, "the record does not show it yet");
+        assert_eq!(
+            after_failed_save.len(),
+            1,
+            "the record does not show it yet"
+        );
         assert!(after_save.is_empty(), "{after_save:?}");
     }
 
@@ -1913,7 +2598,10 @@ mod tests {
         inject(&s, "graph_list_folders", &mut graph_old).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
-        assert_eq!(object["account"]["oauth2AccessToken"], json!("at-fresh-0009"));
+        assert_eq!(
+            object["account"]["oauth2AccessToken"],
+            json!("at-fresh-0009")
+        );
         assert_eq!(object["mailbox"], json!("INBOX"), "nothing else touched");
         let parsed: Value = serde_json::from_str(text["accountJson"].as_str().unwrap()).unwrap();
         assert_eq!(parsed["oauth2AccessToken"], json!("at-fresh-0009"));
@@ -1935,7 +2623,16 @@ mod tests {
         let _mock = test_token_mock(Vec::new());
         let s = st();
         let password = json!({"id": "p1", "email": "p@x.test", "imapHost": "imap.x.test", "authType": "password", "password": "pw"});
-        store(&s, &[("g1", &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000}))), ("p1", &password)]);
+        store(
+            &s,
+            &[
+                (
+                    "g1",
+                    &gmail(json!({"oauth2ExpiresAt": now_ms() + 3_600_000})),
+                ),
+                ("p1", &password),
+            ],
+        );
         let oauth = |id: Value, email: &str| json!({"id": id, "email": email, "authType": "oauth2", "oauth2AccessToken": "from-the-app"});
 
         let mut new_account = json!({"account": oauth(json!("not-stored"), "new@gmail.test")});
@@ -1944,19 +2641,43 @@ mod tests {
         let mut no_id = json!({"sourceAccount": oauth(Value::Null, "me@gmail.test").to_string()});
         let mut not_graph = json!({"accountId": "g1", "accessToken": "from-the-app"});
         let injected = [
-            inject(&s, "imap_test_connection", &mut new_account).await.injected.len(),
-            inject(&s, "imap_get_mailboxes", &mut other_address).await.injected.len(),
-            inject(&s, "imap_get_mailboxes", &mut password_account).await.injected.len(),
-            inject(&s, "start_migration", &mut no_id).await.injected.len(),
-            inject(&s, "abd.set_token", &mut not_graph).await.injected.len(),
+            inject(&s, "imap_test_connection", &mut new_account)
+                .await
+                .injected
+                .len(),
+            inject(&s, "imap_get_mailboxes", &mut other_address)
+                .await
+                .injected
+                .len(),
+            inject(&s, "imap_get_mailboxes", &mut password_account)
+                .await
+                .injected
+                .len(),
+            inject(&s, "start_migration", &mut no_id)
+                .await
+                .injected
+                .len(),
+            inject(&s, "abd.set_token", &mut not_graph)
+                .await
+                .injected
+                .len(),
         ];
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         assert_eq!(injected, [0, 0, 0, 0, 0]);
-        assert_eq!(new_account["account"]["oauth2AccessToken"], json!("from-the-app"));
-        assert_eq!(other_address["account"]["oauth2AccessToken"], json!("from-the-app"));
+        assert_eq!(
+            new_account["account"]["oauth2AccessToken"],
+            json!("from-the-app")
+        );
+        assert_eq!(
+            other_address["account"]["oauth2AccessToken"],
+            json!("from-the-app")
+        );
         assert_eq!(password_account["account"]["password"], json!("pw"));
-        assert!(no_id["sourceAccount"].as_str().unwrap().contains("from-the-app"));
+        assert!(no_id["sourceAccount"]
+            .as_str()
+            .unwrap()
+            .contains("from-the-app"));
         assert_eq!(not_graph["accessToken"], json!("from-the-app"));
     }
 
@@ -1982,7 +2703,10 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
         assert_eq!(injected.len(), 1);
-        assert_eq!(params["targets"][0]["account"]["oauth2AccessToken"], json!("at-search-0012"));
+        assert_eq!(
+            params["targets"][0]["account"]["oauth2AccessToken"],
+            json!("at-search-0012")
+        );
         assert_eq!(params["targets"][1]["account"]["password"], json!("pw"));
         assert!(params["targets"][2]["account"].is_null());
     }
@@ -2016,8 +2740,14 @@ mod tests {
         inject(&s, "imap_get_mailboxes", &mut stale).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
-        assert_eq!(reconnect["account"]["oauth2AccessToken"], json!("at-just-signed-in"));
-        assert_eq!(stale["account"]["oauth2AccessToken"], json!("at-stored-0001"));
+        assert_eq!(
+            reconnect["account"]["oauth2AccessToken"],
+            json!("at-just-signed-in")
+        );
+        assert_eq!(
+            stale["account"]["oauth2AccessToken"],
+            json!("at-stored-0001")
+        );
     }
 
     /// A server that refuses the daemon's token: the next request refreshes
@@ -2042,17 +2772,35 @@ mod tests {
 
         let mut first = request();
         let injected = inject(&s, "imap_get_mailboxes", &mut first).await.injected;
-        note_refusal(&s, &injected, "Login failed for me@gmail.test: something else");
+        note_refusal(
+            &s,
+            &injected,
+            "Login failed for me@gmail.test: something else",
+        );
         let mut unrelated = request();
         inject(&s, "imap_get_mailboxes", &mut unrelated).await;
-        note_refusal(&s, &injected, "XOAUTH2 auth failed for me@gmail.test: [AUTHENTICATIONFAILED]");
+        note_refusal(
+            &s,
+            &injected,
+            "XOAUTH2 auth failed for me@gmail.test: [AUTHENTICATIONFAILED]",
+        );
         let mut second = request();
         inject(&s, "imap_get_mailboxes", &mut second).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
-        assert_eq!(first["account"]["oauth2AccessToken"], json!("at-stored-0001"));
-        assert_eq!(unrelated["account"]["oauth2AccessToken"], json!("at-stored-0001"), "only a sign-in refusal counts");
-        assert_eq!(second["account"]["oauth2AccessToken"], json!("at-renewed-0010"));
+        assert_eq!(
+            first["account"]["oauth2AccessToken"],
+            json!("at-stored-0001")
+        );
+        assert_eq!(
+            unrelated["account"]["oauth2AccessToken"],
+            json!("at-stored-0001"),
+            "only a sign-in refusal counts"
+        );
+        assert_eq!(
+            second["account"]["oauth2AccessToken"],
+            json!("at-renewed-0010")
+        );
         assert_eq!(test_token_posts().len(), 1);
     }
 
@@ -2075,23 +2823,44 @@ mod tests {
         });
         store(&s, &[("o1", &outlook)]);
 
-        let listed = crate::server::handle_request_for_test(&s, "graph_set_read", json!({"accountId": "o1", "messageId": "m1", "isRead": true})).await;
-        let taken = crate::server::handle_request_for_test(&s, "oauth2.take_refreshed", json!({})).await;
-        let changed = crate::server::handle_request_for_test(&s, "oauth2.credentials_changed", json!({})).await;
+        let listed = crate::server::handle_request_for_test(
+            &s,
+            "graph_set_read",
+            json!({"accountId": "o1", "messageId": "m1", "isRead": true}),
+        )
+        .await;
+        let taken =
+            crate::server::handle_request_for_test(&s, "oauth2.take_refreshed", json!({})).await;
+        let changed =
+            crate::server::handle_request_for_test(&s, "oauth2.credentials_changed", json!({}))
+                .await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
         let requests = crate::handlers::graph::test_graph_requests();
         let posts = test_token_posts();
 
         assert!(listed.error.is_none(), "{:?}", listed.error);
         assert_eq!(requests.len(), 1, "{requests:?}");
-        assert_eq!(requests[0].headers.get("authorization").map(String::as_str), Some("Bearer at-graph-0011"));
-        assert!(field(&posts[0], "scope").is_some_and(|sc| sc.contains("Mail.ReadWrite")), "Graph scopes: {posts:?}");
+        assert_eq!(
+            requests[0].headers.get("authorization").map(String::as_str),
+            Some("Bearer at-graph-0011")
+        );
+        assert!(
+            field(&posts[0], "scope").is_some_and(|sc| sc.contains("Mail.ReadWrite")),
+            "Graph scopes: {posts:?}"
+        );
         let tokens = taken.result.expect("take_refreshed")["tokens"].clone();
-        assert_eq!(tokens, json!([{
-            "accountId": "o1", "accessToken": "at-graph-0011", "refreshToken": "rt-graph-0011",
-            "expiresAt": tokens[0]["expiresAt"], "chain": tokens[0]["chain"],
-        }]));
-        assert_eq!(tokens[0]["chain"].as_array().map(Vec::len), Some(2), "the record's refresh token and the rotated one");
+        assert_eq!(
+            tokens,
+            json!([{
+                "accountId": "o1", "accessToken": "at-graph-0011", "refreshToken": "rt-graph-0011",
+                "expiresAt": tokens[0]["expiresAt"], "chain": tokens[0]["chain"],
+            }])
+        );
+        assert_eq!(
+            tokens[0]["chain"].as_array().map(Vec::len),
+            Some(2),
+            "the record's refresh token and the rotated one"
+        );
         assert_eq!(changed.result, Some(json!({"ok": true})));
     }
 
@@ -2129,12 +2898,25 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
         let posts = test_token_posts();
 
-        assert_eq!(signed_in.ok().flatten().as_deref(), Some("at-b-signin-0013"));
-        assert!(offered.is_empty(), "the old grant's pair must not be saved over the sign-in: {}", offered.len());
+        assert_eq!(
+            signed_in.ok().flatten().as_deref(),
+            Some("at-b-signin-0013")
+        );
+        assert!(
+            offered.is_empty(),
+            "the old grant's pair must not be saved over the sign-in: {}",
+            offered.len()
+        );
         assert_eq!(renewed.ok().flatten().as_deref(), Some("at-b-fresh-0013"));
         assert_eq!(posts.len(), 2, "{}", posts.len());
-        assert_eq!(field(&posts[1], "refresh_token").as_deref(), Some("rt-b-0013"));
-        assert_eq!(field(&posts[1], "client_id").as_deref(), Some(GOOGLE_THUNDERBIRD_CLIENT_ID));
+        assert_eq!(
+            field(&posts[1], "refresh_token").as_deref(),
+            Some("rt-b-0013")
+        );
+        assert_eq!(
+            field(&posts[1], "client_id").as_deref(),
+            Some(GOOGLE_THUNDERBIRD_CLIENT_ID)
+        );
     }
 
     /// A Reconnect that moves an Outlook account from IMAP to Graph refreshes
@@ -2163,10 +2945,16 @@ mod tests {
         };
         store(&s, &[("o1", &outlook(json!({})))]);
         let _ = access_token(&s, "o1", Read::Quiet).await;
-        store(&s, &[("o1", &outlook(json!({
-            "oauth2Transport": "graph", "oauth2AccessToken": "at-graph-signin-0014",
-            "oauth2RefreshToken": "rt-graph-0014", "oauth2ExpiresAt": now_ms() + 1_800_000,
-        })))]);
+        store(
+            &s,
+            &[(
+                "o1",
+                &outlook(json!({
+                    "oauth2Transport": "graph", "oauth2AccessToken": "at-graph-signin-0014",
+                    "oauth2RefreshToken": "rt-graph-0014", "oauth2ExpiresAt": now_ms() + 1_800_000,
+                })),
+            )],
+        );
         s.tokens.credentials_changed();
         let signed_in = access_token(&s, "o1", Read::Quiet).await;
         s.tokens.rejected("o1", "at-graph-signin-0014");
@@ -2174,11 +2962,20 @@ mod tests {
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
         let posts = test_token_posts();
 
-        assert_eq!(signed_in.ok().flatten().as_deref(), Some("at-graph-signin-0014"));
+        assert_eq!(
+            signed_in.ok().flatten().as_deref(),
+            Some("at-graph-signin-0014")
+        );
         assert_eq!(posts.len(), 2, "{}", posts.len());
         let scope = field(&posts[1], "scope").unwrap_or_default();
-        assert!(scope.contains("Mail.ReadWrite") && !scope.contains("IMAP"), "{scope}");
-        assert_eq!(field(&posts[1], "refresh_token").as_deref(), Some("rt-graph-0014"));
+        assert!(
+            scope.contains("Mail.ReadWrite") && !scope.contains("IMAP"),
+            "{scope}"
+        );
+        assert_eq!(
+            field(&posts[1], "refresh_token").as_deref(),
+            Some("rt-graph-0014")
+        );
     }
 
     /// The app's stale write after a refresh that rotated the refresh token is
@@ -2200,9 +2997,16 @@ mod tests {
         let after_write = access_token(&s, "g1", Read::Quiet).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
-        assert_eq!(after_write.ok().flatten().as_deref(), Some("at-rotated-0015"));
+        assert_eq!(
+            after_write.ok().flatten().as_deref(),
+            Some("at-rotated-0015")
+        );
         assert_eq!(test_token_posts().len(), 1);
-        assert_eq!(s.tokens.unsaved().len(), 1, "still offered for the app to save");
+        assert_eq!(
+            s.tokens.unsaved().len(),
+            1,
+            "still offered for the app to save"
+        );
     }
 
     /// A server that refuses a token that is valid (IMAP turned off for the
@@ -2228,9 +3032,16 @@ mod tests {
         );
 
         for _ in 0..200 {
-            let mut request = json!({"account": {"id": "g1", "email": "me@gmail.test", "authType": "oauth2"}});
-            let injected = inject(&s, "imap_get_mailboxes", &mut request).await.injected;
-            note_refusal(&s, &injected, "XOAUTH2 auth failed for me@gmail.test: [AUTHENTICATIONFAILED]");
+            let mut request =
+                json!({"account": {"id": "g1", "email": "me@gmail.test", "authType": "oauth2"}});
+            let injected = inject(&s, "imap_get_mailboxes", &mut request)
+                .await
+                .injected;
+            note_refusal(
+                &s,
+                &injected,
+                "XOAUTH2 auth failed for me@gmail.test: [AUTHENTICATIONFAILED]",
+            );
         }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
@@ -2253,14 +3064,31 @@ mod tests {
         store(&s, &[("p1", &password)]);
         let call = json!({"accountId": "o9", "accountEmail": "o9@outlook.test", "messageId": "m1", "isRead": true});
 
-        let no_record = crate::server::handle_request_for_test(&s, "graph_set_read", call.clone()).await;
-        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", s.app_dir.join("not-there.json"));
+        let no_record =
+            crate::server::handle_request_for_test(&s, "graph_set_read", call.clone()).await;
+        std::env::set_var(
+            "MAILVAULT_TEST_CREDENTIALS",
+            s.app_dir.join("not-there.json"),
+        );
         let unreadable = crate::server::handle_request_for_test(&s, "graph_set_read", call).await;
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
 
-        let message = |r: &crate::ipc::RpcResponse| r.error.as_ref().map(|e| e.message.clone()).unwrap_or_default();
-        assert!(message(&no_record).starts_with("E_OAUTH_SIGN_IN_NEEDED:"), "{}", message(&no_record));
-        assert!(message(&unreadable).starts_with("E_OAUTH_KEYCHAIN_UNAVAILABLE:"), "{}", message(&unreadable));
+        let message = |r: &crate::ipc::RpcResponse| {
+            r.error
+                .as_ref()
+                .map(|e| e.message.clone())
+                .unwrap_or_default()
+        };
+        assert!(
+            message(&no_record).starts_with("E_OAUTH_SIGN_IN_NEEDED:"),
+            "{}",
+            message(&no_record)
+        );
+        assert!(
+            message(&unreadable).starts_with("E_OAUTH_KEYCHAIN_UNAVAILABLE:"),
+            "{}",
+            message(&unreadable)
+        );
     }
 
     /// The pairs offered to the app name the grants they belong to, by a
@@ -2286,8 +3114,16 @@ mod tests {
         let offered = s.tokens.unsaved();
         assert_eq!(offered.len(), 1);
         let chain = offered[0]["chain"].as_array().cloned().unwrap_or_default();
-        assert!(chain.contains(&json!("7cb5dadde1643c0110dc129996d0d6278fb0844eb6b2e801d1db96af59d65734")), "{chain:?}");
-        assert!(!offered[0].to_string().contains("cid-x"), "no client id is handed over");
+        assert!(
+            chain.contains(&json!(
+                "7cb5dadde1643c0110dc129996d0d6278fb0844eb6b2e801d1db96af59d65734"
+            )),
+            "{chain:?}"
+        );
+        assert!(
+            !offered[0].to_string().contains("cid-x"),
+            "no client id is handed over"
+        );
     }
     #[tokio::test]
     async fn backup_controls_reject_account_payloads_before_credentials() {
@@ -2423,5 +3259,4 @@ mod tests {
     async fn compose_prep_reply_rejects_oauth_fields_before_credentials() {
         compose_prep_rejected_fields("compose.reply_context").await;
     }
-
 }

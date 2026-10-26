@@ -453,6 +453,8 @@ function isSnap() {
 
 export function clearCredentialsCache() {
   connectionEpoch += 1;
+  refreshing = null;
+  refreshAgain = false;
   keychainCache = null;
   keychainLoaded = false;
   _keychainResolved = false;

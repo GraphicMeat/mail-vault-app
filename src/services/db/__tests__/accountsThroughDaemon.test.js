@@ -485,6 +485,57 @@ describe('qualified U connection epochs', () => {
   });
 });
 
+describe('public credential clear detaches obsolete full refresh work', () => {
+  for (const oldFirst of [true, false]) {
+    it(`keeps post-clear events and current readers when old work settles ${oldFirst ? 'before' : 'after'} current work`, async () => {
+      await keychain.loadKeychain();
+      const old = deferred(), current = deferred(), again = deferred();
+      const replies = [old, current, again];
+      useDaemon(cmd => cmd === 'credentials.get' && replies.length ? () => replies.shift().promise : undefined);
+      let joined;
+      const oldRead = keychain.readCurrentCredentials();
+      await vi.waitFor(() => expect(replies).toHaveLength(2));
+      try {
+        keychain.clearCredentialsCache();
+        // The new initial load is independent of the held full refresh.
+        blob = { initial: '{"id":"initial"}', removed: '{"id":"removed"}' };
+        let initial = true;
+        const heldHandler = h.handler;
+        h.handler = async (cmd, args) => {
+          if (cmd === 'credentials.get' && initial) { initial = false; calls.push([cmd, args]); return { status: 'granted', credentials: { ...blob } }; }
+          return heldHandler(cmd, args);
+        };
+        expect(Object.keys(await keychain.loadKeychain()).sort()).toEqual(['initial', 'removed']);
+        h.listeners.get('credentials-changed')({ payload: { ids: ['latest', 'removed'], version: 11 } });
+        await Promise.resolve(); await Promise.resolve();
+        expect(replies).toHaveLength(1); // current epoch issued its own read
+        joined = keychain.readCurrentCredentials();
+        h.listeners.get('credentials-changed')({ payload: { ids: ['newest'], version: 12 } });
+        if (oldFirst) {
+          old.resolve({ status: 'granted', credentials: { obsolete: '{"id":"obsolete"}' } });
+          expect(await oldRead).toBeNull();
+          h.listeners.get('credentials-changed')({ payload: { ids: ['after-old'], version: 13 } });
+          await Promise.resolve(); await Promise.resolve();
+          expect(replies).toHaveLength(1); // old finally did not detach current work
+        }
+        current.resolve({ status: 'granted', credentials: { latest: '{"id":"latest"}' } });
+        await vi.waitFor(() => expect(replies).toHaveLength(0));
+        again.resolve({ status: 'granted', credentials: { newest: '{"id":"newest"}' } });
+        expect(Object.keys(await joined)).toEqual(['newest']);
+        if (!oldFirst) { old.resolve({ status: 'granted', credentials: { obsolete: '{"id":"obsolete"}' } }); expect(await oldRead).toBeNull(); }
+        expect(Object.keys(await keychain.loadKeychain())).toEqual(['newest']);
+        useDaemon(cmd => cmd === 'credentials.get' ? () => Promise.reject(UNAVAILABLE()) : undefined);
+        expect(await keychain.readCurrentCredentials()).toBeNull();
+      } finally {
+        old.resolve({ status: 'empty', credentials: {} });
+        current.resolve({ status: 'empty', credentials: {} });
+        again.resolve({ status: 'empty', credentials: {} });
+        await Promise.all([oldRead, joined].filter(Boolean));
+      }
+    });
+  }
+});
+
 describe('qualified U refreshed pairs through actual adapters', () => {
   it('old daemon leaves rotated offered pair unsaved until guarded native persistence accepts original chain', async () => {
     const logs = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -638,6 +689,7 @@ describe('round1 reviewed cache and writer interleavings', () => {
     });
     const a = attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }));
     await vi.waitFor(() => expect(pending).toBe(true));
+    keychain.clearCredentialsCache();
     modern = true;
     const b = attempt(keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' }));
     const metadata = attempt(accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }]));
@@ -660,6 +712,7 @@ describe('round1 reviewed cache and writer interleavings', () => {
     });
     const a = attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }));
     await vi.waitFor(() => expect(started).toBe(true));
+    keychain.clearCredentialsCache();
     try {
       expect((await attempt(keychain.deleteCredentials(['old']))).error).toBeInstanceOf(Error);
       expect(sent('store_credentials')).toHaveLength(0);

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep completed OAuth token rotations across unrelated credential changes, and refresh credential caches reliably after retry.
+
 - Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Full native account workflows and autonomous refreshed-token persistence remain later work.
 
 - Move automatic backup scheduling, retry/limit recovery and automatic Time Capsule manifests into the background helper. Backups continue when a window closes, manual controls reconcile retained results after reconnect, and unavailable backup locations remain pending. Interrupted snapshot creation is reported as uncertain instead of repeated blindly.
