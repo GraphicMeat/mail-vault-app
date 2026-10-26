@@ -486,6 +486,54 @@ describe('qualified U connection epochs', () => {
 });
 
 describe('public credential clear detaches obsolete full refresh work', () => {
+  it('an obsolete initial load cannot consume the current refresh reread', async () => {
+    const oldLoad = deferred(), currentReply = deferred(), latestReply = deferred();
+    const oldEntered = deferred(), currentEntered = deferred(), rereadEntered = deferred();
+    const initial = { initial: '{"id":"initial"}', removed: '{"id":"removed"}' };
+    let reads = 0;
+    useDaemon(cmd => cmd === 'credentials.get' ? () => {
+      reads += 1;
+      if (reads === 1) { oldEntered.resolve(); return oldLoad.promise; }
+      if (reads === 2) return { status: 'granted', credentials: { ...initial } };
+      if (reads === 3) { currentEntered.resolve(); return currentReply.promise; }
+      if (reads === 4) { rereadEntered.resolve(); return latestReply.promise; }
+      throw new Error('unexpected extra credential read');
+    } : undefined);
+    let joined;
+    // Start with the actual cache unloaded: this task suspends in loadKeychain.
+    const obsolete = keychain.readCurrentCredentials();
+    await oldEntered.promise;
+    try {
+      keychain.clearCredentialsCache();
+      expect(await keychain.loadKeychain()).toEqual(initial);
+      h.listeners.get('credentials-changed')({ payload: { ids: ['before-later'], version: 11 } });
+      await currentEntered.promise;
+      joined = keychain.readCurrentCredentials();
+      h.listeners.get('credentials-changed')({ payload: { ids: ['newest', 'removed'], version: 12 } });
+      oldLoad.resolve({ status: 'granted', credentials: { obsolete: '{"id":"obsolete"}' } });
+      expect(await obsolete).toBeNull();
+      expect(reads).toBe(3);
+      expect(await keychain.loadKeychain()).toEqual(initial);
+      currentReply.resolve({ status: 'granted', credentials: { ...initial, beforeLater: '{"id":"before-later"}' } });
+      // The held next read wins this race only when the queued event survived
+      // the obsolete continuation; no polling or wall-clock delay is needed.
+      const next = await Promise.race([
+        rereadEntered.promise.then(() => 'reread'),
+        joined.then(() => 'settled without reread'),
+      ]);
+      expect(next).toBe('reread');
+      expect(reads).toBe(4);
+      latestReply.resolve({ status: 'granted', credentials: { newest: '{"id":"newest"}' } });
+      expect(await joined).toEqual({ newest: '{"id":"newest"}' });
+      expect(await keychain.loadKeychain()).toEqual({ newest: '{"id":"newest"}' });
+    } finally {
+      oldLoad.resolve({ status: 'empty', credentials: {} });
+      currentReply.resolve({ status: 'empty', credentials: {} });
+      latestReply.resolve({ status: 'empty', credentials: {} });
+      await Promise.all([obsolete, joined].filter(Boolean));
+    }
+  });
+
   for (const oldFirst of [true, false]) {
     it(`keeps post-clear events and current readers when old work settles ${oldFirst ? 'before' : 'after'} current work`, async () => {
       await keychain.loadKeychain();

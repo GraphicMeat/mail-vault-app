@@ -378,9 +378,9 @@ function refreshCache() {
     try {
     if (!keychainLoaded) await loadKeychain();
     do {
-      refreshAgain = false;
       const status = keychainSession.getStatus();
       if (epoch !== connectionEpoch || !keychainLoaded || (status !== 'granted' && status !== 'empty')) return null;
+      refreshAgain = false;
       const writes = localWrites;
       let reply;
       try { reply = await invoke('credentials.get', {}); } catch { return null; }
