@@ -110,6 +110,7 @@ export function Onboarding({ onOpenFaq, onComplete }) {
       )}
       {step === 'cta' && (
         <UpgradeCta
+          email={accounts[0]?.email}
           onUpgrade={canUpgrade ? () => finish({ openBilling: true }) : undefined}
           onSkip={() => finish()}
           onOpenFaq={onOpenFaq}

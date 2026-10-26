@@ -31,6 +31,7 @@ import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { EmailList } from './components/EmailList';
 import { EmailViewer } from './components/EmailViewer';
+import { LifecycleMessageView } from './components/LifecycleMessageView';
 import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { AbdProgressPanel } from './components/abd/AbdProgressPanel';
@@ -80,6 +81,8 @@ import RestoreModal from './components/RestoreModal.jsx';
 import ChangeServerModal from './components/ChangeServerModal.jsx';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
 import { useEmailScheduler } from './hooks/useEmailScheduler';
+import { useLifecycleMail } from './hooks/useLifecycleMail';
+import { useLifecycleStore } from './stores/lifecycleStore';
 import { useUpdateAvailable } from './hooks/useUpdateAvailable';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -655,7 +658,9 @@ function App() {
   // is 450px of a 900px window spent saying nothing. Once a message is open
   // the reader takes the larger share and the list keeps a scannable strip, so
   // moving to the next message never costs a trip back.
-  const hasOpenMessage = useMailStore(s => !!s.selectedEmail || !!s.selectedThread);
+  // A lifecycle note open in the reader counts as an open message too.
+  const lifecycleOpen = useLifecycleStore(s => !!s.openId);
+  const hasOpenMessage = useMailStore(s => !!s.selectedEmail || !!s.selectedThread) || lifecycleOpen;
   const stackedSolo = layoutMode === 'two-column' && !hasOpenMessage;
   const clampedListHeight = clampListPaneHeight(listPaneHeight, windowHeight);
 
@@ -667,6 +672,9 @@ function App() {
 
   // Initialize email scheduler
   useEmailScheduler();
+
+  // MailVault's own notes about Premium (src-core/src/lifecycle_mail.rs)
+  useLifecycleMail();
 
   // Pipeline coordinator — manages background caching for all accounts
   usePipelineCoordinator();
@@ -1546,7 +1554,9 @@ function App() {
                   className="flex-1 min-h-0 min-w-0 flex flex-col"
                   style={layoutMode === 'three-column' ? { minWidth: 300 } : { minHeight: MIN_VIEWER_HEIGHT }}
                 >
-                  {!overlayOpen && <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />}
+                  {!overlayOpen && (lifecycleOpen
+                    ? <LifecycleMessageView onOpenBilling={() => openSettings({ tab: 'billing' })} />
+                    : <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />)}
                 </div>
               </>
             )}

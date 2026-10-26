@@ -46,6 +46,8 @@ const ALLOWLIST = new Set([
   'settings.tracking.whatOnePixelTellsSender', 'settings.tracking.whatTrackingPixelLooksLike',
   'settings.backup.config.cloudBackupsOneTimePurchase', 'settings.backup.config.secondCopyExternalColdStorage',
   'settings.billing.earlyBirdFamilyPricing', 'settings.billing.plansCouldNotLoaded', 'settings.billing.whatSIncluded',
+  // the plan picker's accessible name, not a setting
+  'onboarding.ctaPlans',
   'settings.migration.reviewMigration', 'settings.migration.selectAll', 'common.premiumFeature',
   'settings.security.howWorks', 'common.noAccountsConfigured', 'settings.storage.security',
   // section headings already covered by their child settings / sectionKey

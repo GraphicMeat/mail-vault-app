@@ -4,11 +4,13 @@ import { useAccountStore } from '../../stores/accountStore';
 import { useBackupStore } from '../../stores/backupStore';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import {
-  createCheckoutSession, createPortalSession, fetchSubscriptionStatus, fetchPricing,
+  createPortalSession, fetchSubscriptionStatus, fetchPricing,
   unregisterBillingClient, getClientInfo, openInBrowser,
   isBillingRateLimited, getBillingRateLimitedUntil, BillingRateLimitError,
 } from '../../services/billingApi';
 import { notify } from '../../stores/focusStore';
+import { startCheckout } from '../../services/checkout';
+import { PlanPicker, defaultPlanId, planCtaLabel } from '../billing/PlanPicker';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { PremiumFeatureList } from './PremiumFeatureList';
@@ -166,6 +168,9 @@ export function BillingSettings({ onNavigate, onReportBug }) {
   const [rateLimitMsg, setRateLimitMsg] = useState(null); // transient: cleared on next successful refresh or cooldown expiry
   const [showingCached, setShowingCached] = useState(false); // transient: true only while last request failed AND cached data exists
   const [checkoutLoading, setCheckoutLoading] = useState(null);
+  const [chosenPlanId, setChosenPlanId] = useState(null); // null: the default plan
+  const lifecycleMessages = useSettingsStore(s => s.lifecycleMessages);
+  const setLifecycleMessages = useSettingsStore(s => s.setLifecycleMessages);
   const [checkoutError, setCheckoutError] = useState(null);
   // emailError removed — dropdown prevents invalid input
   const [replacedNotice, setReplacedNotice] = useState(null);
@@ -394,17 +399,10 @@ export function BillingSettings({ onNavigate, onReportBug }) {
 
   const handleCheckout = async (planId) => {
     setCheckoutError(null);
-    const email = selectedEmail.trim().toLowerCase();
-    if (!email) { setCheckoutError('Select an account email first.'); return; }
     setCheckoutLoading(planId);
-    try {
-      setBillingEmail(email);
-      const { url, customerId: newCustomerId } = await createCheckoutSession(email, { planId });
-      if (newCustomerId) setBillingProfile({ ...billingProfile, customerId: newCustomerId, customerEmail: email });
-      try { await openInBrowser(url); } catch (browserErr) { setCheckoutError(browserErr.message); }
-    } catch (e) {
-      setCheckoutError(e.message || 'Could not start checkout.');
-    } finally { setCheckoutLoading(null); }
+    const result = await startCheckout({ email: selectedEmail, planId });
+    if (!result.ok) setCheckoutError(result.error);
+    setCheckoutLoading(null);
   };
 
   // Manage Subscription is where a trial or plan gets cancelled: ask first
@@ -588,8 +586,8 @@ export function BillingSettings({ onNavigate, onReportBug }) {
           plan surface below is non-MAS only. Existing subscribers still sign in
           above and keep premium. */}
       {!IS_APPSTORE_BUILD && !isPremium && pricing?.plans && (() => {
-        const monthlyPlan = pricing.plans.find(p => p.interval === 'month');
-        const yearlyPlan = pricing.plans.find(p => p.interval === 'year');
+        const planId = pricing.plans.some(p => p.planId === chosenPlanId) ? chosenPlanId : defaultPlanId(pricing.plans);
+        const chosenPlan = pricing.plans.find(p => p.planId === planId);
         const mode = pricing.pricingMode;
         const showCurrencyHint = mode === 'fallback' || mode === 'adaptive';
         const hintText = mode === 'adaptive'
@@ -602,45 +600,13 @@ export function BillingSettings({ onNavigate, onReportBug }) {
             {showCurrencyHint && hintText && (
               <p className="text-xs text-mail-text-muted">{hintText}</p>
             )}
-            <div className="grid grid-cols-2 gap-4">
-              {monthlyPlan && (
-                <div className="settings-section flex flex-col">
-                  <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.monthly')}</h4>
-                  <div className="text-2xl font-bold text-mail-text mb-1">{monthlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
-                  <p className="text-xs text-mail-text-muted mb-4 flex-1">{t('settings.billing.cancelAnytime')}</p>
-                  <button onClick={() => handleCheckout(monthlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
-                    className="w-full py-2 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                    {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                    {t('common.upgrade')}
-                  </button>
-                </div>
-              )}
-              {yearlyPlan && (
-                <div className="bg-mail-surface border-2 border-mail-accent rounded-xl p-5 flex flex-col relative">
-                  {yearlyPlan.trialEligible && yearlyPlan.trialDays ? (
-                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-xs font-bold uppercase bg-mail-accent-fill text-white rounded-full">
-                      {yearlyPlan.trialDays}-day free trial
-                    </span>
-                  ) : yearlyPlan.savingsPercent > 0 ? (
-                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-xs font-bold uppercase bg-mail-accent-fill text-white rounded-full">
-                      {t('settings.billing.savePercent', { percent: yearlyPlan.savingsPercent })}
-                    </span>
-                  ) : null}
-                  <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.yearly')}</h4>
-                  <div className="text-2xl font-bold text-mail-text mb-1">{yearlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/yr</span></div>
-                  <p className="text-xs text-mail-text-muted mb-4 flex-1">
-                    {yearlyPlan.trialEligible && yearlyPlan.trialDays
-                      ? t('settings.billing.daysFreeThenMonth', { yearlyPlan: yearlyPlan.trialDays, yearlyPlan2: yearlyPlan.monthlyEquivalent })
-                      : `~${yearlyPlan.monthlyEquivalent}/month`}
-                  </p>
-                  <button onClick={() => handleCheckout(yearlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
-                    className="w-full py-2 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                    {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                    {yearlyPlan.trialEligible && yearlyPlan.trialDays ? t('settings.billing.startFreeTrial') : t('common.upgrade')}
-                  </button>
-                </div>
-              )}
-            </div>
+            <PlanPicker plans={pricing.plans} selectedId={planId} onSelect={setChosenPlanId} name="billing-plan" label={t('onboarding.ctaPlans')} />
+            <button onClick={() => handleCheckout(planId)} disabled={!!checkoutLoading || !selectedEmail || !chosenPlan}
+              data-testid="billing-checkout"
+              className="w-full py-2.5 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+              {checkoutLoading ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+              {planCtaLabel(chosenPlan)}
+            </button>
           </>
         );
       })()}
@@ -750,6 +716,20 @@ export function BillingSettings({ onNavigate, onReportBug }) {
             })}
           </div>
         </div>
+      )}
+
+      {/* The notes MailVault writes into the inbox about Premium. Not in the App
+          Store build, which never sells outside the App Store. */}
+      {!IS_APPSTORE_BUILD && (
+        <label className="settings-section flex items-start gap-3 cursor-pointer" data-testid="billing-lifecycle-toggle">
+          <input type="checkbox" className="custom-checkbox mt-0.5"
+            checked={lifecycleMessages !== false}
+            onChange={(e) => setLifecycleMessages(e.target.checked)} />
+          <span>
+            <span className="block text-sm font-semibold text-mail-text">{t('lifecycle.setting.label')}</span>
+            <span className="block text-xs text-mail-text-muted">{t('lifecycle.setting.hint')}</span>
+          </span>
+        </label>
       )}
 
       {/* Feature Comparison */}

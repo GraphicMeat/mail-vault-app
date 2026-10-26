@@ -8,6 +8,12 @@
 
 - Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Full native account workflows and autonomous refreshed-token persistence remain later work.
 
+- Show the plans on the thank-you screen at the end of onboarding: yearly and monthly as one choice with yearly selected, the saving, the trial length, three lines on what Premium does and one button that opens the checkout (Start Free Trial, or Upgrade on monthly). Settings > Billing uses the same plan choice. When the plans cannot load, See Premium still leads to Billing; the App Store build still shows no price.
+
+- Add a place for real reviews on the thank-you screen: each quote links to where it was written and opens in your browser. The section stays hidden until there is a quote to show.
+
+- Add short notes from MailVault in your inbox view about Premium: a trial ending in two days, a checkout you left, a plan that ended, and once, four days after onboarding, what Premium adds. They are written on this computer, never sent by email, never counted as unread mail, and can be dismissed or switched off in Settings > Billing.
+
 - Move automatic backup scheduling, retry/limit recovery and automatic Time Capsule manifests into the background helper. Backups continue when a window closes, manual controls reconcile retained results after reconnect, and unavailable backup locations remain pending. Interrupted snapshot creation is reported as uncertain instead of repeated blindly.
 
 - Keep native backup folder access bound to its exact execution through reconnects and cancellation, releasing it only after verified rejection or joined completion.

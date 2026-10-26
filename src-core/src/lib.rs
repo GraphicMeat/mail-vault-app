@@ -63,6 +63,7 @@ pub mod compose;
 pub mod spellcheck;
 pub mod json_doc;
 pub mod settings_doc;
+pub mod lifecycle_mail;
 pub mod notify_policy;
 pub mod transfer_limits;
 pub mod transfer_stats;

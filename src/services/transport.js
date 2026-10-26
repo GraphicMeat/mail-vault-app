@@ -320,6 +320,9 @@ export const DAEMON_OWNED = new Set([
   // (src-core/src/notify_policy.rs, over the settings document); notify() in
   // stores/focusStore.js only renders the answer.
   'notify.decide',
+  // In-app lifecycle messages (src-core/src/lifecycle_mail.rs): what is due, and
+  // what was read or dismissed. stores/lifecycleStore.js is the caller.
+  'lifecycle.sync', 'lifecycle.mark_seen', 'lifecycle.dismiss',
   // Phase 1 row 23: the daemon builds the Insights model from its own
   // snapshot and answers every chart and drill-down (was the web worker and
   // src/utils/insights/model.js). Progress: `insights-build-progress`.
