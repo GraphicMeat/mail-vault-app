@@ -15,8 +15,8 @@ const NOW = Date.UTC(2026, 9, 26, 12, 0, 0);
 const SESSION = 'cs_test_a1B2c3D4e5F6g7H8i9J0';
 
 // ── fake MySQL ──────────────────────────────────────────────────────────────
-function fakeDb({ customers = [], subs = [] } = {}) {
-  const state = { customers: [...customers], subs: [...subs], tokens: [], aliases: [], nextId: 100 };
+function fakeDb({ customers = [], subs = [], aliases = [] } = {}) {
+  const state = { customers: [...customers], subs: [...subs], tokens: [], aliases: [...aliases], nextId: 100 };
   const lower = (s) => s.replace(/\s+/g, ' ').trim();
   return {
     state,
@@ -358,11 +358,32 @@ describe('mintActivationToken', () => {
   });
 });
 
-describe('redeemActivationToken for a returning buyer', () => {
-  it('signs in as the original customer, whose status now includes the new subscription', async () => {
+describe('mintActivationToken for an email that already has a billing row', () => {
+  const mint = (db) => web.mintActivationToken({ db, stripe: fakeStripe(), sessionId: SESSION, now: () => NOW, log: quiet });
+
+  // The email typed at Stripe Checkout is unverified. A token for the existing
+  // row would hand the payer that row's Stripe customer id, which opens its
+  // billing portal, so a payer who is only an alias gets no token.
+  it('refuses to mint when the payer is only an alias of the row', async () => {
     const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_old' }], subs: [priorSub(5)] });
-    const { token } = await web.mintActivationToken({ db, stripe: fakeStripe(), sessionId: SESSION, now: () => NOW, log: quiet });
-    expect(await web.redeemActivationToken({ db, token, now: () => NOW })).toEqual({ customerId: 'cus_old', customerEmail: 'buyer@example.com' });
+    await expect(mint(db)).rejects.toMatchObject({ code: 'verification_required', status: 409 });
+    expect(db.state.tokens).toEqual([]);
+  });
+
+  it('keeps refusing once the webhook already made the alias', async () => {
+    const db = fakeDb({
+      customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_old' }],
+      aliases: [{ stripe_customer_id: 'cus_new', billing_customer_id: 5 }],
+      subs: [priorSub(5)],
+    });
+    await expect(mint(db)).rejects.toMatchObject({ code: 'verification_required', status: 409 });
+    expect(db.state.tokens).toEqual([]);
+  });
+
+  it('still mints for the payer who owns the row', async () => {
+    const db = fakeDb({ customers: [{ id: 5, email: 'buyer@example.com', stripe_customer_id: 'cus_new' }] });
+    const { token } = await mint(db);
+    expect(await web.redeemActivationToken({ db, token, now: () => NOW })).toEqual({ customerId: 'cus_new', customerEmail: 'buyer@example.com' });
   });
 });
 
