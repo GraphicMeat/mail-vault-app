@@ -83,7 +83,6 @@
   "af4e42c0ed12": "下载限额",
   "0fa5edab65b1": "上传限额",
   "2e1b284935af": "AI 驱动的<span class=\"lamp-text\">邮件清理</span>",
-  "03ca8ba644a5": "你的 MailVault Premium 订阅已经生效。回到 MailVault 应用，在 设置 &rarr; 账单 里点击<strong class=\"text-white\">检查状态</strong>，即可激活 Premium 功能。",
   "46aa7b51f19e": "<a href=\"https://en.wikipedia.org/wiki/Maildir\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Maildir</a> 是一种久经考验的邮件存放目录结构，邮件服务器已经用了几十年。每封邮件就是一个文件，所以不存在一个会整体损坏的数据库 —— 一个文件坏了，归档的其余部分毫发无损。.eml + Maildir 合在一起，意味着你的邮件面向未来、可移植，永远不会被任何单一应用锁住。",
   "832558cf7a44": "Proton Mail 对邮件做端到端加密，所以不直接开放 IMAP。要把它接到 MailVault（或任何第三方邮件客户端），需要 <a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a> —— 这是 Proton 提供的桌面应用，跑在你自己的电脑上，把你加密的邮箱以标准 IMAP/SMTP 的形式暴露在 <code class=\"bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm\">127.0.0.1</code> 上。Bridge 需要付费的 Proton Mail 套餐；免费版用不了。",
   "2e089a56554e": "从 Proton 官网安装 <a href=\"https://proton.me/mail/bridge\" target=\"_blank\" rel=\"noopener\" class=\"text-primary-500 hover:underline\">Proton Mail Bridge</a>",

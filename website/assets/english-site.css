@@ -405,3 +405,6 @@ main>.mv-currency-control { max-width:1128px; margin:0 auto 24px; padding-inline
 .mv-clip-spot-inner { box-sizing:content-box; max-width:686px; margin-inline:auto; }
 @media(max-width:900px) { .mv-clip-grid-3 { grid-template-columns:repeat(2,minmax(0,1fr)); } .mv-clip-grid-3 > :last-child:nth-child(odd) { grid-column:1 / -1; justify-self:center; width:calc(50% - 10px); } }
 @media(max-width:760px) { .mv-clip-grid,.mv-clip-grid-3 { grid-template-columns:1fr; } .mv-clip-grid-3 > :last-child:nth-child(odd) { width:auto; justify-self:stretch; } .mv-clip-group { margin-top:40px; } .mv-clip-spot { padding-top:28px; } }
+
+/* Download-first link under the web checkout button on the pricing card. */
+.mv-premium .mv-checkout + .mv-small + .mv-text-link { display:inline-block; margin-top:12px; }

@@ -89,7 +89,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261026">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}.mv-price>.mv-tag{align-self:center;font-size:.78rem;font-weight:700;color:var(--mv-accent)}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -194,8 +194,14 @@
 </div>
 <noscript><p class="mv-small">按月订阅 Premium 为 $4/月，不含试用期。<a href="/zh/get-started.html?plan=monthly">选择按月付费</a>。</p></noscript>
 <p class="mv-small">包含免费版的全部功能，另加这 18 项功能。选择一项，看看它如何运作。</p><ul class="mv-premium-links"><li><a href="#premium-backup-schedule">定时自动备份<span aria-hidden="true">↗</span></a></li><li><a href="#premium-backup-health">备份健康监测<span aria-hidden="true">↗</span></a></li><li><a href="#premium-cleanup">邮件清理<span aria-hidden="true">↗</span></a></li><li><a href="#premium-time-capsule">时间胶囊<span aria-hidden="true">↗</span></a></li><li><a href="#premium-tracker-blocking">移除跟踪器<span aria-hidden="true">↗</span></a></li><li><a href="#premium-auto-cleanup">自动清理规则<span aria-hidden="true">↗</span></a></li><li><a href="#premium-migration">邮箱迁移<span aria-hidden="true">↗</span></a></li><li><a href="#premium-server-change">引导式服务器更换<span aria-hidden="true">↗</span></a></li><li><a href="#premium-export-image">导出为图片或 HTML<span aria-hidden="true">↗</span></a></li><li><a href="#premium-focus-session">专注时段<span aria-hidden="true">↗</span></a></li><li><a href="#premium-scheduled-send">定时发送<span aria-hidden="true">↗</span></a></li><li><a href="#premium-follow-up-reminder">无人回复提醒<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-reminder">附件提醒<span aria-hidden="true">↗</span></a></li><li><a href="#premium-devices">五台设备<span aria-hidden="true">↗</span></a></li><li><a href="#premium-attachment-search">附件搜索<span aria-hidden="true">↗</span></a></li><li><a href="#premium-fast-multi-folder-search">更快的多文件夹搜索<span aria-hidden="true">↗</span></a></li><li><a href="#premium-hoarder">全部保存<span aria-hidden="true">↗</span></a></li><li><a href="#premium-portable">便携版 MailVault<span aria-hidden="true">↗</span></a></li></ul>
-<a class="mv-button" data-premium-cta href="/zh/get-started.html?plan=yearly"><span data-billing-panel="yearly">开始年付试用</span><span data-billing-panel="monthly" hidden>开始使用按月订阅的 Premium</span></a>
-<p class="mv-small">先下载，再在“设置 → 账单”中选择套餐。完成应用内结账时，试用期才会开始。</p>
+<form class="mv-checkout" method="post" action="/api/billing/checkout-session" data-web-checkout>
+<input type="hidden" name="planId" value="yearly" data-web-checkout-plan>
+<input type="hidden" name="landing" value="pricing">
+<button class="mv-button" type="submit" data-acquisition-event="web_checkout_start" data-acquisition-placement="pricing" data-acquisition-destination="stripe"><span data-billing-panel="yearly">开始免费试用</span><span data-billing-panel="monthly" hidden>按月订阅</span></button>
+</form>
+<p class="mv-small" data-web-checkout-error hidden>无法开始结账。请稍后再试。</p>
+<p class="mv-small">先在网站付款，然后下载 MailVault，并从接下来的页面打开它：Premium 会自动开启。试用期内可随时取消。</p>
+<a class="mv-text-link" data-premium-cta href="/zh/get-started.html?plan=yearly">想先下载？请在“设置 → 账单”中选择方案</a>
 <p class="mv-reassurance">可随时取消。你保存的邮件仍属于你。</p>
 </article>
 </div>
@@ -212,7 +218,7 @@
 <div class="mv-faq">
 <details>
 <summary>如何开始试用？</summary>
-<p>下载并打开 MailVault，然后前往“设置 → 账单”并选择年付。完成结账即可开始 14 天试用。试用仅适用于首次年付订阅；曾订阅过的用户应在应用中查看资格。</p>
+<p>在本页选择“开始免费试用”，在结账时填写邮箱和银行卡，然后下载 MailVault 并从接下来的页面打开它。你也可以先下载，再打开“设置 → 账单”选择“年付”。14 天试用适用于你的首个年付订阅；如果你曾用同一邮箱订阅过，则不再提供试用，年付方案会立即扣费。</p>
 </details>
 <details>
 <summary>何时会收费？</summary>
@@ -276,6 +282,7 @@
 </script>
 <script defer src="/pricing-localize.js?v=20261008-spots">
 </script>
+<script defer src="/assets/web-checkout.js?v=20261026"></script>
 <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
 </script>
 <script defer src="/assets/premium-features.js"></script>

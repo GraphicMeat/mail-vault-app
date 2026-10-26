@@ -49,3 +49,12 @@
 .mv-content-page .mv-search-diagram { margin:32px 0; }
 .mv-content-page .mv-search-diagram img { display:block; width:100%; height:auto; border-radius:14px; }
 .mv-content-page .mv-search-diagram figcaption { margin-top:12px; font-size:.9rem; line-height:1.6; color:var(--mv-muted); }
+
+/* Welcome page after checkout and the /start ad landing: one centered column. */
+.mv-centered { text-align:center; padding-bottom:48px; }
+.mv-centered .mv-section { padding-block:20px; }
+.mv-centered .mv-actions { justify-content:center; }
+.mv-centered .hm-os-links { display:flex; justify-content:center; flex-wrap:wrap; gap:20px; list-style:none; padding:0; margin:14px 0 0; }
+.mv-centered .mv-checklist { display:inline-block; text-align:left; }
+.mv-centered .mv-checkout { margin-top:16px; }
+.mv-centered .mv-price { justify-content:center; }
