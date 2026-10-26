@@ -31,8 +31,13 @@ pub(crate) async fn route(
 ) -> Option<RpcResponse> {
     if matches!(method, "accounts.add" | "accounts.update") {
         return Some(
-            crate::account_workflows::account_workflow(state, params, id, method == "accounts.add")
-                .await,
+            Box::pin(crate::account_workflows::account_workflow(
+                state,
+                params,
+                id,
+                method == "accounts.add",
+            ))
+            .await,
         );
     }
     if method == "accounts.save" {

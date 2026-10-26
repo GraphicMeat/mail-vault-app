@@ -2233,6 +2233,113 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn s23_jmap_rpc_survives_default_stack() {
+        const CHILD: &str = "MV_S23_DEFAULT_STACK_CHILD";
+        const DIR: &str = "MV_S23_DEFAULT_STACK_DIR";
+        if std::env::var_os(CHILD).is_none() {
+            struct RemoveDir(PathBuf);
+            impl Drop for RemoveDir {
+                fn drop(&mut self) {
+                    let _ = std::fs::remove_dir_all(&self.0);
+                }
+            }
+            let dir = sock_dir();
+            let _cleanup = RemoveDir(dir.clone());
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("server::tests::s23_jmap_rpc_survives_default_stack")
+                .arg("--exact")
+                .arg("--nocapture")
+                .env(CHILD, "1")
+                .env(DIR, &dir)
+                .env_remove("RUST_MIN_STACK")
+                .spawn()
+                .unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
+            loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    assert!(status.success(), "default-stack JMAP socket child exited: {status}");
+                    return;
+                }
+                if std::time::Instant::now() >= deadline {
+                    child.kill().unwrap();
+                    let _ = child.wait();
+                    panic!("default-stack JMAP socket child did not finish");
+                }
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+        }
+
+        use std::io::{BufRead, Write};
+        assert!(std::env::var_os("RUST_MIN_STACK").is_none());
+        let dir = PathBuf::from(std::env::var_os(DIR).expect("parent supplied private socket dir"));
+        let path = sock_path(&dir);
+        std::fs::write(
+            dir.join("frontend-settings.json"),
+            json!({"mailvault-settings": {"state": {"fetchMode": "hoarder"}}}).to_string(),
+        )
+        .unwrap();
+        let mock = mock_jmap::MockJmap::start(crate::jmap_test_support::scenario());
+        let (imap_trap, imap_port) = crate::jmap_test_support::imap_trap();
+        let account = crate::jmap_test_support::account_json(&mock, imap_port);
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let token = state.token.clone();
+        spawn_on_own_thread(Arc::clone(&state), path.clone(), |why| panic!("server died: {why}"))
+            .unwrap();
+        for _ in 0..200 {
+            if mailvault_core::transport::is_listening(&path) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(mailvault_core::transport::is_listening(&path), "server did not bind");
+        let (read, mut write) = mailvault_core::transport::connect_sync(
+            &path,
+            std::time::Duration::from_secs(10),
+        )
+        .unwrap();
+        let mut read = std::io::BufReader::new(read);
+        let mut line = String::new();
+        writeln!(write, "{}", json!({"token": token})).unwrap();
+        read.read_line(&mut line).unwrap();
+        let auth: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(auth["result"]["authenticated"], true);
+
+        let mut call = |method: &str, params: Value| -> Value {
+            line.clear();
+            writeln!(write, "{}", json!({"jsonrpc": "2.0", "method": method, "params": params, "id": 1})).unwrap();
+            assert!(read.read_line(&mut line).unwrap() > 0, "socket closed before {method} reply");
+            let response: Value = serde_json::from_str(&line).unwrap();
+            assert!(response["error"].is_null(), "{method} returned an RPC error");
+            response["result"].clone()
+        };
+
+        eprintln!("s23-stage=mailboxes");
+        let mailboxes = call("imap_get_mailboxes", json!({"account": account}));
+        assert_eq!(mailboxes["success"], true);
+        assert!(mailboxes["mailboxes"].as_array().unwrap().iter().any(|m| m["path"] == "INBOX"));
+        eprintln!("s23-stage=headers");
+        let listing = call("imap_get_emails", json!({"account": account, "mailbox": "INBOX", "page": 1, "limit": 50}));
+        assert_eq!(listing["success"], true);
+        let uid = listing["emails"].as_array().unwrap().iter()
+            .find(|e| e["messageId"] == "<e1@x>")
+            .and_then(|e| e["uid"].as_u64())
+            .expect("fixture header was listed");
+        eprintln!("s23-stage=body");
+        let body = call("imap_get_email_light", json!({"account": account, "mailbox": "INBOX", "uid": uid}));
+        assert_eq!(body["success"], true);
+        assert_eq!(body["email"]["subject"], "one");
+        assert_eq!(body["email"]["messageId"], "<e1@x>");
+        assert_eq!(body["email"]["uid"], uid);
+        assert!(body["email"]["text"].as_str().unwrap().contains("body of one"));
+        eprintln!("s23-stage=ping");
+        assert_eq!(call("ping", json!({}))["pong"], true);
+        assert!(mock.count_calls("Mailbox/get") > 0);
+        assert!(mock.count_calls("Email/query") > 0);
+        assert!(mock.count_calls("Email/get") > 0);
+        assert!(imap_trap.accept().is_err(), "JMAP request dialled IMAP");
+    }
+
     #[tokio::test]
     async fn a_garbage_line_after_auth_answers_a_parse_error_and_keeps_the_connection() {
         let served = Served::start().await;
