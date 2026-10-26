@@ -280,7 +280,7 @@ export const DAEMON_OWNED = new Set([
   // saves the pairs it refreshed and says when it wrote credentials.
   'oauth2.take_refreshed', 'oauth2.credentials_changed',
   // Staged native per-record capability; app adapters retain the shell path.
-  'accounts.list', 'accounts.get', 'accounts.put', 'accounts.remove', 'accounts.reorder', 'accounts.replace_all',
+  'accounts.list', 'accounts.get', 'accounts.save', 'accounts.put', 'accounts.remove', 'accounts.reorder', 'accounts.replace_all',
   'credentials.get', 'credentials.save', 'credentials.update', 'credentials.delete',
   // Task 5.8: DNS (autodiscover email server settings, post-server-change
   // health probe). Tauri twins deleted in this same task — flat names, no

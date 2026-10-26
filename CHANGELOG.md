@@ -2,11 +2,13 @@
 
 ## [Unreleased]
 
+- Save account creation, imports and explicit account edits through one native persistence boundary. Settings and compose metadata edits preserve newer refreshed credentials; imports count only accepted accounts and keep concurrent duplicates’ settings intact. Native account admission fences participating writers through late backend/document completion, and obsolete whole-store mutation fallback refuses safely. Provider probes and removal workflows remain staged.
+
 - Persist refreshed OAuth token pairs quietly in the daemon, with guarded writes and retries even when no app saver is listening. Failed or unfinished saves remain memory-only until confirmed.
 
 - Keep completed OAuth token rotations across unrelated credential changes, and refresh credential caches reliably after retry.
 
-- Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Full native account workflows and autonomous refreshed-token persistence remain later work.
+- Use native account-list and per-record credential operations together, preserving concurrent records and refusing unknown save outcomes without replay. Account deletion checks compose receipts first and removes metadata before credentials. Older daemons cannot safely persist refreshed OAuth grant chains; an unsaved rotated token can require signing in again if daemon memory is lost. Validated refreshed tokens now persist through the daemon’s quiet native writer, with memory-only retry on failure and no shutdown flush. Complete provider/removal workflows and remaining caller retirement remain later work.
 
 - Move automatic backup scheduling, retry/limit recovery and automatic Time Capsule manifests into the background helper. Backups continue when a window closes, manual controls reconcile retained results after reconnect, and unavailable backup locations remain pending. Interrupted snapshot creation is reported as uncertain instead of repeated blindly.
 

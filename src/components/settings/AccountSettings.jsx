@@ -283,9 +283,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     setSavingSent(true);
     try {
       const nextOverride = sentOverride || null;
-      const updated = { ...selectedAccount, sentFolderOverride: nextOverride };
-      const { saveAccount } = await import('../../services/db');
-      await saveAccount(updated);
+      const { patchAccount } = await import('../../services/db');
+      await patchAccount(selectedAccountId, { sentFolderOverride: nextOverride });
       useMailStore.setState(s => ({
         accounts: (s.accounts || []).map(a => a.id === selectedAccountId ? { ...a, sentFolderOverride: nextOverride } : a),
       }));
@@ -306,8 +305,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
       const path = await ensureSentMailbox(selectedAccount);
       if (!path) throw new Error('Server returned empty path');
       const updated = { ...selectedAccount, sentFolderOverride: path };
-      const { saveAccount, saveMailboxes } = await import('../../services/db');
-      await saveAccount(updated);
+      const { patchAccount, saveMailboxes } = await import('../../services/db');
+      await patchAccount(selectedAccountId, { sentFolderOverride: path });
       // Refresh mailbox tree so a newly-created folder becomes visible
       try {
         const fresh = await fetchMailboxes(updated);
@@ -382,7 +381,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
 
       const tokenData = await exchangeOAuth2Code(state);
 
-      const { saveAccount } = await import('../../services/db');
+      const { patchAccount, accountExpectedContext } = await import('../../services/db');
       if (account) {
         // Spread all existing account fields to preserve oauth2Transport,
         // oauth2Provider, oauth2CustomClientId, oauth2TenantId, etc. The new
@@ -390,7 +389,9 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
         // replaced with it in the same write: an account that still carried
         // Thunderbird's (or no) stamp would otherwise refresh the new tokens
         // with the wrong client.
-        await saveAccount(withOAuth2Exchange(account, tokenData));
+        const grant = withOAuth2Exchange({}, tokenData);
+        const unset = grant.oauth2ClientId === undefined ? ['oauth2ClientId'] : [];
+        await patchAccount(account.id, grant, { unset, expected: accountExpectedContext(account, 'oauth') });
       }
 
       const { init } = useMailStore.getState();
@@ -413,20 +414,10 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
     if (!selectedAccountId || !newPassword.trim()) return;
 
     try {
-      // Store the new password in keychain
-      if (invoke) {
-        await invoke('store_password', {
-          accountId: selectedAccountId,
-          password: newPassword
-        });
-      }
-
-      // Re-save to db to trigger password storage
       const account = accounts.find(a => a.id === selectedAccountId);
-      if (account) {
-        const { saveAccount } = await import('../../services/db');
-        await saveAccount({ ...account, password: newPassword });
-      }
+      if (!account) throw new Error(t('errors.accountNotFound'));
+      const { patchAccount, accountExpectedContext } = await import('../../services/db');
+      await patchAccount(account.id, { password: newPassword }, { expected: accountExpectedContext(account) });
 
       // Reinitialize the mail store to pick up the new password
       const { init } = useMailStore.getState();

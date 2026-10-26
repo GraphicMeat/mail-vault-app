@@ -30,6 +30,7 @@ pub use mailvault_core::imap;
 // ONE OAuth2Manager instance in DaemonState (see server.rs), src-tauri no
 // longer references this module at all.
 pub use mailvault_core::oauth2;
+mod account_workflows;
 #[cfg(test)]
 mod draft_contract_tests;
 mod events;
@@ -606,6 +607,7 @@ async fn daemon_main() {
         insights: insights::InsightsSnapshots::default(),
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
         tokens: oauth_tokens::TokenStore::default(),
+        account_admission: Default::default(),
         snooze: snooze_worker::SnoozeState::default(),
         follow_up: follow_up_worker::FollowUpState::default(),
         auto_tag_worker,

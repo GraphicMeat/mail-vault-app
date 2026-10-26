@@ -29,94 +29,179 @@ pub(crate) async fn route(
     params: &Value,
     id: Value,
 ) -> Option<RpcResponse> {
+    if method == "accounts.save" {
+        return Some(crate::account_workflows::save(state, params, id).await);
+    }
     if !accounts_doc::METHODS.contains(&method) {
         return None;
     }
-    let doc = accounts_doc::shared(&state.app_dir);
-    let preserved = if accounts_doc::writes(method) {
-        legacy_secrets_kept(state, &doc).await
-    } else {
-        None
-    };
-    #[cfg(test)]
-    pause_after_preservation(&state.app_dir).await;
-    let method = method.to_string();
+    let state = Arc::clone(state);
+    let method = method.to_owned();
     let params = params.clone();
-    // File IO and an fsync: off the async workers.
+    let failed_id = id.clone();
+    // The operation/event owner survives a caller disappearing during either
+    // preservation or a running blocking document write.
+    Some(
+        tokio::spawn(async move { run_owned(&state, &method, &params, id).await })
+            .await
+            .unwrap_or_else(|_| {
+                RpcResponse::error(failed_id, ipc::INTERNAL_ERROR, "errors.accountsWriteFailed")
+            }),
+    )
+}
+
+fn scope(
+    listed: Option<&accounts_doc::Listing>,
+    method: &str,
+    params: &Value,
+) -> Result<crate::account_workflows::AccountWriteScope, AccountsError> {
+    use crate::account_workflows::AccountWriteScope;
+    let mut scope = AccountWriteScope::default();
+    let Some(listed) = listed else {
+        scope.whole_store = true;
+        return Ok(scope);
+    };
+    if matches!(method, "accounts.replace_all" | "accounts.reorder")
+        || !accounts_doc::legacy_secrets_representable(&listed.accounts)
+    {
+        scope.whole_store = true;
+        return Ok(scope);
+    }
+    for (id, raw) in accounts_doc::legacy_secrets(&listed.accounts) {
+        let v: Value = serde_json::from_str(&raw).map_err(|_| AccountsError::Invalid)?;
+        scope.record(&id, &v);
+    }
+    let requested = if method == "accounts.put" {
+        match (params.get("entries"), params.get("entry")) {
+            (Some(Value::Array(v)), _) => v.clone(),
+            (None, Some(v)) if v.is_object() => vec![v.clone()],
+            _ => return Err(AccountsError::Invalid),
+        }
+    } else {
+        let ids = if let Some(id) = params.get("id").and_then(Value::as_str) {
+            vec![id.to_owned()]
+        } else {
+            params
+                .get("ids")
+                .and_then(Value::as_array)
+                .ok_or(AccountsError::Invalid)?
+                .iter()
+                .map(|v| v.as_str().map(str::to_owned).ok_or(AccountsError::Invalid))
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        ids.into_iter().map(|id| json!({"id":id})).collect()
+    };
+    for entry in requested {
+        let id = entry
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .ok_or(AccountsError::Invalid)?;
+        scope.ids.insert(id.to_owned());
+        let old = listed
+            .accounts
+            .iter()
+            .find(|v| v.get("id").and_then(Value::as_str) == Some(id));
+        if let Some(old) = old {
+            scope.record(id, old);
+        }
+        if method == "accounts.put" {
+            let mut new = old.cloned().unwrap_or_else(|| json!({}));
+            new.as_object_mut()
+                .ok_or(AccountsError::Invalid)?
+                .extend(entry.as_object().ok_or(AccountsError::Invalid)?.clone());
+            scope.record(id, &new);
+        }
+    }
+    Ok(scope)
+}
+
+async fn run_owned(
+    state: &Arc<DaemonState>,
+    method: &str,
+    params: &Value,
+    id: Value,
+) -> RpcResponse {
+    let doc = accounts_doc::shared(&state.app_dir);
+    let mut lease = None;
+    let mut preserved = None;
+    if accounts_doc::writes(method) {
+        let read = Arc::clone(&doc);
+        let listed = tokio::task::spawn_blocking(move || accounts_doc::list(&read))
+            .await
+            .ok()
+            .and_then(Result::ok);
+        let scope = match scope(listed.as_ref(), method, params) {
+            Ok(s) => s,
+            Err(e) => return RpcResponse::error(id, ipc::INVALID_PARAMS, e.catalog_key()),
+        };
+        let held = match state.account_admission.try_reserve(scope) {
+            Ok(l) => l,
+            Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e.catalog_key()),
+        };
+        if let Some(listed) = listed {
+            if accounts_doc::legacy_secrets_representable(&listed.accounts) {
+                let records: std::collections::HashMap<_, _> =
+                    accounts_doc::legacy_secrets(&listed.accounts)
+                        .into_iter()
+                        .collect();
+                if records.is_empty() {
+                    preserved = Some(listed)
+                } else {
+                    #[cfg(test)]
+                    PRESERVATION_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    match crate::credentials::change_credentials_admitted(
+                        state,
+                        crate::credentials::CredChange::SaveIfAbsent(records),
+                        held.clone(),
+                    )
+                    .await
+                    {
+                        Ok(_) => preserved = Some(listed),
+                        // No preservation write was started. Retain the existing
+                        // live-secret read-failure policy under this valid lease.
+                        Err(crate::credentials::CredError::Unavailable) => {}
+                        Err(e) => {
+                            return RpcResponse::error(id, ipc::INTERNAL_ERROR, e.catalog_key())
+                        }
+                    }
+                }
+            }
+        }
+        lease = Some(held);
+        #[cfg(test)]
+        pause_after_preservation(&state.app_dir).await;
+    }
+    let method = method.to_owned();
+    let params = params.clone();
+    let state = Arc::clone(state);
     let joined = tokio::task::spawn_blocking(move || {
+        let _lease = lease;
         let policy = preserved
             .as_ref()
             .map(accounts_doc::LiveScrub::Preserved)
             .unwrap_or(accounts_doc::LiveScrub::Preserve);
-        accounts_doc::run(&doc, &method, &params, policy)
+        let out = accounts_doc::run(&doc, &method, &params, policy)?;
+        if let Some(change) = &out.changed {
+            state.events.emit(
+                CHANGED_EVENT,
+                json!({"ids":change.changed,"version":change.version}),
+            );
+        }
+        Ok::<_, AccountsError>(out)
     })
     .await;
-    let outcome =
-        joined.unwrap_or_else(|_| Err(AccountsError::Io("accounts task failed".to_string())));
-    Some(match outcome {
-        Ok(out) => {
-            if let Some(change) = &out.changed {
-                state.events.emit(
-                    CHANGED_EVENT,
-                    json!({"ids": change.changed, "version": change.version}),
-                );
-            }
-            RpcResponse::success(id, out.reply)
-        }
-        Err(e) => {
-            let code = if matches!(e, AccountsError::Invalid) {
+    match joined.unwrap_or_else(|_| Err(AccountsError::Io("accounts task failed".into()))) {
+        Ok(out) => RpcResponse::success(id, out.reply),
+        Err(e) => RpcResponse::error(
+            id,
+            if matches!(e, AccountsError::Invalid) {
                 ipc::INVALID_PARAMS
             } else {
                 ipc::INTERNAL_ERROR
-            };
-            RpcResponse::error(id, code, e.catalog_key())
-        }
-    })
-}
-
-/// Before a write may scrub the list: every account it still holds a
-/// password or token for (an older release wrote them there) is in the
-/// keychain blob. One the blob lacks is copied in first, as the old app
-/// used it (its own entry, secrets included); one the blob already holds
-/// keeps the blob's record. The original listing is returned as ephemeral
-/// proof, including on the no-legacy path. Failure cannot authorize blanket
-/// live cleanup of retained records. No document lock crosses credential IO.
-async fn legacy_secrets_kept(
-    state: &Arc<DaemonState>,
-    doc: &Arc<mailvault_core::json_doc::JsonDoc>,
-) -> Option<accounts_doc::Listing> {
-    let read = Arc::clone(doc);
-    let listed = tokio::task::spawn_blocking(move || accounts_doc::list(&read)).await;
-    let Ok(Ok(listed)) = listed else { return None };
-    // A per-ID map cannot preserve ambiguous legacy rows. Skip credential
-    // IO entirely and retain their live fields for this requested mutation.
-    if !accounts_doc::legacy_secrets_representable(&listed.accounts) {
-        return None;
-    }
-    let legacy = accounts_doc::legacy_secrets(&listed.accounts);
-    if legacy.is_empty() {
-        return Some(listed);
-    }
-    let records: std::collections::HashMap<String, String> = legacy.into_iter().collect();
-    let count = records.len();
-    #[cfg(test)]
-    PRESERVATION_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    match crate::credentials::change_credentials(
-        state,
-        crate::credentials::CredChange::SaveIfAbsent(records),
-    )
-    .await
-    {
-        Ok((ids, _version)) => {
-            if !ids.is_empty() {
-                tracing::info!("accounts: {} legacy account record(s) copied into the keychain before the list is scrubbed", ids.len());
-            }
-            Some(listed)
-        }
-        Err(e) => {
-            tracing::warn!("accounts: {count} entr(ies) still hold secrets and the keychain could not take them ({}); left in place", e.catalog_key());
-            None
-        }
+            },
+            e.catalog_key(),
+        ),
     }
 }
 
@@ -198,6 +283,52 @@ mod tests {
             self.1 .1.notify_one();
         }
     }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn metadata_preservation_reserves_legacy_ids_through_document_completion() {
+        let (dir, state) = rig();
+        std::fs::write(dir.path().join("accounts.json"), json!([{"id":"b","email":"b@example.test","imapHost":"h","password":"synthetic-legacy"}]).to_string()).unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        let pause = (
+            Arc::new(tokio::sync::Notify::new()),
+            Arc::new(tokio::sync::Notify::new()),
+        );
+        preservation_pauses()
+            .lock()
+            .unwrap()
+            .insert(state.app_dir.clone(), pause.clone());
+        let _guard = PauseGuard(state.app_dir.clone(), pause.clone());
+        let writing = call(
+            &state,
+            "accounts.put",
+            json!({"entry":{"id":"a","email":"a@example.test","imapHost":"h"}}),
+        );
+        let competing = async {
+            pause.0.notified().await;
+            let result = call(
+                &state,
+                "credentials.update",
+                json!({"id":"b","fields":{"password":"synthetic-other"}}),
+            )
+            .await;
+            pause.1.notify_one();
+            result
+        };
+        let (written, competing) = tokio::join!(writing, competing);
+        assert!(written.is_ok());
+        assert_eq!(
+            competing,
+            Err("errors.keychainBusy".to_string()),
+            "legacy scope must remain reserved until actual document completion"
+        );
+        let blob: Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join("credentials.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(blob["b"].as_str().unwrap()).unwrap()["password"],
+            "synthetic-legacy"
+        );
+    }
+
     async fn snapshot_race(initial_secret: bool) {
         let (dir, state) = rig();
         let a = if initial_secret {

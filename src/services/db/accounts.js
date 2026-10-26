@@ -1,23 +1,12 @@
-// ── db/accounts - accounts.json + keychain account CRUD, dedup, bootstrapping ──
-//
-// The daemon owns accounts.json (Phase 1 step 0b, `accounts.*`,
-// src-core/src/accounts_doc.rs): this module never reads or writes the file
-// itself. It asks the daemon for the list and sends each change (a merge by
-// id, an add-if-absent, a removal), and the daemon writes atomically, keeps
-// a version and backups, and emits `accounts-changed {ids, version}`. A
-// daemon without `accounts.*` can use the one-release `accounts_fallback`
-// after a trusted unsupported mutation refusal. Read failures alone permit
-// only shell reads (a first read waits at most READ_BUDGET_MS). Unknown
-// mutations reject without replay and retain a window-local fallback barrier,
-// which runs the same core code under the same lock file. Nothing here builds
-// a whole list from a read that failed: the one whole-list write (the
-// duplicate cleanup) carries the version of the read it came from.
-// Credentials go through db/keychain.js.
+// Account metadata reads and primitive maintenance go through accounts.*.
+// Creation/import and explicit patches use accounts.save, whose native owner
+// merges fresh credentials, admits conflicting writers and commits metadata.
+// Read fallback remains available; mutations never replay through shell writers.
 
 import { exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
-import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, readCurrentCredentials, markNativeMutationUncertain, assertLegacyWriteAllowed, beginNativeWrite } from './keychain.js';
+import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, readCurrentCredentials, markNativeMutationUncertain, beginNativeWrite, invalidateCredentialsCache } from './keychain.js';
 import { grantFingerprint } from '../oauthTokenSync.js';
 import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
@@ -70,7 +59,7 @@ async function ensureDir(rel) {
 
 // The daemon's own errors (`accounts_doc::AccountsError`): it answered and
 // refused or failed this one, so the shell is not tried instead.
-const ACCOUNTS_ERRORS = ['errors.accountsConflict', 'errors.accountsInvalid', 'errors.accountsWriteFailed'];
+const ACCOUNTS_ERRORS = ['errors.accountsConflict', 'errors.accountsInvalid', 'errors.accountsWriteFailed', 'errors.keychainUnavailable', 'errors.keychainBusy', 'errors.keychainWriteFailed', 'errors.credentialsInvalid', 'errors.daemonOutdated'];
 // How long a read waits for a daemon not yet seen to answer before the shell
 // reads the file instead (a cold daemon is still starting; quick load paints
 // from this list).
@@ -86,6 +75,13 @@ function isReply(method, r) {
   if (!object(r) || !Number.isInteger(r.version) || r.version < 0) return false;
   if (method === 'accounts.list') return Array.isArray(r.accounts);
   if (method === 'accounts.get') return r.account === null || object(r.account);
+  if (method === 'accounts.save') {
+    const ids = a => Array.isArray(a) && a.every(id => typeof id === 'string' && id.length > 0) && new Set(a).size === a.length;
+    return ids(r.accepted) && object(r.skipped) && Object.entries(r.skipped).every(([id, target]) => id && typeof target === 'string' && target)
+      && Number.isInteger(r.credentialVersion) && r.credentialVersion >= 0 && typeof r.hostChanged === 'boolean'
+      && Array.isArray(r.accounts) && r.accounts.length === r.accepted.length
+      && r.accounts.every((a, i) => object(a) && a.id === r.accepted[i] && !SECRET_FIELDS.some(k => Object.hasOwn(a, k)));
+  }
   return Array.isArray(r.changed) && r.changed.every(id => typeof id === 'string');
 }
 let listListening = false;
@@ -117,14 +113,12 @@ async function accountsCall(method, params = {}) {
       throw new Error('errors.accountsWriteFailed');
     } catch (error) {
       if (!read) {
-        if (error?.code !== 'DAEMON_OUTDATED') {
-          if (!['errors.accountsConflict', 'errors.accountsInvalid'].includes(error?.message ?? error)) markNativeMutationUncertain();
-          throw new Error(errText(error));
-        }
+        const message = error?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : errText(error);
+        if (!['errors.accountsConflict', 'errors.accountsInvalid', 'errors.keychainBusy', 'errors.keychainUnavailable', 'errors.credentialsInvalid', 'errors.daemonOutdated'].includes(message)) markNativeMutationUncertain();
+        throw new Error(message);
       }
     } finally { release(); }
   }
-  if (!read) assertLegacyWriteAllowed();
   try {
     const reply = await invoke('accounts_fallback', { method, params });
     if (!isReply(method, reply)) throw new Error('errors.accountsWriteFailed');
@@ -233,77 +227,53 @@ export async function initDB() {
 
 // --- Account operations ---
 
-export async function saveAccount(account) {
-  console.log('[db.js] saveAccount called', { accountId: account.id, hasPassword: !!account.password });
-  await initDB();
-
-  // Stamp a host change so post-sync detection can offer to restore local mail
-  // to a freshly-migrated server. Best-effort: a missing prior account (first
-  // save) simply has nothing to compare.
-  try {
-    const prior = await getAccount(account.id);
-    if (prior && prior.imapHost && account.imapHost && prior.imapHost !== account.imapHost) {
-      account.previousImapHost = prior.imapHost;
-      account.hostChangedAt = Date.now();
-    }
-  } catch { /* first save - nothing to compare */ }
-
-  // Store full account (including password) in keychain
-  if (invoke) {
-    try {
-      await saveCredentials({ [account.id]: JSON.stringify(account) });
-      console.log('[db.js] Account stored in keychain');
-    } catch (error) {
-      console.error('[db.js] Failed to store account in keychain:', errText(error));
-      throw error;
-    }
-  }
-
-  // Also write metadata (no secrets) to accounts.json for quick loading:
-  // merged onto the stored entry with this id, or appended.
-  await accountsCall('accounts.put', { entries: [stripSecrets(account)] });
-  console.log('[db.js] Account metadata saved to accounts.json');
-  return account;
+// Finite source context: absence and explicit null are different guards.
+const identityContext = ['email', 'authType', 'imapHost', 'oauth2Provider', 'oauth2Transport'];
+const oauthContext = [...identityContext, 'oauth2ClientId', 'oauth2CustomClientId', 'oauth2TenantId'];
+const serverContext = [...identityContext, 'imapPort', 'imapSecure', 'imapSecurity', 'smtpHost', 'smtpPort', 'smtpSecure', 'jmapSessionUrl', 'jmapAuth', 'jmapUsername'];
+export function accountExpectedContext(account, kind = 'server') {
+  const keys = kind === 'oauth' ? oauthContext : kind === 'all' ? [...new Set([...serverContext, ...oauthContext])]
+    : kind === 'repair' ? ['email', 'authType', 'oauth2Transport'] : serverContext;
+  return {
+    fields: Object.fromEntries(keys.filter(k => account[k] !== undefined).map(k => [k, account[k]])),
+    absent: keys.filter(k => account[k] === undefined),
+    ...(kind === 'repair' ? { credentialPresent: true } : {}),
+  };
 }
-
-/**
- * Batch save for account transfer import: ONE keychain read, ONE keychain
- * write, ONE accounts.json write, however many accounts arrive.
- *
- * Refuses unless the keychain read really succeeded. After a denied/
- * cancelled/timed-out read loadKeychain() hands back {} and saveKeychain's
- * merge guard only protects a non-empty cache, so writing then would replace
- * every other account's secrets with just these. The status is checked after
- * loadKeychain() resolves, since that read is what sets it.
- */
-export async function saveAccounts(accounts) {
-  if (!accounts.length) return;
-  await initDB();
-
-  // No optimistic failed data enters the cache. Earlier confirmed steps may
-  // remain changed when a later step fails; this is not a disk rollback.
-  await loadKeychain();
-  const status = keychainSession.getStatus();
-  if (status !== 'granted' && status !== 'empty') throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
-  try {
-    await saveCredentials(Object.fromEntries(accounts.map(a => [a.id, JSON.stringify(a)])));
-  } catch (error) {
-    throw accountsWriteError(error);
+async function persistAccount(params) {
+  await initBasic();
+  let reply;
+  try { reply = await accountsCall('accounts.save', params); }
+  catch (error) { throw accountsWriteError(error); }
+  invalidateCredentialsCache();
+  return reply;
+}
+export async function patchAccount(id, fields, { unset = [], expected } = {}) {
+  const reply = await persistAccount({ patch: { id, fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), ...(unset.length ? { unset } : {}), ...(expected ? { expected } : {}) } });
+  if (reply.accepted.length !== 1 || reply.accepted[0] !== id || Object.keys(reply.skipped).length) {
+    markNativeMutationUncertain();
+    throw accountsWriteError(new Error('errors.accountsWriteFailed'));
   }
-
-  try {
-    await accountsCall('accounts.put', { entries: accounts.map(stripSecrets) });
-  } catch (error) {
-    throw accountsWriteError(error);
+  return { ...reply, account: reply.accounts[0] };
+}
+// Add only. Existing-account callers must express their intended patch.
+export async function saveAccount(entry) {
+  const reply = await persistAccount({ entries: [entry], ifAbsent: false });
+  if (reply.accepted.length !== 1 || reply.accepted[0] !== entry.id || Object.keys(reply.skipped).length) {
+    markNativeMutationUncertain();
+    throw accountsWriteError(new Error('errors.accountsWriteFailed'));
   }
-  console.log('[db.js] saveAccounts stored', accounts.length, 'account(s)');
+  return reply.accounts[0];
+}
+export async function saveAccounts(entries) {
+  return persistAccount({ entries, ifAbsent: true });
 }
 
 // The shell's keychain queue rejects with store_credentials' raw Rust string,
 // the account list with its catalog key; callers map on an E_* prefix.
 function accountsWriteError(error) {
   const message = error?.message ?? error;
-  if (message === keychainSession.E_KEYCHAIN_UNAVAILABLE) return new Error(message);
+  if (message === keychainSession.E_KEYCHAIN_UNAVAILABLE || message === 'errors.keychainUnavailable') return new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
   const key = ACCOUNTS_ERRORS.includes(message) ? message : 'errors.keychainWriteFailed';
   return new Error(`${keychainSession.E_KEYCHAIN_WRITE}: ${key}`);
 }
@@ -428,26 +398,13 @@ export async function getAccounts() {
 
   // Auto-repair: personal Microsoft accounts must use Graph transport.
   // Older saved accounts may have oauth2Transport: 'imap' which fails with XOAUTH2.
-  const repaired = [];
   for (const account of accounts) {
     if (account.authType === 'oauth2' && isPersonalMicrosoftEmail(account.email) && account.oauth2Transport !== 'graph') {
-      console.log(`[db.js] Auto-repairing ${account.email}: switching oauth2Transport from '${account.oauth2Transport}' to 'graph'`);
+      const expected = accountExpectedContext(account, 'repair');
+      // Retain the display fallback; only native confirmation proves repair.
       account.oauth2Transport = 'graph';
-      repaired.push(account);
-    }
-  }
-
-  // Persist the repair to keychain so it's permanent: the repaired records
-  // only, and only those the keychain holds (an accounts.json-only entry has
-  // no secrets to keep; the old whole-blob write could drop other records).
-  if (repaired.length && invoke) {
-    try {
-      const data = await loadKeychain();
-      const records = Object.fromEntries(repaired.filter(a => data[a.id]).map(a => [a.id, JSON.stringify(a)]));
-      await saveCredentials(records);
-      console.log('[db.js] Persisted auto-repaired account transports to keychain');
-    } catch (e) {
-      console.warn('[db.js] Failed to persist transport repair:', errText(e));
+      try { await patchAccount(account.id, { oauth2Transport: 'graph' }, { expected }); }
+      catch { console.warn('[db.js] Transport repair was not confirmed'); }
     }
   }
 

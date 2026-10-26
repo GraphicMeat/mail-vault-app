@@ -606,9 +606,31 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-/// The grant, token and expiry of a stored record, or `None` when the daemon
-/// does not manage its token: not OAuth2, or no refresh token (the app left
-/// such an account untouched too).
+// Only these two persistence-only fields may coexist with an in-flight
+// refresh. Unknown fields and every auth/config/token presence remain exact.
+fn same_refresh_source(left: &Value, right: &Value) -> bool {
+    if left == right {
+        return true;
+    }
+    let (Some(a), Some(b)) = (left.as_object(), right.as_object()) else {
+        return false;
+    };
+    let relevant = |k: &str| !matches!(k, "sentFolderOverride" | "updatedAt");
+    if a.iter().any(|(k, v)| relevant(k) && b.get(k) != Some(v))
+        || b.keys().any(|k| relevant(k) && !a.contains_key(k))
+    {
+        return false;
+    }
+    // Differing malformed/non-OAuth records gain no equivalence. The usual
+    // unchanged-record path above retains its original exact comparison.
+    grant_of(left).is_some()
+        && grant_of(right).is_some()
+        && serde_json::from_value::<ImapConfig>(left.clone()).is_ok()
+        && serde_json::from_value::<ImapConfig>(right.clone()).is_ok()
+}
+
+/// The grant, token and expiry of a stored record; non-OAuth records or
+/// records without a refresh token are not managed.
 fn grant_of(record: &Value) -> Option<(Grant, String, i64)> {
     let text = |k: &str| {
         record
@@ -748,8 +770,11 @@ impl TokenStore {
                 {
                     // A definitive new sign-in supersedes the old completion.
                     held.pending = None;
-                } else if pending.source_record == *record
-                    || pending.predecessor_record.as_ref() == Some(record)
+                } else if same_refresh_source(&pending.source_record, record)
+                    || pending
+                        .predecessor_record
+                        .as_ref()
+                        .is_some_and(|prior| same_refresh_source(prior, record))
                 {
                     let mut completed = held.pending.take().unwrap().entry;
                     completed.checked = true;
@@ -1099,8 +1124,10 @@ async fn refresh(
             let (_, current) = read_record(account_id, Read::Quiet)
                 .await
                 .map_err(|_| stale_snapshot())?;
-            let coherent_config = current.record == record.record
-                || predecessor_record.as_ref() == Some(&current.record);
+            let coherent_config = same_refresh_source(&current.record, &record.record)
+                || predecessor_record
+                    .as_ref()
+                    .is_some_and(|prior| same_refresh_source(prior, &current.record));
             let completed = state
                 .tokens
                 .reconcile(account_id, &current, &state.events)?;
@@ -1801,6 +1828,68 @@ mod tests {
         gmail(
             json!({"id":"g","oauth2RefreshToken":rt,"oauth2AccessToken":token,"oauth2ExpiresAt":now_ms()+3_600_000}),
         )
+    }
+
+    #[test]
+    fn refresh_source_comparison_ignores_only_two_valid_persistence_fields() {
+        let original = fresh_grant("synthetic-r", "synthetic-a");
+        let mut benign = original.clone();
+        benign["sentFolderOverride"] = json!("Sent new");
+        benign["updatedAt"] = json!("2026-10-26T00:01:00.000Z");
+        assert!(same_refresh_source(&original, &benign));
+        for (field, value) in [
+            ("id", json!("different")),
+            ("authType", json!("password")),
+            ("email", json!("other@example.test")),
+            ("imapHost", json!("other.example.test")),
+            ("imapPort", json!(444)),
+            ("imapSecure", json!(false)),
+            ("imapSecurity", json!("starttls")),
+            ("smtpHost", json!("smtp.other.example.test")),
+            ("smtpPort", json!(2525)),
+            ("smtpSecure", json!(false)),
+            ("jmapSessionUrl", json!("https://other.example.test/jmap")),
+            ("jmapAuth", json!("basic")),
+            ("jmapUsername", json!("other-login")),
+            ("oauth2Provider", json!("microsoft")),
+            ("oauth2ClientId", json!("other-client")),
+            ("oauth2CustomClientId", json!("other-custom")),
+            ("oauth2TenantId", json!("other-tenant")),
+            ("oauth2Transport", json!("graph")),
+            ("password", json!("synthetic-other-password")),
+            ("fromEmail", json!("alias@example.test")),
+            ("oauth2AccessToken", json!("synthetic-other-at")),
+            ("oauth2RefreshToken", json!("synthetic-other-rt")),
+            ("oauth2ExpiresAt", json!(3)),
+            ("displayName", json!("ambiguous")),
+            ("unknownProperty", json!({"nested":false})),
+        ] {
+            let mut changed = benign.clone();
+            changed[field] = value;
+            assert!(
+                !same_refresh_source(&original, &changed),
+                "{field} must stay exact"
+            );
+        }
+        let mut absent = benign.clone();
+        absent.as_object_mut().unwrap().remove("id");
+        assert!(!same_refresh_source(&original, &absent));
+        let mut null = benign.clone();
+        null["oauth2ClientId"] = Value::Null;
+        assert!(!same_refresh_source(&original, &null));
+        assert!(!same_refresh_source(
+            &json!({}),
+            &json!({"sentFolderOverride":"Sent"})
+        ));
+        assert!(!same_refresh_source(
+            &Value::Null,
+            &json!({"updatedAt":"x"})
+        ));
+        let mut malformed = original.clone();
+        malformed.as_object_mut().unwrap().remove("imapHost");
+        let mut changed = malformed.clone();
+        changed["sentFolderOverride"] = json!("Sent");
+        assert!(!same_refresh_source(&malformed, &changed));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

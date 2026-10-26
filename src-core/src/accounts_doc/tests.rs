@@ -858,3 +858,45 @@ fn review_fix_if_absent_distinct_batch_preserves_legacy_and_existing_precedence(
         ]
     );
 }
+
+#[test]
+fn prepared_rows_replace_only_targets_clear_fields_and_keep_full_proof() {
+    let d = dir();
+    seed(
+        d.path(),
+        json!([{"id":"a","email":"a@example.test","imapHost":"h","oauth2ClientId":"old"},{"id":"b","email":"b@example.test","imapHost":"h","enabled":false}]),
+    );
+    let doc = doc(d.path());
+    let proof = list(&doc).unwrap();
+    commit_prepared(
+        &doc,
+        &proof,
+        &[json!({"id":"a","email":"a@example.test","imapHost":"h","sentFolderOverride":null})],
+    )
+    .unwrap();
+    let saved = disk(d.path());
+    assert!(saved[0].get("oauth2ClientId").is_none());
+    assert_eq!(saved[1], proof.accounts[1]);
+    assert!(matches!(
+        commit_prepared(&doc, &proof, &[]),
+        Err(AccountsError::Conflict { .. })
+    ));
+    let proof = list(&doc).unwrap();
+    assert!(matches!(
+        commit_prepared(
+            &doc,
+            &proof,
+            &[json!({"id":"x","email":"b@example.test","imapHost":"h"})]
+        ),
+        Err(AccountsError::Conflict { .. })
+    ));
+    for field in SECRET_FIELDS {
+        let mut row = json!({"id":"a","email":"a@example.test","imapHost":"h"});
+        row[field] = json!("synthetic-private");
+        assert!(matches!(
+            commit_prepared(&doc, &proof, &[row]),
+            Err(AccountsError::Invalid)
+        ));
+    }
+    assert_eq!(disk(d.path()), saved);
+}

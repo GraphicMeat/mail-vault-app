@@ -15,6 +15,8 @@ export {
   initBasic,
   initDB,
   saveAccount,
+  patchAccount,
+  accountExpectedContext,
   saveAccounts,
   getAccountsWithoutPasswords,
   accountLogicalKey,

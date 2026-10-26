@@ -10,8 +10,9 @@ const daemonReplies = async (method) => {
 const mockDaemonCall = vi.fn(daemonReplies);
 vi.mock('../../daemonClient', () => ({ daemonCall: (...a) => mockDaemonCall(...a) }));
 
-const mockSaveAccounts = vi.fn(async () => {
+const mockSaveAccounts = vi.fn(async entries => {
   if (h.status !== 'granted' && h.status !== 'empty') throw new Error('E_KEYCHAIN_UNAVAILABLE');
+  return { accepted: entries.map(a => a.id), skipped: {} };
 });
 vi.mock('../../db', () => ({
   getAccounts: vi.fn(async () => h.existing),

@@ -577,6 +577,9 @@ async fn accounts_fallback_at(
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    if dir.is_none() && !matches!(method.as_str(), "accounts.list" | "accounts.get") {
+        return Err("errors.daemonOutdated".to_string());
+    }
     tokio::task::spawn_blocking(move || {
         let dir = match dir {
             Some(dir) => dir,
@@ -629,36 +632,12 @@ fn portable_credentials_call(app: tauri::AppHandle, method: &'static str, params
 }
 
 #[tauri::command]
-async fn store_credentials(app_handle: tauri::AppHandle, credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
-    info!("=== STORE CREDENTIALS START ===");
-    info!("Storing credentials for {} account(s)", credentials.len());
-
-    if mailvault_core::paths::portable_root().is_some() {
-        let params = serde_json::json!({ "credentials": credentials });
-        return portable_credentials_call(app_handle, "portable.set_credentials", params).await.map(|_| ());
-    }
-
-    if let Some(path) = test_credentials_path() {
-        warn!("MAILVAULT_TEST_CREDENTIALS set — writing credentials to {:?}, NOT the keychain", path);
-        let json = serde_json::to_string(&credentials)
-            .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
-        return std::fs::write(&path, json)
-            .map_err(|e| format!("Failed to write test credentials: {}", e));
-    }
-
-    tokio::task::spawn_blocking(move || {
-        let json = serde_json::to_string(&credentials)
-            .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
-
-        write_credentials_blob(&json).map_err(|e| {
-            warn!("store_credentials: {}", e);
-            with_snap_keyring_hint(e)
-        })?;
-
-        info!("Credentials stored successfully");
-        info!("=== STORE CREDENTIALS END ===");
-        Ok(())
-    }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
+async fn store_credentials(
+    app_handle: tauri::AppHandle,
+    credentials: std::collections::HashMap<String, String>,
+) -> Result<(), String> {
+    let _ = (app_handle, credentials);
+    Err("errors.daemonOutdated".to_string())
 }
 
 /// A keyring error, led by the `snap connect` command when that is the fix.
@@ -3094,7 +3073,10 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // Full draft MIME/attachment preparation may outlast a short UI read.
         // Expiry is unknown completion, never cancellation of native work.
         "accounts.list" | "accounts.get" => Some(Duration::from_secs(30)),
-        "accounts.put" | "accounts.remove" | "accounts.reorder" | "accounts.replace_all" => Some(Duration::from_secs(50)),
+        "accounts.save" => Some(Duration::from_secs(95)),
+        "accounts.put" | "accounts.remove" | "accounts.reorder" | "accounts.replace_all" => {
+            Some(Duration::from_secs(50))
+        }
         "drafts.save" => Some(Duration::from_secs(600)),
         "compose.reply_context" | "compose.check" => Some(Duration::from_secs(30)),
         // list can recover one selected body; discard validates exact local IO.
@@ -5316,6 +5298,25 @@ mod verify_copies_tests {
 
 #[cfg(test)]
 mod accounts_fallback_tests {
+    #[test]
+    fn account_save_has_its_own_whole_attempt_budget() {
+        assert_eq!(
+            crate::reply_timeout("accounts.save"),
+            Some(std::time::Duration::from_secs(95))
+        );
+    }
+    #[tokio::test]
+    async fn production_account_fallback_refuses_mutations_before_any_file_access() {
+        assert_eq!(
+            crate::accounts_fallback_at(
+                None,
+                "accounts.put".into(),
+                serde_json::json!({"entries":[]})
+            )
+            .await,
+            Err("errors.daemonOutdated".into())
+        );
+    }
     use super::*;
     use serde_json::json;
     #[test]

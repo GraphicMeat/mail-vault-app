@@ -5,8 +5,8 @@
 // shell's `get_credentials` did, and `credentials.save` / `.update` /
 // `.delete` change one account at a time on a fresh read of the store, so a
 // stale cache here cannot replace another window's records. The one-release
-// shell writer requires a trusted unsupported mutation refusal, no unresolved
-// write, and a fresh complete quiet read. Unknown outcomes reject without replay.
+// shell writer is no longer a mutation fallback. Unsupported and unknown
+// mutations reject without replay; read compatibility remains.
 // `credentials-changed {ids, version}` refreshes the presentation copy; reconnect
 // starts a new in-memory read epoch. Neither reads nor reconnect cancel writes.
 
@@ -257,7 +257,7 @@ async function changeThroughDaemon(method, params) {
       markNativeMutationUncertain();
       throw new Error(E_WRITE);
     } catch (error) {
-      if (outdated(error)) return null;
+      if (outdated(error)) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.daemonOutdated`);
       const text = errText(error);
       if (text === E_UNAVAILABLE) {
         throw new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
@@ -449,6 +449,19 @@ export function __resetKeychainForTests() {
 let _isSnap = null;
 function isSnap() {
   return _isSnap === true;
+}
+
+// Completed native account saves return metadata only. Invalidate presentation
+// without replaying their historical secret-bearing input or resetting denial.
+export function invalidateCredentialsCache() {
+  localWrites += 1;
+  cacheRevision += 1;
+  connectionEpoch += 1;
+  refreshing = null;
+  refreshAgain = false;
+  keychainCache = null;
+  keychainLoaded = false;
+  _keychainLoadPromise = null;
 }
 
 export function clearCredentialsCache() {

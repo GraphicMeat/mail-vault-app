@@ -63,14 +63,14 @@ export async function changeServer(accountId, { imapHost, imapPort, imapSecurity
   // previousImapHost/hostChangedAt when the host actually changed.
   console.log('[mailStore] changeServer — persisting new server + password...');
   await api.storePassword(accountId, password);
-  await db.saveAccount(candidate);
+  const saved = await db.patchAccount(accountId, { imapHost, imapPort, imapSecurity: candidate.imapSecurity, smtpHost, smtpPort, password, updatedAt: candidate.updatedAt }, { expected: db.accountExpectedContext(existing) });
 
   useMailStore.setState(state => ({
-    accounts: state.accounts.map(a => (a.id === accountId ? candidate : a)),
+    accounts: state.accounts.map(a => (a.id === accountId ? { ...a, ...saved.account, password } : a)),
   }));
   console.log('[mailStore] changeServer — account updated in store');
 
-  const hostChanged = (existing.imapHost || '') !== (imapHost || '');
+  const hostChanged = saved.hostChanged;
   if (hostChanged && get().activeAccountId === accountId) {
     try {
       await get().activateAccount(accountId, get().activeMailbox || 'INBOX');
@@ -120,10 +120,16 @@ async function changeJmapServer(useMailStore, existing, { jmapSessionUrl, jmapUs
   }
 
   await api.storePassword(accountId, password);
-  await db.saveAccount(candidate);
+  const fields = { jmapSessionUrl: url, imapHost: host, password, updatedAt: candidate.updatedAt };
+  const unset = [];
+  if (jmapUsername !== undefined) {
+    if (candidate.jmapUsername !== undefined) fields.jmapUsername = candidate.jmapUsername;
+    else unset.push('jmapUsername');
+  }
+  const saved = await db.patchAccount(accountId, fields, { unset, expected: db.accountExpectedContext(existing) });
 
   useMailStore.setState(state => ({
-    accounts: state.accounts.map(a => (a.id === accountId ? candidate : a)),
+    accounts: state.accounts.map(a => { if (a.id !== accountId) return a; const next = { ...a, ...saved.account, password }; for (const k of unset) delete next[k]; return next; }),
   }));
 
   const hostChanged = (existing.jmapSessionUrl || '') !== url;

@@ -256,6 +256,17 @@ async fn native_persistence_r1_write_and_ack_preserve_private_r2_then_adoption_w
         granted("synthetic-a2", Some("synthetic-r2")),
     ]);
     assert!(recv(&rig.access()).is_ok());
+    assert!(recv(&rig.request(
+        "accounts.save",
+        json!({"patch":{"id":"g","fields":{"sentFolderOverride":"Sent before R1","updatedAt":"2026-10-26T00:00:00.000Z"}}})
+    ))
+    .error
+    .is_none());
+    assert_eq!(
+        rig.state.tokens.unsaved().len(),
+        1,
+        "metadata persistence cannot acknowledge the validated unsaved R1"
+    );
     rig.write = Some(credentials::TestWritePause::arm_with_timeout(5_000));
     let ack = rig.hook(&PERSISTENCE_ACK_HOOK, false);
     rig.start();
@@ -279,12 +290,36 @@ async fn native_persistence_r1_write_and_ack_preserve_private_r2_then_adoption_w
         rig.state.tokens.unsaved().is_empty(),
         "the private completion stays private during predecessor acknowledgement"
     );
+    assert!(recv(&rig.request(
+        "accounts.save",
+        json!({"patch":{"id":"g","fields":{"sentFolderOverride":"Sent during private R2","updatedAt":"2026-10-26T00:01:00.000Z"}}})
+    ))
+    .error
+    .is_none());
+    assert_eq!(rig.record()["oauth2RefreshToken"], json!("synthetic-r1"));
+    assert!(rig.state.tokens.entries()["g"]
+        .pending
+        .as_ref()
+        .is_some_and(|p| p.entry.grant.refresh_token == "synthetic-r2"));
     rig.release_all();
     assert!(recv(&second).ok().flatten().as_deref() == Some("synthetic-a2"));
     rig.advance(Duration::from_secs(1));
     rig.turn(1).await;
     rig.stop().await;
     assert_eq!(rig.record()["oauth2RefreshToken"], json!("synthetic-r2"));
+    assert_eq!(
+        rig.record()["sentFolderOverride"],
+        json!("Sent during private R2")
+    );
+    assert_eq!(rig.record()["updatedAt"], json!("2026-10-26T00:01:00.000Z"));
+    let metadata: Value =
+        serde_json::from_slice(&std::fs::read(rig.state.app_dir.join("accounts.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        metadata[0]["sentFolderOverride"],
+        json!("Sent during private R2")
+    );
+    assert_eq!(metadata[0]["updatedAt"], json!("2026-10-26T00:01:00.000Z"));
     let posts = test_token_posts();
     assert_eq!(posts.len(), 2);
     assert_eq!(
@@ -505,6 +540,50 @@ async fn native_persistence_queued_snapshot_cannot_overwrite_a_reconnect() {
     rig.stop().await;
     assert_eq!(rig.record(), reconnect);
     assert!(rig.state.tokens.unsaved().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_persistence_queued_pair_cannot_overwrite_intent_reconnect_save() {
+    let mut rig = PersistenceRig::new();
+    let _mock = test_token_mock(vec![granted("synthetic-a1", Some("synthetic-r1"))]);
+    assert!(recv(&rig.access()).is_ok());
+    let captured = rig.hook(&PERSISTENCE_MUTATION_HOOK, true);
+    rig.start();
+    recv(&captured);
+    let reconnect = fresh_grant("synthetic-new-signin-rt", "synthetic-new-signin-at");
+    assert!(recv(&rig.request("accounts.save",json!({"patch":{"id":"g","fields":{"oauth2AccessToken":reconnect["oauth2AccessToken"],"oauth2RefreshToken":reconnect["oauth2RefreshToken"],"oauth2ExpiresAt":reconnect["oauth2ExpiresAt"]}}}))).error.is_none());
+    rig.release_all();
+    rig.turn(0).await;
+    rig.stop().await;
+    assert_eq!(
+        rig.record()["oauth2RefreshToken"],
+        json!("synthetic-new-signin-rt")
+    );
+    assert!(rig.state.tokens.unsaved().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn native_persistence_scoped_busy_keeps_pair_and_existing_backoff_resumes() {
+    let mut rig = PersistenceRig::new();
+    let _mock = test_token_mock(vec![granted("synthetic-a1", Some("synthetic-r1"))]);
+    assert!(recv(&rig.access()).is_ok());
+    let backend = rig.synthetic();
+    let mut scope = crate::account_workflows::AccountWriteScope::default();
+    scope.record("g", &rig.record());
+    let lease = rig.state.account_admission.try_reserve(scope).unwrap();
+    rig.start();
+    let turns = rig.turn(0).await;
+    let waits = rig.waiting(0).await;
+    assert_eq!(backend_reads(&backend), 0);
+    assert_eq!(rig.state.tokens.unsaved().len(), 1);
+    drop(lease);
+    rig.advance(Duration::from_secs(5));
+    rig.turn(turns).await;
+    rig.waiting(waits).await;
+    rig.stop().await;
+    assert_eq!(rig.record()["oauth2RefreshToken"], json!("synthetic-r1"));
+    assert!(rig.state.tokens.unsaved().is_empty());
+    assert_eq!(backend_writes(&backend), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

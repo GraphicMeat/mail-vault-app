@@ -31,10 +31,12 @@ export async function resolveSentMailboxForAccount(account) {
     const path = await api.ensureSentMailbox(account);
     if (path) {
       const updated = { ...account, sentFolderOverride: path };
-      await db.saveAccount(updated).catch(err => console.warn('[composeSend] failed to persist sentFolderOverride:', err));
-      useMailStore.setState(state => ({
-        accounts: (state.accounts || []).map(item => item.id === accountId ? { ...item, sentFolderOverride: path } : item),
-      }));
+      try {
+        await db.patchAccount(accountId, { sentFolderOverride: path });
+        useMailStore.setState(state => ({
+          accounts: (state.accounts || []).map(item => item.id === accountId ? { ...item, sentFolderOverride: path } : item),
+        }));
+      } catch { console.warn('[composeSend] Sent folder persistence was not confirmed'); }
       try {
         const freshBoxes = await api.fetchMailboxes(updated);
         if (Array.isArray(freshBoxes) && freshBoxes.length) {

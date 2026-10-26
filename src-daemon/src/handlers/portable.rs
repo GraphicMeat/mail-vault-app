@@ -10,7 +10,6 @@ use crate::handlers::common::{blocking, done, str_arg};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -109,7 +108,12 @@ fn announce(state: &Arc<DaemonState>) {
     state.events.emit("portable-status", status_json(credentials::sealed()));
 }
 
-pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
+pub(crate) async fn route(
+    state: &Arc<DaemonState>,
+    method: &str,
+    params: &Value,
+    id: Value,
+) -> Option<RpcResponse> {
     if !method.starts_with("portable.") {
         return None;
     }
@@ -136,22 +140,39 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     }
     if method == "portable.create" {
         if store.is_some() {
-            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_FROM_PORTABLE.to_string()));
+            return Some(RpcResponse::error(
+                id,
+                ipc::INVALID_PARAMS,
+                E_FROM_PORTABLE.to_string(),
+            ));
         }
         let passphrase = Zeroizing::new(req!(str_arg(&id, params, "passphrase")));
         if passphrase.chars().count() < MIN_PASSPHRASE {
-            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_PASSPHRASE_SHORT.to_string()));
+            return Some(RpcResponse::error(
+                id,
+                ipc::INVALID_PARAMS,
+                E_PASSPHRASE_SHORT.to_string(),
+            ));
         }
         let flag = |k: &str| params.get(k).and_then(Value::as_bool).unwrap_or(false);
-        let (copy_mail, copy_config, remove_from_host) = (flag("copyMail"), flag("copyConfig"), flag("removeFromHost"));
+        let (copy_mail, copy_config, remove_from_host) =
+            (flag("copyMail"), flag("copyConfig"), flag("removeFromHost"));
         // Removing from the host is only ever offered for a full copy: what
         // is not on the drive would be gone everywhere.
         if remove_from_host && !(copy_mail && copy_config) {
-            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "removeFromHost needs copyMail and copyConfig".to_string()));
+            return Some(RpcResponse::error(
+                id,
+                ipc::INVALID_PARAMS,
+                "removeFromHost needs copyMail and copyConfig".to_string(),
+            ));
         }
         // Mail is filed under account ids: without the accounts it is unreadable.
         if copy_mail && !copy_config {
-            return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "copyMail needs copyConfig".to_string()));
+            return Some(RpcResponse::error(
+                id,
+                ipc::INVALID_PARAMS,
+                "copyMail needs copyConfig".to_string(),
+            ));
         }
         let dest = std::path::PathBuf::from(req!(str_arg(&id, params, "dest")));
         let payload = match this_app_payload() {
@@ -169,13 +190,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         return Some(done(id, run_create(state, req, payload).await));
     }
     let Some(store) = store else {
-        return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_PORTABLE_OFF.to_string()));
+        return Some(RpcResponse::error(
+            id,
+            ipc::INVALID_PARAMS,
+            E_PORTABLE_OFF.to_string(),
+        ));
     };
     Some(match method {
         "portable.unlock" => {
             let passphrase = Zeroizing::new(req!(str_arg(&id, params, "passphrase")));
             // argon2 runs here: off the async workers.
-            let result = blocking(move || store.unlock(&passphrase)).await.and_then(|r| r);
+            let result = blocking(move || store.unlock(&passphrase))
+                .await
+                .and_then(|r| r);
             if result.is_ok() {
                 announce(state);
                 // Rows the lock held back are due now, not at the next look.
@@ -192,9 +219,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let old = Zeroizing::new(req!(str_arg(&id, params, "old")));
             let new = Zeroizing::new(req!(str_arg(&id, params, "new")));
             if new.chars().count() < MIN_PASSPHRASE {
-                return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, E_PASSPHRASE_SHORT.to_string()));
+                return Some(RpcResponse::error(
+                    id,
+                    ipc::INVALID_PARAMS,
+                    E_PASSPHRASE_SHORT.to_string(),
+                ));
             }
-            let result = blocking(move || store.change_passphrase(&old, &new)).await.and_then(|r| r);
+            let result = blocking(move || store.change_passphrase(&old, &new))
+                .await
+                .and_then(|r| r);
             if result.is_ok() {
                 announce(state);
             }
@@ -202,11 +235,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "portable.get_credentials" => RpcResponse::success(id, credentials_reply(store)),
         "portable.set_credentials" => {
-            let blob: HashMap<String, String> = match params.get("credentials").cloned().map(serde_json::from_value) {
-                Some(Ok(b)) => b,
-                _ => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing or invalid credentials".to_string())),
-            };
-            done(id, blocking(move || store.set_credentials(blob)).await.and_then(|r| r).map(|_| Value::Null))
+            RpcResponse::error(id, ipc::METHOD_NOT_FOUND, "errors.daemonOutdated")
         }
         _ => return None,
     })

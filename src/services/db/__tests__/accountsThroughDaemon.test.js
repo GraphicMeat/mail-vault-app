@@ -83,7 +83,7 @@ beforeEach(() => {
   h.mailAccounts = [];
   fsWrites.length = 0;
   h.listeners.clear();
-  daemon = fakeAccountsDaemon({ read: () => file, write: (text) => { file = text; } });
+  daemon = fakeAccountsDaemon({ read: () => file, write: (text) => { file = text; }, credentials: { read: () => ({ ...blob }), write: next => { blob = next; credVersion += 1; }, version: () => credVersion } });
   accounts.__resetAccountsForTests();
   keychain.__resetKeychainForTests();
   useDaemon();
@@ -92,12 +92,13 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('the account list goes through the daemon', () => {
-  it('saveAccount sends one credentials record and one secret-free put, and writes no file itself', async () => {
+  it('strict create sends one native save and writes no file itself', async () => {
     await accounts.saveAccount({ id: 'a', email: 'a@x.test', imapHost: 'imap.x.test', password: 'pa' });
-    expect(sent('credentials.save').map(([, a]) => Object.keys(a.records))).toEqual([['a']]);
+    expect(sent('accounts.save')).toHaveLength(1);
+    expect(sent('credentials.save')).toHaveLength(0);
     expect(JSON.parse(blob.old).password).toBe('keep');
-    expect(sent('accounts.put')).toHaveLength(1);
-    expect(JSON.stringify(sent('accounts.put')[0][1])).not.toMatch(/password|oauth2AccessToken|oauth2RefreshToken/);
+    expect(sent('accounts.put')).toHaveLength(0);
+    expect(file).not.toMatch(/password|oauth2AccessToken|oauth2RefreshToken/);
     expect(JSON.parse(file).map(a => a.id)).toEqual(['old', 'a']);
     expect(names()).not.toContain('store_credentials');
     expect(names()).not.toContain('accounts_fallback');
@@ -125,14 +126,14 @@ describe('the account list goes through the daemon', () => {
     expect(sent('accounts_fallback')).toHaveLength(1);
   });
 
-  it('a daemon without accounts.* revalidates each actual mutation before compatibility fallback', async () => {
+  it('old daemon account reads remain available but mutations refuse without fallback', async () => {
     useDaemon((cmd) => (cmd.startsWith('accounts.') ? () => Promise.reject(OUTDATED()) : undefined));
     await accounts.getAccountsWithoutPasswords();
-    await accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }]);
+    await expect(accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }])).rejects.toThrow('errors.daemonOutdated');
     expect(sent('accounts.list')).toHaveLength(1);
     expect(sent('accounts.put')).toHaveLength(1);
-    expect(sent('accounts_fallback').map(([, a]) => a.method)).toEqual(['accounts.list', 'accounts.put']);
-    expect(JSON.parse(file).map(a => a.id)).toEqual(['old', 'b']);
+    expect(sent('accounts_fallback').map(([, a]) => a.method)).toEqual(['accounts.list']);
+    expect(JSON.parse(file).map(a => a.id)).toEqual(['old']);
   });
 
   it('a first read that takes too long is read through the shell instead', async () => {
@@ -185,7 +186,8 @@ describe('the account list goes through the daemon', () => {
     file = JSON.stringify([{ id: 'fileonly', email: 'f@outlook.test', authType: 'oauth2', oauth2Transport: 'imap' }]);
     await accounts.getAccounts();
     expect(names()).not.toContain('store_credentials');
-    expect(sent('credentials.save').map(([, a]) => Object.keys(a.records))).toEqual([['ms']]);
+    expect(sent('credentials.save')).toHaveLength(0);
+    expect(sent('accounts.save').every(([,a])=>Object.keys(a.patch.fields).join(',')==='oauth2Transport'&&a.patch.expected.credentialPresent)).toBe(true);
     expect(JSON.parse(blob.ms).oauth2Transport).toBe('graph');
     expect(JSON.parse(blob.old).password).toBe('keep');
   });
@@ -237,7 +239,7 @@ describe('the credentials go through the daemon', () => {
   });
 
   it('a refused read writes nothing: E_KEYCHAIN_UNAVAILABLE, no shell write', async () => {
-    useDaemon((cmd) => (cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainUnavailable')) : undefined));
+    useDaemon((cmd) => (cmd === 'accounts.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainUnavailable')) : undefined));
     await expect(accounts.saveAccount({ id: 'a', email: 'a@x.test', password: 'pa' })).rejects.toThrow('E_KEYCHAIN_UNAVAILABLE');
     expect(names()).not.toContain('store_credentials');
     expect(sent('accounts.put')).toHaveLength(0);
@@ -277,13 +279,13 @@ describe('the credentials go through the daemon', () => {
     expect(sent('store_credentials')).toHaveLength(0);
   });
 
-  it('a daemon without credentials.* uses the shell commands, as before', async () => {
-    useDaemon((cmd) => (cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined));
+  it('old daemon credential reads work but mutations cannot switch to shell writes', async () => {
+    useDaemon(cmd => cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined);
     await keychain.loadKeychain();
-    await keychain.saveCredentials({ a: JSON.stringify({ id: 'a', email: 'a@x.test' }) });
-    expect(sent('get_credentials')).toHaveLength(2);
-    expect(Object.keys(sent('store_credentials')[0][1].credentials).sort()).toEqual(['a', 'old']);
-    expect(sent('credentials.save')).toHaveLength(1);
+    await expect(keychain.saveCredentials({ a: JSON.stringify({ id: 'a', email: 'a@x.test' }) })).rejects.toThrow('errors.daemonOutdated');
+    expect(sent('get_credentials')).toHaveLength(1);
+    expect(sent('store_credentials')).toHaveLength(0);
+    expect(Object.keys(blob)).toEqual(['old']);
   });
 });
 
@@ -363,9 +365,10 @@ describe('qualified U outcome policy', () => {
   }
   for (const malformed of [false, true]) {
     it(`metadata put rejects ${malformed ? 'malformed' : 'lost'} completion after credential success`, async () => {
-      useDaemon(cmd => cmd === 'accounts.put' ? () => malformed ? { version: 4 } : Promise.reject(UNAVAILABLE()) : undefined);
+      useDaemon((cmd,args) => cmd === 'accounts.save' ? () => { blob.a=JSON.stringify(args.entries[0]); return malformed ? { version: 4 } : Promise.reject(UNAVAILABLE()); } : undefined);
       const out = await attempt(accounts.saveAccounts([{ id: 'a', email: 'a@x.test', password: 'synthetic-a' }]));
       expect(out.error?.message).toMatch(/^E_KEYCHAIN_WRITE/);
+      expect(() => keychain.assertLegacyWriteAllowed()).toThrow('errors.keychainWriteFailed');
       expect(JSON.parse(blob.a).password).toBe('synthetic-a'); // an earlier step can remain changed
       expect(JSON.parse(file).map(a => a.id)).toEqual(['old']);
       noShellMutation();
@@ -390,19 +393,19 @@ describe('qualified U outcome policy', () => {
     expect((await attempt(keychain.saveCredentials({ a: '{"id":"a"}' }))).error).toBeInstanceOf(Error);
     noShellMutation();
   });
-  it('legacy mutation obtains fresh complete data and probes native again after upgrade', async () => {
+  it('unsupported mutation preserves native data and probes native again after upgrade', async () => {
     useDaemon(cmd => cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined);
     await keychain.loadKeychain();
     blob.other = '{"id":"other","email":"other@x.test"}';
-    await keychain.saveCredentials({ a: '{"id":"a"}' });
-    expect(Object.keys(blob).sort()).toEqual(['a', 'old', 'other']);
-    const shellWrites = sent('store_credentials').length;
+    await expect(keychain.saveCredentials({ a: '{"id":"a"}' })).rejects.toThrow('errors.daemonOutdated');
+    expect(Object.keys(blob).sort()).toEqual(['old','other']);
     useDaemon();
     await keychain.saveCredentials({ b: '{"id":"b"}' });
     expect(sent('credentials.save')).toHaveLength(2);
-    expect(sent('store_credentials')).toHaveLength(shellWrites);
-    expect(Object.keys(blob).sort()).toEqual(['a', 'b', 'old', 'other']);
+    expect(Object.keys(blob).sort()).toEqual(['b','old','other']);
+    noShellMutation();
   });
+
   for (const status of ['denied', 'unavailable', 'malformed']) {
     it(`legacy mutation refuses a fresh ${status} read even with a warm complete cache`, async () => {
       await keychain.loadKeychain();
@@ -412,18 +415,13 @@ describe('qualified U outcome policy', () => {
       noShellMutation();
     });
   }
-  it('unknown legacy completion stops retries and subsequent native intents', async () => {
-    vi.useFakeTimers();
-    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(OUTDATED())
-      : cmd === 'store_credentials' ? () => Promise.reject(UNAVAILABLE()) : undefined);
-    const pending = attempt(keychain.saveCredentials({ a: '{"id":"a"}' }));
-    await vi.advanceTimersByTimeAsync(3500);
-    expect((await pending).error).toBeInstanceOf(Error);
-    expect(sent('store_credentials')).toHaveLength(1);
-    keychain.clearCredentialsCache();
+  it('definitive unsupported refusal starts no legacy job or unknown completion', async () => {
+    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(OUTDATED()) : undefined);
+    await expect(keychain.saveCredentials({ a: '{"id":"a"}' })).rejects.toThrow('errors.daemonOutdated');
+    noShellMutation();
     useDaemon();
-    expect((await attempt(keychain.saveCredentials({ b: '{"id":"b"}' }))).error).toBeInstanceOf(Error);
-    expect(blob.b).toBeUndefined();
+    await keychain.saveCredentials({ b: '{"id":"b"}' });
+    expect(Object.keys(blob).sort()).toEqual(['b','old']);
   });
   it('read message/error canaries never reach logs or the session message', async () => {
     const spies = ['log', 'warn', 'error'].map(k => vi.spyOn(console, k).mockImplementation(() => {}));
@@ -431,7 +429,7 @@ describe('qualified U outcome policy', () => {
     await keychain.loadKeychain();
     expect(keychainSession.getStatus()).toBe('unavailable');
     expect(keychainSession.getMessage() || '').not.toContain('CANARY');
-    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(new Error('CANARY-password-token')) : undefined);
+    useDaemon(cmd => cmd === 'accounts.save' ? () => Promise.reject(new Error('CANARY-password-token')) : undefined);
     vi.useFakeTimers();
     const pending = attempt(accounts.saveAccount({ id: 'a', email: 'a@x.test', password: 'CANARY-password-token' }));
     await vi.advanceTimersByTimeAsync(3500);
@@ -726,29 +724,15 @@ describe('late backend completion is not cancelled by a read', () => {
 
 
 describe('round1 reviewed cache and writer interleavings', () => {
-  it('an active legacy read/apply/store excludes native credential and account intents during upgrade', async () => {
-    const store = deferred();
-    let pending = false;
-    let modern = false;
-    useDaemon((cmd, args) => {
-      if (cmd === 'credentials.save' && !modern) return () => Promise.reject(OUTDATED());
-      if (cmd === 'store_credentials') return async () => { pending = true; const snapshot = { ...args.credentials }; await store.promise; blob = snapshot; };
-      return undefined;
-    });
-    const a = attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }));
-    await vi.waitFor(() => expect(pending).toBe(true));
-    keychain.clearCredentialsCache();
-    modern = true;
-    const b = attempt(keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' }));
-    const metadata = attempt(accounts.ensureAccountsInFile([{ id: 'b', email: 'b@x.test' }]));
-    try {
-      expect((await b).error).toBeInstanceOf(Error);
-      expect((await metadata).error).toBeInstanceOf(Error);
-      expect(sent('credentials.save')).toHaveLength(1);
-      expect(sent('accounts.put')).toHaveLength(0);
-    } finally { store.resolve(); await a; }
-    await keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' });
-    expect(Object.keys(blob).sort()).toEqual(['a', 'b', 'old']);
+  it('an unsupported legacy intent creates no owner that blocks a later compatible native save', async () => {
+    useDaemon(cmd=>cmd==='credentials.save'?()=>Promise.reject(OUTDATED()):undefined);
+    await expect(keychain.saveCredentials({a:'{"id":"a"}'})).rejects.toThrow('errors.daemonOutdated');
+    noShellMutation();
+    useDaemon();
+    await keychain.saveCredentials({b:'{"id":"b"}'});
+    await accounts.ensureAccountsInFile([{id:'b',email:'b@x.test'}]);
+    expect(Object.keys(blob).sort()).toEqual(['b','old']);
+    expect(JSON.parse(file).some(a=>a.id==='b')).toBe(true);
   });
   it('an admitted native credential call excludes a competing legacy whole-blob intent', async () => {
     const native = deferred();
@@ -765,6 +749,7 @@ describe('round1 reviewed cache and writer interleavings', () => {
       expect((await attempt(keychain.deleteCredentials(['old']))).error).toBeInstanceOf(Error);
       expect(sent('store_credentials')).toHaveLength(0);
     } finally { native.resolve(); await a; }
+    useDaemon();
     await keychain.deleteCredentials(['old']);
     expect(Object.keys(blob)).toEqual(['a']);
   });
@@ -927,3 +912,38 @@ describe('round2 post-confirmation OAuth publication guard', () => {
     });
   }
 });
+
+// S2.2 baseline RED: these invoke the existing adapter, not a future method.
+describe('account intent persistence regressions', () => {
+  it('a Sent metadata edit preserves a newer native rotated pair', async () => {
+    const stale = { id: 'g', email: 'g@x.test', imapHost: 'h', authType: 'oauth2', oauth2Provider: 'google', oauth2AccessToken: 'synthetic-old-at', oauth2RefreshToken: 'synthetic-old-rt', oauth2ExpiresAt: 1 };
+    blob.g = JSON.stringify(stale);
+    await accounts.getAccount('g');
+    await keychain.updateCredentials('g', { oauth2AccessToken: 'synthetic-new-at', oauth2RefreshToken: 'synthetic-new-rt', oauth2ExpiresAt: 9 });
+    await accounts.patchAccount(stale.id, { sentFolderOverride: 'Sent custom' });
+    const saved = JSON.parse(blob.g);
+    expect(saved.oauth2AccessToken === 'synthetic-new-at' && saved.oauth2RefreshToken === 'synthetic-new-rt' && saved.oauth2ExpiresAt === 9, 'new native pair must survive stale caller').toBe(true);
+    expect(JSON.parse(file).find(a => a.id === 'g').sentFolderOverride).toBe('Sent custom');
+  });
+
+  it('Microsoft repair preserves a rotation committed after its cached read', async () => {
+    const stale = { id: 'ms', email: 'me@outlook.test', imapHost: 'h', authType: 'oauth2', oauth2Transport: 'imap', oauth2RefreshToken: 'synthetic-old-rt', oauth2AccessToken: 'synthetic-old-at', oauth2ExpiresAt: 1 };
+    blob.ms = JSON.stringify(stale);
+    await keychain.loadKeychain();
+    useDaemon();
+    const real = h.handler;
+    h.handler = async (cmd, args) => {
+      if (cmd === 'accounts.save') {
+        blob.ms = JSON.stringify({ ...stale, oauth2RefreshToken: 'synthetic-new-rt', oauth2AccessToken: 'synthetic-new-at', oauth2ExpiresAt: 9 });
+        useDaemon();
+        return h.handler(cmd, args);
+      }
+      return real(cmd, args);
+    };
+    await accounts.getAccounts();
+    const saved = JSON.parse(blob.ms);
+    expect(saved.oauth2AccessToken === 'synthetic-new-at' && saved.oauth2RefreshToken === 'synthetic-new-rt' && saved.oauth2ExpiresAt === 9, 'new native pair must survive stale caller').toBe(true);
+    expect(saved.oauth2Transport).toBe('graph');
+  });
+});
+

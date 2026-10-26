@@ -339,6 +339,63 @@ fn put(
     })?)
 }
 
+/// Commit only the prepared target rows, fenced by the complete N2 listing.
+/// Replacement is intentional: field removal must survive metadata merging.
+pub fn commit_prepared(
+    doc: &JsonDoc,
+    proof: &Listing,
+    rows: &[Value],
+) -> Result<Outcome, AccountsError> {
+    let mut ids = std::collections::HashSet::new();
+    let mut keys = std::collections::HashSet::new();
+    for row in rows {
+        let id = id_of(row)
+            .filter(|s| !s.is_empty())
+            .ok_or(AccountsError::Invalid)?;
+        if !row.is_object()
+            || SECRET_FIELDS.iter().any(|k| row.get(k).is_some())
+            || !ids.insert(id.to_owned())
+            || !keys.insert(logical_key(row))
+        {
+            return Err(AccountsError::Invalid);
+        }
+    }
+    Ok(wrote(mutate(
+        doc,
+        None,
+        LiveScrub::Preserved(proof),
+        move |list| {
+            let list = entries(list)?;
+            for row in rows {
+                let id = id_of(row).unwrap();
+                let key = logical_key(row);
+                if list
+                    .iter()
+                    .any(|old| id_of(old) != Some(id) && logical_key(old) == key)
+                {
+                    return Err(DocError::Conflict {
+                        current: proof.version,
+                    });
+                }
+            }
+            let mut changed = Vec::new();
+            for row in rows {
+                let id = id_of(row).unwrap();
+                if let Some(old) = list.iter_mut().find(|v| id_of(v) == Some(id)) {
+                    if old != row {
+                        *old = row.clone();
+                        push_unique(&mut changed, id);
+                    }
+                } else {
+                    list.push(row.clone());
+                    push_unique(&mut changed, id);
+                }
+            }
+            Ok(changed)
+        },
+    )?))
+}
+
 fn remove(
     doc: &JsonDoc,
     ids: &[String],

@@ -121,7 +121,9 @@ pub struct DaemonState {
     pub vault_registry: Arc<mailvault_core::vault_registry::VaultRegistry>,
     /// Named local/server search runs. The handler removes entries by pointer
     /// identity so an older completion cannot unregister a newer run.
-    pub(crate) search_runs: std::sync::Mutex<std::collections::HashMap<String, Arc<crate::handlers::mail_search::SearchRun>>>,
+    pub(crate) search_runs: std::sync::Mutex<
+        std::collections::HashMap<String, Arc<crate::handlers::mail_search::SearchRun>>,
+    >,
     /// Task 2.9a: not opened at daemon startup by this task (Task 2.9b wires
     /// that, once nothing in the app still holds the exclusive lock on
     /// `custody.db`) — see `crate::custody`.
@@ -179,6 +181,7 @@ pub struct DaemonState {
     /// The OAuth2 access tokens this daemon refreshed and holds
     /// (`oauth_tokens`): every RPC and worker that needs one asks there.
     pub tokens: crate::oauth_tokens::TokenStore,
+    pub account_admission: crate::account_workflows::AccountAdmission,
     /// Snooze's wake signal and pass lock — `handlers::snooze` pokes it on
     /// create/reschedule and holds the lock for an immediate unsnooze.
     pub snooze: crate::snooze_worker::SnoozeState,
@@ -914,10 +917,19 @@ fn lift_open_file_limit() {
 #[cfg(test)]
 impl DaemonState {
     /// A state wired the way main.rs wires it, but pointed at scratch dirs.
-    pub(crate) fn for_test(mail_dir: PathBuf, app_dir: PathBuf, mail_dir_ok: bool) -> Arc<DaemonState> {
+    pub(crate) fn for_test(
+        mail_dir: PathBuf,
+        app_dir: PathBuf,
+        mail_dir_ok: bool,
+    ) -> Arc<DaemonState> {
         // A gate whose probe always answers "online": these tests are about
         // routing and state, never about connectivity.
-        Self::for_test_with_probe(mail_dir, app_dir, mail_dir_ok, Arc::new(|| Box::pin(async { true })))
+        Self::for_test_with_probe(
+            mail_dir,
+            app_dir,
+            mail_dir_ok,
+            Arc::new(|| Box::pin(async { true })),
+        )
     }
 
     /// `for_test` with the network gate's probe scripted by the caller, for
@@ -966,7 +978,12 @@ impl DaemonState {
         }
         sync_engine.attach_custody_db(Arc::clone(&custody.db));
         contacts.attach_db(Arc::clone(&custody.db));
-        let search_index = crate::search_index::SearchIndexState::new(mail_dir.clone(), app_dir_for_index.clone(), mail_dir_ok, events.clone());
+        let search_index = crate::search_index::SearchIndexState::new(
+            mail_dir.clone(),
+            app_dir_for_index.clone(),
+            mail_dir_ok,
+            events.clone(),
+        );
         search_index.attach_custody_db(Arc::clone(&custody.db));
         // A registry file of its own per state: many tests pass the vault dir
         // (or one shared dir) as `app_dir`, and one file under two roots wipes.
@@ -975,7 +992,10 @@ impl DaemonState {
         // The worker process is spawned on the first call, so no reaper runs in tests.
         #[cfg(feature = "blitz-render")]
         let blitz = Arc::new(crate::blitz::RenderPool::new(|| {
-            crate::blitz::RenderHost::new(events.clone(), crate::blitz::WorkerCommand::current_exe().expect("current_exe"))
+            crate::blitz::RenderHost::new(
+                events.clone(),
+                crate::blitz::WorkerCommand::current_exe().expect("current_exe"),
+            )
         }));
         let state = Arc::new(DaemonState {
             net,
@@ -1008,13 +1028,16 @@ impl DaemonState {
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
-            bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(&app_dir_for_index)),
+            bulk: std::sync::Mutex::new(mailvault_core::bulk::Coordinator::load(
+                &app_dir_for_index,
+            )),
             custody,
             run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
             tokens: crate::oauth_tokens::TokenStore::default(),
+            account_admission: Default::default(),
             snooze: crate::snooze_worker::SnoozeState::default(),
             follow_up: crate::follow_up_worker::FollowUpState::default(),
             auto_tag_worker,

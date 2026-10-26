@@ -45,22 +45,24 @@ export async function updateAccount(accountId, patch) {
     throw typeof error === 'string' ? new Error(error) : error;
   }
 
+  const unset = ['oauth2ClientId', 'jmapUsername'].filter(k => Object.hasOwn(patch, k) && patch[k] === undefined);
+  let saved;
   try {
-    await db.saveAccount(updated);
+    saved = await db.patchAccount(accountId, { ...patch, updatedAt: updated.updatedAt }, { unset, expected: db.accountExpectedContext(existing, 'all') });
   } catch (error) {
     console.error('[mailStore] updateAccount — failed to save account:', error);
     throw error;
   }
 
   useMailStore.setState(state => ({
-    accounts: state.accounts.map(a => (a.id === accountId ? updated : a)),
+    accounts: state.accounts.map(a => { if (a.id !== accountId) return a; const next = { ...a, ...saved.account }; for (const k of ['password', 'oauth2AccessToken', 'oauth2RefreshToken', 'oauth2ExpiresAt']) if (Object.hasOwn(patch, k)) next[k] = patch[k]; for (const k of unset) delete next[k]; return next; }),
   }));
   console.log('[mailStore] updateAccount — account updated in store');
 
   // If the IMAP host actually changed, reconnect the active account to the new
   // server. Activation's post-sync step runs checkRestoreNeeded, which offers to
   // restore local Maildir mail when the new server is near-empty.
-  const hostChanged = !isGraphAccount(updated) && (existing.imapHost || '') !== (updated.imapHost || '');
+  const hostChanged = saved.hostChanged;
   if (hostChanged && get().activeAccountId === accountId) {
     try {
       await get().activateAccount(accountId, get().activeMailbox || 'INBOX');
@@ -69,5 +71,5 @@ export async function updateAccount(accountId, patch) {
     }
   }
 
-  return updated;
+  return { ...get().accounts.find(a => a.id === accountId), ...saved.account };
 }

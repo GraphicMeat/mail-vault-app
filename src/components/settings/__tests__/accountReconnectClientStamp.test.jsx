@@ -12,11 +12,11 @@ import { t } from '../../../i18n';
 // new sign-in used: an account that predates the stamp (or holds the old
 // client's) would otherwise refresh its new tokens as the wrong client.
 
-const mockSaveAccount = vi.fn(async () => {});
+const mockPatchAccount = vi.fn(async () => {});
 // Both ids: db.js re-exports db/index.js, and AccountSettings' dynamic import
 // can land on either.
-vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: (...a) => mockSaveAccount(...a) }));
-vi.mock('../../../services/db/index.js', () => ({ getCachedMailboxes: async () => [], saveAccount: (...a) => mockSaveAccount(...a) }));
+vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], patchAccount: (...a) => mockPatchAccount(...a), accountExpectedContext: a => ({ fields: { email:a.email,authType:a.authType,oauth2Provider:a.oauth2Provider } }) }));
+vi.mock('../../../services/db/index.js', () => ({ getCachedMailboxes: async () => [], patchAccount: (...a) => mockPatchAccount(...a), accountExpectedContext: a => ({ fields: { email:a.email,authType:a.authType,oauth2Provider:a.oauth2Provider } }) }));
 
 const mockGetOAuth2AuthUrl = vi.fn();
 const mockExchangeOAuth2Code = vi.fn();
@@ -40,12 +40,12 @@ async function reconnect(account) {
   render(<AccountSettings accounts={[account]} />);
   fireEvent.click(screen.getByRole('tab', { name: t('settings.accounts.sectionConnection') }));
   fireEvent.click(screen.getByRole('button', { name: t('settings.accounts.reconnect') }));
-  await waitFor(() => expect(mockSaveAccount).toHaveBeenCalledTimes(1));
-  return mockSaveAccount.mock.calls[0][0];
+  await waitFor(() => expect(mockPatchAccount).toHaveBeenCalledTimes(1));
+  return mockPatchAccount.mock.calls[0][1];
 }
 
 beforeEach(() => {
-  mockSaveAccount.mockClear();
+  mockPatchAccount.mockClear();
   mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({ authUrl: 'https://accounts.google.com/o/oauth2/v2/auth?x=1', state: 's1' });
   mockExchangeOAuth2Code.mockReset().mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt', expiresAt: 99, clientId: NEW });
   vi.spyOn(window, 'open').mockImplementation(() => {});
@@ -71,4 +71,5 @@ it('keeps no stale stamp when the exchange reports no client', async () => {
   mockExchangeOAuth2Code.mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt', expiresAt: 99 });
   const saved = await reconnect(googleAccount({ oauth2ClientId: OLD }));
   expect(saved.oauth2ClientId).toBeUndefined();
+  expect(mockPatchAccount.mock.calls[0][2].unset).toEqual(['oauth2ClientId']);
 });

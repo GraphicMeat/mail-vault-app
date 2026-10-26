@@ -39,7 +39,7 @@ vi.mock('../api', () => ({
   sendStaged: (...args) => sendStaged(...args),
   ensureSentMailbox: vi.fn().mockResolvedValue('Sent'),
 }));
-vi.mock('../db', () => ({ getCachedMailboxes: vi.fn().mockResolvedValue([]), saveAccount: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../db', () => ({ getCachedMailboxes: vi.fn().mockResolvedValue([]), patchAccount: vi.fn().mockResolvedValue({}) }));
 vi.mock('../authUtils', () => ({ ensureFreshToken: (...args) => ensureFreshToken(...args) }));
 vi.mock('../localDrafts', () => ({ cleanupDraftFor: (...args) => cleanupDraftFor(...args) }));
 vi.mock('../workflows/messageMutations', () => ({

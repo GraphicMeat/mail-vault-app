@@ -102,7 +102,12 @@ export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
   }
 
   // Throws E_KEYCHAIN_UNAVAILABLE before any write, E_KEYCHAIN_WRITE if a write fails.
-  await saveAccounts(toSave);
+  const accepted = await saveAccounts(toSave);
+  const acceptedIds = new Set(accepted.accepted);
+  for (const [fileId, targetId] of Object.entries(idMap)) {
+    if (Object.hasOwn(accepted.skipped, targetId)) idMap[fileId] = accepted.skipped[targetId];
+    if (importedIds.has(fileId) && !acceptedIds.has(targetId)) importedIds.delete(fileId);
+  }
 
   const importedMap = Object.fromEntries(Object.entries(idMap).filter(([id]) => importedIds.has(id)));
   const { settingsError } = await applySettings(bundle, importedMap, { applyGlobal: applyAppSettings, existingIds: existing.map(a => a.id) });
@@ -118,6 +123,6 @@ export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
     aiKeyError = !!report?.aiKeyError;
     contactsError = !!report?.contactsError;
   }
-  console.log('[transfer] imported', toSave.length, 'account(s)');
-  return { imported: toSave.length, aiKeyError, contactsError, settingsError };
+  console.log('[transfer] imported', accepted.accepted.length, 'account(s)');
+  return { imported: accepted.accepted.length, aiKeyError, contactsError, settingsError };
 }

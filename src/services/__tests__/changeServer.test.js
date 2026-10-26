@@ -10,14 +10,21 @@ if (!globalThis.window) {
 
 // ── Mock the same dependency surface as mailStore.test.js — activateAccount.js
 // pulls in the same transitive tree via accountSlice.js. ──
-const mockSaveAccount = vi.fn().mockResolvedValue(undefined);
+const mockPatchAccount = vi.fn().mockResolvedValue(undefined);
 function accountLogicalKey(a) {
   const email = (a.email || '').toLowerCase();
   const server = (a.imapHost || a.oauth2Provider || '').toLowerCase();
   return `${email}@${server}`;
 }
 vi.mock('../../services/db', () => ({
-  saveAccount: (...args) => mockSaveAccount(...args),
+  patchAccount: async (id, fields, options) => {
+    await mockPatchAccount(id, fields, options);
+    const old = storeState.accounts.find(a => a.id === id);
+    const account = { ...old, ...fields, id };
+    for (const k of ['password', 'oauth2AccessToken', 'oauth2RefreshToken', ...(options.unset || [])]) delete account[k];
+    return { account, hostChanged: !!old.imapHost && !!fields.imapHost && old.imapHost !== fields.imapHost };
+  },
+  accountExpectedContext: a => ({ fields: { email: a.email, imapHost: a.imapHost } }),
   accountLogicalKey,
   getVaultUidSets: () => Promise.resolve({ saved: new Set(), archived: new Set() }),
 }));
@@ -117,7 +124,7 @@ describe('changeServer', () => {
     mockTestConnection.mockResolvedValue({ success: true });
     mockSmtpTestConnection.mockResolvedValue({ success: true });
     mockStorePassword.mockResolvedValue(undefined);
-    mockSaveAccount.mockResolvedValue(undefined);
+    mockPatchAccount.mockResolvedValue(undefined);
     mockActivateAccount.mockResolvedValue(undefined);
     storeState = {
       accounts: [makeAccount()],
@@ -132,11 +139,11 @@ describe('changeServer', () => {
     mockTestConnection.mockImplementation(async () => { callOrder.push('imap'); return { success: true }; });
     mockSmtpTestConnection.mockImplementation(async () => { callOrder.push('smtp'); return { success: true }; });
     mockStorePassword.mockImplementation(async () => { callOrder.push('store_password'); });
-    mockSaveAccount.mockImplementation(async () => { callOrder.push('saveAccount'); });
+    mockPatchAccount.mockImplementation(async () => { callOrder.push('patchAccount'); });
 
     const result = await changeServer('acc-1', NEW_PARAMS);
 
-    expect(callOrder).toEqual(['imap', 'smtp', 'store_password', 'saveAccount']);
+    expect(callOrder).toEqual(['imap', 'smtp', 'store_password', 'patchAccount']);
     expect(result).toEqual({ ok: true, hostChanged: true });
 
     const updated = storeState.accounts.find(a => a.id === 'acc-1');
@@ -151,7 +158,7 @@ describe('changeServer', () => {
 
     expect(mockSmtpTestConnection).not.toHaveBeenCalled();
     expect(mockStorePassword).not.toHaveBeenCalled();
-    expect(mockSaveAccount).not.toHaveBeenCalled();
+    expect(mockPatchAccount).not.toHaveBeenCalled();
   });
 
   it('throws SMTP-prefixed error on SMTP failure and persists nothing', async () => {
@@ -161,7 +168,7 @@ describe('changeServer', () => {
 
     expect(mockTestConnection).toHaveBeenCalled();
     expect(mockStorePassword).not.toHaveBeenCalled();
-    expect(mockSaveAccount).not.toHaveBeenCalled();
+    expect(mockPatchAccount).not.toHaveBeenCalled();
   });
 
   it('throws on collision with another account and runs no connection tests', async () => {
@@ -175,7 +182,7 @@ describe('changeServer', () => {
 
     expect(mockTestConnection).not.toHaveBeenCalled();
     expect(mockSmtpTestConnection).not.toHaveBeenCalled();
-    expect(mockSaveAccount).not.toHaveBeenCalled();
+    expect(mockPatchAccount).not.toHaveBeenCalled();
   });
 
   it('throws immediately for OAuth accounts', async () => {
@@ -185,7 +192,7 @@ describe('changeServer', () => {
 
     expect(mockTestConnection).not.toHaveBeenCalled();
     expect(mockSmtpTestConnection).not.toHaveBeenCalled();
-    expect(mockSaveAccount).not.toHaveBeenCalled();
+    expect(mockPatchAccount).not.toHaveBeenCalled();
   });
 
   it('hostChanged is false and no reconnect happens when only password/smtp change', async () => {
@@ -211,13 +218,13 @@ describe('changeServer', () => {
     expect(mockActivateAccount).not.toHaveBeenCalled();
   });
 
-  it('passes the new imapHost to db.saveAccount so it can stamp previousImapHost/hostChangedAt', async () => {
+  it('passes the new imapHost to db.patchAccount so it can stamp previousImapHost/hostChangedAt', async () => {
     await changeServer('acc-1', NEW_PARAMS);
 
-    expect(mockSaveAccount).toHaveBeenCalledTimes(1);
-    const savedCandidate = mockSaveAccount.mock.calls[0][0];
+    expect(mockPatchAccount).toHaveBeenCalledTimes(1);
+    const savedCandidate = mockPatchAccount.mock.calls[0][1];
     expect(savedCandidate.imapHost).toBe('new.host.com');
-    expect(savedCandidate.id).toBe('acc-1');
+    expect(mockPatchAccount.mock.calls[0][0]).toBe('acc-1');
   });
 
   it('throws if the account does not exist', async () => {
@@ -238,7 +245,7 @@ describe('changeServer on a JMAP account', () => {
     vi.clearAllMocks();
     mockTestConnection.mockResolvedValue({ success: true });
     mockStorePassword.mockResolvedValue(undefined);
-    mockSaveAccount.mockResolvedValue(undefined);
+    mockPatchAccount.mockResolvedValue(undefined);
     mockActivateAccount.mockResolvedValue(undefined);
     storeState = { accounts: [{ ...JMAP }], activeAccountId: 'acc-1', activeMailbox: 'INBOX', activateAccount: mockActivateAccount };
   });
@@ -254,8 +261,8 @@ describe('changeServer on a JMAP account', () => {
       imapHost: 'jmap.new.example.org', password: 'new-token',
     });
     expect(mockStorePassword).toHaveBeenCalledWith('acc-1', 'new-token');
-    const saved = mockSaveAccount.mock.calls[0][0];
-    expect(saved).toMatchObject({ id: 'acc-1', jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', imapHost: 'jmap.new.example.org' });
+    const saved = mockPatchAccount.mock.calls[0][1];
+    expect(saved).toMatchObject({ jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', imapHost: 'jmap.new.example.org' });
     expect(storeState.accounts[0].imapHost).toBe('jmap.new.example.org');
     expect(mockActivateAccount).toHaveBeenCalledWith('acc-1', 'INBOX');
   });
@@ -264,7 +271,7 @@ describe('changeServer on a JMAP account', () => {
     const result = await changeServer('acc-1', { password: 'new-token' });
 
     expect(result).toEqual({ ok: true, hostChanged: false });
-    expect(mockSaveAccount.mock.calls[0][0]).toMatchObject({ jmapSessionUrl: JMAP.jmapSessionUrl, imapHost: 'old.example.org', password: 'new-token' });
+    expect(mockPatchAccount.mock.calls[0][1]).toMatchObject({ jmapSessionUrl: JMAP.jmapSessionUrl, imapHost: 'old.example.org', password: 'new-token' });
     expect(mockActivateAccount).not.toHaveBeenCalled();
   });
 
@@ -272,7 +279,7 @@ describe('changeServer on a JMAP account', () => {
     await expect(changeServer('acc-1', { jmapSessionUrl: 'http://jmap.new.example.org/jmap', password: 'x' }))
       .rejects.toThrow('Enter the full https:// address of the JMAP session.');
     expect(mockTestConnection).not.toHaveBeenCalled();
-    expect(mockSaveAccount).not.toHaveBeenCalled();
+    expect(mockPatchAccount).not.toHaveBeenCalled();
   });
 
   it('persists nothing when the server refuses the new secret', async () => {
@@ -281,7 +288,7 @@ describe('changeServer on a JMAP account', () => {
     await expect(changeServer('acc-1', { password: 'wrong' })).rejects.toThrow();
     expect(mockSmtpTestConnection).not.toHaveBeenCalled();
     expect(mockStorePassword).not.toHaveBeenCalled();
-    expect(mockSaveAccount).not.toHaveBeenCalled();
+    expect(mockPatchAccount).not.toHaveBeenCalled();
   });
 });
 
@@ -298,9 +305,11 @@ describe('changeServer on a JMAP account: the Basic login', () => {
 
   it('stores a new login, and drops it when it is the address again', async () => {
     await changeServer('acc-1', { jmapUsername: ' alice ', password: 'p2' });
-    expect(mockSaveAccount.mock.calls[0][0].jmapUsername).toBe('alice');
+    expect(mockPatchAccount.mock.calls[0][1].jmapUsername).toBe('alice');
 
     await changeServer('acc-1', { jmapUsername: 'me@example.org', password: 'p3' });
-    expect(mockSaveAccount.mock.calls[1][0]).not.toHaveProperty('jmapUsername');
+    expect(mockPatchAccount.mock.calls[1][1]).not.toHaveProperty('jmapUsername');
+    expect(mockPatchAccount.mock.calls[1][2].unset).toEqual(['jmapUsername']);
+    expect(storeState.accounts[0]).not.toHaveProperty('jmapUsername');
   });
 });

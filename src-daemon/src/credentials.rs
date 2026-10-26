@@ -1,5 +1,5 @@
-// Account credential reads and per-record mutations. The app adapters still
-// use their existing shell path; these native routes are a staged capability.
+// Account credentials use one native mutation engine across primitive,
+// account-save and quiet refreshed-pair writers.
 // AI/PGP, gate and watcher behavior stays shared with the existing readers.
 
 use std::collections::HashMap;
@@ -11,6 +11,10 @@ use keyring::Entry;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
+use crate::account_workflows::{
+    check_deadline, AccountLease, AccountSaveInput, AppliedCredentials, CredentialCompletion,
+    CredentialOp, LeaseOwner, MutationFailure,
+};
 use crate::events::EventBus;
 use crate::imap::ImapConfig;
 use crate::server::DaemonState;
@@ -622,10 +626,10 @@ impl TestKeychainBackend {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(("write", interactive));
+        test_pause_write();
         if self.fail_write.load(std::sync::atomic::Ordering::SeqCst) {
             return Err("synthetic credential write refused".to_string());
         }
-        test_pause_write();
         mailvault_core::fsx::write_atomic(&self.shared.path, json.as_bytes())
             .map_err(|_| "synthetic credential write failed".to_string())
     }
@@ -1876,39 +1880,67 @@ pub(crate) fn write_generation() -> u64 {
     BLOB_READ.generation()
 }
 
-type Job = Box<dyn FnOnce() -> Result<Vec<String>, CredError> + Send>;
+type Job = Box<dyn FnOnce() -> Result<AppliedCredentials, MutationFailure> + Send>;
+
+// Independent backend drain: cancellation tests must not wait for a finalizer
+// that the baseline caller could drop. This never changes backend behavior.
+#[cfg(test)]
+static TEST_BACKEND_FINISHED: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>> =
+    std::sync::Mutex::new(None);
 
 /// Finalizes the actual backend outcome while APP_WRITE still excludes the
 /// next writer. A late completion has exactly the same state effects; its
 /// already-timed-out RPC remains an error.
 fn finish_credential_change(
     state: &Arc<DaemonState>,
-    result: Result<Vec<String>, CredError>,
-) -> Result<(Vec<String>, u64), CredError> {
+    result: Result<AppliedCredentials, MutationFailure>,
+) -> Result<CredentialCompletion, MutationFailure> {
     match result {
-        Ok(ids) if ids.is_empty() => Ok((ids, BLOB_READ.generation())),
-        Ok(ids) => {
-            let version = BLOB_READ.bump();
-            info!(
-                "[keychain] credentials changed for {} account(s)",
-                ids.len()
-            );
-            crate::handlers::oauth2::credentials_written(state);
-            state.events.emit(
-                crate::handlers::credentials::CHANGED_EVENT,
-                json!({"ids": ids, "version": version}),
-            );
-            Ok((ids, version))
+        Ok(applied) => {
+            let version = if applied.ids.is_empty() {
+                BLOB_READ.generation()
+            } else {
+                let version = BLOB_READ.bump();
+                info!(
+                    "[keychain] credentials changed for {} account(s)",
+                    applied.ids.len()
+                );
+                crate::handlers::oauth2::credentials_written(state);
+                state.events.emit(
+                    crate::handlers::credentials::CHANGED_EVENT,
+                    json!({"ids":applied.ids,"version":version}),
+                );
+                version
+            };
+            Ok(CredentialCompletion { applied, version })
         }
-        Err(CredError::WriteFailed) => {
-            // A failed platform write or JoinError may follow a side effect.
-            // Re-read before trusting tokens, without claiming a change.
+        Err(MutationFailure::Credential(CredError::WriteFailed)) => {
             BLOB_READ.bump();
             state.tokens.credentials_changed();
-            Err(CredError::WriteFailed)
+            Err(CredError::WriteFailed.into())
         }
-        Err(error) => Err(error),
+        Err(e) => Err(e),
     }
+}
+
+pub(crate) struct BlobSnapshot {
+    pub records: HashMap<String, String>,
+    pub generation: u64,
+}
+pub(crate) async fn read_account_save_snapshot() -> Result<BlobSnapshot, CredError> {
+    let generation = BLOB_READ.generation();
+    let records = guarded(
+        CREDENTIALS_KEY,
+        raw_read(may_prompt(), generation),
+        AI_KEY_TIMEOUT,
+    )
+    .await
+    .map_err(|_| CredError::Unavailable)?
+    .unwrap_or_default();
+    Ok(BlobSnapshot {
+        records,
+        generation,
+    })
 }
 
 /// Applies `change` to the stored blob. `Ok((ids, version))`: the ids it
@@ -1918,7 +1950,15 @@ pub(crate) async fn change_credentials(
     state: &Arc<DaemonState>,
     change: CredChange,
 ) -> Result<(Vec<String>, u64), CredError> {
-    change_credentials_mode(state, change, Interaction::Interactive).await
+    owned_change(
+        state,
+        CredentialOp::Change(change),
+        None,
+        Interaction::Interactive,
+    )
+    .await
+    .map(|c| (c.applied.ids, c.version))
+    .map_err(MutationFailure::credential)
 }
 
 #[derive(Clone, Copy)]
@@ -1927,15 +1967,79 @@ enum Interaction {
     Quiet,
 }
 
-async fn change_credentials_mode(
+pub(crate) async fn change_credentials_admitted(
     state: &Arc<DaemonState>,
     change: CredChange,
-    mode: Interaction,
+    lease: AccountLease,
 ) -> Result<(Vec<String>, u64), CredError> {
+    owned_change(
+        state,
+        CredentialOp::Change(change),
+        Some(lease),
+        Interaction::Interactive,
+    )
+    .await
+    .map(|c| (c.applied.ids, c.version))
+    .map_err(MutationFailure::credential)
+}
+
+pub(crate) async fn save_account_credentials(
+    state: &Arc<DaemonState>,
+    input: AccountSaveInput,
+    lease: AccountLease,
+) -> Result<CredentialCompletion, MutationFailure> {
+    owned_change(
+        state,
+        CredentialOp::AccountSave(input),
+        Some(lease),
+        Interaction::Interactive,
+    )
+    .await
+}
+
+#[cfg(test)]
+pub(crate) fn test_owned_completions(
+) -> &'static std::sync::Mutex<HashMap<PathBuf, std::sync::mpsc::Sender<()>>> {
+    static G: std::sync::OnceLock<std::sync::Mutex<HashMap<PathBuf, std::sync::mpsc::Sender<()>>>> =
+        std::sync::OnceLock::new();
+    G.get_or_init(Default::default)
+}
+
+// Dropping any RPC/worker awaiter cannot cancel the actual mutation owner.
+async fn owned_change(
+    state: &Arc<DaemonState>,
+    op: CredentialOp,
+    supplied: Option<AccountLease>,
+    mode: Interaction,
+) -> Result<CredentialCompletion, MutationFailure> {
+    if supplied.is_none() && state.account_admission.known_conflict(&op.ids()) {
+        return Err(CredError::Busy.into());
+    }
+    let state = Arc::clone(state);
+    tokio::spawn(async move {
+        #[cfg(test)]
+        let _done = test_owned_completions()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&state.app_dir)
+            .map(TestTaskDone);
+        change_credentials_mode(&state, op, supplied, mode).await
+    })
+    .await
+    .map_err(|_| MutationFailure::Credential(CredError::WriteFailed))?
+}
+async fn change_credentials_mode(
+    state: &Arc<DaemonState>,
+    op: CredentialOp,
+    supplied: Option<AccountLease>,
+    mode: Interaction,
+) -> Result<CredentialCompletion, MutationFailure> {
     use std::sync::atomic::Ordering::SeqCst;
+    let deadline = op.deadline();
+    check_deadline(deadline)?;
     let interactive = matches!(mode, Interaction::Interactive);
     if WRITE_PARKED.load(SeqCst) {
-        return Err(CredError::Busy);
+        return Err(CredError::Busy.into());
     }
     let held = if interactive {
         tokio::time::timeout(APP_LOCK_WAIT, APP_WRITE.lock())
@@ -1945,40 +2049,55 @@ async fn change_credentials_mode(
         APP_WRITE.try_lock().map_err(|_| CredError::Busy)?
     };
     if WRITE_PARKED.load(SeqCst) {
-        return Err(CredError::Busy);
+        return Err(CredError::Busy.into());
     }
+    check_deadline(deadline)?;
+    let owner: LeaseOwner = Arc::new(std::sync::Mutex::new(supplied.clone()));
+    let apply_state = Arc::clone(state);
+    let apply_owner = Arc::clone(&owner);
+    let apply = move |blob: &mut HashMap<String, String>| {
+        crate::account_workflows::apply_operation(
+            blob,
+            &op,
+            &apply_state,
+            supplied.as_ref(),
+            &apply_owner,
+        )
+    };
     let debug_path = test_credentials_path();
     #[cfg(test)]
     let debug_path = debug_path.filter(|_| test_keychain_backend().is_none());
     let job: Job = if let Some(store) = sealed() {
-        Box::new(move || store.change_credentials(|blob| apply_change(blob, &change)))
+        Box::new(move || store.change_operation(apply, deadline))
     } else if let Some(path) = debug_path {
-        Box::new(move || change_test_file(&path, &change))
+        Box::new(move || change_test_file(&path, apply, deadline))
     } else {
-        // A blocked gate would only answer a quiet read's failure: fail fast,
-        // and never raise a prompt from here while one episode is open.
         if GATE.is_blocked() {
-            return Err(CredError::Unavailable);
+            return Err(CredError::Unavailable.into());
         }
+        check_deadline(deadline)?;
         let since = BLOB_READ.generation();
-        let mut blob = match guarded(
+        let mut blob = guarded(
             CREDENTIALS_KEY,
             raw_read(interactive, since),
             AI_KEY_TIMEOUT,
         )
         .await
-        {
-            Ok(blob) => blob.unwrap_or_default(),
-            Err(_) => return Err(CredError::Unavailable),
-        };
-        let changed = apply_change(&mut blob, &change)?;
-        if changed.is_empty() {
-            return Ok((changed, since));
+        .map_err(|_| CredError::Unavailable)?
+        .unwrap_or_default();
+        let applied = apply(&mut blob)?;
+        drop(apply);
+        if applied.ids.is_empty() {
+            let result = finish_credential_change(state, Ok(applied));
+            drop(held);
+            drop(owner);
+            return result;
         }
         let json = serde_json::to_string(&blob).map_err(|_| CredError::WriteFailed)?;
         #[cfg(test)]
         let synthetic = test_keychain_backend();
         Box::new(move || {
+            check_deadline(deadline)?;
             with_interaction(interactive, || {
                 #[cfg(test)]
                 if let Some(backend) = synthetic {
@@ -1986,20 +2105,27 @@ async fn change_credentials_mode(
                 }
                 write_keychain_blob(&json)
             })
-            .map(|()| changed)
-            .map_err(|e| {
-                warn!("[keychain] the credentials write failed: {e}");
-                CredError::WriteFailed
-            })
+            .map(|()| applied)
+            .map_err(|_| MutationFailure::Credential(CredError::WriteFailed))
         })
     };
-    let mut task = tokio::task::spawn_blocking(job);
-    let finished = tokio::time::timeout(write_timeout(), &mut task).await;
-    match finished {
+    let mut task = tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        let _done = TEST_BACKEND_FINISHED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+            .map(TestTaskDone);
+        job()
+    });
+    match tokio::time::timeout(write_timeout(), &mut task).await {
         Ok(result) => {
-            let result =
-                finish_credential_change(state, result.unwrap_or(Err(CredError::WriteFailed)));
+            let result = finish_credential_change(
+                state,
+                result.unwrap_or(Err(CredError::WriteFailed.into())),
+            );
             drop(held);
+            drop(owner);
             #[cfg(test)]
             test_write_finished();
             result
@@ -2009,14 +2135,15 @@ async fn change_credentials_mode(
             WRITE_PARKED.store(true, SeqCst);
             let state = Arc::clone(state);
             tokio::spawn(async move {
-                let result = task.await.unwrap_or(Err(CredError::WriteFailed));
+                let result = task.await.unwrap_or(Err(CredError::WriteFailed.into()));
                 let _ = finish_credential_change(&state, result);
                 WRITE_PARKED.store(false, SeqCst);
                 drop(held);
+                drop(owner);
                 #[cfg(test)]
                 test_write_finished();
             });
-            Err(CredError::WriteFailed)
+            Err(CredError::WriteFailed.into())
         }
     }
 }
@@ -2026,26 +2153,40 @@ pub(crate) async fn change_credentials_quiet(
     state: &Arc<DaemonState>,
     change: CredChange,
 ) -> Result<(Vec<String>, u64), CredError> {
-    change_credentials_mode(state, change, Interaction::Quiet).await
+    owned_change(
+        state,
+        CredentialOp::Change(change),
+        None,
+        Interaction::Quiet,
+    )
+    .await
+    .map(|c| (c.applied.ids, c.version))
+    .map_err(MutationFailure::credential)
 }
 
 /// The debug file bypass: the same compact `{id: record}` JSON the app's
 /// `store_credentials` writes there, replaced atomically.
-fn change_test_file(path: &std::path::Path, change: &CredChange) -> Result<Vec<String>, CredError> {
+fn change_test_file(
+    path: &std::path::Path,
+    apply: impl FnOnce(&mut HashMap<String, String>) -> Result<AppliedCredentials, MutationFailure>,
+    deadline: Option<tokio::time::Instant>,
+) -> Result<AppliedCredentials, MutationFailure> {
+    check_deadline(deadline)?;
     let mut blob: HashMap<String, String> = match std::fs::read_to_string(path) {
         Ok(json) => serde_json::from_str(&json).map_err(|_| CredError::Unavailable)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
-        Err(_) => return Err(CredError::Unavailable),
+        Err(_) => return Err(CredError::Unavailable.into()),
     };
-    let changed = apply_change(&mut blob, change)?;
-    if changed.is_empty() {
-        return Ok(changed);
+    let applied = apply(&mut blob)?;
+    if applied.ids.is_empty() {
+        return Ok(applied);
     }
     let json = serde_json::to_string(&blob).map_err(|_| CredError::WriteFailed)?;
+    check_deadline(deadline)?;
     #[cfg(test)]
     test_pause_write();
     mailvault_core::fsx::write_atomic(path, json.as_bytes()).map_err(|_| CredError::WriteFailed)?;
-    Ok(changed)
+    Ok(applied)
 }
 
 #[cfg(test)]
@@ -2135,19 +2276,45 @@ impl SealedStore {
         &self,
         apply: impl FnOnce(&mut HashMap<String, String>) -> Result<Vec<String>, CredError>,
     ) -> Result<Vec<String>, CredError> {
+        self.change_operation(
+            |b| {
+                apply(b)
+                    .map(|ids| AppliedCredentials {
+                        ids,
+                        prepared: None,
+                    })
+                    .map_err(MutationFailure::Credential)
+            },
+            None,
+        )
+        .map(|a| a.ids)
+        .map_err(MutationFailure::credential)
+    }
+    fn change_operation(
+        &self,
+        apply: impl FnOnce(&mut HashMap<String, String>) -> Result<AppliedCredentials, MutationFailure>,
+        deadline: Option<tokio::time::Instant>,
+    ) -> Result<AppliedCredentials, MutationFailure> {
+        check_deadline(deadline)?;
         let mut guard = self.opened();
         let Some((passphrase, current)) = guard.as_mut() else {
-            return Err(CredError::Unavailable);
+            return Err(CredError::Unavailable.into());
         };
+        check_deadline(deadline)?;
         let mut next = current.clone();
-        let changed = apply(&mut next.credentials)?;
-        if changed.is_empty() {
-            return Ok(changed);
+        let applied = apply(&mut next.credentials)?;
+        if applied.ids.is_empty() {
+            return Ok(applied);
+        }
+        check_deadline(deadline)?;
+        #[cfg(test)]
+        if sealed().is_some_and(|store| std::ptr::eq(store, self)) {
+            test_pause_write();
         }
         mailvault_core::portable::write_sealed(&self.path, passphrase, &next, self.params)
             .map_err(|_| CredError::WriteFailed)?;
         *current = next;
-        Ok(changed)
+        Ok(applied)
     }
 }
 
@@ -2286,6 +2453,57 @@ mod tests {
         drop(held);
         assert!(matches!(result, Ok(Err(CredError::Busy))));
         assert!(backend.0.modes.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cancelled_caller_retains_serializer_until_backend_returns() {
+        let _env = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = TestEnvRestore::capture();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        std::fs::write(
+            &path,
+            json!({"a":json!({"id":"a","email":"a@example.test","imapHost":"h"}).to_string()})
+                .to_string(),
+        )
+        .unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let (release, gate) = std::sync::mpsc::channel();
+        let (started, entered) = std::sync::mpsc::channel();
+        let (done, completed) = std::sync::mpsc::channel();
+        *TEST_WRITE_GATE.lock().unwrap() = Some(gate);
+        *TEST_WRITE_ENTERED.lock().unwrap() = Some(started);
+        *TEST_BACKEND_FINISHED.lock().unwrap() = Some(done);
+        // Reverse Drop order always opens the backend before draining it.
+        let _drain = TestTaskDrain(completed);
+        let release = release;
+        let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        let owned = Arc::clone(&state);
+        let task = tokio::spawn(async move {
+            change_credentials(
+                &owned,
+                CredChange::Update {
+                    id: "a".into(),
+                    fields: json!({"name":"changed"}).as_object().unwrap().clone(),
+                    chain: None,
+                },
+            )
+            .await
+        });
+        entered
+            .recv_timeout(Duration::from_secs(5))
+            .expect("backend entered");
+        task.abort();
+        let _ = task.await;
+        let competing =
+            change_credentials_quiet(&state, CredChange::Delete(vec!["missing".into()])).await;
+        drop(release);
+        let released = APP_WRITE.lock().await;
+        drop(released);
+        assert!(
+            matches!(competing, Err(CredError::Busy)),
+            "caller cancellation must not release an active backend serializer"
+        );
     }
 
     /// Mirrors the shape the app (`store_credentials`) and the e2e harness
