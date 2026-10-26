@@ -319,6 +319,12 @@ impl AccountLifecycle {
         if !s.ready {
             return Err(LifecycleError::Unready);
         }
+        if s.entries
+            .values()
+            .any(|entry| entry.phase == Phase::Closing)
+        {
+            return Err(LifecycleError::Busy);
+        }
         s.unscoped += 1;
         Ok(OperationPermit(Arc::new(CountOwner {
             lifecycle: self.clone(),
@@ -1176,6 +1182,91 @@ mod tests {
             Err(LifecycleError::Unknown)
         ));
     }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p1_closing_excludes_real_unscoped_child_in_both_orders() {
+        let life = AccountLifecycle::default();
+        life.seed(&listing(&["a", "b"]));
+        let b = life.capture("b").unwrap();
+        let global = life.try_unscoped_operation().unwrap();
+        let (release, gate) = std::sync::mpsc::channel::<()>();
+        let (entered, in_child) = std::sync::mpsc::channel::<()>();
+        let child = tokio::task::spawn_blocking(move || {
+            let _actual_owner = global;
+            entered.send(()).unwrap();
+            let _ = gate.recv_timeout(Duration::from_secs(5));
+        });
+        in_child.recv_timeout(Duration::from_secs(5)).unwrap();
+        let opposite_order_refused = matches!(
+            life.try_close(lease(&["a"]), "a"),
+            Err(LifecycleError::Busy)
+        );
+        release.send(()).unwrap();
+        child.await.unwrap();
+
+        let claim = life.try_close(lease(&["a"]), "a").unwrap();
+        let b_independent = life.try_operation(&[b]).is_ok();
+        let pre = life.try_unscoped_operation();
+        let pre_effect_refused = matches!(&pre, Err(LifecycleError::Busy));
+        drop(pre);
+        drop(claim);
+        let pre_effect_reopened = life.capture("a").is_ok();
+        let reopened_allows_global = life.try_unscoped_operation().is_ok();
+
+        let mut claim = life.try_close(lease(&["a"]), "a").unwrap();
+        let drained = claim
+            .wait_local_until(Instant::now() + Duration::from_secs(5))
+            .await
+            .unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        let post = life.try_unscoped_operation();
+        let post_effect_refused = matches!(&post, Err(LifecycleError::Busy));
+        drop(post);
+        drop(claim);
+        let dropped = life.try_unscoped_operation();
+        let post_drop_refused = matches!(&dropped, Err(LifecycleError::Busy));
+        drop(dropped);
+
+        let mut resumed = life.try_close(lease(&["a"]), "a").unwrap();
+        let drained = resumed
+            .wait_local_until(Instant::now() + Duration::from_secs(5))
+            .await
+            .unwrap();
+        resumed.mark_effects_started(drained).unwrap();
+        let late = life.try_unscoped_operation();
+        let close_first_admitted = late.is_ok();
+        let mut premature_retirement = false;
+        if let Ok(owner) = late {
+            let (release, gate) = std::sync::mpsc::channel::<()>();
+            let (entered, in_child) = std::sync::mpsc::channel::<()>();
+            let child = tokio::task::spawn_blocking(move || {
+                let _actual_owner = owner;
+                entered.send(()).unwrap();
+                let _ = gate.recv_timeout(Duration::from_secs(5));
+            });
+            in_child.recv_timeout(Duration::from_secs(5)).unwrap();
+            let finished = resumed.finish_retired().is_ok();
+            premature_retirement =
+                finished && matches!(life.capture("a"), Err(LifecycleError::RetiredIds(_)));
+            release.send(()).unwrap();
+            child.await.unwrap();
+            if !finished {
+                let mut retry = life.try_close(lease(&["a"]), "a").unwrap();
+                let drained = retry
+                    .wait_local_until(Instant::now() + Duration::from_secs(5))
+                    .await
+                    .unwrap();
+                retry.mark_effects_started(drained).unwrap();
+                retry.finish_retired().unwrap();
+            }
+        } else {
+            resumed.finish_retired().unwrap();
+        }
+        let retired = matches!(life.capture("a"), Err(LifecycleError::RetiredIds(_)));
+        let retired_allows_global = life.try_unscoped_operation().is_ok();
+        assert!(opposite_order_refused && b_independent && pre_effect_refused && pre_effect_reopened && reopened_allows_global && post_effect_refused && post_drop_refused && !close_first_admitted && !premature_retirement && retired && retired_allows_global,
+            "unscoped/Closing: opposite_order_refused={opposite_order_refused}, b_independent={b_independent}, pre_effect_refused={pre_effect_refused}, pre_effect_reopened={pre_effect_reopened}, reopened_allows_global={reopened_allows_global}, post_effect_refused={post_effect_refused}, post_drop_refused={post_drop_refused}, close_first_admitted={close_first_admitted}, premature_retirement={premature_retirement}, retired={retired}, retired_allows_global={retired_allows_global}");
+    }
+
     #[test]
     fn p1_scope_mismatch_and_unscoped_owner_never_partially_admit() {
         let life = AccountLifecycle::default();
