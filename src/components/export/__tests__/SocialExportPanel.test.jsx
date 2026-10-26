@@ -708,14 +708,53 @@ describe('SocialExportPanel', () => {
       expect(buildSocialContent).toHaveBeenCalledTimes(2);
     });
 
-    it('the app window is a shot of the live UI: no hint, no marks sent, a click does nothing', async () => {
+    it('works on the App window shot too: its marks are sent with the app capture', async () => {
+      await ready();
+      fireEvent.click(screen.getByRole('button', { name: /app window/i }));
+      await waitFor(() => expect(lastOptions().content).toBe('app'));
+      await waitFor(() => expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy());
+      expect(screen.getByText(/click a word in the preview/i)).toBeTruthy();
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions()).toMatchObject({ content: 'app', marks: { ana: 'show' } }), { timeout: 2000 });
+    });
+
+    it('marks follow you between the card and the App window', async () => {
       await ready();
       clickAt(30, 35);
       await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show' }), { timeout: 2000 });
       fireEvent.click(screen.getByRole('button', { name: /app window/i }));
-      await waitFor(() => expect(lastOptions().content).toBe('app'));
-      expect(lastOptions()).not.toHaveProperty('marks');
+      await waitFor(() => expect(lastOptions()).toMatchObject({ content: 'app', marks: { ana: 'show' } }));
+    });
+
+    it('the Redact tool starts on; off, a click does nothing and the hint goes; on again it works', async () => {
+      await ready();
+      const tool = screen.getByRole('button', { name: 'Redact tool' });
+      expect(tool.getAttribute('aria-pressed')).toBe('true');
+      fireEvent.click(tool);
+      expect(tool.getAttribute('aria-pressed')).toBe('false');
       expect(screen.queryByText(/click a word in the preview/i)).toBeNull();
+      clickAt(30, 35);
+      await new Promise(r => setTimeout(r, 450));
+      expect(buildSocialContent).toHaveBeenCalledTimes(1);
+      fireEvent.click(tool);
+      expect(screen.getByText(/click a word in the preview/i)).toBeTruthy();
+      clickAt(30, 35);
+      await waitFor(() => expect(lastOptions().marks).toEqual({ ana: 'show' }), { timeout: 2000 });
+    });
+
+    it('the tool is not stored, and goes to the window only when off', async () => {
+      const onPopOut = vi.fn();
+      render(<SocialExportPanel message={FIXTURE_MESSAGE} onDone={() => {}} onPopOut={onPopOut} />);
+      await waitFor(() => expect(screen.getByRole('img', { name: /preview/i })).toBeTruthy());
+      fireEvent.click(screen.getByRole('button', { name: /open in window/i }));
+      expect(onPopOut.mock.calls[0][0]).not.toHaveProperty('tool');
+      fireEvent.click(screen.getByRole('button', { name: 'Redact tool' }));
+      fireEvent.click(screen.getByRole('button', { name: /open in window/i }));
+      expect(onPopOut.mock.calls[1][0]).toMatchObject({ tool: false });
+      for (const [patch] of setSocialExport.mock.calls) expect(patch).not.toHaveProperty('tool');
+      cleanup();
+      render(<SocialExportPanel message={FIXTURE_MESSAGE} onDone={() => {}} initial={{ tool: false }} />);
+      expect(screen.getByRole('button', { name: 'Redact tool' }).getAttribute('aria-pressed')).toBe('false');
     });
 
     it('no hint and no click without a hit map (the alternative renderer, or a card not yet built)', async () => {

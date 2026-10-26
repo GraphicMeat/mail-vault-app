@@ -7,6 +7,9 @@ import { PRIVACY_GATE_ID } from '../../../utils/emailIframeTemplate.js';
 import { isUiString } from '../../../i18n/index.js';
 import { getActiveBodyRenderer } from '../../../components/email/bodyRendererRegistry';
 import { fetchAssetViaTauri } from '../exportService';
+import { resetCaptureMasks } from '../../../utils/privacy/captureMasks';
+import { collectAppWords } from './appWords';
+import { wordTokens } from '../../../utils/privacy/wordKey';
 
 /**
  * A 2x picture of the app window (#root) with the message open, for a social
@@ -33,6 +36,11 @@ import { fetchAssetViaTauri } from '../exportService';
  * (captureSenderDetails); a popover sits over the message frame, so the frame
  * composite leaves the popover's pixels alone. Both are cleared when the capture
  * ends, however it ends.
+ *
+ * With `dict.show` / `dict.hide` (the user's clicked words, wordKeys) the live masking
+ * follows them for the length of the capture (captureMarks: React fields and the
+ * reader frames), and with `wantWords` the canvas carries `mvWords`, the hit map
+ * of what is on it (appWords). A word not marked and not detected stays as it was.
  *
  * Message frames are drawn separately: each frame's body is rendered on its
  * own and painted over the frame's visible rect (ruling R16: the probe that
@@ -68,7 +76,11 @@ const keep = (node) => !(node?.nodeType === 1 && node.closest?.('[data-capture-e
 // ponytail: only whole catalog strings are kept; a label built from a template
 // ("Found 36 results in Inbox") is still matched against the names.
 // A revealed value (a spam sender's name) is a whole text node of its own.
-const chromeHooks = (reveal) => ({ keep: (text) => isUiString(text) || !!reveal?.has(String(text).trim().toLowerCase()) });
+// A label the user clicked a word of (`hide`) is no longer the app's to keep: they asked for that word gone.
+const chromeHooks = (reveal, hide) => ({
+  keep: (text) => (isUiString(text) && !(hide?.size && wordTokens(text).some(t => hide.has(t.key))))
+    || !!reveal?.has(String(text).trim().toLowerCase()),
+});
 
 // The last clone's text, read by the connected e2e spec: canvas pixels hold no text to assert on.
 let lastCloneText = '';
@@ -228,7 +240,7 @@ let masking = 0;
 // Captures run strictly one after the other.
 let queue = Promise.resolve();
 
-async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails, hideTo }) {
+async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails, hideTo, wantWords }) {
   let flipped = false;
   let mailSet = false;
   const privacy = usePrivacyStore.getState();
@@ -247,8 +259,14 @@ async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails, 
     if (senderDetails) privacy.setCaptureSenderDetails(senderDetails);
     // The reader's header drops its To row for the length of the capture: live layout and frame rects agree.
     if (hideTo) privacy.setCaptureHideTo(true);
+    // The user's clicked words (and, for the hit map, the masks naming their originals) reach the masking in the same render.
+    const marked = !!(dict?.show?.size || dict?.hide?.size);
+    if (marked || wantWords) {
+      resetCaptureMasks();
+      privacy.setCaptureMarks({ show: dict?.show ?? new Set(), hide: dict?.hide ?? new Set(), ...(dict?.detect === false ? { detect: false } : {}) });
+    }
     // One frame for React to render masked, one for the frames' pass to land.
-    if (redact || senderDetails || hideTo) await nextPaint();
+    if (redact || senderDetails || hideTo || marked || wantWords) await nextPaint();
     if (bodiesBusy(root)) await waitForFrames(root, snapshotFrames(root), redact);
     const themes = useThemeStore.getState();
     const flipApp = (theme === 'light' || theme === 'dark') && theme !== themes.theme && theme !== themes.captureTheme;
@@ -266,27 +284,31 @@ async function capture({ redact, dict, theme, mailTheme, reveal, senderDetails, 
     }
     // The dictionary the clone passes read carries the reveal too (copied: the host's is shared).
     const clonedDict = shown ? { ...(dict ?? EMPTY_DICTIONARY), reveal: shown } : dict;
+    // Measured on the live UI as it is drawn: masked, marks applied, nothing yet cloned.
+    const words = wantWords ? collectAppWords(root, { scale: SCALE, keep, visibleRect, hide: dict?.hide }) : null;
     const canvas = await domToCanvas(root, {
-      ...RASTER, filter: keep, onCloneNode: cloneHook(redact, clonedDict, chromeHooks(shown)),
+      ...RASTER, filter: keep, onCloneNode: cloneHook(redact, clonedDict, chromeHooks(shown, dict?.hide)),
       backgroundColor: getComputedStyle(document.body).backgroundColor || null,
     });
     // A message body is the sender's text, not the app's: no labels are kept.
     await compositeFrames(canvas, root, cloneHook(redact, clonedDict), redact);
+    if (words) canvas.mvWords = words;
     return canvas;
   } finally {
     // Not behind the masking count: a reveal belongs to this capture alone.
     privacy.setCaptureReveal(null);
     privacy.setCaptureSenderDetails(null);
     privacy.setCaptureHideTo(false);
+    privacy.setCaptureMarks(null);
     if (flipped) useThemeStore.getState().setCaptureTheme(null);
     if (mailSet) useThemeStore.getState().setCaptureMailTheme(null);
     if (redact && --masking === 0) usePrivacyStore.getState().setCaptureMask(false);
   }
 }
 
-export function captureAppWindow({ redact, dict, theme, mailTheme, reveal, senderDetails, hideTo = false } = {}) {
+export function captureAppWindow({ redact, dict, theme, mailTheme, reveal, senderDetails, hideTo = false, wantWords = false } = {}) {
   if (redact) masking += 1;
-  const run = queue.then(() => capture({ redact, dict, theme, mailTheme, reveal: reveal ? new Set([...reveal].map(v => String(v).trim().toLowerCase())) : null, senderDetails, hideTo }));
+  const run = queue.then(() => capture({ redact, dict, theme, mailTheme, reveal: reveal ? new Set([...reveal].map(v => String(v).trim().toLowerCase())) : null, senderDetails, hideTo, wantWords }));
   queue = run.catch(() => {});
   return run;
 }

@@ -939,6 +939,7 @@
   "export.social.radius": "모서리",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "macOS 창과 같은 모서리 둥글기 사용",
+  "export.social.redactTool": "가리기 도구",
   "export.social.redactForced": "개인정보 보호 모드가 켜져 있는 동안 항상 켜집니다.",
   "export.social.revealSender": "발신자 표시",
   "export.social.revealSenderHint": "스팸 발신자의 주소는 그대로 보여 줍니다. 내 정보는 계속 가려집니다.",

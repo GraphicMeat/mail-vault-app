@@ -939,6 +939,7 @@
   "export.social.radius": "圆角",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "使用 macOS 窗口的圆角半径",
+  "export.social.redactTool": "隐藏工具",
   "export.social.redactForced": "隐私模式开启时始终开启。",
   "export.social.revealSender": "显示发件人",
   "export.social.revealSenderHint": "保留垃圾邮件发件人的地址。您自己的信息仍保持隐藏。",

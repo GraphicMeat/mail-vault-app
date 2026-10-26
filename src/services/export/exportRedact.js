@@ -1,6 +1,5 @@
 import { redactTree, safeDecode, PII_CLASS } from '../../utils/privacy/redactDom';
-import { findPii, maskText, maskString } from '../../utils/privacy/piiDetector';
-import { wordTokens } from '../../utils/privacy/wordKey';
+import { findPii, maskText, maskString, markedMask } from '../../utils/privacy/piiDetector';
 
 /**
  * Redaction for exports. Unlike the live reader, nothing here is ever put
@@ -26,30 +25,10 @@ function maskParty(p, mask, reveal) {
   return { ...p, name: p.name ? mine(p.name) : p.name, address: p.address ? mine(p.address) : p.address };
 }
 
-// A party is masked whole, whatever the dictionary knows. The user's marks
-// (a click on a social image) reach it by word: `show` keeps a word readable,
-// and with `detect: false` (redact box off) only a `hide` word is masked.
-function partyMask(dict) {
-  const { show, hide } = dict ?? {};
-  const only = dict?.detect === false;
-  if (!only && !show?.size) return maskText;
-  return (text) => {
-    const s = String(text ?? '');
-    let out = '';
-    let last = 0;
-    for (const t of wordTokens(s)) {
-      const word = s.slice(t.start, t.end);
-      out += maskText(s.slice(last, t.start)) + ((only ? !hide?.has(t.key) : show.has(t.key)) ? word : maskText(word));
-      last = t.end;
-    }
-    return out + maskText(s.slice(last));
-  };
-}
-
 // `bar`: █ runs instead of x (the HTML export's header card).
 // `reveal`: defaults to the dictionary's own (`dict.reveal`).
 export function redactMessageForExport(message, dict, { bar = false, reveal = dict?.reveal } = {}) {
-  const mask = bar ? barText : partyMask(dict);
+  const mask = bar ? barText : markedMask(dict);
   const spanMask = bar ? barText : maskText;
   const out = { ...message };
   for (const f of PARTIES) {

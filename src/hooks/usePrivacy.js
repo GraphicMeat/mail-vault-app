@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { usePrivacyStore, isPrivacyMasking } from '../stores/privacyStore';
 import { usePrivacyDictStore, getPrivacyDictionary } from '../utils/privacy/privacyDictionary';
-import { findPii, maskText, maskString } from '../utils/privacy/piiDetector';
+import { findPii, maskText, maskString, markedMask } from '../utils/privacy/piiDetector';
 import { createPeekController } from '../utils/privacy/peekController';
 
 const STRUCTURAL = new Set(['name', 'email', 'filename']);
@@ -58,30 +58,34 @@ export function usePrivateSegments(value, kind = 'text') {
   const active = usePrivacyActive();
   const version = usePrivacyDictStore(s => s.version);
   const reveal = usePrivacyStore(s => s.captureReveal);
+  // The words a social capture was told to show or hide: the same value masks differently under them.
+  const marks = usePrivacyStore(s => s.captureMarks);
   return useMemo(() => {
     if (!active) return null;
     const s = String(value ?? '');
     if (!s) return [];
     if (revealed(reveal, kind, s)) return [{ text: s, masked: false }];
+    const dict = withReveal(getPrivacyDictionary(), reveal);
+    // `original` is what a masked run hides, for a capture's hit map (Private writes its index while marks are set).
     if (STRUCTURAL.has(kind)) {
       // A filename keeps its extension: ".pdf" says nothing about anyone.
       const [stem, ext] = kind === 'filename' ? splitFilename(s) : [s, ''];
-      return ext
-        ? [{ text: maskText(stem), masked: true }, { text: ext, masked: false }]
-        : [{ text: maskText(s), masked: true }];
+      const masked = markedMask(dict)(stem);
+      const run = { text: masked, masked: masked !== stem, original: stem };
+      return ext ? [run, { text: ext, masked: false }] : [run];
     }
-    const spans = findPii(s, withReveal(getPrivacyDictionary(), reveal));
+    const spans = findPii(s, dict);
     const out = [];
     let last = 0;
     for (const { start, end } of spans) {
       if (start > last) out.push({ text: s.slice(last, start), masked: false });
-      out.push({ text: maskText(s.slice(start, end)), masked: true });
+      out.push({ text: maskText(s.slice(start, end)), masked: true, original: s.slice(start, end) });
       last = end;
     }
     if (last < s.length) out.push({ text: s.slice(last), masked: false });
     return out;
   // version: the dictionary changed underneath the same value
-  }, [active, value, kind, version, reveal]);
+  }, [active, value, kind, version, reveal, marks]);
 }
 
 /**
@@ -98,12 +102,14 @@ export function usePrivateAttr() {
   const active = usePrivacyActive();
   const version = usePrivacyDictStore(s => s.version);
   const reveal = usePrivacyStore(s => s.captureReveal);
+  const marks = usePrivacyStore(s => s.captureMarks);
   return useMemo(() => (value, kind = 'text') => {
     if (!active || !value) return value;
     if (revealed(reveal, kind, value)) return value;
-    if (kind === 'filename') { const [stem, ext] = splitFilename(String(value)); return maskText(stem) + ext; }
-    return STRUCTURAL.has(kind) ? maskText(value) : maskString(value, withReveal(getPrivacyDictionary(), reveal));
-  }, [active, version, reveal]);
+    const dict = withReveal(getPrivacyDictionary(), reveal);
+    if (kind === 'filename') { const [stem, ext] = splitFilename(String(value)); return markedMask(dict)(stem) + ext; }
+    return STRUCTURAL.has(kind) ? markedMask(dict)(value) : maskString(value, dict);
+  }, [active, version, reveal, marks]);
 }
 
 export function attachPeekToDocument(doc) {

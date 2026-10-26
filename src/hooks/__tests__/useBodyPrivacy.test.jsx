@@ -7,7 +7,7 @@ import { usePrivacyStore } from '../../stores/privacyStore';
 import { setPrivacyDictionary } from '../../utils/privacy/privacyDictionary';
 import { buildNameDictionary, EMPTY_DICTIONARY } from '../../utils/privacy/piiDetector';
 import { buildEmailIframeHtml } from '../../utils/emailIframeTemplate';
-import { PRIVACY_GATE_ID } from '../../utils/iframePrivacyRedact';
+import { PRIVACY_GATE_ID, maskOriginal } from '../../utils/iframePrivacyRedact';
 import { applySearchHighlight } from '../../utils/iframeSearchHighlight';
 import { useSearchHighlight } from '../useSearchHighlight';
 import { useSearchStore } from '../../stores/searchStore';
@@ -32,6 +32,37 @@ function writeFrame(iframe, html) {
 
 beforeEach(() => { vi.useFakeTimers(); usePrivacyStore.setState({ enabled: true, peek: false, captureMask: false }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); useSearchStore.setState({ searchActive: false, searchQuery: '' }); });
+
+describe('useBodyPrivacy under a capture\'s word marks', () => {
+  const marks = (m) => act(() => usePrivacyStore.getState().setCaptureMarks(m));
+  const setup = (bodyHtml) => {
+    setPrivacyDictionary(buildNameDictionary({ names: ['John Smith'] }), { ready: true });
+    usePrivacyStore.setState({ enabled: false, captureMask: true, captureMarks: null });
+    const html = buildEmailIframeHtml({ bodyHtml, privacy: true });
+    const { container } = render(<Frame html={html} />);
+    const iframe = container.querySelector('iframe');
+    act(() => writeFrame(iframe, html));
+    return iframe.contentDocument.body;
+  };
+  afterEach(() => usePrivacyStore.setState({ captureMask: false, captureMarks: null }));
+
+  it('show leaves a detected word readable, hide masks a missed one, and the mask gives back its original', () => {
+    const body = setup('<p>Hi John Smith, project Falcon</p>');
+    expect(body.textContent.trim()).toBe('Hi xxxx xxxxx, project Falcon');
+    marks({ show: new Set(['john']), hide: new Set(['falcon']) });
+    expect(body.textContent.trim()).toBe('Hi John xxxxx, project xxxxxx');
+    const originals = [...body.querySelectorAll('span.mv-pii')].map(maskOriginal);
+    expect(originals).toEqual(['Smith', 'Falcon']);
+    marks(null);
+    expect(body.textContent.trim()).toBe('Hi xxxx xxxxx, project Falcon');
+  });
+
+  it('with detect:false only the hide words are masked', () => {
+    const body = setup('<p>Hi John Smith, project Falcon</p>');
+    marks({ show: new Set(), hide: new Set(['falcon']), detect: false });
+    expect(body.textContent.trim()).toBe('Hi John Smith, project xxxxxx');
+  });
+});
 
 describe('useBodyPrivacy', () => {
   it('keeps the body gated until the dictionary is ready, then shows it masked', () => {

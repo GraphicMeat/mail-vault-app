@@ -939,6 +939,7 @@
   "export.social.radius": "Angoli",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "Usa il raggio degli angoli delle finestre macOS",
+  "export.social.redactTool": "Strumento di oscuramento",
   "export.social.redactForced": "Sempre attivo finché la modalità privacy è attiva.",
   "export.social.revealSender": "Mostra mittente",
   "export.social.revealSenderHint": "Mantiene visibile l’indirizzo del mittente dello spam. I tuoi dati restano nascosti.",

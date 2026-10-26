@@ -91,31 +91,30 @@ const mustRedact = (redact) => !!redact || usePrivacyStore.getState().enabled;
  * message's real popover, in the app window); `links` adds the links list
  * (card only). `width` is the card's email column in CSS px (card only).
  * `hideTo` leaves the To row off the header (card) or out of the shot (app window).
- * `marks` (card only) are the user's clicks on the image, `{ [wordKey]: 'show' | 'hide' }`:
+ * `marks` are the user's clicks on the image, `{ [wordKey]: 'show' | 'hide' }`:
  * show leaves a word readable that the detector masks, hide masks one it missed
- * (even with `redact` off). `hitMap` (default on) puts `mvWords` on the card: every
+ * (even with `redact` off). `hitMap` (default on) puts `mvWords` on the content: every
  * word's rects and whether it is masked, for the next click.
  */
 export async function buildSocialContent(message, { content, redact, dict, theme, mailTheme, revealSender, senderDetails, links, width, hideTo, marks, hitMap = true } = {}) {
   const dated = { ...message, date: asDate(message.date) };
   const red = mustRedact(redact);
   const base = red ? dictionaryWithReveal(dict ?? await socialDictionary(dated), dated, { redact: red, revealSender }) : null;
-  // The app window is a shot of the live UI: no word marks (a click on it is a later piece).
-  if (content === 'app') {
-    // Addresses only: a name revealed in the live UI unmasks every row that names
-    // it, and a spoofed display name can be a real contact's.
-    const reveal = revealAddressesOnly(base?.reveal);
-    return captureAppWindow({
-      redact: red, dict: base && base.reveal ? { ...base, reveal } : base, theme, mailTheme, reveal, hideTo: !!hideTo,
-      // The open message's header opens its own popover; named as the reader places it.
-      senderDetails: senderDetails ? captureTargetOf(dated, useMailStore.getState()) ?? undefined : undefined,
-    });
-  }
   // A click on the image is a word marked show (readable though detected) or hide
   // (masked though missed). A hide mark masks even with the redact box off.
   const wordMarks = marksOf(marks);
   const d = markedDictionary(base, wordMarks);
   const active = red || wordMarks.hide.size > 0;
+  if (content === 'app') {
+    // Addresses only: a name revealed in the live UI unmasks every row that names
+    // it, and a spoofed display name can be a real contact's.
+    const reveal = revealAddressesOnly(d?.reveal);
+    return captureAppWindow({
+      redact: active, dict: d && d.reveal ? { ...d, reveal } : d, theme, mailTheme, reveal, hideTo: !!hideTo, wantWords: hitMap,
+      // The open message's header opens its own popover; named as the reader places it.
+      senderDetails: senderDetails ? captureTargetOf(dated, useMailStore.getState()) ?? undefined : undefined,
+    });
+  }
   // What each mask in the body hides, by the index its markup carries: the hit map's only way back to the word.
   const masks = [];
   const hooks = hitMap ? { onText: (span, original) => { span.setAttribute('data-mv-i', String(masks.push(original) - 1)); } } : undefined;
@@ -226,7 +225,7 @@ export async function buildSocialExport({ message, options }) {
     const canvas = composeFull(content, options, theme, watermark);
     lap('social-compose');
     // The file name hides what the image hides: a hide mark too, but a show mark never reaches it.
-    const hidden = options.content === 'app' ? new Set() : marksOf(options.marks).hide;
+    const hidden = marksOf(options.marks).hide;
     const named = markedDictionary(dict, { show: new Set(), hide: hidden });
     const name = socialName(named ? redactMessageForExport(dated, named) : dated);
     return { ok: true, file: { name, base64: await canvasToPngBase64(canvas) }, canvas };

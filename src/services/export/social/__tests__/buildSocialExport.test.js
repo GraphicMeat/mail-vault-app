@@ -238,11 +238,27 @@ describe('buildSocialExport', () => {
       expect(hid.file.name).not.toContain('Falcon');
     });
 
-    it('the app window takes no marks: it is a shot of the live UI', async () => {
+    it('the app window takes the marks too: the live masking follows them, and a hide mark masks with the redact box off', async () => {
       await buildSocialExport({ message, options: { ...options, content: 'app', marks: { 'joanna.k@example.org': 'show', falcon: 'hide' } } });
-      const dict = captureAppWindow.mock.calls[0][0].dict;
-      expect(dict).not.toHaveProperty('show');
-      expect(dict).not.toHaveProperty('hide');
+      let args = captureAppWindow.mock.calls[0][0];
+      expect([...args.dict.show]).toEqual(['joanna.k@example.org']);
+      expect([...args.dict.hide]).toEqual(['falcon']);
+      expect(args.redact).toBe(true);
+      expect(args.wantWords).toBe(false); // a saved image maps no words
+      captureAppWindow.mockClear();
+      await buildSocialExport({ message, options: { ...plain, content: 'app', marks: { falcon: 'hide' } } });
+      args = captureAppWindow.mock.calls[0][0];
+      expect(args.redact).toBe(true);
+      expect(args.dict).toMatchObject({ detect: false });
+      expect([...args.dict.hide]).toEqual(['falcon']);
+      captureAppWindow.mockClear();
+      await buildSocialExport({ message, options: { ...plain, content: 'app', marks: { rokas: 'show' } } });
+      expect(captureAppWindow.mock.calls[0][0].redact).toBe(false);
+    });
+
+    it('the preview\'s app shot asks for the hit map', async () => {
+      await buildSocialContent(message, { content: 'app', redact: true, theme: 'light' });
+      expect(captureAppWindow.mock.calls[0][0].wantWords).toBe(true);
     });
 
     it('a saved image maps no words; the preview\'s content does, resolved to keys and mask state', async () => {

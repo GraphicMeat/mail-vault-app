@@ -15,6 +15,9 @@ export const PRIVACY_RELEASED_EVENT = 'mv-privacy-released';
 const textOriginals = new WeakMap(); // span -> original text
 const attrOriginals = new WeakMap(); // element -> Map(name -> original | null)
 
+/** What a mask span hides (a social capture's hit map), or undefined. */
+export const maskOriginal = (span) => textOriginals.get(span);
+
 // Ours is in <head>: an element of the mail's own carrying the id is not the gate.
 const gateOf = (doc) => doc?.head?.querySelector?.(`style#${PRIVACY_GATE_ID}`) || null;
 // Read through the CSSOM, not the attribute string: a script that touches

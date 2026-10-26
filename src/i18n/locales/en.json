@@ -939,6 +939,7 @@
   "export.social.radius": "Corners",
   "export.social.radiusMacos": "macOS",
   "export.social.radiusMacosAria": "Use the macOS window corner radius",
+  "export.social.redactTool": "Redact tool",
   "export.social.redactForced": "Always on while privacy mode is on.",
   "export.social.revealSender": "Show sender",
   "export.social.revealSenderHint": "Keeps the spam sender's address visible. Your own details stay hidden.",
