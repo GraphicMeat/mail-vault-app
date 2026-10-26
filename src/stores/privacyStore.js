@@ -15,7 +15,8 @@ import { isChildWindow } from '../utils/privacy/isChildWindow';
  * `peek` (Option held), `captureMask` (a social capture forcing masks on
  * for a moment), `captureReveal` (the lowercased exact values that capture
  * leaves readable: a spam sender), `captureSenderDetails` (the message whose
- * sender-details popover that capture opens) and `dictWanted` (a redacted
+ * sender-details popover that capture opens), `captureHideTo` (the reader's
+ * header leaves its To row out of that capture) and `dictWanted` (a redacted
  * export needing the name dictionary without masking the UI) are never
  * persisted, and never leave the window (privacySync sends `enabled` only).
  */
@@ -27,6 +28,7 @@ export const usePrivacyStore = create(
       captureMask: false,
       captureReveal: null,
       captureSenderDetails: null,
+      captureHideTo: false,
       dictWanted: false,
       setEnabled: (on) => {
         // A detached window follows the main window's event; it never diverges.
@@ -43,6 +45,7 @@ export const usePrivacyStore = create(
       setCaptureReveal: (values) => set({ captureReveal: values ? new Set([...values].map(v => String(v).trim().toLowerCase())) : null }),
       // `{ uid, accountId, mailbox }` of the message, or null.
       setCaptureSenderDetails: (target) => set({ captureSenderDetails: target || null }),
+      setCaptureHideTo: (on) => set({ captureHideTo: !!on }),
       setDictWanted: (on) => set({ dictWanted: !!on }),
     }),
     {

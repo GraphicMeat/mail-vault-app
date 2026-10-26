@@ -147,6 +147,39 @@ describe('composeSocialImage', () => {
     expect(x).toBeGreaterThan(0);
   });
 
+  describe('own brand image', () => {
+    const custom = (w, h) => ({ custom: { naturalWidth: w, naturalHeight: h } });
+
+    it('replaces the whole lockup: just the picture, in the band, right-aligned with the card, aspect kept', () => {
+      const wm = custom(300, 100);
+      composeSocialImage({ ...base, content: contentCanvas(1640, 1200), size: null, background: { type: 'solid', id: 'white' }, shadow: false, watermark: wm });
+      const L = layoutSocial({ contentW: 1640, contentH: 1200, size: null, padding: 64, chrome: true });
+      const [, , x, y, w, h] = log.find(([k, img]) => k === 'drawImage' && img === wm.custom);
+      expect(log.some(([k]) => k === 'fillText')).toBe(false);
+      expect(log.filter(([k]) => k === 'drawImage')).toHaveLength(2); // the content and the picture
+      expect(y).toBeGreaterThanOrEqual(L.card.y + L.card.h);
+      expect(y + h).toBeLessThanOrEqual(L.canvasH);
+      expect(x + w).toBeCloseTo(L.card.x + L.card.w, 5);
+      expect(w / h).toBeCloseTo(3, 5);
+      expect(h).toBeGreaterThanOrEqual(40);
+    });
+
+    it('shrinks a very wide picture to the room it has, keeping its aspect', () => {
+      const wm = custom(4000, 100);
+      composeSocialImage({ ...base, content: contentCanvas(400, 400), size: null, background: { type: 'solid', id: 'white' }, shadow: false, watermark: wm });
+      const L = layoutSocial({ contentW: 400, contentH: 400, size: null, padding: 64, chrome: true });
+      const [, , x, , w, h] = log.find(([k, img]) => k === 'drawImage' && img === wm.custom);
+      expect(x).toBeGreaterThanOrEqual(24 - 0.001);
+      expect(x + w).toBeLessThanOrEqual(L.card.x + L.card.w + 0.001);
+      expect(w / h).toBeCloseTo(40, 5);
+    });
+
+    it('draws nothing for a picture with no size', () => {
+      composeSocialImage({ ...base, content: contentCanvas(1640, 1200), size: null, background: { type: 'solid', id: 'white' }, shadow: false, watermark: custom(0, 0) });
+      expect(log.filter(([k]) => k === 'drawImage')).toHaveLength(1);
+    });
+  });
+
   it('draws no lockup without one', () => {
     const content = contentCanvas(1640, 1200);
     composeSocialImage({ ...base, content, size: null, background: { type: 'solid', id: 'white' }, shadow: false });

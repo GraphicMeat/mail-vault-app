@@ -17,7 +17,7 @@ import { trace } from '../exportTrace';
 import { captureAppWindow } from './captureAppWindow';
 import { renderSocialCard } from './renderSocialCard';
 import { composeSocialImage } from './composeSocialImage';
-import { loadWatermark } from './socialWatermark';
+import { loadBrand, loadWatermark } from './socialWatermark';
 import { canvasToPngBase64 } from './encodePng';
 import { SIZE_PRESETS } from './socialLayout';
 
@@ -73,8 +73,9 @@ const mustRedact = (redact) => !!redact || usePrivacyStore.getState().enabled;
  * addresses readable; `senderDetails` adds the sender-details box (the open
  * message's real popover, in the app window); `links` adds the links list
  * (card only). `width` is the card's email column in CSS px (card only).
+ * `hideTo` leaves the To row off the header (card) or out of the shot (app window).
  */
-export async function buildSocialContent(message, { content, redact, dict, theme, mailTheme, revealSender, senderDetails, links, width } = {}) {
+export async function buildSocialContent(message, { content, redact, dict, theme, mailTheme, revealSender, senderDetails, links, width, hideTo } = {}) {
   const dated = { ...message, date: asDate(message.date) };
   const red = mustRedact(redact);
   const d = red ? dictionaryWithReveal(dict ?? await socialDictionary(dated), dated, { redact: red, revealSender }) : null;
@@ -83,7 +84,7 @@ export async function buildSocialContent(message, { content, redact, dict, theme
     // it, and a spoofed display name can be a real contact's.
     const reveal = revealAddressesOnly(d?.reveal);
     return captureAppWindow({
-      redact: red, dict: d && d.reveal ? { ...d, reveal } : d, theme, mailTheme, reveal,
+      redact: red, dict: d && d.reveal ? { ...d, reveal } : d, theme, mailTheme, reveal, hideTo: !!hideTo,
       // The open message's header opens its own popover; named as the reader places it.
       senderDetails: senderDetails ? captureTargetOf(dated, useMailStore.getState()) ?? undefined : undefined,
     });
@@ -109,6 +110,7 @@ export async function buildSocialContent(message, { content, redact, dict, theme
     redactStyle: red ? 'blur' : undefined,
     extrasHtml: extrasHtml || undefined,
     width,
+    hideTo: !!hideTo,
     onCloneNode: red ? (clone) => { redactTree(clone, d); } : undefined,
     onCloneHead: red
       ? (clone) => redactOutsideBoxes(clone, d, keep ? { keep: (text) => keep.has(String(text).trim().toLowerCase()) } : {})
@@ -117,6 +119,7 @@ export async function buildSocialContent(message, { content, redact, dict, theme
 }
 
 // The full-size image from a content canvas and the panel's style.
+// `watermark` is the brand loaded from the style (loadBrand): the lockup, an own picture or nothing.
 const composeFull = (content, options, theme, watermark) => composeSocialImage({
   content,
   size: SIZE_PRESETS[options.size] ?? null,
@@ -152,7 +155,7 @@ export async function composeSocialFile({ content, options, name }) {
   if (!hasPremiumAccess(useSettingsStore.getState().billingProfile)) return { ok: false, reason: 'premium' };
   try {
     const theme = options.appTheme ?? useThemeStore.getState().theme;
-    const canvas = composeFull(content, options, theme, await loadWatermark());
+    const canvas = composeFull(content, options, theme, await loadBrand(options));
     return { ok: true, file: { name, base64: await canvasToPngBase64(canvas) }, canvas };
   } catch (err) {
     return { ok: false, reason: 'render', error: String(err?.message || err) };
@@ -179,10 +182,10 @@ export async function buildSocialExport({ message, options }) {
     const content = await buildSocialContent(dated, {
       content: options.content, redact, dict, theme, mailTheme: options.mailTheme ?? theme,
       revealSender: options.revealSender, senderDetails: options.senderDetails, links: options.links,
-      width: options.width,
+      width: options.width, hideTo: options.hideTo,
     });
     lap('social-content');
-    const watermark = await loadWatermark();
+    const watermark = await loadBrand(options);
     t = performance.now();
     const canvas = composeFull(content, options, theme, watermark);
     lap('social-compose');

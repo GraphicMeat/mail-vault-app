@@ -42,6 +42,15 @@ describe('renderSocialCard', () => {
     expect([callFor('head').width, callFor('body').width]).toEqual([640, 640]);
   });
 
+  it('hideTo goes to the header, the only half with a To row', async () => {
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>', hideTo: true });
+    expect(callFor('head').hideTo).toBe(true);
+    expect(callFor('body').hideTo).toBeFalsy();
+    renderMessageToCanvas.mockClear();
+    await renderSocialCard({ message, bodyHtml: '<p>x</p>' });
+    expect(callFor('head').hideTo).toBeFalsy();
+  });
+
   it('light mail: a plain frame, no scripts, no Dark Reader', async () => {
     await renderSocialCard({ message, bodyHtml: '<p>x</p>', appearance: 'light', mail: 'light' });
     const body = callFor('body');

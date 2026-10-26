@@ -10,6 +10,7 @@ let themeDuringCapture = null;
 let mailThemeDuringCapture = null;
 let revealDuringCapture = null;
 let detailsDuringCapture = null;
+let hideToDuringCapture = null;
 // Every rasterizer call: the node as it stood live, and the clone it drew.
 let calls = [];
 // jsdom has no 2d context: a stub that records the composite's draws.
@@ -24,6 +25,7 @@ vi.mock('modern-screenshot', () => ({
     mailThemeDuringCapture = themes.getState().captureMailTheme;
     revealDuringCapture = store.getState().captureReveal;
     detailsDuringCapture = store.getState().captureSenderDetails;
+    hideToDuringCapture = store.getState().captureHideTo;
     const live = node.outerHTML;
     const clone = node.cloneNode(true);
     await opts.onCloneNode?.(clone);
@@ -41,8 +43,8 @@ import { NEEDLES, PEOPLE } from '../../../../test/privacyFixtures';
 import { Private } from '../../../../components/privacy/Private';
 
 afterEach(() => {
-  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; mailThemeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; calls = [];
-  usePrivacyStore.setState({ captureReveal: null, captureSenderDetails: null });
+  document.body.innerHTML = ''; lastClone = null; lastOpts = null; maskDuringCapture = null; themeDuringCapture = null; mailThemeDuringCapture = null; revealDuringCapture = null; detailsDuringCapture = null; hideToDuringCapture = null; calls = [];
+  usePrivacyStore.setState({ captureReveal: null, captureSenderDetails: null, captureHideTo: false });
   useThemeStore.setState({ theme: 'dark', captureTheme: null, captureMailTheme: null });
   document.documentElement.setAttribute('data-theme', 'dark');
   // The composite also sets fillStyle on it: clear only the spies.
@@ -53,6 +55,15 @@ const noNeedle = (html) => NEEDLES.forEach(n => expect(html, n).not.toContain(n)
 const box = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top });
 
 describe('captureAppWindow', () => {
+  it('hideTo holds the reader\'s To row out for the length of the shot only, so live layout and frame rects agree', async () => {
+    document.body.innerHTML = '<div id="root"><div>Subject</div></div>';
+    await captureAppWindow({ redact: false, dict: null, hideTo: true });
+    expect(hideToDuringCapture).toBe(true);
+    expect(usePrivacyStore.getState().captureHideTo).toBe(false);
+    await captureAppWindow({ redact: false, dict: null });
+    expect(hideToDuringCapture).toBe(false);
+  });
+
   it('redacts every text node and attribute of the clone, and restores capture mask after', async () => {
     document.body.innerHTML = '<div id="root"><span title="Joanna Kowalczyk">Joanna Kowalczyk</span> joanna.k@example.org</div>';
     await captureAppWindow({ redact: true, dict: buildNameDictionary({ names: ['Joanna Kowalczyk'] }) });
