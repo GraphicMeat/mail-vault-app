@@ -16,6 +16,8 @@ export {
   initDB,
   saveAccount,
   patchAccount,
+  addAccountNative,
+  updateAccountNative,
   accountExpectedContext,
   saveAccounts,
   getAccountsWithoutPasswords,

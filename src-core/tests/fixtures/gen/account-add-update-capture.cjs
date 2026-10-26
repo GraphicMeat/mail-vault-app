@@ -2,7 +2,8 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const root = __dirname, originals = path.join(root, 'account-add-update-originals');
 const blobs = { addAccount: 'e7b21ae85aedcfddbce3e7140e1846bd6a193af7', updateAccount: '170aab3494c6b14aff07027ef1672b625e84b9f6', accounts: '1b4e980f779c61bd75d94ef3cfe14097ee0f6b8b', graphConfig: 'c3ba1418c98ced06fca6e2f3fe6669ff87ec98d2' };
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
-for (const [name, blob] of Object.entries(blobs)) { const b = fs.readFileSync(path.join(originals, name + '.js')); if (crypto.createHash('sha1').update(Buffer.from(`blob ${b.length}\0`)).update(b).digest('hex') !== blob) throw Error('Changed original ' + name); }
+const originalBytes = name => Buffer.from(fs.readFileSync(path.join(originals, name + '.js.base64'), 'ascii').trim(), 'base64');
+for (const [name, blob] of Object.entries(blobs)) { const b = originalBytes(name); if (crypto.createHash('sha1').update(Buffer.from(`blob ${b.length}\0`)).update(b).digest('hex') !== blob) throw Error('Changed original ' + name); }
 const base = { id: 'a', email: 'a@example.test', imapHost: 'h', password: 'synthetic-password' };
 const cases = [
  ['add-first', 'add', base], ['add-second', 'add', base, [{ ...base, id: 'b', email: 'b@example.test' }]],
@@ -30,7 +31,7 @@ async function capture([name, kind, input, initial = [], response = { host: 'h',
  const context = vm.createContext({ console: { log() {}, warn() {}, error() {} }, crypto: { randomUUID: () => 'synthetic-uuid' }, Date: class extends Date { constructor(...args) { super(...(args.length ? args : ['2026-10-26T00:00:00.000Z'])); } } });
  const modules = new Map();
  function synthetic(key, exports) { if (!modules.has(key)) modules.set(key, new vm.SyntheticModule(Object.keys(exports), function () { for (const [k, v] of Object.entries(exports)) this.setExport(k, v); }, { context, identifier: key })); return modules.get(key); }
- function source(name) { const key = 'original:' + name; if (!modules.has(key)) modules.set(key, new vm.SourceTextModule(fs.readFileSync(path.join(originals, name + '.js'), 'utf8'), { context, identifier: key, importModuleDynamically: async spec => { const m = link(spec); if (m.status === 'unlinked') await m.link(link); if (m.status === 'linked') await m.evaluate(); return m; } })); return modules.get(key); }
+ function source(name) { const key = 'original:' + name; if (!modules.has(key)) modules.set(key, new vm.SourceTextModule(originalBytes(name).toString('utf8'), { context, identifier: key, importModuleDynamically: async spec => { const m = link(spec); if (m.status === 'unlinked') await m.link(link); if (m.status === 'linked') await m.evaluate(); return m; } })); return modules.get(key); }
  const never = () => { throw Error('Unexpected original dependency call'); };
  const external = { exists: never, mkdir: never, remove: never, send: never, parseKeychainValue: never, getAccountsFromKeychain: never, loadKeychain: never, saveCredentials: never, deleteCredentials: never, updateCredentials: never, readCurrentCredentials: never, markNativeMutationUncertain: never, assertLegacyWriteAllowed: never, beginNativeWrite: never, grantFingerprint: never };
  async function probe(branch, args) { effects.push([branch, clone(args)]); if (response === 'string-error') throw 'synthetic probe'; if (response === 'error') throw Error('synthetic probe'); return typeof response === 'object' ? response : {}; }

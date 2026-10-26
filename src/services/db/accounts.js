@@ -6,7 +6,7 @@
 import { exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
-import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, readCurrentCredentials, markNativeMutationUncertain, beginNativeWrite, invalidateCredentialsCache } from './keychain.js';
+import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, readCurrentCredentials, markNativeMutationUncertain, assertAccountCreateOutcomeKnown, beginNativeWrite, invalidateCredentialsCache } from './keychain.js';
 import { grantFingerprint } from '../oauthTokenSync.js';
 import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
@@ -71,7 +71,26 @@ let listMode = 'unknown';
 
 const errText = e => ACCOUNTS_ERRORS.includes(e?.message ?? e) ? (e?.message ?? e) : 'errors.accountsWriteFailed';
 const object = r => !!r && typeof r === 'object' && !Array.isArray(r);
-function isReply(method, r) {
+const PROBE_ERROR_KEYS = new Set(['errors.conn.couldReachMailServerCheck']);
+const workflowMethod = method => method === 'accounts.add' || method === 'accounts.update';
+function isWorkflowReply(r) {
+  if (!object(r)) return false;
+  if (r.ok === false) return r.stage === 'probe' && PROBE_ERROR_KEYS.has(r.error)
+    && (r.errorCode === null || typeof r.errorCode === 'string') && (r.host === null || typeof r.host === 'string')
+    && (r.port === null || Number.isInteger(r.port) && r.port > 0 && r.port <= 65535);
+  const c = r.connectionCheck;
+  return r.ok === true && object(r.account) && typeof r.account.id === 'string' && r.account.id.length > 0
+    && !SECRET_FIELDS.some(k => Object.hasOwn(r.account, k))
+    && Number.isInteger(r.version) && r.version >= 0 && Number.isInteger(r.credentialVersion) && r.credentialVersion >= 0
+    && typeof r.hostChanged === 'boolean'
+    && (c === null || object(c) && typeof c.host === 'string' && c.host.length > 0
+      && (c.messageCount === null || typeof c.messageCount === 'number' && Number.isFinite(c.messageCount))
+      && (c.fromAddress === null || typeof c.fromAddress === 'string'));
+}
+function isReply(method, r, params = {}) {
+  if (workflowMethod(method)) return isWorkflowReply(r) && (r.ok === false
+    || r.account.id === (method === 'accounts.add' ? params.account?.id : params.id)
+      && (method !== 'accounts.update' && r.account.oauth2Transport !== 'graph' || r.connectionCheck === null));
   if (!object(r) || !Number.isInteger(r.version) || r.version < 0) return false;
   if (method === 'accounts.list') return Array.isArray(r.accounts);
   if (method === 'accounts.get') return r.account === null || object(r.account);
@@ -106,22 +125,23 @@ async function accountsCall(method, params = {}) {
     try {
       const call = Promise.resolve().then(() => invoke(method, params));
       const reply = await (read && listMode !== 'daemon' ? withBudget(call, READ_BUDGET_MS) : call);
-      if (isReply(method, reply)) {
+      if (isReply(method, reply, params)) {
         listMode = 'daemon';
         return reply;
       }
       throw new Error('errors.accountsWriteFailed');
     } catch (error) {
       if (!read) {
-        const message = error?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : errText(error);
-        if (!['errors.accountsConflict', 'errors.accountsInvalid', 'errors.keychainBusy', 'errors.keychainUnavailable', 'errors.credentialsInvalid', 'errors.daemonOutdated'].includes(message)) markNativeMutationUncertain();
+        const workflowRefusal = workflowMethod(method) && ['errors.duplicateAccount', 'errors.accountNotFound'].includes(error?.message ?? error);
+        const message = error?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : workflowRefusal ? (error?.message ?? error) : errText(error);
+        if (!['errors.accountsConflict', 'errors.accountsInvalid', 'errors.keychainBusy', 'errors.keychainUnavailable', 'errors.credentialsInvalid', 'errors.daemonOutdated'].includes(message) && !workflowRefusal) markNativeMutationUncertain();
         throw new Error(message);
       }
     } finally { release(); }
   }
   try {
     const reply = await invoke('accounts_fallback', { method, params });
-    if (!isReply(method, reply)) throw new Error('errors.accountsWriteFailed');
+    if (!isReply(method, reply, params)) throw new Error('errors.accountsWriteFailed');
     return reply;
   } catch (error) {
     if (!read) markNativeMutationUncertain();
@@ -248,6 +268,34 @@ async function persistAccount(params) {
   invalidateCredentialsCache();
   return reply;
 }
+
+async function accountWorkflow(method, params, requestedId) {
+  let reply;
+  try { reply = await accountsCall(method, params); }
+  catch (error) {
+    invalidateCredentialsCache();
+    if (['errors.duplicateAccount', 'errors.accountNotFound'].includes(error.message)) throw new Error(t(error.message));
+    throw accountsWriteError(error);
+  }
+  invalidateCredentialsCache();
+  if (reply.ok === false) throw Object.assign(new Error(t(reply.error)), { errorCode: reply.errorCode, host: reply.host, port: reply.port });
+  if (reply.account.id !== requestedId || method === 'accounts.update' && reply.connectionCheck !== null
+    || reply.account.oauth2Transport === 'graph' && reply.connectionCheck !== null) {
+    markNativeMutationUncertain(); throw accountsWriteError(new Error('errors.accountsWriteFailed'));
+  }
+  return reply;
+}
+export async function addAccountNative(account) {
+  assertAccountCreateOutcomeKnown();
+  const submitted = { ...account, id: typeof account?.id === 'string' && account.id ? account.id : crypto.randomUUID() };
+  return accountWorkflow('accounts.add', { account: submitted }, submitted.id);
+}
+export async function updateAccountNative(id, fields, { unset = [], expected } = {}) {
+  const omitted = ['oauth2ClientId', 'jmapUsername'].filter(k => Object.hasOwn(fields, k) && fields[k] === undefined);
+  const remove = [...new Set([...unset, ...omitted])];
+  return accountWorkflow('accounts.update', { id, fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), ...(remove.length ? { unset: remove } : {}), expected }, id);
+}
+
 export async function patchAccount(id, fields, { unset = [], expected } = {}) {
   const reply = await persistAccount({ patch: { id, fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), ...(unset.length ? { unset } : {}), ...(expected ? { expected } : {}) } });
   if (reply.accepted.length !== 1 || reply.accepted[0] !== id || Object.keys(reply.skipped).length) {

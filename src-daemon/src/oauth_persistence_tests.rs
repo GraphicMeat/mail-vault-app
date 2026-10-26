@@ -267,6 +267,27 @@ async fn native_persistence_r1_write_and_ack_preserve_private_r2_then_adoption_w
         1,
         "metadata persistence cannot acknowledge the validated unsaved R1"
     );
+    // The completed metadata write schedules ordinary quiet rechecks. Let those
+    // owners drain before this fixture deliberately captures its probe proof.
+    rig.state.tokens.drain_rechecks();
+    let workflow_result = resolve_probe(
+        &rig.state,
+        "g",
+        credentials::optional_record_quiet("g").await.unwrap(),
+        tokio::time::Instant::now() + Duration::from_secs(75),
+        (true, true),
+    )
+    .await;
+    assert!(
+        workflow_result.is_ok(),
+        "fixture proof resolution failed: {}",
+        workflow_result
+            .as_ref()
+            .err()
+            .map(|e| e.message.as_str())
+            .unwrap_or("none")
+    );
+    let (_, workflow_proof) = workflow_result.ok().unwrap();
     rig.write = Some(credentials::TestWritePause::arm_with_timeout(5_000));
     let ack = rig.hook(&PERSISTENCE_ACK_HOOK, false);
     rig.start();
@@ -290,6 +311,16 @@ async fn native_persistence_r1_write_and_ack_preserve_private_r2_then_adoption_w
         rig.state.tokens.unsaved().is_empty(),
         "the private completion stays private during predecessor acknowledgement"
     );
+    assert!(
+        !crate::account_workflows::save_probe_for_test(
+            &rig.state,
+            "g",
+            workflow_proof,
+            json!({"displayName":"must-not-use-private-r2"})
+        )
+        .await
+    );
+    assert!(rig.record().get("displayName").is_none());
     assert!(recv(&rig.request(
         "accounts.save",
         json!({"patch":{"id":"g","fields":{"sentFolderOverride":"Sent during private R2","updatedAt":"2026-10-26T00:01:00.000Z"}}})
@@ -306,6 +337,25 @@ async fn native_persistence_r1_write_and_ack_preserve_private_r2_then_adoption_w
     rig.advance(Duration::from_secs(1));
     rig.turn(1).await;
     rig.stop().await;
+    let (_, fresh_proof) = resolve_probe(
+        &rig.state,
+        "g",
+        credentials::optional_record_quiet("g").await.unwrap(),
+        tokio::time::Instant::now() + Duration::from_secs(75),
+        (true, true),
+    )
+    .await
+    .ok()
+    .unwrap();
+    assert!(
+        crate::account_workflows::save_probe_for_test(
+            &rig.state,
+            "g",
+            fresh_proof,
+            json!({"displayName":"fresh-after-private-r2"})
+        )
+        .await
+    );
     assert_eq!(rig.record()["oauth2RefreshToken"], json!("synthetic-r2"));
     assert_eq!(
         rig.record()["sentFolderOverride"],

@@ -1830,7 +1830,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'oauth2.take_refreshed': return { tokens: [] };
       case 'credentials.get': return invoke('get_credentials');
       case 'credentials.save': case 'credentials.update': case 'credentials.delete': return unsupported(command);
-      case 'accounts.save': throw new Error('errors.daemonOutdated');
+      case 'accounts.add': case 'accounts.update': case 'accounts.save': throw new Error('errors.daemonOutdated');
       case 'accounts.list': return { accounts: clone(accountList), version: accountsVersion };
       case 'accounts.get': return { account: clone(accountList.find(a => a.id === args.id) || null), version: accountsVersion };
       case 'accounts.put': case 'accounts.remove': case 'accounts.reorder': case 'accounts.replace_all': {

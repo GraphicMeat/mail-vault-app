@@ -34,4 +34,10 @@ describe('staged native account capability', () => {
     expect(await demo.invoke('credentials.get')).toEqual(credentials);
     demo.reset(); expect((await call('accounts.list')).accounts).toEqual(initial);
   });
+  it('demo refuses native add/update without changing metadata or credentials', async () => {
+    const demo=createDemoBackend();const before=await demo.invoke('accounts.list');const credentials=await demo.invoke('credentials.get');
+    for(const method of ['accounts.add','accounts.update']) await expect(demo.invoke(method,{account:{id:'synthetic',password:'synthetic-secret'}})).rejects.toThrow('errors.daemonOutdated');
+    expect(await demo.invoke('accounts.list')).toEqual(before);expect(await demo.invoke('credentials.get')).toEqual(credentials);
+  });
+
 });

@@ -196,26 +196,48 @@ async fn answer_with_retry(state: &Arc<DaemonState>, method: &str, params: &Valu
     }
 }
 
+pub(crate) async fn probe_connection(account: &ImapConfig) -> Result<Option<u32>, JmapError> {
+    let url = account
+        .jmap_session_url
+        .as_deref()
+        .unwrap_or_default()
+        .trim();
+    let auth = account.jmap_auth().ok_or(JmapError::Unauthorized)?;
+    let client = JmapClient::connect(url, auth, &account.email).await?;
+    let (list, _) = client.mailboxes().await?;
+    Ok(list
+        .iter()
+        .find(|m| {
+            m.role
+                .as_deref()
+                .is_some_and(|r| r.eq_ignore_ascii_case("inbox"))
+        })
+        .map(|m| m.total_emails))
+}
+
 /// `imap_test_connection` over JMAP: connect fresh (never the cached
 /// session, so it proves the credentials as typed) and list the mailboxes.
 async fn test_connection(account: &ImapConfig, id: Value) -> RpcResponse {
-    let url = account.jmap_session_url.as_deref().unwrap_or_default().trim().to_string();
+    let url = account
+        .jmap_session_url
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let (host, port) = url::Url::parse(&url)
         .ok()
-        .map(|u| (u.host_str().unwrap_or_default().to_string(), u.port_or_known_default().unwrap_or(443)))
+        .map(|u| {
+            (
+                u.host_str().unwrap_or_default().to_string(),
+                u.port_or_known_default().unwrap_or(443),
+            )
+        })
         .unwrap_or_else(|| (account.host.clone(), 443));
-    info!("[test-connection] Testing JMAP {} → {}:{}", account.email, host, port);
-    let reached = async {
-        let auth = account.jmap_auth().ok_or(JmapError::Unauthorized)?;
-        let client = JmapClient::connect(&url, auth, &account.email).await?;
-        let (list, _) = client.mailboxes().await?;
-        Ok::<_, JmapError>(
-            list.iter()
-                .find(|m| m.role.as_deref().is_some_and(|r| r.eq_ignore_ascii_case("inbox")))
-                .map(|m| m.total_emails),
-        )
-    }
-    .await;
+    info!(
+        "[test-connection] Testing JMAP {} → {}:{}",
+        account.email, host, port
+    );
+    let reached = probe_connection(account).await;
     match reached {
         Ok(message_count) => RpcResponse::success(
             id,
@@ -228,7 +250,10 @@ async fn test_connection(account: &ImapConfig, id: Value) -> RpcResponse {
                 "fromAddress": account.from_address(),
             }),
         ),
-        Err(e) => RpcResponse::success(id, super::failed_connection_test_with_code(&e.to_string(), e.code(), &host, port)),
+        Err(e) => RpcResponse::success(
+            id,
+            super::failed_connection_test_with_code(&e.to_string(), e.code(), &host, port),
+        ),
     }
 }
 

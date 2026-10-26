@@ -733,6 +733,11 @@ impl TokenStore {
         Arc::clone(flights.entry(account_id.to_string()).or_default())
     }
 
+    #[cfg(test)]
+    pub(crate) async fn test_hold_flight(&self, id: &str) -> tokio::sync::OwnedMutexGuard<()> {
+        self.flight(id).lock_owned().await
+    }
+
     /// The held token, when it is good past the margin and the stored record
     /// was read since the app last wrote. No I/O: the hot path.
     fn cached(&self, account_id: &str, now: i64) -> Option<String> {
@@ -1037,6 +1042,217 @@ async fn retire_pending(state: &DaemonState, account_id: &str) -> Result<(), Tok
     Ok(())
 }
 
+// Workflow-only observations. No public serialization, debug or lineage input.
+#[derive(Clone)]
+pub(crate) struct ProbeSource {
+    account_id: String,
+    original: Value,
+    resolved: Value,
+    presence: (bool, bool),
+}
+struct ResolvedRecord {
+    token: Option<String>,
+    snapshot: credentials::RecordSnapshot,
+}
+fn same_tuple(a: &Value, b: &Value) -> bool {
+    ["oauth2AccessToken", "oauth2RefreshToken", "oauth2ExpiresAt"]
+        .iter()
+        .all(|k| a.get(*k) == b.get(*k))
+}
+impl TokenStore {
+    fn permits_probe_source(
+        &self,
+        id: &str,
+        original: &Value,
+        resolved: Option<&Value>,
+        current: &Value,
+        generation: u64,
+    ) -> bool {
+        if !crate::account_workflows::same_auth_context(original, current)
+            || original.get("password") != current.get("password")
+        {
+            return false;
+        }
+        let (Some((original_grant, _, _)), Some((current_grant, _, _))) =
+            (grant_of(original), grant_of(current))
+        else {
+            return false;
+        };
+        let resolved_grant = match resolved {
+            Some(v) => match grant_of(v) {
+                Some((g, _, _)) => Some(g),
+                None => return false,
+            },
+            None => None,
+        };
+        #[cfg(test)]
+        tests::before_probe_comparison(id);
+        let entries = self.entries();
+        if generation != credentials::write_generation() {
+            return false;
+        }
+        let Some(entry) = entries.get(id).filter(|e| e.pending.is_none()) else {
+            return false;
+        };
+        if !entry.grant.same_grant(&entry.lineage, &original_grant)
+            || !entry.grant.same_grant(&entry.lineage, &current_grant)
+            || resolved_grant
+                .as_ref()
+                .is_some_and(|g| !entry.grant.same_grant(&entry.lineage, g))
+        {
+            return false;
+        }
+        if resolved.is_some_and(|r| {
+            crate::account_workflows::same_auth_context(original, r)
+                && (same_tuple(current, original) || same_tuple(current, r))
+        }) {
+            return true;
+        }
+        // A same-RT access/expiry change has no native-origin proof. Only an
+        // exact ordinary tuple with a distinct later RT supplies this exception.
+        current_grant.refresh_token != original_grant.refresh_token
+            && resolved_grant
+                .as_ref()
+                .is_none_or(|g| current_grant.refresh_token != g.refresh_token)
+            && current_grant.refresh_token == entry.grant.refresh_token
+            && current.get("oauth2AccessToken").and_then(Value::as_str)
+                == Some(entry.access_token.as_str())
+            && current.get("oauth2ExpiresAt").and_then(Value::as_i64) == Some(entry.expires_at)
+    }
+    pub(crate) fn permits_explicit_rotation(
+        &self,
+        id: &str,
+        original: &Value,
+        current: &Value,
+        generation: u64,
+    ) -> bool {
+        self.permits_probe_source(id, original, None, current, generation)
+    }
+}
+impl ProbeSource {
+    pub(crate) fn matches(
+        &self,
+        state: &DaemonState,
+        id: &str,
+        current: &Value,
+        generation: u64,
+        presence: (bool, bool),
+    ) -> bool {
+        self.presence == presence
+            && self.account_id == id
+            && state.tokens.permits_probe_source(
+                id,
+                &self.original,
+                Some(&self.resolved),
+                current,
+                generation,
+            )
+    }
+}
+pub(crate) fn managed_probe_record(record: &Value) -> bool {
+    grant_of(record).is_some()
+}
+
+#[cfg(test)]
+fn probe_resolvers() -> &'static (Mutex<usize>, std::sync::Condvar) {
+    static TASKS: std::sync::OnceLock<(Mutex<usize>, std::sync::Condvar)> =
+        std::sync::OnceLock::new();
+    TASKS.get_or_init(Default::default)
+}
+#[cfg(test)]
+pub(crate) fn drain_probe_resolvers() {
+    let (tasks, done) = probe_resolvers();
+    let tasks = tasks.lock().unwrap_or_else(|e| e.into_inner());
+    let (tasks, _) = done
+        .wait_timeout_while(tasks, Duration::from_secs(5), |n| *n != 0)
+        .unwrap_or_else(|e| e.into_inner());
+    if *tasks != 0 {
+        eprintln!("workflow token owners did not drain");
+        std::process::abort();
+    }
+}
+#[cfg(test)]
+struct ProbeTaskDone;
+#[cfg(test)]
+impl Drop for ProbeTaskDone {
+    fn drop(&mut self) {
+        let (tasks, done) = probe_resolvers();
+        *tasks.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        done.notify_all();
+    }
+}
+
+pub(crate) async fn resolve_probe(
+    state: &Arc<DaemonState>,
+    account_id: &str,
+    record: credentials::RecordSnapshot,
+    deadline: tokio::time::Instant,
+    presence: (bool, bool),
+) -> Result<(ImapConfig, ProbeSource), TokenError> {
+    let flight = state
+        .tokens
+        .flight(account_id)
+        .try_lock_owned()
+        .map_err(|_| TokenError {
+            kind: FailKind::Unreadable,
+            message: "errors.keychainBusy".into(),
+            fallback: None,
+        })?;
+    let state = Arc::clone(state);
+    let account_id = account_id.to_owned();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    #[cfg(test)]
+    {
+        *probe_resolvers()
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) += 1;
+    }
+    tokio::spawn(async move {
+        #[cfg(test)]
+        let _done = ProbeTaskDone;
+        let result = async {
+            let resolved = resolve_record_locked(&state, &account_id, &record, || {
+                tokio::time::Instant::now() < deadline && !tx.is_closed()
+            })
+            .await?;
+            let mut config: ImapConfig = serde_json::from_value(resolved.snapshot.record.clone())
+                .map_err(|_| stale_snapshot())?;
+            config.access_token = resolved.token;
+            let mut tuple = resolved.snapshot.record.clone();
+            {
+                let entries = state.tokens.entries();
+                if resolved.snapshot.generation != credentials::write_generation() {
+                    return Err(stale_snapshot());
+                }
+                let entry = entries
+                    .get(&account_id)
+                    .filter(|e| e.pending.is_none())
+                    .ok_or_else(stale_snapshot)?;
+                tuple["oauth2AccessToken"] = json!(entry.access_token);
+                tuple["oauth2RefreshToken"] = json!(entry.grant.refresh_token);
+                tuple["oauth2ExpiresAt"] = json!(entry.expires_at);
+            }
+            Ok((
+                config,
+                ProbeSource {
+                    account_id,
+                    original: record.record,
+                    resolved: tuple,
+                    presence,
+                },
+            ))
+        }
+        .await;
+        drop(flight); // No flight spans a provider probe or persistence admission.
+        let _ = tx.send(result);
+    });
+    tokio::time::timeout_at(deadline, rx)
+        .await
+        .map_err(|_| stale_snapshot())?
+        .map_err(|_| stale_snapshot())?
+}
+
 /// `access_token` for a caller that has just read the record itself.
 pub(crate) async fn for_record(
     state: &DaemonState,
@@ -1045,35 +1261,53 @@ pub(crate) async fn for_record(
 ) -> Result<Option<String>, TokenError> {
     let flight = state.tokens.flight(account_id);
     let _one_refresh = flight.lock().await;
+    resolve_record_locked(state, account_id, record, || true)
+        .await
+        .map(|r| r.token)
+}
+async fn resolve_record_locked(
+    state: &DaemonState,
+    account_id: &str,
+    record: &credentials::RecordSnapshot,
+    wants: impl Fn() -> bool,
+) -> Result<ResolvedRecord, TokenError> {
     retire_pending(state, account_id).await?;
-    // A refresh that finished while this caller waited wins here: its expiry
-    // is later than the record this caller read.
     let Some(entry) = state.tokens.reconcile(account_id, record, &state.events)? else {
-        return Ok(unrefreshable_token(&record.record));
+        return Ok(ResolvedRecord {
+            token: unrefreshable_token(&record.record),
+            snapshot: record.clone(),
+        });
     };
     let now = state.tokens.now();
     if !entry.needs_refresh(now) {
-        return Ok(Some(entry.access_token));
+        return Ok(ResolvedRecord {
+            token: Some(entry.access_token),
+            snapshot: record.clone(),
+        });
     }
-    if let Some((until, kind, message)) = entry.cooldown.clone().filter(|(until, ..)| now < *until)
-    {
-        let _ = until;
+    if let Some((_, kind, message)) = entry.cooldown.clone().filter(|(until, ..)| now < *until) {
         return if entry.still_valid(now) {
-            Ok(Some(entry.access_token))
+            Ok(ResolvedRecord {
+                token: Some(entry.access_token),
+                snapshot: record.clone(),
+            })
         } else {
             Err(entry.failure(kind, message))
         };
     }
-    refresh(state, account_id, entry, now, record).await
+    if !wants() {
+        return Err(stale_snapshot());
+    }
+    refresh_record(state, account_id, entry, now, record).await
 }
 
-async fn refresh(
+async fn refresh_record(
     state: &DaemonState,
     account_id: &str,
     entry: Entry,
     now: i64,
     record: &credentials::RecordSnapshot,
-) -> Result<Option<String>, TokenError> {
+) -> Result<ResolvedRecord, TokenError> {
     let grant = &entry.grant;
     // Network Activity shows the refresh as the account's, from a worker too.
     let request = state.oauth2.refresh_token(
@@ -1117,7 +1351,10 @@ async fn refresh(
             // entries ownership; storage I/O stays outside that short lock.
             if let Ok(Some(completed)) = state.tokens.reconcile(account_id, record, &state.events) {
                 info!("[oauth] refreshed the access token of {}", grant.email);
-                return Ok(Some(completed.access_token));
+                return Ok(ResolvedRecord {
+                    token: Some(completed.access_token),
+                    snapshot: record.clone(),
+                });
             }
             // Exactly one bounded quiet current read. Failure or another
             // generation change leaves the sole successful response private.
@@ -1137,7 +1374,10 @@ async fn refresh(
                 return Err(stale_snapshot());
             }
             return completed
-                .map(|e| Some(e.access_token))
+                .map(|e| ResolvedRecord {
+                    token: Some(e.access_token),
+                    snapshot: current,
+                })
                 .ok_or_else(stale_snapshot);
         }
         Ok(_) => "the refresh returned no token".to_string(),
@@ -1154,7 +1394,10 @@ async fn refresh(
         .store_failure(account_id, kind, &message, record.generation)?;
     if entry.still_valid(now) {
         warn!("[oauth] could not refresh the token of {}: {message}; using the stored one, still valid", grant.email);
-        return Ok(Some(entry.access_token));
+        return Ok(ResolvedRecord {
+            token: Some(entry.access_token),
+            snapshot: record.clone(),
+        });
     }
     warn!(
         "[oauth] the token of {} has expired and could not be refreshed: {message}",
@@ -1631,6 +1874,10 @@ mod tests {
     static RETIREMENT_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static PERSISTENCE_MUTATION_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
     static PERSISTENCE_ACK_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+    static PROBE_COMPARISON_HOOK: Mutex<Option<ReadHook>> = Mutex::new(None);
+    pub(super) fn before_probe_comparison(id: &str) {
+        run_read_hook(&PROBE_COMPARISON_HOOK, id);
+    }
 
     fn run_read_hook(hook: &Mutex<Option<ReadHook>>, id: &str) {
         let taken = {
@@ -1933,6 +2180,7 @@ mod tests {
         fn drop(&mut self) {
             self.release_all();
             self.write.take();
+            drain_probe_resolvers();
             for (_, done) in self.tasks.drain(..) {
                 if done.recv_timeout(Duration::from_secs(5)).is_err() {
                     eprintln!("freshness test tasks did not drain");
@@ -1989,6 +2237,10 @@ mod tests {
                 .unwrap_or_else(|e| e.into_inner())
                 .take();
             PERSISTENCE_MUTATION_HOOK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            PROBE_COMPARISON_HOOK
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .take();
@@ -3799,5 +4051,475 @@ mod tests {
         compose_prep_rejected_fields("compose.reply_context").await;
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_probe_waiter_loss_retains_a_real_late_successful_post() {
+        use mock_imap::oauth::{GrantSpec, TokenAuthority};
+        for mode in [0, 1, 2, 3] {
+            use std::io::{Read as _, Write};
+            let authority = TokenAuthority::new();
+            let signed = authority.sign_in(GrantSpec {
+                client_id: mailvault_core::oauth2::GOOGLE_THUNDERBIRD_CLIENT_ID.into(),
+                scope: "https://mail.google.com/".into(),
+                expires_in: 3600,
+                rotate: true,
+            });
+            let mut original = fresh_grant(&signed.refresh_token, &signed.access_token);
+            original["oauth2ExpiresAt"] = json!(1);
+            let rig = FreshRig::new(original.clone());
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let stopped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let server_stopped = Arc::clone(&stopped);
+            rig.state.oauth2.set_token_endpoint_for_tests(Some(format!(
+                "http://{}",
+                listener.local_addr().unwrap()
+            )));
+            let (entered, posted) = std::sync::mpsc::channel();
+            let (release, gate) = std::sync::mpsc::channel();
+            let (finished, done) = std::sync::mpsc::channel();
+            let auth = authority.clone();
+            let server = std::thread::spawn(move || {
+                let mut stream = loop {
+                    match listener.accept() {
+                        Ok((stream, _)) => break stream,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            if server_stopped.load(std::sync::atomic::Ordering::SeqCst) {
+                                return;
+                            }
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(_) => return,
+                    }
+                };
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut raw = Vec::new();
+                let mut buf = [0; 1024];
+                let (end, len) = loop {
+                    let n = stream.read(&mut buf).unwrap();
+                    assert!(n > 0);
+                    raw.extend_from_slice(&buf[..n]);
+                    if let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&raw[..end]);
+                        let len = head
+                            .lines()
+                            .find_map(|l| {
+                                l.split_once(':')
+                                    .filter(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+                                    .map(|(_, v)| v.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap();
+                        break (end + 4, len);
+                    }
+                };
+                while raw.len() < end + len {
+                    let n = stream.read(&mut buf).unwrap();
+                    raw.extend_from_slice(&buf[..n]);
+                }
+                let (status, body, _) = auth.answer(&String::from_utf8_lossy(&raw[end..end + len]));
+                assert_eq!(status, 200);
+                let _ = entered.send(());
+                let _ = gate.recv();
+                let _=write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body);
+                let _ = finished.send(());
+            });
+            struct Release(
+                Option<std::sync::mpsc::Sender<()>>,
+                Option<std::thread::JoinHandle<()>>,
+                Arc<std::sync::atomic::AtomicBool>,
+            );
+            impl Drop for Release {
+                fn drop(&mut self) {
+                    self.2.store(true, std::sync::atomic::Ordering::SeqCst);
+                    self.0.take();
+                    if let Some(t) = self.1.take() {
+                        let _ = t.join();
+                    }
+                }
+            }
+            let mut control = Release(Some(release), Some(server), stopped);
+            let state = Arc::clone(&rig.state);
+            let snapshot = credentials::RecordSnapshot {
+                record: original,
+                generation: credentials::write_generation(),
+            };
+            let waiter = tokio::spawn(async move {
+                resolve_probe(
+                    &state,
+                    "g",
+                    snapshot,
+                    tokio::time::Instant::now()
+                        + Duration::from_secs(if mode != 1 { 75 } else { 2 }),
+                    (true, false),
+                )
+                .await
+            });
+            recv(&posted);
+            if mode != 1 {
+                waiter.abort();
+                let _ = waiter.await;
+            } else {
+                assert!(matches!(waiter.await, Ok(Err(_))));
+            }
+            if mode == 2 {
+                let changed=credentials::change_credentials(&rig.state,credentials::CredChange::Update{id:"g".into(),fields:json!({"oauth2AccessToken":"synthetic-new-intent-at","oauth2RefreshToken":"synthetic-new-intent-rt","oauth2ExpiresAt":rig.state.tokens.now()+3_600_000}).as_object().unwrap().clone(),chain:None}).await;
+                assert!(changed.is_ok());
+            }
+            let restore = if mode == 3 {
+                assert!(credentials::change_credentials(&rig.state,credentials::CredChange::Save([("other".to_owned(),json!({"id":"other","email":"other@example.test","imapHost":"other","password":"synthetic-other"}).to_string())].into_iter().collect())).await.is_ok());
+                let path = rig.state.app_dir.join("credentials.json");
+                let good = std::fs::read(&path).unwrap();
+                std::fs::write(path, b"{ invalid").unwrap();
+                Some(good)
+            } else {
+                None
+            };
+            control.0.take();
+            recv(&done);
+            let until = tokio::time::Instant::now() + Duration::from_millis(500);
+            let retained = loop {
+                let retained = rig
+                    .state
+                    .tokens
+                    .entries()
+                    .get("g")
+                    .is_some_and(|e| e.unsaved || e.pending.is_some());
+                if retained || tokio::time::Instant::now() >= until {
+                    break retained;
+                }
+                tokio::task::yield_now().await;
+            };
+            drain_probe_resolvers();
+            if mode == 2 {
+                let entries = rig.state.tokens.entries();
+                let current = &entries["g"];
+                assert!(
+                    current.pending.is_none()
+                        && !current.unsaved
+                        && current.grant.refresh_token == "synthetic-new-intent-rt"
+                        && current.access_token == "synthetic-new-intent-at",
+                    "late old response must not replace deliberate new intent"
+                );
+            } else {
+                assert!(retained,"the real provider consumed R0: its sole successful R1 must remain owned after the waiter disappears");
+            }
+            if let Some(good) = restore {
+                assert!(rig.state.tokens.entries()["g"].pending.is_some());
+                assert!(rig.state.tokens.unsaved().is_empty());
+                std::fs::write(rig.state.app_dir.join("credentials.json"), good).unwrap();
+                credentials::blob_written_elsewhere();
+                assert!(access_token(&rig.state, "g", Read::Quiet).await.is_ok());
+                let worker = TestPersistenceWorker::start(&rig.state);
+                worker.turn_after(0).await;
+                worker.stop().await;
+                let current = credentials::optional_record_quiet("g").await.unwrap();
+                assert!(current.record["oauth2RefreshToken"] != json!(signed.refresh_token));
+            }
+            assert_eq!(authority.posts().len(), 1);
+        }
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_saved_own_r1_and_distinct_later_r2_keep_probe_authority() {
+        let mut rig = PersistenceRig::new();
+        let _mock = test_token_mock(vec![
+            granted("synthetic-a1", Some("synthetic-r1")),
+            granted("synthetic-a2", Some("synthetic-r2")),
+        ]);
+        let original = rig.record();
+        let mut metadata = original.clone();
+        for field in ["password", "oauth2AccessToken", "oauth2RefreshToken"] {
+            metadata.as_object_mut().unwrap().remove(field);
+        }
+        std::fs::write(
+            rig.state.app_dir.join("accounts.json"),
+            json!([metadata]).to_string(),
+        )
+        .unwrap();
+        let (_, proof) = resolve_probe(
+            &rig.state,
+            "g",
+            credentials::RecordSnapshot {
+                record: original,
+                generation: credentials::write_generation(),
+            },
+            tokio::time::Instant::now() + Duration::from_secs(75),
+            (true, true),
+        )
+        .await
+        .ok()
+        .unwrap();
+        assert!(
+            crate::account_workflows::save_probe_for_test(
+                &rig.state,
+                "g",
+                proof.clone(),
+                json!({"displayName":"before-own-ack"})
+            )
+            .await
+        );
+        assert_eq!(rig.record()["oauth2RefreshToken"], "synthetic-r0");
+        rig.start();
+        rig.turn(0).await;
+        assert_eq!(rig.record()["oauth2RefreshToken"], "synthetic-r1");
+        assert!(rig.state.tokens.unsaved().is_empty());
+        let unrelated=credentials::change_credentials(&rig.state,credentials::CredChange::Save([("other".to_owned(),json!({"id":"other","email":"other@example.test","imapHost":"other","password":"synthetic-other"}).to_string())].into_iter().collect())).await;
+        assert!(unrelated.is_ok());
+        assert!(
+            crate::account_workflows::save_probe_for_test(
+                &rig.state,
+                "g",
+                proof.clone(),
+                json!({"displayName":"after-own-r1"})
+            )
+            .await
+        );
+        assert_eq!(rig.record()["oauth2RefreshToken"], "synthetic-r1");
+        rig.state
+            .tokens
+            .advance_clock_for_tests(Duration::from_secs(3600));
+        assert!(recv(&rig.access()).is_ok());
+        rig.advance(Duration::from_secs(1));
+        rig.turn(1).await;
+        rig.stop().await;
+        assert_eq!(rig.record()["oauth2RefreshToken"], "synthetic-r2");
+        assert!(
+            crate::account_workflows::save_probe_for_test(
+                &rig.state,
+                "g",
+                proof,
+                json!({"displayName":"after-later-r2"})
+            )
+            .await
+        );
+        assert_eq!(rig.record()["oauth2RefreshToken"], "synthetic-r2");
+        let posts = test_token_posts();
+        assert_eq!(posts.len(), 2);
+        assert_eq!(
+            field(&posts[0], "refresh_token").as_deref(),
+            Some("synthetic-r0")
+        );
+        assert_eq!(
+            field(&posts[1], "refresh_token").as_deref(),
+            Some("synthetic-r1")
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_same_rt_unknown_adoption_conflicts_but_authoritative_retry_succeeds() {
+        let original = fresh_grant("synthetic-r1", "synthetic-a1");
+        let rig = FreshRig::new(original.clone());
+        let _mock = test_token_mock(vec![]);
+        let (_, proof) = resolve_probe(
+            &rig.state,
+            "g",
+            credentials::RecordSnapshot {
+                record: original,
+                generation: credentials::write_generation(),
+            },
+            tokio::time::Instant::now() + Duration::from_secs(75),
+            (true, false),
+        )
+        .await
+        .ok()
+        .unwrap();
+        let changed=credentials::change_credentials(&rig.state,credentials::CredChange::Update{id:"g".into(),fields:json!({"oauth2AccessToken":"synthetic-unknown-a2","oauth2ExpiresAt":now_ms()+7_200_000}).as_object().unwrap().clone(),chain:None}).await;
+        assert!(changed.is_ok());
+        assert!(access_token(&rig.state, "g", Read::Quiet).await.is_ok());
+        assert!(
+            !crate::account_workflows::save_probe_for_test(
+                &rig.state,
+                "g",
+                proof,
+                json!({"displayName":"must-not-land"})
+            )
+            .await
+        );
+        let snapshot = credentials::optional_record_quiet("g").await.unwrap();
+        let (_, fresh) = resolve_probe(
+            &rig.state,
+            "g",
+            snapshot,
+            tokio::time::Instant::now() + Duration::from_secs(75),
+            (true, false),
+        )
+        .await
+        .ok()
+        .unwrap();
+        assert!(
+            crate::account_workflows::save_probe_for_test(
+                &rig.state,
+                "g",
+                fresh,
+                json!({"displayName":"fresh-retry"})
+            )
+            .await
+        );
+        assert!(test_token_posts().is_empty());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_real_same_rt_refresh_is_bounded_conflict_and_fresh_retry_uses_current_pair() {
+        let original = fresh_grant("synthetic-r1", "synthetic-a1");
+        let rig = FreshRig::new(original.clone());
+        let _mock = test_token_mock(vec![granted("synthetic-native-a2", None)]);
+        let (_, proof) = resolve_probe(
+            &rig.state,
+            "g",
+            credentials::RecordSnapshot {
+                record: original,
+                generation: credentials::write_generation(),
+            },
+            tokio::time::Instant::now() + Duration::from_secs(75),
+            (true, false),
+        )
+        .await
+        .ok()
+        .unwrap();
+        rig.state
+            .tokens
+            .advance_clock_for_tests(Duration::from_secs(3600));
+        assert!(access_token(&rig.state, "g", Read::Quiet).await.is_ok());
+        let worker = TestPersistenceWorker::start(&rig.state);
+        worker.turn_after(0).await;
+        worker.stop().await;
+        assert!(
+            !crate::account_workflows::save_probe_for_test(
+                &rig.state,
+                "g",
+                proof,
+                json!({"displayName":"stale"})
+            )
+            .await
+        );
+        let snapshot = credentials::optional_record_quiet("g").await.unwrap();
+        let (_, fresh) = resolve_probe(
+            &rig.state,
+            "g",
+            snapshot,
+            tokio::time::Instant::now() + Duration::from_secs(75),
+            (true, false),
+        )
+        .await
+        .ok()
+        .unwrap();
+        assert!(
+            crate::account_workflows::save_probe_for_test(
+                &rig.state,
+                "g",
+                fresh,
+                json!({"displayName":"fresh"})
+            )
+            .await
+        );
+        assert_eq!(test_token_posts().len(), 1);
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_generation_notification_before_entries_observation_refuses_without_effect() {
+        let original = fresh_grant("synthetic-r1", "synthetic-a1");
+        let mut rig = FreshRig::new(original.clone());
+        let _mock = test_token_mock(vec![]);
+        let (_, proof) = resolve_probe(
+            &rig.state,
+            "g",
+            credentials::RecordSnapshot {
+                record: original,
+                generation: credentials::write_generation(),
+            },
+            tokio::time::Instant::now() + Duration::from_secs(75),
+            (true, false),
+        )
+        .await
+        .ok()
+        .unwrap();
+        let entered = rig.hook(&PROBE_COMPARISON_HOOK, true);
+        let state = Arc::clone(&rig.state);
+        let saving = rig.spawn(async move {
+            crate::account_workflows::save_probe_for_test(
+                &state,
+                "g",
+                proof,
+                json!({"displayName":"must-not-land"}),
+            )
+            .await
+        });
+        recv(&entered);
+        let notice = crate::server::handle_request_for_test(
+            &rig.state,
+            "oauth2.credentials_changed",
+            json!({}),
+        )
+        .await;
+        assert!(notice.error.is_none());
+        rig.release_all();
+        assert!(!recv(&saving));
+        let current = credentials::optional_record_quiet("g").await.unwrap();
+        assert!(current.record.get("displayName").is_none());
+        assert!(test_token_posts().is_empty());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_workflow_busy_flight_refuses_without_a_queued_post() {
+        let original = fresh_grant("synthetic-r1", "synthetic-a1");
+        let rig = FreshRig::new(original.clone());
+        let _mock = test_token_mock(vec![]);
+        let _flight = rig.state.tokens.test_hold_flight("g").await;
+        let result = resolve_probe(
+            &rig.state,
+            "g",
+            credentials::RecordSnapshot {
+                record: original,
+                generation: credentials::write_generation(),
+            },
+            tokio::time::Instant::now() + Duration::from_secs(75),
+            (true, false),
+        )
+        .await;
+        assert!(matches!(result, Err(TokenError { fallback: None, .. })));
+        assert!(test_token_posts().is_empty());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s23_explicit_replacement_of_unchanged_preimage_ignores_private_old_completion() {
+        let mut rig = PersistenceRig::new();
+        let _mock = test_token_mock(vec![
+            granted("synthetic-a1", Some("synthetic-r1")),
+            granted("synthetic-a2", Some("synthetic-r2")),
+        ]);
+        assert!(recv(&rig.access()).is_ok());
+        rig.start();
+        rig.turn(0).await;
+        rig.stop().await;
+        rig.state
+            .tokens
+            .advance_clock_for_tests(Duration::from_secs(3600));
+        let held = rig.hook(&RETIREMENT_HOOK, true);
+        let old = rig.access();
+        recv(&held);
+        assert!(rig.state.tokens.entries()["g"].pending.is_some());
+        let batch = [
+            "inbox",
+            "sentitems",
+            "drafts",
+            "deleteditems",
+            "junkemail",
+            "archive",
+        ]
+        .iter()
+        .map(|id| json!({"id":id,"status":200,"body":{"id":id}}))
+        .collect::<Vec<_>>();
+        let _graph=crate::handlers::graph::test_graph_mock_with(vec![(200,json!({"value":[{"id":"inbox","displayName":"Inbox","totalItemCount":0,"unreadItemCount":0}]}).to_string()),(200,json!({"responses":batch}).to_string())]);
+        let replacement_expiry = rig.state.tokens.now() + 3_600_000;
+        let replacement=rig.request("accounts.update",json!({"id":"g","fields":{"oauth2AccessToken":"synthetic-deliberate-new-at","oauth2RefreshToken":"synthetic-deliberate-new-rt","oauth2ExpiresAt":replacement_expiry,"oauth2Transport":"graph","oauth2Provider":"microsoft"},"unset":["oauth2ClientId"],"expected":{"fields":{},"absent":[]}}));
+        let reply = recv(&replacement);
+        assert!(reply.error.is_none());
+        assert_eq!(reply.result.unwrap()["ok"], true);
+        rig.release_all();
+        assert!(stale(&recv(&old)));
+        rig.state.tokens.drain_rechecks();
+        let stored = rig.record();
+        assert!(
+            stored["oauth2AccessToken"] == "synthetic-deliberate-new-at"
+                && stored["oauth2RefreshToken"] == "synthetic-deliberate-new-rt"
+        );
+        assert!(rig.state.tokens.unsaved().is_empty());
+        assert_eq!(test_token_posts().len(), 2);
+    }
     include!("oauth_persistence_tests.rs");
 }

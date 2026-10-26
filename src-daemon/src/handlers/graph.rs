@@ -376,6 +376,64 @@ pub(crate) fn test_graph_requests() -> Vec<tests::SeenRequest> {
 }
 
 #[cfg(test)]
+struct ResponseGate {
+    entered: tokio::sync::oneshot::Sender<()>,
+    release: std::sync::mpsc::Receiver<()>,
+    done: std::sync::mpsc::Sender<()>,
+}
+#[cfg(test)]
+fn response_gate() -> &'static std::sync::Mutex<Option<ResponseGate>> {
+    static G: std::sync::OnceLock<std::sync::Mutex<Option<ResponseGate>>> =
+        std::sync::OnceLock::new();
+    G.get_or_init(Default::default)
+}
+#[cfg(test)]
+pub(crate) struct GraphPause {
+    pub entered: tokio::sync::oneshot::Receiver<()>,
+    release: Option<std::sync::mpsc::Sender<()>>,
+    done: Option<std::sync::mpsc::Receiver<()>>,
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+#[cfg(test)]
+impl Drop for GraphPause {
+    fn drop(&mut self) {
+        let unused = response_gate()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+            .is_some();
+        self.release.take();
+        if !unused
+            && self
+                .done
+                .take()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .is_err()
+        {
+            std::process::abort();
+        }
+    }
+}
+#[cfg(test)]
+pub(crate) fn test_graph_paused() -> GraphPause {
+    let lock = test_graph_mock_with(vec![(200, "{}".into())]);
+    let (entered, notice) = tokio::sync::oneshot::channel();
+    let (release, gate) = std::sync::mpsc::channel();
+    let (done, finished) = std::sync::mpsc::channel();
+    *response_gate().lock().unwrap_or_else(|e| e.into_inner()) = Some(ResponseGate {
+        entered,
+        release: gate,
+        done,
+    });
+    GraphPause {
+        entered: notice,
+        release: Some(release),
+        done: Some(finished),
+        _lock: lock,
+    }
+}
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::VecDeque;
@@ -464,16 +522,33 @@ mod tests {
         if let Some(req) = read_request(&mut stream) {
             SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(req);
         }
-        let (status, body) = QUEUE.lock().unwrap().pop_front().unwrap_or((500, "no response queued".into()));
+        let (status, body) = QUEUE
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or((500, "no response queued".into()));
+        let gate = super::response_gate()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        let _gate_done = gate.map(|gate| {
+            let _ = gate.entered.send(());
+            let _ = gate.release.recv_timeout(std::time::Duration::from_secs(5));
+            crate::credentials::TestTaskDone(gate.done)
+        });
         // Status 0: took the request, and the connection dies unanswered.
         if status == 0 {
             return;
         }
-        let reason = if (200..300).contains(&status) { "OK" } else { "Mock Error" };
+        let reason = if (200..300).contains(&status) {
+            "OK"
+        } else {
+            "Mock Error"
+        };
         let resp = format!(
-            "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
+                        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
         let _ = stream.write_all(resp.as_bytes());
     }
 

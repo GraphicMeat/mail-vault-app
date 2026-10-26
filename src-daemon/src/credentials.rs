@@ -2105,6 +2105,7 @@ async fn change_credentials_mode(
         return Err(CredError::Busy.into());
     }
     check_deadline(deadline)?;
+    let writer_generation = write_generation();
     let owner: LeaseOwner = Arc::new(std::sync::Mutex::new(supplied.clone()));
     let apply_state = Arc::clone(state);
     let apply_owner = Arc::clone(&owner);
@@ -2115,6 +2116,7 @@ async fn change_credentials_mode(
             &apply_state,
             supplied.as_ref(),
             &apply_owner,
+            writer_generation,
         )
     };
     let debug_path = test_credentials_path();

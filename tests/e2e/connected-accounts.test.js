@@ -20,6 +20,17 @@ describe('Connected Account Setup', function () {
     await waitForApp();
   });
 
+  it('updates through the native workflow and refuses an origin change without replacement', async()=>{
+    const result=await browser.executeAsync(done=>{
+      const state=window.__MAIL_STORE__.getState();const account=state.accounts[0];
+      state.updateAccount(account.id,{displayName:'S2.3 native metadata'}).then(async saved=>{
+        let refused=false;try{await state.updateAccount(account.id,{imapPort:(Number(saved.imapPort)||993)+1});}catch{refused=true;}
+        done({id:saved.id,name:saved.displayName,secretFree:!['password','oauth2AccessToken','oauth2RefreshToken'].some(k=>Object.hasOwn(saved,k)),refused});
+      }).catch(e=>done({failed:String(e?.message||e)}));
+    });
+    expect(result.failed).toBeUndefined();expect(result.name).toBe('S2.3 native metadata');expect(result.secretFree).toBe(true);expect(result.refused).toBe(true);
+  });
+
   // Account rows live inside the settings page; the identical-looking sidebar
   // rows behind it must never be clicked by mistake.
   const SETTINGS_ROW_SELECTOR = '[data-testid="settings-page"] button[aria-pressed]';

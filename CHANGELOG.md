@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Validate and save account additions and edits in the background helper. Account forms preserve newer credentials, test explicit replacements directly, and publish only confirmed account metadata. A changed server requires replacement credentials; uncertain saves are not replayed.
+
 - Save account creation, imports and explicit account edits through one native persistence boundary. Settings and compose metadata edits preserve newer refreshed credentials; imports count only accepted accounts and keep concurrent duplicates’ settings intact. Native account admission fences participating writers through late backend/document completion, and obsolete whole-store mutation fallback refuses safely. Provider probes and removal workflows remain staged.
 
 - Persist refreshed OAuth token pairs quietly in the daemon, with guarded writes and retries even when no app saver is listening. Failed or unfinished saves remain memory-only until confirmed.

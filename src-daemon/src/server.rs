@@ -181,7 +181,7 @@ pub struct DaemonState {
     /// The OAuth2 access tokens this daemon refreshed and holds
     /// (`oauth_tokens`): every RPC and worker that needs one asks there.
     pub tokens: crate::oauth_tokens::TokenStore,
-    pub account_admission: crate::account_workflows::AccountAdmission,
+    pub(crate) account_admission: crate::account_workflows::AccountAdmission,
     /// Snooze's wake signal and pass lock — `handlers::snooze` pokes it on
     /// create/reschedule and holds the lock for an immediate unsnooze.
     pub snooze: crate::snooze_worker::SnoozeState,

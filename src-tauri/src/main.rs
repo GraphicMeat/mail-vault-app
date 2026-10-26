@@ -3074,6 +3074,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // Expiry is unknown completion, never cancellation of native work.
         "accounts.list" | "accounts.get" => Some(Duration::from_secs(30)),
         "accounts.save" => Some(Duration::from_secs(95)),
+        "accounts.add" | "accounts.update" => Some(Duration::from_secs(305)),
         "accounts.put" | "accounts.remove" | "accounts.reorder" | "accounts.replace_all" => {
             Some(Duration::from_secs(50))
         }
@@ -5294,6 +5295,21 @@ mod verify_copies_tests {
         assert_eq!(map.get(&12).map(String::as_str), Some("<a@host.test>"));
         assert_eq!(map.get(&7).map(String::as_str), Some("b@host.test"));
     }
+}
+
+#[cfg(test)]
+#[test]
+fn reply_timeout_bounds_account_workflows() {
+    for method in ["accounts.add", "accounts.update"] {
+        assert_eq!(
+            crate::reply_timeout(method),
+            Some(std::time::Duration::from_secs(305))
+        );
+    }
+    assert_eq!(
+        crate::reply_timeout("accounts.save"),
+        Some(std::time::Duration::from_secs(95))
+    );
 }
 
 #[cfg(test)]

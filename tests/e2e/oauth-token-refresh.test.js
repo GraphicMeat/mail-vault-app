@@ -92,6 +92,16 @@ describe('OAuth2 token refresh against mock servers', () => {
     assert.deepEqual(await leakedTokens(), []);
   });
 
+  it('native metadata update probes current stored tokens and returns only metadata', async()=>{
+    const before=stored();const count=(await posts(origin())).length;
+    const result=await browser.executeAsync((id,done)=>{
+      window.__MAIL_STORE__.getState().updateAccount(id,{displayName:'S2.3 native account'}).then(a=>done({id:a.id,name:a.displayName,secretFree:!['password','oauth2AccessToken','oauth2RefreshToken'].some(k=>Object.hasOwn(a,k))})).catch(e=>done({failed:String(e?.message||e)}));
+    },account().id);
+    assert.ok(!result.failed,`native metadata update: ${result.failed}`);assert.equal(result.name,'S2.3 native account');assert.equal(result.secretFree,true);
+    const after=stored();assert.ok(after.oauth2AccessToken===before.oauth2AccessToken&&after.oauth2RefreshToken===before.oauth2RefreshToken,'metadata save preserves the current pair');
+    assert.equal((await posts(origin())).length,count);assert.ok((await authLog(origin())).every(a=>a.accepted));
+  });
+
   // Checklist 5.
   it('answers the keychain code, never "Missing accessToken", when the store cannot be read', async () => {
     const saved = readFileSync(credentialsPath(), 'utf8');
@@ -123,14 +133,16 @@ describe('OAuth2 token refresh against mock servers', () => {
     for (let i = 0; i < 10; i++) await rpc('imap_get_mailboxes', { account: account() });
     assert.ok((await posts(origin())).length - before <= 1, 'at most one token request in the cooldown');
 
-    // Reconnect: the record a new sign-in saves (a new grant), then the
-    // credentials write the app always ends with.
-    const grant = await signIn(origin(), { clientId: THUNDERBIRD_CLIENT_ID, scope: GOOGLE_SCOPE, expiresIn: 3600 });
-    const record = { ...stored(), oauth2AccessToken: grant.accessToken, oauth2RefreshToken: grant.refreshToken, oauth2ExpiresAt: grant.expiresAt };
-    const blob = JSON.parse(readFileSync(credentialsPath(), 'utf8'));
-    blob[account().id] = JSON.stringify(record);
-    writeFileSync(credentialsPath(), JSON.stringify(blob));
-    await rpc('oauth2.credentials_changed', {});
+    // Reconnect uses the actual native workflow with the submitted lower-expiry
+    // pair, independently of the refused old grant/cache/refresh flight.
+    const grant = await signIn(origin(), { clientId: THUNDERBIRD_CLIENT_ID, scope: GOOGLE_SCOPE, expiresIn: 600 });
+    const beforeReplacement=(await posts(origin())).length;
+    const replaced=await browser.executeAsync((id,fields,done)=>{
+      window.__MAIL_STORE__.getState().updateAccount(id,fields).then(a=>done({id:a.id,secretFree:!['password','oauth2AccessToken','oauth2RefreshToken'].some(k=>Object.hasOwn(a,k))})).catch(e=>done({failed:String(e?.message||e)}));
+    },account().id,{oauth2AccessToken:grant.accessToken,oauth2RefreshToken:grant.refreshToken,oauth2ExpiresAt:grant.expiresAt,oauth2ClientId:THUNDERBIRD_CLIENT_ID});
+    assert.ok(!replaced.failed,`native replacement: ${replaced.failed}`);assert.equal(replaced.id,account().id);assert.equal(replaced.secretFree,true);
+    assert.ok(stored().oauth2AccessToken===grant.accessToken&&stored().oauth2RefreshToken===grant.refreshToken,'the submitted pair was saved together');
+    assert.equal((await posts(origin())).length,beforeReplacement,'replacement must not refresh the refused old grant');
 
     const after = await rpc('imap_get_mailboxes', { account: account() });
     assert.ok(!after?.__error, `the next request works with the new sign-in: ${after?.__error}`);

@@ -1,0 +1,137 @@
+{
+  "add-first": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "add-second": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "duplicate-logical": {
+    "native": "early-duplicate",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Actual native preflight refusal before loopback authentication; duplicate-id-gap is the intentional strict-ID correction."
+  },
+  "same-email-other-host": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "duplicate-id-gap": {
+    "native": "early-duplicate",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Actual native preflight refusal before loopback authentication; duplicate-id-gap is the intentional strict-ID correction."
+  },
+  "no-trim": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "security-empty": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "count-null": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "count-missing": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "count-number": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "summary-no-host": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "graph-add": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "jmap-basic": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests. Native host projection is jmap.example.test, matching the real form helper; the legacy function itself merely forwards the supplied host."
+  },
+  "jmap-bearer": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests. Native host projection is jmap.example.test, matching the real form helper; the legacy function itself merely forwards the supplied host."
+  },
+  "probe-string": {
+    "native": "probe-refusal",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native actual auth refusal preserves no-save behavior and returns a safe classified union instead of the historical mock string/Error."
+  },
+  "probe-error": {
+    "native": "probe-refusal",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native actual auth refusal preserves no-save behavior and returns a safe classified union instead of the historical mock string/Error."
+  },
+  "save-error": {
+    "native": "save-failure",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Actual synthetic backend write failure after a successful loopback probe; metadata remains unchanged and native reports classified write failure."
+  },
+  "activation-pending": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "activation-reject": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "update-missing": {
+    "native": "early-missing",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Actual native missing-target refusal before loopback authentication."
+  },
+  "update-collision": {
+    "native": "early-duplicate",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Actual native preflight refusal before loopback authentication; duplicate-id-gap is the intentional strict-ID correction."
+  },
+  "update-own": {
+    "native": "kernel",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Native parser/default/time, fresh persistence projection and typed summary parity. View effects are checked in actual JS workflow tests."
+  },
+  "update-active-host": {
+    "native": "early-origin",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Intentional refusal to reuse a stored secret at a changed origin without replacement. Active/nonactive/nonfatal activation behavior remains actual JS update controls after a successful native reply."
+  },
+  "update-inactive-host": {
+    "native": "early-origin",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Intentional refusal to reuse a stored secret at a changed origin without replacement. Active/nonactive/nonfatal activation behavior remains actual JS update controls after a successful native reply."
+  },
+  "update-activation-reject": {
+    "native": "early-origin",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Intentional refusal to reuse a stored secret at a changed origin without replacement. Active/nonactive/nonfatal activation behavior remains actual JS update controls after a successful native reply."
+  },
+  "graph-exchange": {
+    "native": "contradictory-auth",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Historical fixture has graph transport with password/missing OAuth authType. Native deliberately refuses the contradiction; real Graph submitted/stored authority uses native provider/token controls."
+  },
+  "graph-stored": {
+    "native": "contradictory-auth",
+    "control": "s23_frozen_js_corpus_drives_native_policy_and_preservation",
+    "qualification": "Historical fixture has graph transport with password/missing OAuth authType. Native deliberately refuses the contradiction; real Graph submitted/stored authority uses native provider/token controls."
+  }
+}

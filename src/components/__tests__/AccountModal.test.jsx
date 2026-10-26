@@ -34,6 +34,15 @@ vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: (selector) => selector({ localeEpoch: 0 }),
 }));
 
+const nativeBoundary=vi.hoisted(()=>({accounts:[],calls:[]}));
+vi.mock('../../services/db',async()=>await import('../../services/db/accounts.js'));
+vi.mock('../../services/transport.js',()=>({send:async(method,params)=>{
+  nativeBoundary.calls.push([method,params]);if(method==='get_app_data_dir')return '/synthetic';
+  if(method==='accounts.add')return {ok:false,stage:'probe',error:'errors.conn.couldReachMailServerCheck',errorCode:'blocked_or_timeout',host:'mail.example.test',port:993};
+  throw new Error('unexpected native boundary');
+}}));
+vi.mock('../../stores/mailStore',()=>({useMailStore:{getState:()=>({accounts:nativeBoundary.accounts}),setState:fn=>{nativeBoundary.accounts=fn({accounts:nativeBoundary.accounts}).accounts;}}}));
+
 const mockAddAccount = vi.fn();
 vi.mock('../../stores/accountStore', () => ({
   useAccountStore: () => ({ addAccount: (...a) => mockAddAccount(...a) }),
@@ -318,5 +327,21 @@ describe('AccountModal: which Google app signs in', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign in with Google/i }));
     expect(await screen.findByText('This build of MailVault does not include its own Google sign-in.')).toBeTruthy();
     expect(mockAddAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe('AccountModal native workflow classification',()=>{
+  it('keeps classified host/port through the actual workflow and DB adapter',async()=>{
+    nativeBoundary.accounts=[];nativeBoundary.calls=[];
+    mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({authUrl:'https://accounts.google.com/o/oauth2/v2/auth?x=1',state:'state-1'});mockGetGoogleClients.mockResolvedValue({mailvault:false,default:'thunderbird'});mockAddAccount.mockReset();
+    vi.stubGlobal('crypto',{randomUUID:()=> 'synthetic-modal-id'});
+    const keychain=await import('../../services/db/keychain.js');keychain.__resetKeychainForTests();
+    const {addAccount}=await import('../../services/workflows/addAccount.js');mockAddAccount.mockImplementation(addAccount);
+    mockExchangeOAuth2Code.mockResolvedValue({accessToken:'synthetic-at',refreshToken:'synthetic-rt',expiresAt:1234567890,email:TYPED_EMAIL,emailMatches:true,clientId:'synthetic-client'});
+    vi.spyOn(window,'open').mockImplementation(()=>{});
+    try {await openGmailStep2();fireEvent.click(screen.getByRole('button',{name:/Sign in with Google/i}));
+      expect(await screen.findByText(/Nothing answered on mail\.example\.test, port 993/)).toBeTruthy();
+      expect(screen.queryByText('Connected!')).toBeNull();expect(nativeBoundary.accounts).toEqual([]);expect(nativeBoundary.calls.filter(([name])=>name==='accounts.add')).toHaveLength(1);
+    } finally {cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();}
   });
 });

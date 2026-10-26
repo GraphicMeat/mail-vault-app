@@ -173,6 +173,14 @@ describe('Adding a JMAP account by its session URL', function () {
     expect(saved).toEqual({ jmapSessionUrl: sessionUrl, jmapAuth: 'basic', imapHost: '127.0.0.1', smtpHost: null });
   });
 
+  it('updates JMAP metadata through a fresh native probe',async()=>{
+    const result=await browser.executeAsync((email,done)=>{
+      const state=window.__MAIL_STORE__.getState();const account=state.accounts.find(a=>a.email===email);
+      state.updateAccount(account.id,{displayName:'S2.3 JMAP metadata'}).then(a=>done({name:a.displayName,secretFree:!['password','oauth2AccessToken','oauth2RefreshToken'].some(k=>Object.hasOwn(a,k))})).catch(e=>done({failed:String(e?.message||e)}));
+    },JMAP_EMAIL);
+    expect(result.failed).toBeUndefined();expect(result.name).toBe('S2.3 JMAP metadata');expect(result.secretFree).toBe(true);
+  });
+
   it('lists the JMAP mailboxes as folders: INBOX, Work and Work/Sub', async function () {
     // The modal closes itself 1.5 s after success.
     await browser.waitUntil(async () => browser.execute(() => !document.querySelector('form input[name="email"]')),

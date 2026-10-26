@@ -33,6 +33,15 @@ describe('daemon-owned commands', () => {
     }
   });
 
+  it('routes native account workflows directly and never decomposes an unknown completion', async () => {
+    for(const method of ['accounts.add','accounts.update']) {
+      expect(declaredDaemonOwned.has(method)).toBe(true);DAEMON_OWNED.add(method);
+      daemonCall.mockRejectedValueOnce(new Error('unknown completion'));
+      await expect(send(method,{id:'a'})).rejects.toThrow('unknown completion');
+      expect(daemonCall).toHaveBeenLastCalledWith(method,{id:'a'});
+    }
+  });
+
   // The name regex in the next test only sees flat names; dotted ones are
   // checked by text. Track H: H5's settings call this after a mode change.
   it('owns storage.fetch_mode_changed (download modes)', async () => {

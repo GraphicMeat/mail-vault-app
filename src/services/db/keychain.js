@@ -42,6 +42,10 @@ let activeLegacyIntents = 0;
 let nativeOutcomeUnknown = false;
 let legacyOutcomeUnknown = false;
 export function markNativeMutationUncertain() { nativeOutcomeUnknown = true; }
+// A lost create reply cannot authorize another add with a newly minted ID.
+export function assertAccountCreateOutcomeKnown() {
+  if (nativeOutcomeUnknown) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.accountsWriteFailed`);
+}
 export function assertNativeWriteAllowed() {
   if (legacyOutcomeUnknown || activeLegacyIntents > 0) throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainWriteFailed`);
 }

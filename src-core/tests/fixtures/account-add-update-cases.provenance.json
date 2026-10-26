@@ -10,5 +10,28 @@
   "node": "v24.19.0",
   "lockfile": "e028bb112fa145998cdaaf2a94a20a66b4a56d86895d830207e7330af9871294",
   "command": "env MV_CAPTURE_ACCOUNT_WORKFLOWS=1 npx vitest run src-core/tests/fixtures/gen/account-add-update-cases.test.js",
-  "output": "31b66a7c26d4e0564ec501440b2e63932906f204019f40cd3412978156d22ca8"
+  "output": "31b66a7c26d4e0564ec501440b2e63932906f204019f40cd3412978156d22ca8",
+  "verificationHarness": "21cd17beade5a18d5bef282d26197d03a8d65bab34a4ec520d973592c7031b49",
+  "storageCorrection": {
+    "encoding": "base64",
+    "qualification": "Applied after the original capture. The original capture harness hash above and frozen corpus bytes remain unchanged. Decoded source bytes must match the original Git blobs.",
+    "captureHarnessArchive": {
+      "commit": "9caa1f7cbdbdef08b015f507fdfba523cd3e3290",
+      "path": "src-core/tests/fixtures/gen/account-add-update-capture.cjs"
+    },
+    "files": {
+      "accounts.js.base64": {
+        "sha256": "a3622437fa2da252bd530cfffe0a03291618745da1dcefc4f373eee187233b5a"
+      },
+      "addAccount.js.base64": {
+        "sha256": "de8e50d2034f65b0d575c3e62b44eeb25bc336ae6a9a55f8e8992cca434c6248"
+      },
+      "graphConfig.js.base64": {
+        "sha256": "d4ca166c2a689f9326855061d171e73586c4b8046f884d134822a9334ec0fa85"
+      },
+      "updateAccount.js.base64": {
+        "sha256": "d9d2b586d0518fe00af9780dc325d16f988dede16d72c4d674f6968c17f4e372"
+      }
+    }
+  }
 }

@@ -1,128 +1,38 @@
-// Track B (B2): the OAuth callback finishes the add on its own, which meant
-// addAccount() could no longer sit blocked on the first-account activation —
-// activateAccount's mailbox listing + first sync can run far longer than the
-// save itself, and the caller (AccountModal) only needs the save to land
-// before it reports success.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-const mockAccountLogicalKey = vi.fn(a => `${a.email}|${a.imapHost || a.oauth2Provider || ''}`);
-const mockSaveAccount = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../db', () => ({
-  accountLogicalKey: (...a) => mockAccountLogicalKey(...a),
-  saveAccount: (...a) => mockSaveAccount(...a),
-}));
-
-const mockTestConnection = vi.fn().mockResolvedValue({ success: true });
-vi.mock('../../api', () => ({
-  testConnection: (...a) => mockTestConnection(...a),
-  graphListFolders: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock('../../graphConfig', () => ({
-  isGraphAccount: () => false,
-}));
-
-vi.mock('../../authUtils', () => ({
-  ensureFreshToken: vi.fn(async a => a),
-}));
-
-const mockActivateAccount = vi.fn(() => new Promise(() => {})); // never resolves within a test
-
-vi.mock('../../../stores/mailStore', () => {
-  const state = { accounts: [], activateAccount: (...a) => mockActivateAccount(...a) };
-  const useMailStore = () => state;
-  useMailStore.getState = () => state;
-  useMailStore.setState = updater => {
-    Object.assign(state, typeof updater === 'function' ? updater(state) : updater);
-  };
-  return { useMailStore, __mockState: state };
+import { beforeEach, expect, it, vi } from 'vitest';
+const h = vi.hoisted(() => ({ state: {}, reply: null, failure: null, aliases: [] }));
+vi.mock('../../db', () => ({ addAccountNative: async () => { if (h.failure) throw h.failure; return h.reply; } }));
+vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => h.state, setState: fn => Object.assign(h.state, fn(h.state)) } }));
+vi.mock('../../aliases', () => ({ scheduleAliasRefresh: a => h.aliases.push(a) }));
+const { addAccount } = await import('../addAccount.js');
+beforeEach(() => {
+  h.state = { accounts: [], activateAccount: vi.fn(async () => {}) }; h.aliases = []; h.failure = null;
+  h.reply = { ok: true, account: { id: 'a', email: 'a@example.test', imapHost: 'h' }, connectionCheck: { host: 'h', messageCount: 3, fromAddress: null }, hostChanged: false, version: 1, credentialVersion: 1 };
 });
-
-const { addAccount } = await import('../addAccount');
-const { __mockState } = await import('../../../stores/mailStore');
-
-describe('addAccount — first-account activation is fire-and-forget', () => {
-  beforeEach(() => {
-    mockSaveAccount.mockClear();
-    mockActivateAccount.mockClear();
-    mockTestConnection.mockClear();
-    __mockState.accounts = [];
-  });
-
-  it('resolves once the account is saved, without waiting for activateAccount', async () => {
-    const account = await addAccount({
-      email: 'user@gmail.com',
-      imapHost: 'imap.gmail.com',
-      authType: 'oauth2',
-      oauth2Provider: 'google',
-      oauth2AccessToken: 'AT',
-    });
-
-    expect(account.email).toBe('user@gmail.com');
-    // The save happened — addAccount genuinely finished its own work, it
-    // didn't just skip past it.
-    expect(mockSaveAccount).toHaveBeenCalledTimes(1);
-    // The connection test that ran before the save carried the typed email,
-    // not a blank one — this is the field the Rust side puts straight into
-    // "Connection test timed out for <email>".
-    expect(mockTestConnection).toHaveBeenCalledTimes(1);
-    expect(mockTestConnection.mock.calls[0][0].email).toBe('user@gmail.com');
-    // Activation was started (this is the only account, so it qualifies)...
-    expect(mockActivateAccount).toHaveBeenCalledTimes(1);
-    expect(mockActivateAccount).toHaveBeenCalledWith(account.id, 'INBOX');
-    // ...but addAccount already resolved above despite that promise never
-    // settling — if it were still awaited, the `await` on the line above
-    // would never have returned and this assertion would not run.
-  });
-
-  it('does not turn a rejected activation into an unhandled rejection', async () => {
-    mockActivateAccount.mockImplementationOnce(() => Promise.reject(new Error('mailbox listing failed')));
-    // Must not throw, and must not leave the rejection unhandled — vitest
-    // fails the whole run on an unhandled rejection, not just this test.
-    await expect(addAccount({ email: 'user2@gmail.com', imapHost: 'imap.gmail.com' })).resolves.toBeTruthy();
-  });
+it('completes first add while activation never resolves, using only native metadata', async () => {
+  h.state.activateAccount.mockImplementation(() => new Promise(() => {}));
+  const result = await addAccount({ email: 'a@example.test', password: 'synthetic-secret' });
+  await vi.dynamicImportSettled();
+  expect(result).toEqual({ ...h.reply.account, connectionCheck: h.reply.connectionCheck });
+  expect(h.state.accounts).toEqual([h.reply.account]); expect(h.aliases).toEqual([h.reply.account]);
+  expect(h.state.activateAccount).toHaveBeenCalledWith('a', 'INBOX');
 });
-
-// The add-account form shows what the connection test reached. The summary
-// rides on the value addAccount returns, never on the account that is saved
-// and put in the store.
-describe('addAccount: the connection test summary', () => {
-  beforeEach(() => {
-    mockSaveAccount.mockClear();
-    mockTestConnection.mockReset();
-    __mockState.accounts = [];
-  });
-
-  it('returns what the test reached', async () => {
-    mockTestConnection.mockResolvedValue({
-      success: true,
-      host: 'imap.example.test',
-      port: 993,
-      messageCount: 1204,
-      fromAddress: 'me@example.test',
-    });
-
-    const added = await addAccount({ email: 'me@example.test', imapHost: 'imap.example.test' });
-
-    expect(added.connectionCheck).toEqual({
-      host: 'imap.example.test',
-      messageCount: 1204,
-      fromAddress: 'me@example.test',
-    });
-    expect(mockSaveAccount.mock.calls[0][0]).not.toHaveProperty('connectionCheck');
-    expect(__mockState.accounts[0]).not.toHaveProperty('connectionCheck');
-    expect(added.id).toBe(__mockState.accounts[0].id);
-  });
-
-  it('keeps a null count as null', async () => {
-    mockTestConnection.mockResolvedValue({ success: true, host: 'imap.example.test', port: 993, messageCount: null, fromAddress: 'me@example.test' });
-    const added = await addAccount({ email: 'me2@example.test', imapHost: 'imap.example.test' });
-    expect(added.connectionCheck.messageCount).toBeNull();
-  });
-
-  it('has no summary when the test named no server (an older daemon)', async () => {
-    mockTestConnection.mockResolvedValue({ success: true, message: 'Connection successful' });
-    const added = await addAccount({ email: 'me3@example.test', imapHost: 'imap.example.test' });
-    expect(added.connectionCheck).toBeNull();
-  });
+it('second add schedules aliases without activating', async () => {
+  h.state.accounts = [{ id: 'older', email: 'older@example.test' }];
+  await addAccount({ email: 'a@example.test' }); await vi.dynamicImportSettled();
+  expect(h.state.accounts).toHaveLength(2); expect(h.aliases).toEqual([h.reply.account]); expect(h.state.activateAccount).not.toHaveBeenCalled();
+});
+it('activation rejection stays nonfatal after accepted native save', async () => {
+  h.state.activateAccount.mockRejectedValue(new Error('synthetic activation'));
+  await expect(addAccount({ email: 'a@example.test' })).resolves.toMatchObject({ id: 'a' });
+  await vi.dynamicImportSettled(); expect(h.state.accounts).toEqual([h.reply.account]);
+});
+it('native refusal leaves store, aliases and activation untouched', async () => {
+  h.failure = new Error('synthetic native refusal');
+  await expect(addAccount({ email: 'a@example.test' })).rejects.toThrow('synthetic native refusal');
+  await vi.dynamicImportSettled(); expect(h.state.accounts).toEqual([]); expect(h.aliases).toEqual([]); expect(h.state.activateAccount).not.toHaveBeenCalled();
+});
+it.each([null, { host: 'h', messageCount: null, fromAddress: null }, { host: 'h', messageCount: 4, fromAddress: 'alias@example.test' }])('returns native summary %j without putting it in the store', async connectionCheck => {
+  h.reply.connectionCheck = connectionCheck;
+  const result = await addAccount({ email: 'a@example.test' });
+  expect(result.connectionCheck).toEqual(connectionCheck); expect(h.state.accounts[0]).not.toHaveProperty('connectionCheck');
 });
