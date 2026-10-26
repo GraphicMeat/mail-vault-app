@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep retired accounts from receiving delayed sync, body, attachment, contact, decrypt, hoarder, eviction and legacy-import writes. Startup import now runs once after account bootstrap while the helper remains responsive.
+
 - Fence native account and credential writes with process-local account lifecycle authority. Confirmed metadata creation opens its bound ID, confirmed removal retires it, and uncertain creation waits for an explicit fresh account-list recovery. Full native removal and remaining mail writers are staged.
 
 - Validate and save account additions and edits in the background helper. Account forms preserve newer credentials, test explicit replacements directly, and publish only confirmed account metadata. A changed server requires replacement credentials; uncertain saves are not replayed.

@@ -22,13 +22,22 @@ pub(crate) fn start_bootstrap(state: Arc<crate::server::DaemonState>) {
             Ok(lease) => {
                 #[cfg(test)]
                 let done = bootstrap_pause(&state.app_dir);
-                match accounts_doc::list(&accounts_doc::shared(&state.app_dir)) {
-                    Ok(listing) => state.account_lifecycle.seed(&listing),
-                    Err(_) => state.account_lifecycle.fail_bootstrap(),
-                }
+                let seeded = match accounts_doc::list(&accounts_doc::shared(&state.app_dir)) {
+                    Ok(listing) => {
+                        state.account_lifecycle.seed(&listing);
+                        true
+                    }
+                    Err(_) => {
+                        state.account_lifecycle.fail_bootstrap();
+                        false
+                    }
+                };
                 drop(lease);
                 #[cfg(test)]
                 drop(done);
+                if seeded {
+                    crate::custody::dispatch_pending_import(&state);
+                }
             }
             Err(_) => state.account_lifecycle.fail_bootstrap(),
         }
@@ -46,6 +55,14 @@ fn bootstrap_gates() -> &'static Mutex<BTreeMap<std::path::PathBuf, BootstrapGat
     static GATES: std::sync::OnceLock<Mutex<BTreeMap<std::path::PathBuf, BootstrapGate>>> =
         std::sync::OnceLock::new();
     GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+pub(crate) fn pause_bootstrap_for_test(path: &std::path::Path) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>) {
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    bootstrap_gates().lock().unwrap().insert(path.to_path_buf(), BootstrapGate { entered: entered_tx, release: release_rx, done: done_tx });
+    (entered_rx, release_tx, done_rx)
 }
 #[cfg(test)]
 fn bootstrap_pause(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
@@ -105,6 +122,9 @@ pub(crate) struct AccountStamp {
 impl AccountStamp {
     pub fn id(&self) -> &str {
         &self.id
+    }
+    pub(crate) fn epoch(&self) -> u64 {
+        self.epoch
     }
 }
 pub(crate) struct LocalCommitPermit(Arc<CountOwner>);

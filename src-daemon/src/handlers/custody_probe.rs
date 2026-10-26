@@ -59,16 +59,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     let uid = req!(u32_arg(&id, params, "uid"));
     let hint = opt_str_arg(params, "messageId");
     let fallback = params.get("fallbackEntry").filter(|v| v.is_object()).cloned();
-    Some(RpcResponse::success(id, probe_server_copy(state, account, account_id, mailbox, uid, hint, fallback).await))
+    let stamp = state.account_lifecycle.capture(&account_id);
+    Some(RpcResponse::success(id, probe_server_copy(state, account, account_id, mailbox, uid, hint, fallback, stamp, config.uses_jmap()).await))
 }
 
 /// The entry for `uid` after the mailbox's uid generation is checked: a uid
 /// only names a message inside one UIDVALIDITY, so a stale vault would hand
 /// over another message's Message-ID.
-async fn read_entry(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Option<Value> {
+async fn read_entry(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, stamp: &Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>) -> Option<Value> {
+    let stamp = stamp.as_ref().ok()?.clone();
     let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
     blocking(move || {
-        if let Err(e) = repair_generation_for(&state, &account_id, &mailbox) {
+        if let Err(e) = repair_generation_for(&state, &stamp, &mailbox) {
             warn!("[custody.probe_server_copy] generation repair for {account_id}/{mailbox}: {e}");
         }
         daemon_custody::with_conn(&state, |c| entries::get(c, &account_id, &mailbox, uid))
@@ -95,10 +97,13 @@ fn vault_holds(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u
 /// sweep, and a message deleted since must not come back as a custody row
 /// with nothing behind it. False when there was nothing to stamp or the
 /// write failed.
-async fn write_stamp(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, fallback: Option<Value>, extra: Value) -> bool {
+async fn write_stamp(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, fallback: Option<Value>, extra: Value, stamp: &Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>) -> bool {
+    let stamp = stamp.clone();
     let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
     blocking(move || {
         let fallback = fallback.filter(|_| vault_holds(&state, &account_id, &mailbox, uid));
+        let Ok(stamp) = stamp else { return false };
+        let Ok(_permit) = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)) else { return false };
         daemon_custody::with_conn(&state, |c| {
             let current = entries::get(c, &account_id, &mailbox, uid)?;
             let Some(entry) = probe::stamp(current.as_ref(), fallback.as_ref(), uid, &extra) else {
@@ -123,16 +128,23 @@ async fn probe_server_copy(
     uid: u32,
     hint: Option<String>,
     fallback: Option<Value>,
+    stamp: Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>,
+    jmap: bool,
 ) -> Value {
-    let entry = read_entry(state, &account_id, &mailbox, uid).await;
+    let entry = read_entry(state, &account_id, &mailbox, uid, &stamp).await;
     let Some(message_id) = probe::message_id(entry.as_ref(), hint.as_deref()) else {
         return json!({"state": "unknown", "reason": "no-message-id"});
     };
 
     // Presence needs one hit, absence needs every folder: the common answer
     // (it is still there) costs one round trip.
-    let ask = json!({"account": account, "messageId": message_id, "stopOnFirst": true});
-    let swept = crate::handlers::imap::route(state, "imap_find_message_id", &ask, json!(0)).await;
+    let ask = json!({"account": account, "accountId": account_id, "messageId": message_id, "stopOnFirst": true});
+    let swept = if jmap {
+        let Ok(original) = stamp.as_ref() else { return json!({"state": "unknown", "reason": "error"}) };
+        crate::handlers::jmap_bridge::intercept_with_stamp(state, "imap_find_message_id", &json!(0), &ask, Some(original)).await
+    } else {
+        crate::handlers::imap::route(state, "imap_find_message_id", &ask, json!(0)).await
+    };
     let sweep = match swept.map(|r| (r.result, r.error)) {
         Some((Some(sweep), None)) => sweep,
         other => {
@@ -148,7 +160,7 @@ async fn probe_server_copy(
         // On the server after all: an earlier absence stamp is now a lie on disk.
         let cleared = probe::stamped_absent(entry.as_ref());
         if cleared {
-            write_stamp(state, &account_id, &mailbox, uid, fallback, probe::present_fields()).await;
+            write_stamp(state, &account_id, &mailbox, uid, fallback, probe::present_fields(), &stamp).await;
         }
         return json!({"state": "present", "locations": found, "cleared": cleared});
     }
@@ -159,7 +171,7 @@ async fn probe_server_copy(
     // Every selectable folder answered and none of them has it. No vault
     // copy, no claim: gold says the vault is what is left.
     let checked_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    if !write_stamp(state, &account_id, &mailbox, uid, fallback, probe::absent_fields(&checked_at)).await {
+    if !write_stamp(state, &account_id, &mailbox, uid, fallback, probe::absent_fields(&checked_at), &stamp).await {
         return json!({"state": "unknown", "reason": "not-in-vault"});
     }
     json!({"state": "absent", "checkedAt": checked_at, "searched": sweep["searched"].clone()})
@@ -176,6 +188,8 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir, true);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         let _ = daemon_custody::open_into(&s);
         (vault, s)
     }

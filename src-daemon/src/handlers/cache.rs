@@ -106,10 +106,12 @@ fn removed_uids(data: &str) -> Vec<u32> {
 /// that route and the mbox import: the custody row, else the pre-SQL
 /// `mailboxes.json` moved in once. `None` when neither exists. Blocking.
 pub(crate) fn load_mailbox_listing(state: &Arc<DaemonState>, account_id: &str) -> Result<Option<String>, String> {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let root = vault_root(state)?;
     if let Some(data) = daemon_custody::with_conn(state, |c| sql_cache::load_mailboxes(c, account_id))? {
         return Ok(Some(data));
     }
+    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
     let Some(data) = header_cache::take_legacy_mailbox_cache(&root, account_id) else {
         return Ok(None);
     };
@@ -141,10 +143,27 @@ pub(crate) fn with_native_expectation(mut batch: Value, expected: Option<Value>)
     batch
 }
 
+#[cfg(test)]
+type CacheRouteGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>);
+#[cfg(test)]
+fn cache_route_gates() -> &'static std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), CacheRouteGate>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), CacheRouteGate>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn cache_route_pause(path: &std::path::Path, method: &'static str) {
+    let gate = cache_route_gates().lock().unwrap().remove(&(path.to_path_buf(), method));
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
+    }
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "save_email_cache" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let data = req!(str_arg(&id, params, "data"));
             if let Ok(batch) = serde_json::from_str::<Value>(&data) {
@@ -165,6 +184,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let data = without_preview_text(data);
+                    #[cfg(test)] cache_route_pause(&state.app_dir, "save_email_cache");
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     let now = mailvault_core::people::model::now_ms();
                     let added = with_vault_write(&state, |_root| {
                         #[cfg(test)] crate::bulk_worker::cache_publication_probe(_root);
@@ -173,7 +195,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // Mail the app fetched itself reaches the contacts index
                     // once, the first time it is cached, as the sync's does.
                     if !added.is_empty() {
-                        state.contacts.observe_saved_rows(&account_id, &mailbox, &rows_with_uids(&data, &added));
+                        state.contacts.observe_saved_rows_owned(&stamp, &permit, &mailbox, &rows_with_uids(&data, &added));
                     }
                     // The search index keeps an evicted message's row while
                     // this list holds its uid: reconcile the folder once it does not.
@@ -297,10 +319,17 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "clear_email_cache" => {
             let account_id = opt_str_arg(params, "accountId");
             let mailbox = opt_str_arg(params, "mailbox");
+            let stamp = account_id.as_ref().map(|aid| state.account_lifecycle.capture(aid));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let _permit: Box<dyn std::any::Any> = if let Some(stamp) = stamp {
+                        let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                        Box::new(state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?)
+                    } else {
+                        Box::new(state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?)
+                    };
                     with_vault_write(&state, |root| {
                         daemon_custody::with_conn(&state, |c| sql_cache::clear_headers(c, account_id.as_deref(), mailbox.as_deref()))?;
                         header_cache::clear(root, account_id.as_deref(), mailbox.as_deref())
@@ -312,11 +341,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "save_mailbox_cache" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let data = req!(str_arg(&id, params, "data"));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    #[cfg(test)] cache_route_pause(&state.app_dir, "save_mailbox_cache");
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     with_vault_write(&state, |_root| {
                         daemon_custody::with_conn(&state, |c| sql_cache::save_mailboxes(c, &account_id, &data))
                     }).map(|_| Value::Null)
@@ -339,10 +372,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "delete_mailbox_cache" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     with_vault_write(&state, |root| {
                         daemon_custody::with_conn(&state, |c| sql_cache::delete_mailboxes(c, &account_id))?;
                         header_cache::delete_legacy_mailbox_cache(root, &account_id)
@@ -360,12 +396,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // the same mailbox's, read through the store (`allocate_in`).
         "graph_allocate_uids" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let entries = req!(vec_arg::<(String, Option<String>)>(&id, params, "entries"));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    #[cfg(test)] cache_route_pause(&state.app_dir, "graph_allocate_uids");
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     let uids = with_vault_write(&state, |root| {
                         // Graph-only: the app's Outlook listing RPC; the frontend treats JMAP as IMAP.
                         let ledger = root
@@ -422,12 +462,68 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(tmp.path().to_path_buf(), app_dir, mail_dir_ok);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         if mail_dir_ok { let _ = crate::custody::open_into(&s); }
         (tmp, s)
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
         route(s, method, &params, json!(1)).await.expect("routed")
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_delayed_cache_routes_do_not_recreate_retired_rows() {
+        let (_tmp, state) = st(true);
+        std::fs::write(state.app_dir.join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap(),
+        );
+        let methods = ["save_email_cache", "save_mailbox_cache", "graph_allocate_uids"];
+        let mut gates = Vec::new();
+        for method in methods {
+            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            cache_route_gates().lock().unwrap().insert((state.app_dir.clone(), method), (entered_tx, release_rx));
+            gates.push((entered_rx, release_tx));
+        }
+        let payloads = [
+            json!({"accountId":"a","mailbox":"new-folder","data":json!({"emails":[{"uid":7}],"totalEmails":1}).to_string()}),
+            json!({"accountId":"a","data":"[\"new-folder\"]"}),
+            json!({"accountId":"a","mailbox":"new-folder","entries":[["graph-old","mid-old"]]}),
+        ];
+        let mut pending = Vec::new();
+        for (method, params) in methods.into_iter().zip(payloads) {
+            let held = Arc::clone(&state);
+            pending.push(tokio::spawn(async move { call(&held, method, params).await }));
+        }
+        for (entered, _) in &gates {
+            entered.recv_timeout(std::time::Duration::from_secs(5)).expect("real cache route child parked before publication");
+        }
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        for (_, release) in gates { release.send(()).unwrap(); }
+        let mut outcomes = Vec::new();
+        for task in pending { outcomes.push(task.await.unwrap()); }
+        let (headers, mailboxes) = crate::custody::with_conn(&state, |conn| Ok((
+            sql_cache::uid_set(conn, "a", "new-folder")?,
+            sql_cache::load_mailboxes(conn, "a")?,
+        ))).unwrap();
+        let ledger = state.data_dir.join("email_cache")
+            .join(header_cache::cache_base_name("a", "new-folder"))
+            .join(graph_ledger::LEDGER_FILE);
+        let ledger_exists = ledger.exists();
+        let b = call(&state, "save_email_cache", json!({"accountId":"b","mailbox":"INBOX","data":json!({"emails":[{"uid":1}]}).to_string()})).await;
+        let b_rows = crate::custody::with_conn(&state, |conn| sql_cache::uid_set(conn, "b", "INBOX")).unwrap();
+        assert!(headers.is_empty() && mailboxes.is_none() && !ledger_exists,
+            "old cache child recreated A SQL/ledger: headers={headers:?}, mailboxes={mailboxes:?}, ledger={ledger_exists}, outcomes={:?}", outcomes.iter().map(|r| r.result.is_some()).collect::<Vec<_>>());
+        assert!(outcomes.iter().all(|r| r.result.is_none()), "revoked routes must report refusal");
+        assert!(b.result.is_some() && b_rows.contains(&1), "independent B cache save must work");
     }
 
     #[tokio::test]

@@ -29,7 +29,8 @@
 //! and `run_read` adds a dead-socket retry `with_background` never had.
 //! `imap_get_email`/`imap_get_email_light` already used `run_read` as Tauri
 //! commands (`commands.rs`), so they keep doing so here, unchanged.
-use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_mailbox_write, with_vault_write};
+use crate::account_lifecycle::AccountStamp;
+use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_stamped_mailbox_write, with_vault_write};
 use crate::imap::{self, pool::ImapPool, ImapConfig};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -103,8 +104,8 @@ where
 /// ahead (backfill, IDLE arrivals) only inside a Keep Recent / Index Only
 /// window, always under Hoarder. A hidden account: nothing. `false` then:
 /// no copy was written by this call.
-pub(crate) async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool) -> bool {
-    auto_cache_with_ids(state, account_id, mailbox, uid, raw, date_ms, opened, None).await
+pub(crate) async fn auto_cache(state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: String, uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool) -> Result<bool, String> {
+    auto_cache_with_ids(state, stamp, mailbox, uid, raw, date_ms, opened, None).await
 }
 
 /// `auto_cache` of a JMAP account's body with its server ids (Plan A Task
@@ -115,47 +116,78 @@ pub(crate) async fn auto_cache(state: &Arc<DaemonState>, account_id: String, mai
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn auto_cache_with_ids(
     state: &Arc<DaemonState>,
-    account_id: String,
+    stamp: AccountStamp,
     mailbox: String,
     uid: u32,
     raw: Vec<u8>,
     date_ms: Option<i64>,
     opened: bool,
     ids: Option<mailvault_core::jmap_store::record::ServerIds>,
-) -> bool {
+) -> Result<bool, String> {
     let app_dir = state.app_dir.clone();
-    let policy_account = account_id.clone();
+    let policy_account = stamp.id().to_owned();
     let policy = blocking(move || download_policy(&app_dir, &policy_account)).await.ok().flatten();
     if !policy.is_some_and(|p| p.caches_fetched(opened, date_ms, now_ms())) {
-        return false;
+        state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
+        return Ok(false);
     }
     let state2 = Arc::clone(state);
+    let commit_stamp = stamp.clone();
     let cache_result = blocking(move || -> Result<bool, String> {
         // The parse, the hash and the blob write run before the mailbox lock,
         // so an open of this folder never waits on them (Plan B 7a D3); the
         // lock covers the commit alone.
-        let prepared = with_vault_write(&state2, |root| vault_files::prepare_store(root, &account_id, &mailbox, uid, raw, &[]))?;
+        let prepared = with_vault_write(&state2, |root| vault_files::prepare_store(root, commit_stamp.id(), &mailbox, uid, raw, &[]))?;
         let prepared = match ids {
             Some(ids) => prepared.with_server_ids(ids),
             None => prepared,
         };
-        with_mailbox_write(&state2, &account_id, &mailbox, |root| {
-            vault_files::store_prepared(&state2.vault_registry, root, &account_id, &mailbox, &prepared, &[], false)
+        #[cfg(test)]
+        prepared_cache_pause(&state2.app_dir);
+        with_stamped_mailbox_write(&state2, &commit_stamp, &mailbox, |root| {
+            vault_files::store_prepared(&state2.vault_registry, root, commit_stamp.id(), &mailbox, &prepared, &[], false)
         })
     })
     .await;
     match cache_result {
         // A write nudges the index through the registry's change hook;
         // `false` = already cached, no nudge, matching maildir_store_raw.
-        Ok(Ok(_)) => true,
+        Ok(Ok(_)) => Ok(true),
         Ok(Err(err)) => {
+            if err == "errors.keychainBusy" || state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).is_err() {
+                return Err("errors.keychainBusy".to_owned());
+            }
             warn!("Failed to auto-cache .eml for UID {}: {}", uid, err);
-            false
+            Ok(false)
         }
         Err(join_err) => {
+            state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
             warn!("Failed to auto-cache .eml for UID {}: task join error: {}", uid, join_err);
-            false
+            Ok(false)
         }
+    }
+}
+
+#[cfg(test)]
+fn prepared_cache_gates() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+pub(crate) fn pause_prepared_cache_for_test(path: &std::path::Path) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    prepared_cache_gates().lock().unwrap().insert(path.to_path_buf(), (entered_tx, release_rx));
+    (entered_rx, release_tx)
+}
+
+#[cfg(test)]
+fn prepared_cache_pause(path: &std::path::Path) {
+    let gate = prepared_cache_gates().lock().unwrap().remove(path);
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv();
     }
 }
 
@@ -181,7 +213,7 @@ pub(crate) fn email_date_ms(date: Option<&str>, internal_date: Option<&str>) -> 
 /// hidden account or On Demand (no body is even fetched), none for a message
 /// dated outside a Keep Recent / Index Only window (`auto_cache` decides that
 /// once the date is known).
-pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sync_engine::SyncAccount, mailbox: &str, uids: &[u32]) {
+pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, stamp: AccountStamp, account: &crate::sync_engine::SyncAccount, mailbox: &str, uids: &[u32]) {
     if uids.is_empty() {
         return;
     }
@@ -203,7 +235,7 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
                     match body {
                         Ok(body) => {
                             let dated = crate::handlers::jmap_bridge::dated_ms(&body.raw, body.received_at.as_deref());
-                            auto_cache_with_ids(state, account.id.clone(), mailbox.to_string(), uid, body.raw, dated, false, Some(body.ids)).await;
+                            let _ = auto_cache_with_ids(state, stamp.clone(), mailbox.to_string(), uid, body.raw, dated, false, Some(body.ids)).await;
                         }
                         Err(e) => warn!("[push] {}: arrival body {} not cached: {}", account.email, uid, e),
                     }
@@ -234,7 +266,7 @@ pub(crate) async fn cache_arrivals(state: &Arc<DaemonState>, account: &crate::sy
             }
         };
         let dated = email_date_ms(email.date.as_deref(), email.internal_date.as_deref());
-        auto_cache(state, account.id.clone(), mailbox.to_string(), email.uid, email.raw_source_bytes, dated, false).await;
+        let _ = auto_cache(state, stamp.clone(), mailbox.to_string(), email.uid, email.raw_source_bytes, dated, false).await;
     }
 }
 
@@ -532,6 +564,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let uid = req!(u32_arg(&id, params, "uid"));
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
             let account_id = opt_str_arg(params, "accountId");
+            let authority_id = account_id.as_deref().unwrap_or(&account.email);
+            let body_stamp = match state.account_lifecycle.capture(authority_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             // Prefetch of the next rows is background work — left on the
             // priority lane it would take one of that account's 5 permits,
             // queueing the click the user actually made behind up to five
@@ -619,23 +656,30 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // `e.uid` (the server's answer), not the request's `uid` —
                     // matches `maildir_store_raw`'s original call, which
                     // stored under the fetched email's own uid.
-                    let aid = account_id.clone().unwrap_or_else(|| account.email.clone());
                     let store_uid = e.uid;
                     let mb = mb_clone.clone();
                     // `store` answered Ok: written now, or a file was already there.
                     let dated = email_date_ms(e.date.as_deref(), e.internal_date.as_deref());
-                    let cached = auto_cache(state, aid.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone(), dated, opened).await;
+                    let cached = match auto_cache(state, body_stamp.clone(), mb.clone(), store_uid, e.raw_source_bytes.clone(), dated, opened).await {
+                        Ok(cached) => cached,
+                        Err(err) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, err)),
+                    };
                     // Not kept on disk (On Demand): the attachment and inline
                     // image reads that follow this open are served from
                     // memory (`raw_message`). A backfill body is not an open.
                     if !cached && opened {
-                        state.raw_messages.remember(&aid, &mb, store_uid, e.raw_source_bytes.clone());
+                        let _permit = match state.account_lifecycle.try_commit(std::slice::from_ref(&body_stamp)) {
+                            Ok(permit) => permit,
+                            Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+                        };
+                        state.raw_messages.remember(&body_stamp, &mb, store_uid, e.raw_source_bytes.clone());
                     }
                     // OpenPGP: decrypted in memory whatever the cache did; the
                     // decrypted copy is kept only when the vault holds the message.
                     let raw = e.raw_source_bytes.clone();
                     let state2 = Arc::clone(state);
-                    let rendered = blocking(move || crate::handlers::pgp::render(&state2, &aid, &mb, store_uid, raw, cached)).await;
+                    let render_stamp = body_stamp.clone();
+                    let rendered = blocking(move || crate::handlers::pgp::render(&state2, render_stamp, &mb, store_uid, raw, cached)).await;
                     let mut email = json!(e);
                     if let Ok((bytes, status)) = rendered {
                         crate::handlers::pgp::overlay(&mut email, &bytes, store_uid, status);
@@ -946,7 +990,16 @@ mod tests {
     fn st(mail_dir_ok: bool) -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-imap-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        DaemonState::for_test(dir.clone(), dir, mail_dir_ok)
+        let state = DaemonState::for_test(dir.clone(), dir, mail_dir_ok);
+        seed_test_accounts(&state);
+        state
+    }
+
+    fn seed_test_accounts(state: &Arc<DaemonState>) {
+        std::fs::write(state.app_dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"user@example.com"}]"#).unwrap();
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap(),
+        );
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
@@ -1140,6 +1193,46 @@ mod tests {
         std::fs::write(dir.join("frontend-settings.json"), json!({"mailvault-settings": {"state": state}}).to_string()).unwrap();
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_prepared_body_cannot_recreate_retired_new_mailbox() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap(),
+        );
+        write_settings(dir.path(), json!({"fetchMode": "hoarder"}));
+
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        prepared_cache_gates().lock().unwrap().insert(state.app_dir.clone(), (entered_tx, release_rx));
+        let held = Arc::clone(&state);
+        let old_stamp = state.account_lifecycle.capture("a").unwrap();
+        let old = tokio::spawn(async move {
+            auto_cache(&held, old_stamp, "new-folder".into(), 7,
+                b"From: a@example.test\r\nSubject: Old\r\n\r\nOld body".to_vec(), None, true).await
+        });
+        entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("real prepare_store finished");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        let a_tree = state.data_dir.join("Maildir").join("a");
+        let _ = std::fs::remove_dir_all(&a_tree);
+        release_tx.send(()).unwrap();
+        let cached = old.await.unwrap();
+        let a_recreated = a_tree.exists();
+        let b_cached = auto_cache(&state, state.account_lifecycle.capture("b").unwrap(), "INBOX".into(), 1,
+            b"From: b@example.test\r\nSubject: B\r\n\r\nB body".to_vec(), None, true).await.unwrap();
+        let b_exists = state.data_dir.join("Maildir").join("b").join("INBOX").join("cur").exists();
+        assert!(!a_recreated, "old prepared body recreated retired account tree; cached={cached:?}, B cached={b_cached}, B exists={b_exists}");
+        assert!(cached.is_err(), "revoked body must be refused, not reported cached");
+        assert!(b_cached && b_exists, "independent B cache must still work");
+    }
+
     #[tokio::test]
     async fn get_email_light_auto_caches_to_the_vault_and_nudges_the_index() {
         plaintext();
@@ -1147,7 +1240,9 @@ mod tests {
         let (tmp, s) = {
             let dir = std::env::temp_dir().join(format!("mv-imap-light-{}", uuid::Uuid::new_v4()));
             std::fs::create_dir_all(&dir).unwrap();
-            (dir.clone(), DaemonState::for_test(dir.clone(), dir, true))
+            let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+            seed_test_accounts(&state);
+            (dir, state)
         };
         // The synthetic message is dated 2026-01-01: a mode that keeps every
         // body, so this test does not start failing as the calendar moves.
@@ -1184,7 +1279,9 @@ mod tests {
     fn light_state() -> (std::path::PathBuf, Arc<DaemonState>) {
         let dir = std::env::temp_dir().join(format!("mv-imap-mode-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        (dir.clone(), DaemonState::for_test(dir.clone(), dir, true))
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        seed_test_accounts(&state);
+        (dir, state)
     }
 
     fn cached_files(dir: &std::path::Path) -> Vec<String> {
@@ -1354,7 +1451,7 @@ mod tests {
         }))
         .unwrap();
 
-        cache_arrivals(&s, &account, "INBOX", &[1, 2]).await;
+        cache_arrivals(&s, s.account_lifecycle.capture(&account.id).unwrap(), &account, "INBOX", &[1, 2]).await;
 
         assert_eq!(cached_files(&dir).len(), 2, "both arrivals were downloaded and kept");
         let _ = std::fs::remove_dir_all(&dir);
@@ -1686,12 +1783,12 @@ mod tests {
         let downloads = || m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count();
 
         write_settings(&dir, json!({"fetchMode": "onDemand"}));
-        cache_arrivals(&s, &account, "INBOX", &[2]).await;
+        cache_arrivals(&s, s.account_lifecycle.capture(&account.id).unwrap(), &account, "INBOX", &[2]).await;
         assert_eq!(downloads(), 0, "On Demand fetches no body");
         assert!(cached_files(&dir).is_empty());
 
         write_settings(&dir, json!({"fetchMode": "hoarder"}));
-        cache_arrivals(&s, &account, "INBOX", &[2]).await;
+        cache_arrivals(&s, s.account_lifecycle.capture(&account.id).unwrap(), &account, "INBOX", &[2]).await;
         assert_eq!(downloads(), 1);
         let files = cached_files(&dir);
         assert_eq!(files.len(), 1, "{files:?}");
@@ -1721,7 +1818,7 @@ mod tests {
         write_settings(&dir, json!({"fetchMode": "hoarder"}));
 
         // uid 7 was never issued: left out, not an error.
-        cache_arrivals(&s, &account, "INBOX", &[1, 2, 7]).await;
+        cache_arrivals(&s, s.account_lifecycle.capture(&account.id).unwrap(), &account, "INBOX", &[1, 2, 7]).await;
 
         let mut uids: Vec<u32> = cached_files(&dir).iter().filter_map(|f| mailvault_core::maildir::vault_filename_uid(f)).collect();
         uids.sort();
@@ -1750,7 +1847,7 @@ mod tests {
         .unwrap();
         write_settings(&dir, json!({"fetchMode": "hoarder"}));
 
-        cache_arrivals(&s, &account, "INBOX", &[2]).await;
+        cache_arrivals(&s, s.account_lifecycle.capture(&account.id).unwrap(), &account, "INBOX", &[2]).await;
 
         let record = mailvault_core::message_store::mailbox_dir(&dir, "acc1", "INBOX").join("jmap").join("2.json");
         let rec: Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();

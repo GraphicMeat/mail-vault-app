@@ -499,7 +499,8 @@ async fn daemon_main() {
     let inference_engine = Arc::new(inference::InferenceEngine::new());
 
     let imap_pool = Arc::new(imap::ImapPool::new());
-    let contacts = contacts_index::ContactsState::new(mail_dir.clone());
+    let account_lifecycle = account_lifecycle::AccountLifecycle::default();
+    let contacts = contacts_index::ContactsState::new(mail_dir.clone(), account_lifecycle.clone());
     // Connectivity gate. Its watchdog parks on a notify while online, so it
     // costs nothing until something actually fails.
     let net = netgate::NetGate::new();
@@ -514,6 +515,7 @@ async fn daemon_main() {
         Arc::clone(&net),
         Arc::clone(&vault_closed),
         Arc::clone(&vault_gate),
+        account_lifecycle.clone(),
     ));
 
     // IDLE watchers. 30 s first backoff, doubling — a provider that refuses
@@ -610,7 +612,7 @@ async fn daemon_main() {
         scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
         tokens: oauth_tokens::TokenStore::default(),
         account_admission: Default::default(),
-        account_lifecycle: Default::default(),
+        account_lifecycle,
         snooze: snooze_worker::SnoozeState::default(),
         follow_up: follow_up_worker::FollowUpState::default(),
         auto_tag_worker,
@@ -1102,6 +1104,8 @@ mod tests {
         let mail = scratch("contacts-flush-closed-mail");
         let app = scratch("contacts-flush-closed-app");
         let state = server::DaemonState::for_test(mail.clone(), app.clone(), true);
+        std::fs::write(app.join("accounts.json"), r#"[{"id":"acc1"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&app)).unwrap());
         state.contacts.seed_dirty_for_test("acc1");
         state
             .vault_closed

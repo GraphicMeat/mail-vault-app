@@ -150,6 +150,12 @@ fn ledger_account(params: &Value) -> Result<String, Fail> {
 /// Answer `method` over JMAP when `params.account` is a JMAP account, else
 /// `None` (the caller's own arms answer it).
 pub async fn intercept(state: &Arc<DaemonState>, method: &str, id: &Value, params: &Value) -> Option<RpcResponse> {
+    intercept_with_stamp(state, method, id, params, None).await
+}
+
+/// A nested finite operation can carry its entry stamp through the provider
+/// wait instead of capturing a new account epoch after that wait.
+pub(crate) async fn intercept_with_stamp(state: &Arc<DaemonState>, method: &str, id: &Value, params: &Value, original: Option<&crate::account_lifecycle::AccountStamp>) -> Option<RpcResponse> {
     if !method.starts_with("imap_") && method != "smtp_test_connection" {
         return None;
     }
@@ -166,7 +172,7 @@ pub async fn intercept(state: &Arc<DaemonState>, method: &str, id: &Value, param
             state.jmap.forget(&account);
             RpcResponse::success(id, json!({"success": true}))
         }
-        m if HANDLED.contains(&m) => match answer_with_retry(state, m, params, &account).await {
+        m if HANDLED.contains(&m) => match answer_with_retry(state, m, params, &account, original).await {
             Ok(v) => RpcResponse::success(id, v),
             Err(Fail::Params(e)) => RpcResponse::error(id, ipc::INVALID_PARAMS, e),
             Err(Fail::Rpc(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
@@ -184,13 +190,14 @@ pub async fn intercept(state: &Arc<DaemonState>, method: &str, id: &Value, param
 /// the server applied nothing, and a write logs, never returns, the failures
 /// that can follow its landed server change (the mailbox listing, a custody
 /// row), so an authentication retry never repeats a write that landed.
-async fn answer_with_retry(state: &Arc<DaemonState>, method: &str, params: &Value, account: &ImapConfig) -> Result<Value, Fail> {
+async fn answer_with_retry(state: &Arc<DaemonState>, method: &str, params: &Value, account: &ImapConfig, carried: Option<&crate::account_lifecycle::AccountStamp>) -> Result<Value, Fail> {
+    let original = carried.cloned().or_else(|| ledger_account(params).ok().and_then(|id| state.account_lifecycle.capture(&id).ok()));
     let acct = state.jmap.get(account).await?;
-    match answer(state, method, params, account, &acct).await {
+    match answer(state, method, params, account, &acct, original.as_ref()).await {
         Err(f) if is_auth_failure(&f) => {
             state.jmap.forget(account);
             let acct = state.jmap.get(account).await?;
-            answer(state, method, params, account, &acct).await
+            answer(state, method, params, account, &acct, original.as_ref()).await
         }
         other => other,
     }
@@ -262,12 +269,13 @@ async fn test_connection(account: &ImapConfig, id: Value) -> RpcResponse {
 async fn uids_for(
     state: &Arc<DaemonState>,
     acct: &AccountJmap,
+    original: &crate::account_lifecycle::AccountStamp,
     account_id: &str,
     mailbox: &str,
     ids: &[String],
 ) -> Result<HashMap<String, u32>, Fail> {
     let oldest_first: Vec<String> = ids.iter().rev().cloned().collect();
-    let uids = acct.ids_to_uids(state, account_id, mailbox, &oldest_first).await?;
+    let uids = acct.ids_to_uids(state, original.clone(), account_id, mailbox, &oldest_first).await?;
     Ok(oldest_first.into_iter().zip(uids).collect())
 }
 
@@ -445,6 +453,7 @@ async fn answer(
     params: &Value,
     account: &ImapConfig,
     acct: &Arc<AccountJmap>,
+    original: Option<&crate::account_lifecycle::AccountStamp>,
 ) -> Result<Value, Fail> {
     match method {
         "imap_get_mailboxes" => {
@@ -462,7 +471,7 @@ async fn answer(
             let position = page.saturating_sub(1) as usize * limit as usize;
             let (ids, total) = acct.client.query_mailbox(&mailbox_id, position, limit as usize).await?;
             let total = total.unwrap_or(position + ids.len());
-            let uids = uids_for(state, acct, &account_id, &mailbox, &ids).await?;
+            let uids = uids_for(state, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?, &account_id, &mailbox, &ids).await?;
             let mut got = by_id(acct.client.get_emails(&ids, HEADER_PROPS).await?.list);
             let emails: Vec<EmailHeader> =
                 ids.iter().filter_map(|id| Some(to_header(&got.remove(id)?, *uids.get(id)?))).collect();
@@ -516,7 +525,7 @@ async fn answer(
             let mailbox = mailbox_param(params);
             let mailbox_id = acct.mailbox_id(&mailbox).await?;
             let ids = all_ids(acct, &mailbox_id).await?;
-            let mut uids: Vec<u32> = uids_for(state, acct, &account_id, &mailbox, &ids).await?.into_values().collect();
+            let mut uids: Vec<u32> = uids_for(state, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?, &account_id, &mailbox, &ids).await?.into_values().collect();
             uids.sort_unstable();
             Ok(json!({"uids": uids}))
         }
@@ -555,7 +564,7 @@ async fn answer(
                 // Older than the log: every uid in the mailbox, with its flags.
                 None => {
                     let ids = all_ids(acct, &mailbox_id).await?;
-                    let uids = uids_for(state, acct, &account_id, &mailbox, &ids).await?;
+                    let uids = uids_for(state, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?, &account_id, &mailbox, &ids).await?;
                     let mut pairs: Vec<(u32, String)> = ids.into_iter().filter_map(|id| Some((*uids.get(&id)?, id))).collect();
                     pairs.sort_unstable_by_key(|(uid, _)| *uid);
                     pairs
@@ -590,6 +599,7 @@ async fn answer(
 
         "imap_get_email_light" => {
             let account_id = ledger_account(params)?;
+            let stamp = state.account_lifecycle.capture(&account_id).map_err(|_| Fail::Rpc("errors.keychainBusy".into()))?;
             let uid: u32 = param(params, "uid")?;
             let mailbox = mailbox_param(params);
             let opened = opened_intent(params);
@@ -606,14 +616,16 @@ async fn answer(
             };
             let light = vault_eml::parse_eml_bytes_light(&body.raw, uid, body.flags).map_err(Fail::Rpc)?;
             let dated = email_date_ms(light.date.as_deref(), body.received_at.as_deref());
-            let cached = auto_cache_with_ids(state, account_id.clone(), mailbox.clone(), uid, body.raw.clone(), dated, opened, Some(body.ids)).await;
+            let cached = auto_cache_with_ids(state, stamp.clone(), mailbox.clone(), uid, body.raw.clone(), dated, opened, Some(body.ids)).await?;
             // Not kept on disk (On Demand): the reads that follow this open
             // are served from memory (`raw_message`), as for IMAP.
             if !cached && opened {
-                state.raw_messages.remember(&account_id, &mailbox, uid, body.raw.clone());
+                let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| Fail::Rpc("errors.keychainBusy".into()))?;
+                state.raw_messages.remember(&stamp, &mailbox, uid, body.raw.clone());
             }
-            let (st, aid, mb, raw) = (Arc::clone(state), account_id.clone(), mailbox.clone(), body.raw);
-            let rendered = blocking(move || crate::handlers::pgp::render(&st, &aid, &mb, uid, raw, cached)).await;
+            let (st, mb, raw) = (Arc::clone(state), mailbox.clone(), body.raw);
+            let render_stamp = stamp.clone();
+            let rendered = blocking(move || crate::handlers::pgp::render(&st, render_stamp, &mb, uid, raw, cached)).await;
             let mut email = json!(light);
             email["internalDate"] = json!(body.received_at);
             if let Ok((bytes, status)) = rendered {
@@ -636,7 +648,7 @@ async fn answer(
                 before: filters.before.as_deref(),
                 ..Default::default()
             };
-            let (emails, total, mailbox_id) = search_mailbox(state, acct, &account_id, &mailbox, &search).await?;
+            let (emails, total, mailbox_id) = search_mailbox(state, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?, &account_id, &mailbox, &search).await?;
             Ok(crate::handlers::cache::with_native_expectation(json!({"nativeIdentity": mailvault_core::imap::NativeHeaderIdentity::new(account, &account_id, &mailbox, Some(1)).with_jmap_mailbox(&mailbox_id), "uidValidity": 1, "success": true, "emails": emails, "total": total}), expected))
         }
 
@@ -655,7 +667,7 @@ async fn answer(
                 let Some(mailbox_ids) = email["mailboxIds"].as_object() else { continue };
                 for (mailbox_id, on) in mailbox_ids {
                     let Some(path) = path_of.get(mailbox_id.as_str()).filter(|_| on.as_bool() == Some(true)) else { continue };
-                    let uids = uids_for(state, acct, &account_id, path, &[email_id.to_string()]).await?;
+                    let uids = uids_for(state, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?, &account_id, path, &[email_id.to_string()]).await?;
                     if let Some(uid) = uids.get(email_id) {
                         found.push(MessageIdLocation { mailbox: path.to_string(), uid: *uid });
                         if stop_on_first {
@@ -676,8 +688,8 @@ async fn answer(
         }
 
         "imap_set_flags" => set_flags(state, params, acct).await,
-        "imap_move_emails" => move_emails(state, params, acct).await,
-        "imap_delete_email" => delete_email(state, params, account, acct).await,
+        "imap_move_emails" => move_emails(state, params, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?).await,
+        "imap_delete_email" => delete_email(state, params, account, acct, original.ok_or_else(|| Fail::Rpc("errors.keychainBusy".into()))?).await,
         "imap_create_mailbox" => create_mailbox(params, acct).await,
         "imap_rename_mailbox" => rename_mailbox(params, acct).await,
         "imap_delete_mailbox" => delete_mailbox(params, acct).await,
@@ -724,6 +736,7 @@ fn search_conditions(search: &ServerSearch<'_>) -> Vec<Value> {
 async fn search_mailbox(
     state: &Arc<DaemonState>,
     acct: &AccountJmap,
+    original: &crate::account_lifecycle::AccountStamp,
     account_id: &str,
     mailbox: &str,
     search: &ServerSearch<'_>,
@@ -736,7 +749,7 @@ async fn search_mailbox(
     conditions.insert(0, json!({"inMailbox": mailbox_id}));
     let filter = json!({"operator": "AND", "conditions": conditions});
     let (ids, total) = query_ids(&acct.client, filter, SEARCH_LIMIT).await?;
-    let uids = uids_for(state, acct, account_id, mailbox, &ids).await?;
+    let uids = uids_for(state, acct, original, account_id, mailbox, &ids).await?;
     let mut got = by_id(acct.client.get_emails(&ids, HEADER_PROPS).await?.list);
     let emails: Vec<EmailHeader> = ids
         .iter()
@@ -761,10 +774,11 @@ pub(crate) async fn server_search(
     mailbox: &str,
     search: &ServerSearch<'_>,
 ) -> Result<(Vec<EmailHeader>, u32, mailvault_core::imap::NativeHeaderIdentity), String> {
+    let original = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let once = || async {
         let acct = state.jmap.get(config).await?;
         let exists = mailbox_counts(&acct, mailbox).await?.total_emails;
-        let (emails, _, mailbox_id) = search_mailbox(state, &acct, account_id, mailbox, search).await?;
+        let (emails, _, mailbox_id) = search_mailbox(state, &acct, &original, account_id, mailbox, search).await?;
         let identity = mailvault_core::imap::NativeHeaderIdentity::new(config, account_id, mailbox, Some(1)).with_jmap_mailbox(&mailbox_id);
         Ok::<_, Fail>((emails, exists, identity))
     };
@@ -1042,7 +1056,7 @@ async fn set_flags(state: &Arc<DaemonState>, params: &Value, acct: &AccountJmap)
 /// pair a uid with the wrong message, and the IMAP arm's rule is never a
 /// guess. A refusal other than `notFound` fails the move, as a refused
 /// UID MOVE fails the IMAP arm.
-async fn move_emails(state: &Arc<DaemonState>, params: &Value, acct: &AccountJmap) -> Result<Value, Fail> {
+async fn move_emails(state: &Arc<DaemonState>, params: &Value, acct: &AccountJmap, original: &crate::account_lifecycle::AccountStamp) -> Result<Value, Fail> {
     let account_id = ledger_account(params)?;
     let uids: Vec<u32> = param(params, "uids")?;
     let source: String = param(params, "sourceMailbox")?;
@@ -1075,7 +1089,7 @@ async fn move_emails(state: &Arc<DaemonState>, params: &Value, acct: &AccountJma
     }
     let new_uids = if moved.len() == uids.len() {
         let ids: Vec<String> = moved.iter().map(|(_, id)| id.clone()).collect();
-        match acct.ids_to_uids(state, &account_id, &target, &ids).await {
+        match acct.ids_to_uids(state, original.clone(), &account_id, &target, &ids).await {
             Ok(new_uids) => Some(new_uids),
             Err(e) => {
                 warn!("[jmap] move {} -> {}: no target uids: {}", source, target, e);
@@ -1107,7 +1121,7 @@ struct Removed {
 ///    permanent one, whose request may have landed with its reply lost, as
 ///    the IMAP arm keeps it) or changed nothing. On success the bin row
 ///    learns where the message went (`deleted::landed`).
-async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapConfig, acct: &AccountJmap) -> Result<Value, Fail> {
+async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapConfig, acct: &AccountJmap, original: &crate::account_lifecycle::AccountStamp) -> Result<Value, Fail> {
     let account_id = ledger_account(params)?;
     let uid: u32 = param(params, "uid")?;
     let mailbox = mailbox_param(params);
@@ -1131,7 +1145,7 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
     } else {
         None
     };
-    match remove_one(state, acct, &account_id, &mailbox, uid, permanent).await {
+    match remove_one(state, acct, original, &account_id, &mailbox, uid, permanent).await {
         Ok(removed) => {
             let bin_id = match binned {
                 Some((id, true)) if !removed.changed => {
@@ -1180,6 +1194,7 @@ async fn delete_email(state: &Arc<DaemonState>, params: &Value, account: &ImapCo
 async fn remove_one(
     state: &Arc<DaemonState>,
     acct: &AccountJmap,
+    original: &crate::account_lifecycle::AccountStamp,
     account_id: &str,
     mailbox: &str,
     uid: u32,
@@ -1223,7 +1238,7 @@ async fn remove_one(
             drop_header_rows(state, account_id, mailbox, vec![uid]).await;
             let trash_path = trash.map(|(path, _)| path);
             let trash_uid = match &trash_path {
-                Some(path) => match acct.ids_to_uids(state, account_id, path, &[email_id]).await {
+                Some(path) => match acct.ids_to_uids(state, original.clone(), account_id, path, &[email_id]).await {
                     Ok(uids) => uids.first().copied(),
                     Err(e) => {
                         warn!("[jmap] delete uid={}: no Trash uid: {}", uid, e);
@@ -1515,7 +1530,11 @@ second body";
             json!({"mailvault-settings": {"state": {"fetchMode": "hoarder"}}}).to_string(),
         )
         .unwrap();
-        let state = DaemonState::for_test(dir.clone(), dir, true);
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acct-1"}]"#).unwrap();
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap(),
+        );
         (state, MockJmap::start(s))
     }
 

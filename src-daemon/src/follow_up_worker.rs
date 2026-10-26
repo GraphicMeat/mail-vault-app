@@ -544,6 +544,7 @@ fn jmap_reply_from_someone_else(email: &Value, term: &str, own: &[String]) -> bo
 /// mailbox's JMAP ledger gives it, `SentCopyGone` when neither holds it.
 async fn check_row_jmap(state: &Arc<DaemonState>, row: &follow_up::FollowUp, account: &ImapConfig, own: &[String]) -> follow_up::Outcome {
     use follow_up::Outcome::*;
+    let original = state.account_lifecycle.capture(&row.account_id).ok();
     let term = mailvault_core::maildir::normalize_message_id(&row.message_id);
     let checked = async {
         let acct = state.jmap.get(account).await.map_err(|e| e.to_string())?;
@@ -575,7 +576,8 @@ async fn check_row_jmap(state: &Arc<DaemonState>, row: &follow_up::FollowUp, acc
                 .await
                 .map_err(|e| e.to_string())?;
             if let Some(email_id) = found.into_iter().next() {
-                let uids = acct.ids_to_uids(state, &row.account_id, &path, &[email_id]).await?;
+                let stamp = original.clone().ok_or_else(|| "errors.keychainBusy".to_owned())?;
+                let uids = acct.ids_to_uids(state, stamp, &row.account_id, &path, &[email_id]).await?;
                 if let Some(sent_uid) = uids.first().copied() {
                     return Ok(NoReply { sent_mailbox: path, sent_uid });
                 }
@@ -1231,6 +1233,8 @@ mod tests {
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
         let creds = dir.join("credentials.json");
         std::fs::write(&creds, json!({ "acct1": support::account_json(&m, port).to_string() }).to_string()).unwrap();
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acct1"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
         app_db::with(&dir, |c| {
             follow_up::insert(c, "f1", "acct1", "<sent1@x>", "Quote", "bob@example.test", "Sent", &["alice@example.test".to_string()], 1_000, 2_000)

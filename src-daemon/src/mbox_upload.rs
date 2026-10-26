@@ -334,6 +334,8 @@ impl MboxUpload {
     }
 
     async fn attempt_jmap(&mut self, msg: &[u8]) -> Result<Outcome, JmapError> {
+        let original = self.state.account_lifecycle.capture(&self.account_id)
+            .map_err(|_| JmapError::Protocol("errors.keychainBusy".into()))?;
         let acct = self.jmap_session().await?;
         if self.folders.is_none() {
             let boxes = acct.current().await?;
@@ -384,7 +386,7 @@ impl MboxUpload {
         if let (Some(f), Some(fp)) = (self.boxes.get_mut(&path), fingerprint(&head)) {
             f.uploaded.insert(fp);
         }
-        let uid = match acct.ids_to_uids(&self.state, &self.account_id, &path, &[imported.id.clone()]).await {
+        let uid = match acct.ids_to_uids(&self.state, original, &self.account_id, &path, &[imported.id.clone()]).await {
             Ok(uids) => uids.first().copied(),
             Err(e) => {
                 warn!("[mbox_upload] {path}: {} is on the server, no uid was issued for its vault copy: {e}", imported.id);
@@ -913,6 +915,8 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir, true);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acct1"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (vault, s)
     }
 
@@ -1855,7 +1859,8 @@ mod tests {
             {"uid": 2, "messageId": "<huge@x>", "subject": "huge", "messageDate": DATE},
         ]});
         cache_headers(&s, "[Gmail]/All Mail", rows);
-        let repair = crate::handlers::custody::repair_generation_for(&s, "acct1", "[Gmail]/All Mail").unwrap();
+        let stamp = s.account_lifecycle.capture("acct1").unwrap();
+        let repair = crate::handlers::custody::repair_generation_for(&s, &stamp, "[Gmail]/All Mail").unwrap();
         assert!(repair.orphaned.is_empty(), "{repair:?}");
         assert_eq!(names_in(v.path(), "[Gmail]/All Mail"), ["1:2,AS.eml", "2:2,AS.eml"]);
         assert_eq!(std::fs::read(all_mail.join(native("2:2,AS.eml"))).unwrap(), crate::mbox::mbox_unescape_from(&huge), "whole");

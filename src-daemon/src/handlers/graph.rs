@@ -137,6 +137,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
+            let stamp = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
 
             let client = GraphClient::for_purpose(&access_token, "open message");
             let raw_bytes = match client.get_mime_content(&message_id).await {
@@ -175,7 +179,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 // source) come from memory: the daemon has no Graph token to
                 // fetch this message again (`raw_message`).
                 if opened {
-                    state.raw_messages.remember(&account_id, &mailbox, uid, raw_bytes.clone());
+                    let _permit = match state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)) {
+                        Ok(permit) => permit,
+                        Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+                    };
+                    state.raw_messages.remember(&stamp, &mailbox, uid, raw_bytes.clone());
+                }
+                if state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).is_err() {
+                    return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy"));
                 }
                 return Some(match vault_eml::parse_eml_bytes_light(&raw_bytes, uid, vec![]) {
                     Ok(email) => RpcResponse::success(id, json!({"success": true, "email": email, "cached": false})),
@@ -183,12 +194,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 });
             }
 
-            let root = match common::vault_root(state) {
-                Ok(r) => r,
-                Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
-            };
             let raw_for_write = raw_bytes.clone();
             let write_state = Arc::clone(state);
+            let result_stamp = stamp.clone();
             let (write_account, write_mailbox) = (account_id.clone(), mailbox.clone());
             // Unlike `imap_get_email_light`'s auto-cache (best-effort, only
             // `warn!`s on failure), this write failing fails the whole
@@ -198,12 +206,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // `find_file_by_uid` check it replaces did; a write upserts the
             // row and the registry's hook nudges the index.
             let write = blocking(move || -> Result<bool, String> {
-                let registry = &write_state.vault_registry;
                 // Built and its blob stored before the mailbox lock (Plan B
                 // 7a D3); the lock covers the commit alone.
-                let prepared = vault_files::prepare_store(&root, &write_account, &write_mailbox, uid, raw_for_write, &[])?;
-                registry.serialized(&write_account, &write_mailbox, || {
-                    vault_files::store_prepared(registry, &root, &write_account, &write_mailbox, &prepared, &[], false)
+                let prepared = common::with_vault_write(&write_state, |root| {
+                    vault_files::prepare_store(root, &write_account, &write_mailbox, uid, raw_for_write, &[])
+                })?;
+                common::with_stamped_mailbox_write(&write_state, &stamp, &write_mailbox, |root| {
+                    vault_files::store_prepared(&write_state.vault_registry, root, &write_account, &write_mailbox, &prepared, &[], false)
                 })
             })
             .await;
@@ -224,6 +233,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Ok(e) => e,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
+
+            if state.account_lifecycle.try_commit(std::slice::from_ref(&result_stamp)).is_err() {
+                return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy"));
+            }
 
             // Reached only when `store` succeeded: the uid's file is in the vault.
             RpcResponse::success(id, json!({"success": true, "email": email, "cached": true}))
@@ -417,7 +430,11 @@ impl Drop for GraphPause {
 }
 #[cfg(test)]
 pub(crate) fn test_graph_paused() -> GraphPause {
-    let lock = test_graph_mock_with(vec![(200, "{}".into())]);
+    test_graph_paused_with("{}".into())
+}
+#[cfg(test)]
+fn test_graph_paused_with(response: String) -> GraphPause {
+    let lock = test_graph_mock_with(vec![(200, response)]);
     let (entered, notice) = tokio::sync::oneshot::channel();
     let (release, gate) = std::sync::mpsc::channel();
     let (done, finished) = std::sync::mpsc::channel();
@@ -569,11 +586,71 @@ mod tests {
     fn st() -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-graph-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        DaemonState::for_test(dir.clone(), dir, true)
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acct1"},{"id":"other"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
+        state
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
         route(s, method, &params, json!(1)).await.expect("routed")
+    }
+
+    fn seed_account(s: &Arc<DaemonState>) {
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acct1"},{"id":"other"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+    }
+
+    async fn retire_acct1(s: &Arc<DaemonState>) {
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct1".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = s.account_lifecycle.try_close(lease, "acct1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+    }
+
+    #[tokio::test]
+    async fn p2_delayed_mime_cannot_recreate_retired_mailbox() {
+        let s = st();
+        seed_account(&s);
+        let mut pause = test_graph_paused_with("From: a@b.com\r\nSubject: old\r\n\r\nOld body".into());
+        let held = Arc::clone(&s);
+        let task = tokio::spawn(async move {
+            call(&held, "graph_cache_mime", json!({"accessToken":"tok","messageId":"m1","accountId":"acct1","mailbox":"new-folder","uid":7})).await
+        });
+        (&mut pause.entered).await.expect("real Graph MIME request arrived");
+        retire_acct1(&s).await;
+        let a_tree = s.data_dir.join("Maildir").join("acct1");
+        let _ = std::fs::remove_dir_all(&a_tree);
+        drop(pause);
+        let result = task.await.unwrap();
+        assert!(!a_tree.exists(), "old Graph MIME recreated retired account tree");
+        assert!(result.result.is_none(), "revoked Graph MIME must be refused");
+    }
+
+    #[tokio::test]
+    async fn p2_delayed_on_demand_mime_cannot_remember_retired_body() {
+        let s = st();
+        seed_account(&s);
+        std::fs::write(s.app_dir.join("frontend-settings.json"),
+            json!({"mailvault-settings":{"state":{"fetchMode":"onDemand"}}}).to_string()).unwrap();
+        let raw = "From: a@b.com\r\nSubject: old\r\nMessage-ID: <old@x>\r\n\r\nOld body";
+        crate::custody::with_conn(&s, |c| mailvault_core::custody::cache::save_headers(c, "acct1", "INBOX",
+            &json!({"emails":[{"uid":7,"messageId":"<old@x>"}]}).to_string())).unwrap();
+        let mut pause = test_graph_paused_with(raw.into());
+        let held = Arc::clone(&s);
+        let task = tokio::spawn(async move {
+            call(&held, "graph_cache_mime", json!({"accessToken":"tok","messageId":"m1","accountId":"acct1","mailbox":"INBOX","uid":7})).await
+        });
+        (&mut pause.entered).await.expect("real Graph MIME request arrived");
+        retire_acct1(&s).await;
+        drop(pause);
+        let result = task.await.unwrap();
+        assert!(!s.raw_messages.test_holds("acct1", "INBOX", 7),
+            "old On Demand MIME remembered a retired body");
+        assert!(result.result.is_none(), "revoked Graph MIME must be refused");
     }
 
     /// Every optional field present (even as `null`) — none of `GraphMessage`'s

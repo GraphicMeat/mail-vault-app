@@ -12,6 +12,20 @@ use mailvault_core::{maildir, message_store, vault_eml, vault_files};
 use serde_json::Value;
 use std::sync::Arc;
 
+#[cfg(test)]
+fn p2_gates() -> &'static std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn p2_pause(path: &std::path::Path, method: &'static str) {
+    let gate = p2_gates().lock().unwrap().remove(&(path.to_path_buf(), method));
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
+    }
+}
+
 /// A required param, returning early from `route` on a missing key — mirrors
 /// the `let Some(..) = .. else { return Some(..) }` shape `search_index.rs`
 /// uses, but through the arg helpers so the error names the missing key.
@@ -32,10 +46,11 @@ async fn with_message<T: Send + 'static>(
     mailbox: &str,
     uid: u32,
     readable: bool,
-    f: impl FnOnce(Arc<[u8]>) -> Result<T, String> + Send + 'static,
+    f: impl FnOnce(Arc<[u8]>, crate::account_lifecycle::AccountStamp) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let raw = crate::raw_message::raw_message(state, account_id, mailbox, uid, readable).await?;
-    blocking(move || f(raw)).await.and_then(|r| r)
+    blocking(move || f(raw, stamp)).await.and_then(|r| r)
 }
 
 /// `with_message` with no server fallback: the vault file or the in-memory
@@ -47,12 +62,13 @@ async fn with_local_message<T: Send + 'static>(
     mailbox: &str,
     uid: u32,
     readable: bool,
-    f: impl FnOnce(Arc<[u8]>) -> Result<T, String> + Send + 'static,
+    f: impl FnOnce(Arc<[u8]>, crate::account_lifecycle::AccountStamp) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let raw = crate::raw_message::local_message(state, account_id, mailbox, uid, readable)
         .await?
         .ok_or_else(|| format!("Email UID {} not found", uid))?;
-    blocking(move || f(raw)).await.and_then(|r| r)
+    blocking(move || f(raw, stamp)).await.and_then(|r| r)
 }
 
 /// A bulk attachment save is a job: its RPC answers `{ jobId }` at once, and
@@ -123,6 +139,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     Some(match method {
         "maildir_read" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let state = Arc::clone(state);
@@ -131,7 +148,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
                     let Some((name, raw)) = vault_files::read_resolved(&state.vault_registry, &root, &account_id, &mailbox, uid)? else { return Ok(Value::Null) };
-                    let (raw, pgp) = crate::handlers::pgp::render(&state, &account_id, &mailbox, uid, raw, true);
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let (raw, pgp) = crate::handlers::pgp::render(&state, stamp.clone(), &mailbox, uid, raw, true);
+                    state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     let email = vault_eml::parse_eml_bytes(&raw, uid, message_store::flags_in_name(&name))?;
                     let mut email = serde_json::to_value(email).map_err(|e| e.to_string())?;
                     crate::handlers::pgp::badge(&mut email, pgp);
@@ -143,6 +162,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "maildir_read_light" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let state = Arc::clone(state);
@@ -151,7 +171,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
                     let Some((name, raw)) = vault_files::read_resolved(&state.vault_registry, &root, &account_id, &mailbox, uid)? else { return Ok(Value::Null) };
-                    let (raw, pgp) = crate::handlers::pgp::render(&state, &account_id, &mailbox, uid, raw, true);
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let (raw, pgp) = crate::handlers::pgp::render(&state, stamp.clone(), &mailbox, uid, raw, true);
+                    state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     let email = vault_eml::parse_eml_bytes_light(&raw, uid, message_store::flags_in_name(&name))?;
                     let mut email = serde_json::to_value(email).map_err(|e| e.to_string())?;
                     crate::handlers::pgp::badge(&mut email, pgp);
@@ -185,7 +207,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let uid = req!(u32_arg(&id, params, "uid"));
             done(
                 id,
-                with_message(state, &account_id, &mailbox, uid, false, |raw| {
+                with_message(state, &account_id, &mailbox, uid, false, |raw, _stamp| {
                     use base64::Engine;
                     Ok(Value::String(base64::engine::general_purpose::STANDARD.encode(raw)))
                 })
@@ -197,7 +219,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let index = req!(u32_arg(&id, params, "attachmentIndex")) as usize;
-            let read = move |raw: Arc<[u8]>| vault_files::attachment_of(&raw, index).map(Value::String);
+            let read = move |raw: Arc<[u8]>, _stamp: crate::account_lifecycle::AccountStamp| vault_files::attachment_of(&raw, index).map(Value::String);
             // `localOnly`: only what this computer already holds, never the server.
             let result = if params.get("localOnly").and_then(Value::as_bool).unwrap_or(false) {
                 with_local_message(state, &account_id, &mailbox, uid, true, read).await
@@ -215,7 +237,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let indices = req!(vec_arg::<usize>(&id, params, "attachmentIndices"));
             done(
                 id,
-                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
+                with_message(state, &account_id, &mailbox, uid, true, move |raw, _stamp| {
                     serde_json::to_value(vault_files::attachments_of(&raw, &indices)?).map_err(|e| e.to_string())
                 })
                 .await,
@@ -252,12 +274,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // answer is keyed by the server's current UIDVALIDITY.
         "vault_uid_sets" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || {
-                    let answer = registry_read(&state, &account_id, &mailbox, |root| {
+                    let answer = registry_read(&state, stamp, &account_id, &mailbox, |root| {
                         state.vault_registry.uid_sets(root, &account_id, &mailbox)
                     });
                     answer.map_or(Value::Null, |(saved, archived)| serde_json::json!({ "saved": saved, "archived": archived }))
@@ -271,6 +294,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // before is parsed here once and stored.
         "vault_light_rows" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uids = match params.get("uids") {
                 None | Some(Value::Null) => None,
@@ -280,7 +304,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || {
-                    let rows = registry_read(&state, &account_id, &mailbox, |root| {
+                    let rows = registry_read(&state, stamp, &account_id, &mailbox, |root| {
                         state.vault_registry.light_rows(root, &account_id, &mailbox, uids.as_deref())
                     });
                     rows.map_or(Value::Null, Value::Array)
@@ -418,7 +442,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // mailbox lock before the gate.
             done(
                 id,
-                with_message(state, &account_id, &mailbox, uid, true, move |raw| {
+                with_message(state, &account_id, &mailbox, uid, true, move |raw, stamp| {
+                    #[cfg(test)] p2_pause(&state2.app_dir, "cache_attachment");
+                    let _permit = state2.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     with_vault_write(&state2, |root| vault_files::cache_attachment(root, &raw, &a, &m, uid, index)).map(Value::String)
                 })
                 .await,
@@ -434,6 +460,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // walk, same reasoning as `prefetch_attachments` above.
         "maildir_store" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let raw_b64 = req!(str_arg(&id, params, "rawSourceBase64"));
@@ -446,6 +473,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     // Always overwrites (a differently-named old file for the
                     // same uid is removed after the new one lands —
                     // `vault_files::store`, oddity 1). Every successful write
@@ -461,6 +490,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "maildir_delete" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             // `bin: true`: the user deleted a message that exists only here,
@@ -475,6 +505,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     // A real removal nudges the index through the registry's
                     // change hook; an absent uid touches neither.
                     with_mailbox_write(&state, &account_id, &mailbox, |root| {
@@ -488,6 +520,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "maildir_set_flags" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let flags = req!(vec_arg::<String>(&id, params, "flags"));
@@ -495,6 +528,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
                     // `vault_files::set_flags` answers `E_UID_NOT_IN_MAILDIR:`
                     // verbatim when the uid has no file — propagated as-is.
                     // A real rename nudges through the registry's change hook.
@@ -514,7 +549,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
-                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| {
+                        let _permit = gate_state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
+                        with_vault_write(&gate_state, |_| work())
+                    };
                     // A walk that removed anything invalidates the whole
                     // registry, and its hook sweeps the index.
                     let result = vault_files::clear_cache(&state.vault_registry, &root, &gate)?;
@@ -531,7 +569,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
-                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| {
+                        let _permit = gate_state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
+                        with_vault_write(&gate_state, |_| work())
+                    };
                     // A walk that wrote any .eml invalidates the whole
                     // registry, and its hook sweeps the index.
                     vault_files::migrate_json_to_eml(&state.vault_registry, &root, &gate).map(Value::String)
@@ -550,7 +591,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
-                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| {
+                        let _permit = gate_state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
+                        with_vault_write(&gate_state, |_| work())
+                    };
                     // Folders moved between account dirs: the registry is
                     // invalidated whole, and its hook sweeps the index.
                     let migrated = vault_files::migrate_email_dirs(&state.vault_registry, &root, &account_map, &gate)?;
@@ -576,6 +620,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // of waiting out the whole sweep.
         "prefetch_attachments" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let state = Arc::clone(state);
             done(
@@ -584,7 +629,12 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let _one_sweep_at_a_time = state.prefetch_lock.lock().unwrap_or_else(|p| p.into_inner());
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
-                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| {
+                        #[cfg(test)] p2_pause(&gate_state.app_dir, "prefetch_attachments");
+                        let stamp = stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
+                        let _permit = gate_state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
+                        with_vault_write(&gate_state, |_| work())
+                    };
                     vault_files::prefetch_attachments(&root, &account_id, &mailbox, &state.prefetch_high_water, &gate).map(|n| Value::from(n as u64))
                 })
                 .await
@@ -600,9 +650,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// only then `read`, outside every lock, may verify. `None` for each failure:
 /// the routes answer `null`, never an error the caller could read as empty.
 /// The folder's old-import pass starts beside the read, never before it.
-fn registry_read<T>(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, read: impl FnOnce(&std::path::Path) -> Option<T>) -> Option<T> {
+fn registry_read<T>(state: &Arc<DaemonState>, stamp: Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>, account_id: &str, mailbox: &str, read: impl FnOnce(&std::path::Path) -> Option<T>) -> Option<T> {
+    let stamp = stamp.ok()?;
     let root = vault_root(state).ok()?;
-    if let Err(e) = crate::handlers::custody::repair_generation_for(state, account_id, mailbox) {
+    if let Err(e) = crate::handlers::custody::repair_generation_for(state, &stamp, mailbox) {
         tracing::warn!("vault read {account_id}/{mailbox}: generation repair failed: {e}");
         return None;
     }
@@ -617,6 +668,11 @@ mod tests {
     use serde_json::json;
     use std::fs;
 
+    fn seed_test_account(s: &Arc<DaemonState>) {
+        fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc"},{"id":"a"},{"id":"b"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+    }
+
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let tmp = tempfile::tempdir().unwrap();
         // I2 fix (2.6 review): the vault root and the app-dir fallback must be
@@ -628,6 +684,7 @@ mod tests {
         // `DaemonState` directly instead of going through `st`.
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(tmp.path().to_path_buf(), app_dir, mail_dir_ok);
+        seed_test_account(&s);
         (tmp, s)
     }
 
@@ -651,6 +708,50 @@ mod tests {
         fs::create_dir_all(&cur).unwrap();
         let raw = b"From: a@b.com\r\nTo: c@d.com\r\nSubject: hi\r\nContent-Type: multipart/mixed; boundary=X\r\n\r\n--X\r\nContent-Type: text/plain\r\n\r\nbody\r\n--X\r\nContent-Type: application/octet-stream; name=pixel.png\r\nContent-Disposition: attachment; filename=pixel.png\r\n\r\ndata\r\n--X--\r\n";
         fs::write(cur.join(vault_files::build_maildir_filename(uid, &[])), raw).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_delayed_attachment_and_prefetch_refuse_retired_stamp() {
+        let (root, state) = st(true);
+        fs::write(state.app_dir.join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+        seed_email(root.path(), "a", "INBOX", 7);
+        seed_email(root.path(), "b", "INBOX", 7);
+        let methods = ["cache_attachment", "prefetch_attachments"];
+        let mut gates = Vec::new();
+        for method in methods {
+            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            p2_gates().lock().unwrap().insert((state.app_dir.clone(), method), (entered_tx, release_rx));
+            gates.push((entered_rx, release_tx));
+        }
+        let mut tasks = Vec::new();
+        for method in methods {
+            let held = Arc::clone(&state);
+            tasks.push(tokio::spawn(async move {
+                call(&held, method, json!({"accountId":"a","mailbox":"INBOX","uid":7,"attachmentIndex":0})).await
+            }));
+        }
+        for (entered, _) in &gates {
+            entered.recv_timeout(std::time::Duration::from_secs(5)).expect("real attachment publication child entered");
+        }
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        fs::remove_dir_all(root.path().join("Maildir").join("a")).unwrap();
+        claim.finish_retired().unwrap();
+        for (_, release) in gates { release.send(()).unwrap(); }
+        let mut outcomes = Vec::new();
+        for task in tasks { outcomes.push(task.await.unwrap()); }
+        let a_cache = root.path().join("attachment_cache").join("a_INBOX_7_0").join("pixel.png");
+        let a_mark = state.prefetch_high_water.lock().unwrap().iter().find(|(key, _)| key == "a/INBOX").map(|(_, uid)| *uid);
+        let b = call(&state, "cache_attachment", json!({"accountId":"b","mailbox":"INBOX","uid":7,"attachmentIndex":0})).await;
+        let b_cache = root.path().join("attachment_cache").join("b_INBOX_7_0").join("pixel.png");
+        assert!(!a_cache.exists() && a_mark.is_none_or(|uid| uid == 0), "old attachment/prefetch recreated retired A publication; cache={}, highwater={a_mark:?}, outcomes={outcomes:?}, B={b:?}", a_cache.exists());
+        assert!(b.result.is_some() && b_cache.exists(), "independent B attachment remains available");
     }
 
     #[tokio::test]
@@ -912,6 +1013,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), false);
+        seed_test_account(&s);
         seed_email(app_dir.path(), "acc", "INBOX", 7);
 
         let r = call(&s, "maildir_read_light", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 1})).await;
@@ -934,6 +1036,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        seed_test_account(&s);
         seed_email(vault.path(), "acc", "INBOX", 7);
         s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
 
@@ -1370,6 +1473,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), false);
+        seed_test_account(&s);
         assert_task_2_8_writers_are_gated(vault.path(), app_dir.path(), &s).await;
     }
 
@@ -1378,6 +1482,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        seed_test_account(&s);
         s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
         assert_task_2_8_writers_are_gated(vault.path(), app_dir.path(), &s).await;
     }

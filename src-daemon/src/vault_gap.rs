@@ -520,6 +520,7 @@ impl Save {
     /// landed since the plan is not fetched twice) and its fetch.
     async fn run(&self) -> Result<(), String> {
         let now = now_ms();
+        let stamp = self.state.account_lifecycle.capture(&self.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
         let (st, acct) = (Arc::clone(&self.state), self.account_id.clone());
         let planned = in_background(move || -> Result<Option<(FetchPolicy, Vec<String>)>, Unknown> {
             let plan = plan(&st, &acct, now)?;
@@ -528,7 +529,7 @@ impl Save {
             for (mailbox, _) in plan.folders.into_iter().filter(|(_, walked)| *walked) {
                 // What `vault_uid_sets` runs first: renames copies filed under
                 // an earlier UIDVALIDITY, so they are not fetched again.
-                if let Err(e) = crate::handlers::custody::repair_generation_for(&st, &acct, &mailbox) {
+                if let Err(e) = crate::handlers::custody::repair_generation_for(&st, &stamp, &mailbox) {
                     warn!("[vault_gap] {acct}: {mailbox} generation not repaired: {e}");
                 }
                 if !folder_gap(&st, &acct, &mailbox, &policy, CACHE_CHUNK, now)?.missing.is_empty() {
@@ -677,6 +678,8 @@ mod tests {
     fn rig() -> Rig {
         let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc1"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         mode(&s, json!({"fetchMode": "hoarder"}));
         Rig { _vault: vault, _app: app, s }
     }

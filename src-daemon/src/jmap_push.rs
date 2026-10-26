@@ -377,6 +377,7 @@ async fn stored_email_state(state: &Arc<DaemonState>, account_id: &str, jmap_acc
 /// nothing is published again here.
 async fn sync_inbox(state: &Arc<DaemonState>, slot: &Mutex<SyncAccount>) {
     let account = slot.lock().unwrap().clone();
+    let stamp = state.account_lifecycle.capture(&account.id).ok();
     let result = state.sync_engine.sync_account_announcing(&account, "INBOX").await;
     if !result.success {
         warn!("[push] {}: sync failed: {:?}", account.email, result.error);
@@ -389,9 +390,10 @@ async fn sync_inbox(state: &Arc<DaemonState>, slot: &Mutex<SyncAccount>) {
     // The arrivals' bodies, as `idle_watch` keeps an IDLE arrival's: on a
     // task of their own, so the stream is read again now.
     if !result.arrival_uids.is_empty() {
+        let Some(stamp) = stamp else { return };
         let (state, mailbox, uids) = (Arc::clone(state), result.mailbox.clone(), result.arrival_uids);
         tokio::spawn(async move {
-            crate::handlers::imap::cache_arrivals(&state, &account, &mailbox, &uids).await;
+            crate::handlers::imap::cache_arrivals(&state, stamp, &account, &mailbox, &uids).await;
         });
     }
 }
@@ -489,6 +491,8 @@ mod tests {
     ) -> (tempfile::TempDir, Arc<DaemonState>, MockJmap, SyncAccount) {
         let dir = tempfile::tempdir().unwrap();
         let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"acct-1"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
         state.idle.set_push_timing(timing);
         let m = MockJmap::start(scenario(faults));
         m.mutate(before);
@@ -787,6 +791,8 @@ mod tests {
         let (trap, port) = crate::jmap_test_support::imap_trap();
         let dir = tempfile::tempdir().unwrap();
         let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"acct-1"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
         state.idle.set_push_timing(timing());
         let m = MockJmap::start(scenario(vec![]));
         let mut account = account_for(&m);

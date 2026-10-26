@@ -304,6 +304,7 @@ impl AccountJmap {
     pub async fn ids_to_uids(
         &self,
         state: &Arc<DaemonState>,
+        original: crate::account_lifecycle::AccountStamp,
         account_id: &str,
         mailbox: &str,
         ids: &[String],
@@ -314,6 +315,7 @@ impl AccountJmap {
         let listed: Vec<(String, Option<String>)> = ids.iter().map(|id| (id.clone(), None)).collect();
         let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
         tokio::task::spawn_blocking(move || {
+            let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
             with_vault_write(&state, |root| {
                 let ledger = jmap_ledger_path(root, &account_id, &mailbox);
                 graph_ledger::allocate_in(&ledger, root, &account_id, &mailbox, &listed)

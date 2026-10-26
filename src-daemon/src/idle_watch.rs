@@ -371,6 +371,10 @@ impl IdleWatchers {
     }
 
     async fn sync_inbox(&self, slot: &Mutex<SyncAccount>, woken: bool) {
+        let arrival_stamp = self.daemon.get().and_then(Weak::upgrade).and_then(|state| {
+            let id = slot.lock().unwrap().id.clone();
+            state.account_lifecycle.capture(&id).ok()
+        });
         self.renew_token(slot).await;
         let account = slot.lock().unwrap().clone();
         // `announcing`: new headers are published the moment they are cached,
@@ -404,8 +408,10 @@ impl IdleWatchers {
         // so a message that lands meanwhile still raises its EXISTS.
         if let Some(state) = self.daemon.get().and_then(Weak::upgrade) {
             let uids = result.arrival_uids;
+            let Some(stamp) = arrival_stamp else { return };
             tokio::spawn(async move {
-                crate::handlers::imap::cache_arrivals(&state, &account, "INBOX", &uids).await;
+                crate::handlers::imap::cache_arrivals(&state, stamp, &account, "INBOX", &uids).await;
+                #[cfg(test)] p2_arrival_child_done(&state.app_dir);
             });
         }
     }
@@ -418,6 +424,18 @@ impl IdleWatchers {
             w.handle.abort();
             info!("[idle] shutdown: aborted watcher for {}", id);
         }
+    }
+}
+
+#[cfg(test)]
+fn p2_arrival_done_gates() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn p2_arrival_child_done(path: &std::path::Path) {
+    if let Some(done) = p2_arrival_done_gates().lock().unwrap().remove(path) {
+        let _ = done.send(());
     }
 }
 
@@ -455,14 +473,17 @@ mod tests {
     }
 
     fn engine_for(dir: &Path) -> SyncEngine {
+        let lifecycle = crate::account_lifecycle::AccountLifecycle::default();
+        lifecycle.seed(&mailvault_core::accounts_doc::Listing { accounts: vec![serde_json::json!({"id":"acc1"})], version: 0, recovered: None });
         let engine = SyncEngine::new(
             Arc::new(imap::ImapPool::new()),
             dir.to_path_buf(),
             dir.to_path_buf(),
-            ContactsState::new(dir.to_path_buf()),
+            ContactsState::new(dir.to_path_buf(), lifecycle.clone()),
             gate(true),
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Arc::new(std::sync::RwLock::new(())),
+            lifecycle,
         );
         // The header cache is `custody.db`: without one attached every cache
         // write fails, which is what production does too.
@@ -939,6 +960,8 @@ mod tests {
         use mailvault_core::search_index::query::SearchRequest;
         let dir = scratch_dir("idle_body");
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
         let account = account_for(&server);
         state.sync_engine.sync_account(&account, "INBOX").await;
@@ -973,5 +996,42 @@ mod tests {
 
         state.idle.shutdown().await;
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_waiting_idle_is_revocable_but_arrival_child_finishes_after_watcher_abort() {
+        let dir = scratch_dir("p2_idle_child");
+        std::fs::write(dir.join("frontend-settings.json"), serde_json::json!({"mailvault-settings":{"state":{"fetchMode":"hoarder"}}}).to_string()).unwrap();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let account = account_for(&server);
+        assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+        state.idle.watch(account, Duration::from_secs(29 * 60)).await;
+        wait_until(|| server.count_commands("IDLE") >= 1, 5_000, "silent IDLE established").await;
+        let (entered, release) = crate::handlers::imap::pause_prepared_cache_for_test(&dir);
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        p2_arrival_done_gates().lock().unwrap().insert(dir.clone(), done_tx);
+        let uid = add_message(&server, "From: sender@example.com\r\nSubject: delayed\r\nDate: Thu, 01 Jan 2015 00:00:00 +0000\r\n\r\nlate body\r\n");
+        entered.recv_timeout(Duration::from_secs(10)).expect("actual arrival child prepared its body");
+        state.idle.unwatch("acc1").await;
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "acc1").expect("IDLE socket and unadmitted child hold no lifetime owner");
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        release.send(()).unwrap();
+        done_rx.recv_timeout(Duration::from_secs(10)).expect("arrival child finished after watcher abort");
+        let a_copy = mailvault_core::vault_files::cur_path(&dir, "acc1", "INBOX").join(format!("{uid}{}.eml", mailvault_core::maildir::INFO_PREFIX));
+        let b_stamp = state.account_lifecycle.capture("b").unwrap();
+        let b_stored = crate::handlers::imap::auto_cache(&state, b_stamp, "INBOX".into(), 9,
+            b"From: sender@example.com\r\nSubject: B\r\n\r\nbody".to_vec(), None, false).await.unwrap();
+        let b_copy = mailvault_core::vault_files::cur_path(&dir, "b", "INBOX").join(format!("9{}.eml", mailvault_core::maildir::INFO_PREFIX));
+        assert!(!a_copy.exists(), "old arrival child recreated retired A cache after watcher abort");
+        assert!(b_stored && b_copy.exists(), "independent B cache remains available");
+        state.idle.shutdown().await;
     }
 }

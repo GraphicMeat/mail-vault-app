@@ -56,6 +56,13 @@ pub struct CustodyState {
     /// covers them, plus custody.db being replaced wholesale on disk under
     /// the same vault root.
     pub gen: AtomicU64,
+    startup_import: Mutex<StartupImport>,
+}
+
+#[derive(Default)]
+struct StartupImport {
+    pending: bool,
+    running: bool,
 }
 
 impl Default for CustodyState {
@@ -66,12 +73,35 @@ impl Default for CustodyState {
             error: Mutex::new(None),
             switch: SwitchGuard::default(),
             gen: AtomicU64::new(0),
+            startup_import: Mutex::new(StartupImport::default()),
         }
     }
 }
 
 fn g<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+#[cfg(test)]
+fn p2_import_gates() -> &'static Mutex<std::collections::BTreeMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<Mutex<std::collections::BTreeMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn p2_import_panics() -> &'static Mutex<std::collections::BTreeSet<PathBuf>> {
+    static PATHS: std::sync::OnceLock<Mutex<std::collections::BTreeSet<PathBuf>>> = std::sync::OnceLock::new();
+    PATHS.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn p2_before_import(path: &std::path::Path) {
+    if p2_import_panics().lock().unwrap().remove(path) {
+        panic!("synthetic import thread panic after owner admission");
+    }
+    let gate = p2_import_gates().lock().unwrap().remove(path);
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(Duration::from_secs(5));
+    }
 }
 
 /// Open the store for the current vault root. The legacy import is a
@@ -130,25 +160,62 @@ pub fn open_into(state: &DaemonState) -> Result<(), String> {
 /// a `load_email_cache` landing mid-import waits for one mailbox, never for
 /// the whole vault. Stops early when the store closes under it (a vault move).
 pub fn run_legacy_import(state: &DaemonState) {
+    let Ok(owner) = state.account_lifecycle.try_unscoped_operation() else { return };
+    let _ = run_legacy_import_owned(state, owner);
+}
+
+fn run_legacy_import_owned(state: &DaemonState, _owner: crate::account_lifecycle::OperationPermit) -> bool {
     if !state.mail_dir_ok {
-        return;
+        return true;
     }
+    // The authoritative document is read before the filesystem inventory.
+    // Each named SQL unit keeps this operation's original epoch, even if a
+    // later account document changes while the scan is in flight.
+    let listing = match mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)) {
+        Ok(listing) => listing,
+        Err(e) => {
+            warn!("custody import: account listing unavailable: {e:?}");
+            return false;
+        }
+    };
+    let stamps: std::collections::BTreeMap<String, crate::account_lifecycle::AccountStamp> =
+        mailvault_core::accounts_doc::authoritative_ids(&listing.accounts)
+            .into_iter()
+            .filter_map(|id| state.account_lifecycle.capture(&id).ok().map(|stamp| (id, stamp)))
+            .collect();
     let root = state.data_dir.clone();
     let units = import::legacy_units(&root);
     if units.is_empty() {
-        return;
+        return true;
     }
     let started = std::time::Instant::now();
     let stamp = import::stamp_now();
     let mut report = import::ImportReport::default();
     for unit in &units {
+        let target = match unit {
+            import::ImportUnit::Index { account, .. }
+            | import::ImportUnit::MailboxList { account, .. }
+            | import::ImportUnit::Headers { account, .. } => Some(account),
+            import::ImportUnit::RetireCache { .. } => None,
+        };
+        let _target_owner = match target {
+            Some(account) => {
+                let Some(original) = stamps.get(account) else { continue };
+                match state.account_lifecycle.try_commit(&[original.clone()]) {
+                    Ok(owner) => Some(owner),
+                    Err(_) => continue,
+                }
+            }
+            None => None,
+        };
+        #[cfg(test)] p2_before_import(&state.app_dir);
         let mut one = import::ImportReport::default();
         if let Err(e) = with_conn(state, |c| {
             import::import_unit(c, &root, unit, stamp, &mut one);
             Ok(())
         }) {
             warn!("custody import: stopped after {:?} — {e}", started.elapsed());
-            return;
+            return false;
         }
         merge(&mut report, one);
     }
@@ -163,6 +230,7 @@ pub fn run_legacy_import(state: &DaemonState) {
     {
         info!("custody import: {report:?} in {:?}", started.elapsed());
     }
+    report.errors.is_empty()
 }
 
 fn merge(into: &mut import::ImportReport, from: import::ImportReport) {
@@ -180,11 +248,43 @@ fn merge(into: &mut import::ImportReport, from: import::ImportReport) {
 /// `run_legacy_import` on its own thread: the daemon must answer RPCs while
 /// it runs. Named, like the search index worker, so a sample names it.
 pub fn spawn_legacy_import(state: Arc<DaemonState>) {
-    if let Err(e) = std::thread::Builder::new()
-        .name("custody-import".into())
-        .spawn(move || run_legacy_import(&state))
-    {
-        warn!("custody import: thread did not start: {e}");
+    g(&state.custody.startup_import).pending = true;
+    dispatch_pending_import(&state);
+}
+
+/// Called by startup and the successful bootstrap seam after its lease and
+/// lifecycle mutex have both been released. An Unready/Closing refusal leaves
+/// the request pending for an explicit later bootstrap or start event.
+pub(crate) fn dispatch_pending_import(state: &Arc<DaemonState>) {
+    let mut pending = g(&state.custody.startup_import);
+    if !pending.pending || pending.running {
+        return;
+    }
+    let Ok(owner) = state.account_lifecycle.try_unscoped_operation() else { return };
+    pending.pending = false;
+    pending.running = true;
+    let thread_state = Arc::clone(state);
+    match std::thread::Builder::new().name("custody-import".into()).spawn(move || {
+        struct Finish<'a> {
+            state: &'a DaemonState,
+            completed: bool,
+        }
+        impl Drop for Finish<'_> {
+            fn drop(&mut self) {
+                let mut status = g(&self.state.custody.startup_import);
+                status.running = false;
+                if !self.completed { status.pending = true; }
+            }
+        }
+        let mut finish = Finish { state: &thread_state, completed: false };
+        finish.completed = run_legacy_import_owned(&thread_state, owner);
+    }) {
+        Ok(_) => {}
+        Err(e) => {
+            pending.running = false;
+            pending.pending = true;
+            warn!("custody import: thread did not start: {e}");
+        }
     }
 }
 
@@ -303,7 +403,195 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), mail_dir_ok);
+        std::fs::write(app_dir.path().join("accounts.json"), r#"[{"id":"acct"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (vault, app_dir, s)
+    }
+
+    #[test]
+    fn p2_legacy_import_waits_for_authoritative_bootstrap_before_named_sql() {
+        let vault = tempfile::tempdir().unwrap();
+        let app = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        let a = vault.path().join("maildir/a/INBOX/local-index.json");
+        let b = vault.path().join("maildir/b/INBOX/local-index.json");
+        for path in [&a, &b] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, r#"[{"uid":7,"source":"local_draft","flags":["draft"]}]"#).unwrap();
+        }
+        std::fs::write(app.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        run_legacy_import(&state);
+        let early_a = with_conn(&state, |c| entries::read(c, "a", "INBOX")).unwrap();
+        let early_b = with_conn(&state, |c| entries::read(c, "b", "INBOX")).unwrap();
+        let early_paths = (a.exists(), b.exists());
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+        run_legacy_import(&state);
+        let ready_b = with_conn(&state, |c| entries::read(c, "b", "INBOX")).unwrap();
+        assert!(early_a.is_none() && early_b.is_none() && early_paths == (true, true), "legacy import published before bootstrap: A={early_a:?}, B={early_b:?}, files={early_paths:?}");
+        assert!(ready_b.is_some() && !b.exists(), "ready independent B imports once");
+    }
+
+    fn p2_import_state() -> (tempfile::TempDir, tempfile::TempDir, Arc<DaemonState>, PathBuf, PathBuf) {
+        let vault = tempfile::tempdir().unwrap();
+        let app = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        std::fs::write(app.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+        let a = vault.path().join("maildir/a/INBOX/local-index.json");
+        let b = vault.path().join("maildir/b/INBOX/local-index.json");
+        for path in [&a, &b] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, r#"[{"uid":7,"source":"local_draft","flags":["draft"]}]"#).unwrap();
+        }
+        (vault, app, state, a, b)
+    }
+
+    #[test]
+    fn p2_legacy_import_real_thread_blocks_close_until_completion() {
+        let (_vault, _app, state, a, b) = p2_import_state();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        p2_import_gates().lock().unwrap().insert(state.app_dir.clone(), (entered_tx, release_rx));
+        spawn_legacy_import(Arc::clone(&state));
+        entered_rx.recv_timeout(Duration::from_secs(5)).expect("actual import unit entered with its finite owner");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let close_while_owned = state.account_lifecycle.try_close(lease, "a");
+        let blocked = matches!(close_while_owned, Err(crate::account_lifecycle::LifecycleError::Busy));
+        release_tx.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while g(&state.custody.startup_import).running {
+            assert!(Instant::now() < deadline, "real import thread never completed");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let a_row = with_conn(&state, |c| entries::read(c, "a", "INBOX")).unwrap();
+        let b_row = with_conn(&state, |c| entries::read(c, "b", "INBOX")).unwrap();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let close_after = state.account_lifecycle.try_close(lease, "a");
+        assert!(blocked && close_after.is_ok(), "close did not wait for real import: blocked={blocked}, after={:?}, A={a_row:?}, B={b_row:?}", close_after.err());
+        assert!(a_row.is_some() && b_row.is_some() && !a.exists() && !b.exists());
+    }
+
+    #[test]
+    fn p2_import_panic_and_error_release_actual_thread_owner() {
+        for panic_thread in [true, false] {
+            let (_vault, _app, state, a, _b) = p2_import_state();
+            if panic_thread {
+                p2_import_panics().lock().unwrap().insert(state.app_dir.clone());
+            } else {
+                std::fs::write(&a, b"[").unwrap();
+            }
+            spawn_legacy_import(Arc::clone(&state));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while g(&state.custody.startup_import).running {
+                assert!(Instant::now() < deadline, "import thread did not release after panic/error");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let lease = crate::account_workflows::AccountLease::detached_for_test(
+                crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+            );
+            let close = state.account_lifecycle.try_close(lease, "a");
+            assert!(close.is_ok() && g(&state.custody.startup_import).pending,
+                "panic/error left a false completed state or live owner: panic={panic_thread}, close={:?}", close.err());
+        }
+    }
+
+    #[test]
+    fn p2_close_first_refuses_legacy_import_without_retiring_cache() {
+        let (vault, _app, state, a, b) = p2_import_state();
+        let unknown = vault.path().join("Maildir/unknown/INBOX/archived_headers.json");
+        std::fs::create_dir_all(unknown.parent().unwrap()).unwrap();
+        std::fs::write(&unknown, b"old cache").unwrap();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let refused_while_closing = state.account_lifecycle.try_unscoped_operation().is_err();
+        run_legacy_import(&state);
+        let during = with_conn(&state, |c| entries::read(c, "a", "INBOX")).unwrap();
+        let drained = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap()
+            .block_on(claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5))).unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        run_legacy_import(&state);
+        let after = with_conn(&state, |c| entries::read(c, "a", "INBOX")).unwrap();
+        let b_row = with_conn(&state, |c| entries::read(c, "b", "INBOX")).unwrap();
+        let renamed_unknown = !unknown.exists() && std::fs::read_dir(unknown.parent().unwrap()).unwrap().any(|e| e.unwrap().file_name().to_string_lossy().starts_with("archived_headers.json.pre-db-"));
+        assert!(refused_while_closing && during.is_none() && after.is_none() && a.exists(), "closed A legacy SQL/file changed: during={during:?}, after={after:?}, a_exists={}", a.exists());
+        assert!(b_row.is_some() && !b.exists() && renamed_unknown, "open B import and unknown rename remain available: B={b_row:?}, rename={renamed_unknown}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_startup_import_runs_once_after_bootstrap_success_in_both_orders() {
+        for request_first in [true, false] {
+            let vault = tempfile::tempdir().unwrap();
+            let app = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+            std::fs::write(app.path().join("accounts.json"), r#"[{"id":"a"}]"#).unwrap();
+            let source = vault.path().join("maildir/a/INBOX/local-index.json");
+            std::fs::create_dir_all(source.parent().unwrap()).unwrap();
+            std::fs::write(&source, r#"[{"uid":7,"source":"local_draft","flags":["draft"]}]"#).unwrap();
+            let (entered, release, done) = crate::account_lifecycle::pause_bootstrap_for_test(&state.app_dir);
+            crate::account_lifecycle::start_bootstrap(Arc::clone(&state));
+            entered.recv_timeout(Duration::from_secs(5)).expect("real bootstrap lease acquired");
+            if request_first {
+                spawn_legacy_import(Arc::clone(&state));
+                assert!(source.exists(), "startup request ran before bootstrap");
+            }
+            release.send(()).unwrap();
+            done.recv_timeout(Duration::from_secs(5)).expect("bootstrap released its lease");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !state.account_lifecycle.is_ready() {
+                assert!(Instant::now() < deadline, "bootstrap never seeded authority");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if !request_first { spawn_legacy_import(Arc::clone(&state)); }
+            while source.exists() || g(&state.custody.startup_import).running {
+                assert!(Instant::now() < deadline, "pending startup import never completed in request_first={request_first}");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let row = with_conn(&state, |c| entries::read(c, "a", "INBOX")).unwrap();
+            assert!(row.is_some(), "bootstrap order lost named SQL import: request_first={request_first}");
+            assert!(!g(&state.custody.startup_import).pending, "completed import still pending");
+            let generation_before = generation(&state);
+            crate::custody::dispatch_pending_import(&state);
+            assert_eq!(generation(&state), generation_before, "completion dispatched the same startup request twice");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_failed_bootstrap_keeps_startup_import_pending_until_explicit_retry() {
+        let vault = tempfile::tempdir().unwrap();
+        let app = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        let doc = app.path().join("accounts.json");
+        // A directory is an actual unreadable document. Malformed JSON is
+        // recovered as an empty listing by JsonDoc, not a bootstrap error.
+        std::fs::create_dir(&doc).unwrap();
+        assert!(mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).is_err(), "fixture must cause a real bootstrap read error");
+        let source = vault.path().join("maildir/a/INBOX/local-index.json");
+        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
+        std::fs::write(&source, r#"[{"uid":7,"source":"local_draft","flags":["draft"]}]"#).unwrap();
+        let (entered, release, done) = crate::account_lifecycle::pause_bootstrap_for_test(&state.app_dir);
+        spawn_legacy_import(Arc::clone(&state));
+        crate::account_lifecycle::start_bootstrap(Arc::clone(&state));
+        entered.recv_timeout(Duration::from_secs(5)).unwrap();
+        release.send(()).unwrap();
+        done.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(!state.account_lifecycle.is_ready() && source.exists() && g(&state.custody.startup_import).pending);
+        std::fs::remove_dir(&doc).unwrap();
+        std::fs::write(&doc, r#"[{"id":"a"}]"#).unwrap();
+        crate::account_lifecycle::start_bootstrap(Arc::clone(&state));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while source.exists() || g(&state.custody.startup_import).running {
+            assert!(Instant::now() < deadline, "explicit bootstrap retry did not deliver pending import");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(state.account_lifecycle.is_ready());
+        assert!(with_conn(&state, |c| entries::read(c, "a", "INBOX")).unwrap().is_some());
     }
 
     #[test]

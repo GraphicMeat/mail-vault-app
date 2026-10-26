@@ -491,12 +491,13 @@ async fn recover_on_imap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapCon
 /// (`migration::ensure_dest_folder_jmap`). Returns the uid the mailbox's
 /// ledger gives the email: the old one for a label put back.
 async fn recover_on_jmap(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig) -> Result<Option<u32>, String> {
-    crate::handlers::jmap_bridge::with_session_retry(state, config, |acct| recover_jmap_once(state, d, config, acct)).await
+    let original = state.account_lifecycle.capture(&d.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+    crate::handlers::jmap_bridge::with_session_retry(state, config, |acct| recover_jmap_once(state, d, config, acct, original.clone())).await
 }
 
 /// One pass of `recover_on_jmap` on `acct`. Safe to run twice: a second pass
 /// finds the email the first one put back (or imported) and relabels it again.
-async fn recover_jmap_once(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig, acct: Arc<crate::jmap_sessions::AccountJmap>) -> Result<Option<u32>, String> {
+async fn recover_jmap_once(state: &Arc<DaemonState>, d: &Deleted, config: &ImapConfig, acct: Arc<crate::jmap_sessions::AccountJmap>, original: crate::account_lifecycle::AccountStamp) -> Result<Option<u32>, String> {
     use mailvault_core::jmap::ImportResult;
     let mailbox_id = crate::migration::ensure_dest_folder_jmap(&acct, &d.mailbox).await.map_err(|e| e.to_string())?;
     let boxes = acct.current().await.map_err(|e| e.to_string())?;
@@ -539,7 +540,7 @@ async fn recover_jmap_once(state: &Arc<DaemonState>, d: &Deleted, config: &ImapC
             }
         }
     };
-    let uids = acct.ids_to_uids(state, &d.account_id, &d.mailbox, &[email_id]).await?;
+    let uids = acct.ids_to_uids(state, original, &d.account_id, &d.mailbox, &[email_id]).await?;
     Ok(uids.first().copied())
 }
 
@@ -906,6 +907,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-deleted-jmap-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir, true);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acct1"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), support::config(m, port));
         let listing = handle_request_for_test(&s, "imap_get_emails", json!({"account": support::account_json(m, port), "mailbox": "INBOX", "page": 1, "limit": 50}))
             .await

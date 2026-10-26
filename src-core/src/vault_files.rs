@@ -1660,13 +1660,16 @@ pub fn prefetch_attachments(
         .iter().find(|(m, _)| m == k).map(|(_, uid)| *uid).unwrap_or(0);
     let above = Marks { server: mark(&key), import: mark(&import_key) };
     let (written, seen) = prefetch_attachments_in(&cache_dir, &cur_dir, account_id, mailbox, above, gate)?;
-    let mut marks = high_water.lock().unwrap_or_else(|p| p.into_inner());
-    for (k, uid) in [(key, seen.server), (import_key, seen.import)] {
-        match marks.iter_mut().find(|(m, _)| *m == k) {
-            Some(entry) => entry.1 = uid,
-            None => marks.push((k, uid)),
+    gate(&mut || {
+        let mut marks = high_water.lock().unwrap_or_else(|p| p.into_inner());
+        for (k, uid) in [(key.clone(), seen.server), (import_key.clone(), seen.import)] {
+            match marks.iter_mut().find(|(m, _)| *m == k) {
+                Some(entry) => entry.1 = uid,
+                None => marks.push((k, uid)),
+            }
         }
-    }
+        Ok(())
+    })?;
     info!("Attachment prefetch {}/{}: {} written above uid {}", account_id, mailbox, written.len(), above.server);
     Ok(written.len())
 }

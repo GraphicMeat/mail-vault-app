@@ -19,7 +19,8 @@ use crate::imap::{EmailAddress, EmailHeader};
 use mailvault_core::custody::contacts as contacts_db;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use crate::account_lifecycle::{AccountLifecycle, AccountStamp, LocalCommitPermit};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
@@ -97,7 +98,7 @@ fn to_row(entry: &ContactEntry) -> contacts_db::Row {
 
 struct InnerState {
     per_account: HashMap<String, HashMap<String, ContactEntry>>,
-    dirty: HashSet<String>,
+    dirty: HashMap<String, AccountStamp>,
     loaded_accounts: HashSet<String>,
     cold_built_accounts: HashSet<String>,
     /// Accounts whose map covers their whole header cache: the store held
@@ -106,17 +107,47 @@ struct InnerState {
 }
 
 pub struct ContactsState {
+    lifecycle: AccountLifecycle,
     inner: Mutex<InnerState>,
     data_dir: PathBuf,
     db: Mutex<Option<Arc<mailvault_core::custody::SharedConn>>>,
 }
 
+#[cfg(test)]
+fn flush_gates() -> &'static Mutex<HashMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<Mutex<HashMap<PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn flush_pause(path: &Path) {
+    let gate = flush_gates().lock().unwrap().remove(path);
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
+    }
+}
+
+#[cfg(test)]
+fn entry_gates() -> &'static Mutex<HashMap<(PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<Mutex<HashMap<(PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn entry_pause(path: &Path, kind: &'static str) {
+    let gate = entry_gates().lock().unwrap().remove(&(path.to_path_buf(), kind));
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
+    }
+}
+
 impl ContactsState {
-    pub fn new(data_dir: PathBuf) -> Arc<Self> {
+    pub fn new(data_dir: PathBuf, lifecycle: AccountLifecycle) -> Arc<Self> {
         Arc::new(Self {
+            lifecycle,
             inner: Mutex::new(InnerState {
                 per_account: HashMap::new(),
-                dirty: HashSet::new(),
+                dirty: HashMap::new(),
                 loaded_accounts: HashSet::new(),
                 cold_built_accounts: HashSet::new(),
                 seeded: HashSet::new(),
@@ -148,6 +179,13 @@ impl ContactsState {
 
     /// Load the persisted index for one account into memory. Idempotent.
     pub fn load_account(&self, account_id: &str) {
+        let Ok(stamp) = self.lifecycle.capture(account_id) else { return };
+        #[cfg(test)] entry_pause(&self.data_dir, "load");
+        let Ok(permit) = self.lifecycle.try_commit(std::slice::from_ref(&stamp)) else { return };
+        self.load_account_owned(account_id, &permit);
+    }
+
+    fn load_account_owned(&self, account_id: &str, _permit: &LocalCommitPermit) {
         {
             let g = self.inner.lock().unwrap();
             if g.loaded_accounts.contains(account_id) {
@@ -183,6 +221,13 @@ impl ContactsState {
     /// Update the in-memory index with a batch of new email headers. System
     /// folders (Trash/Junk/Drafts/Archive) are skipped.
     pub fn observe_headers(&self, account_id: &str, mailbox: &str, headers: &[EmailHeader]) {
+        let Ok(stamp) = self.lifecycle.capture(account_id) else { return };
+        let Ok(permit) = self.lifecycle.try_commit(std::slice::from_ref(&stamp)) else { return };
+        self.observe_headers_owned(&stamp, &permit, mailbox, headers);
+    }
+
+    pub(crate) fn observe_headers_owned(&self, stamp: &AccountStamp, permit: &LocalCommitPermit, mailbox: &str, headers: &[EmailHeader]) {
+        let account_id = stamp.id();
         if is_excluded_mailbox(mailbox) {
             return;
         }
@@ -190,7 +235,7 @@ impl ContactsState {
             return;
         }
 
-        self.load_account(account_id);
+        self.load_account_owned(account_id, permit);
 
         let mut g = self.inner.lock().unwrap();
         let map = g.per_account.entry(account_id.to_string()).or_default();
@@ -210,24 +255,33 @@ impl ContactsState {
                 ingest_address(map, rt, date_ms, mailbox);
             }
         }
-        g.dirty.insert(account_id.to_string());
+        g.dirty.insert(account_id.to_string(), stamp.clone());
     }
 
     /// Header rows the app cached itself (`save_email_cache`), each new to the
     /// header cache. Before an account is seeded the seed replaces them.
     pub fn observe_saved_rows(&self, account_id: &str, mailbox: &str, rows: &[serde_json::Value]) {
+        let Ok(stamp) = self.lifecycle.capture(account_id) else { return };
+        let Ok(permit) = self.lifecycle.try_commit(std::slice::from_ref(&stamp)) else { return };
+        self.observe_saved_rows_owned(&stamp, &permit, mailbox, rows);
+    }
+
+    pub(crate) fn observe_saved_rows_owned(&self, stamp: &AccountStamp, permit: &LocalCommitPermit, mailbox: &str, rows: &[serde_json::Value]) {
         if is_excluded_mailbox(mailbox) || rows.is_empty() {
             return;
         }
         let headers: Vec<CachedHeader> = rows.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect();
-        self.observe_cached_headers(account_id, mailbox, &headers);
+        self.observe_cached_headers_owned(stamp, permit, mailbox, &headers);
     }
 
     /// Returns `{account_id → Vec<ContactEntry>}` for the requested accounts.
     pub fn get_snapshot(&self, account_ids: &[String]) -> HashMap<String, Vec<ContactEntry>> {
         // Load + cold-build on first request per account (lazy).
         for aid in account_ids {
-            self.load_account(aid);
+            let Ok(stamp) = self.lifecycle.capture(aid) else { continue };
+            #[cfg(test)] entry_pause(&self.data_dir, "snapshot");
+            let Ok(permit) = self.lifecycle.try_commit(std::slice::from_ref(&stamp)) else { continue };
+            self.load_account_owned(aid, &permit);
             // Rows a sync or an app save observed first do not count as a
             // seed: the rest of the header cache would never be read.
             let needs_cold_build = {
@@ -235,7 +289,7 @@ impl ContactsState {
                 !g.seeded.contains(aid) && !g.cold_built_accounts.contains(aid)
             };
             if needs_cold_build {
-                self.cold_build_account(aid);
+                self.cold_build_account_owned(&stamp, &permit);
             }
         }
 
@@ -255,7 +309,7 @@ impl ContactsState {
     /// Write every dirty account's index to disk. Called periodically by a
     /// background task.
     pub fn flush_dirty(&self) {
-        let to_write: Vec<(String, Vec<ContactEntry>)> = {
+        let to_write: Vec<(String, AccountStamp, Vec<ContactEntry>)> = {
             let mut guard = self.inner.lock().unwrap();
             let g = &mut *guard;
             if g.dirty.is_empty() {
@@ -263,13 +317,14 @@ impl ContactsState {
             }
             // An account not seeded yet holds only what was observed so far;
             // stored, it would pass for a seed after a restart.
-            let accounts: Vec<String> = g.dirty.drain().filter(|a| g.seeded.contains(a)).collect();
+            let seeded = g.seeded.clone();
+            let accounts: Vec<(String, AccountStamp)> = g.dirty.drain().filter(|(a, _)| seeded.contains(a)).collect();
             accounts
                 .into_iter()
-                .filter_map(|aid| {
+                .filter_map(|(aid, stamp)| {
                     g.per_account
                         .get(&aid)
-                        .map(|m| (aid, m.values().cloned().collect()))
+                        .map(|m| (aid, stamp, m.values().cloned().collect()))
                 })
                 .collect()
         };
@@ -277,15 +332,21 @@ impl ContactsState {
         if to_write.is_empty() {
             return;
         }
-        let wrote = self.with_db(|conn| {
-            for (account_id, entries) in &to_write {
+        #[cfg(test)]
+        flush_pause(&self.data_dir);
+        let mut had_store = false;
+        for (account_id, stamp, entries) in &to_write {
+            let Ok(_permit) = self.lifecycle.try_commit(std::slice::from_ref(stamp)) else { continue };
+            let wrote = self.with_db(|conn| {
                 let rows: Vec<contacts_db::Row> = entries.iter().map(to_row).collect();
                 if let Err(e) = contacts_db::replace_account(conn, account_id, &rows) {
                     warn!("[contacts_index] write {}: {}", account_id, e);
                 }
             }
-        });
-        if wrote.is_none() {
+            );
+            had_store |= wrote.is_some();
+        }
+        if !had_store {
             warn!("[contacts_index] no custody store attached — {} account(s) stay in memory", to_write.len());
         }
     }
@@ -297,6 +358,13 @@ impl ContactsState {
     /// account lifetime — gated by `cold_built_accounts`. Reads `custody.db`;
     /// it used to walk `email_cache/<account>_*` and open every `<uid>.json`.
     pub fn cold_build_account(&self, account_id: &str) {
+        let Ok(stamp) = self.lifecycle.capture(account_id) else { return };
+        let Ok(permit) = self.lifecycle.try_commit(std::slice::from_ref(&stamp)) else { return };
+        self.cold_build_account_owned(&stamp, &permit);
+    }
+
+    fn cold_build_account_owned(&self, stamp: &AccountStamp, permit: &LocalCommitPermit) {
+        let account_id = stamp.id();
         let attached = self.db.lock().unwrap_or_else(|p| p.into_inner()).is_some();
         {
             let mut g = self.inner.lock().unwrap();
@@ -335,7 +403,7 @@ impl ContactsState {
             Some(Ok(by_mailbox)) => {
                 for (mailbox, headers) in by_mailbox {
                     total += headers.len();
-                    self.observe_cached_headers(account_id, &mailbox, &headers);
+                    self.observe_cached_headers_owned(stamp, permit, &mailbox, &headers);
                 }
                 self.inner.lock().unwrap().seeded.insert(account_id.to_string());
             }
@@ -349,11 +417,12 @@ impl ContactsState {
         );
     }
 
-    fn observe_cached_headers(&self, account_id: &str, mailbox: &str, headers: &[CachedHeader]) {
+    fn observe_cached_headers_owned(&self, stamp: &AccountStamp, permit: &LocalCommitPermit, mailbox: &str, headers: &[CachedHeader]) {
+        let account_id = stamp.id();
         if is_excluded_mailbox(mailbox) || headers.is_empty() {
             return;
         }
-        self.load_account(account_id);
+        self.load_account_owned(account_id, permit);
         let mut g = self.inner.lock().unwrap();
         let map = g.per_account.entry(account_id.to_string()).or_default();
         for h in headers {
@@ -374,7 +443,7 @@ impl ContactsState {
                 ingest_address(map, &EmailAddress::from(rt), date_ms, mailbox);
             }
         }
-        g.dirty.insert(account_id.to_string());
+        g.dirty.insert(account_id.to_string(), stamp.clone());
     }
 }
 
@@ -392,7 +461,9 @@ impl ContactsState {
                 ..Default::default()
             },
         );
-        g.dirty.insert(account_id.to_string());
+        if let Ok(stamp) = self.lifecycle.capture(account_id) {
+            g.dirty.insert(account_id.to_string(), stamp);
+        }
         g.seeded.insert(account_id.to_string());
     }
 }
@@ -467,6 +538,12 @@ fn parse_date_ms(date: Option<&str>) -> i64 {
 mod tests {
     use super::*;
 
+    fn test_state(dir: PathBuf) -> Arc<ContactsState> {
+        let lifecycle = AccountLifecycle::default();
+        lifecycle.seed(&mailvault_core::accounts_doc::Listing { accounts: vec![serde_json::json!({"id":"acc1"})], version: 0, recovered: None });
+        ContactsState::new(dir, lifecycle)
+    }
+
     fn addr(name: &str, address: &str) -> EmailAddress {
         EmailAddress {
             name: if name.is_empty() {
@@ -513,10 +590,112 @@ mod tests {
         }
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_delayed_flush_cannot_replace_retired_account() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap(),
+        );
+        state.contacts.seed_dirty_for_test("a");
+        state.contacts.seed_dirty_for_test("b");
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        flush_gates().lock().unwrap().insert(state.data_dir.clone(), (entered_tx, release_rx));
+        let held = Arc::clone(&state);
+        let task = tokio::task::spawn_blocking(move || held.contacts.flush_dirty());
+        entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("real dirty snapshot created");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        release_tx.send(()).unwrap();
+        task.await.unwrap();
+        let (a_rows, b_rows) = crate::custody::with_conn(&state, |conn| Ok((contacts_db::load(conn, "a"), contacts_db::load(conn, "b")))).unwrap();
+        assert!(a_rows.is_empty(), "old dirty snapshot replaced retired A contacts: {} rows; B={} rows", a_rows.len(), b_rows.len());
+        assert!(!b_rows.is_empty(), "independent B dirty snapshot must persist");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_dirty_arriving_after_flush_snapshot_is_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
+        state.contacts.seed_dirty_for_test("a");
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        flush_gates().lock().unwrap().insert(state.data_dir.clone(), (entered_tx, release_rx));
+        let held = Arc::clone(&state);
+        let old = tokio::task::spawn_blocking(move || held.contacts.flush_dirty());
+        entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("old A snapshot taken");
+        state.contacts.seed_dirty_for_test("b");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        release_tx.send(()).unwrap();
+        old.await.unwrap();
+        state.contacts.flush_dirty();
+        let (a, b) = crate::custody::with_conn(&state, |conn| Ok((contacts_db::load(conn, "a"), contacts_db::load(conn, "b")))).unwrap();
+        assert!(a.is_empty(), "old revoked snapshot must not write A");
+        assert_eq!(b.len(), 1, "B dirty after old snapshot must survive and write on the next flush");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_cold_build_and_legacy_load_keep_original_authority() {
+        for kind in ["load", "snapshot"] {
+            let dir = tempfile::tempdir().unwrap();
+            let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+            std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
+            let legacy = state.data_dir.join(contacts_db::LEGACY_DIR).join("a.json");
+            if kind == "load" {
+                std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+                std::fs::write(&legacy, r#"[{"address":"old@example.com","name":"Old","count":1,"lastSeen":1,"folders":["INBOX"]}]"#).unwrap();
+            } else {
+                crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn, "a", "INBOX", r#"{"emails":[{"uid":1,"from":{"address":"old@example.com"},"to":[],"cc":[],"bcc":[]}]}"#)).unwrap();
+            }
+            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            entry_gates().lock().unwrap().insert((state.data_dir.clone(), kind), (entered_tx, release_rx));
+            let held = Arc::clone(&state);
+            let task = tokio::task::spawn_blocking(move || {
+                if kind == "load" { held.contacts.load_account("a"); }
+                else { held.contacts.get_snapshot(&["a".into()]); }
+            });
+            entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("original contact load/snapshot captured");
+            let lease = crate::account_workflows::AccountLease::detached_for_test(
+                crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+            );
+            let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+            release_tx.send(()).unwrap();
+            task.await.unwrap();
+            let a_rows = crate::custody::with_conn(&state, |conn| Ok(contacts_db::load(conn, "a"))).unwrap();
+            assert!(a_rows.is_empty(), "{kind}: retired A contact SQL must stay absent");
+            assert!(state.contacts.get_snapshot(&["a".into()])["a"].is_empty(), "{kind}: old contact snapshot must not publish memory");
+            if kind == "load" { assert!(legacy.exists(), "{kind}: legacy file must not be consumed"); }
+            state.contacts.seed_dirty_for_test("b");
+            state.contacts.flush_dirty();
+            let b_rows = crate::custody::with_conn(&state, |conn| Ok(contacts_db::load(conn, "b"))).unwrap();
+            assert_eq!(b_rows.len(), 1, "{kind}: independent B contact write remains available");
+        }
+    }
+
     #[test]
     fn observe_skips_excluded_mailboxes() {
         let tmp = tempdir();
-        let state = ContactsState::new(tmp.clone());
+        let state = test_state(tmp.clone());
         let h = header(1, addr("Alice", "alice@ex.com"), vec![]);
         state.observe_headers("acc1", "Trash", &[h]);
         let snap = state.get_snapshot(&["acc1".to_string()]);
@@ -526,7 +705,7 @@ mod tests {
     #[test]
     fn observe_collects_and_dedupes() {
         let tmp = tempdir();
-        let state = ContactsState::new(tmp.clone());
+        let state = test_state(tmp.clone());
         let h1 = header(1, addr("Alice", "alice@ex.com"), vec![addr("", "bob@ex.com")]);
         let h2 = header(2, addr("Alice", "ALICE@ex.com"), vec![]);
         state.observe_headers("acc1", "Butcher", &[h1, h2]);
@@ -548,7 +727,7 @@ mod tests {
             mailvault_core::custody::db::open(&tmp).unwrap(),
         )));
         {
-            let state = ContactsState::new(tmp.clone());
+            let state = test_state(tmp.clone());
             state.attach_db(Arc::clone(&db));
             // seeded first (an empty header cache): only a seeded account is stored
             state.get_snapshot(&["acc1".to_string()]);
@@ -556,7 +735,7 @@ mod tests {
             state.observe_headers("acc1", "INBOX", &[h]);
             state.flush_dirty();
         }
-        let state2 = ContactsState::new(tmp.clone());
+        let state2 = test_state(tmp.clone());
         state2.attach_db(db);
         state2.load_account("acc1");
         let snap = state2.get_snapshot(&["acc1".to_string()]);
@@ -588,13 +767,13 @@ mod tests {
         };
         let want = vec![("Alice".to_string(), 1), ("Bob".to_string(), 1)];
         {
-            let state = ContactsState::new(tmp.clone());
+            let state = test_state(tmp.clone());
             state.attach_db(Arc::clone(&db));
             // the sync observed uid 2 before anyone asked for a snapshot
             state.observe_headers("acc1", "INBOX", &[header(2, addr("Bob", "bob@ex.com"), vec![])]);
             state.flush_dirty();
             // a restart: what the store kept must not stand in for the seed
-            let restarted = ContactsState::new(tmp.clone());
+            let restarted = test_state(tmp.clone());
             restarted.attach_db(Arc::clone(&db));
             assert_eq!(names(&restarted.get_snapshot(&["acc1".to_string()])), want);
             assert_eq!(names(&state.get_snapshot(&["acc1".to_string()])), want);
@@ -606,7 +785,7 @@ mod tests {
     #[test]
     fn a_flush_with_no_store_attached_is_not_a_panic() {
         let tmp = tempdir();
-        let state = ContactsState::new(tmp.clone());
+        let state = test_state(tmp.clone());
         state.observe_headers("acc1", "INBOX", &[header(1, addr("Alice", "alice@ex.com"), vec![])]);
         state.flush_dirty();
         assert_eq!(state.get_snapshot(&["acc1".to_string()])["acc1"].len(), 1);

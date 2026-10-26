@@ -8,6 +8,7 @@
 //! Skipped on purpose: encrypting or signing outgoing mail, signature
 //! verification, public key directory lookups, S/MIME.
 use crate::credentials;
+use crate::account_lifecycle::AccountStamp;
 use crate::handlers::common::{str_arg, vault_root, with_mailbox_write};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -23,11 +24,26 @@ pub(crate) const DECRYPTED: &str = "decrypted";
 /// instead of ciphertext.
 pub(crate) const LOCKED: &str = "locked";
 
+#[cfg(test)]
+fn key_gates() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn key_pause(path: &std::path::Path) {
+    let gate = key_gates().lock().unwrap().remove(path);
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
+    }
+}
+
 /// The bytes a reader renders for `raw`, and its badge (`None`: not
 /// encrypted). `in_vault`: the vault holds `raw` as `uid`, so an existing
 /// decrypted copy is used and a first decryption is kept. Blocking (a
 /// keychain read, a file write): run it on a blocking thread.
-pub(crate) fn render(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, raw: Vec<u8>, in_vault: bool) -> (Vec<u8>, Option<&'static str>) {
+pub(crate) fn render(state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: &str, uid: u32, raw: Vec<u8>, in_vault: bool) -> (Vec<u8>, Option<&'static str>) {
+    let account_id = stamp.id();
     if !core_pgp::is_encrypted(&raw) {
         return (raw, None);
     }
@@ -37,6 +53,7 @@ pub(crate) fn render(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
             return (copy, Some(DECRYPTED));
         }
     }
+    #[cfg(test)] key_pause(&state.app_dir);
     let keys = tokio::runtime::Handle::current().block_on(credentials::resolve_pgp_keys_guarded()).unwrap_or_else(|e| {
         warn!("[pgp] keys unavailable: {e}");
         Vec::new()
@@ -49,6 +66,9 @@ pub(crate) fn render(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, 
         }
     };
     if in_vault {
+        let Ok(_permit) = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)) else {
+            return (decrypted, Some(DECRYPTED));
+        };
         let kept = with_mailbox_write(state, account_id, mailbox, |root| {
             message_store::write_decrypted_copy(root, account_id, mailbox, uid, &decrypted)
         });
@@ -143,6 +163,7 @@ pub(crate) async fn route(_state: &Arc<DaemonState>, method: &str, params: &Valu
 
 #[cfg(test)]
 mod tests {
+    use super::{key_gates, render, DECRYPTED};
     use crate::server::{handle_request_for_test, DaemonState};
     use mailvault_core::search_index::plan::Signal;
     use mailvault_core::vault_files;
@@ -196,6 +217,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(tmp.path().to_path_buf(), app_dir, true);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc"},{"id":"a"},{"id":"b"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (tmp, s)
     }
 
@@ -269,6 +292,55 @@ mod tests {
         assert!(full["html"].as_str().unwrap().contains("4242"));
         let source = call(&s, "maildir_read_raw_source", p).await.unwrap();
         assert_eq!(base64::engine::general_purpose::STANDARD.decode(source.as_str().unwrap()).unwrap(), raw);
+        std::env::remove_var("MAILVAULT_TEST_PGP_KEYS");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_key_wait_revokes_decrypted_file_and_index_publication() {
+        let _guard = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let keys_file = tempfile::tempdir().unwrap();
+        let keys_path = keys_file.path().join("keys.json");
+        std::env::set_var("MAILVAULT_TEST_PGP_KEYS", &keys_path);
+        let (root, state) = st();
+        std::fs::write(state.app_dir.join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+        let key = keypair(None);
+        std::fs::write(&keys_path, serde_json::json!([{"armored": armored(&key)}]).to_string()).unwrap();
+        let raw = encrypted_eml(&key);
+        let a_cur = vault_files::cur_path(root.path(), "a", "INBOX");
+        let b_cur = vault_files::cur_path(root.path(), "b", "INBOX");
+        std::fs::create_dir_all(&a_cur).unwrap();
+        std::fs::create_dir_all(&b_cur).unwrap();
+        let name = vault_files::build_maildir_filename(7, &[]);
+        std::fs::write(a_cur.join(&name), &raw).unwrap();
+        std::fs::write(b_cur.join(&name), &raw).unwrap();
+        let (signals_tx, signals_rx) = std::sync::mpsc::channel();
+        *state.search_index.signals.lock().unwrap() = Some(signals_tx);
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        key_gates().lock().unwrap().insert(state.app_dir.clone(), (entered_tx, release_rx));
+        let held = Arc::clone(&state);
+        let old_raw = raw.clone();
+        let old_stamp = state.account_lifecycle.capture("a").unwrap();
+        let old = tokio::task::spawn_blocking(move || render(&held, old_stamp, "INBOX", 7, old_raw, true));
+        entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("real guarded key wait entered");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        std::fs::remove_dir_all(root.path().join("Maildir").join("a")).unwrap();
+        claim.finish_retired().unwrap();
+        release_tx.send(()).unwrap();
+        let old_result = old.await.unwrap();
+        let a_copy = mailvault_core::pgp::copy_path(&a_cur, 7);
+        let a_nudge = signals_rx.try_iter().any(|sig| matches!(sig, Signal::Nudge { .. }));
+        let b_stamp = state.account_lifecycle.capture("b").unwrap();
+        let b_result = tokio::task::spawn_blocking({ let state = Arc::clone(&state); move || render(&state, b_stamp, "INBOX", 7, raw, true) }).await.unwrap();
+        let b_copy = mailvault_core::pgp::copy_path(&b_cur, 7);
+        assert!(!a_copy.exists() && !a_nudge, "old guarded-key result recreated retired A decrypted copy/index; copy={}, nudge={}, badge={:?}, B={:?}", a_copy.exists(), a_nudge, old_result.1, b_result.1);
+        assert!(b_copy.exists() && b_result.1 == Some(DECRYPTED), "independent B decrypt persists");
         std::env::remove_var("MAILVAULT_TEST_PGP_KEYS");
     }
 

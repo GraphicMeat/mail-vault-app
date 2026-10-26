@@ -42,6 +42,20 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 
+#[cfg(test)]
+fn p2_evict_gates() -> &'static std::sync::Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn p2_before_evict(path: &std::path::Path) {
+    let gate = p2_evict_gates().lock().unwrap().remove(path);
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(Duration::from_secs(5));
+    }
+}
+
 /// The first pass waits out the launch (sync, backfill, the user's first
 /// clicks); a mode change wakes it at once.
 const FIRST_PASS_DELAY: Duration = Duration::from_secs(10 * 60);
@@ -137,6 +151,7 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) {
     }
     let now = crate::handlers::imap::now_ms();
     for (account_id, mailboxes) in accounts {
+        let Ok(stamp) = state.account_lifecycle.capture(&account_id) else { continue };
         // Hidden: no policy at all.
         let Some(policy) = FetchPolicy::from_settings(&settings, &account_id) else { continue };
         if policy.mode == FetchMode::Hoarder || (policy.mode == FetchMode::KeepRecent && policy.window_months == 0) {
@@ -174,7 +189,7 @@ pub(crate) async fn sweep(state: &Arc<DaemonState>) {
                 info!("[evict] {account_id} {mailbox}: evicted=0 skipped_reason=shared_vault_folder");
                 continue;
             }
-            evict_mailbox(state, &config, &account_id, mailbox, &policy, now).await;
+            evict_mailbox_stamped(state, &config, &account_id, mailbox, &policy, now, stamp.clone()).await;
         }
     }
 }
@@ -195,7 +210,22 @@ pub(crate) async fn evict_mailbox(
     policy: &FetchPolicy,
     now_ms: i64,
 ) -> Outcome {
-    let outcome = evict_mailbox_inner(state, config, account_id, mailbox, policy, now_ms).await;
+    let Ok(stamp) = state.account_lifecycle.capture(account_id) else {
+        return Outcome { evicted: 0, kept: 0, skipped: Some("errors.keychainBusy".into()) };
+    };
+    evict_mailbox_stamped(state, config, account_id, mailbox, policy, now_ms, stamp).await
+}
+
+async fn evict_mailbox_stamped(
+    state: &Arc<DaemonState>,
+    config: &ImapConfig,
+    account_id: &str,
+    mailbox: &str,
+    policy: &FetchPolicy,
+    now_ms: i64,
+    stamp: crate::account_lifecycle::AccountStamp,
+) -> Outcome {
+    let outcome = evict_mailbox_inner(state, config, account_id, mailbox, policy, now_ms, stamp).await;
     info!(
         "[evict] {account_id} {mailbox}: evicted={} kept={} skipped_reason={}",
         outcome.evicted,
@@ -212,6 +242,7 @@ async fn evict_mailbox_inner(
     mailbox: &str,
     policy: &FetchPolicy,
     now_ms: i64,
+    stamp: crate::account_lifecycle::AccountStamp,
 ) -> Outcome {
     let skip = |kept: usize, reason: String| Outcome { evicted: 0, kept, skipped: Some(reason) };
 
@@ -271,6 +302,8 @@ async fn evict_mailbox_inner(
         return skip(total, format!("uidvalidity server={server_validity:?} header_cache={cached_validity:?}"));
     }
 
+    #[cfg(test)] p2_before_evict(&state.app_dir);
+
     let on_server: Vec<u32> = cache_uids.into_iter().filter(|uid| server.contains(uid)).collect();
     let mut evicted = 0usize;
     let server = Arc::new(server);
@@ -279,7 +312,9 @@ async fn evict_mailbox_inner(
         let chunk: Vec<u32> = chunk.to_vec();
         let (st, acct, mb) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
         let (server, indexed, policy) = (Arc::clone(&server), Arc::clone(&indexed), policy.clone());
+        let original = stamp.clone();
         let pass = blocking(move || {
+            let _permit = st.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
             with_mailbox_write(&st, &acct, &mb, |root| {
                 let uids: HashSet<u32> = chunk.iter().copied().collect();
                 let copies = vault_files::cache_copies(root, &acct, &mb, &uids)?;
@@ -363,6 +398,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-evict-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"b"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         crate::custody::open_into(&s).unwrap();
         let cur = cur(&dir);
         std::fs::create_dir_all(&cur).unwrap();
@@ -373,6 +410,42 @@ mod tests {
         let data = json!({"emails": emails, "uidValidity": 1, "totalEmails": listed.len()}).to_string();
         crate::custody::with_conn(&s, |c| cache::save_headers(c, ACCT, "INBOX", &data)).unwrap();
         (dir, s)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_retired_account_does_not_delete_cache_after_fresh_listing() {
+        let mock = MockImap::start(server(&[1, 2, 3], 1));
+        let (dir, state) = state(&[1, 2, 3]);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
+        let b_cur = vault_files::cur_path(&dir, "b", "INBOX");
+        std::fs::create_dir_all(&b_cur).unwrap();
+        std::fs::write(b_cur.join(format!("1{INFO_PREFIX}S.eml")), raw(1)).unwrap();
+        let b_headers = json!({"emails": [{"uid":1,"messageId":"<m1@example.com>"}], "uidValidity":1, "totalEmails":1}).to_string();
+        crate::custody::with_conn(&state, |c| cache::save_headers(c, "b", "INBOX", &b_headers)).unwrap();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        p2_evict_gates().lock().unwrap().insert(dir.clone(), (entered_tx, release_rx));
+        let old = tokio::spawn({
+            let (state, config) = (Arc::clone(&state), config(&mock));
+            async move { evict_mailbox(&state, &config, ACCT, "INBOX", &policy(FetchMode::OnDemand, 3), now()).await }
+        });
+        entered_rx.recv_timeout(Duration::from_secs(5)).expect("fresh server listing and generation check completed");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, ACCT).unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        release_tx.send(()).unwrap();
+        let old_outcome = old.await.unwrap();
+        let a_files = on_disk(&dir);
+        let b_outcome = evict_mailbox(&state, &config(&mock), "b", "INBOX", &policy(FetchMode::OnDemand, 3), now()).await;
+        let b_exists = b_cur.join(format!("1{INFO_PREFIX}S.eml")).exists();
+        assert_eq!(a_files, vec![1, 2, 3], "retired A cache deleted after its listing: outcome={old_outcome:?}, files={a_files:?}, B={b_outcome:?}");
+        assert_eq!(b_outcome.evicted, 1, "independent B eviction remains available: {b_outcome:?}, exists={b_exists}");
+        assert!(!b_exists);
     }
 
     fn cur(dir: &Path) -> PathBuf {

@@ -176,6 +176,8 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), mail_dir_ok);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acct1"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (vault, app_dir, s)
     }
 
@@ -615,7 +617,8 @@ mod tests {
 
         let sets = handle_request_for_test(&s, "vault_uid_sets", json!({"accountId": "acct1", "mailbox": name})).await;
         assert_eq!(sets.result.expect("an answer")["archived"].as_array().map(Vec::len), Some(2));
-        let repaired = crate::handlers::custody::repair_generation_for(&s, "acct1", &name).unwrap();
+        let stamp = s.account_lifecycle.capture("acct1").unwrap();
+        let repaired = crate::handlers::custody::repair_generation_for(&s, &stamp, &name).unwrap();
         assert!(repaired.rebound.is_empty() && repaired.orphaned.is_empty());
         assert!(crate::handlers::custody::rehome_imports_for(&s, "acct1", &name).unwrap().is_none());
 

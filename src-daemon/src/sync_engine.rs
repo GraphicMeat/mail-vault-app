@@ -106,6 +106,7 @@ struct BackfillCompletion {
 
 /// The sync engine manages background email sync for all accounts.
 pub struct SyncEngine {
+    lifecycle: crate::account_lifecycle::AccountLifecycle,
     pool: Arc<ImapPool>,
     data_dir: PathBuf,
     /// App data dir (settings + transfer stats). Distinct from `data_dir`,
@@ -188,6 +189,7 @@ impl SyncEngine {
         net: Arc<NetGate>,
         vault_closed: Arc<AtomicBool>,
         vault_gate: Arc<std::sync::RwLock<()>>,
+        lifecycle: crate::account_lifecycle::AccountLifecycle,
     ) -> Self {
         let (changes, _changes_rx) = tokio::sync::watch::channel(0u64);
         Self {
@@ -196,6 +198,7 @@ impl SyncEngine {
             recent: std::sync::Mutex::new(std::collections::VecDeque::new()),
             acked: std::sync::atomic::AtomicU64::new(0),
             pool,
+            lifecycle,
             data_dir,
             app_dir,
             states: Mutex::new(HashMap::new()),
@@ -250,7 +253,14 @@ impl SyncEngine {
 
     /// One cache step's inputs, cloned into a blocking task (`cache_io`).
     pub(crate) fn cache_ctx(&self, account_id: &str, mailbox: &str) -> CacheCtx {
+        self.cache_ctx_with_stamp(account_id, mailbox, self.lifecycle.capture(account_id))
+    }
+
+    pub(crate) fn cache_ctx_with_stamp(&self, account_id: &str, mailbox: &str, stamp: Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>) -> CacheCtx {
         CacheCtx {
+            lifecycle: self.lifecycle.clone(),
+            stamp,
+            owned: None,
             vault_closed: Arc::clone(&self.vault_closed),
             vault_gate: Arc::clone(&self.vault_gate),
             account: account_id.to_string(),
@@ -450,6 +460,15 @@ impl SyncEngine {
 
     async fn sync_account_with(&self, account: &SyncAccount, mailbox: &str, announce: bool) -> SyncResult {
         let account_id = &account.id;
+        let stamp = match self.lifecycle.capture(account_id) {
+            Ok(stamp) => stamp,
+            Err(_) => return SyncResult {
+                account_id: account_id.clone(), mailbox: mailbox.to_string(),
+                new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
+                success: false, error: Some("errors.keychainBusy".into()), offline: false,
+                error_code: None, arrival_uids: Vec::new(), announced: false,
+            },
+        };
 
         // Every account that syncs teaches the gate its server, before the
         // short-circuit below: the watchdog's probe dials it too, and must
@@ -512,7 +531,7 @@ impl SyncEngine {
 
         info!("[sync] Starting sync for {} ({})", account.email, mailbox);
 
-        let mut result = self.do_sync(account, mailbox, announce).await;
+        let mut result = self.do_sync(account, mailbox, announce, &stamp).await;
 
         // Teach the gate what just happened. A success is proof of reach; a
         // connect-shaped failure only *asks* — `note_failure` probes and the
@@ -603,16 +622,17 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
         announce: bool,
+        stamp: &crate::account_lifecycle::AccountStamp,
     ) -> SyncResult {
         // A JMAP account never reaches the IMAP pool: its account-level sync
         // runs here, inside `sync_account_with`'s gate, folder lock and
         // `SyncState` bookkeeping, exactly where an IMAP sync would open its
         // session.
         if account.imap_config.uses_jmap() {
-            return crate::sync_jmap::sync_jmap(self, account, mailbox, announce).await;
+            return crate::sync_jmap::sync_jmap(self, account, mailbox, announce, stamp).await;
         }
         let account_id = account.id.clone();
-        let outcome = retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh, announce)).await;
+        let outcome = retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh, announce, stamp)).await;
         match outcome {
             Ok((delta, mailbox)) => SyncResult {
                 account_id,
@@ -648,6 +668,7 @@ impl SyncEngine {
         mailbox: &str,
         fresh: bool,
         announce: bool,
+        stamp: &crate::account_lifecycle::AccountStamp,
     ) -> Result<(SyncDelta, String), String> {
         let account_id = &account.id;
         let config = &account.imap_config;
@@ -666,7 +687,7 @@ impl SyncEngine {
         // the folder is not there.
         let requested = mailbox;
         let mut mailbox = self.alias_for(account_id, requested).await;
-        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, announce).await;
+        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, announce, stamp).await;
 
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
             if mailbox != requested {
@@ -683,7 +704,7 @@ impl SyncEngine {
                 // asking the server to resolve it: `resolve_mailbox` answers
                 // None for an exact match, so this is the only path that finds
                 // a plain folder by the requested name in the same tick.
-                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, announce).await;
+                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, announce, stamp).await;
             }
         }
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
@@ -692,7 +713,7 @@ impl SyncEngine {
                     "[sync] {} has no '{}' — syncing '{}' instead",
                     account.email, requested, actual
                 );
-                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, announce).await;
+                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, announce, stamp).await;
                 mailbox = actual;
             }
         }
@@ -725,9 +746,10 @@ impl SyncEngine {
         mailbox: &str,
         has_condstore: bool,
         announce: bool,
+        stamp: &crate::account_lifecycle::AccountStamp,
     ) -> Result<SyncDelta, String> {
         let account_id = &account.id;
-        let io = self.cache_ctx(account_id, mailbox);
+        let io = self.cache_ctx_with_stamp(account_id, mailbox, Ok(stamp.clone()));
         let seed = self.prepare_native_seed(&io, &account.imap_config).await?;
 
         let (total, uid_validity, server_uid_next, highest_modseq) =
@@ -1394,6 +1416,9 @@ impl NativeBatchSeed {
 
 #[derive(Clone)]
 pub(crate) struct CacheCtx {
+    lifecycle: crate::account_lifecycle::AccountLifecycle,
+    stamp: Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>,
+    owned: Option<crate::account_lifecycle::LocalCommitPermit>,
     vault_closed: Arc<AtomicBool>,
     vault_gate: Arc<std::sync::RwLock<()>>,
     account: String,
@@ -1406,6 +1431,11 @@ pub(crate) struct CacheCtx {
 }
 
 impl CacheCtx {
+    fn commit(&self) -> Result<crate::account_lifecycle::LocalCommitPermit, String> {
+        if let Some(permit) = &self.owned { return Ok(permit.clone()); }
+        let stamp = self.stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
+        self.lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())
+    }
     pub(crate) fn for_source(&self, config: &ImapConfig, validity: Option<u32>) -> Self {
         let mut io = self.clone();
         io.source_identity = Some(imap::NativeHeaderIdentity::new(config, &self.account, &self.mailbox, validity));
@@ -1461,6 +1491,7 @@ impl CacheCtx {
     }
 
     pub(crate) fn write_bound_headers(&self, headers: &[ImapEmailHeader], seed: &NativeBatchSeed, validity: Option<u32>) -> Result<(), String> {
+        let permit = self.commit()?;
         self.vault_open()?;
         let mut identity = seed.identity.clone();
         identity.uid_validity = validity;
@@ -1468,7 +1499,7 @@ impl CacheCtx {
         let now = mailvault_core::people::model::now_ms();
         let added = self.with_db(|conn| mailvault_core::custody::cache::save_headers_reporting_new(conn, &self.account, &self.mailbox, &value.to_string(), now))?.ok_or("errors.bulkIdentityUncertain")?;
         let written: Vec<_> = headers.iter().filter(|h| added.contains(&h.uid)).cloned().collect();
-        self.contacts.observe_headers(&self.account, &self.mailbox, &written);
+        self.contacts.observe_headers_owned(self.stamp.as_ref().unwrap(), &permit, &self.mailbox, &written);
         Ok(())
     }
 
@@ -1532,6 +1563,7 @@ impl CacheCtx {
     }
 
     pub(crate) fn write_meta_for(&self, total: u32, uid_validity: Option<u32>, uid_next: Option<u32>, highest_modseq: Option<u64>, last_reconcile: Option<u64>, sync_total: Option<u32>, identity: Option<&imap::NativeHeaderIdentity>) -> Result<(), String> {
+        let _permit = self.commit()?;
         self.vault_open()?;
         // `syncTotalEmails` is the daemon's own copy of EXISTS. `None` writes a
         // JSON null, which the meta merge skips — the stored baseline survives
@@ -1555,6 +1587,7 @@ impl CacheCtx {
     /// The header rows and the contacts observation — the two things that
     /// always follow a header fetch.
     pub(crate) fn write_headers(&self, headers: &[ImapEmailHeader]) -> Result<(), String> {
+        let permit = self.commit()?;
         self.vault_open()?;
         let value = serde_json::json!({"emails": headers});
         let now = mailvault_core::people::model::now_ms();
@@ -1565,7 +1598,7 @@ impl CacheCtx {
         // Only rows new to the cache: a delta fetch from the daemon's UIDNEXT
         // can repeat uids the app already cached and counted.
         let written: Vec<ImapEmailHeader> = headers.iter().filter(|h| added.contains(&h.uid)).cloned().collect();
-        self.contacts.observe_headers(&self.account, &self.mailbox, &written);
+        self.contacts.observe_headers_owned(self.stamp.as_ref().unwrap(), &permit, &self.mailbox, &written);
         Ok(())
     }
 
@@ -1573,6 +1606,7 @@ impl CacheCtx {
     /// since the fetch is newer), and the meta is left alone. Returns the uids
     /// written.
     fn restore_bound(&self, headers: &[ImapEmailHeader], identity: &imap::NativeHeaderIdentity) -> Result<Vec<u32>, String> {
+        let permit = self.commit()?;
         self.vault_open()?;
         let rows = match serde_json::to_value(headers).map_err(|e| e.to_string())? {
             serde_json::Value::Array(rows) => rows,
@@ -1584,12 +1618,13 @@ impl CacheCtx {
         if !restored.is_empty() {
             let written: Vec<ImapEmailHeader> =
                 headers.iter().filter(|h| restored.contains(&h.uid)).cloned().collect();
-            self.contacts.observe_headers(&self.account, &self.mailbox, &written);
+            self.contacts.observe_headers_owned(self.stamp.as_ref().unwrap(), &permit, &self.mailbox, &written);
         }
         Ok(restored)
     }
 
     pub(crate) fn patch_flags(&self, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
+        let _permit = self.commit()?;
         self.vault_open()?;
         self.require_db(|conn| {
             mailvault_core::custody::cache::patch_flags(conn, &self.account, &self.mailbox, changes)
@@ -1597,6 +1632,7 @@ impl CacheCtx {
     }
 
     pub(crate) fn remove(&self, uids: &[u32]) -> Result<usize, String> {
+        let _permit = self.commit()?;
         self.vault_open()?;
         let removed =
             self.require_db(|conn| mailvault_core::custody::cache::remove_headers(conn, &self.account, &self.mailbox, uids))?;
@@ -1605,6 +1641,7 @@ impl CacheCtx {
     }
 
     fn prune(&self, live: &[u32]) -> Result<usize, String> {
+        let _permit = self.commit()?;
         self.vault_open()?;
         let live_set: HashSet<u32> = live.iter().copied().collect();
         let gone: Vec<u32> = self.cached_uids().into_iter().filter(|u| !live_set.contains(u)).collect();
@@ -1619,6 +1656,7 @@ impl CacheCtx {
     /// sidecar directory is kept for the Outlook uid ledger that shares it,
     /// which a uid generation change must never take with it.
     fn wipe(&self) -> Result<(), String> {
+        let _permit = self.commit()?;
         self.vault_open()?;
         self.require_db(|conn| {
             mailvault_core::custody::cache::clear_headers(conn, Some(&self.account), Some(&self.mailbox))
@@ -1667,8 +1705,11 @@ pub(crate) async fn cache_io<T: Send + 'static>(
     ctx: &CacheCtx,
     f: impl FnOnce(CacheCtx) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
-    let ctx = ctx.clone();
-    tokio::task::spawn_blocking(move || f(ctx)).await.map_err(|e| format!("cache task failed: {e}"))?
+    let mut ctx = ctx.clone();
+    tokio::task::spawn_blocking(move || {
+        ctx.owned = Some(ctx.commit()?);
+        f(ctx)
+    }).await.map_err(|e| format!("cache task failed: {e}"))?
 }
 
 // ── Tauri-compatible cache format ────────────────────────────────────────────
@@ -1826,12 +1867,17 @@ mod tests {
     /// `SyncEngine::cache_ctx` builds one.
     fn ctx(dir: &Path, closed: bool) -> CacheCtx {
         let conn = mailvault_core::custody::db::open(dir).unwrap();
+        let lifecycle = crate::account_lifecycle::AccountLifecycle::default();
+        lifecycle.seed(&mailvault_core::accounts_doc::Listing { accounts: vec![serde_json::json!({"id":"acc1"})], version: 0, recovered: None });
         CacheCtx {
+            stamp: lifecycle.capture("acc1"),
+            owned: None,
+            lifecycle: lifecycle.clone(),
             vault_closed: Arc::new(AtomicBool::new(closed)),
             vault_gate: Arc::new(std::sync::RwLock::new(())),
             account: "acc1".into(),
             mailbox: "INBOX".into(),
-            contacts: ContactsState::new(dir.to_path_buf()),
+            contacts: ContactsState::new(dir.to_path_buf(), lifecycle),
             db: Some(Arc::new(std::sync::Mutex::new(Some(conn)))),
             app_dir: dir.to_path_buf(),
             source_identity: None,
@@ -2221,15 +2267,90 @@ mod tests {
         engine_with_net(dir, gate(true))
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_actual_cachectx_rejects_retired_empty_owner_and_new_mailbox() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap(),
+        );
+        let ctx = state.sync_engine.cache_ctx("a", "new-folder");
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let old = tokio::task::spawn_blocking(move || {
+            entered_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            ctx.write_meta(1, None, None, None, None, None)
+        });
+        entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("real CacheCtx child entered");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        release_tx.send(()).unwrap();
+        let result = old.await.unwrap();
+        let a_meta = crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::load_meta(conn, "a", "new-folder")).unwrap();
+        let b_result = state.sync_engine.cache_ctx("b", "INBOX").write_meta(1, None, None, None, None, None);
+        let b_meta = crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::load_meta(conn, "b", "INBOX")).unwrap();
+        assert!(a_meta.is_none(), "retired A CacheCtx recreated metadata-only new mailbox; result={result:?}, B={b_result:?}");
+        assert!(result.is_err(), "retired CacheCtx must report lifecycle refusal");
+        assert!(b_result.is_ok() && b_meta.is_some(), "independent B CacheCtx writes");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_admitted_sql_contact_child_survives_waiter_loss() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = crate::server::DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        fs::write(dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
+        let ctx = state.sync_engine.cache_ctx("a", "INBOX");
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let waiter = tokio::spawn(async move {
+            cache_io(&ctx, move |io| {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                let mut header = test_header(7);
+                header.from.address = "owner@example.com".into();
+                let result = io.write_headers(&[header]);
+                done_tx.send(result.clone()).unwrap();
+                result
+            }).await
+        });
+        entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("admitted real child entered");
+        waiter.abort();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        assert_eq!(claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_millis(100)).await.err(), Some(crate::account_lifecycle::LifecycleError::Busy), "dropped waiter cannot release child's permit");
+        let b = state.sync_engine.cache_ctx("b", "INBOX").write_meta(1, None, None, None, None, None);
+        assert!(b.is_ok(), "B remains independent: {b:?}");
+        release_tx.send(()).unwrap();
+        assert!(done_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap().is_ok(), "admitted A SQL/contact child finishes while Closing");
+        claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        let rows = crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::load_by_uids(conn, "a", "INBOX", &[7])).unwrap();
+        assert!(!rows.is_empty(), "admitted child wrote real SQL");
+        assert!(state.contacts.get_snapshot(&["a".into()])["a"].iter().any(|row| row.address == "owner@example.com"), "same permit covers contact observation");
+    }
+
     fn engine_with_net(dir: &Path, net: Arc<NetGate>) -> SyncEngine {
+        let lifecycle = crate::account_lifecycle::AccountLifecycle::default();
+        lifecycle.seed(&mailvault_core::accounts_doc::Listing { accounts: vec![serde_json::json!({"id":"acc1"})], version: 0, recovered: None });
         let engine = SyncEngine::new(
             Arc::new(imap::ImapPool::new()),
             dir.to_path_buf(),
             dir.to_path_buf(),
-            ContactsState::new(dir.to_path_buf()),
+            ContactsState::new(dir.to_path_buf(), lifecycle.clone()),
             net,
             Arc::new(AtomicBool::new(false)),
             Arc::new(std::sync::RwLock::new(())),
+            lifecycle,
         );
         // The header cache is `custody.db`: without one attached every cache
         // write fails, which is exactly what production does too.

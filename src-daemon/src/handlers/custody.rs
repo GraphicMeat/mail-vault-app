@@ -30,12 +30,27 @@ use crate::custody as daemon_custody;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, vault_root, with_mailbox_write, with_vault_write};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
+use crate::account_lifecycle::{AccountStamp, LifecycleError, LocalCommitPermit};
 use mailvault_core::custody::{cache, entries};
 use mailvault_core::{import_rehome, maildir, message_store, vault_files};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{info, warn};
+
+#[cfg(test)]
+fn p2_gates() -> &'static std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(std::path::PathBuf, &'static str), (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn p2_pause(path: &std::path::Path, method: &'static str) {
+    let gate = p2_gates().lock().unwrap().remove(&(path.to_path_buf(), method));
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
+    }
+}
 
 macro_rules! req {
     ($result:expr) => {
@@ -44,6 +59,11 @@ macro_rules! req {
             Err(resp) => return Some(resp),
         }
     };
+}
+
+fn commit(state: &DaemonState, stamp: &Result<AccountStamp, LifecycleError>) -> Result<LocalCommitPermit, String> {
+    let stamp = stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
+    state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -67,6 +87,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // without ever touching the custody connection.
         "local_index_append" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let entries_json = req!(str_arg(&id, params, "entriesJson"));
             let new_entries: Vec<Value> = match serde_json::from_str(&entries_json) {
@@ -77,6 +98,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    #[cfg(test)] p2_pause(&state.app_dir, "local_index_append");
+                    let _permit = commit(&state, &stamp)?;
                     daemon_custody::with_conn(&state, |c| {
                         let (_, skipped) = entries::upsert(c, &account_id, &mailbox, &new_entries)?;
                         if skipped > 0 {
@@ -91,12 +114,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "local_index_remove" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uid = req!(u32_arg(&id, params, "uid"));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let _permit = commit(&state, &stamp)?;
                     daemon_custody::with_conn(&state, |c| entries::remove(c, &account_id, &mailbox, &[uid]).map(|_| Value::Null))
                 })
                 .await
@@ -112,12 +137,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "maildir_delete_many" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uids = req!(crate::handlers::common::vec_arg::<u32>(&id, params, "uids"));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let _permit = commit(&state, &stamp)?;
                     let uid_set: HashSet<u32> = uids.into_iter().collect();
                     // The registry drops the removed uids, and its change hook
                     // nudges the index when anything went.
@@ -143,12 +170,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // repair below, which re-keys files the same way.
         "vault_rebind_uids" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let pairs = req!(crate::handlers::common::vec_arg::<(u32, u32)>(&id, params, "pairs"));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let _permit = commit(&state, &stamp)?;
                     let rebound = with_mailbox_write(&state, &account_id, &mailbox, |root| {
                         let rebound = message_store::rebind_uids(root, &account_id, &mailbox, &pairs);
                         if !rebound.is_empty() {
@@ -167,12 +196,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         }
         "maildir_repair_generation" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
+            let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let report = repair_generation_for(&state, &account_id, &mailbox)?;
+                    let stamp = stamp.map_err(|_| "errors.keychainBusy".to_owned())?;
+                    let report = repair_generation_for(&state, &stamp, &mailbox)?;
                     serde_json::to_value(report).map_err(|e| e.to_string())
                 })
                 .await
@@ -188,6 +219,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // per-directory `match`.
         "maildir_purge_orphans" => {
             let account_id = opt_str_arg(params, "accountId");
+            let stamp = account_id.as_ref().map(|aid| state.account_lifecycle.capture(aid));
             let state = Arc::clone(state);
             done(
                 id,
@@ -195,6 +227,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let base = crate::handlers::common::vault_root(&state)?.join("Maildir");
                     let mut removed = 0u64;
                     for mailbox_dir in vault_files::orphan_mailbox_dirs(&base, account_id.as_deref()) {
+                        let _permit: Box<dyn std::any::Any> = if let Some(ref stamp) = stamp {
+                            Box::new(commit(&state, stamp)?)
+                        } else {
+                            Box::new(state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?)
+                        };
                         // Only `orphaned/` is touched, never `cur/`: nothing the
                         // vault registry holds changes, so it is not told.
                         match with_vault_write(&state, |_| maildir::purge_orphans(&mailbox_dir)) {
@@ -222,7 +259,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// this returns, never inside it. A repair that moved anything, or hit any
 /// error (a failed second-phase rename leaves a file under its temp name),
 /// invalidates the mailbox, so the next read relists it.
-pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Result<maildir::GenerationRepair, String> {
+pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) -> Result<maildir::GenerationRepair, String> {
+    let account_id = stamp.id();
     with_mailbox_write(state, account_id, mailbox, |root| -> Result<maildir::GenerationRepair, String> {
         let (cached_uv, cached_total) =
             daemon_custody::with_conn(state, |c| cache::sync_meta(c, account_id, mailbox))
@@ -252,6 +290,8 @@ pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, account_id: &str, 
                 return Ok(maildir::GenerationRepair::default());
             }
         };
+        #[cfg(test)] p2_pause(&state.app_dir, "maildir_repair_generation");
+        let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
         let report = maildir::repair_generation(&mailbox_dir, uid_validity, &id_to_uid, &protected);
         // A JMAP vault's folder holding Maildir files after a repair that
         // turned its records back into files: Settings offers to convert them
@@ -309,6 +349,7 @@ impl Drop for Running {
 /// already done (its stamp) costs one stat and spawns nothing, and neither
 /// does one whose pass is already running.
 pub(crate) fn rehome_imports_soon(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) {
+    let Ok(stamp) = state.account_lifecycle.capture(account_id) else { return };
     let Ok(root) = vault_root(state) else { return };
     let Some(mailbox_dir) = mailbox_dir(&root, account_id, mailbox) else { return };
     if mailbox_dir.join(import_rehome::DONE_FILE).exists() {
@@ -318,7 +359,7 @@ pub(crate) fn rehome_imports_soon(state: &Arc<DaemonState>, account_id: &str, ma
     let spawned = std::thread::Builder::new().name("import-rehome".into()).spawn(move || {
         crate::mbox_upload_job::background_qos();
         let (account_id, mailbox) = &running.1;
-        if let Err(e) = rehome_pass(&running.0, account_id, mailbox) {
+        if let Err(e) = rehome_pass(&running.0, &stamp, mailbox) {
             warn!("import rehome {account_id}/{mailbox}: {e}");
         }
     });
@@ -336,8 +377,9 @@ fn mailbox_dir(root: &std::path::Path, account_id: &str, mailbox: &str) -> Optio
 /// when nothing ran: another pass of the folder is running, the folder is a
 /// vault-only one, or it is not ready (below).
 pub(crate) fn rehome_imports_for(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Result<Option<import_rehome::Report>, String> {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let Some(_running) = Running::claim(state, account_id, mailbox) else { return Ok(None) };
-    rehome_pass(state, account_id, mailbox)
+    rehome_pass(state, &stamp, mailbox)
 }
 
 /// Moves the folder's old mbox imports out of the server's uid range, and
@@ -354,7 +396,8 @@ pub(crate) fn rehome_imports_for(state: &Arc<DaemonState>, account_id: &str, mai
 /// covers the folder. The plan is made outside every lock; the ledger is
 /// written in one hold of the mailbox lock and the renames follow a chunk
 /// per hold. `None`: nothing ran.
-fn rehome_pass(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Result<Option<import_rehome::Report>, String> {
+fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) -> Result<Option<import_rehome::Report>, String> {
+    let account_id = stamp.id();
     let root = vault_root(state)?;
     let dir = mailbox_dir(&root, account_id, mailbox).ok_or("Maildir path has no parent")?;
     if let (Some(account_dir), Some(name)) = (dir.parent(), dir.file_name()) {
@@ -362,7 +405,7 @@ fn rehome_pass(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Res
             return Ok(None);
         }
     }
-    repair_generation_for(state, account_id, mailbox)?;
+    repair_generation_for(state, stamp, mailbox)?;
     let stamped = dir.join(import_rehome::DONE_FILE).exists();
     let (cached_uv, cached_total) = daemon_custody::with_conn(state, |c| cache::sync_meta(c, account_id, mailbox)).unwrap_or((None, None));
     let Some(uid_validity) = cached_uv else { return Ok(None) };
@@ -453,11 +496,62 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir, mail_dir_ok);
+        fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc"},{"id":"a"},{"id":"b"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (vault, s)
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
         route(s, method, &params, json!(1)).await.expect("routed")
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_local_index_and_generation_repair_are_finite_owned_writes() {
+        let (vault, state) = st(true);
+        fs::write(state.app_dir.join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+        let _ = daemon_custody::open_into(&state);
+        let cur = vault_files::cur_path(vault.path(), "a", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join(format!("1{}.eml", maildir::INFO_PREFIX)), b"From: a@b.test\r\nMessage-ID: <m@x.test>\r\n\r\nbody").unwrap();
+        maildir::write_generation(cur.parent().unwrap(), 1).unwrap();
+        let headers = json!({"uidValidity":2,"totalEmails":1,"emails":[{"uid":5,"messageId":"<m@x.test>"}]});
+        daemon_custody::with_conn(&state, |conn| cache::save_headers(conn, "a", "INBOX", &headers.to_string())).unwrap();
+        let methods = ["local_index_append", "maildir_repair_generation"];
+        let mut gates = Vec::new();
+        for method in methods {
+            let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            p2_gates().lock().unwrap().insert((state.app_dir.clone(), method), (entered_tx, release_rx));
+            gates.push((entered_rx, release_tx));
+        }
+        let mut old = Vec::new();
+        for method in methods {
+            let held = Arc::clone(&state);
+            old.push(tokio::spawn(async move {
+                call(&held, method, json!({"accountId":"a","mailbox":"INBOX","entriesJson":"[{\"uid\":7,\"flags\":[\"draft\"]}]"})).await
+            }));
+        }
+        for (entered, _) in &gates {
+            entered.recv_timeout(std::time::Duration::from_secs(5)).expect("real local index/repair child reached write seam");
+        }
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        fs::remove_dir_all(vault.path().join("Maildir").join("a")).unwrap();
+        claim.finish_retired().unwrap();
+        for (_, release) in gates { release.send(()).unwrap(); }
+        let mut outcomes = Vec::new();
+        for task in old { outcomes.push(task.await.unwrap()); }
+        let a_index = daemon_custody::with_conn(&state, |conn| entries::read(conn, "a", "INBOX")).unwrap();
+        let a_generation = message_store::mailbox_dir(vault.path(), "a", "INBOX").join(maildir::GENERATION_FILE);
+        let b = call(&state, "local_index_append", json!({"accountId":"b","mailbox":"INBOX","entriesJson":"[{\"uid\":9}]"})).await;
+        let b_index = daemon_custody::with_conn(&state, |conn| entries::read(conn, "b", "INBOX")).unwrap();
+        assert!(a_index.is_none() && !a_generation.exists(), "old local index/repair recreated retired A SQL/generation; SQL={}, generation={}, outcomes={outcomes:?}, B={b:?}", a_index.is_some(), a_generation.exists());
+        assert!(b.result.is_some() && b_index.is_some(), "independent B local index write works");
     }
 
     #[tokio::test]

@@ -48,6 +48,20 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
+#[cfg(test)]
+fn p2_complete_gates() -> &'static Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<Mutex<HashMap<std::path::PathBuf, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn p2_before_complete(path: &Path) {
+    let gate = p2_complete_gates().lock().unwrap().remove(path);
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.recv_timeout(Duration::from_secs(5));
+    }
+}
+
 // ponytail: fixed pacing, sized for Gmail, the strictest provider we know:
 // 2500 MB/day of IMAP download per account across EVERY client (phone,
 // webmail export, a second install, backup), and a suspension of up to 24h
@@ -468,6 +482,7 @@ pub(crate) async fn hoard_account(state: &Arc<DaemonState>, config: &ImapConfig,
 }
 
 async fn hoard_account_inner(state: &Arc<DaemonState>, config: &ImapConfig, account_id: &str, out: &mut Outcome) -> Result<(), String> {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     if !hoarding(state, account_id).await {
         return Err("policy_off".into());
     }
@@ -476,7 +491,7 @@ async fn hoard_account_inner(state: &Arc<DaemonState>, config: &ImapConfig, acco
         return Err(spent_reason(by_limit).into());
     }
     if config.uses_jmap() {
-        return hoard_account_jmap(state, config, account_id, out).await;
+        return hoard_account_jmap(state, &stamp, config, account_id, out).await;
     }
     let list = state.imap_pool.run_read(config, false, |mut session| async move {
         let boxes = imap::list_mailboxes(&mut session).await?;
@@ -532,8 +547,10 @@ async fn hoard_account_inner(state: &Arc<DaemonState>, config: &ImapConfig, acco
         if left == 0 {
             return Err(spent_reason(by_limit).into());
         }
-        if hoard_mailbox(state, config, account_id, mailbox, listing, status, out).await? {
+        if hoard_mailbox(state, &stamp, config, account_id, mailbox, listing, status, out).await? {
             if let Some(status) = status {
+                #[cfg(test)] p2_before_complete(&state.app_dir);
+                let _permit = state.account_lifecycle.try_commit(&[stamp.clone()]).map_err(|_| "errors.keychainBusy".to_owned())?;
                 // A range listing keeps the last FULL listing's time.
                 let listed_at = match (listing, done) {
                     (Listing::From(_), Some(done)) => done.listed_at,
@@ -553,6 +570,7 @@ async fn hoard_account_inner(state: &Arc<DaemonState>, config: &ImapConfig, acco
 /// limit, sign-in refused).
 async fn hoard_mailbox(
     state: &Arc<DaemonState>,
+    stamp: &crate::account_lifecycle::AccountStamp,
     config: &ImapConfig,
     account_id: &str,
     mailbox: &str,
@@ -589,7 +607,11 @@ async fn hoard_mailbox(
             return Ok(false);
         }
     };
-    state.hoarder_worker.spend(&state.app_dir, account_id, server.len() as u64 * LISTING_BYTES_PER_UID, now_ms());
+    if let Ok(_permit) = state.account_lifecycle.try_commit(&[stamp.clone()]) {
+        state.hoarder_worker.spend(&state.app_dir, account_id, server.len() as u64 * LISTING_BYTES_PER_UID, now_ms());
+    } else {
+        return Err("errors.keychainBusy".into());
+    }
     // The generation changed between the STATUS and the listing: the memo
     // would record the wrong one. The next pass lists it in full.
     if let Some(status) = status {
@@ -638,9 +660,13 @@ async fn hoard_mailbox(
             });
             let stored = match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
                 Ok(Ok(Some(email))) if email.uid == uid => {
-                    state.hoarder_worker.spend(&state.app_dir, account_id, email.raw_source_bytes.len() as u64, now_ms());
+                    if let Ok(_permit) = state.account_lifecycle.try_commit(&[stamp.clone()]) {
+                        state.hoarder_worker.spend(&state.app_dir, account_id, email.raw_source_bytes.len() as u64, now_ms());
+                    } else {
+                        return Err("errors.keychainBusy".into());
+                    }
                     let dated = email_date_ms(email.date.as_deref(), email.internal_date.as_deref());
-                    auto_cache(state, account_id.to_string(), mailbox.to_string(), uid, email.raw_source_bytes, dated, false).await
+                    auto_cache(state, stamp.clone(), mailbox.to_string(), uid, email.raw_source_bytes, dated, false).await?
                 }
                 // Expunged since the listing: nothing to keep.
                 Ok(Ok(_)) => {
@@ -679,7 +705,7 @@ async fn hoard_mailbox(
 /// `hoard_account_inner` for a JMAP account: every folder of the account's
 /// mailbox listing (`folders_to_hoard`, the shared-vault-folder rule
 /// included), one at a time, the policy and allowance read before each.
-async fn hoard_account_jmap(state: &Arc<DaemonState>, config: &ImapConfig, account_id: &str, out: &mut Outcome) -> Result<(), String> {
+async fn hoard_account_jmap(state: &Arc<DaemonState>, stamp: &crate::account_lifecycle::AccountStamp, config: &ImapConfig, account_id: &str, out: &mut Outcome) -> Result<(), String> {
     let stop = |e: String, what: &str| account_stop(state, account_id, &e).unwrap_or_else(|| format!("{what}: {e}"));
     let acct = state.jmap.get(config).await.map_err(|e| stop(e.to_string(), "folder_list_failed"))?;
     let boxes = match tokio::time::timeout(LISTING_TIMEOUT, acct.refresh()).await {
@@ -715,8 +741,9 @@ async fn hoard_account_jmap(state: &Arc<DaemonState>, config: &ImapConfig, accou
         if left == 0 {
             return Err(spent_reason(by_limit).into());
         }
-        if hoard_mailbox_jmap(state, &acct, &config.host, account_id, mailbox, mailbox_id, out).await? {
+        if hoard_mailbox_jmap(state, stamp, &acct, &config.host, account_id, mailbox, mailbox_id, out).await? {
             if let Some(status) = status {
+                let _permit = state.account_lifecycle.try_commit(&[stamp.clone()]).map_err(|_| "errors.keychainBusy".to_owned())?;
                 state.hoarder_worker.mark_complete(account_id, mailbox, Complete { status, listed_at: now });
             }
         }
@@ -732,6 +759,7 @@ async fn hoard_account_jmap(state: &Arc<DaemonState>, config: &ImapConfig, accou
 /// account's `imapHost`, which the daily limit is keyed by.
 async fn hoard_mailbox_jmap(
     state: &Arc<DaemonState>,
+    stamp: &crate::account_lifecycle::AccountStamp,
     acct: &AccountJmap,
     host: &str,
     account_id: &str,
@@ -754,9 +782,13 @@ async fn hoard_mailbox_jmap(
             return Ok(false);
         }
     };
-    state.hoarder_worker.spend(&state.app_dir, account_id, ids.len() as u64 * LISTING_BYTES_PER_UID, now_ms());
+    if let Ok(_permit) = state.account_lifecycle.try_commit(&[stamp.clone()]) {
+        state.hoarder_worker.spend(&state.app_dir, account_id, ids.len() as u64 * LISTING_BYTES_PER_UID, now_ms());
+    } else {
+        return Err("errors.keychainBusy".into());
+    }
     let oldest_first: Vec<String> = ids.into_iter().rev().collect();
-    let uids = match acct.ids_to_uids(state, account_id, mailbox, &oldest_first).await {
+    let uids = match acct.ids_to_uids(state, stamp.clone(), account_id, mailbox, &oldest_first).await {
         Ok(uids) => uids,
         Err(e) => {
             warn!("[hoard] {account_id} {mailbox}: skipped_reason=ledger_unwritable: {e}");
@@ -824,10 +856,14 @@ async fn hoard_mailbox_jmap(
                 }
                 Some(blob) => match tokio::time::timeout(BODY_FETCH_TIMEOUT, acct.client.download(blob)).await {
                     Ok(Ok(raw)) => {
-                        state.hoarder_worker.spend(&state.app_dir, account_id, raw.len() as u64, now_ms());
+                        if let Ok(_permit) = state.account_lifecycle.try_commit(&[stamp.clone()]) {
+                            state.hoarder_worker.spend(&state.app_dir, account_id, raw.len() as u64, now_ms());
+                        } else {
+                            return Err("errors.keychainBusy".into());
+                        }
                         let dated = crate::handlers::jmap_bridge::dated_ms(&raw, email["receivedAt"].as_str());
                         let ids = crate::handlers::jmap_bridge::server_ids(id, blob, email);
-                        auto_cache_with_ids(state, account_id.to_string(), mailbox.to_string(), *uid, raw, dated, false, Some(ids)).await
+                        auto_cache_with_ids(state, stamp.clone(), mailbox.to_string(), *uid, raw, dated, false, Some(ids)).await?
                     }
                     Ok(Err(e)) => {
                         let e = e.to_string();
@@ -871,6 +907,11 @@ mod tests {
 
     const ACCT: &str = "acc1";
 
+    fn seed_jmap_account(s: &Arc<DaemonState>) {
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc1"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+    }
+
     fn raw(uid: u32) -> String {
         format!(
             "From: a@example.com\r\nSubject: Msg {uid}\r\nDate: Thu, 01 Jan 2015 00:00:00 +0000\r\nMessage-ID: <m{uid}@example.com>\r\n\r\nBody {uid}\r\n"
@@ -909,6 +950,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-hoard-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"b"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         crate::custody::open_into(&s).unwrap();
         let cur = vault_files::cur_path(&dir, ACCT, "INBOX");
         std::fs::create_dir_all(&cur).unwrap();
@@ -919,6 +962,69 @@ mod tests {
         crate::custody::with_conn(&s, |c| cache::save_headers(c, ACCT, "INBOX", &data)).unwrap();
         hoarder(&dir, true);
         (dir, s)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_complete_memo_does_not_publish_after_account_retire() {
+        let mock = MockImap::start(Scenario::new().mailbox(folder("INBOX", 1..=1)));
+        let (dir, state) = state();
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"b"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        p2_complete_gates().lock().unwrap().insert(dir.clone(), (entered_tx, release_rx));
+        let old = tokio::spawn({
+            let (state, config) = (Arc::clone(&state), config(&mock));
+            async move { hoard_account(&state, &config, ACCT).await }
+        });
+        entered_rx.recv_timeout(Duration::from_secs(5)).expect("real folder sweep reached completion memo");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, ACCT).unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        release_tx.send(()).unwrap();
+        let old_outcome = old.await.unwrap();
+        let stale_memo = state.hoarder_worker.complete(ACCT, "INBOX");
+        let b_status = FolderStatus { uid_validity: Some(1), uid_next: Some(2) };
+        state.hoarder_worker.mark_complete("b", "INBOX", Complete { status: b_status, listed_at: Instant::now() });
+        let b_memo = state.hoarder_worker.complete("b", "INBOX");
+        assert!(stale_memo.is_none(), "retired account completion memo published: {stale_memo:?}, outcome={old_outcome:?}, B={b_memo:?}");
+        assert!(b_memo.is_some(), "independent B completion remains usable");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_old_fetch_is_revoked_but_periodic_worker_does_not_block_close() {
+        let mock = MockImap::start(
+            Scenario::new().mailbox(folder("Archive", 1..=1))
+                .fault(Trigger::nth_with("FETCH", "BODY.PEEK[]", 1), Action::Delay(Duration::from_secs(2))),
+        );
+        let (dir, state) = state();
+        let old = tokio::spawn({
+            let (state, config) = (Arc::clone(&state), config(&mock));
+            async move { hoard_account(&state, &config, ACCT).await }
+        });
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while mock.count_commands("BODY.PEEK[]") == 0 {
+            assert!(Instant::now() < deadline, "old body fetch never reached mock provider");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, ACCT).expect("network wait holds no lifetime owner");
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        let old_outcome = old.await.unwrap();
+        let a_copy = on_disk(&dir, "Archive");
+        let b_stamp = state.account_lifecycle.capture("b").unwrap();
+        let b_stored = auto_cache(&state, b_stamp, "Archive".into(), 9, raw(9).into_bytes(), None, false).await.unwrap();
+        let b_copy = vault_files::cur_path(&dir, "b", "Archive").join(format!("9{INFO_PREFIX}.eml"));
+        assert!(a_copy.is_empty(), "old hoarder fetch published retired A cache: {a_copy:?}, outcome={old_outcome:?}");
+        assert!(b_stored && b_copy.exists(), "independent B cache remains available");
     }
 
     /// uid -> the flag letters of its file name, for every file in `mailbox`'s `cur/`.
@@ -1353,6 +1459,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-hoard-jmap-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        seed_jmap_account(&s);
         hoarder(&dir, true);
         let config = support::config(&m, port);
         let downloads = || m.requests().iter().filter(|r| r.path.starts_with("/jmap/download/")).count();
@@ -1394,6 +1501,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         mailvault_core::message_store::set_vault_format(&dir, mailvault_core::message_store::Format::Jmap).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        seed_jmap_account(&s);
         hoarder(&dir, true);
         let config = support::config(&m, port);
 
@@ -1421,6 +1529,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-hoard-jmap-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        seed_jmap_account(&s);
         hoarder(&dir, true);
         let config = support::config(&m, port);
         let queries = || m.count_calls("Email/query");

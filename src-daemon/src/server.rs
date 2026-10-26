@@ -956,7 +956,8 @@ impl DaemonState {
         lift_open_file_limit();
         let app_dir_for_index = app_dir.clone();
         let imap_pool = Arc::new(imap::ImapPool::new());
-        let contacts = contacts_index::ContactsState::new(mail_dir.clone());
+        let account_lifecycle = crate::account_lifecycle::AccountLifecycle::default();
+        let contacts = contacts_index::ContactsState::new(mail_dir.clone(), account_lifecycle.clone());
         let net = NetGate::with_probe(probe);
         let vault_closed = Arc::new(AtomicBool::new(false));
         let vault_gate = Arc::new(std::sync::RwLock::new(()));
@@ -968,6 +969,7 @@ impl DaemonState {
             Arc::clone(&net),
             Arc::clone(&vault_closed),
             Arc::clone(&vault_gate),
+            account_lifecycle.clone(),
         ));
         let idle = idle_watch::IdleWatchers::new(
             Arc::clone(&sync_engine),
@@ -1051,7 +1053,7 @@ impl DaemonState {
             scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
             tokens: crate::oauth_tokens::TokenStore::default(),
             account_admission: Default::default(),
-            account_lifecycle: Default::default(),
+            account_lifecycle,
             snooze: crate::snooze_worker::SnoozeState::default(),
             follow_up: crate::follow_up_worker::FollowUpState::default(),
             auto_tag_worker,

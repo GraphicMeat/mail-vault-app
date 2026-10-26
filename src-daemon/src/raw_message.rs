@@ -27,6 +27,7 @@
 //! here. What `graph_cache_mime` fetched for an open and did not keep is in
 //! the in-memory copy; past that, the vault's error stands.
 use crate::handlers::common::{blocking, vault_root, with_vault_write};
+use crate::account_lifecycle::AccountStamp;
 use crate::imap::{self, ImapConfig};
 use crate::server::DaemonState;
 use mailvault_core::fetch_mode::{same_message, RawLru};
@@ -59,14 +60,14 @@ const LOCAL_ONLY_MAILBOXES: &[&str] = &[crate::handlers::scheduled::MAILBOX];
 type Key = (String, String, u32);
 
 pub(crate) struct RawMessages {
-    lru: Mutex<RawLru>,
+    memory: Mutex<Memory>,
     /// One download per message: an attachment bar asks for the inline
     /// images and every attachment at once, and the second read of the same
     /// message waits, then finds the first's copy. Entries are dropped once
     /// nobody holds them.
     fetching: Mutex<HashMap<Key, Arc<tokio::sync::Mutex<()>>>>,
     /// Downloads that failed, and when.
-    failed: Mutex<HashMap<Key, Instant>>,
+    failed: Mutex<HashMap<Key, (u64, Instant)>>,
     /// Tests only: the credentials `raw_message` resolves. The keychain is
     /// never read under `cfg(test)`; a missing account is "no server".
     #[cfg(test)]
@@ -76,10 +77,15 @@ pub(crate) struct RawMessages {
     pub(crate) bound: Mutex<Duration>,
 }
 
+struct Memory {
+    lru: RawLru,
+    epochs: HashMap<Key, u64>,
+}
+
 impl Default for RawMessages {
     fn default() -> Self {
         RawMessages {
-            lru: Mutex::new(RawLru::new(LRU_MESSAGES, LRU_BYTES)),
+            memory: Mutex::new(Memory { lru: RawLru::new(LRU_MESSAGES, LRU_BYTES), epochs: HashMap::new() }),
             fetching: Mutex::new(HashMap::new()),
             failed: Mutex::new(HashMap::new()),
             #[cfg(test)]
@@ -98,16 +104,32 @@ impl RawMessages {
     /// A body the user opened that the vault did not keep (On Demand, a
     /// hidden account, a failed write): the reads that follow the open (its
     /// inline images, its attachments) are served from memory.
-    pub(crate) fn remember(&self, account_id: &str, mailbox: &str, uid: u32, raw: impl Into<Arc<[u8]>>) {
-        locked(&self.lru).put(account_id, mailbox, uid, raw);
+    pub(crate) fn remember(&self, stamp: &AccountStamp, mailbox: &str, uid: u32, raw: impl Into<Arc<[u8]>>) {
+        let mut memory = locked(&self.memory);
+        memory.lru.put(stamp.id(), mailbox, uid, raw);
+        memory.epochs.insert((stamp.id().to_owned(), mailbox.to_owned(), uid), stamp.epoch());
+        let Memory { lru, epochs } = &mut *memory;
+        epochs.retain(|(account_id, mailbox, uid), _| lru.contains(account_id, mailbox, *uid));
     }
 
-    fn recall(&self, account_id: &str, mailbox: &str, uid: u32) -> Option<Arc<[u8]>> {
-        locked(&self.lru).get(account_id, mailbox, uid)
+    fn recall(&self, stamp: &AccountStamp, mailbox: &str, uid: u32) -> Option<Arc<[u8]>> {
+        let mut memory = locked(&self.memory);
+        let key = (stamp.id().to_owned(), mailbox.to_owned(), uid);
+        if memory.epochs.get(&key) != Some(&stamp.epoch()) { return None }
+        let raw = memory.lru.get(stamp.id(), mailbox, uid);
+        if raw.is_none() { memory.epochs.remove(&key); }
+        raw
     }
 
-    fn holds(&self, account_id: &str, mailbox: &str, uid: u32) -> bool {
-        locked(&self.lru).contains(account_id, mailbox, uid)
+    fn holds(&self, stamp: &AccountStamp, mailbox: &str, uid: u32) -> bool {
+        let memory = locked(&self.memory);
+        memory.epochs.get(&(stamp.id().to_owned(), mailbox.to_owned(), uid)) == Some(&stamp.epoch())
+            && memory.lru.contains(stamp.id(), mailbox, uid)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_holds(&self, account_id: &str, mailbox: &str, uid: u32) -> bool {
+        locked(&self.memory).lru.contains(account_id, mailbox, uid)
     }
 
     fn lock_for(&self, key: &Key) -> Arc<tokio::sync::Mutex<()>> {
@@ -122,14 +144,17 @@ impl RawMessages {
         }
     }
 
-    fn failed_recently(&self, key: &Key) -> bool {
-        locked(&self.failed).get(key).is_some_and(|at| at.elapsed() < FAILURE_MEMO)
+    fn failed_recently(&self, stamp: &AccountStamp, key: &Key) -> bool {
+        locked(&self.failed).get(key).is_some_and(|(epoch, at)| *epoch == stamp.epoch() && at.elapsed() < FAILURE_MEMO)
     }
 
-    fn note_failure(&self, key: &Key) {
+    fn note_failure(&self, stamp: &AccountStamp, key: &Key) {
         let mut failed = locked(&self.failed);
-        failed.retain(|_, at| at.elapsed() < FAILURE_MEMO);
-        failed.insert(key.clone(), Instant::now());
+        failed.retain(|_, (_, at)| at.elapsed() < FAILURE_MEMO);
+        if failed.get(key).is_some_and(|(epoch, _)| *epoch > stamp.epoch()) {
+            return;
+        }
+        failed.insert(key.clone(), (stamp.epoch(), Instant::now()));
     }
 
     fn bound(&self) -> Duration {
@@ -144,7 +169,8 @@ impl RawMessages {
 /// (attachments, parts: an OpenPGP message decrypted), else the original
 /// (View Source, `.eml` export).
 pub(crate) async fn raw_message(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, readable: bool) -> Result<Arc<[u8]>, String> {
-    if let Some(raw) = local_message(state, account_id, mailbox, uid, readable).await? {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+    if let Some(raw) = local_message_stamped(state, &stamp, mailbox, uid, readable).await? {
         return Ok(raw);
     }
     if LOCAL_ONLY_MAILBOXES.contains(&mailbox) {
@@ -152,24 +178,35 @@ pub(crate) async fn raw_message(state: &Arc<DaemonState>, account_id: &str, mail
     }
     let key: Key = (account_id.to_string(), mailbox.to_string(), uid);
     let lock = state.raw_messages.lock_for(&key);
-    let outcome = tokio::time::timeout(state.raw_messages.bound(), fallback(state, &key, lock, readable)).await;
+    let outcome = tokio::time::timeout(state.raw_messages.bound(), fallback(state, &stamp, &key, lock, readable)).await;
     state.raw_messages.tidy(&key);
-    outcome.unwrap_or_else(|_| {
+    let result = outcome.unwrap_or_else(|_| {
         warn!("[raw] {account_id}/{mailbox} uid {uid}: server fallback gave up after {:?}", state.raw_messages.bound());
-        state.raw_messages.note_failure(&key);
+        state.raw_messages.note_failure(&stamp, &key);
         Err(missing(uid))
-    })
+    });
+    state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
+    result
 }
 
 /// The no-network half of `raw_message`: the vault file, else the in-memory
 /// copy (checked against the header cache). `Ok(None)`: neither holds it.
 pub(crate) async fn local_message(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, readable: bool) -> Result<Option<Arc<[u8]>>, String> {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+    local_message_stamped(state, &stamp, mailbox, uid, readable).await
+}
+
+async fn local_message_stamped(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str, uid: u32, readable: bool) -> Result<Option<Arc<[u8]>>, String> {
+    let account_id = stamp.id();
     if let Some(raw) = from_vault(state, account_id, mailbox, uid, readable).await? {
+        state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
         return Ok(Some(raw.into()));
     }
-    let Some(raw) = state.raw_messages.recall(account_id, mailbox, uid) else { return Ok(None) };
+    let Some(raw) = state.raw_messages.recall(stamp, mailbox, uid) else { return Ok(None) };
     verify(state, account_id, mailbox, uid, &raw).await?;
-    readable_bytes(state, account_id, mailbox, uid, raw, false, readable).await.map(Some)
+    let rendered = readable_bytes(state, stamp, mailbox, uid, raw, false, readable).await?;
+    state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
+    Ok(Some(rendered))
 }
 
 fn missing(uid: u32) -> String {
@@ -179,34 +216,52 @@ fn missing(uid: u32) -> String {
 /// Holds `key`'s lock for the whole download, so a read of the same message
 /// queued behind it finds the copy it leaves (or its failure) instead of
 /// downloading again.
-async fn fallback(state: &Arc<DaemonState>, key: &Key, lock: Arc<tokio::sync::Mutex<()>>, readable: bool) -> Result<Arc<[u8]>, String> {
+async fn fallback(state: &Arc<DaemonState>, stamp: &AccountStamp, key: &Key, lock: Arc<tokio::sync::Mutex<()>>, readable: bool) -> Result<Arc<[u8]>, String> {
     let (account_id, mailbox, uid) = (key.0.as_str(), key.1.as_str(), key.2);
     let _one = lock.lock().await;
-    if let Some(raw) = local_message(state, account_id, mailbox, uid, readable).await? {
+    if let Some(raw) = local_message_stamped(state, stamp, mailbox, uid, readable).await? {
         return Ok(raw);
     }
-    if state.raw_messages.failed_recently(key) {
+    if state.raw_messages.failed_recently(stamp, key) {
         return Err(missing(uid));
     }
     let (raw, ids) = match from_server(state, account_id, mailbox, uid).await {
         Ok(Some(got)) => got,
         Ok(None) => {
-            state.raw_messages.note_failure(key);
+            state.raw_messages.note_failure(stamp, key);
             return Err(missing(uid));
         }
         Err(e) => {
             info!("[raw] {account_id}/{mailbox} uid {uid}: no vault copy, server fallback failed: {e}");
-            state.raw_messages.note_failure(key);
+            state.raw_messages.note_failure(stamp, key);
             return Err(missing(uid));
         }
     };
+    #[cfg(test)]
+    old_server_result_pause(&state.app_dir).await;
     verify(state, account_id, mailbox, uid, &raw).await?;
-    let cached = crate::handlers::imap::auto_cache_with_ids(state, account_id.to_string(), mailbox.to_string(), uid, raw.clone(), None, true, ids).await;
+    let cached = crate::handlers::imap::auto_cache_with_ids(state, stamp.clone(), mailbox.to_string(), uid, raw.clone(), None, true, ids).await?;
     let raw: Arc<[u8]> = raw.into();
     if !cached {
-        state.raw_messages.remember(account_id, mailbox, uid, Arc::clone(&raw));
+        let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
+        state.raw_messages.remember(stamp, mailbox, uid, Arc::clone(&raw));
     }
-    readable_bytes(state, account_id, mailbox, uid, raw, cached, readable).await
+    readable_bytes(state, stamp, mailbox, uid, raw, cached, readable).await
+}
+
+#[cfg(test)]
+fn old_server_result_gates() -> &'static Mutex<HashMap<std::path::PathBuf, (tokio::sync::oneshot::Sender<()>, tokio::sync::oneshot::Receiver<()>)>> {
+    static GATES: std::sync::OnceLock<Mutex<HashMap<std::path::PathBuf, (tokio::sync::oneshot::Sender<()>, tokio::sync::oneshot::Receiver<()>)>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+async fn old_server_result_pause(path: &std::path::Path) {
+    let gate = locked(old_server_result_gates()).remove(path);
+    if let Some((entered, release)) = gate {
+        let _ = entered.send(());
+        let _ = release.await;
+    }
 }
 
 /// `raw` must be the message the header cache lists under `uid`. A header
@@ -223,13 +278,13 @@ async fn verify(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: 
 
 /// An OpenPGP message decrypted for a `readable` read (`render` blocks on
 /// the keychain: off the runtime); anything else as it is.
-async fn readable_bytes(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32, raw: Arc<[u8]>, in_vault: bool, readable: bool) -> Result<Arc<[u8]>, String> {
+async fn readable_bytes(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str, uid: u32, raw: Arc<[u8]>, in_vault: bool, readable: bool) -> Result<Arc<[u8]>, String> {
     if !readable || !mailvault_core::pgp::is_encrypted(&raw) {
         return Ok(raw);
     }
     let state = Arc::clone(state);
-    let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
-    blocking(move || crate::handlers::pgp::render(&state, &account_id, &mailbox, uid, raw.to_vec(), in_vault).0.into()).await
+    let (stamp, mailbox) = (stamp.clone(), mailbox.to_string());
+    blocking(move || crate::handlers::pgp::render(&state, stamp, &mailbox, uid, raw.to_vec(), in_vault).0.into()).await
 }
 
 /// `Ok(None)`: the vault verifiably does not hold the uid. An unreachable
@@ -310,7 +365,8 @@ pub(crate) async fn prune_attachment_cache(state: &Arc<DaemonState>, older_than:
             }
         };
         let stale = vault_files::stale_attachment_cache_files(&root.join("attachment_cache"), &mailboxes, older_than, &mut |a, m, uid| {
-            state.raw_messages.holds(a, m, uid) || state.vault_registry.resolve(&root, a, m, uid) != Some(None)
+            state.account_lifecycle.capture(a).map_or(true, |stamp| state.raw_messages.holds(&stamp, m, uid))
+                || state.vault_registry.resolve(&root, a, m, uid) != Some(None)
         });
         let removed = stale
             .iter()
@@ -377,6 +433,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-raw-message-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let s = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"other"}]"#).unwrap();
+        s.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap(),
+        );
         std::fs::write(
             dir.join("frontend-settings.json"),
             json!({"mailvault-settings": {"state": {"fetchMode": mode, "localCacheDurationMonths": 3}}}).to_string(),
@@ -449,6 +509,94 @@ mod tests {
 
         assert!(vault_files_of(&dir).is_empty(), "On Demand writes no body");
         assert_eq!(fetches(&server), 1, "the second read must not go back to the server");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_delayed_fallback_cannot_remember_after_retirement() {
+        let raw = raw_with_attachment("<r1@example.com>");
+        let server = server_with(1, &raw);
+        let (dir, state) = state("onDemand", Some(&server), "<r1@example.com>");
+        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"other"}]"#).unwrap();
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap(),
+        );
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        locked(old_server_result_gates()).insert(dir.clone(), (entered_tx, release_rx));
+        let held = Arc::clone(&state);
+        let old = tokio::spawn(async move { raw_message(&held, "acc1", "INBOX", 1, false).await });
+        entered_rx.await.expect("actual server body returned");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() },
+        );
+        let mut claim = state.account_lifecycle.try_close(lease, "acc1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        release_tx.send(()).unwrap();
+        let returned = old.await.unwrap();
+        let recalled = state.raw_messages.test_holds("acc1", "INBOX", 1);
+        assert!(!recalled, "old server result entered retired account LRU; returned={}", returned.is_ok());
+        assert!(returned.is_err(), "revoked fallback returned old body");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p2_old_timeout_cannot_poison_new_epoch() {
+        let raw = raw_with_attachment("<r1@example.com>");
+        let server = server_with(1, &raw);
+        let (dir, state) = state("onDemand", Some(&server), "<r1@example.com>");
+        *state.raw_messages.bound.lock().unwrap() = Duration::from_millis(250);
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        locked(old_server_result_gates()).insert(dir.clone(), (entered_tx, release_rx));
+        let held = Arc::clone(&state);
+        let first = tokio::spawn(async move { raw_message(&held, "acc1", "INBOX", 1, false).await });
+        entered_rx.await.expect("first actual server result reached old owner");
+        let held = Arc::clone(&state);
+        let second = tokio::spawn(async move { raw_message(&held, "acc1", "INBOX", 1, false).await });
+        let key = ("acc1".to_owned(), "INBOX".to_owned(), 1);
+        for _ in 0..1000 {
+            if locked(&state.raw_messages.fetching).get(&key).is_some_and(|arc| Arc::strong_count(arc) >= 3) { break }
+            tokio::task::yield_now().await;
+        }
+        assert!(locked(&state.raw_messages.fetching).get(&key).is_some_and(|arc| Arc::strong_count(arc) >= 3),
+            "two real awaiters share one fetch lock");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() },
+        );
+        let claim = state.account_lifecycle.try_close(lease, "acc1").unwrap();
+        claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        drop(claim);
+        assert!(state.account_lifecycle.capture("acc1").is_ok(), "before-effect abort reopened at a new epoch");
+        let _ = tokio::join!(first, second);
+        drop(release_tx);
+        let fresh = raw_message(&state, "acc1", "INBOX", 1, false).await;
+        let fetched = fetches(&server);
+        assert!(fresh.is_ok() && fetched == 2,
+            "old timeout memo poisoned new epoch: fresh={} real fetches={fetched}", fresh.is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn p2_old_on_demand_memory_is_not_recalled_in_new_epoch() {
+        let raw = raw_with_attachment("<r1@example.com>");
+        let server = server_with(1, &raw);
+        let (dir, state) = state("onDemand", Some(&server), "<r1@example.com>");
+        assert!(raw_message(&state, "acc1", "INBOX", 1, false).await.is_ok());
+        assert_eq!(fetches(&server), 1);
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() },
+        );
+        let claim = state.account_lifecycle.try_close(lease, "acc1").unwrap();
+        claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        drop(claim);
+        assert!(state.account_lifecycle.capture("acc1").is_ok());
+        let second = raw_message(&state, "acc1", "INBOX", 1, false).await;
+        let fetched = fetches(&server);
+        assert!(second.is_ok() && fetched == 2,
+            "old On Demand LRU crossed epoch: second={} real fetches={fetched}", second.is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -657,7 +805,7 @@ mod tests {
         inbox.add(Message::new(1, raw_with_attachment("<r1@example.com>")));
         let server = MockImap::start(stalling(Scenario::new().mailbox(inbox), "1 (UID"));
         let (dir, s) = state("onDemand", Some(&server), "<r1@example.com>");
-        s.raw_messages.remember("acc1", "INBOX", 2, raw_with_attachment("<r2@example.com>").into_bytes());
+        s.raw_messages.remember(&s.account_lifecycle.capture("acc1").unwrap(), "INBOX", 2, raw_with_attachment("<r2@example.com>").into_bytes());
 
         let blocked = {
             let s = Arc::clone(&s);

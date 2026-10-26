@@ -32,6 +32,7 @@ use crate::imap::{EmailHeader, ImapConfig};
 use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
 use crate::server::DaemonState;
 use crate::sync_engine::{cache_io, SyncAccount, SyncEngine, SyncResult};
+use crate::account_lifecycle::AccountStamp;
 use mailvault_core::custody::{cache, Connection};
 use mailvault_core::graph_ledger::{self, Ledger};
 use mailvault_core::jmap::headers::{keywords_to_flags, to_header, HEADER_PROPS};
@@ -76,7 +77,7 @@ struct Run {
 /// `announce` is not consulted: a JMAP run always publishes what it touched
 /// (module doc), so `announced` is set whenever there are arrivals and an
 /// announcing caller never publishes them a second time.
-pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str, announce: bool) -> SyncResult {
+pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str, announce: bool, stamp: &AccountStamp) -> SyncResult {
     let _ = announce;
     let failed = |error: String| SyncResult {
         account_id: account.id.clone(),
@@ -100,10 +101,10 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
     let _account_guard = lock.lock().await;
     // An expired or revoked session: forget it and run once more on a fresh
     // connect, as the bridge's `answer_with_retry` does.
-    let run = match run_once(&state, engine, config, &account.id, Some(mailbox)).await {
+    let run = match run_once(&state, engine, config, &account.id, Some(mailbox), stamp).await {
         Err(e) if is_auth_failure(&e) => {
             state.jmap.forget(config);
-            run_once(&state, engine, config, &account.id, Some(mailbox)).await
+            run_once(&state, engine, config, &account.id, Some(mailbox), stamp).await
         }
         other => other,
     };
@@ -116,7 +117,7 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
     };
     publish(engine, &account.id, &run);
     wake_workers(&state, &run);
-    if let Err(e) = write_meta(&state, engine, config, &account.id, &path, &mailbox_id, total).await {
+    if let Err(e) = write_meta(&state, engine, config, &account.id, &path, &mailbox_id, total, stamp).await {
         return failed(e);
     }
     let mine = run.touched.get(&path);
@@ -152,10 +153,11 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
 /// current. It publishes what it touched and writes no mailbox's cache meta,
 /// so the app's probe still sees the counter move past its meta and syncs.
 pub async fn delta_only(state: &Arc<DaemonState>, cfg: &ImapConfig, account_id: &str) -> Result<(), String> {
+    let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let engine = &state.sync_engine;
     let lock = engine.lock_for(&account_lock_key(account_id)).await;
     let _account_guard = lock.lock().await;
-    let run = run_once(state, engine, cfg, account_id, None).await?;
+    let run = run_once(state, engine, cfg, account_id, None, &stamp).await?;
     publish(engine, account_id, &run);
     wake_workers(state, &run);
     Ok(())
@@ -197,6 +199,7 @@ async fn run_once(
     cfg: &ImapConfig,
     account_id: &str,
     wanted: Option<&str>,
+    stamp: &AccountStamp,
 ) -> Result<Run, String> {
     let acct = state.jmap.get(cfg).await.map_err(|e| e.to_string())?;
     let boxes = acct.current().await.map_err(|e| e.to_string())?;
@@ -209,7 +212,7 @@ async fn run_once(
     let mut bound = true;
     for path in &cached {
         let Some(mailbox_id) = boxes.ids.get(path) else { bound = false; continue };
-        let io = engine.cache_ctx(account_id, path).for_jmap_source(cfg, mailbox_id);
+        let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone())).for_jmap_source(cfg, mailbox_id);
         let config = cfg.clone();
         let seed = cache_io(&io, move |io| io.native_seed(&config)).await?;
         let identity = mailvault_core::imap::NativeHeaderIdentity::new(cfg, account_id, path, Some(1)).with_jmap_mailbox(mailbox_id);
@@ -233,11 +236,11 @@ async fn run_once(
     let mut touched: BTreeMap<String, Touch> = BTreeMap::new();
     let new_state = match changes {
         Some(changes) => {
-            apply_delta(state, engine, &acct, cfg, account_id, &boxes, &cached, &changes, &mut touched).await?;
+            apply_delta(state, engine, &acct, cfg, account_id, &boxes, &cached, &changes, &mut touched, stamp).await?;
             // A requested mailbox with no header cache yet gets its first
             // fill. The account's state stays the delta's.
             if let Some((path, _, _)) = requested.as_ref().filter(|(p, _, _)| !cached.contains(p)) {
-                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched).await?;
+                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched, stamp).await?;
             }
             changes.new_state
         }
@@ -250,7 +253,7 @@ async fn run_once(
                 targets.insert(path.clone());
             }
             for path in &targets {
-                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched).await?;
+                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched, stamp).await?;
             }
             before
         }
@@ -356,11 +359,12 @@ async fn apply_delta(
     cached: &HashSet<String>,
     changes: &EmailChanges,
     touched: &mut BTreeMap<String, Touch>,
+    stamp: &AccountStamp,
 ) -> Result<(), String> {
     let mut seeds = HashMap::new();
     for path in cached {
         let Some(mailbox_id) = boxes.ids.get(path) else { continue };
-        let io = engine.cache_ctx(account_id, path).for_jmap_source(cfg, mailbox_id);
+        let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone())).for_jmap_source(cfg, mailbox_id);
         seeds.insert(path.clone(), engine.prepare_native_seed(&io, cfg).await?);
     }
     let wanted: Vec<String> = changes.created.iter().chain(&changes.updated).cloned().collect();
@@ -386,7 +390,7 @@ async fn apply_delta(
             continue;
         }
         let here = Here { path: &path, mailbox_id: &mailbox_id, role: role.as_deref(), cached: is_cached };
-        let touch = apply_to_mailbox(state, engine, acct, cfg, account_id, &here, ledger, &emails, &gone, &created, &mut announced, seeds.get(&path)).await?;
+        let touch = apply_to_mailbox(state, engine, acct, cfg, account_id, &here, ledger, &emails, &gone, &created, &mut announced, seeds.get(&path), stamp).await?;
         let entry = touched.entry(path.clone()).or_default();
         entry.written += touch.written;
         entry.arrival_uids.extend(touch.arrival_uids);
@@ -430,6 +434,7 @@ async fn apply_to_mailbox(
     created: &HashSet<&str>,
     announced: &mut HashSet<String>,
     seed: Option<&crate::sync_engine::NativeBatchSeed>,
+    stamp: &AccountStamp,
 ) -> Result<Touch, String> {
     // id -> uid as the ledger issued it before this run (the lower uid of a
     // duplicate, as `graph_ledger::allocate` resolves one).
@@ -462,7 +467,7 @@ async fn apply_to_mailbox(
     } else {
         HashMap::new()
     };
-    let io = engine.cache_ctx(account_id, here.path).for_jmap_source(cfg, here.mailbox_id);
+    let io = engine.cache_ctx_with_stamp(account_id, here.path, Ok(stamp.clone())).for_jmap_source(cfg, here.mailbox_id);
     let mut touch = Touch::default();
 
     // 1. New here.
@@ -476,7 +481,7 @@ async fn apply_to_mailbox(
         .collect();
     if !fresh.is_empty() {
         let ids: Vec<String> = fresh.iter().map(|e| email_id(e)).collect();
-        let uids = acct.ids_to_uids(state, account_id, here.path, &ids).await?;
+        let uids = acct.ids_to_uids(state, stamp.clone(), account_id, here.path, &ids).await?;
         let mut headers: Vec<EmailHeader> = Vec::new();
         for (email, uid) in fresh.iter().zip(uids) {
             let id = email_id(email);
@@ -544,15 +549,16 @@ async fn rebuild(
     boxes: &Mailboxes,
     path: &str,
     touched: &mut BTreeMap<String, Touch>,
+    stamp: &AccountStamp,
 ) -> Result<(), String> {
     let mailbox_id = boxes.ids.get(path).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {path}"))?;
-    let io = engine.cache_ctx(account_id, path).for_jmap_source(cfg, &mailbox_id);
+    let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone())).for_jmap_source(cfg, &mailbox_id);
     let seed = engine.prepare_native_seed(&io, cfg).await?;
     let (ids, _) = acct.client.query_mailbox(&mailbox_id, 0, COLD_PAGE).await.map_err(|e| e.to_string())?;
     // A page lists newest first; the ledger takes it oldest first, so the
     // uids one listing issues follow arrival.
     let oldest_first: Vec<String> = ids.iter().rev().cloned().collect();
-    let uids = acct.ids_to_uids(state, account_id, path, &oldest_first).await?;
+    let uids = acct.ids_to_uids(state, stamp.clone(), account_id, path, &oldest_first).await?;
     let uid_of: HashMap<String, u32> = oldest_first.into_iter().zip(uids).collect();
     let got = if ids.is_empty() {
         Vec::new()
@@ -617,12 +623,12 @@ async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<Str
 /// count, `uidValidity` 1 (ledger uids are never renumbered), the ledger's
 /// `uidNext` and the mailbox's counter, so `syncProbe.js` compares them like
 /// for like with `imap_check_mailbox_status`.
-async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, config: &ImapConfig, account_id: &str, path: &str, mailbox_id: &str, total: u32) -> Result<(), String> {
+async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, config: &ImapConfig, account_id: &str, path: &str, mailbox_id: &str, total: u32, stamp: &AccountStamp) -> Result<(), String> {
     let ledger = load_ledger(state, account_id, path).await?;
     let uid_next = ledger.keys().next_back().map_or(1, |uid| uid.saturating_add(1));
     let (aid, mb) = (account_id.to_string(), path.to_string());
     let modseq = custody_read(state, move |c| Ok(JmapMeta::modseq(c, &aid, &mb))).await?;
-    let io = engine.cache_ctx(account_id, path).for_jmap_source(config, mailbox_id);
+    let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone())).for_jmap_source(config, mailbox_id);
     let identity = mailvault_core::imap::NativeHeaderIdentity::new(config, account_id, path, Some(1)).with_jmap_mailbox(mailbox_id);
     cache_io(&io, move |io| io.write_meta_for(total, Some(1), Some(uid_next), Some(modseq), None, Some(total), Some(&identity))).await
 }
@@ -709,6 +715,8 @@ mod tests {
     async fn setup() -> (tempfile::TempDir, Arc<DaemonState>, MockJmap, SyncAccount) {
         let dir = tempfile::tempdir().unwrap();
         let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        std::fs::write(dir.path().join("accounts.json"), r#"[{"id":"acct-1"}]"#).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
         let m = MockJmap::start(scenario());
         let account = sync_account(account_json(&m));
         (dir, state, m, account)
