@@ -90,6 +90,13 @@ describe('renderMessageToCanvas', () => {
     expect(domToCanvas.mock.calls[0][1]).toMatchObject({ scale: 2, backgroundColor: '#ffffff' });
   });
 
+  it('wantWords puts the words measured on the frame on the canvas; without it the canvas carries none', async () => {
+    const withWords = await renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10, wantWords: true });
+    expect(withWords.mvWords).toEqual([]); // jsdom lays nothing out: no rects, no words
+    const without = await renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10 });
+    expect(without).not.toHaveProperty('mvWords');
+  });
+
   it('hideTo builds the document without the To row', async () => {
     // jsdom never navigates the frame: the document is the srcdoc it was given.
     let srcdoc;

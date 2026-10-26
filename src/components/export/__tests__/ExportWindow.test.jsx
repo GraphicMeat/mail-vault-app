@@ -26,7 +26,7 @@ vi.mock('../../../services/export/social/buildSocialExport', () => ({
   chromeTheme: (_content, appTheme) => (appTheme === 'dark' ? 'dark' : 'light'),
 }));
 vi.mock('../../../services/export/social/composeSocialImage', () => ({ composeSocialImage: () => ({ width: 10, height: 10 }) }));
-vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => null }));
+vi.mock('../../../services/export/social/socialWatermark', () => ({ loadWatermark: async () => null, loadBrand: async () => null }));
 const settings = vi.hoisted(() => {
   const DEFAULT = {
     content: 'card', size: 'auto', background: { type: 'gradient', id: 'sunset' },

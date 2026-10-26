@@ -1,3 +1,5 @@
+import { wordTokens } from './wordKey';
+
 /**
  * Finds the people in a piece of text: names from the user's own contacts,
  * plus email addresses, phone numbers and postal addresses by pattern.
@@ -79,20 +81,37 @@ export const EMPTY_DICTIONARY = Object.freeze(buildNameDictionary({ names: [] })
 // while everything else is masked. Never mutate a dictionary to add it: the host's
 // is shared and EMPTY_DICTIONARY is frozen.
 const mergeReveal = (a, b) => (a?.reveal || b?.reveal ? new Set([...(a?.reveal || []), ...(b?.reveal || [])]) : null);
+// `show` / `hide` (wordKey sets) and `detect: false` are the user's clicks on a
+// social image: show leaves a detected word readable, hide masks a word the
+// detector missed, and detect:false turns detection off so only hide marks
+// mask. They travel with the dictionary through every union.
+const mergeSet = (a, b, key) => (a?.[key]?.size || b?.[key]?.size ? new Set([...(a?.[key] || []), ...(b?.[key] || [])]) : null);
+const mergeMarks = (a, b) => {
+  const show = mergeSet(a, b, 'show');
+  const hide = mergeSet(a, b, 'hide');
+  return {
+    ...(show ? { show } : {}),
+    ...(hide ? { hide } : {}),
+    ...(a?.detect === false || b?.detect === false ? { detect: false } : {}),
+  };
+};
 
 /** Both dictionaries' names in one (a frame's own parties on top of the global set). */
 export function unionDictionaries(a, b) {
   const reveal = mergeReveal(a, b);
-  // The early returns are the cold-host case (an empty host dictionary): reveal must survive them.
-  if (!b?.size) return reveal ? { ...a, reveal } : a;
-  if (!a?.size) return reveal ? { ...b, reveal } : b;
+  const marks = mergeMarks(a, b);
+  const extra = { ...(reveal ? { reveal } : {}), ...marks };
+  const plain = !Object.keys(extra).length;
+  // The early returns are the cold-host case (an empty host dictionary): reveal and marks must survive them.
+  if (!b?.size) return plain ? a : { ...a, ...extra };
+  if (!a?.size) return plain ? b : { ...b, ...extra };
   const fullNames = new Set([...a.fullNames, ...b.fullNames]);
   const tokens = new Set([...a.tokens, ...b.tokens]);
   const unspaced = new Set([...a.unspaced, ...b.unspaced]);
   return {
     fullNames, tokens, unspaced, unspacedMax: Math.max(a.unspacedMax, b.unspacedMax),
     size: tokens.size + fullNames.size + unspaced.size,
-    ...(reveal ? { reveal } : {}),
+    ...extra,
   };
 }
 
@@ -227,9 +246,42 @@ function names(text, dict, out) {
   }
 }
 
+// The user's marks on a text's spans: each word marked `show` is cut out of
+// them, each word marked `hide` that no span covers becomes one. Words are
+// wordKey's, so a click on "Smith," and a mark on "smith" are the same word.
+function cut(spans, a, b) {
+  return spans.flatMap((sp) => {
+    if (sp.end <= a || sp.start >= b) return [sp];
+    return [sp.start < a ? { ...sp, end: a } : null, sp.end > b ? { ...sp, start: b } : null].filter(Boolean);
+  });
+}
+function applyMarks(s, spans, dict) {
+  const { show, hide } = dict ?? {};
+  if (!show?.size && !hide?.size) return spans;
+  let out = spans;
+  for (const t of wordTokens(s)) {
+    if (show?.has(t.key)) out = cut(out, t.start, t.end);
+    else if (hide?.has(t.key) && !out.some(sp => sp.start <= t.start && sp.end >= t.end)) {
+      out = [...cut(out, t.start, t.end), { start: t.start, end: t.end, kind: 'manual' }];
+    }
+  }
+  // A piece a cut left may be only blanks or marks: nothing to mask there.
+  return out
+    .map((sp) => {
+      let { start, end } = sp;
+      while (start < end && /\s/.test(s[start])) start++;
+      while (end > start && /\s/.test(s[end - 1])) end--;
+      return { ...sp, start, end };
+    })
+    .filter(sp => /[\p{L}\p{N}]/u.test(s.slice(sp.start, sp.end)))
+    .sort((x, y) => x.start - y.start);
+}
+
 export function findPii(text, dict = EMPTY_DICTIONARY) {
   const s = String(text ?? '');
   if (!s.trim()) return [];
+  // Only the user's hide marks mask: a social image with the redact box off.
+  if (dict?.detect === false) return applyMarks(s, [], dict);
   const found = [];
   collect(EMAIL, s, 'email', found);
   const addrs = [];
@@ -245,7 +297,7 @@ export function findPii(text, dict = EMPTY_DICTIONARY) {
   collect(LT_POSTCODE, s, 'address', found);
   phones(s, found);
   names(s, dict, found);
-  if (!found.length) return [];
+  if (!found.length) return applyMarks(s, [], dict);
 
   // Highest priority first, then longest. A span that overlaps one already kept
   // keeps only its uncovered pieces: dropping it whole would leak the rest.
@@ -270,7 +322,7 @@ export function findPii(text, dict = EMPTY_DICTIONARY) {
   // name tokens inside it ("prize" of spam@prize.com) must not be masked piecemeal.
   const reveal = dict?.reveal;
   const shown = reveal?.size ? kept.filter(k => !(k.kind === 'email' && reveal.has(s.slice(k.start, k.end).toLowerCase()))) : kept;
-  return shown.sort((a, b) => a.start - b.start);
+  return applyMarks(s, shown.sort((a, b) => a.start - b.start), dict);
 }
 
 // One x per letter or digit (marks fold into their base letter), never derived from the real char.

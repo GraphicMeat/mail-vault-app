@@ -51,27 +51,36 @@ function stack(head, body, headBg) {
  * CSP that admits only the nonced Dark Reader tags, so the mail's own scripts
  * (already stripped by the sanitizer) could not run anyway. `width` (CSS px)
  * goes to both halves: stack() puts them on one canvas of one width. `hideTo`
- * leaves the To row off the header.
+ * leaves the To row off the header. `wantWords`: the canvas carries `mvRaw`, the
+ * words of each half with their rects on the stacked canvas (wordHits resolves them).
  */
-export async function renderSocialCard({ message, bodyHtml, appearance = 'light', mail = 'light', palette, redactStyle, onCloneNode, onCloneHead, extrasHtml, width, hideTo }) {
+export async function renderSocialCard({ message, bodyHtml, appearance = 'light', mail = 'light', palette, redactStyle, onCloneNode, onCloneHead, extrasHtml, width, hideTo, wantWords = false }) {
   const head = await renderMessageToCanvas({
-    message, part: 'head', theme: appearance, redactStyle, onCloneNode: onCloneHead ?? onCloneNode, extrasHtml, width, hideTo,
+    message, part: 'head', theme: appearance, redactStyle, onCloneNode: onCloneHead ?? onCloneNode, extrasHtml, width, hideTo, wantWords,
     backgroundColor: appearance === 'dark' ? EXPORT_HEAD_DARK.bg : '#ffffff',
   });
   let body;
   if (mail === 'dark') {
     const nonce = emailScriptNonce();
     body = await renderMessageToCanvas({
-      message, bodyHtml, part: 'body', theme: 'dark', palette, redactStyle, onCloneNode, width,
+      message, bodyHtml, part: 'body', theme: 'dark', palette, redactStyle, onCloneNode, width, wantWords,
       sandbox: 'allow-same-origin allow-scripts',
       extraHead: `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">${getDarkReaderInlineScripts({ palette, nonce })}`,
       backgroundColor: getEmailColors('dark', palette).background,
       beforeCapture: waitForDarkReader,
     });
   } else {
-    body = await renderMessageToCanvas({ message, bodyHtml, part: 'body', redactStyle, onCloneNode, width });
+    body = await renderMessageToCanvas({ message, bodyHtml, part: 'body', redactStyle, onCloneNode, width, wantWords });
   }
-  return stack(head, body, appearance === 'dark' ? EXPORT_HEAD_DARK.bg : '#ffffff');
+  const card = stack(head, body, appearance === 'dark' ? EXPORT_HEAD_DARK.bg : '#ffffff');
+  // The body's words sit below the header's height on the stacked canvas.
+  if (head.mvWords || body.mvWords) {
+    card.mvRaw = {
+      head: head.mvWords ?? [],
+      body: (body.mvWords ?? []).map(w => ({ ...w, rects: w.rects.map(([x, y, rw, rh]) => [x, y + head.height, rw, rh]) })),
+    };
+  }
+  return card;
 }
 
 // The connected e2e spec renders cards straight through this, no dialog.

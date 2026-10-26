@@ -169,7 +169,8 @@ const stemOf = (fileName) => fileName.replace(/\.[^.]+$/, '');
 /**
  * One message made ready for a social card: the same hydrate → prepareBody →
  * redact steps buildExport runs, for a canvas instead of files.
- * `redact`: null, or `{ dict, format }`; the message's own parties join the
+ * `redact`: null, or `{ dict, format, hooks }` (`hooks` are redactTree's, for the
+ * body); the message's own parties join the
  * dictionary, as in buildExport. `details` and `links` ask for the card's
  * sender-details model and links list, both worked out from the unredacted
  * message and body (the verdicts need the real text; redaction strips every
@@ -192,11 +193,13 @@ export async function prepareSocialMessage(message, { mirror = true, redact = nu
   };
   const model = details ? senderDetailsModel(sender, await verifySender(sender)) : null;
   const rawBody = links ? rawBodyHtml(full) : '';
-  if (!redact) return { message: full, body, details: model, links: links ? await collectSocialLinks(rawBody) : null };
+  if (!redact) return { message: full, plainMessage: full, body, details: model, links: links ? await collectSocialLinks(rawBody) : null };
   const dict = unionDictionaries(redact.dict, buildNameDictionary({ names: collectPrivacyNames({ emails: [full] }) }));
   return {
     message: redactMessageForExport(full, dict),
-    body: redactBodyForExport(body, dict, { format: redact.format || 'image' }),
+    // The message as it reads, for the one caller that matches the masked header to it by word (the hit map): never drawn.
+    plainMessage: full,
+    body: redactBodyForExport(body, dict, { format: redact.format || 'image', hooks: redact.hooks }),
     details: model && maskSenderDetails(model, dict),
     links: links ? await collectSocialLinks(rawBody, { dict, redact: true }) : null,
   };
