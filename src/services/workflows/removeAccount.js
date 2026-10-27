@@ -1,11 +1,9 @@
-// ── removeAccount workflow — disconnects, deletes account, and re-activates next ──
+// ── removeAccount workflow — native deletion followed by renderer presentation cleanup ──
 
 import * as db from '../db';
-import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { forgetAccount } from '../../stores/unreadCounts';
 import { dismissAccountFollowUps } from '../../stores/followUpStore';
-import { isGraphAccount } from '../graphConfig';
 import { unwatchAccount } from '../syncService';
 import { invalidateRestoreDescriptors as _invalidateRestore, clearGraphIdMap as _clearGraphIdMap } from '../cacheManager';
 
@@ -16,7 +14,6 @@ export async function removeAccount(accountId) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
-  const account = get().accounts.find(a => a.id === accountId);
   const removal = await db.deleteAccount(accountId);
   if (!removal || removal.outcome !== 'complete' || removal.accountId !== accountId
     || Object.keys(removal).length !== 2) {
@@ -26,16 +23,8 @@ export async function removeAccount(accountId) {
     throw error;
   }
 
-  if (account && !isGraphAccount(account)) {
-    try {
-      await api.disconnect(account);
-    } catch (e) {
-      // Ignore disconnect errors
-    }
-  }
-
-  // The native removal owns the active drain. This renderer cleanup starts
-  // only after its final complete result, so a Busy send is never disconnected.
+  // Native removal owns session retirement. Presentation cleanup starts only
+  // after its final complete result.
   unwatchAccount(accountId);
   _invalidateRestore(accountId);
   _clearGraphIdMap(accountId);

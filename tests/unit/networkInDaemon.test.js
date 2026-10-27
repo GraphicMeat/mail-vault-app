@@ -4,9 +4,8 @@
  * (20), SMTP (4), Graph (12 real + graph_get_mime dead), OAuth2 (3), DNS (2),
  * plus the 2 dead keychain commands from Task 5.1 (get_password,
  * delete_password) — must be absent from `generate_handler!`, and the 3
- * commands that deliberately stayed app-local (store_credentials,
- * get_credentials, store_password — keychain calls tied 1:1 to a UI action,
- * per the plan's scoping call) must still be registered. CI never runs
+ * get_credentials remains app-local for quiet reads. Stage2 retires the two
+ * old mutation commands after native account and credential cutovers. CI never runs
  * `cargo test -p mailvault`, so this reads the source directly, same
  * pattern as `tests/unit/searchIndexInDaemon.test.js` (Phase 1) and
  * `tests/unit/vaultInDaemon.test.js` (Phase 2+).
@@ -69,28 +68,25 @@ const DNS = ['resolve_email_settings', 'dns_mail_health'];
 
 // Dead commands deleted outright across the phase, never ported: 2 keychain
 // (Task 5.1, 0 callers each) + graph_get_mime (Task 5.6, 0 callers).
-const DEAD = ['get_password', 'delete_password', 'graph_get_mime'];
+const DEAD = ['get_password', 'delete_password', 'graph_get_mime', 'store_credentials', 'store_password'];
 
 const MOVED_OR_DEAD = [...IMAP, ...SMTP, ...GRAPH, ...OAUTH2, ...DNS, ...DEAD];
 
-// The 3 keychain commands the plan's scoping call keeps app-local: OS
-// keychain calls tied 1:1 to a UI action (add-account, settings), not
-// background work — moving them would add the keychain-inheritance risk
-// (Task 5.1's ledger) to a path that doesn't need it.
-const STAY_APP_LOCAL_KEYCHAIN = ['store_credentials', 'get_credentials', 'store_password'];
+// Quiet app-side read remains for startup and denied-daemon fallback.
+const STAY_APP_LOCAL_KEYCHAIN = ['get_credentials'];
 
 describe('Phase 5: IMAP/SMTP/Graph/OAuth2/DNS live in the daemon, keychain interactive commands stay app-local (Task 5.9)', () => {
   it('reads a real handler list', () => {
     expect(handlerCode).toContain('daemon_rpc');
   });
 
-  it('the guarded name lists match the plan\'s reconciled inventory (20 IMAP, 4 SMTP, 12 Graph, 4 OAuth2, 2 DNS, 3 dead)', () => {
+  it('the guarded name lists include the two retired keychain mutations', () => {
     expect(IMAP.length).toBe(20);
     expect(SMTP.length).toBe(4);
     expect(GRAPH.length).toBe(12);
     expect(OAUTH2.length).toBe(4);
     expect(DNS.length).toBe(2);
-    expect(DEAD.length).toBe(3);
+    expect(DEAD.length).toBe(5);
   });
 
   it.each(MOVED_OR_DEAD)('the app does not register %s as a real generate_handler! entry', (name) => {

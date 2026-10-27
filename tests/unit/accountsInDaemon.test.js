@@ -2,9 +2,8 @@
  * Phase 1 step 0b: the daemon owns accounts.json (src-core/src/accounts_doc.rs,
  * src-daemon/src/handlers/accounts.rs) and is the one writer of the account
  * credentials blob (src-daemon/src/credentials.rs, handlers/credentials.rs).
- * The app's db/accounts.js and db/keychain.js are bindings: the shell's own
- * commands (`accounts_fallback`, `get_credentials`, `store_credentials`) stay
- * one release as the fallback, called from db/ only. CI never runs
+ * The app's db/accounts.js and db/keychain.js are read bindings with one
+ * daemon-only legacy-entry cleanup; only quiet shell reads remain. CI never runs
  * `cargo test -p mailvault-daemon` on every path, so this reads the sources,
  * like learningInDaemon and authInDaemon.
  */
@@ -26,7 +25,7 @@ const accountsJs = read('src/services/db/accounts.js');
 const keychainJs = read('src/services/db/keychain.js');
 const en = JSON.parse(read('src/i18n/locales/en.json'));
 
-const ACCOUNT_RPCS = ['accounts.list', 'accounts.get', 'accounts.put', 'accounts.remove', 'accounts.reorder', 'accounts.replace_all'];
+const ACCOUNT_RPCS = ['accounts.list', 'accounts.get', 'accounts.put', 'accounts.remove_local', 'accounts.reorder', 'accounts.replace_all'];
 const CREDENTIAL_RPCS = ['credentials.get', 'credentials.save', 'credentials.update', 'credentials.delete'];
 
 function sources(dir) {
@@ -50,7 +49,8 @@ describe('the account list and the credentials live in the daemon', () => {
     expect(owned).toContain(`'${rpc}'`);
     expect(demo).toContain(`'${rpc}'`);
     expect(shell).toContain(`"${rpc}"`);
-    if (rpc.startsWith('accounts.')) expect(core).toContain(`"${rpc}"`);
+    if (rpc === 'accounts.remove_local') expect(read('src-daemon/src/handlers/accounts.rs')).toContain(`"${rpc}"`);
+    else if (rpc.startsWith('accounts.')) expect(core).toContain(`"${rpc}"`);
     else expect(credHandler).toContain(`"${rpc}" =>`);
   });
 
@@ -74,14 +74,11 @@ describe('the account list and the credentials live in the daemon', () => {
     expect(fileWriters).toEqual([]);
   });
 
-  it('only db/ reaches the shell fallbacks, and only as fallbacks', () => {
-    expect(callers("'store_credentials'")).toEqual(['src/services/db/keychain.js']);
+  it('only db/ reaches the quiet shell read fallback', () => {
+    expect(callers("'store_credentials'")).toEqual([]);
     expect(callers("'get_credentials'")).toEqual(['src/services/db/keychain.js']);
     expect(callers("'accounts_fallback'")).toEqual(['src/services/db/accounts.js']);
-    // The legacy per-account item (`com.mailvault.app` / <accountId>): no
-    // reader anywhere, written next to the blob by the password and server
-    // change workflows. Those move in stage 2; no new caller may appear.
-    expect(callers("'store_password'")).toEqual(['src/components/settings/AccountSettings.jsx', 'src/services/api.js']);
+    expect(callers("'store_password'")).toEqual([]);
   });
 
   it('every change is one account at a time: no caller hands the app a whole blob to write', () => {

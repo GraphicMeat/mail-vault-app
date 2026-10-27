@@ -1831,13 +1831,11 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'pgp.import_key': case 'pgp.remove_key': return unsupported(command);
       case 'open_file': case 'open_email_window': return unsupported(command);
       case 'oauth2_google_clients': return { mailvault: false, default: 'thunderbird' };
-      case 'oauth2.take_refreshed': return { tokens: [] };
       case 'credentials.get': return invoke('get_credentials');
       case 'credentials.save': case 'credentials.update': case 'credentials.delete': return unsupported(command);
       case 'accounts.add': case 'accounts.update': case 'accounts.save': throw new Error('errors.daemonOutdated');
       case 'accounts.list': return { accounts: clone(accountList), version: accountsVersion };
       case 'accounts.get': return { account: clone(accountList.find(a => a.id === args.id) || null), version: accountsVersion };
-      case 'accounts.remove': throw new Error('errors.accountsInvalid');
       case 'accounts.remove_local': {
         if (typeof args.accountId !== 'string' || !args.accountId) throw new Error('errors.accountsInvalid');
         const before = accountList.length;
@@ -1870,8 +1868,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         if (changed) { accountsVersion += 1; emit('demo:state', { type: 'accounts' }); }
         return { version: accountsVersion, changed: changed ? entries.map(e => e.id).concat(args.ids || []) : [] };
       }
-      case 'oauth2.credentials_changed': return { ok: true };
-      case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': case 'store_password': case 'store_credentials': return unsupported(command);
+      case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': return unsupported(command);
       // The browser demo has no index: searchLocalEmails falls back to its scan.
       case 'vault_search': return { available: false };
       case 'search_index_status': return { available: false, state: 'unavailable', firstPassDone: false, indexed: 0, total: 0, sizeBytes: 0, complete: false };

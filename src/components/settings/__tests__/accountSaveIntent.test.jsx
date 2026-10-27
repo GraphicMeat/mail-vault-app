@@ -115,5 +115,5 @@ for(const kind of ['missing','overlap','unknown accepted','unknown skipped'])it(
   expect.soft(useSettingsStore.getState().signatures).toEqual({g:{html:'keep existing'}});
   expect.soft(h.calls.some(([cmd])=>cmd==='transfer.apply_config')).toBe(false);
   expect(failure?.message).toContain('E_KEYCHAIN_WRITE');
-  expect(()=>keychain.assertLegacyWriteAllowed()).toThrow('errors.keychainWriteFailed');
+  expect(()=>keychain.assertAccountCreateOutcomeKnown()).toThrow('errors.accountsWriteFailed');
 });

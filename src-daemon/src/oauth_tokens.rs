@@ -3615,9 +3615,8 @@ mod tests {
         assert_eq!(test_token_posts().len(), 1);
     }
 
-    /// Through the RPC layer: a Graph call that names only its account goes
-    /// out with the daemon's fresh token, and the app can take the new pair
-    /// to save and say it saved it.
+    /// Through the RPC layer: a Graph call naming only its account goes out
+    /// with the daemon's fresh token. The pair remains private native state.
     #[tokio::test]
     async fn a_graph_call_naming_only_its_account_is_sent_with_a_fresh_token() {
         let _env = credentials::test_env_lock()
@@ -3640,11 +3639,7 @@ mod tests {
             json!({"accountId": "o1", "messageId": "m1", "isRead": true}),
         )
         .await;
-        let taken =
-            crate::server::handle_request_for_test(&s, "oauth2.take_refreshed", json!({})).await;
-        let changed =
-            crate::server::handle_request_for_test(&s, "oauth2.credentials_changed", json!({}))
-                .await;
+        let tokens = json!(s.tokens.unsaved());
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
         let requests = crate::handlers::graph::test_graph_requests();
         let posts = test_token_posts();
@@ -3659,7 +3654,6 @@ mod tests {
             field(&posts[0], "scope").is_some_and(|sc| sc.contains("Mail.ReadWrite")),
             "Graph scopes: {posts:?}"
         );
-        let tokens = taken.result.expect("take_refreshed")["tokens"].clone();
         assert_eq!(
             tokens,
             json!([{
@@ -3672,7 +3666,6 @@ mod tests {
             Some(2),
             "the record's refresh token and the rotated one"
         );
-        assert_eq!(changed.result, Some(json!({"ok": true})));
     }
 
     // ── review fixes ────────────────────────────────────────────────────────
@@ -4462,13 +4455,8 @@ mod tests {
             .await
         });
         recv(&entered);
-        let notice = crate::server::handle_request_for_test(
-            &rig.state,
-            "oauth2.credentials_changed",
-            json!({}),
-        )
-        .await;
-        assert!(notice.error.is_none());
+        credentials::blob_written_elsewhere();
+        crate::handlers::oauth2::credentials_written(&rig.state);
         rig.release_all();
         assert!(!recv(&saving));
         let current = credentials::optional_record_quiet("g").await.unwrap();

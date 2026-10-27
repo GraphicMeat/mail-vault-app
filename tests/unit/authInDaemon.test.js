@@ -3,8 +3,7 @@
  * owns OAuth2 access-token freshness (`src-daemon/src/oauth_tokens.rs`). The
  * app no longer decides when to refresh a token and no longer hands one to a
  * daemon call: every request is given the daemon's own token on the way in
- * (`oauth_tokens::inject` in `server.rs`), and the app only saves the pairs the
- * daemon refreshed, through its one credentials writer.
+ * (`oauth_tokens::inject` in `server.rs`); native completion persists pairs.
  *
  * What stays in the app: the interactive sign-in (`oauth2_auth_url`,
  * `oauth2_exchange`, `withOAuth2Exchange`), the one probe of a token that sign-in
@@ -71,8 +70,8 @@ describe('the app hands the daemon no token', () => {
       'src/components/AccountModal.jsx', // the new-account form's empty field
       'src/hooks/useEmailScheduler.js', // a change key, never sent
       'src/services/authUtils.js', // withOAuth2Exchange, hasValidCredentials
-      'src/services/db/accounts.js', // the credentials writer
-      'src/services/oauthTokenSync.js', // saves what the daemon refreshed
+      'src/services/db/accounts.js', // account presence and metadata
+      'src/services/oauthCredentialProjection.js', // fresh, read-only UI copy
       'src/services/syncService.js', // says why the payload leaves it out
       'src/services/workflows/activateAccount.js', // presence
       'src/services/workflows/addAccount.js', // probes the sign-in it just got
@@ -122,13 +121,14 @@ describe('the daemon owns the token', () => {
     expect(tokens).toMatch(/fn flight\(/);
   });
 
-  it('registers the two save-side RPCs in every place an RPC lives', () => {
+  it('retired renderer token writer RPCs have no public registration', () => {
     const transport = read('src/services/transport.js');
     const demo = read('src/demo/backend.js');
+    const routes = oauth2.slice(0, oauth2.indexOf('/// Test seam'));
     for (const name of ['oauth2.take_refreshed', 'oauth2.credentials_changed']) {
-      expect(oauth2, name).toContain(`"${name}"`);
-      expect(transport, name).toContain(`'${name}'`);
-      expect(demo, name).toContain(`'${name}'`);
+      expect(routes, name).not.toContain(`"${name}"`);
+      expect(transport, name).not.toContain(`'${name}'`);
+      expect(demo, name).not.toContain(`'${name}'`);
     }
   });
 

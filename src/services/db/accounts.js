@@ -6,8 +6,7 @@
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
-import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, readCurrentCredentials, markNativeMutationUncertain, assertAccountCreateOutcomeKnown, beginNativeWrite, invalidateCredentialsCache } from './keychain.js';
-import { grantFingerprint } from '../oauthTokenSync.js';
+import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, deleteCredentials, markNativeMutationUncertain, assertAccountCreateOutcomeKnown, invalidateCredentialsCache } from './keychain.js';
 import * as keychainSession from '../keychainSession.js';
 import { t } from '../../i18n/index.js';
 
@@ -143,7 +142,6 @@ function withBudget(promise, ms) {
 
 async function accountsCall(method, params = {}, { strictRead = false } = {}) {
   const read = method === 'accounts.list' || method === 'accounts.get';
-  const release = read ? () => {} : beginNativeWrite();
   listenForReconnect();
   {
     try {
@@ -163,7 +161,7 @@ async function accountsCall(method, params = {}, { strictRead = false } = {}) {
         if (!['errors.accountsConflict', 'errors.accountsInvalid', 'errors.keychainBusy', 'errors.keychainUnavailable', 'errors.credentialsInvalid', 'errors.daemonOutdated'].includes(message) && !workflowRefusal) markNativeMutationUncertain();
         throw new Error(message);
       }
-    } finally { release(); }
+    }
   }
   if (strictRead) throw new Error('errors.accountsWriteFailed');
   try {
@@ -366,8 +364,7 @@ export async function saveAccounts(entries) {
   return reply;
 }
 
-// The shell's keychain queue rejects with store_credentials' raw Rust string,
-// the account list with its catalog key; callers map on an E_* prefix.
+// Keep the adapter's existing E_* error contract around native catalog keys.
 function accountsWriteError(error) {
   const message = error?.message ?? error;
   if (message === keychainSession.E_KEYCHAIN_UNAVAILABLE || message === 'errors.keychainUnavailable') return new Error(keychainSession.E_KEYCHAIN_UNAVAILABLE);
@@ -533,42 +530,6 @@ export async function getAccount(id) {
   // Fallback to accounts.json (no password)
   const accounts = await readAccountsFile();
   return accounts.find(a => a.id === id);
-}
-
-export async function updateOAuth2Tokens(accountId, tokens) {
-  if (!invoke) return;
-
-  try {
-    const data = await loadKeychain();
-    if (!data[accountId]) return;
-
-    const stored = JSON.parse(data[accountId]);
-    // The refresh token only when the pair carries one: this window's copy
-    // may be older than a Reconnect another window saved.
-    const fields = {
-      oauth2AccessToken: tokens.accessToken,
-      ...(tokens.refreshToken ? { oauth2RefreshToken: tokens.refreshToken } : {}),
-      oauth2ExpiresAt: tokens.expiresAt,
-    };
-    // Only these fields change, merged into the record as stored now, and
-    // only while it is still this pair's grant (`chain`, checked by the
-    // daemon against what it holds, not against this window's copy).
-    if (!(await updateCredentials(accountId, fields, { chain: tokens.chain }))) return;
-    const currentData = await readCurrentCredentials();
-    const current = currentData?.[accountId] ? JSON.parse(currentData[accountId]) : null;
-    const expected = { ...stored, ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) };
-    if (!current || current.oauth2AccessToken !== expected.oauth2AccessToken
-      || Number(current.oauth2ExpiresAt) !== Number(expected.oauth2ExpiresAt)
-      || await grantFingerprint(current) !== await grantFingerprint(expected)) {
-      console.warn('[db.js] Refreshed pair is not confirmed current for account:', accountId);
-      return;
-    }
-    console.log('[db.js] OAuth2 tokens updated for account:', accountId);
-    return current;
-  } catch (error) {
-    console.error('[db.js] Failed to update OAuth2 tokens:', errText(error));
-    throw error;
-  }
 }
 
 export async function deleteAccount(id) {

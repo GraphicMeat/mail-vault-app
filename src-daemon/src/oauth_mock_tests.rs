@@ -39,9 +39,7 @@ struct Rig {
     imap: MockImap,
     creds: PathBuf,
     rx: tokio::sync::broadcast::Receiver<Arc<str>>,
-    /// Every RPC answer and event payload seen, for the leak scan. The answer
-    /// to `oauth2.take_refreshed` is left out: handing the pair to the app is
-    /// what it is for.
+    /// Every RPC answer and event payload seen, for the leak scan.
     seen: Vec<String>,
     /// Every event seen, oldest first.
     all_events: Vec<(String, Value)>,
@@ -155,11 +153,15 @@ impl Rig {
 
     async fn rpc(&mut self, method: &str, params: Value) -> RpcResponse {
         let r = handle_request_for_test(&self.s, method, params).await;
-        if method != "oauth2.take_refreshed" {
-            self.seen
-                .push(serde_json::to_string(&r).unwrap_or_default());
-        }
+        self.seen.push(serde_json::to_string(&r).unwrap_or_default());
         r
+    }
+
+    // Direct fixture writes are not production writers. Tell the native
+    // lineage owner that this synthetic store changed without a public RPC.
+    fn notify_fixture_write(&self) {
+        crate::credentials::blob_written_elsewhere();
+        crate::handlers::oauth2::credentials_written(&self.s);
     }
 
     fn events(&mut self) -> Vec<(String, Value)> {
@@ -284,27 +286,23 @@ fn message(r: &RpcResponse) -> String {
         .unwrap_or_default()
 }
 
-/// A take of the pairs the daemon refreshed, saved as the app's
-/// `oauthTokenSync` saves them (`updateOAuth2Tokens`: three fields over the
-/// stored record), then `oauth2.credentials_changed`.
-async fn app_saves_what_the_daemon_refreshed(rig: &mut Rig, records: &mut [Value]) -> usize {
-    let taken = rig
-        .rpc("oauth2.take_refreshed", json!({}))
-        .await
-        .result
-        .unwrap();
-    let pairs = taken["tokens"].as_array().cloned().unwrap_or_default();
-    for pair in &pairs {
-        if let Some(r) = records.iter_mut().find(|r| r["id"] == pair["accountId"]) {
-            r["oauth2AccessToken"] = pair["accessToken"].clone();
-            r["oauth2RefreshToken"] = pair["refreshToken"].clone();
-            r["oauth2ExpiresAt"] = pair["expiresAt"].clone();
+/// Run the native persistence worker and read back its durable result.
+async fn native_persists_refresh(rig: &mut Rig, records: &mut [Value]) -> usize {
+    let worker = crate::oauth_tokens::TestPersistenceWorker::start(&rig.s);
+    worker.turn_after(0).await;
+    worker.stop().await;
+    let blob: std::collections::HashMap<String, String> =
+        serde_json::from_str(&std::fs::read_to_string(&rig.creds).unwrap()).unwrap();
+    let mut changed = 0;
+    for record in records.iter_mut() {
+        let id = record["id"].as_str().unwrap();
+        let stored: Value = serde_json::from_str(&blob[id]).unwrap();
+        if stored["oauth2AccessToken"] != record["oauth2AccessToken"] {
+            changed += 1;
         }
+        *record = stored;
     }
-    rig.store(&records.iter().collect::<Vec<_>>());
-    assert!(ok(&rig.rpc("oauth2.credentials_changed", json!({})).await));
-    crate::oauth_tokens::recheck_unsaved(&rig.s).await;
-    pairs.len()
+    changed
 }
 
 fn inbox() -> Scenario {
@@ -345,7 +343,7 @@ async fn backup_finished(rig: &mut Rig) -> Value {
 
 /// Checklist 1: the token expired an hour ago. Loading INBOX, sending and a
 /// backup run each need it: exactly one refresh, announced with the account
-/// id only; the app takes and saves the pair; no token in any output.
+/// id only; native persistence saves the pair; no token in any output.
 #[tokio::test]
 async fn checklist_1_an_expired_token_is_refreshed_once_for_inbox_send_and_backup() {
     let mut rig = Rig::new(inbox());
@@ -398,12 +396,12 @@ async fn checklist_1_an_expired_token_is_refreshed_once_for_inbox_send_and_backu
     assert_eq!(announced, vec![json!({"accountId": "g1"})]);
 
     assert_eq!(
-        app_saves_what_the_daemon_refreshed(&mut rig, &mut records).await,
+        native_persists_refresh(&mut rig, &mut records).await,
         1
     );
     assert!(
         rig.s.tokens.unsaved().is_empty(),
-        "saved, no longer offered"
+        "native completion retired the pending pair"
     );
     assert_ne!(records[0]["oauth2AccessToken"], json!(signed.access_token));
     assert_eq!(rig.leaks(), Vec::<String>::new());
@@ -454,7 +452,7 @@ async fn checklist_2_a_revoked_grant_asks_for_a_sign_in_once_and_a_new_one_works
     let reconnect = rig.sign_in(GOOGLE_SCOPE, false);
     let record = rig.record("g1", "me@gmail.test", &reconnect, json!({}));
     rig.store(&[&record]);
-    assert!(ok(&rig.rpc("oauth2.credentials_changed", json!({})).await));
+    rig.notify_fixture_write();
     let after = rig
         .rpc(
             "imap_get_mailboxes",
@@ -468,10 +466,10 @@ async fn checklist_2_a_revoked_grant_asks_for_a_sign_in_once_and_a_new_one_works
 // ── 3. the daemon outlives the token with the app closed ────────────────────
 
 /// Checklist 3: the app is closed; the IDLE watcher lives on past the token's
-/// expiry and renews it itself when mail arrives. The relaunched app takes
-/// the pair, and nothing refreshes a second time.
+/// expiry and renews it itself when mail arrives. Native persistence saves
+/// the pair with no window, and nothing refreshes a second time.
 #[tokio::test]
-async fn checklist_3_the_idle_watcher_renews_the_token_and_the_relaunched_app_takes_the_pair() {
+async fn checklist_3_the_idle_watcher_renews_and_native_persistence_saves_the_pair() {
     let mut rig = Rig::new(inbox());
     let signed = rig.sign_in(GOOGLE_SCOPE, false);
     let mut records = vec![rig.record("g1", "me@gmail.test", &signed, json!({}))];
@@ -505,9 +503,9 @@ async fn checklist_3_the_idle_watcher_renews_the_token_and_the_relaunched_app_ta
     .await;
     wait_until("IDLE again", 10, || rig.imap.count_commands("IDLE") >= 2).await;
 
-    // The app opens: it takes the pair, and using the account refreshes nothing.
+    // The app stays closed; native persistence saves the pair.
     assert_eq!(
-        app_saves_what_the_daemon_refreshed(&mut rig, &mut records).await,
+        native_persists_refresh(&mut rig, &mut records).await,
         1
     );
     assert!(ok(&rig
@@ -519,7 +517,7 @@ async fn checklist_3_the_idle_watcher_renews_the_token_and_the_relaunched_app_ta
     assert_eq!(
         rig.posts(),
         1,
-        "no second refresh after the app saved the pair"
+        "no second refresh after native persistence"
     );
     let _ = rig.rpc("sync.unwatch", json!({"accountId": "g1"})).await;
     assert_eq!(rig.leaks(), Vec::<String>::new());
@@ -564,17 +562,12 @@ async fn checklist_4_a_reconnect_right_after_a_rotating_refresh_keeps_the_new_gr
     moved["oauth2Transport"] = json!("graph");
     let reconnected = rig.record("o1", "me@outlook.test", &graph_grant, moved);
     rig.store(&[&reconnected]);
-    assert!(ok(&rig.rpc("oauth2.credentials_changed", json!({})).await));
+    rig.notify_fixture_write();
     crate::oauth_tokens::recheck_unsaved(&rig.s).await;
-    let offered = rig
-        .rpc("oauth2.take_refreshed", json!({}))
-        .await
-        .result
-        .unwrap();
     assert_eq!(
-        offered["tokens"],
-        json!([]),
-        "the old grant's pair is not offered over the new sign-in"
+        rig.s.tokens.unsaved(),
+        Vec::<Value>::new(),
+        "the old grant's pair is not pending over the new sign-in"
     );
 
     rig.advance(Duration::from_secs(90 * 60));

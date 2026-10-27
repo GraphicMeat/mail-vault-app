@@ -189,30 +189,11 @@ pub(crate) async fn route(
             }
         }
 
-        // The token pairs the daemon refreshed (`oauth_tokens`) that the
-        // stored credentials do not show yet, for the app to save through its
-        // own writer: `{tokens: [{accountId, accessToken, refreshToken,
-        // expiresAt}]}`. Offered again until a read shows them saved.
-        "oauth2.take_refreshed" => {
-            RpcResponse::success(id, json!({ "tokens": state.tokens.unsaved() }))
-        }
-
-        // The app wrote the credentials blob: no held token is trusted before
-        // the stored record is read again (a new sign-in, a removed account),
-        // the pairs it just saved stop being offered, and Archive & delete
-        // jobs waiting for a token look again at once. A keychain read out
-        // from before that write is not joined by the next daemon write.
-        "oauth2.credentials_changed" => {
-            crate::credentials::blob_written_elsewhere();
-            credentials_written(state);
-            RpcResponse::success(id, json!({ "ok": true }))
-        }
-
         _ => return None,
     })
 }
 
-/// The credentials blob was written (by the app, or by `credentials.*`):
+/// The credentials blob was written by native credential completion:
 /// no held token is trusted before the stored record is read again, the
 /// pairs it now holds stop being offered, and Archive & delete jobs waiting
 /// for a token look again at once.
@@ -268,6 +249,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-oauth2-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         DaemonState::for_test(dir.clone(), dir, true)
+    }
+
+    #[tokio::test]
+    async fn renderer_token_writer_routes_are_unavailable() {
+        let state = st();
+        for method in ["oauth2.take_refreshed", "oauth2.credentials_changed"] {
+            assert!(route(&state, method, &json!({}), json!(1)).await.is_none(), "{method}");
+        }
     }
 
     // `refresh_token` posts straight to `mailvault_core::oauth2`'s per-provider

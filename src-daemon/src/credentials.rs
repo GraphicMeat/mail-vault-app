@@ -829,9 +829,9 @@ fn load_blob_raw(interactive: bool) -> Result<Option<HashMap<String, String>>, S
     keychain_blob(interactive)
 }
 
-/// The blob was written outside `change_credentials` (the shell's own
-/// `store_credentials`, announced by `oauth2.credentials_changed`): a read
-/// already out may predate that write, so the next writer must not join it.
+/// Test fixtures that write the blob outside `change_credentials` must bump
+/// this generation: a read already out may predate that fixture write.
+#[cfg(test)]
 pub(crate) fn blob_written_elsewhere() {
     BLOB_READ.bump();
 }
@@ -3249,14 +3249,11 @@ mod tests {
         assert_eq!(*started.lock().unwrap(), vec![false, true]);
     }
 
-    /// The shell writes the blob itself (`store_credentials`) and then tells
-    /// the daemon (`oauth2.credentials_changed`). A keychain read already out
-    /// from before that write holds the old blob, so a daemon write that
-    /// starts after the notice (`change_credentials` reads at the current
-    /// generation) must wait that read out and read again; joining it would
-    /// write the old blob back over the shell's change.
+    /// A test fixture writes the blob outside the native writer and bumps
+    /// the generation. An already started keychain read may hold the old
+    /// blob, so a subsequent native write must wait it out and read again.
     #[tokio::test]
-    async fn a_write_after_the_shells_notice_never_joins_a_read_from_before_it() {
+    async fn a_write_after_an_external_fixture_change_reads_fresh_blob() {
         let _guard = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let _restore_env = TestEnvRestore::capture();
         let dir = std::env::temp_dir().join(format!("mv-cred-notice-{}", uuid::Uuid::new_v4()));
@@ -3272,34 +3269,29 @@ mod tests {
                 BLOB_READ.read_since(BLOB_READ.generation(), true, move |interactive| {
                     s.lock().unwrap().push(interactive);
                     let _ = parked.recv();
-                    Ok(blob("before the shell wrote"))
+                    Ok(blob("before the fixture wrote"))
                 }),
             );
         until_started(&started, 1).await;
 
-        let notice = crate::server::handle_request_for_test(
-            &state,
-            "oauth2.credentials_changed",
-            serde_json::json!({}),
-        )
-        .await;
-        assert!(notice.error.is_none(), "the notice is answered");
+        blob_written_elsewhere();
+        crate::handlers::oauth2::credentials_written(&state);
 
         let s = started.clone();
         let write_read =
             tokio::spawn(
                 BLOB_READ.read_since(BLOB_READ.generation(), true, move |interactive| {
                     s.lock().unwrap().push(interactive);
-                    Ok(blob("what the shell wrote"))
+                    Ok(blob("what the fixture wrote"))
                 }),
             );
         tokio::time::sleep(Duration::from_millis(50)).await;
         release.send(()).unwrap();
-        assert_eq!(stale.await.unwrap(), Ok(blob("before the shell wrote")));
+        assert_eq!(stale.await.unwrap(), Ok(blob("before the fixture wrote")));
         assert_eq!(
             write_read.await.unwrap(),
-            Ok(blob("what the shell wrote")),
-            "the write reads the blob the shell wrote"
+            Ok(blob("what the fixture wrote")),
+            "the write reads the blob the fixture wrote"
         );
         assert_eq!(
             *started.lock().unwrap(),

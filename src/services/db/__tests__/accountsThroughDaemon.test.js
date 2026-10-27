@@ -1,10 +1,7 @@
 // @vitest-environment node
 // db/accounts.js and db/keychain.js through the daemon (Phase 1 step 0b):
-// accounts.json and the credentials blob are the daemon's; the app sends one
-// change per account and never writes either itself. The shell's old path is
-// taken only for a daemon without the RPCs (for good) or one that cannot be
-// reached (that call only), and nothing is ever written from a read that
-// did not succeed.
+// accounts.json and the credentials blob are native-owned. Renderer writes
+// are limited to one daemon-only cleanup of malformed legacy entries.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fakeAccountsDaemon } from './fakeAccountsDaemon.js';
 
@@ -25,7 +22,6 @@ globalThis.window = { __TAURI__: { event: { listen: (name, cb) => { h.listeners.
 
 vi.mock('../../db', async () => await import('../accounts.js'));
 vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => ({ accounts: h.mailAccounts }), setState: (fn) => { h.mailAccounts = fn({ accounts: h.mailAccounts }).accounts; } } }));
-const sync = await import('../../oauthTokenSync.js');
 const accounts = await import('../accounts.js');
 const keychain = await import('../keychain.js');
 const keychainSession = await import('../../keychainSession.js');
@@ -61,7 +57,7 @@ function useDaemon(override = () => undefined) {
     }
     if (cmd === 'credentials.delete') { args.ids.forEach(id => delete blob[id]); return { deleted: args.ids, version: ++credVersion }; }
     if (cmd === 'get_credentials') return Object.keys(blob).length ? { status: 'granted', credentials: { ...blob } } : { status: 'empty', credentials: {} };
-    if (cmd === 'store_credentials') { blob = { ...args.credentials }; return null; }
+    if (cmd === 'store_credentials') throw new Error('retired shell writer reached');
     return {};
   };
 }
@@ -74,7 +70,6 @@ beforeEach(() => {
   blob = { old: JSON.stringify({ id: 'old', email: 'old@x.test', imapHost: 'imap.x.test', password: 'keep' }) };
   calls = [];
   credVersion = 10;
-  sync.__resetForTests();
   h.mailAccounts = [];
   fsWrites.length = 0;
   h.listeners.clear();
@@ -211,7 +206,7 @@ describe('the account list goes through the daemon', () => {
   });
 });
 
-describe('the credentials go through the daemon', () => {
+describe('the remaining renderer credential adapter', () => {
   it('reads the blob with the daemon and keeps the status the shell answered', async () => {
     const data = await keychain.loadKeychain();
     expect(Object.keys(data)).toEqual(['old']);
@@ -219,98 +214,49 @@ describe('the credentials go through the daemon', () => {
     expect(names()).not.toContain('get_credentials');
   });
 
-  it('updateOAuth2Tokens merges only the token fields', async () => {
-    blob.g = JSON.stringify({ id: 'g', email: 'g@x.test', authType: 'oauth2', oauth2RefreshToken: 'rt-1', oauth2ClientId: 'c' });
-    const stored = await accounts.updateOAuth2Tokens('g', { accessToken: 'at-2', expiresAt: 5 });
-    // No refresh token in the pair: the stored one is left alone, never
-    // rewritten from this window's (possibly older) copy.
-    expect(sent('credentials.update')[0][1]).toEqual({ id: 'g', fields: { oauth2AccessToken: 'at-2', oauth2ExpiresAt: 5 } });
-    expect(stored).toMatchObject({ oauth2AccessToken: 'at-2', oauth2RefreshToken: 'rt-1', oauth2ClientId: 'c' });
-    await accounts.updateOAuth2Tokens('g', { accessToken: 'at-3', refreshToken: 'rt-2', expiresAt: 6 });
-    expect(sent('credentials.update')[1][1].fields.oauth2RefreshToken).toBe('rt-2');
-    expect(await accounts.updateOAuth2Tokens('missing', { accessToken: 'x' })).toBeUndefined();
-  });
-
-  // Another window saved a Reconnect (a new grant) after this window cached
-  // the old one: the daemon refuses the old grant's pair, and nothing here
-  // treats it as saved or touches the copy.
-  it('a pair for a grant the daemon no longer holds is not saved, and its chain goes with it', async () => {
-    blob.g = JSON.stringify({ id: 'g', email: 'g@x.test', authType: 'oauth2', oauth2RefreshToken: 'rt-old' });
-    await keychain.loadKeychain();
-    useDaemon((cmd) => (cmd === 'credentials.update' ? () => ({ updated: false, staleGrant: true, version: credVersion }) : undefined));
-    const stored = await accounts.updateOAuth2Tokens('g', { accessToken: 'at-old-grant', refreshToken: 'rt-old', expiresAt: 5, chain: ['fp-old'] });
-    expect(stored).toBeUndefined();
-    expect(sent('credentials.update')[0][1].chain).toEqual(['fp-old']);
-    expect(JSON.parse((await keychain.loadKeychain()).g).oauth2AccessToken).toBeUndefined();
-    expect(names()).not.toContain('store_credentials');
-  });
-
-  it('a parked daemon write answers busy: retried, then refused, never written by the shell', async () => {
-    vi.useFakeTimers();
-    useDaemon((cmd) => (cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainBusy')) : undefined));
-    await keychain.loadKeychain();
-    const saving = keychain.saveCredentials({ a: '{"id":"a"}' }).catch(e => e);
-    await vi.advanceTimersByTimeAsync(3500);
-    expect(String((await saving).message)).toBe('E_KEYCHAIN_WRITE: errors.keychainBusy');
-    expect(sent('credentials.save')).toHaveLength(3);
-    expect(names()).not.toContain('store_credentials');
-  });
-
-  it('a refused read writes nothing: E_KEYCHAIN_UNAVAILABLE, no shell write', async () => {
-    useDaemon((cmd) => (cmd === 'accounts.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainUnavailable')) : undefined));
-    await expect(accounts.saveAccount({ id: 'a', email: 'a@x.test', password: 'pa' })).rejects.toThrow('E_KEYCHAIN_UNAVAILABLE');
-    expect(names()).not.toContain('store_credentials');
-    expect(sent('accounts.put')).toHaveLength(0);
-  });
-
-  it('an uncertain native write rejects once with a complete cache and no shell replay', async () => {
-    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainWriteFailed')) : undefined);
-    const cache = await keychain.loadKeychain();
-    await expect(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' })).rejects.toThrow('E_KEYCHAIN_WRITE');
-    expect(sent('credentials.save')).toHaveLength(1);
-    expect(sent('store_credentials')).toHaveLength(0);
-    expect(cache.a).toBeUndefined();
-  });
-
-  it('a failed keychain write without a complete copy is an error, never a partial whole-blob write', async () => {
-    vi.useFakeTimers();
-    useDaemon((cmd) => (cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainWriteFailed'))
-      : cmd === 'credentials.get' || cmd === 'get_credentials' ? () => ({ status: 'unavailable', message: 'locked' }) : undefined));
-    await keychain.loadKeychain();
-    const saving = keychain.saveCredentials({ a: '{"id":"a"}' }).catch(e => e);
-    await vi.advanceTimersByTimeAsync(3500);
-    expect(String((await saving).message)).toMatch(/^E_KEYCHAIN_WRITE: errors\.keychainWriteFailed/);
-    expect(names()).not.toContain('store_credentials');
-  });
-
-  // macOS: the daemon's gate is blocked (its prompt was refused) while the
-  // app, the item's creator, still reads it quietly. That read is kept, and
-  // a change the daemon then refuses is written by the shell from it.
-  it('a quiet shell read does not authorize a refused native mutation', async () => {
-    useDaemon((cmd) => (cmd === 'credentials.get' ? () => ({ status: 'unavailable', message: 'The keychain could not be read' })
-      : cmd === 'credentials.save' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainUnavailable')) : undefined));
-    const data = await keychain.loadKeychain();
-    expect(Object.keys(data)).toEqual(['old']);
-    expect(keychainSession.getStatus()).toBe('granted');
-    await expect(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' })).rejects.toThrow('E_KEYCHAIN_UNAVAILABLE');
-    expect(sent('credentials.save')).toHaveLength(1);
-    expect(sent('store_credentials')).toHaveLength(0);
-  });
-
-  it('old daemon credential reads work but mutations cannot switch to shell writes', async () => {
-    useDaemon(cmd => cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined);
-    await keychain.loadKeychain();
-    await expect(keychain.saveCredentials({ a: JSON.stringify({ id: 'a', email: 'a@x.test' }) })).rejects.toThrow('errors.daemonOutdated');
-    expect(sent('get_credentials')).toHaveLength(1);
-    expect(sent('store_credentials')).toHaveLength(0);
+  it('initDB removes malformed legacy entries through one native delete', async () => {
+    blob.legacy = JSON.stringify({ id: 'legacy', password: 'synthetic-old' });
+    await accounts.initDB();
+    expect(sent('credentials.delete')).toEqual([['credentials.delete', { ids: ['legacy'] }]]);
     expect(Object.keys(blob)).toEqual(['old']);
+    expect(names()).not.toContain('store_credentials');
+  });
+
+  it('a lost native cleanup reply changes neither cache nor shell storage', async () => {
+    const cache = await keychain.loadKeychain();
+    useDaemon(cmd => cmd === 'credentials.delete' ? () => Promise.reject(UNAVAILABLE()) : undefined);
+    await expect(keychain.deleteCredentials(['old'])).rejects.toThrow('E_KEYCHAIN_WRITE');
+    expect(cache.old).toBeDefined();
+    expect(blob.old).toBeDefined();
+    expect(sent('credentials.delete')).toHaveLength(1);
+    expect(names()).not.toContain('store_credentials');
+  });
+
+  it('METHOD_NOT_FOUND keeps quiet reads but refuses cleanup with zero fallback writes', async () => {
+    useDaemon(cmd => cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined);
+    expect(Object.keys(await keychain.loadKeychain())).toEqual(['old']);
+    await expect(keychain.deleteCredentials(['old'])).rejects.toThrow('errors.daemonOutdated');
+    expect(sent('get_credentials')).toHaveLength(1);
+    expect(sent('credentials.delete')).toHaveLength(1);
+    expect(names()).not.toContain('store_credentials');
+    expect(Object.keys(blob)).toEqual(['old']);
+  });
+
+  it('a quiet shell read does not authorize a refused native cleanup', async () => {
+    useDaemon(cmd => cmd === 'credentials.get' ? () => ({ status: 'unavailable' })
+      : cmd === 'credentials.delete' ? () => Promise.reject(coded('RPC_ERROR', 'errors.keychainUnavailable')) : undefined);
+    expect(Object.keys(await keychain.loadKeychain())).toEqual(['old']);
+    await expect(keychain.deleteCredentials(['old'])).rejects.toThrow('E_KEYCHAIN_UNAVAILABLE');
+    expect(sent('get_credentials')).toHaveLength(1);
+    expect(names()).not.toContain('store_credentials');
+    expect(blob.old).toBeDefined();
   });
 });
 
 describe('other windows', () => {
-  it('foreign and own events refresh the complete copy without assuming per-record freshness', async () => {
+  it('native events refresh the complete copy without assuming per-record freshness', async () => {
     await keychain.loadKeychain();
-    await keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' });
+    blob.a = '{"id":"a","email":"a@x.test"}';
     const reads = sent('credentials.get').length;
     h.listeners.get('credentials-changed')({ payload: { ids: ['a'], version: credVersion } });
     await vi.waitFor(() => expect(sent('credentials.get').length).toBeGreaterThan(reads));
@@ -323,17 +269,17 @@ describe('other windows', () => {
     await vi.waitFor(async () => expect(Object.keys(await keychain.loadKeychain()).sort()).toEqual(['a', 'old', 'w2']));
   });
 
-  it('a refresh read that a local write overtook does not replace the copy', async () => {
+  it('a refresh read overtaken by native cleanup does not restore a deleted record', async () => {
     await keychain.loadKeychain();
     let release;
     let first = true;
     useDaemon((cmd) => (cmd === 'credentials.get' && first ? () => { first = false; const snapshot = { status: 'granted', credentials: { ...blob } }; return new Promise(r => { release = () => r(snapshot); }); } : undefined));
     h.listeners.get('credentials-changed')({ payload: { ids: ['x'], version: 99 } });
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
-    await keychain.saveCredentials({ mine: '{"id":"mine","email":"m@x.test"}' });
+    await keychain.deleteCredentials(['old']);
     release();
     await vi.waitFor(() => expect(sent('credentials.get').length).toBeGreaterThanOrEqual(2));
-    await vi.waitFor(async () => expect(Object.keys(await keychain.loadKeychain())).toContain('mine'));
+    await vi.waitFor(async () => expect((await keychain.loadKeychain()).old).toBeUndefined());
   });
 });
 
@@ -349,130 +295,100 @@ const noShellMutation = () => {
   expect(sent('accounts_fallback').filter(([, a]) => !['accounts.list', 'accounts.get'].includes(a.method))).toHaveLength(0);
 };
 
-describe('qualified U outcome policy', () => {
-  for (const method of ['credentials.save', 'credentials.delete', 'credentials.update']) {
-    it(`${method}: a lost accepted reply cannot switch writers or commit cache`, async () => {
-      const cache = await keychain.loadKeychain();
-      const before = { ...cache };
-      const wire = deferred();
-      let admitted = false;
-      useDaemon(cmd => cmd === method ? () => { admitted = true; return wire.promise; } : undefined);
-      const operation = method.endsWith('save') ? keychain.saveCredentials({ a: '{"id":"a"}' })
-        : method.endsWith('delete') ? keychain.deleteCredentials(['old']) : keychain.updateCredentials('old', { password: 'new' });
-      const result = attempt(operation);
-      await vi.waitFor(() => expect(admitted).toBe(true));
-      wire.reject(UNAVAILABLE());
-      expect((await result).error).toBeInstanceOf(Error);
-      expect(cache).toEqual(before);
-      expect(keychainSession.getStatus()).toBe('granted'); // read outcome, not a saved claim
-      noShellMutation();
-      expect(sent(method)).toHaveLength(1);
-      expect(sent('oauth2.credentials_changed')).toHaveLength(0);
-    });
-    it(`${method}: bare version is not an acknowledgement`, async () => {
-      const cache = await keychain.loadKeychain();
-      const before = { ...cache };
-      useDaemon(cmd => cmd === method ? () => ({ version: 40 }) : undefined);
-      const operation = method.endsWith('save') ? keychain.saveCredentials({ a: '{"id":"a"}' })
-        : method.endsWith('delete') ? keychain.deleteCredentials(['old']) : keychain.updateCredentials('old', { password: 'new' });
-      expect((await attempt(operation)).error).toBeInstanceOf(Error);
-      expect(cache).toEqual(before);
-      expect(keychainSession.getStatus()).toBe('granted'); // read outcome, not a saved claim
-      noShellMutation();
-    });
-  }
+describe('native mutation outcomes', () => {
+  it('a lost accepted cleanup reply cannot switch writers or commit cache', async () => {
+    const cache = await keychain.loadKeychain();
+    const before = { ...cache };
+    const wire = deferred();
+    useDaemon(cmd => cmd === 'credentials.delete' ? () => wire.promise : undefined);
+    const result = attempt(keychain.deleteCredentials(['old']));
+    await vi.waitFor(() => expect(sent('credentials.delete')).toHaveLength(1));
+    wire.reject(UNAVAILABLE());
+    expect((await result).error).toBeInstanceOf(Error);
+    expect(cache).toEqual(before);
+    expect(keychainSession.getStatus()).toBe('granted');
+    noShellMutation();
+  });
+
+  it('bare version is not a cleanup acknowledgement', async () => {
+    const cache = await keychain.loadKeychain();
+    useDaemon(cmd => cmd === 'credentials.delete' ? () => ({ version: 40 }) : undefined);
+    expect((await attempt(keychain.deleteCredentials(['old']))).error).toBeInstanceOf(Error);
+    expect(cache.old).toBeDefined();
+    noShellMutation();
+  });
+
   for (const malformed of [false, true]) {
-    it(`metadata put rejects ${malformed ? 'malformed' : 'lost'} completion after credential success`, async () => {
-      useDaemon((cmd,args) => cmd === 'accounts.save' ? () => { blob.a=JSON.stringify(args.entries[0]); return malformed ? { version: 4 } : Promise.reject(UNAVAILABLE()); } : undefined);
+    it(`metadata save rejects ${malformed ? 'malformed' : 'lost'} completion after credential success`, async () => {
+      useDaemon((cmd, args) => cmd === 'accounts.save' ? () => {
+        blob.a = JSON.stringify(args.entries[0]);
+        return malformed ? { version: 4 } : Promise.reject(UNAVAILABLE());
+      } : undefined);
       const out = await attempt(accounts.saveAccounts([{ id: 'a', email: 'a@x.test', password: 'synthetic-a' }]));
       expect(out.error?.message).toMatch(/^E_KEYCHAIN_WRITE/);
-      expect(() => keychain.assertLegacyWriteAllowed()).toThrow('errors.keychainWriteFailed');
-      expect(JSON.parse(blob.a).password).toBe('synthetic-a'); // an earlier step can remain changed
+      expect(() => keychain.assertAccountCreateOutcomeKnown()).toThrow('errors.accountsWriteFailed');
+      expect(JSON.parse(blob.a).password).toBe('synthetic-a');
       expect(JSON.parse(file).map(a => a.id)).toEqual(['old']);
       noShellMutation();
     });
   }
-  it('native uncertainty survives read/cache/reconnect and refuses later old-daemon fallback', async () => {
-    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(UNAVAILABLE()) : undefined);
-    await attempt(keychain.saveCredentials({ a: '{"id":"a"}' }));
-    keychain.clearCredentialsCache();
-    await keychain.loadKeychain(); // readable data does not prove earlier work was cancelled
-    h.listeners.get('daemon-reconnected')?.();
-    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(OUTDATED()) : undefined);
-    const out = await attempt(keychain.saveCredentials({ b: '{"id":"b"}' }));
-    expect(out.error).toBeInstanceOf(Error);
-    noShellMutation();
-  });
-  it('a quiet fallback read remains presentation data, never write authority', async () => {
+
+  it('a quiet fallback read remains presentation data, never cleanup write authority', async () => {
     useDaemon(cmd => cmd === 'credentials.get' ? () => Promise.reject(UNAVAILABLE())
-      : cmd === 'credentials.save' ? () => Promise.reject(UNAVAILABLE()) : undefined);
+      : cmd === 'credentials.delete' ? () => Promise.reject(UNAVAILABLE()) : undefined);
     expect(Object.keys(await keychain.loadKeychain())).toEqual(['old']);
     expect(keychainSession.getStatus()).toBe('granted');
-    expect((await attempt(keychain.saveCredentials({ a: '{"id":"a"}' }))).error).toBeInstanceOf(Error);
-    noShellMutation();
-  });
-  it('unsupported mutation preserves native data and probes native again after upgrade', async () => {
-    useDaemon(cmd => cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined);
-    await keychain.loadKeychain();
-    blob.other = '{"id":"other","email":"other@x.test"}';
-    await expect(keychain.saveCredentials({ a: '{"id":"a"}' })).rejects.toThrow('errors.daemonOutdated');
-    expect(Object.keys(blob).sort()).toEqual(['old','other']);
-    useDaemon();
-    await keychain.saveCredentials({ b: '{"id":"b"}' });
-    expect(sent('credentials.save')).toHaveLength(2);
-    expect(Object.keys(blob).sort()).toEqual(['b','old','other']);
+    expect((await attempt(keychain.deleteCredentials(['old']))).error).toBeInstanceOf(Error);
+    expect(blob.old).toBeDefined();
     noShellMutation();
   });
 
-  for (const status of ['denied', 'unavailable', 'malformed']) {
-    it(`legacy mutation refuses a fresh ${status} read even with a warm complete cache`, async () => {
-      await keychain.loadKeychain();
-      useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(OUTDATED())
-        : cmd === 'get_credentials' ? () => status === 'malformed' ? { status: 'granted', credentials: [] } : { status } : undefined);
-      expect((await attempt(keychain.saveCredentials({ a: '{"id":"a"}' }))).error).toBeInstanceOf(Error);
-      noShellMutation();
-    });
-  }
-  it('definitive unsupported refusal starts no legacy job or unknown completion', async () => {
-    useDaemon(cmd => cmd === 'credentials.save' ? () => Promise.reject(OUTDATED()) : undefined);
-    await expect(keychain.saveCredentials({ a: '{"id":"a"}' })).rejects.toThrow('errors.daemonOutdated');
+  it('definite old-daemon refusal preserves native data and a later compatible delete succeeds', async () => {
+    useDaemon(cmd => cmd.startsWith('credentials.') ? () => Promise.reject(OUTDATED()) : undefined);
+    await keychain.loadKeychain();
+    blob.other = '{"id":"other","email":"other@x.test"}';
+    await expect(keychain.deleteCredentials(['old'])).rejects.toThrow('errors.daemonOutdated');
+    expect(Object.keys(blob).sort()).toEqual(['old', 'other']);
     noShellMutation();
     useDaemon();
-    await keychain.saveCredentials({ b: '{"id":"b"}' });
-    expect(Object.keys(blob).sort()).toEqual(['b','old']);
+    await keychain.deleteCredentials(['old']);
+    expect(Object.keys(blob)).toEqual(['other']);
   });
-  it('read message/error canaries never reach logs or the session message', async () => {
+
+  it('read message and mutation error canaries never reach logs or session text', async () => {
     const spies = ['log', 'warn', 'error'].map(k => vi.spyOn(console, k).mockImplementation(() => {}));
-    useDaemon(cmd => cmd === 'credentials.get' || cmd === 'get_credentials' ? () => ({ status: 'unavailable', message: 'CANARY-password-token' }) : undefined);
+    useDaemon(cmd => cmd === 'credentials.get' || cmd === 'get_credentials'
+      ? () => ({ status: 'unavailable', message: 'CANARY-password-token' }) : undefined);
     await keychain.loadKeychain();
     expect(keychainSession.getStatus()).toBe('unavailable');
     expect(keychainSession.getMessage() || '').not.toContain('CANARY');
     useDaemon(cmd => cmd === 'accounts.save' ? () => Promise.reject(new Error('CANARY-password-token')) : undefined);
-    vi.useFakeTimers();
-    const pending = attempt(accounts.saveAccount({ id: 'a', email: 'a@x.test', password: 'CANARY-password-token' }));
-    await vi.advanceTimersByTimeAsync(3500);
-    await pending;
-    expect(JSON.stringify(spies.flatMap(s => s.mock.calls))).not.toContain('CANARY');
+    const out = await attempt(accounts.saveAccount({ id: 'a', email: 'a@x.test', password: 'CANARY-password-token' }));
+    expect(out.error).toBeInstanceOf(Error);
+    expect(JSON.stringify(spies.flatMap(spy => spy.mock.calls))).not.toContain('CANARY');
   });
 });
 
 describe('qualified U connection epochs', () => {
-  it('a native write overtaking the first load obtains a fresh usable cache', async () => {
+  it('a native cleanup overtaking the first load obtains a fresh usable cache', async () => {
     const old = deferred();
+    const stale = blob.old;
     let first = true;
     useDaemon(cmd => cmd === 'credentials.get' && first ? () => { first = false; return old.promise; } : undefined);
     const loading = keychain.loadKeychain();
     await vi.waitFor(() => expect(first).toBe(false));
-    await keychain.saveCredentials({ mine: '{"id":"mine","email":"mine@x.test"}' });
-    old.resolve({ status: 'granted', credentials: { old: blob.old } });
-    expect(Object.keys(await loading).sort()).toEqual(['mine', 'old']);
-    expect(Object.keys(await keychain.loadKeychain()).sort()).toEqual(['mine', 'old']);
-    expect(keychainSession.getStatus()).toBe('granted');
+    await keychain.deleteCredentials(['old']);
+    old.resolve({ status: 'granted', credentials: { old: stale } });
+    expect(Object.keys(await loading)).toEqual([]);
+    expect(Object.keys(await keychain.loadKeychain())).toEqual([]);
+    expect(keychainSession.getStatus()).toBe('empty');
   });
   it('restart after generation100 accepts new generation1/2 and another window deletion', async () => {
     await keychain.loadKeychain();
     credVersion = 100;
-    await keychain.saveCredentials({ mine: '{"id":"mine"}' });
+    blob.mine = '{"id":"mine"}';
+    h.listeners.get('credentials-changed')({ payload: { ids: ['mine'], version: 100 } });
+    await vi.waitFor(async () => expect((await keychain.loadKeychain()).mine).toBeDefined());
     h.listeners.get('daemon-reconnected')();
     await vi.waitFor(() => expect(sent('credentials.get').length).toBeGreaterThan(1));
     delete blob.old;
@@ -600,46 +516,6 @@ describe('public credential clear detaches obsolete full refresh work', () => {
   }
 });
 
-describe('qualified U refreshed pairs through actual adapters', () => {
-  it('old daemon leaves rotated offered pair unsaved until guarded native persistence accepts original chain', async () => {
-    const logs = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const original = { id: 'g', email: 'g@x.test', oauth2RefreshToken: 'synthetic-original', oauth2ClientId: 'c', oauth2ExpiresAt: 1 };
-    blob.g = JSON.stringify(original);
-    const chain = [await sync.grantFingerprint(original)];
-    const pair = { accountId: 'g', accessToken: 'synthetic-access', refreshToken: 'synthetic-rotated', expiresAt: 500, chain };
-    h.mailAccounts = [original];
-    let supported = false;
-    let offered = true;
-    useDaemon((cmd, args) => {
-      if (cmd === 'oauth2.take_refreshed') return () => ({ tokens: offered ? [pair] : [] });
-      if (cmd === 'credentials.update') return async () => {
-        if (!supported) throw OUTDATED();
-        expect(args.chain).toEqual(chain);
-        expect(args.chain).toContain(await sync.grantFingerprint(JSON.parse(blob.g)));
-        blob.g = JSON.stringify({ ...JSON.parse(blob.g), ...args.fields });
-        offered = false;
-        return { updated: true, version: ++credVersion };
-      };
-      return undefined;
-    });
-    expect(await sync.saveRefreshedTokens()).toBe(0);
-    expect(await sync.saveRefreshedTokens()).toBe(0);
-    expect(sent('oauth2.take_refreshed')).toHaveLength(2);
-    expect(offered).toBe(true);
-    expect(JSON.parse((await keychain.loadKeychain()).g)).toEqual(original);
-    expect(h.mailAccounts[0].oauth2AccessToken).toBeUndefined();
-    expect(sent('oauth2.credentials_changed')).toHaveLength(0);
-    noShellMutation();
-    expect(logs.mock.calls.some(a => String(a[0]).includes('could not save'))).toBe(true);
-    expect(JSON.stringify(logs.mock.calls)).not.toContain('synthetic-');
-    supported = true;
-    expect(await sync.saveRefreshedTokens()).toBe(1);
-    expect(JSON.parse(blob.g).oauth2RefreshToken).toBe(pair.refreshToken);
-    expect(h.mailAccounts[0].oauth2AccessToken).toBe(pair.accessToken);
-    expect(offered).toBe(false);
-  });
-});
-
 describe('qualified native removal outcomes', () => {
   it('one native result removes the exact account without a renderer persistence chain', async () => {
     file = JSON.stringify([{ id: 'old', email: 'old@x.test', password: 'legacy-A' }, { id: 'b', email: 'b@x.test' }]);
@@ -692,34 +568,6 @@ describe('qualified native removal outcomes', () => {
 
 
 describe('late backend completion is not cancelled by a read', () => {
-  it('a lost native credential reply remains parked, excludes another intent, and later keeps both records', async () => {
-    vi.useFakeTimers();
-    const backend = deferred();
-    let parked = true;
-    let first = true;
-    const late = backend.promise.then(() => { blob.a = '{"id":"a","email":"a@x.test"}'; parked = false; });
-    useDaemon((cmd, args) => cmd === 'credentials.save' ? () => {
-      if (first) { first = false; return Promise.reject(UNAVAILABLE()); }
-      if (parked) return Promise.reject(coded('RPC_ERROR', 'errors.keychainBusy'));
-      Object.assign(blob, args.records);
-      return { saved: Object.keys(args.records), version: ++credVersion };
-    } : undefined);
-    const cache = await keychain.loadKeychain();
-    expect((await attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }))).error).toBeInstanceOf(Error);
-    keychain.clearCredentialsCache();
-    expect((await keychain.loadKeychain()).a).toBeUndefined();
-    expect(cache.a).toBeUndefined();
-    const second = attempt(keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' }));
-    await vi.advanceTimersByTimeAsync(3500);
-    expect((await second).error?.message).toContain('errors.keychainBusy');
-    expect(blob.a).toBeUndefined();
-    backend.resolve(); await late;
-    expect(blob.a).toBeDefined();
-    await keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' });
-    expect(Object.keys(blob).sort()).toEqual(['a', 'b', 'old']);
-    expect(sent('credentials.save')).toHaveLength(5); // first + bounded Busy + new intent
-    noShellMutation();
-  });
   it('a lost metadata reply can complete after a read; only a new named native intent continues', async () => {
     const backend = deferred();
     let parked = true;
@@ -743,203 +591,57 @@ describe('late backend completion is not cancelled by a read', () => {
 });
 
 
-describe('round1 reviewed cache and writer interleavings', () => {
-  it('an unsupported legacy intent creates no owner that blocks a later compatible native save', async () => {
-    useDaemon(cmd=>cmd==='credentials.save'?()=>Promise.reject(OUTDATED()):undefined);
-    await expect(keychain.saveCredentials({a:'{"id":"a"}'})).rejects.toThrow('errors.daemonOutdated');
+describe('native cleanup and event interleavings', () => {
+  it('an old epoch delete reply does not patch the reconnected cache', async () => {
+    await keychain.loadKeychain();
+    const wire = deferred();
+    useDaemon(cmd => cmd === 'credentials.delete' ? () => wire.promise : undefined);
+    const pending = attempt(keychain.deleteCredentials(['old']));
+    await vi.waitFor(() => expect(sent('credentials.delete')).toHaveLength(1));
+    blob.old = '{"id":"old","email":"old@x.test","password":"current"}';
+    h.listeners.get('daemon-reconnected')();
+    await vi.waitFor(async () => expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current'));
+    wire.resolve({ deleted: ['old'], version: 100 });
+    expect((await pending).error).toBeUndefined();
+    expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current');
     noShellMutation();
-    useDaemon();
-    await keychain.saveCredentials({b:'{"id":"b"}'});
-    await accounts.ensureAccountsInFile([{id:'b',email:'b@x.test'}]);
-    expect(Object.keys(blob).sort()).toEqual(['b','old']);
-    expect(JSON.parse(file).some(a=>a.id==='b')).toBe(true);
   });
-  it('an admitted native credential call excludes a competing legacy whole-blob intent', async () => {
-    const native = deferred();
-    let started = false;
-    useDaemon((cmd, args) => {
-      if (cmd === 'credentials.save') return async () => { started = true; await native.promise; Object.assign(blob, args.records); return { saved: ['a'], version: 11 }; };
-      if (cmd === 'credentials.delete') return () => Promise.reject(OUTDATED());
-      return undefined;
-    });
-    const a = attempt(keychain.saveCredentials({ a: '{"id":"a","email":"a@x.test"}' }));
-    await vi.waitFor(() => expect(started).toBe(true));
-    keychain.clearCredentialsCache();
-    try {
-      expect((await attempt(keychain.deleteCredentials(['old']))).error).toBeInstanceOf(Error);
-      expect(sent('store_credentials')).toHaveLength(0);
-    } finally { native.resolve(); await a; }
-    useDaemon();
-    await keychain.deleteCredentials(['old']);
-    expect(Object.keys(blob)).toEqual(['a']);
-  });
-  it('an admitted native account mutation excludes legacy credential preservation conflicts', async () => {
-    const native = deferred();
-    let started = false;
-    useDaemon((cmd, args) => {
-      if (cmd === 'accounts.put') return async () => { started = true; await native.promise; return daemon.call(cmd, args); };
-      if (cmd === 'credentials.save') return () => Promise.reject(OUTDATED());
-      return undefined;
-    });
-    const metadata = attempt(accounts.ensureAccountsInFile([{ id: 'a', email: 'a@x.test' }]));
-    await vi.waitFor(() => expect(started).toBe(true));
-    try {
-      expect((await attempt(keychain.saveCredentials({ b: '{"id":"b","email":"b@x.test"}' }))).error).toBeInstanceOf(Error);
-      expect(sent('store_credentials')).toHaveLength(0);
-    } finally { native.resolve(); await metadata; }
-  });
-  for (const method of ['credentials.save', 'credentials.update', 'credentials.delete']) {
-    it(`${method}: an old epoch success keeps operation truth without patching the reconnected cache`, async () => {
-      await keychain.loadKeychain();
-      const wire = deferred();
-      let admitted = false;
-      const result = method.endsWith('save') ? { saved: ['old'], version: 100 }
-        : method.endsWith('delete') ? { deleted: ['old'], version: 100 } : { updated: true, version: 100 };
-      useDaemon(cmd => cmd === method ? () => { admitted = true; return wire.promise; } : undefined);
-      const op = method.endsWith('save') ? keychain.saveCredentials({ old: '{"id":"old","email":"old@x.test","password":"obsolete"}' })
-        : method.endsWith('delete') ? keychain.deleteCredentials(['old']) : keychain.updateCredentials('old', { password: 'obsolete' });
-      const pending = attempt(op);
-      await vi.waitFor(() => expect(admitted).toBe(true));
-      blob.old = '{"id":"old","email":"old@x.test","password":"current"}';
-      h.listeners.get('daemon-reconnected')();
-      await vi.waitFor(async () => expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current'));
-      wire.resolve(result);
-      const settled = await pending;
-      expect(settled.error).toBeUndefined();
-      if (method.endsWith('update')) expect(settled.value).toBe(true);
-      expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current');
-      delete blob.old; blob.next = '{"id":"next","email":"next@x.test"}';
-      h.listeners.get('credentials-changed')({ payload: { version: 1, ids: ['old', 'next'] } });
-      await vi.waitFor(async () => expect((await keychain.loadKeychain()).old).toBeUndefined());
-      blob.last = '{"id":"last","email":"last@x.test"}';
-      h.listeners.get('credentials-changed')({ payload: { version: 2, ids: ['last'] } });
-      await vi.waitFor(async () => expect((await keychain.loadKeychain()).last).toBeDefined());
-      expect(sent(method)).toHaveLength(1);
-      noShellMutation();
-    });
-  }
-  it('a delayed foreign deletion/event is not hidden by this windows later per-record reply', async () => {
+
+  it('a delayed foreign deletion event is not hidden by a later local cleanup reply', async () => {
     await keychain.loadKeychain();
     delete blob.old;
     blob.foreign = '{"id":"foreign","email":"foreign@x.test"}';
-    await keychain.saveCredentials({ mine: '{"id":"mine","email":"mine@x.test"}' }); // version11 only patched mine
+    await keychain.deleteCredentials(['old']);
     h.listeners.get('credentials-changed')({ payload: { version: 10, ids: ['old', 'foreign'] } });
-    h.listeners.get('credentials-changed')({ payload: { version: 11, ids: ['mine'] } });
-    await vi.waitFor(async () => expect(Object.keys(await keychain.loadKeychain()).sort()).toEqual(['foreign', 'mine']));
+    await vi.waitFor(async () => expect(Object.keys(await keychain.loadKeychain())).toEqual(['foreign']));
+    noShellMutation();
   });
-  it('an older success reply cannot overwrite a newer same-connection full refresh', async () => {
+
+  it('an older delete success reply cannot overwrite a newer same-connection read', async () => {
     await keychain.loadKeychain();
     const wire = deferred();
-    let admitted = false;
-    useDaemon(cmd => cmd === 'credentials.save' ? () => { admitted = true; return wire.promise; } : undefined);
-    const pending = attempt(keychain.saveCredentials({ old: '{"id":"old","email":"old@x.test","password":"obsolete"}' }));
-    await vi.waitFor(() => expect(admitted).toBe(true));
+    useDaemon(cmd => cmd === 'credentials.delete' ? () => wire.promise : undefined);
+    const pending = attempt(keychain.deleteCredentials(['old']));
+    await vi.waitFor(() => expect(sent('credentials.delete')).toHaveLength(1));
     blob.old = '{"id":"old","email":"old@x.test","password":"current"}';
     h.listeners.get('credentials-changed')({ payload: { version: 12, ids: ['old'] } });
     await vi.waitFor(async () => expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current'));
-    wire.resolve({ saved: ['old'], version: 11 });
+    wire.resolve({ deleted: ['old'], version: 11 });
     expect((await pending).error).toBeUndefined();
     expect(JSON.parse((await keychain.loadKeychain()).old).password).toBe('current');
-  });
-  it('a historical OAuth update success cannot publish its pair over the newer reconciled grant', async () => {
-    const original = { id: 'g', email: 'g@x.test', oauth2RefreshToken: 'synthetic-original', oauth2ClientId: 'c', oauth2ExpiresAt: 1 };
-    blob.g = JSON.stringify(original);
-    const chain = [await sync.grantFingerprint(original)];
-    const pair = { accountId: 'g', accessToken: 'synthetic-pair', refreshToken: 'synthetic-rotated', expiresAt: 50, chain };
-    const newer = { ...original, oauth2RefreshToken: 'synthetic-new-grant', oauth2AccessToken: 'synthetic-new-access', oauth2ExpiresAt: 5 };
-    const wire = deferred(); let admitted = false;
-    h.mailAccounts = [original];
-    useDaemon((cmd, args) => {
-      if (cmd === 'oauth2.take_refreshed') return () => ({ tokens: [pair] });
-      if (cmd === 'credentials.update') return () => { admitted = true; expect(args.chain).toEqual(chain); return wire.promise; };
-      return undefined;
-    });
-    const saving = sync.saveRefreshedTokens();
-    await vi.waitFor(() => expect(admitted).toBe(true));
-    blob.g = JSON.stringify(newer); h.mailAccounts = [newer];
-    h.listeners.get('daemon-reconnected')();
-    await vi.waitFor(async () => expect(JSON.parse((await keychain.loadKeychain()).g).oauth2RefreshToken).toBe(newer.oauth2RefreshToken));
-    wire.resolve({ updated: true, version: 100 });
-    expect(await saving).toBe(0);
-    expect(h.mailAccounts[0]).toEqual(newer);
-    expect(JSON.parse((await keychain.loadKeychain()).g)).toEqual(newer);
-    expect(sent('credentials.update')).toHaveLength(1);
     noShellMutation();
   });
 });
 
-
-describe('round1 refreshed-pair current-read confirmation', () => {
-  for (const condition of ['unavailable', 'newer-grant']) {
-    it(`does not publish a historically saved pair when current confirmation is ${condition}`, async () => {
-      const original = { id: 'g', email: 'g@x.test', oauth2RefreshToken: 'synthetic-original', oauth2ClientId: 'c', oauth2ExpiresAt: 1 };
-      blob.g = JSON.stringify(original);
-      const pair = { accountId: 'g', accessToken: 'synthetic-pair', refreshToken: 'synthetic-rotated', expiresAt: 50, chain: [await sync.grantFingerprint(original)] };
-      const newer = { ...original, oauth2RefreshToken: 'synthetic-new', oauth2AccessToken: 'synthetic-new-access', oauth2ExpiresAt: 5 };
-      h.mailAccounts = [original];
-      let changed = false;
-      useDaemon((cmd, args) => {
-        if (cmd === 'oauth2.take_refreshed') return () => ({ tokens: [pair] });
-        if (cmd === 'credentials.get' && changed && condition === 'unavailable') return () => ({ status: 'unavailable' });
-        if (cmd === 'credentials.update') return () => {
-          changed = true;
-          blob.g = JSON.stringify(condition === 'newer-grant' ? newer : { ...original, ...args.fields });
-          if (condition === 'newer-grant') h.mailAccounts = [newer];
-          return { updated: true, version: 11 };
-        };
-        return undefined;
-      });
-      expect(await sync.saveRefreshedTokens()).toBe(0);
-      expect(h.mailAccounts[0]).toEqual(condition === 'newer-grant' ? newer : original);
-      expect(sent('credentials.update')).toHaveLength(1);
-      noShellMutation();
-    });
-  }
-});
-
-
-describe('round2 post-confirmation OAuth publication guard', () => {
-  for (const change of ['new-sign-in', 'newer-same-grant']) {
-    it(`keeps ${change} installed during the confirming digest without replaying persistence`, async () => {
-      const original = { id: 'g', email: 'g@x.test', oauth2RefreshToken: 'synthetic-original', oauth2ClientId: 'c', oauth2AccessToken: 'synthetic-old', oauth2ExpiresAt: 1 };
-      blob.g = JSON.stringify(original); h.mailAccounts = [original];
-      const pair = { accountId: 'g', accessToken: 'synthetic-pair', refreshToken: 'synthetic-rotated', expiresAt: 50, chain: [await sync.grantFingerprint(original)] };
-      useDaemon(cmd => cmd === 'oauth2.take_refreshed' ? () => ({ tokens: [pair] }) : undefined);
-      const gate = deferred(), entered = deferred();
-      const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
-      let hashes = 0;
-      vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation((...args) => {
-        if (++hashes === 2) { entered.resolve(); return gate.promise.then(() => digest(...args)); }
-        return digest(...args);
-      });
-      const saving = sync.saveRefreshedTokens();
-      await entered.promise; // confirming read completed, current record already captured
-      const stored = JSON.parse(blob.g);
-      expect(stored.oauth2AccessToken).toBe(pair.accessToken);
-      const newer = { ...stored, oauth2AccessToken: 'synthetic-newer-access', oauth2ExpiresAt: 500,
-        ...(change === 'new-sign-in' ? { oauth2RefreshToken: 'synthetic-new-sign-in', oauth2ExpiresAt: 5 } : {}) };
-      try {
-        await keychain.saveCredentials({ g: JSON.stringify(newer) });
-        h.mailAccounts = [newer];
-      } finally { gate.resolve(); }
-      expect(await saving).toBe(0);
-      expect(h.mailAccounts[0]).toEqual(newer);
-      expect(JSON.parse((await keychain.loadKeychain()).g)).toEqual(newer);
-      expect(JSON.parse(blob.g)).toEqual(newer);
-      expect(sent('credentials.update')).toHaveLength(1);
-      expect(sent('credentials.update')[0][1].chain).toEqual(pair.chain);
-      noShellMutation();
-    });
-  }
-});
-
-// S2.2 baseline RED: these invoke the existing adapter, not a future method.
+// The native owner can rotate a pair after a renderer read but before a
+// metadata-only account edit. The adapter must preserve the native pair.
 describe('account intent persistence regressions', () => {
   it('a Sent metadata edit preserves a newer native rotated pair', async () => {
     const stale = { id: 'g', email: 'g@x.test', imapHost: 'h', authType: 'oauth2', oauth2Provider: 'google', oauth2AccessToken: 'synthetic-old-at', oauth2RefreshToken: 'synthetic-old-rt', oauth2ExpiresAt: 1 };
     blob.g = JSON.stringify(stale);
     await accounts.getAccount('g');
-    await keychain.updateCredentials('g', { oauth2AccessToken: 'synthetic-new-at', oauth2RefreshToken: 'synthetic-new-rt', oauth2ExpiresAt: 9 });
+    await h.handler('credentials.update', { id: 'g', fields: { oauth2AccessToken: 'synthetic-new-at',
+      oauth2RefreshToken: 'synthetic-new-rt', oauth2ExpiresAt: 9 } });
     await accounts.patchAccount(stale.id, { sentFolderOverride: 'Sent custom' });
     const saved = JSON.parse(blob.g);
     expect(saved.oauth2AccessToken === 'synthetic-new-at' && saved.oauth2RefreshToken === 'synthetic-new-rt' && saved.oauth2ExpiresAt === 9, 'new native pair must survive stale caller').toBe(true);
@@ -974,7 +676,7 @@ for(const [kind,reply] of [
 ])it(`fix1 import rejects ${kind} completion and retains uncertainty`,async()=>{
   useDaemon(cmd=>cmd==='accounts.save'?()=>reply:undefined);
   await expect(accounts.saveAccounts([{id:'a',email:'a@example.test',imapHost:'h'}])).rejects.toThrow('E_KEYCHAIN_WRITE');
-  expect(()=>keychain.assertLegacyWriteAllowed()).toThrow('errors.keychainWriteFailed');
+  expect(()=>keychain.assertAccountCreateOutcomeKnown()).toThrow('errors.accountsWriteFailed');
   expect(sent('accounts.save')).toHaveLength(1);expect(names()).not.toContain('accounts_fallback');
 });
 for(const [kind,entries,reply] of [
@@ -988,5 +690,5 @@ for(const [kind,entries,reply] of [
 
 for(const [kind,entries] of [['empty id',[{id:''}]],['duplicate ids',[{id:'a'},{id:'a'}]],['non-string id',[{id:9}]],['missing record',[null]]])it(`fix1 refuses ${kind} before import dispatch`,async()=>{
   await expect(accounts.saveAccounts(entries)).rejects.toThrow('errors.accountsInvalid');
-  expect(sent('accounts.save')).toHaveLength(0);expect(()=>keychain.assertLegacyWriteAllowed()).not.toThrow();
+  expect(sent('accounts.save')).toHaveLength(0);expect(()=>keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
 });

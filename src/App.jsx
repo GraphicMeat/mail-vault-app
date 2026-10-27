@@ -101,7 +101,7 @@ import { filterUnread } from './utils/emailParser';
 import { rowKey, stepThroughList, spansMailboxes } from './stores/slices/unifiedHelpers';
 import { migrationManager } from './services/migrationManager.js';
 import { initAbd } from './services/abd.js';
-import { initOAuthTokenSync } from './services/oauthTokenSync.js';
+import { initOAuthCredentialProjection } from './services/oauthCredentialProjection.js';
 import { useAbdStore } from './stores/abdStore';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
@@ -689,8 +689,8 @@ function App() {
     restoreManager.init();
     // Archive & delete jobs live in the daemon: pick up the ones already running.
     initAbd();
-    // OAuth2 tokens the daemon refreshed (also while the app was closed): save them.
-    initOAuthTokenSync();
+    // Refresh the visible account copy after native credential changes.
+    initOAuthCredentialProjection();
     return () => {
       migrationManager.destroy();
       restoreManager.destroy();

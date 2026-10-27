@@ -1218,8 +1218,8 @@ async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_tok
     rig.finished().await;
 }
 
-/// The user signs in again while a Graph job waits for a token: the app's
-/// credentials write (`oauth2.credentials_changed`) wakes the job at once,
+/// The user signs in again while a Graph job waits for a token: native
+/// credential completion wakes the job at once,
 /// and it leases the new token, instead of waiting out its retry. Nobody
 /// listens for `abd-token-needed` any more, so it is not sent.
 #[tokio::test]
@@ -1237,8 +1237,9 @@ async fn a_new_sign_in_wakes_a_graph_job_waiting_for_its_token() {
     let mut signed_in = account;
     signed_in["oauth2AccessToken"] = json!("tok-after-sign-in");
     std::fs::write(rig.dir.join("credentials.json"), json!({ ACCT: signed_in.to_string() }).to_string()).unwrap();
-    let changed = crate::server::handle_request_for_test(&rig.state, "oauth2.credentials_changed", json!({})).await;
-    assert!(changed.error.is_none());
+    // The fixture writes directly; mirror native credential completion.
+    crate::credentials::blob_written_elsewhere();
+    crate::handlers::oauth2::credentials_written(&rig.state);
 
     let state = Arc::clone(&rig.state);
     wait_for("the job to lease the new sign-in's token", 10, move || {
@@ -1308,7 +1309,7 @@ async fn an_oauth_job_whose_token_expires_mid_run_renews_it_and_finishes() {
 }
 
 /// Checklist 6b: the grant is revoked mid-run. The job pauses for a sign-in
-/// and deletes nothing; a new sign-in (the app's credentials write) wakes it
+/// and deletes nothing; a new sign-in's native credential completion wakes it
 /// at once, not at its ten-minute retry, and it finishes.
 #[tokio::test]
 async fn a_grant_revoked_mid_run_parks_the_job_deleting_nothing_until_a_new_sign_in_wakes_it() {
@@ -1339,7 +1340,9 @@ async fn a_grant_revoked_mid_run_parks_the_job_deleting_nothing_until_a_new_sign
     let account = oauth_account(&rig.mock, &renewed);
     std::fs::write(rig.dir.join("credentials.json"), json!({ ACCT: account.to_string() }).to_string()).unwrap();
     let woke = Instant::now();
-    assert!(handle_request_for_test(&rig.state, "oauth2.credentials_changed", json!({})).await.error.is_none());
+    // The fixture writes directly; mirror native credential completion.
+    crate::credentials::blob_written_elsewhere();
+    crate::handlers::oauth2::credentials_written(&rig.state);
     let state = Arc::clone(&rig.state);
     wait_for("the job to leave the sign-in pause", 10, move || {
         let f = state.abd.handle(ACCT)?.frame();

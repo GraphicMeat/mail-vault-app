@@ -43,7 +43,7 @@ it('validated versionless probe failure retains classification and releases nati
   let failure; try { await addAccount({ id: 'a', email: 'a@example.test' }); } catch (error) { failure = error; }
   expect(failure).toMatchObject({ errorCode: 'blocked_or_timeout', host: 'mail.example.test', port: 993 });
   expect(failure.message).not.toBe(h.reply.error); expect(describeConnectionError(failure).message).toContain('mail.example.test');
-  expect(h.state.accounts).toEqual([]); expect(() => keychain.assertLegacyWriteAllowed()).not.toThrow();
+  expect(h.state.accounts).toEqual([]); expect(() => keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
   expect(h.calls.filter(([name]) => name === 'legacyProbe')).toEqual([]);
 });
 for (const [name, change] of [
@@ -58,8 +58,8 @@ for (const [name, change] of [
   h.reply = change(h.reply);
   await expect(addAccount({ id: 'a', email: 'a@example.test' })).rejects.toThrow();
   expect(h.state.accounts).toEqual([]); expect(h.calls.filter(([name]) => ['aliases', 'activate', 'legacyProbe'].includes(name))).toEqual([]);
-  expect(() => keychain.assertLegacyWriteAllowed()).toThrow();
-  keychain.clearCredentialsCache(); expect(() => keychain.assertLegacyWriteAllowed()).toThrow();
+  expect(() => keychain.assertAccountCreateOutcomeKnown()).toThrow();
+  keychain.clearCredentialsCache(); expect(() => keychain.assertAccountCreateOutcomeKnown()).toThrow();
 });
 it('a successful update forwards supported unsets and full expected context', async () => {
   h.state.accounts = [{ ...h.reply.account, oauth2ClientId: 'old-client', jmapUsername: 'old-login' }];
@@ -68,7 +68,7 @@ it('a successful update forwards supported unsets and full expected context', as
   const request = h.calls.find(([name]) => name === 'accounts.update')[1];
   expect(request.fields).toEqual({ displayName: 'new' }); expect(request.unset).toEqual(['oauth2ClientId', 'jmapUsername']);
   expect(request.expected.fields).toMatchObject({ email: 'a@example.test', oauth2ClientId: 'old-client', jmapUsername: 'old-login' });
-  expect(request.expected.absent).toContain('oauth2Transport'); expect(() => keychain.assertLegacyWriteAllowed()).not.toThrow();
+  expect(request.expected.absent).toContain('oauth2Transport'); expect(() => keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
 });
 it('an unknown add cannot mint a fresh id and resubmit on retry', async () => {
   h.reply = null;
@@ -76,31 +76,31 @@ it('an unknown add cannot mint a fresh id and resubmit on retry', async () => {
   await expect(addAccount({ email: 'a@example.test' })).rejects.toThrow();
   expect(h.calls.filter(([name]) => name === 'accounts.add')).toHaveLength(1);
 });
-it('mismatched native identity latches uncertainty before native admission is released', async () => {
-  const begin=keychain.beginNativeWrite;let allowedAtRelease=null;
-  vi.spyOn(keychain,'beginNativeWrite').mockImplementation(()=>{const release=begin();return()=>{release();try{keychain.assertLegacyWriteAllowed();allowedAtRelease=true;}catch{allowedAtRelease=false;}};});
+it('mismatched native identity latches uncertainty before another add', async () => {
   h.reply={...h.reply,account:{...h.reply.account,id:'alien'}};
-  try {await expect(addAccount({id:'a',email:'a@example.test'})).rejects.toThrow();expect(allowedAtRelease).toBe(false);}
-  finally {vi.restoreAllMocks();}
+  await expect(addAccount({id:'a',email:'a@example.test'})).rejects.toThrow();
+  expect(() => keychain.assertAccountCreateOutcomeKnown()).toThrow();
+  await expect(addAccount({id:'a',email:'a@example.test'})).rejects.toThrow();
+  expect(h.calls.filter(([name]) => name === 'accounts.add')).toHaveLength(1);
 });
 
 it('known pre-effect refusal permits corrected intent without an uncertainty latch', async () => {
   h.responder=async()=>{throw new Error('errors.duplicateAccount');};
-  await expect(addAccount({id:'a',email:'a@example.test'})).rejects.toThrow();expect(()=>keychain.assertLegacyWriteAllowed()).not.toThrow();
+  await expect(addAccount({id:'a',email:'a@example.test'})).rejects.toThrow();expect(()=>keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
   h.responder=null;await expect(addAccount({id:'a',email:'a@example.test'})).resolves.toMatchObject({id:'a'});
 });
-it('independent native additions retain concurrent admission until each completes', async () => {
+it('independent native additions dispatch concurrently without uncertain outcome', async () => {
   const pending=new Map();h.responder=(_method,params)=>new Promise(resolve=>pending.set(params.account.id,resolve));
   const operations = ['a', 'b'].map(id => db.addAccountNative({ id, email: `${id}@example.test` }));
   try {
     await vi.waitFor(() => expect([...pending.keys()], JSON.stringify(h.calls.filter(([name]) => name === 'accounts.add'))).toEqual(['a', 'b']));
-    expect(() => keychain.assertLegacyWriteAllowed()).toThrow();
+    expect(() => keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
   } finally {
     for (const [id, resolve] of pending) resolve({ ...h.reply, account: { ...h.reply.account, id, email: `${id}@example.test` } });
     await Promise.allSettled(operations);
   }
   expect(await Promise.all(operations)).toHaveLength(2);
-  expect(() => keychain.assertLegacyWriteAllowed()).not.toThrow();
+  expect(() => keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
 });
 
 it('overlapping workflows enter transport before either response settles with controlled fixture import entry', async () => {
@@ -135,7 +135,7 @@ it('overlapping workflows enter transport before either response settles with co
     await Promise.race([arrival.b.promise, beforeReply(second, 'b'), cutoff]);
     expect([...pending.keys()].sort()).toEqual(['a', 'b']);
     expect(settled).toBe(0);
-    expect(() => keychain.assertLegacyWriteAllowed()).toThrow();
+    expect(() => keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
     console.info('S23_WORKFLOW_CONCURRENCY', JSON.stringify({ entry: 'B starts after unresolved A transport arrival', dispatches, readinessMs: performance.now() - started }));
   } finally {
     clearTimeout(timer); draining = true;
@@ -145,7 +145,7 @@ it('overlapping workflows enter transport before either response settles with co
   }
   await Promise.all(operations);
   expect(h.state.accounts.map(a => a.id).sort()).toEqual(['a', 'b']);
-  expect(() => keychain.assertLegacyWriteAllowed()).not.toThrow();
+  expect(() => keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
 });
 
 it('OAuth source failures with unknown location keep classification without a mail destination', async () => {
@@ -158,6 +158,6 @@ it('OAuth source failures with unknown location keep classification without a ma
     expect(described.message).not.toContain('port 993');
     if (errorCode === 'blocked_or_timeout') expect(described.message).toContain('The server did not answer in time.');
     expect(h.state.accounts).toEqual([]);
-    expect(() => keychain.assertLegacyWriteAllowed()).not.toThrow();
+    expect(() => keychain.assertAccountCreateOutcomeKnown()).not.toThrow();
   }
 });

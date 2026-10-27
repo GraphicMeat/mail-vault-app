@@ -12,8 +12,6 @@ const JMAP_AWARE = /isJmapAccount|serverSavesSent/;
 
 const IMAP_PATH = 'Graph-only branch; JMAP takes the IMAP path';
 const ALLOWED = {
-  // Names a grant's transport for its fingerprint (oauth_tokens.rs); no mail branch.
-  'src/services/oauthTokenSync.js': 'grant fingerprint, not a mail branch',
   'src/components/ComposeModal.jsx': IMAP_PATH,
   'src/App.jsx': 'Detached compose admission uses the same follow-up reminder policy; JMAP takes the IMAP path',
   'src/components/settings/MboxImportDialog.jsx': IMAP_PATH,
@@ -29,14 +27,12 @@ const ALLOWED = {
   'src/services/graphConfig.js': 'Defines isGraphAccount itself',
   'src/services/searchTargets.js': IMAP_PATH,
   'src/services/workflows/activateAccount.js': IMAP_PATH,
-  'src/services/workflows/addAccount.js': IMAP_PATH,
   'src/services/workflows/adoptGraphFolderKeys.js': IMAP_PATH,
   'src/services/workflows/folderOps.js': IMAP_PATH,
   'src/services/workflows/folderStatus.js': IMAP_PATH,
   'src/services/workflows/loadEmails.js': IMAP_PATH,
   'src/services/workflows/probeServerCopy.js': IMAP_PATH,
   'src/services/workflows/refreshAccounts.js': IMAP_PATH,
-  'src/services/workflows/removeAccount.js': IMAP_PATH,
   'src/services/workflows/replayOps.js': IMAP_PATH,
   'src/services/workflows/selectEmail.js': IMAP_PATH,
   'src/services/workflows/snooze.js': IMAP_PATH,

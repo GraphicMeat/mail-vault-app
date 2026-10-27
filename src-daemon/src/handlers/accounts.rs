@@ -6,7 +6,7 @@
 //! - `accounts.put {entries | entry, ifAbsent?, baseVersion?}`: each entry is
 //!   merged onto the one with its id, or appended; with `ifAbsent` only ids
 //!   and identities the list lacks are appended. `{version, changed}`.
-//! - `accounts.remove {ids | id, baseVersion?}`, `accounts.reorder {ids,
+//! - `accounts.reorder {ids,
 //!   baseVersion?}`, `accounts.replace_all {entries, baseVersion?}`: `{version,
 //!   changed}`.
 //!
@@ -47,12 +47,9 @@ pub(crate) async fn route(
     if method == "accounts.save" {
         return Some(crate::account_workflows::save(state, params, id).await);
     }
-    // Full retirement is owned by accounts.remove_local. The metadata-only
-    // public route must not run its legacy-secret preservation first.
-    if method == "accounts.remove" {
-        return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid"));
-    }
-    if !accounts_doc::METHODS.contains(&method) {
+    // The metadata-only remove remains an internal AccountDoc helper, never
+    // a public route. Full retirement is owned by accounts.remove_local.
+    if method == "accounts.remove" || !accounts_doc::METHODS.contains(&method) {
         return None;
     }
     let state = Arc::clone(state);
@@ -823,7 +820,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn p1_late_document_remove_retires_after_real_child_and_replace_all_retires() {
+    async fn p1_late_document_remove_retires_after_real_child() {
         let (dir, state) = rig();
         std::fs::write(
             dir.path().join("accounts.json"),
@@ -840,7 +837,7 @@ mod tests {
         let mut pause = DocPause::arm(&state);
         let state_for_task = Arc::clone(&state);
         let task = tokio::spawn(async move {
-            call(&state_for_task, "accounts.remove", json!({"id":"a"})).await
+            internal_remove(&state_for_task, json!({"id":"a"})).await
         });
         pause.entered();
         let open_before_commit = state.account_lifecycle.capture("a").is_ok();
@@ -857,13 +854,8 @@ mod tests {
             .unwrap()
             .iter()
             .all(|v| v["id"] != "a");
-        let replaced = call(&state, "accounts.replace_all", json!({"entries":[]})).await;
-        let b_retired = matches!(
-            state.account_lifecycle.capture("b"),
-            Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))
-        );
-        assert!(open_before_commit && retired_after_child && b_open && document_removed && replaced.is_ok() && b_retired,
-            "late membership: open_before_commit={open_before_commit}, retired_after_child={retired_after_child}, b_open={b_open}, document_removed={document_removed}, replaced_ok={}, b_retired={b_retired}", replaced.is_ok());
+        assert!(open_before_commit && retired_after_child && b_open && document_removed,
+            "late membership: open_before_commit={open_before_commit}, retired_after_child={retired_after_child}, b_open={b_open}, document_removed={document_removed}");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -881,7 +873,7 @@ mod tests {
         state
             .account_lifecycle
             .seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
-        let missing = call(&state, "accounts.remove", json!({"id":"missing"})).await;
+        let missing = internal_remove(&state, json!({"id":"missing"})).await;
         let reorder = call(&state, "accounts.reorder", json!({"ids":["b","a"]})).await;
         let edited = call(
             &state,
@@ -911,8 +903,20 @@ mod tests {
         }
     }
 
+    // Exercise the retained metadata-only helper without publishing a route.
+    async fn internal_remove(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
+        let state = Arc::clone(state);
+        let resp = tokio::spawn(async move {
+            run_owned(&state, "accounts.remove", &params, json!(1)).await
+        }).await.unwrap();
+        match resp.error {
+            Some(e) => Err(e.message),
+            None => Ok(resp.result.unwrap_or(Value::Null)),
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn s24_public_remove_refuses_before_effects() {
+    async fn s25_public_remove_is_unavailable_before_effects() {
         use mailvault_core::app_db::{self, compose_receipts as receipts};
         let (dir, state) = rig();
         let metadata = json!([
@@ -929,6 +933,7 @@ mod tests {
             scope.clone(), b"Message-ID: <a@example.test>\r\n\r\nbody",
         ).unwrap());
         app_db::with(&state.app_dir, |c| receipts::save(c, &receipt)).unwrap();
+        assert!(route(&state, "accounts.remove", &json!({"id":"a"}), json!(1)).await.is_none());
         let removed = call(&state, "accounts.remove", json!({"id":"a"})).await;
         let receipt_intact = app_db::with(&state.app_dir, |c| receipts::load(c, &scope)).unwrap() == vec![receipt];
         assert!(removed.is_err() && on_disk(&dir) == metadata
@@ -1306,6 +1311,7 @@ mod tests {
     async fn every_method_is_routed_through_the_server_chain() {
         let (_dir, state) = rig();
         for method in accounts_doc::METHODS {
+            if method == "accounts.remove" { continue; }
             let resp = handle_request_for_test(&state, method, json!({})).await;
             if let Some(e) = &resp.error {
                 assert!(
@@ -1329,11 +1335,12 @@ mod tests {
 
         std::fs::write(&path, json!([a.clone(), b.clone()]).to_string()).unwrap();
         std::fs::write(&creds, initial.to_string()).unwrap();
+        state.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
         call(&state, "credentials.delete", json!({"ids":["a"]}))
             .await
             .unwrap();
         assert!(read().get("a").is_none());
-        call(&state, "accounts.remove", json!({"ids":["a"]}))
+        internal_remove(&state, json!({"ids":["a"]}))
             .await
             .unwrap();
         assert_eq!(read()["a"], a.to_string(), "old UI order resurrects A");
@@ -1351,7 +1358,8 @@ mod tests {
         let read = || -> Value { serde_json::from_slice(&std::fs::read(&creds).unwrap()).unwrap() };
         std::fs::write(&path, json!([a.clone(), b.clone()]).to_string()).unwrap();
         std::fs::write(&creds, initial.to_string()).unwrap();
-        call(&state, "accounts.remove", json!({"ids":["a"]}))
+        state.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        internal_remove(&state, json!({"ids":["a"]}))
             .await
             .unwrap();
         assert_eq!(
@@ -1402,14 +1410,14 @@ mod tests {
             .unwrap();
         assert_eq!(got["account"], json!({"id": "a", "email": "a@x.test"}));
 
-        call(&state, "accounts.remove", json!({"ids": ["old"]}))
+        internal_remove(&state, json!({"ids": ["old"]}))
             .await
             .unwrap();
         assert_eq!(on_disk(&dir), json!([{"id": "a", "email": "a@x.test"}]));
         let stale = call(
             &state,
             "accounts.replace_all",
-            json!({"entries": [], "baseVersion": v0}),
+            json!({"entries": [{"id": "a", "email": "a@x.test"}], "baseVersion": v0}),
         )
         .await;
         assert_eq!(stale, Err("errors.accountsConflict".to_string()));
@@ -1593,19 +1601,19 @@ mod tests {
             call(&state, "accounts.list", json!({})).await.unwrap()["accounts"][0]["id"],
             "b"
         );
-        call(&state, "accounts.remove", json!({"id":"b"}))
+        internal_remove(&state, json!({"id":"b"}))
             .await
             .unwrap();
         call(
             &state,
             "accounts.replace_all",
-            json!({"entries":[{"id":"c", "password":"incoming"}]}),
+            json!({"entries":[{"id":"a"},{"id":"c", "password":"incoming"}]}),
         )
         .await
         .unwrap();
         assert_eq!(
             call(&state, "accounts.list", json!({})).await.unwrap()["accounts"],
-            json!([{"id":"c"}])
+            json!([{"id":"a"},{"id":"c"}])
         );
     }
     #[tokio::test]

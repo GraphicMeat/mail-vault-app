@@ -651,15 +651,6 @@ fn portable_credentials_call(app: tauri::AppHandle, method: &'static str, params
     }
 }
 
-#[tauri::command]
-async fn store_credentials(
-    app_handle: tauri::AppHandle,
-    credentials: std::collections::HashMap<String, String>,
-) -> Result<(), String> {
-    let _ = (app_handle, credentials);
-    Err("errors.daemonOutdated".to_string())
-}
-
 /// A keyring error, led by the `snap connect` command when that is the fix.
 fn with_snap_keyring_hint(err: String) -> String {
     match mailvault_core::keychain::snap_keyring_hint(std::env::var_os("SNAP").is_some(), &err) {
@@ -881,13 +872,6 @@ async fn get_credentials(app_handle: tauri::AppHandle) -> Result<serde_json::Val
             }
         }
     }
-}
-
-// Keep the legacy command registered until the caller cutover, but never
-// let it mutate credentials outside the native account workflow.
-#[tauri::command]
-fn store_password(_account_id: String, _password: String) -> Result<(), String> {
-    Err("errors.daemonOutdated".into())
 }
 
 // Off the main thread: a sync command runs there, and the Logs tab stalled the
@@ -3062,7 +3046,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         "accounts.save" => Some(Duration::from_secs(95)),
         "accounts.add" | "accounts.update" => Some(Duration::from_secs(305)),
         "accounts.remove_local" => Some(Duration::from_secs(185)),
-        "accounts.put" | "accounts.remove" | "accounts.reorder" | "accounts.replace_all" => {
+        "accounts.put" | "accounts.reorder" | "accounts.replace_all" => {
             Some(Duration::from_secs(50))
         }
         "drafts.save" => Some(Duration::from_secs(600)),
@@ -3861,9 +3845,7 @@ fn main() {
             accounts_fallback,
             autostart::autostart_state,
             autostart::set_autostart,
-            store_credentials,
             get_credentials,
-            store_password,
             read_logs,
             clear_logs,
             check_network_connectivity,
@@ -5323,9 +5305,8 @@ fn reply_timeout_bounds_account_workflows() {
 #[cfg(test)]
 mod accounts_fallback_tests {
     #[test]
-    fn p6_store_password_refuses_before_backend_access() {
-        let result = crate::store_password("synthetic-account".into(), "synthetic-password".into());
-        assert_eq!(result, Err("errors.daemonOutdated".into()));
+    fn retired_public_account_remove_has_no_reply_budget() {
+        assert_eq!(crate::reply_timeout("accounts.remove"), None);
     }
     #[test]
     fn account_save_has_its_own_whole_attempt_budget() {
@@ -5354,7 +5335,6 @@ mod accounts_fallback_tests {
             ("accounts.list", 30),
             ("accounts.get", 30),
             ("accounts.put", 50),
-            ("accounts.remove", 50),
             ("accounts.remove_local", 185),
             ("accounts.reorder", 50),
             ("accounts.replace_all", 50),

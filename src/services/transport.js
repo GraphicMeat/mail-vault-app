@@ -276,11 +276,8 @@ export const DAEMON_OWNED = new Set([
   // Which Google apps a new sign-in can use (whether MailVault's own is in
   // this build, and the default).
   'oauth2_google_clients',
-  // Phase 1 step 0c: the daemon refreshes OAuth2 tokens itself; the app
-  // saves the pairs it refreshed and says when it wrote credentials.
-  'oauth2.take_refreshed', 'oauth2.credentials_changed',
-  // Staged native per-record capability; app adapters retain the shell path.
-  'accounts.list', 'accounts.get', 'accounts.save', 'accounts.add', 'accounts.update', 'accounts.put', 'accounts.remove', 'accounts.remove_local', 'accounts.reorder', 'accounts.replace_all',
+  // Native account workflows and credential completion own persistence.
+  'accounts.list', 'accounts.get', 'accounts.save', 'accounts.add', 'accounts.update', 'accounts.put', 'accounts.remove_local', 'accounts.reorder', 'accounts.replace_all',
   'credentials.get', 'credentials.save', 'credentials.update', 'credentials.delete',
   // Task 5.8: DNS (autodiscover email server settings, post-server-change
   // health probe). Tauri twins deleted in this same task — flat names, no

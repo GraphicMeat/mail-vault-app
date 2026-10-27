@@ -1,23 +1,22 @@
-//! `credentials.*`: the app reads and changes the account credentials blob
+//! `credentials.*`: native readers and writers of the account credentials blob
 //! (the keychain entry `com.mailvault.app` / `credentials`, the sealed store
-//! on a portable drive). These routes expose native per-record capability;
-//! the existing app adapters still use their Tauri credential commands.
+//! on a portable drive). The renderer keeps a quiet read fallback and uses
+//! `credentials.delete` only for malformed legacy-entry cleanup.
 //!
 //! - `credentials.get {}`: what `get_credentials` answered: `{status,
 //!   credentials}` or `{status, message}`.
 //! - `credentials.save {records: {id: recordJson}}`: each record replaces the
 //!   one stored under its id; every other account is kept. `{saved, version}`.
 //! - `credentials.update {id, fields, chain?}`: top-level fields merged into
-//!   the stored record (the OAuth2 pair the daemon refreshed). `{updated,
-//!   version}`. With `chain` (the pair's grant fingerprints, from
-//!   `oauth2.take_refreshed`) only over a stored record of that grant:
+//!   the stored record. `{updated, version}`. With `chain`, only over a
+//!   stored record of that grant:
 //!   another grant stored (a newer sign-in) answers `{updated: false,
 //!   staleGrant: true}` and writes nothing; a refresh token is merged only
 //!   when it is a new one of that grant.
 //! - `credentials.delete {ids}`: `{deleted, version}`.
 //!
 //! A change that wrote emits `credentials-changed {ids, version}` (ids only)
-//! and does what `oauth2.credentials_changed` does. Errors are catalog keys
+//! and invalidates native token trust and waiting jobs. Errors are catalog keys
 //! (`errors.keychainUnavailable`: nothing was written; `errors.keychainWriteFailed`;
 //! `errors.credentialsInvalid`). No record, password or token is ever logged.
 
@@ -981,11 +980,9 @@ mod tests {
                 .await
                 .unwrap();
         assert!(token.as_deref() == Some("synthetic-refreshed-token"));
-        let offered = call(&rig, "oauth2.take_refreshed", json!({}))
-            .await
-            .unwrap();
-        assert_eq!(offered["tokens"].as_array().unwrap().len(), 1);
-        let pair = &offered["tokens"][0];
+        let offered = rig.state.tokens.unsaved();
+        assert_eq!(offered.len(), 1);
+        let pair = &offered[0];
         let mut saved = old;
         saved["oauth2AccessToken"] = pair["accessToken"].clone();
         saved["oauth2RefreshToken"] = pair["refreshToken"].clone();
@@ -1007,13 +1004,8 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(5), waiter.ctl.wake.notified())
             .await
             .expect("the real parked-token control was woken");
-        let offered = call(&rig, "oauth2.take_refreshed", json!({}))
-            .await
-            .unwrap();
-        assert!(
-            offered["tokens"].as_array().unwrap().is_empty(),
-            "the real quiet recheck observed the saved pair"
-        );
+        assert!(rig.state.tokens.unsaved().is_empty(),
+            "the real quiet recheck observed the saved pair");
         assert_eq!(
             changed_events(&mut rx),
             vec![json!({"ids":["g"],"version":credentials::write_generation()})]

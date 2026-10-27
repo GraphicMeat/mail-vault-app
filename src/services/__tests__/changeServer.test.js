@@ -33,11 +33,9 @@ vi.mock('../../services/db', () => ({
 
 const mockTestConnection = vi.fn().mockResolvedValue({ success: true });
 const mockSmtpTestConnection = vi.fn().mockResolvedValue({ success: true });
-const mockStorePassword = vi.fn().mockResolvedValue(undefined);
 vi.mock('../api', () => ({
   testConnection: (...args) => mockTestConnection(...args),
   smtpTestConnection: (...args) => mockSmtpTestConnection(...args),
-  storePassword: (...args) => mockStorePassword(...args),
 }));
 
 vi.mock('../authUtils', () => ({
@@ -133,7 +131,6 @@ function nativeReply(id, fields, { unset = [] } = {}) {
 }
 
 function expectNoLegacyCalls() {
-  expect(mockStorePassword).not.toHaveBeenCalled();
   expect(mockPatchAccount).not.toHaveBeenCalled();
   expect(mockTestConnection).not.toHaveBeenCalled();
   expect(mockSmtpTestConnection).not.toHaveBeenCalled();
@@ -142,7 +139,6 @@ function expectNoLegacyCalls() {
 function resetMocks() {
   vi.clearAllMocks();
   mockUpdateAccountNative.mockImplementation(nativeReply);
-  mockStorePassword.mockRejectedValue(new Error('errors.daemonOutdated'));
   mockTestConnection.mockRejectedValue(new Error('renderer IMAP probe must not run'));
   mockSmtpTestConnection.mockRejectedValue(new Error('renderer SMTP probe must not run'));
   mockActivateAccount.mockResolvedValue(undefined);
@@ -161,7 +157,7 @@ describe('changeServer on a password/IMAP account', () => {
     };
   });
 
-  it('S2.4 persists through one native update when the retired password writer refuses', async () => {
+  it('persists through one native update without the retired password writer', async () => {
     mockUpdateAccountNative.mockResolvedValue({
       account: { ...makeAccount(NEW_PARAMS), password: undefined }, hostChanged: true,
     });
@@ -169,7 +165,7 @@ describe('changeServer on a password/IMAP account', () => {
     let error;
     try { result = await changeServer('acc-1', NEW_PARAMS); }
     catch (caught) { error = caught; }
-    const observed = `S24_CHANGE_SERVER_LEGACY_ACTUAL: resolved=${!!result}, legacyCalls=${mockStorePassword.mock.calls.length}, nativeCalls=${mockUpdateAccountNative.mock.calls.length}, patchCalls=${mockPatchAccount.mock.calls.length}, stateHost=${storeState.accounts[0].imapHost}, error=${error?.message || 'none'}`;
+    const observed = `S25_CHANGE_SERVER_NATIVE_ACTUAL: resolved=${!!result}, nativeCalls=${mockUpdateAccountNative.mock.calls.length}, patchCalls=${mockPatchAccount.mock.calls.length}, stateHost=${storeState.accounts[0].imapHost}, error=${error?.message || 'none'}`;
     console.log(observed);
     expect(result, observed).toEqual({ ok: true, hostChanged: true });
     expect(mockUpdateAccountNative).toHaveBeenCalledOnce();
@@ -276,7 +272,7 @@ describe('changeServer on a JMAP account', () => {
     };
   });
 
-  it('S2.4 persists a JMAP session through native update after the retired writer refuses', async () => {
+  it('persists a JMAP session through native update without the retired writer', async () => {
     mockUpdateAccountNative.mockResolvedValue({ account: {
       ...JMAP, jmapSessionUrl: 'https://jmap.new.example.org/jmap/session',
       imapHost: 'jmap.new.example.org', password: undefined,
@@ -286,7 +282,7 @@ describe('changeServer on a JMAP account', () => {
     try {
       result = await changeServer('acc-1', { jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', password: 'new-token' });
     } catch (caught) { error = caught; }
-    const observed = `S24_CHANGE_SERVER_JMAP_ACTUAL: resolved=${!!result}, legacyCalls=${mockStorePassword.mock.calls.length}, nativeCalls=${mockUpdateAccountNative.mock.calls.length}, patchCalls=${mockPatchAccount.mock.calls.length}, stateUrl=${storeState.accounts[0].jmapSessionUrl}, error=${error?.message || 'none'}`;
+    const observed = `S25_CHANGE_SERVER_JMAP_ACTUAL: resolved=${!!result}, nativeCalls=${mockUpdateAccountNative.mock.calls.length}, patchCalls=${mockPatchAccount.mock.calls.length}, stateUrl=${storeState.accounts[0].jmapSessionUrl}, error=${error?.message || 'none'}`;
     console.log(observed);
     expect(result, observed).toEqual({ ok: true, hostChanged: true });
     expect(mockUpdateAccountNative).toHaveBeenCalledOnce();

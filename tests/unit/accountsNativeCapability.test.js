@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createDemoBackend } from '../../src/demo/backend.js';
-const RPCS = ['accounts.list','accounts.get','accounts.put','accounts.remove','accounts.reorder','accounts.replace_all'];
+const RPCS = ['accounts.list','accounts.get','accounts.put','accounts.remove_local','accounts.reorder','accounts.replace_all'];
 const read = path => readFileSync(path, 'utf8');
 
 describe('staged native account capability', () => {
@@ -9,14 +9,15 @@ describe('staged native account capability', () => {
     const transport = read('src/services/transport.js');
     const start = transport.indexOf('export const DAEMON_OWNED');
     expect(transport.slice(start, transport.indexOf(']);', start))).toContain(`'${rpc}'`);
-    expect(read('src-core/src/accounts_doc.rs')).toContain(`"${rpc}"`);
+    if (rpc === 'accounts.remove_local') expect(read('src-daemon/src/handlers/accounts.rs')).toContain(`"${rpc}"`);
+    else expect(read('src-core/src/accounts_doc.rs')).toContain(`"${rpc}"`);
   });
   it.each(['de','en','es','fr','it','ja','ko','pt-BR','zh-Hans'])('%s supplies neutral account error keys', locale => {
     const catalog = JSON.parse(read(`src/i18n/locales/${locale}.json`));
     for (const key of ['errors.accountsConflict','errors.accountsInvalid','errors.accountsWriteFailed']) expect(catalog[key]).toBeTypeOf('string');
     if (locale === 'en') expect(catalog['errors.accountsWriteFailed']).not.toMatch(/unchanged|nothing was saved/i);
   });
-  it('demo routes all six names, strips incoming secrets, persists and resets list without credentials writes', async () => {
+  it('demo routes supported methods, strips secrets, and removes only through remove_local', async () => {
     const demo = createDemoBackend();
     const call = (method, params = {}) => demo.invoke('daemon_rpc', { method, params });
     const credentials = await demo.invoke('credentials.get');
@@ -27,10 +28,11 @@ describe('staged native account capability', () => {
     expect((await restored.invoke('accounts.list')).accounts).toContainEqual({ id:'new' });
     await call('accounts.reorder', { ids:['new'] });
     expect((await call('accounts.list')).accounts[0].id).toBe('new');
-    await call('accounts.remove', { id:'new' });
+    await call('accounts.remove_local', { accountId:'new' });
     expect((await call('accounts.get', { id:'new' })).account).toBeNull();
-    await call('accounts.replace_all', { entries:[{id:'only', password:'incoming'}] });
-    expect((await call('accounts.list')).accounts).toEqual([{id:'only'}]);
+    const beforeReplace = (await call('accounts.list')).accounts;
+    await call('accounts.replace_all', { entries:[...beforeReplace, {id:'only', password:'incoming'}] });
+    expect((await call('accounts.list')).accounts).toEqual([...beforeReplace, {id:'only'}]);
     expect(await demo.invoke('credentials.get')).toEqual(credentials);
     demo.reset(); expect((await call('accounts.list')).accounts).toEqual(initial);
   });

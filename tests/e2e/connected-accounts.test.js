@@ -124,6 +124,21 @@ describe('Connected Account Setup', function () {
     await waitForApp();
   });
 
+  it('the rebuilt shell has no legacy credential mutation commands', async () => {
+    for (const command of ['store_credentials', 'store_password']) {
+      // Empty arguments cannot write even if an old command were registered.
+      const result = await browser.executeAsync((name, done) => {
+        window.__TAURI__.core.invoke(name, {}).then(value => done({ value }))
+          .catch(error => done({ error: String(error?.message || error) }));
+      }, command);
+      expect(result.value, `${command} unexpectedly returned`).toBeUndefined();
+      expect(result.error, `${command} must be unregistered`).toContain(command);
+      expect(result.error).toMatch(/(?:unknown|not found|unregistered)/i);
+      expect(result.error).toMatch(/command/i);
+      expect(result.error).not.toMatch(/(?:missing|required|invalid)\s+(?:arg|parameter)/i);
+    }
+  });
+
   it('updates through the native workflow and refuses an origin change without replacement', async()=>{
     const result=await browser.executeAsync(done=>{
       const state=window.__MAIL_STORE__.getState();const account=state.accounts[0];

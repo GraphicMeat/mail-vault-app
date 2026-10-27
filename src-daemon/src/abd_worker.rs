@@ -1032,7 +1032,7 @@ impl Rt {
             PauseReason::SignInNeeded => {
                 // The daemon renews the token itself first (Graph and OAuth
                 // IMAP); after a renewal that failed the job waits for a new
-                // sign-in (`oauth2.credentials_changed` wakes it) or its retry.
+                // sign-in (native credential completion wakes it) or its retry.
                 // Password and JMAP accounts sign in with what the keychain holds.
                 if matches!(self.kind, Kind::Graph | Kind::ImapOauth) {
                     let refused = st.abd.tokens.get(&account).map(|l| l.token);

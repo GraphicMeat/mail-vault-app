@@ -51,6 +51,16 @@ describe('removing an account', () => {
     expect(useFollowUpStore.getState().rows.map(r => r.id)).toEqual(['c']);
   });
 
+  it('leaves native session retirement alone after complete removal and switches accounts', async () => {
+    state.activeAccountId = 'gone';
+    await removeAccount('gone');
+    expect(api.disconnect).not.toHaveBeenCalled();
+    expect(unwatchAccount).toHaveBeenCalledWith('gone');
+    expect(state.accounts.map(account => account.id)).toEqual(['kept']);
+    expect(state.activateAccount).toHaveBeenCalledWith('kept', 'INBOX');
+    expect(useFollowUpStore.getState().rows.map(r => r.id)).toEqual(['c']);
+  });
+
   it.each(['busy', 'incomplete'])('does not disconnect or present %s as removed', async (outcome) => {
     db.deleteAccount.mockResolvedValue({ outcome, accountId: 'gone',
       ...(outcome === 'busy' ? { effects: 'none' } : {

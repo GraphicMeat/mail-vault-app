@@ -108,10 +108,6 @@ export async function smtpTestConnection(account) {
   return rejectFailedTest(await tauriInvoke('smtp_test_connection', { account }));
 }
 
-export async function storePassword(accountId, password) {
-  return tauriInvoke('store_password', { accountId, password });
-}
-
 export async function fetchMailboxes(account) {
   if (IS_TAURI) {
     const data = await tauriInvoke('imap_get_mailboxes', { account });

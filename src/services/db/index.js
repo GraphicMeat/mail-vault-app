@@ -1,7 +1,7 @@
 // ── db/index — re-exports the full db.js surface from its split modules ──
 // Explicit list (rather than `export *`) so the public surface matches the
 // original monolithic db.js exactly — internal cross-module helpers like
-// loadKeychain/saveKeychain/accountDir stay implementation details.
+// loadKeychain/accountDir stay implementation details.
 
 export {
   parseKeychainValue,
@@ -27,7 +27,6 @@ export {
   completeZipImportAccounts,
   getAccounts,
   getAccount,
-  updateOAuth2Tokens,
   deleteAccount,
 } from './accounts.js';
 
