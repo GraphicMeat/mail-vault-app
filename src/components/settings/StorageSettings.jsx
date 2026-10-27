@@ -48,6 +48,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
   // destructive action in the app could not name what it was about to erase.
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [clearVaultError, setClearVaultError] = useState(false);
   const {
     localStoragePath,
     setLocalStoragePath,
@@ -801,7 +802,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           {t('settings.storage.emptiesVaultExplanation')}
         </p>
         <Button variant="dangerTint"
-          onClick={() => setShowClearConfirm(true)}
+          onClick={() => { setClearVaultError(false); setShowClearConfirm(true); }}
         >
           <Trash2 size={16} />
           {t('settings.storage.emptyVault')}
@@ -812,21 +813,35 @@ export function StorageSettings({ accounts, onUpgrade }) {
         isOpen={showClearConfirm}
         onClose={() => !clearing && setShowClearConfirm(false)}
         title={t('settings.storage.emptyVaultComputer')}
-        description="Every email in your vault, every account, and every setting is deleted from this computer. Mail still on the server can be downloaded again; anything the server no longer has has no other copy. This cannot be undone."
+        description={<>
+          {t('settings.storage.emptyVaultConfirmDescription')}
+          {clearVaultError && <span role="alert" className="block mt-3 text-mail-danger">
+            {t('settings.storage.emptyVaultFailed')}
+          </span>}
+        </>}
         confirmLabel="Empty the vault"
         destructive
         loading={clearing}
         onConfirm={async () => {
           setClearing(true);
+          setClearVaultError(false);
           try {
             const db = await import('../../services/db');
-            // Delete each account's Maildir and data
-            const accts = await db.getAccountsWithoutPasswords();
+            const accts = await db.listAccountsForRemoval();
+            if (!Array.isArray(accts) || accts.some(acct => typeof acct?.id !== 'string' || !acct.id)
+              || new Set(accts.map(acct => acct.id)).size !== accts.length) {
+              throw new Error('errors.accountsWriteFailed');
+            }
             for (const acct of accts) {
-              await db.deleteAccount(acct.id);
+              const result = await db.deleteAccount(acct.id);
+              if (result?.outcome !== 'complete' || result.accountId !== acct.id
+                || Object.keys(result).length !== 2) throw new Error('errors.accountRemovalIncomplete');
             }
           } catch (e) {
             console.error('Failed to clear Maildir data:', e);
+            setClearVaultError(true);
+            setClearing(false);
+            return;
           }
           try { localStorage.clear(); } catch { /* sandbox may block */ }
           window.location.reload();

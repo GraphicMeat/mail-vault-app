@@ -39,7 +39,6 @@ let blob;
 let calls;
 let daemon;
 let credVersion;
-let preserveLegacy;
 
 // A daemon that knows accounts.* and credentials.*; `override(cmd, args)`
 // may answer first (return undefined to let the daemon answer).
@@ -50,9 +49,6 @@ function useDaemon(override = () => undefined) {
     if (forced !== undefined) return forced();
     if (cmd === 'get_app_data_dir') return '/data';
     if (cmd.startsWith('accounts.')) {
-      if (preserveLegacy && cmd === 'accounts.remove') {
-        for (const a of JSON.parse(file)) if (a.password && !blob[a.id]) blob[a.id] = JSON.stringify(a);
-      }
       return daemon.call(cmd, args);
     }
     if (cmd === 'accounts_fallback') return daemon.call(args.method, args.params);
@@ -78,7 +74,6 @@ beforeEach(() => {
   blob = { old: JSON.stringify({ id: 'old', email: 'old@x.test', imapHost: 'imap.x.test', password: 'keep' }) };
   calls = [];
   credVersion = 10;
-  preserveLegacy = false;
   sync.__resetForTests();
   h.mailAccounts = [];
   fsWrites.length = 0;
@@ -113,6 +108,29 @@ describe('the account list goes through the daemon', () => {
     const writes = names().filter(n => /accounts\.(put|remove|replace_all|reorder)|store_credentials|credentials\.(save|delete|update)/.test(n));
     expect(writes).toEqual([]);
     expect(fsWrites).toEqual([]);
+  });
+
+  it('clear-all listing fails closed instead of using the benign reader fallback', async () => {
+    useDaemon(cmd => cmd === 'accounts.list' ? () => Promise.reject(UNAVAILABLE()) : undefined);
+    await expect(accounts.listAccountsForRemoval()).rejects.toThrow('errors.accountsWriteFailed');
+    expect(sent('accounts_fallback')).toHaveLength(0);
+    expect(names().filter(name => name === 'accounts.remove_local')).toEqual([]);
+  });
+
+  it('clear-all listing rejects malformed IDs but preserves every authoritative distinct ID', async () => {
+    file = JSON.stringify([{ id: 'x1', email: 'same@x.test', imapHost: 'h' },
+      { id: 'x2', email: 'same@x.test', imapHost: 'h' }]);
+    expect((await accounts.listAccountsForRemoval()).map(account => account.id)).toEqual(['x1', 'x2']);
+    file = JSON.stringify([{ id: 'x1' }, { id: 'x1' }]);
+    await expect(accounts.listAccountsForRemoval()).rejects.toThrow('errors.accountsWriteFailed');
+    file = '[]';
+    expect(await accounts.listAccountsForRemoval()).toEqual([]);
+  });
+
+  it('clear-all listing rejects an unknown response instead of retrying through a benign shell read', async () => {
+    useDaemon(cmd => cmd === 'accounts.list' ? () => ({ version: 1, status: 'unknown' }) : undefined);
+    await expect(accounts.listAccountsForRemoval()).rejects.toThrow('errors.accountsWriteFailed');
+    expect(sent('accounts_fallback')).toHaveLength(0);
   });
 
   it('an unreachable daemon sends that one call through the shell, and the next one tries the daemon again', async () => {
@@ -163,20 +181,20 @@ describe('the account list goes through the daemon', () => {
     expect(JSON.parse(file).map(a => a.id)).toEqual(['old', 'b']);
   });
 
-  it('the duplicate cleanup replaces the list only at the version it was read at', async () => {
+  it('deduplicates the visible list without persistently retiring a duplicate ID', async () => {
     file = JSON.stringify([{ id: 'x1', email: 'x@x.test', imapHost: 'h' }, { id: 'x2', email: 'x@x.test', imapHost: 'h' }]);
     blob = {};
-    await accounts.getAccounts();
-    const [[, args]] = sent('accounts.replace_all');
-    expect(args.baseVersion).toBe(1);
-    expect(JSON.parse(file).map(a => a.id)).toEqual(['x1']);
+    expect((await accounts.getAccounts()).map(account => account.id)).toEqual(['x1']);
+    expect(sent('accounts.replace_all')).toHaveLength(0);
+    expect(JSON.parse(file).map(a => a.id)).toEqual(['x1', 'x2']);
   });
 
-  it('deleteAccount removes the record and the entry by id', async () => {
+  it('deleteAccount uses the one native removal result for the exact ID', async () => {
     blob.a = JSON.stringify({ id: 'a', email: 'a@x.test', password: 'pa' });
-    await accounts.deleteAccount('old');
-    expect(sent('credentials.delete')[0][1]).toEqual({ ids: ['old'] });
-    expect(sent('accounts.remove')[0][1]).toEqual({ ids: ['old'] });
+    expect(await accounts.deleteAccount('old')).toEqual({ outcome: 'complete', accountId: 'old' });
+    expect(sent('accounts.remove_local')[0][1]).toEqual({ accountId: 'old' });
+    expect(sent('credentials.delete')).toHaveLength(0);
+    expect(sent('accounts.remove')).toHaveLength(0);
     expect(Object.keys(blob)).toEqual(['a']);
     expect(JSON.parse(file)).toEqual([]);
   });
@@ -622,28 +640,30 @@ describe('qualified U refreshed pairs through actual adapters', () => {
   });
 });
 
-describe('qualified U deletion sequencing and outcomes', () => {
-  it('receipt, metadata, credential order prevents native legacy preservation resurrection', async () => {
-    preserveLegacy = true;
+describe('qualified native removal outcomes', () => {
+  it('one native result removes the exact account without a renderer persistence chain', async () => {
     file = JSON.stringify([{ id: 'old', email: 'old@x.test', password: 'legacy-A' }, { id: 'b', email: 'b@x.test' }]);
     blob.b = '{"id":"b","email":"b@x.test","password":"keep-B"}';
     await accounts.deleteAccount('old');
-    const effects = names().filter(n => ['compose.receipts.remove_account', 'accounts.remove', 'credentials.delete'].includes(n));
-    expect(effects).toEqual(['compose.receipts.remove_account', 'accounts.remove', 'credentials.delete']);
+    const effects = names().filter(n => ['accounts.remove_local', 'compose.receipts.remove_account', 'accounts.remove', 'credentials.delete'].includes(n));
+    expect(effects).toEqual(['accounts.remove_local']);
     expect(blob.old).toBeUndefined();
     expect(JSON.parse(blob.b).password).toBe('keep-B');
     expect(JSON.parse(file).map(a => a.id)).toEqual(['b']);
   });
-  it('receipt refusal precedes init legacy cleanup', async () => {
+  it('native refusal leaves unrelated legacy credentials untouched', async () => {
     blob.orphan = '{"id":"orphan","password":"synthetic-orphan"}';
-    useDaemon(cmd => cmd === 'compose.receipts.remove_account' ? () => Promise.reject(UNAVAILABLE()) : undefined);
+    useDaemon(cmd => cmd === 'accounts.remove_local' ? () => Promise.reject(UNAVAILABLE()) : undefined);
     expect((await attempt(accounts.deleteAccount('old'))).error).toBeInstanceOf(Error);
-    expect(names()).toEqual(['compose.receipts.remove_account']);
+    expect(names()).toEqual(['accounts.remove_local']);
     expect(blob.orphan).toBeDefined();
   });
-  for (const error of [() => UNAVAILABLE(), () => coded('RPC_ERROR', 'errors.accountsConflict')]) {
-    it('unknown/refused metadata removal stops credential and local cleanup', async () => {
-      useDaemon(cmd => cmd === 'accounts.remove' ? () => Promise.reject(error()) : undefined);
+  for (const [cause, error] of [
+    ['unavailable', () => UNAVAILABLE()],
+    ['conflict', () => coded('RPC_ERROR', 'errors.accountsConflict')],
+  ]) {
+    it(`${cause} native removal starts no renderer credential or local cleanup`, async () => {
+      useDaemon(cmd => cmd === 'accounts.remove_local' ? () => Promise.reject(error()) : undefined);
       expect((await attempt(accounts.deleteAccount('old'))).error).toBeInstanceOf(Error);
       expect(blob.old).toBeDefined();
       expect(sent('credentials.delete')).toHaveLength(0);
@@ -651,12 +671,12 @@ describe('qualified U deletion sequencing and outcomes', () => {
       noShellMutation();
     });
   }
-  it('credential deletion stays pending after list removal, then fails truthfully before local cleanup', async () => {
+  it('a pending native reply cannot trigger a renderer deletion, and explicit retry may complete', async () => {
     const wire = deferred();
-    useDaemon(cmd => cmd === 'credentials.delete' ? () => wire.promise : undefined);
+    useDaemon(cmd => cmd === 'accounts.remove_local' ? () => wire.promise : undefined);
     const pending = attempt(accounts.deleteAccount('old'));
-    await vi.waitFor(() => expect(sent('credentials.delete')).toHaveLength(1));
-    expect(JSON.parse(file)).toEqual([]);
+    await vi.waitFor(() => expect(sent('accounts.remove_local')).toHaveLength(1));
+    expect(JSON.parse(file).map(account => account.id)).toEqual(['old']);
     expect(sent('clear_email_cache')).toHaveLength(0);
     wire.reject(UNAVAILABLE());
     expect((await pending).error).toBeInstanceOf(Error);
@@ -664,9 +684,9 @@ describe('qualified U deletion sequencing and outcomes', () => {
     expect(sent('clear_email_cache')).toHaveLength(0);
     noShellMutation();
     useDaemon();
-    await accounts.deleteAccount('old'); // explicit caller retry uses idempotent native intents
+    await accounts.deleteAccount('old');
     expect(blob.old).toBeUndefined();
-    expect(sent('clear_email_cache')).toHaveLength(1);
+    expect(sent('clear_email_cache')).toHaveLength(0);
   });
 });
 

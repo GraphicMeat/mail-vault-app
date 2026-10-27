@@ -240,6 +240,25 @@ pub fn dismiss(conn: &Connection, id: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+/// End every active reminder owned by one removed account while preserving
+/// completed history and reminders belonging to other accounts.
+pub fn dismiss_account(conn: &Connection, account_id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE follow_ups SET state = 'dismissed', retry_at = 0
+         WHERE account_id = ?1 AND state IN ('waiting', 'due', 'failed')",
+        [account_id],
+    )
+    .map_err(|e| e.to_string())?;
+    let active: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM follow_ups
+         WHERE account_id = ?1 AND state IN ('waiting', 'due', 'failed'))",
+        [account_id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+    if active { return Err("follow-up rows remain".into()); }
+    Ok(())
+}
+
 /// The Sent copies at `uids` in `mailbox` were deleted or moved: the due
 /// reminders that point at them point at nothing now, and end. Returns the
 /// ids it ended, for the caller to announce.

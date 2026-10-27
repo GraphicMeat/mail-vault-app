@@ -21,6 +21,7 @@ export {
   accountExpectedContext,
   saveAccounts,
   getAccountsWithoutPasswords,
+  listAccountsForRemoval,
   accountLogicalKey,
   ensureAccountsInFile,
   completeZipImportAccounts,

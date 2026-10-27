@@ -31,6 +31,7 @@ pub use mailvault_core::imap;
 // longer references this module at all.
 pub use mailvault_core::oauth2;
 mod account_lifecycle;
+mod account_removal;
 mod account_workflows;
 #[cfg(test)]
 mod draft_contract_tests;

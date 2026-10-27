@@ -83,13 +83,23 @@ export function fakeAccountsDaemon({ read, write, credentials }) {
         }
         return save(accounts, changed);
       }
-      case 'accounts.remove': {
-        const ids = params.ids || [params.id];
-        const kept = accounts.filter((a) => !ids.includes(a.id));
-        return save(kept, kept.length === accounts.length ? [] : ids.filter((id) => accounts.some((a) => a.id === id)));
+      case 'accounts.remove': throw new Error('errors.accountsInvalid');
+      case 'accounts.remove_local': {
+        const id = params.accountId;
+        if (typeof id !== 'string' || !id) throw new Error('errors.accountsInvalid');
+        const next = credentials?.read();
+        if (next && Object.hasOwn(next, id)) {
+          delete next[id];
+          credentials.write(next);
+        }
+        const kept = accounts.filter(account => account.id !== id);
+        save(kept, kept.length === accounts.length ? [] : [id]);
+        return { outcome: 'complete', accountId: id };
       }
       case 'accounts.replace_all': {
         if (params.baseVersion != null && params.baseVersion !== version) throw new Error('errors.accountsConflict');
+        const retained = new Set(params.entries.map(entry => entry.id));
+        if (accounts.some(account => !retained.has(account.id))) throw new Error('errors.accountsInvalid');
         return save(params.entries.map(strip), params.entries.map((e) => e.id));
       }
       default: throw new Error(`fake daemon: ${method}`);

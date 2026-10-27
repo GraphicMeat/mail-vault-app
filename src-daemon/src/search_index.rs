@@ -800,6 +800,27 @@ pub fn holds_account(st: &SearchIndexState, account_id: &str) -> Result<bool, St
         .map_err(|e| e.to_string())
 }
 
+/// Remove only this retired account's indexed messages and scan markers.
+/// An unopened persisted index is an unknown residual for explicit retry.
+pub fn forget_account(st: &SearchIndexState, account_id: &str) -> Result<(), String> {
+    let mut guard = lock(&st.db);
+    let Some(conn) = guard.as_mut() else {
+        let file = st.vault_root.join(db::DB_DIR).join(db::DB_FILE);
+        return if file.exists() { Err("search index unavailable".into()) } else { Ok(()) };
+    };
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM msg_fts WHERE rowid IN (SELECT id FROM messages WHERE account_id = ?1)", [account_id])
+        .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM msg_cjk WHERE rowid IN (SELECT id FROM messages WHERE account_id = ?1)", [account_id])
+        .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM messages WHERE account_id = ?1", [account_id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM mailbox_scan WHERE account_id = ?1", [account_id]).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    let remains: i64 = conn.query_row("SELECT COUNT(*) FROM messages WHERE account_id = ?1", [account_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    if remains == 0 { Ok(()) } else { Err("search index rows remain".into()) }
+}
+
 /// Notes to Self's raw candidates: every message this index says came from
 /// `sql_own` with a non-empty recipient list. `[]` while the index is off or
 /// closed — the board is a convenience view, not a claim about the mail.

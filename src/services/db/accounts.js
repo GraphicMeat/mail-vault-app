@@ -3,7 +3,7 @@
 // merges fresh credentials, admits conflicting writers and commits metadata.
 // Read fallback remains available; mutations never replay through shell writers.
 
-import { exists, mkdir, remove } from '@tauri-apps/plugin-fs';
+import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
 import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveCredentials, deleteCredentials, updateCredentials, readCurrentCredentials, markNativeMutationUncertain, assertAccountCreateOutcomeKnown, beginNativeWrite, invalidateCredentialsCache } from './keychain.js';
@@ -65,6 +65,10 @@ const ACCOUNTS_ERRORS = ['errors.accountsConflict', 'errors.accountsInvalid', 'e
 // from this list).
 const READ_BUDGET_MS = 1500;
 const SECRET_FIELDS = ['password', 'oauth2AccessToken', 'oauth2RefreshToken'];
+const REMOVAL_STAGES = new Set(['receipt', 'document', 'credentials', 'local', 'bookkeeping']);
+const REMOVAL_RESIDUALS = new Set(['accountTree', 'headerCache', 'mailboxCache', 'custody', 'followUps']);
+const exactKeys = (value, keys) => Object.keys(value).length === keys.length
+  && keys.every(key => Object.hasOwn(value, key));
 
 // 'daemon' once accounts.* answered, 'shell' for a daemon without it.
 let listMode = 'unknown';
@@ -88,6 +92,17 @@ function isWorkflowReply(r) {
       && (c.fromAddress === null || typeof c.fromAddress === 'string'));
 }
 function isReply(method, r, params = {}) {
+  if (method === 'accounts.remove_local') {
+    if (!object(r) || typeof r.accountId !== 'string' || r.accountId !== params.accountId) return false;
+    if (r.outcome === 'complete') return exactKeys(r, ['outcome', 'accountId']);
+    if (r.outcome === 'busy') return exactKeys(r, ['outcome', 'accountId', 'effects']) && r.effects === 'none';
+    return r.outcome === 'incomplete'
+      && exactKeys(r, ['outcome', 'accountId', 'stage', 'completion', 'retry', 'residuals'])
+      && REMOVAL_STAGES.has(r.stage) && ['failed', 'unknown'].includes(r.completion)
+      && ['afterSettlement', 'explicit'].includes(r.retry)
+      && Array.isArray(r.residuals) && new Set(r.residuals).size === r.residuals.length
+      && r.residuals.every(residual => REMOVAL_RESIDUALS.has(residual));
+  }
   if (workflowMethod(method)) return isWorkflowReply(r) && (r.ok === false
     || r.account.id === (method === 'accounts.add' ? params.account?.id : params.id)
       && (method !== 'accounts.update' && r.account.oauth2Transport !== 'graph' || r.connectionCheck === null));
@@ -126,20 +141,22 @@ function withBudget(promise, ms) {
   return Promise.race([promise, budget]).finally(() => clearTimeout(timer));
 }
 
-async function accountsCall(method, params = {}) {
+async function accountsCall(method, params = {}, { strictRead = false } = {}) {
   const read = method === 'accounts.list' || method === 'accounts.get';
   const release = read ? () => {} : beginNativeWrite();
   listenForReconnect();
   {
     try {
       const call = Promise.resolve().then(() => invoke(method, params));
-      const reply = await (read && listMode !== 'daemon' ? withBudget(call, READ_BUDGET_MS) : call);
+      const reply = await (strictRead ? withBudget(call, 35000)
+        : read && listMode !== 'daemon' ? withBudget(call, READ_BUDGET_MS) : call);
       if (isReply(method, reply, params)) {
         listMode = 'daemon';
         return reply;
       }
       throw new Error('errors.accountsWriteFailed');
     } catch (error) {
+      if (strictRead) throw new Error(errText(error));
       if (!read) {
         const workflowRefusal = workflowMethod(method) && ['errors.duplicateAccount', 'errors.accountNotFound'].includes(error?.message ?? error);
         const message = error?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : workflowRefusal ? (error?.message ?? error) : errText(error);
@@ -148,6 +165,7 @@ async function accountsCall(method, params = {}) {
       }
     } finally { release(); }
   }
+  if (strictRead) throw new Error('errors.accountsWriteFailed');
   try {
     const reply = await invoke('accounts_fallback', { method, params });
     if (!isReply(method, reply, params)) throw new Error('errors.accountsWriteFailed');
@@ -167,6 +185,16 @@ async function listAccounts() {
   if (!Array.isArray(reply.accounts)) throw new Error('errors.accountsWriteFailed');
   if (reply.recovered) console.warn('[db.js] accounts.json did not parse; recovered list used');
   return { accounts: reply.accounts, version: reply.version };
+}
+
+// Destructive clear-all uses a successful full native listing, including
+// duplicate logical identities, and never interprets a reader fallback as empty.
+export async function listAccountsForRemoval() {
+  const reply = await accountsCall('accounts.list', {}, { strictRead: true });
+  const ids = reply.accounts.map(account => account?.id);
+  if (reply.recovered != null || ids.some(id => typeof id !== 'string' || !id)
+    || new Set(ids).size !== ids.length) throw new Error('errors.accountsWriteFailed');
+  return reply.accounts;
 }
 
 // The list for showing and merging: empty when it cannot be read.
@@ -472,14 +500,6 @@ export async function getAccounts() {
     // Deduplicate by logical identity (email + server/provider)
     accounts = deduplicateAccounts(accounts);
 
-    // One-time cleanup: remove duplicates from accounts.json. Only over the
-    // list as it was read (its version): if it changed since, skip it.
-    const cleanedFile = deduplicateAccounts(fileAccounts);
-    if (cleanedFile.length < fileAccounts.length && listed.version != null) {
-      console.log(`[db.js] Cleaning up ${fileAccounts.length - cleanedFile.length} duplicate(s) from accounts.json`);
-      await accountsCall('accounts.replace_all', { entries: cleanedFile.map(stripSecrets), baseVersion: listed.version })
-        .catch(e => console.warn('[db.js] Failed to clean accounts.json:', errText(e)));
-    }
   } else {
     accounts = deduplicateAccounts(await readAccountsFile());
   }
@@ -552,40 +572,14 @@ export async function updateOAuth2Tokens(accountId, tokens) {
 }
 
 export async function deleteAccount(id) {
-  // Remove this account's compose receipts before any account cleanup.
-  await invoke('compose.receipts.remove_account', { accountId: id });
-  await initDB();
-
-  // Native metadata writes preserve legacy credentials first. Removing the
-  // list row before its credential prevents preservation from recreating it.
-  // A refused/unknown step rejects before local cleanup; prior effects may remain.
-  await accountsCall('accounts.remove', { ids: [id] });
-  await deleteCredentials([id]);
-
-  // Remove Maildir/{accountId}/ directory
-  try {
-    const dirPath = await dataPath(accountDir(id));
-    const dirExists = await exists(dirPath);
-    if (dirExists) {
-      await remove(dirPath, { recursive: true });
-    }
-  } catch (error) {
-    console.warn('[db.js] Failed to remove account Maildir');
+  const result = await accountsCall('accounts.remove_local', { accountId: id });
+  if (result.outcome === 'complete') {
+    invalidateCredentialsCache();
+    return result;
   }
-
-  // Clear email headers cache for this account
-  if (invoke) {
-    try {
-      await invoke('clear_email_cache', { accountId: id });
-    } catch (error) {
-      console.warn('[db.js] Failed to clear email cache');
-    }
-
-    // Clear mailbox cache
-    try {
-      await invoke('delete_mailbox_cache', { accountId: id });
-    } catch (error) {
-      console.warn('[db.js] Failed to clear mailbox cache');
-    }
-  }
+  if (result.outcome === 'incomplete') markNativeMutationUncertain();
+  const error = new Error(result.outcome === 'busy' ? 'errors.accountRemovalBusy' : 'errors.accountRemovalIncomplete');
+  error.outcome = result.outcome;
+  error.result = result;
+  throw error;
 }

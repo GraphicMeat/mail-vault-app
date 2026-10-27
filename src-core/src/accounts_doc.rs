@@ -205,12 +205,14 @@ pub fn list(doc: &JsonDoc) -> Result<Listing, AccountsError> {
     })
 }
 
-/// Ephemeral authorization for live cleanup. The daemon constructs the proof
-/// only after preserving the exact listing; the shell always uses Preserve.
+/// Ephemeral authorization for live cleanup and commit-time listing validation.
+/// The daemon permits live cleanup only after preserving the exact listing;
+/// the shell always uses Preserve.
 #[derive(Clone, Copy)]
 pub enum LiveScrub<'a> {
     Preserve,
     Preserved(&'a Listing),
+    Fenced(&'a Listing),
 }
 
 // Persistence and affected IDs are separate: a real replacement can remove
@@ -253,9 +255,10 @@ fn mutate(
     policy: LiveScrub<'_>,
     apply: impl FnOnce(&mut Value) -> Result<Vec<String>, DocError>,
 ) -> Result<Mutation, AccountsError> {
+    let scrub_live = matches!(policy, LiveScrub::Preserved(_));
     let proof = match policy {
         LiveScrub::Preserve => None,
-        LiveScrub::Preserved(listing) => Some(listing),
+        LiveScrub::Preserved(listing) | LiveScrub::Fenced(listing) => Some(listing),
     };
     let base = match proof {
         Some(proof) => {
@@ -285,7 +288,7 @@ fn mutate(
             .as_array()
             .map(|rows| authoritative_ids(rows))
             .unwrap_or_default();
-        let mut cleaned = if proof.is_some() {
+        let mut cleaned = if scrub_live {
             scrub_secrets(value)
         } else {
             Vec::new()

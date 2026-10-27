@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AccountSettings } from '../AccountSettings';
 import { useMailStore } from '../../../stores/mailStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -185,4 +185,22 @@ it('overrides the download mode for one account under Advanced', () => {
   fireEvent.click(within(modes).getByRole('radio', { name: t('settings.storage.modeIndexOnly') }));
   expect(useSettingsStore.getState().fetchModes).toEqual({ studio: 'indexOnly' });
   expect(useSettingsStore.getState().fetchMode).toBe('keepRecent');
+});
+
+it('keeps removal confirmation and selected account visible when native removal is Busy', async () => {
+  const original = useMailStore.getState().removeAccount;
+  const busy = Object.assign(new Error('errors.accountRemovalBusy'), { outcome: 'busy' });
+  const removeAccount = vi.fn().mockRejectedValue(busy);
+  useMailStore.setState({ removeAccount });
+  try {
+    render(<AccountSettings accounts={accounts} initialSection="advanced" />);
+    fireEvent.click(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') }));
+    fireEvent.click(screen.getByRole('button', { name: t('common.remove'), exact: true }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(t('settings.accounts.removeBusy')));
+    expect(removeAccount).toHaveBeenCalledWith('studio');
+    expect(screen.getByText(t('settings.accounts.sureRemoveAccount', { email: 'studio@example.test' }))).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Studio' })).toBeTruthy();
+  } finally {
+    useMailStore.setState({ removeAccount: original });
+  }
 });

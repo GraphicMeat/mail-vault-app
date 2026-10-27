@@ -1837,7 +1837,18 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'accounts.add': case 'accounts.update': case 'accounts.save': throw new Error('errors.daemonOutdated');
       case 'accounts.list': return { accounts: clone(accountList), version: accountsVersion };
       case 'accounts.get': return { account: clone(accountList.find(a => a.id === args.id) || null), version: accountsVersion };
-      case 'accounts.put': case 'accounts.remove': case 'accounts.reorder': case 'accounts.replace_all': {
+      case 'accounts.remove': throw new Error('errors.accountsInvalid');
+      case 'accounts.remove_local': {
+        if (typeof args.accountId !== 'string' || !args.accountId) throw new Error('errors.accountsInvalid');
+        const before = accountList.length;
+        accountList = accountList.filter(account => account.id !== args.accountId);
+        if (accountList.length !== before) {
+          accountsVersion += 1;
+          emit('demo:state', { type: 'accounts' });
+        }
+        return { outcome: 'complete', accountId: args.accountId };
+      }
+      case 'accounts.put': case 'accounts.reorder': case 'accounts.replace_all': {
         const strip = ({ password, oauth2AccessToken, oauth2RefreshToken, ...rest }) => rest;
         const entries = (args.entries || (args.entry ? [args.entry] : [])).map(strip);
         const before = JSON.stringify(accountList);
@@ -1847,13 +1858,12 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
             if (at >= 0 && !args.ifAbsent) accountList[at] = { ...accountList[at], ...entry };
             else if (at < 0) accountList.push(entry);
           }
-        } else if (command === 'accounts.remove') {
-          const ids = args.ids || [args.id];
-          accountList = accountList.filter(a => !ids.includes(a.id));
         } else if (command === 'accounts.reorder') {
           const ids = args.ids || [];
           accountList = [...ids.map(id => accountList.find(a => a.id === id)).filter(Boolean), ...accountList.filter(a => !ids.includes(a.id))];
         } else {
+          const retained = new Set(entries.map(entry => entry.id));
+          if (accountList.some(account => !retained.has(account.id))) throw new Error('errors.accountsInvalid');
           accountList = entries;
         }
         const changed = JSON.stringify(accountList) !== before;

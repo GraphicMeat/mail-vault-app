@@ -2,6 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoBackend } from '../backend.js';
 
 describe('demo mailbox backend', () => {
+  it('routes one complete account removal and refuses public metadata retirement', async () => {
+    const backend = createDemoBackend();
+    const call = (method, params = {}) => backend.invoke('daemon_rpc', { method, params });
+    const before = (await call('accounts.list')).accounts;
+    const target = before[0].id;
+    await expect(call('accounts.remove', { id: target })).rejects.toThrow('errors.accountsInvalid');
+    await expect(call('accounts.replace_all', { entries: before.slice(1) })).rejects.toThrow('errors.accountsInvalid');
+    expect((await call('accounts.list')).accounts.map(account => account.id)).toEqual(before.map(account => account.id));
+    expect(await call('accounts.remove_local', { accountId: target }))
+      .toEqual({ outcome: 'complete', accountId: target });
+    expect((await call('accounts.list')).accounts.map(account => account.id))
+      .toEqual(before.slice(1).map(account => account.id));
+  });
+
   it('prepares message and authored mailto Bcc against its settings version', async () => {
     const backend = createDemoBackend();
     const call = (method, params = {}) => backend.invoke('daemon_rpc', { method, params });

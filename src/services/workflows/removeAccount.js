@@ -17,6 +17,15 @@ export async function removeAccount(accountId) {
   const get = () => useMailStore.getState();
 
   const account = get().accounts.find(a => a.id === accountId);
+  const removal = await db.deleteAccount(accountId);
+  if (!removal || removal.outcome !== 'complete' || removal.accountId !== accountId
+    || Object.keys(removal).length !== 2) {
+    const error = new Error('errors.accountRemovalIncomplete');
+    error.outcome = removal?.outcome || 'unknown';
+    error.result = removal;
+    throw error;
+  }
+
   if (account && !isGraphAccount(account)) {
     try {
       await api.disconnect(account);
@@ -25,11 +34,9 @@ export async function removeAccount(accountId) {
     }
   }
 
-  // Drop the daemon's IDLE watcher before the row goes: it holds this
-  // account's credentials open on a connection nobody will own any more.
+  // The native removal owns the active drain. This renderer cleanup starts
+  // only after its final complete result, so a Busy send is never disconnected.
   unwatchAccount(accountId);
-
-  await db.deleteAccount(accountId);
   _invalidateRestore(accountId);
   _clearGraphIdMap(accountId);
 
@@ -37,8 +44,7 @@ export async function removeAccount(accountId) {
   forgetAccount(accountId);
   // Its follow-up reminders end with it (snooze rows have no such rule: a
   // removed account's snoozes are left to fail at their wake).
-  dismissAccountFollowUps(accountId)
-    .catch(err => console.warn('[removeAccount] follow-up reminders not dismissed:', err));
+  dismissAccountFollowUps(accountId);
 
   useMailStore.setState({ accounts: newAccounts });
 

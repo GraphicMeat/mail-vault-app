@@ -11,12 +11,14 @@ if (!globalThis.window) {
 // ── Mock the same dependency surface as mailStore.test.js — activateAccount.js
 // pulls in the same transitive tree via accountSlice.js. ──
 const mockPatchAccount = vi.fn().mockResolvedValue(undefined);
+const mockUpdateAccountNative = vi.fn();
 function accountLogicalKey(a) {
   const email = (a.email || '').toLowerCase();
   const server = (a.imapHost || a.oauth2Provider || '').toLowerCase();
   return `${email}@${server}`;
 }
 vi.mock('../../services/db', () => ({
+  updateAccountNative: (...args) => mockUpdateAccountNative(...args),
   patchAccount: async (id, fields, options) => {
     await mockPatchAccount(id, fields, options);
     const old = storeState.accounts.find(a => a.id === id);
@@ -118,123 +120,148 @@ const NEW_PARAMS = {
   password: 'newpass',
 };
 
-describe('changeServer', () => {
+function nativeReply(id, fields, { unset = [] } = {}) {
+  const old = storeState.accounts.find(a => a.id === id);
+  const account = { ...old, ...fields, id };
+  for (const key of ['password', 'oauth2AccessToken', 'oauth2RefreshToken', ...unset]) delete account[key];
+  const hostChanged = !!old.imapHost && !!fields.imapHost && old.imapHost !== fields.imapHost;
+  if (hostChanged) {
+    account.previousImapHost = old.imapHost;
+    account.hostChangedAt = 123456789;
+  }
+  return { account, hostChanged };
+}
+
+function expectNoLegacyCalls() {
+  expect(mockStorePassword).not.toHaveBeenCalled();
+  expect(mockPatchAccount).not.toHaveBeenCalled();
+  expect(mockTestConnection).not.toHaveBeenCalled();
+  expect(mockSmtpTestConnection).not.toHaveBeenCalled();
+}
+
+function resetMocks() {
+  vi.clearAllMocks();
+  mockUpdateAccountNative.mockImplementation(nativeReply);
+  mockStorePassword.mockRejectedValue(new Error('errors.daemonOutdated'));
+  mockTestConnection.mockRejectedValue(new Error('renderer IMAP probe must not run'));
+  mockSmtpTestConnection.mockRejectedValue(new Error('renderer SMTP probe must not run'));
+  mockActivateAccount.mockResolvedValue(undefined);
+}
+
+const nativeProbeFailure = (host, port, errorCode = 'auth') => Object.assign(
+  new Error('errors.conn.couldReachMailServerCheck'), { errorCode, host, port },
+);
+
+describe('changeServer on a password/IMAP account', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockTestConnection.mockResolvedValue({ success: true });
-    mockSmtpTestConnection.mockResolvedValue({ success: true });
-    mockStorePassword.mockResolvedValue(undefined);
-    mockPatchAccount.mockResolvedValue(undefined);
-    mockActivateAccount.mockResolvedValue(undefined);
+    resetMocks();
     storeState = {
-      accounts: [makeAccount()],
-      activeAccountId: 'acc-1',
-      activeMailbox: 'INBOX',
+      accounts: [makeAccount()], activeAccountId: 'acc-1', activeMailbox: 'INBOX',
       activateAccount: mockActivateAccount,
     };
   });
 
-  it('happy path: verifies IMAP then SMTP then persists then updates state, in order', async () => {
-    const callOrder = [];
-    mockTestConnection.mockImplementation(async () => { callOrder.push('imap'); return { success: true }; });
-    mockSmtpTestConnection.mockImplementation(async () => { callOrder.push('smtp'); return { success: true }; });
-    mockStorePassword.mockImplementation(async () => { callOrder.push('store_password'); });
-    mockPatchAccount.mockImplementation(async () => { callOrder.push('patchAccount'); });
+  it('S2.4 persists through one native update when the retired password writer refuses', async () => {
+    mockUpdateAccountNative.mockResolvedValue({
+      account: { ...makeAccount(NEW_PARAMS), password: undefined }, hostChanged: true,
+    });
+    let result;
+    let error;
+    try { result = await changeServer('acc-1', NEW_PARAMS); }
+    catch (caught) { error = caught; }
+    const observed = `S24_CHANGE_SERVER_LEGACY_ACTUAL: resolved=${!!result}, legacyCalls=${mockStorePassword.mock.calls.length}, nativeCalls=${mockUpdateAccountNative.mock.calls.length}, patchCalls=${mockPatchAccount.mock.calls.length}, stateHost=${storeState.accounts[0].imapHost}, error=${error?.message || 'none'}`;
+    console.log(observed);
+    expect(result, observed).toEqual({ ok: true, hostChanged: true });
+    expect(mockUpdateAccountNative).toHaveBeenCalledOnce();
+    expect(mockUpdateAccountNative.mock.calls[0]).toMatchObject(['acc-1', {
+      imapHost: 'new.host.com', imapPort: 993, imapSecurity: 'ssl',
+      smtpHost: 'new-smtp.host.com', smtpPort: 465, password: 'newpass',
+    }, { expected: { fields: { email: 'user@example.com', imapHost: 'old.host.com' } } }]);
+    expectNoLegacyCalls();
+    expect(storeState.accounts[0].imapHost).toBe('new.host.com');
+    expect(storeState.accounts[0].password).toBe('newpass');
+  });
 
+  it('submits all six server fields and applies confirmed previous-host metadata', async () => {
     const result = await changeServer('acc-1', NEW_PARAMS);
-
-    expect(callOrder).toEqual(['imap', 'smtp', 'store_password', 'patchAccount']);
     expect(result).toEqual({ ok: true, hostChanged: true });
-
-    const updated = storeState.accounts.find(a => a.id === 'acc-1');
-    expect(updated.imapHost).toBe('new.host.com');
-    expect(updated.password).toBe('newpass');
+    expect(mockUpdateAccountNative).toHaveBeenCalledOnce();
+    expect(mockUpdateAccountNative.mock.calls[0][1]).toMatchObject({
+      imapHost: 'new.host.com', imapPort: 993, imapSecurity: 'ssl',
+      smtpHost: 'new-smtp.host.com', smtpPort: 465, password: 'newpass',
+    });
+    expect(storeState.accounts[0]).toMatchObject({
+      previousImapHost: 'old.host.com', hostChangedAt: 123456789, imapHost: 'new.host.com',
+    });
+    expect(mockActivateAccount).toHaveBeenCalledWith('acc-1', 'INBOX');
+    expectNoLegacyCalls();
   });
 
-  it('throws IMAP-prefixed error on IMAP failure and persists nothing', async () => {
-    mockTestConnection.mockRejectedValue(new Error('auth failed'));
-
+  it('keeps the old account and secret when the native IMAP probe fails', async () => {
+    mockUpdateAccountNative.mockRejectedValue(nativeProbeFailure('new.host.com', 993));
     await expect(changeServer('acc-1', NEW_PARAMS)).rejects.toThrow(/^IMAP:/);
-
-    expect(mockSmtpTestConnection).not.toHaveBeenCalled();
-    expect(mockStorePassword).not.toHaveBeenCalled();
-    expect(mockPatchAccount).not.toHaveBeenCalled();
+    expect(storeState.accounts[0]).toEqual(makeAccount());
+    expect(mockActivateAccount).not.toHaveBeenCalled();
+    expectNoLegacyCalls();
   });
 
-  it('throws SMTP-prefixed error on SMTP failure and persists nothing', async () => {
-    mockSmtpTestConnection.mockRejectedValue(new Error('smtp auth failed'));
-
+  it('keeps the old account and secret when the native SMTP probe fails', async () => {
+    mockUpdateAccountNative.mockRejectedValue(nativeProbeFailure('new-smtp.host.com', 465, 'refused'));
     await expect(changeServer('acc-1', NEW_PARAMS)).rejects.toThrow(/^SMTP:/);
-
-    expect(mockTestConnection).toHaveBeenCalled();
-    expect(mockStorePassword).not.toHaveBeenCalled();
-    expect(mockPatchAccount).not.toHaveBeenCalled();
+    expect(storeState.accounts[0]).toEqual(makeAccount());
+    expect(mockActivateAccount).not.toHaveBeenCalled();
+    expectNoLegacyCalls();
   });
 
-  it('throws on collision with another account and runs no connection tests', async () => {
+  it('leaves the visible account unchanged on a stale or retired native refusal', async () => {
+    mockUpdateAccountNative.mockRejectedValue(new Error('errors.accountsConflict'));
+    await expect(changeServer('acc-1', NEW_PARAMS)).rejects.toThrow('errors.accountsConflict');
+    expect(storeState.accounts[0]).toEqual(makeAccount());
+    expect(mockActivateAccount).not.toHaveBeenCalled();
+    expectNoLegacyCalls();
+  });
+
+  it('refuses a local logical-key collision before any native request', async () => {
     storeState.accounts.push(makeAccount({
-      id: 'acc-2',
-      email: 'user@example.com',
-      imapHost: 'new.host.com', // same email + same target host as the change
+      id: 'acc-2', email: 'user@example.com', imapHost: 'new.host.com',
     }));
-
     await expect(changeServer('acc-1', NEW_PARAMS)).rejects.toThrow(/already added/);
-
-    expect(mockTestConnection).not.toHaveBeenCalled();
-    expect(mockSmtpTestConnection).not.toHaveBeenCalled();
-    expect(mockPatchAccount).not.toHaveBeenCalled();
+    expect(mockUpdateAccountNative).not.toHaveBeenCalled();
+    expectNoLegacyCalls();
   });
 
-  it('throws immediately for OAuth accounts', async () => {
+  it('refuses an OAuth account before any native request', async () => {
     storeState.accounts = [makeAccount({ authType: 'oauth2' })];
-
     await expect(changeServer('acc-1', NEW_PARAMS)).rejects.toThrow(/OAuth/);
-
-    expect(mockTestConnection).not.toHaveBeenCalled();
-    expect(mockSmtpTestConnection).not.toHaveBeenCalled();
-    expect(mockPatchAccount).not.toHaveBeenCalled();
+    expect(mockUpdateAccountNative).not.toHaveBeenCalled();
+    expectNoLegacyCalls();
   });
 
-  it('hostChanged is false and no reconnect happens when only password/smtp change', async () => {
-    const params = { ...NEW_PARAMS, imapHost: 'old.host.com' };
-
-    const result = await changeServer('acc-1', params);
-
+  it('does not reconnect when the confirmed IMAP host is unchanged', async () => {
+    const result = await changeServer('acc-1', { ...NEW_PARAMS, imapHost: 'old.host.com' });
     expect(result).toEqual({ ok: true, hostChanged: false });
     expect(mockActivateAccount).not.toHaveBeenCalled();
   });
 
-  it('reconnects the active account via activateAccount when the host changed', async () => {
+  it('does not reconnect when the changed account is not active', async () => {
+    storeState.activeAccountId = 'another';
     await changeServer('acc-1', NEW_PARAMS);
-
-    expect(mockActivateAccount).toHaveBeenCalledWith('acc-1', 'INBOX');
-  });
-
-  it('does not reconnect when the changed account is not the active one', async () => {
-    storeState.activeAccountId = 'some-other-account';
-
-    await changeServer('acc-1', NEW_PARAMS);
-
     expect(mockActivateAccount).not.toHaveBeenCalled();
   });
 
-  it('passes the new imapHost to db.patchAccount so it can stamp previousImapHost/hostChangedAt', async () => {
-    await changeServer('acc-1', NEW_PARAMS);
-
-    expect(mockPatchAccount).toHaveBeenCalledTimes(1);
-    const savedCandidate = mockPatchAccount.mock.calls[0][1];
-    expect(savedCandidate.imapHost).toBe('new.host.com');
-    expect(mockPatchAccount.mock.calls[0][0]).toBe('acc-1');
+  it('reports a completed native save even if reactivation fails', async () => {
+    mockActivateAccount.mockRejectedValue(new Error('offline'));
+    const result = await changeServer('acc-1', NEW_PARAMS);
+    expect(result).toEqual({ ok: true, hostChanged: true });
+    expect(storeState.accounts[0].imapHost).toBe('new.host.com');
   });
 
-  it('throws if the account does not exist', async () => {
-    await expect(changeServer('does-not-exist', NEW_PARAMS)).rejects.toThrow(/not found/i);
+  it('rejects a missing account before any native request', async () => {
+    await expect(changeServer('missing', NEW_PARAMS)).rejects.toThrow(/not found/i);
+    expect(mockUpdateAccountNative).not.toHaveBeenCalled();
   });
 });
 
-// A JMAP account stays JMAP: the session URL and the secret change, the
-// daemon's imap_test_connection proves them over JMAP, and there is no SMTP
-// leg to run (JMAP sends through EmailSubmission).
 describe('changeServer on a JMAP account', () => {
   const JMAP = {
     id: 'acc-1', email: 'me@example.org', authType: 'password', password: 'old-token',
@@ -242,74 +269,93 @@ describe('changeServer on a JMAP account', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockTestConnection.mockResolvedValue({ success: true });
-    mockStorePassword.mockResolvedValue(undefined);
-    mockPatchAccount.mockResolvedValue(undefined);
-    mockActivateAccount.mockResolvedValue(undefined);
-    storeState = { accounts: [{ ...JMAP }], activeAccountId: 'acc-1', activeMailbox: 'INBOX', activateAccount: mockActivateAccount };
-  });
-
-  it('verifies the new session once, never over SMTP, and keys the account on the session host', async () => {
-    const result = await changeServer('acc-1', { jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', password: 'new-token' });
-
-    expect(result).toEqual({ ok: true, hostChanged: true });
-    expect(mockSmtpTestConnection).not.toHaveBeenCalled();
-    expect(mockTestConnection).toHaveBeenCalledTimes(1);
-    expect(mockTestConnection.mock.calls[0][0]).toMatchObject({
-      id: 'acc-1', jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', jmapAuth: 'bearer',
-      imapHost: 'jmap.new.example.org', password: 'new-token',
-    });
-    expect(mockStorePassword).toHaveBeenCalledWith('acc-1', 'new-token');
-    const saved = mockPatchAccount.mock.calls[0][1];
-    expect(saved).toMatchObject({ jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', imapHost: 'jmap.new.example.org' });
-    expect(storeState.accounts[0].imapHost).toBe('jmap.new.example.org');
-    expect(mockActivateAccount).toHaveBeenCalledWith('acc-1', 'INBOX');
-  });
-
-  it('keeps the session URL when only the secret changes', async () => {
-    const result = await changeServer('acc-1', { password: 'new-token' });
-
-    expect(result).toEqual({ ok: true, hostChanged: false });
-    expect(mockPatchAccount.mock.calls[0][1]).toMatchObject({ jmapSessionUrl: JMAP.jmapSessionUrl, imapHost: 'old.example.org', password: 'new-token' });
-    expect(mockActivateAccount).not.toHaveBeenCalled();
-  });
-
-  it('refuses a session URL that is not https before anything is tested', async () => {
-    await expect(changeServer('acc-1', { jmapSessionUrl: 'http://jmap.new.example.org/jmap', password: 'x' }))
-      .rejects.toThrow('Enter the full https:// address of the JMAP session.');
-    expect(mockTestConnection).not.toHaveBeenCalled();
-    expect(mockPatchAccount).not.toHaveBeenCalled();
-  });
-
-  it('persists nothing when the server refuses the new secret', async () => {
-    mockTestConnection.mockRejectedValue(Object.assign(new Error('E_JMAP_AUTH: authentication failed'), { errorCode: 'E_JMAP_AUTH' }));
-
-    await expect(changeServer('acc-1', { password: 'wrong' })).rejects.toThrow();
-    expect(mockSmtpTestConnection).not.toHaveBeenCalled();
-    expect(mockStorePassword).not.toHaveBeenCalled();
-    expect(mockPatchAccount).not.toHaveBeenCalled();
-  });
-});
-
-describe('changeServer on a JMAP account: the Basic login', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockTestConnection.mockResolvedValue({ success: true });
+    resetMocks();
     storeState = {
-      accounts: [{ id: 'acc-1', email: 'me@example.org', authType: 'password', password: 'p', imapHost: 'mail.example.org',
-        jmapSessionUrl: 'https://mail.example.org/jmap/session', jmapAuth: 'basic', jmapUsername: 'old-login' }],
-      activeAccountId: 'acc-1', activeMailbox: 'INBOX', activateAccount: mockActivateAccount,
+      accounts: [{ ...JMAP }], activeAccountId: 'acc-1', activeMailbox: 'INBOX',
+      activateAccount: mockActivateAccount,
     };
   });
 
-  it('stores a new login, and drops it when it is the address again', async () => {
-    await changeServer('acc-1', { jmapUsername: ' alice ', password: 'p2' });
-    expect(mockPatchAccount.mock.calls[0][1].jmapUsername).toBe('alice');
+  it('S2.4 persists a JMAP session through native update after the retired writer refuses', async () => {
+    mockUpdateAccountNative.mockResolvedValue({ account: {
+      ...JMAP, jmapSessionUrl: 'https://jmap.new.example.org/jmap/session',
+      imapHost: 'jmap.new.example.org', password: undefined,
+    }, hostChanged: true });
+    let result;
+    let error;
+    try {
+      result = await changeServer('acc-1', { jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', password: 'new-token' });
+    } catch (caught) { error = caught; }
+    const observed = `S24_CHANGE_SERVER_JMAP_ACTUAL: resolved=${!!result}, legacyCalls=${mockStorePassword.mock.calls.length}, nativeCalls=${mockUpdateAccountNative.mock.calls.length}, patchCalls=${mockPatchAccount.mock.calls.length}, stateUrl=${storeState.accounts[0].jmapSessionUrl}, error=${error?.message || 'none'}`;
+    console.log(observed);
+    expect(result, observed).toEqual({ ok: true, hostChanged: true });
+    expect(mockUpdateAccountNative).toHaveBeenCalledOnce();
+    expect(mockUpdateAccountNative.mock.calls[0]).toMatchObject(['acc-1', {
+      jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', imapHost: 'jmap.new.example.org',
+      password: 'new-token',
+    }, { expected: { fields: { email: 'me@example.org', imapHost: 'old.example.org' } } }]);
+    expectNoLegacyCalls();
+    expect(storeState.accounts[0].jmapSessionUrl).toBe('https://jmap.new.example.org/jmap/session');
+  });
 
+  it('uses one native JMAP probe path and keeps the account on JMAP', async () => {
+    const result = await changeServer('acc-1', {
+      jmapSessionUrl: 'https://jmap.new.example.org/jmap/session', password: 'new-token',
+    });
+    expect(result).toEqual({ ok: true, hostChanged: true });
+    expect(mockUpdateAccountNative.mock.calls[0][1]).toMatchObject({
+      jmapSessionUrl: 'https://jmap.new.example.org/jmap/session',
+      imapHost: 'jmap.new.example.org', password: 'new-token',
+    });
+    expect(storeState.accounts[0]).toMatchObject({
+      jmapAuth: 'bearer', imapHost: 'jmap.new.example.org', password: 'new-token',
+    });
+    expect(mockActivateAccount).toHaveBeenCalledWith('acc-1', 'INBOX');
+    expectNoLegacyCalls();
+  });
+
+  it('reactivates when a JMAP session URL changes within the same host', async () => {
+    const result = await changeServer('acc-1', {
+      jmapSessionUrl: 'https://old.example.org/jmap/other', password: 'new-token',
+    });
+    expect(result).toEqual({ ok: true, hostChanged: true });
+    expect(mockActivateAccount).toHaveBeenCalledWith('acc-1', 'INBOX');
+  });
+
+  it('keeps the session URL and skips reconnect when only the secret changes', async () => {
+    const result = await changeServer('acc-1', { password: 'new-token' });
+    expect(result).toEqual({ ok: true, hostChanged: false });
+    expect(mockUpdateAccountNative.mock.calls[0][1]).toMatchObject({
+      jmapSessionUrl: JMAP.jmapSessionUrl, imapHost: 'old.example.org', password: 'new-token',
+    });
+    expect(mockActivateAccount).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-HTTPS session URL before any native request', async () => {
+    await expect(changeServer('acc-1', {
+      jmapSessionUrl: 'http://jmap.new.example.org/jmap', password: 'x',
+    })).rejects.toThrow('Enter the full https:// address of the JMAP session.');
+    expect(mockUpdateAccountNative).not.toHaveBeenCalled();
+    expectNoLegacyCalls();
+  });
+
+  it('leaves the old session and secret on a native JMAP probe refusal', async () => {
+    mockUpdateAccountNative.mockRejectedValue(nativeProbeFailure('old.example.org', 443, 'E_JMAP_AUTH'));
+    await expect(changeServer('acc-1', { password: 'wrong' })).rejects.toThrow();
+    expect(storeState.accounts[0]).toEqual(JMAP);
+    expect(mockActivateAccount).not.toHaveBeenCalled();
+    expectNoLegacyCalls();
+  });
+
+  it('sets a distinct Basic login and unsets it when the address is selected', async () => {
+    storeState.accounts[0] = { ...JMAP, jmapAuth: 'basic', jmapUsername: 'old-login' };
+    await changeServer('acc-1', { jmapUsername: ' alice ', password: 'p2' });
+    expect(mockUpdateAccountNative.mock.calls[0][1].jmapUsername).toBe('alice');
+    expect(mockUpdateAccountNative.mock.calls[0][2].unset).toEqual([]);
     await changeServer('acc-1', { jmapUsername: 'me@example.org', password: 'p3' });
-    expect(mockPatchAccount.mock.calls[1][1]).not.toHaveProperty('jmapUsername');
-    expect(mockPatchAccount.mock.calls[1][2].unset).toEqual(['jmapUsername']);
+    expect(mockUpdateAccountNative.mock.calls[1][1]).not.toHaveProperty('jmapUsername');
+    expect(mockUpdateAccountNative.mock.calls[1][2].unset).toEqual(['jmapUsername']);
     expect(storeState.accounts[0]).not.toHaveProperty('jmapUsername');
+    expectNoLegacyCalls();
   });
 });

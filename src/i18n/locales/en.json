@@ -1902,6 +1902,9 @@
   "settings.accounts.reconnecting": "Reconnecting...",
   "settings.accounts.removeAccount": "Remove Account",
   "settings.accounts.removeAccount2": "Remove This Account",
+  "settings.accounts.removeBusy": "This account is busy. Wait for the current operation to finish, then try again.",
+  "settings.accounts.removeIncomplete": "Account removal did not finish. Retry after the current operation settles.",
+  "settings.accounts.removeFailed": "Could not remove this account. Try again.",
   "settings.accounts.removeSignOut": "Remove & Sign Out",
   "settings.accounts.removingDeletesEverythingLocal": "This removes the account from MailVault. Everything of its in your vault, attachments, and settings for this account will be permanently deleted and cannot be recovered.",
   "settings.accounts.reorderAccount": "Reorder {{email}}",
@@ -2860,6 +2863,7 @@
   "settings.storage.emptyVault": "Empty the vault",
   "settings.storage.emptyVaultComputer": "Empty your vault on this computer?",
   "settings.storage.emptyVaultConfirmDescription": "Every email in your vault, every account, and every setting is deleted from this computer. Mail still on the server can be downloaded again; anything the server no longer has has no other copy. This cannot be undone.",
+  "settings.storage.emptyVaultFailed": "The vault could not be emptied. Some accounts or data may still be present. Try again after the current operation finishes.",
   "settings.storage.enableRule": "Enable cleanup for {{folder}}",
   "settings.storage.featureUnderDevelopment": "This feature is under development",
   "settings.storage.folderNotAvailable": "The folder is not available.",
@@ -4049,5 +4053,7 @@
   "svc.backupScheduler.uncertain": "Backup status is uncertain; waiting for the native worker.",
   "errors.accountsConflict": "Your account list changed in another window. Try again.",
   "errors.accountsInvalid": "That account change could not be saved because it is not valid.",
-  "errors.accountsWriteFailed": "Your account change could not be completed."
+  "errors.accountsWriteFailed": "Your account change could not be completed.",
+  "errors.accountRemovalBusy": "This account is busy. Wait for the current operation to finish, then try again.",
+  "errors.accountRemovalIncomplete": "Account removal did not finish. Retry after the current operation settles."
 }

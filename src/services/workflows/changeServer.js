@@ -1,18 +1,25 @@
 // ── changeServer workflow — re-point account to new server with new password ──
 
 import * as db from '../db';
-import * as api from '../api';
 import { t } from '../../i18n/index.js';
 import { isJmapAccount, jmapSessionHost } from '../providerKind.js';
 import { describeConnectionError } from '../../utils/connectionError';
 
 
 // ── changeServer workflow ──
-// Atomic "re-point account to new server with new password" operation. Unlike
-// updateAccount (which tests the connection using the account's stored — old,
-// possibly gone — password), this verifies IMAP and SMTP with the NEW password
-// first and persists nothing unless both legs succeed. Password/IMAP accounts
-// only — OAuth accounts don't have a server password to re-verify.
+// The native full server-and-password update probes before saving. OAuth
+// accounts do not have a server password to re-verify in this form.
+function probeError(error, candidate, jmap = false) {
+  if (!Object.hasOwn(error ?? {}, 'errorCode')) return error;
+  const msg = describeConnectionError(error).message;
+  if (jmap) return new Error(msg);
+  const smtp = error.host === candidate.smtpHost && Number(error.port) === Number(candidate.smtpPort);
+  const imap = error.host === candidate.imapHost && Number(error.port) === Number(candidate.imapPort);
+  if (smtp && !imap) return new Error(t('errors.smtpPrefixed', { msg }));
+  if (imap && !smtp) return new Error(t('errors.imapPrefixed', { msg }));
+  return new Error(msg);
+}
+
 export async function changeServer(accountId, { imapHost, imapPort, imapSecurity, smtpHost, smtpPort, password, jmapSessionUrl, jmapUsername }) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -41,34 +48,19 @@ export async function changeServer(accountId, { imapHost, imapPort, imapSecurity
   const collision = get().accounts.find(a => a.id !== accountId && db.accountLogicalKey(a) === candidateKey);
   if (collision) throw new Error(t('errors.duplicateAccount'));
 
-  console.log('[mailStore] changeServer — verifying IMAP with new password...');
+  let saved;
   try {
-    await api.testConnection(candidate);
+    saved = await db.updateAccountNative(accountId, {
+      imapHost, imapPort, imapSecurity: candidate.imapSecurity,
+      smtpHost, smtpPort, password,
+    }, { expected: db.accountExpectedContext(existing) });
   } catch (error) {
-    const msg = typeof error === 'string' ? error : error?.message || 'IMAP connection failed';
-    throw new Error(t('errors.imapPrefixed', { msg }));
+    throw probeError(error, candidate);
   }
-
-  console.log('[mailStore] changeServer — verifying SMTP...');
-  try {
-    await api.smtpTestConnection(candidate);
-  } catch (error) {
-    const msg = typeof error === 'string' ? error : error?.message || 'SMTP connection failed';
-    throw new Error(t('errors.smtpPrefixed', { msg }));
-  }
-
-  // Both legs verified — persist. store_password writes the OS keychain entry
-  // directly (mirrors AccountSettings' handleUpdatePassword); db.saveAccount
-  // persists the full account blob + accounts.json metadata, and stamps
-  // previousImapHost/hostChangedAt when the host actually changed.
-  console.log('[mailStore] changeServer — persisting new server + password...');
-  await api.storePassword(accountId, password);
-  const saved = await db.patchAccount(accountId, { imapHost, imapPort, imapSecurity: candidate.imapSecurity, smtpHost, smtpPort, password, updatedAt: candidate.updatedAt }, { expected: db.accountExpectedContext(existing) });
 
   useMailStore.setState(state => ({
     accounts: state.accounts.map(a => (a.id === accountId ? { ...a, ...saved.account, password } : a)),
   }));
-  console.log('[mailStore] changeServer — account updated in store');
 
   const hostChanged = saved.hostChanged;
   if (hostChanged && get().activeAccountId === accountId) {
@@ -82,10 +74,7 @@ export async function changeServer(accountId, { imapHost, imapPort, imapSecurity
   return { ok: true, hostChanged };
 }
 
-// A JMAP account keeps speaking JMAP: a new session URL and secret, proven by
-// one `imap_test_connection` (the daemon answers it over JMAP) and no SMTP
-// leg, since JMAP sends through EmailSubmission. `imapHost` follows the
-// session host, the account's key. Editing it as IMAP would corrupt it.
+// JMAP updates stay on the native JMAP probe and EmailSubmission path.
 async function changeJmapServer(useMailStore, existing, { jmapSessionUrl, jmapUsername, password }) {
   const get = () => useMailStore.getState();
   const accountId = existing.id;
@@ -112,27 +101,24 @@ async function changeJmapServer(useMailStore, existing, { jmapSessionUrl, jmapUs
   const collision = get().accounts.find(a => a.id !== accountId && db.accountLogicalKey(a) === candidateKey);
   if (collision) throw new Error(t('errors.duplicateAccount'));
 
-  console.log('[mailStore] changeServer: verifying JMAP with the new secret...');
-  try {
-    await api.testConnection(candidate);
-  } catch (error) {
-    throw new Error(describeConnectionError(error).message);
-  }
-
-  await api.storePassword(accountId, password);
   const fields = { jmapSessionUrl: url, imapHost: host, password, updatedAt: candidate.updatedAt };
   const unset = [];
   if (jmapUsername !== undefined) {
     if (candidate.jmapUsername !== undefined) fields.jmapUsername = candidate.jmapUsername;
     else unset.push('jmapUsername');
   }
-  const saved = await db.patchAccount(accountId, fields, { unset, expected: db.accountExpectedContext(existing) });
+  let saved;
+  try {
+    saved = await db.updateAccountNative(accountId, fields, { unset, expected: db.accountExpectedContext(existing) });
+  } catch (error) {
+    throw probeError(error, candidate, true);
+  }
 
   useMailStore.setState(state => ({
     accounts: state.accounts.map(a => { if (a.id !== accountId) return a; const next = { ...a, ...saved.account, password }; for (const k of unset) delete next[k]; return next; }),
   }));
 
-  const hostChanged = (existing.jmapSessionUrl || '') !== url;
+  const hostChanged = saved.hostChanged || (existing.jmapSessionUrl || '') !== saved.account.jmapSessionUrl;
   if (hostChanged && get().activeAccountId === accountId) {
     try {
       await get().activateAccount(accountId, get().activeMailbox || 'INBOX');

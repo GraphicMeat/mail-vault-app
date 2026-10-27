@@ -42,6 +42,15 @@ describe('daemon-owned commands', () => {
     }
   });
 
+  it('routes one native local removal without a shell fallback', async () => {
+    const method = 'accounts.remove_local';
+    expect(declaredDaemonOwned.has(method)).toBe(true);
+    DAEMON_OWNED.add(method);
+    daemonCall.mockRejectedValueOnce(new Error('unknown completion'));
+    await expect(send(method, { accountId: 'a' })).rejects.toThrow('unknown completion');
+    expect(daemonCall).toHaveBeenCalledExactlyOnceWith(method, { accountId: 'a' });
+  });
+
   // The name regex in the next test only sees flat names; dotted ones are
   // checked by text. Track H: H5's settings call this after a mode change.
   it('owns storage.fetch_mode_changed (download modes)', async () => {

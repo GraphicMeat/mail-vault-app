@@ -12,6 +12,110 @@ import {
   closeSettings,
   clickSettingsNav,
 } from './helpers.js';
+import { createServer, connect } from 'node:net';
+import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { appDataDir, trackMailbox } from './mockImap.js';
+import { openComposeFresh, setField, typeInBody, clickSend, outboxItems, nativeComposeRpc } from './composeHelpers.js';
+
+// The proxy forwards the real mock SMTP protocol. One disposable account's
+// MAIL FROM can be held after transport entry, then released without changing
+// the server response or manufacturing a lifecycle result.
+async function smtpEntryProxy(host, initialPort) {
+  let targetPort = initialPort;
+  let arm = null;
+  let held = null;
+  const sockets = new Set();
+  const server = createServer((client) => {
+    const upstream = connect({ host, port: targetPort });
+    sockets.add(client);
+    sockets.add(upstream);
+    const cleanup = () => { client.destroy(); upstream.destroy(); sockets.delete(client); sockets.delete(upstream); };
+    client.on('error', cleanup);
+    upstream.on('error', cleanup);
+    client.on('close', cleanup);
+    upstream.on('close', cleanup);
+    upstream.pipe(client);
+    if (!arm) { client.pipe(upstream); return; }
+
+    let pending = Buffer.alloc(0);
+    const forward = (chunk) => {
+      pending = Buffer.concat([pending, chunk]);
+      for (;;) {
+        const end = pending.indexOf(10);
+        if (end < 0) return;
+        const line = pending.subarray(0, end + 1);
+        pending = pending.subarray(end + 1);
+        if (/^MAIL FROM:/i.test(line.toString('ascii'))
+          && line.toString('ascii').toLowerCase().includes(arm.email)) {
+          const reached = arm;
+          arm = null;
+          client.pause();
+          held = { client, upstream, line, tail: pending, forward };
+          pending = Buffer.alloc(0);
+          reached.resolve();
+          return;
+        }
+        upstream.write(line);
+      }
+    };
+    client.on('data', forward);
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  return {
+    port: server.address().port,
+    retarget(port) { targetPort = port; },
+    arm(email) {
+      if (arm || held) throw new Error('SMTP hold already active');
+      return new Promise((resolve) => { arm = { email: email.toLowerCase(), resolve }; });
+    },
+    release() {
+      if (!held) { arm = null; return; }
+      const { client, upstream, line, tail, forward } = held;
+      held = null;
+      client.removeListener('data', forward);
+      upstream.write(line);
+      if (tail.length) upstream.write(tail);
+      client.pipe(upstream);
+      client.resume();
+    },
+    async stop() {
+      this.release();
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => server.close(resolve));
+    },
+  };
+}
+
+async function bounded(promise, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} did not happen within ${ms} ms`)), ms);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+function credentialEntry(id) {
+  const file = join(appDataDir(browser.testDataDir), 'test-credentials.json');
+  return JSON.parse(readFileSync(file, 'utf8'))[id];
+}
+
+function receiptRows(id) {
+  const db = new DatabaseSync(join(appDataDir(browser.testDataDir), 'app.db'), { readOnly: true });
+  try {
+    db.exec('PRAGMA busy_timeout=5000');
+    const prefix = `compose_receipt:${createHash('sha256').update(id).digest('hex')}:`;
+    return db.prepare('SELECT value FROM meta WHERE key LIKE ?').all(`${prefix}%`).map((row) => JSON.parse(row.value));
+  } finally { db.close(); }
+}
+
+const nativeAccounts = async () => (await nativeComposeRpc('accounts.list', {})).accounts;
 
 describe('Connected Account Setup', function () {
   this.timeout(120_000);
@@ -54,10 +158,7 @@ describe('Connected Account Setup', function () {
   // ---------------------------------------------------------------------------
   // Helper: remove an account by email via Settings > Accounts
   // ---------------------------------------------------------------------------
-  async function removeAccountIfExists(email) {
-    await openSettings();
-    await browser.pause(500);
-
+  async function selectSettingsAccount(email) {
     await openAccountsTab();
 
     // Select the row for this account. Every query here is scoped to the
@@ -78,6 +179,16 @@ describe('Connected Account Setup', function () {
       await closeSettings();
       return false;
     }
+    await browser.waitUntil(() => browser.execute((target, selector) =>
+      [...document.querySelectorAll(selector)].some((row) =>
+        (row.innerText || '').includes(target) && row.getAttribute('aria-pressed') === 'true'),
+    email, SETTINGS_ROW_SELECTOR),
+    { timeout: 10_000, interval: 200, timeoutMsg: `Settings did not select ${email}` });
+    return true;
+  }
+
+  async function openRemoveConfirmation(email) {
+    if (!await selectSettingsAccount(email)) return false;
 
     // Account removal lives in Advanced; selecting an account opens Profile.
     if (!(await clickSettingsNav('Advanced'))) {
@@ -112,22 +223,41 @@ describe('Connected Account Setup', function () {
       throw new Error(`Remove confirmation says "${confirmLine}" — refusing to confirm for ${email}`);
     }
 
-    const confirmed = await browser.execute(() => {
-      for (const btn of document.querySelectorAll('[data-testid="settings-page"] button')) {
-        if ((btn.textContent || '').trim().startsWith('Remove') && btn.offsetHeight > 0
-            && !(btn.textContent || '').includes('This Account')) {
-          btn.click();
-          return true;
-        }
-      }
-      return false;
-    });
+    return true;
+  }
 
-    if (!confirmed) throw new Error(`Could not confirm removal of ${email}`);
+  async function confirmRemoval(email) {
+    const result = await browser.execute((target) => {
+      const page = document.querySelector('[data-testid="settings-page"]');
+      const question = [...(page?.querySelectorAll('p') || [])]
+        .find((item) => item.textContent.includes('Are you sure you want to remove')
+          && item.textContent.includes(target));
+      const card = question?.parentElement;
+      const button = [...(card?.querySelectorAll('button') || [])]
+        .find((item) => item.textContent.trim().startsWith('Remove'));
+      const result = {
+        question: question?.textContent.trim(), button: button?.textContent.trim(),
+        disabled: button?.disabled, visible: !!button && button.offsetHeight > 0,
+        alertBefore: card?.querySelector('[role="alert"]')?.textContent.trim(),
+      };
+      if (result.visible && !result.disabled) { button.click(); result.clicked = true; }
+      return result;
+    }, email);
+
+    if (!result.clicked) throw new Error(`Could not confirm removal of ${email}: ${JSON.stringify(result)}`);
+    return result;
+  }
+
+  async function removeAccountIfExists(email) {
+    if (!await openRemoveConfirmation(email)) return false;
+    await confirmRemoval(email);
 
     await browser.waitUntil(
-      async () => browser.execute((targetEmail) => !document.body.innerText.includes(targetEmail), email),
-      { timeout: 15_000, interval: 500, timeoutMsg: `${email} still listed after removal` },
+      async () => {
+        const accounts = await nativeAccounts();
+        return !accounts.some((account) => account.email === email);
+      },
+      { timeout: 30_000, interval: 500, timeoutMsg: `${email} remained in native account listing after removal` },
     );
 
     await closeSettings();
@@ -326,17 +456,33 @@ describe('Connected Account Setup', function () {
   });
 
   describe('Add and remove an account', function () {
+    this.timeout(300_000);
     // A third address on mock server #1 — the mock accepts any LOGIN, so this
     // exercises the real AccountModal flow (connection test included) without
     // disturbing the two seeded accounts.
     const email = 'r2d2@mock.test';
+    let accountId;
+    let proxy;
+    let restoreSent;
+
+    before(async function () {
+      proxy = await smtpEntryProxy(browser.mockImap[0].host, browser.mockImap[0].smtpPort);
+    });
 
     after(async function () {
-      await removeAccountIfExists(email);
+      proxy?.release();
+      try {
+        const listed = await nativeAccounts();
+        if (listed.some((account) => account.email === email)) await removeAccountIfExists(email);
+      } finally {
+        await restoreSent?.();
+        await browser.execute(() => { window.__S24_APPEND_UNLISTEN__?.(); delete window.__S24_APPEND_EVENTS__; });
+        await proxy?.stop();
+      }
     });
 
     it('should add an account through the AccountModal', async function () {
-      const { host, port, smtpPort } = browser.mockImap[0];
+      const { host, port } = browser.mockImap[0];
 
       await addTestAccount({
         email,
@@ -346,8 +492,17 @@ describe('Connected Account Setup', function () {
         smtpHost: host,
         // The mock's own SMTP listener, not its IMAP port — the connection test
         // the modal runs reaches a server that answers.
-        smtpPort,
+        smtpPort: proxy.port,
       });
+
+      const added = (await nativeAccounts()).filter((account) => account.email === email);
+      expect(added).toHaveLength(1);
+      accountId = added[0].id;
+      expect(credentialEntry(accountId)).toBeDefined();
+      // The native removal must erase this exact configured-root account tree.
+      const tree = join(appDataDir(browser.testDataDir), 'Maildir', accountId);
+      mkdirSync(tree, { recursive: true });
+      writeFileSync(join(tree, '.s24-target'), 'remove this exact account');
 
       const present = await browser.execute((target) => {
         const sidebar = document.querySelector('[data-testid="sidebar"]');
@@ -362,8 +517,275 @@ describe('Connected Account Setup', function () {
       expect(present).toBe(true);
     });
 
-    it('should remove the account again', async function () {
-      await removeAccountIfExists(email);
+    it('changes server only after real IMAP and SMTP verification', async function () {
+      const [before] = (await nativeAccounts()).filter((account) => account.id === accountId);
+      const beforeCredential = credentialEntry(accountId);
+      const otherId = browser.mockAccounts[1].id;
+      const otherCredential = credentialEntry(otherId);
+      expect(await selectSettingsAccount(email)).toBe(true);
+      expect(await clickSettingsNav('Connection')).toBe(true);
+      let connectionView;
+      try {
+        await browser.waitUntil(async () => {
+          connectionView = await browser.execute((id) => {
+            const page = document.querySelector('[data-testid="settings-page"]');
+            const account = window.__MAIL_STORE__.getState().accounts.find((row) => row.id === id);
+            const buttons = [...(page?.querySelectorAll('button') || [])];
+            return {
+              account: account && { id: account.id, authType: account.authType },
+              selectedTab: page?.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim(),
+              changeButtons: buttons.filter((button) => (button.textContent || '').includes('Change server'))
+                .map((button) => ({ text: button.textContent.trim(), height: button.offsetHeight })),
+              visibleButtons: buttons.filter((button) => button.offsetHeight > 0)
+                .map((button) => button.textContent.trim()).filter(Boolean).slice(0, 40),
+            };
+          }, accountId);
+          return connectionView.changeButtons.some((button) => button.text === 'Change server' && button.height > 0);
+        }, { timeout: 10_000, interval: 200, timeoutMsg: 'Selected account Connection did not render Change server' });
+      } catch (error) {
+        throw new Error(`${error.message}; observed ${JSON.stringify(connectionView)}`);
+      }
+      const opened = await browser.execute(() => {
+        const button = [...document.querySelectorAll('[data-testid="settings-page"] button')]
+          .find((item) => item.offsetHeight > 0 && (item.textContent || '').trim() === 'Change server');
+        button?.click();
+        return !!button;
+      });
+      expect(opened).toBe(true);
+      await browser.waitUntil(() => browser.execute(() => [...document.querySelectorAll('[role="dialog"]')]
+        .some((dialog) => dialog.querySelector('h2')?.textContent?.trim().startsWith('Change server:')
+          && dialog.querySelector('input[aria-label="IMAP host"]'))),
+        { timeout: 10_000, interval: 200, timeoutMsg: 'Change server form did not open' });
+
+      const setServerField = async (label, value) => {
+        const found = await browser.execute((name, next) => {
+          const dialog = [...document.querySelectorAll('[role="dialog"]')]
+            .find((item) => item.querySelector('h2')?.textContent?.trim().startsWith('Change server:'));
+          const input = dialog?.querySelector(`[aria-label="${name}"]`);
+          if (!input) return false;
+          const proto = input.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+          Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, String(next));
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }, label, value);
+        expect(found).toBe(true);
+      };
+      const verify = async () => {
+        const clicked = await browser.execute(() => {
+          const dialog = [...document.querySelectorAll('[role="dialog"]')]
+            .find((item) => item.querySelector('h2')?.textContent?.trim().startsWith('Change server:'));
+          const button = [...(dialog?.querySelectorAll('button') || [])]
+            .find((item) => (item.textContent || '').includes('Verify & Save') && !item.disabled);
+          button?.click();
+          return !!button;
+        });
+        expect(clicked).toBe(true);
+      };
+
+      const next = browser.mockImap[1];
+      await setServerField('Security', 'none');
+      await setServerField('IMAP host', next.host);
+      await setServerField('IMAP port', next.port);
+      await setServerField('SMTP host', next.host);
+      await setServerField('SMTP port', 1);
+      await setServerField('Password', browser.testEnv.TEST_PASSWORD);
+      await verify();
+      let refusalView;
+      try {
+        await browser.waitUntil(async () => {
+          refusalView = await browser.execute(() => {
+            const dialog = [...document.querySelectorAll('[role="dialog"]')]
+              .find((item) => item.querySelector('h2')?.textContent?.trim().startsWith('Change server:'));
+            const value = (label) => dialog?.querySelector(`[aria-label="${label}"]`)?.value;
+            return {
+              open: !!dialog,
+              imapHost: value('IMAP host'), imapPort: value('IMAP port'), security: value('Security'),
+              smtpHost: value('SMTP host'), smtpPort: value('SMTP port'),
+              passwordPresent: !!value('Password'),
+              errors: [...(dialog?.querySelectorAll('.text-mail-danger') || [])]
+                .map((item) => item.textContent.trim()),
+              buttons: [...(dialog?.querySelectorAll('button') || [])]
+                .map((item) => ({ text: item.textContent.trim(), disabled: item.disabled })).filter((item) => item.text),
+            };
+          });
+          return refusalView.errors.some((message) => message.includes('SMTP:'));
+        }, { timeout: 35_000, interval: 250, timeoutMsg: 'Invalid SMTP endpoint was not rejected in Change server' });
+      } catch (error) {
+        const actual = (await nativeAccounts()).find((account) => account.id === accountId);
+        throw new Error(`${error.message}; observed ${JSON.stringify({ ...refusalView,
+          native: actual && { imapHost: actual.imapHost, imapPort: actual.imapPort,
+            smtpHost: actual.smtpHost, smtpPort: actual.smtpPort },
+          credentialChanged: credentialEntry(accountId) !== beforeCredential })}`);
+      }
+      const [afterRefusal] = (await nativeAccounts()).filter((account) => account.id === accountId);
+      expect(afterRefusal.imapPort).toBe(before.imapPort);
+      expect(afterRefusal.smtpPort).toBe(before.smtpPort);
+      expect(credentialEntry(accountId)).toBe(beforeCredential);
+      expect(credentialEntry(otherId)).toBe(otherCredential);
+
+      proxy.retarget(next.smtpPort);
+      await setServerField('SMTP port', proxy.port);
+      await verify();
+      await browser.waitUntil(async () => {
+        const [saved] = (await nativeAccounts()).filter((account) => account.id === accountId);
+        return saved?.imapPort === next.port && saved?.smtpPort === proxy.port;
+      }, { timeout: 60_000, interval: 250, timeoutMsg: 'Native Change server did not publish the new endpoint' });
+      const [saved] = (await nativeAccounts()).filter((account) => account.id === accountId);
+      expect(saved.imapHost).toBe(next.host);
+      expect(saved.smtpHost).toBe(next.host);
+      expect(saved.imapSecurity).toBe('none');
+      expect(saved.password).toBeUndefined();
+      expect(credentialEntry(accountId)).toBeDefined();
+      expect(credentialEntry(otherId)).toBe(otherCredential);
+      await browser.waitUntil(() => browser.execute(() => {
+        const dialog = [...document.querySelectorAll('[role="dialog"]')]
+          .find((item) => item.querySelector('h2')?.textContent?.trim().startsWith('Change server:'));
+        return [...(dialog?.querySelectorAll('button') || [])]
+          .some((item) => ['Skip', 'Done'].includes(item.textContent.trim()));
+      }),
+        { timeout: 10_000, interval: 250, timeoutMsg: 'Change server completion did not render' });
+      await browser.execute(() => {
+        const dialog = [...document.querySelectorAll('[role="dialog"]')]
+          .find((item) => item.querySelector('h2')?.textContent?.trim().startsWith('Change server:'));
+        const buttons = [...(dialog?.querySelectorAll('button') || [])];
+        buttons.find((item) => (item.textContent || '').trim() === 'Skip')?.click();
+      });
+      await browser.waitUntil(() => browser.execute(() => {
+        const dialog = [...document.querySelectorAll('[role="dialog"]')]
+          .find((item) => item.querySelector('h2')?.textContent?.trim().startsWith('Change server:'));
+        return [...(dialog?.querySelectorAll('button') || [])].some((item) => item.textContent.trim() === 'Done');
+      }),
+      { timeout: 30_000, interval: 250, timeoutMsg: 'Change server did not reach Done' });
+      await browser.execute(() => {
+        const dialog = [...document.querySelectorAll('[role="dialog"]')]
+          .find((item) => item.querySelector('h2')?.textContent?.trim().startsWith('Change server:'));
+        [...(dialog?.querySelectorAll('button') || [])]
+          .find((item) => (item.textContent || '').trim() === 'Done')?.click();
+      });
+      await closeSettings();
+    });
+
+    it('refuses removal during a real send, then erases only that account after settlement', async function () {
+      const otherId = browser.mockAccounts[1].id;
+      const otherTree = join(appDataDir(browser.testDataDir), 'Maildir', otherId);
+      mkdirSync(otherTree, { recursive: true });
+      writeFileSync(join(otherTree, '.s24-preserve'), 'keep the other account');
+      const otherCredential = credentialEntry(otherId);
+      const ownCredential = credentialEntry(accountId);
+      // A preceding failed modal assertion can leave both dialogs open. The
+      // compose shortcut belongs to the main window, never to Settings.
+      await closeSettings();
+      await closeSettings();
+      restoreSent = await trackMailbox(browser.mockImap[1], 'Sent');
+      const subscribed = await browser.executeAsync((done) => {
+        window.__S24_APPEND_EVENTS__ = [];
+        window.__TAURI__.event.listen('send-server-append-complete', (event) =>
+          window.__S24_APPEND_EVENTS__.push(event.payload))
+          .then((unlisten) => { window.__S24_APPEND_UNLISTEN__ = unlisten; done(true); }, () => done(false));
+      });
+      expect(subscribed).toBe(true);
+      const activated = await browser.executeAsync((id, done) => {
+        window.__MAIL_STORE__.getState().activateAccount(id, 'INBOX')
+          .then(() => done(true), () => done(false));
+      }, accountId);
+      expect(activated).toBe(true);
+      await browser.execute(() => {
+        window.__SETTINGS_STORE__.getState().setComposeOpenMode('app');
+        window.__SETTINGS_STORE__.getState().setSendDelay(0);
+      });
+      await openComposeFresh();
+      expect(await setField('compose-from', `${accountId} ${email}`)).toBe(true);
+      expect(await setField('compose-to', 'recipient@mock.test')).toBe(true);
+      expect(await setField('compose-subject', 'S2.4 account retirement hold')).toBe(true);
+      await typeInBody('The send must finish before account removal.');
+      const entered = proxy.arm(email);
+      try {
+        expect(await clickSend()).toBe(true);
+        await bounded(entered, 30_000, 'disposable SMTP MAIL FROM');
+        const present = receiptRows(accountId);
+        expect(present.some((row) => row.state === 'present' && row.identity.accountId === accountId)).toBe(true);
+        expect((await outboxItems()).some((item) => item.status === 'sending')).toBe(true);
+
+        expect(await openRemoveConfirmation(email)).toBe(true);
+        await confirmRemoval(email);
+        await browser.waitUntil(() => browser.execute(() => {
+          const page = document.querySelector('[data-testid="settings-page"]');
+          return !!page?.querySelector('[role="alert"]')
+            && page.querySelector('[role="alert"]').textContent.includes('This account is busy');
+        }), { timeout: 15_000, interval: 250, timeoutMsg: 'Actual active send did not produce Busy in removal UI' });
+        expect((await nativeAccounts()).some((account) => account.id === accountId)).toBe(true);
+        expect(await browser.execute((target, selector) => [...document.querySelectorAll(selector)]
+          .some((row) => (row.innerText || '').includes(target)), email, SETTINGS_ROW_SELECTOR)).toBe(true);
+        expect((await outboxItems()).some((item) => item.status === 'sending')).toBe(true);
+        expect(receiptRows(accountId).some((row) => row.state === 'present' && row.identity.accountId === accountId)).toBe(true);
+        expect(credentialEntry(accountId)).toBe(ownCredential);
+        expect(existsSync(join(appDataDir(browser.testDataDir), 'Maildir', accountId, '.s24-target'))).toBe(true);
+        expect(credentialEntry(otherId)).toBe(otherCredential);
+        expect(readFileSync(join(otherTree, '.s24-preserve'), 'utf8')).toBe('keep the other account');
+      } finally { proxy.release(); }
+
+      let append;
+      await browser.waitUntil(async () => {
+        append = await browser.execute((id) => (window.__S24_APPEND_EVENTS__ || [])
+          .find((event) => event.vaultAccountId === id), accountId);
+        return !!append;
+      }, { timeout: 60_000, interval: 250, timeoutMsg: 'Actual Sent APPEND completion event did not arrive' });
+      expect(append.ok).toBe(true);
+      expect(append.stagedUid).toBeGreaterThan(0);
+      await browser.waitUntil(() => {
+        const rows = receiptRows(accountId);
+        const settled = rows.some((row) => row.identity.uid === append.stagedUid && row.state === 'cleaned');
+        const cur = join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'Sent', 'cur');
+        const staged = existsSync(cur) && readdirSync(cur).some((name) =>
+          name.startsWith(`${append.stagedUid}:`) || name.startsWith(`${append.stagedUid};`));
+        return settled && !staged;
+      }, { timeout: 30_000, interval: 250, timeoutMsg: 'Compose receipt and staged copy did not settle after APPEND' });
+      await browser.waitUntil(async () => !(await outboxItems()).some((item) => item.status === 'sending'),
+        { timeout: 15_000, interval: 250, timeoutMsg: 'Outbox still sending after APPEND' });
+      expect((await outboxItems()).some((item) => item.status === 'error')).toBe(false);
+
+      const retryClick = await confirmRemoval(email);
+      try {
+        await browser.waitUntil(async () => !(await nativeAccounts()).some((account) => account.id === accountId),
+          { timeout: 45_000, interval: 250, timeoutMsg: 'Native account list retained account after UI retry' });
+      } catch (error) {
+        const ui = await browser.execute((id, address) => {
+          const page = document.querySelector('[data-testid="settings-page"]');
+          const question = [...(page?.querySelectorAll('p') || [])]
+            .find((item) => item.textContent.includes('Are you sure you want to remove')
+              && item.textContent.includes(address));
+          const card = question?.parentElement;
+          return {
+            confirmationVisible: !!question && question.offsetHeight > 0,
+            confirmButtons: [...(card?.querySelectorAll('button') || [])]
+              .map((item) => ({ text: item.textContent.trim(), disabled: item.disabled })),
+            alerts: [...(page?.querySelectorAll('[role="alert"]') || [])]
+              .map((item) => item.textContent.trim()),
+            selectedRow: [...(page?.querySelectorAll('button[aria-pressed]') || [])]
+              .find((item) => item.textContent.includes(address))?.getAttribute('aria-pressed'),
+            inStore: window.__MAIL_STORE__.getState().accounts.some((account) => account.id === id),
+          };
+        }, accountId, email);
+        throw new Error(`${error.message}; observed ${JSON.stringify({ retryClick, ui,
+          nativePresent: (await nativeAccounts()).some((account) => account.id === accountId),
+          credentialPresent: credentialEntry(accountId) !== undefined,
+          treePresent: existsSync(join(appDataDir(browser.testDataDir), 'Maildir', accountId)),
+          receipts: receiptRows(accountId).map((row) => ({ state: row.state, uid: row.identity.uid })),
+          outbox: await outboxItems() })}`);
+      }
+      await browser.waitUntil(() => browser.execute((id, address) => {
+        const sidebar = document.querySelector('[data-testid="sidebar"]');
+        return !(sidebar?.textContent || '').includes(address)
+          && !window.__MAIL_STORE__.getState().accounts.some((account) => account.id === id);
+      }, accountId, email), { timeout: 15_000, interval: 250, timeoutMsg: 'UI retained completed account after native deletion' });
+      expect(credentialEntry(accountId)).toBeUndefined();
+      expect(existsSync(join(appDataDir(browser.testDataDir), 'Maildir', accountId))).toBe(false);
+      expect(receiptRows(accountId)).toHaveLength(0);
+      expect((await nativeAccounts()).some((account) => account.id === otherId)).toBe(true);
+      expect(credentialEntry(otherId)).toBe(otherCredential);
+      expect(readFileSync(join(otherTree, '.s24-preserve'), 'utf8')).toBe('keep the other account');
+      await closeSettings();
 
       const present = await browser.execute((target) => {
         const sidebar = document.querySelector('[data-testid="sidebar"]');

@@ -196,7 +196,7 @@ pub(crate) struct UncertainMembershipCompletion {
 pub(crate) struct RemovalClaim {
     lifecycle: AccountLifecycle,
     id: String,
-    previous: Phase,
+    previous: Option<Phase>,
     epoch: u64,
     effects: bool,
     finished: bool,
@@ -635,6 +635,14 @@ impl AccountLifecycle {
             return;
         }
         for id in &delta.removed {
+            // Full removal owns the live Closing claim through credentials and
+            // local cleanup. A document commit cannot retire its epoch early.
+            if matches!(owner, Some(PersistenceOwner { authority: PersistenceAuthority::Claim(bound), .. })
+                if bound.id == *id && bound.identity.upgrade().is_some()
+                    && s.entries.get(id).is_some_and(|e| e.phase == Phase::Closing
+                        && e.epoch == bound.epoch && e.claim_active)) {
+                continue;
+            }
             let epoch = s.epoch();
             if let Some(e) = s.entries.get_mut(id) {
                 e.phase = Phase::Retired;
@@ -763,7 +771,54 @@ impl AccountLifecycle {
         Ok(RemovalClaim {
             lifecycle: self.clone(),
             id: id.to_owned(),
-            previous,
+            previous: Some(previous),
+            epoch,
+            effects: false,
+            finished: false,
+            identity: Arc::new(()),
+            _lease: lease,
+        })
+    }
+
+    /// Removal-only recovery for a target absent from a fresh, successful
+    /// authoritative document listing. It never publishes an Open ID.
+    pub fn try_close_absent(
+        &self,
+        lease: AccountLease,
+        id: &str,
+        proof: &Listing,
+    ) -> Result<RemovalClaim, LifecycleError> {
+        if id.is_empty()
+            || proof.recovered.is_some()
+            || accounts_doc::authoritative_ids(&proof.accounts).contains(id)
+            || !lease.covers(&AccountWriteScope {
+                ids: [id.to_owned()].into(),
+                ..Default::default()
+            })
+        {
+            return Err(LifecycleError::Busy);
+        }
+        let mut s = self.lock();
+        if !s.ready {
+            return Err(LifecycleError::Unready);
+        }
+        if s.unscoped > 0 || s.entries.contains_key(id) {
+            return Err(LifecycleError::Busy);
+        }
+        let epoch = s.epoch();
+        s.entries.insert(id.to_owned(), Entry {
+            phase: Phase::Closing,
+            epoch,
+            local: 0,
+            operations: 0,
+            reservation: None,
+            uncertain: None,
+            claim_active: true,
+        });
+        Ok(RemovalClaim {
+            lifecycle: self.clone(),
+            id: id.to_owned(),
+            previous: None,
             epoch,
             effects: false,
             finished: false,
@@ -912,10 +967,14 @@ impl Drop for RemovalClaim {
                 s.entries.get_mut(&self.id).unwrap().claim_active = false;
             } else {
                 let epoch = s.epoch();
-                let e = s.entries.get_mut(&self.id).unwrap();
-                e.phase = self.previous;
-                e.epoch = epoch;
-                e.claim_active = false;
+                if let Some(previous) = self.previous {
+                    let e = s.entries.get_mut(&self.id).unwrap();
+                    e.phase = previous;
+                    e.epoch = epoch;
+                    e.claim_active = false;
+                } else {
+                    s.entries.remove(&self.id);
+                }
             }
         }
         self.lifecycle.0.notify.notify_waiters();
@@ -1328,6 +1387,24 @@ mod tests {
         let retired_allows_global = life.try_unscoped_operation().is_ok();
         assert!(opposite_order_refused && b_independent && pre_effect_refused && pre_effect_reopened && reopened_allows_global && post_effect_refused && post_drop_refused && !close_first_admitted && !premature_retirement && retired && retired_allows_global,
             "unscoped/Closing: opposite_order_refused={opposite_order_refused}, b_independent={b_independent}, pre_effect_refused={pre_effect_refused}, pre_effect_reopened={pre_effect_reopened}, reopened_allows_global={reopened_allows_global}, post_effect_refused={post_effect_refused}, post_drop_refused={post_drop_refused}, close_first_admitted={close_first_admitted}, premature_retirement={premature_retirement}, retired={retired}, retired_allows_global={retired_allows_global}");
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_local_drain_timeout_revokes_old_stamp() {
+        let life = AccountLifecycle::default();
+        life.seed(&listing(&["a", "b"]));
+        let old = life.capture("a").unwrap();
+        let b = life.capture("b").unwrap();
+        let local = life.try_commit(std::slice::from_ref(&old)).unwrap();
+        let claim = life.try_close(lease(&["a"]), "a").unwrap();
+        let wait = claim.wait_local_until(Instant::now() + Duration::from_millis(20)).await;
+        assert!(matches!(wait, Err(LifecycleError::Busy)));
+        assert!(life.try_operation(&[b]).is_ok(), "B remains independent during A's drain");
+        drop(claim);
+        drop(local);
+        let fresh = life.capture("a").unwrap();
+        assert_ne!(old.epoch, fresh.epoch, "a refused pre-effect drain must advance its epoch");
+        assert!(matches!(life.try_commit(&[old]), Err(LifecycleError::Stale)),
+            "S24_DRAIN_STAMP: prior A observation cannot publish after Busy");
     }
 
     #[test]

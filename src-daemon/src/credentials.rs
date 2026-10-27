@@ -11,7 +11,7 @@ use keyring::Entry;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::account_lifecycle::PersistenceOwner;
+use crate::account_lifecycle::{PersistenceOwner, RemovalClaim};
 use crate::account_workflows::{
     check_deadline, AccountLease, AccountSaveInput, AppliedCredentials, CredentialCompletion,
     CredentialOp, LeaseOwner, MutationFailure,
@@ -2071,6 +2071,8 @@ pub(crate) async fn change_credentials(
         None,
         None,
         Interaction::Interactive,
+        None,
+        None,
     )
     .await
     .map(|c| (c.applied.ids, c.version))
@@ -2094,6 +2096,8 @@ pub(crate) async fn change_credentials_admitted(
         Some(lease),
         None,
         Interaction::Interactive,
+        None,
+        None,
     )
     .await
     .map(|c| (c.applied.ids, c.version))
@@ -2111,6 +2115,8 @@ pub(crate) async fn save_account_credentials(
         Some(persistence.lease.clone()),
         Some(persistence),
         Interaction::Interactive,
+        None,
+        None,
     )
     .await
 }
@@ -2126,10 +2132,51 @@ pub(crate) async fn change_credentials_admitted_owned(
         Some(persistence.lease.clone()),
         Some(persistence),
         Interaction::Interactive,
+        None,
+        None,
     )
     .await
     .map(|c| (c.applied.ids, c.version))
     .map_err(MutationFailure::credential)
+}
+
+/// Removal waits for the real backend finalizer after a writer timeout, so
+/// its Closing claim cannot be released while that child still mutates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RemovalCredError { Failed, Unknown }
+
+pub(crate) async fn change_credentials_admitted_owned_wait_actual(
+    state: &Arc<DaemonState>,
+    change: CredChange,
+    persistence: PersistenceOwner,
+    claim: Arc<RemovalClaim>,
+    deadline: tokio::time::Instant,
+) -> Result<(Vec<String>, u64), RemovalCredError> {
+    let state = Arc::clone(state);
+    let timed_out = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let timeout_flag = Arc::clone(&timed_out);
+    let result = tokio::spawn(async move {
+        let _claim = claim;
+        owned_change(
+            &state,
+            CredentialOp::Change(change),
+            Some(persistence.lease.clone()),
+            Some(persistence),
+            Interaction::Interactive,
+            Some(timeout_flag),
+            Some(deadline),
+        )
+        .await
+        .map(|c| (c.applied.ids, c.version))
+        .map_err(MutationFailure::credential)
+    })
+    .await;
+    match result {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(_)) if timed_out.load(std::sync::atomic::Ordering::SeqCst) => Err(RemovalCredError::Unknown),
+        Ok(Err(_)) => Err(RemovalCredError::Failed),
+        Err(_) => Err(RemovalCredError::Unknown),
+    }
 }
 
 #[cfg(test)]
@@ -2147,6 +2194,8 @@ async fn owned_change(
     supplied: Option<AccountLease>,
     preowner: Option<PersistenceOwner>,
     mode: Interaction,
+    wait_actual: Option<Arc<std::sync::atomic::AtomicBool>>,
+    deadline_override: Option<tokio::time::Instant>,
 ) -> Result<CredentialCompletion, MutationFailure> {
     if !state.account_lifecycle.is_ready() {
         crate::account_lifecycle::start_bootstrap(Arc::clone(state));
@@ -2162,7 +2211,7 @@ async fn owned_change(
             .unwrap_or_else(|e| e.into_inner())
             .remove(&state.app_dir)
             .map(TestTaskDone);
-        change_credentials_mode(&state, op, supplied, preowner, mode).await
+        change_credentials_mode(&state, op, supplied, preowner, mode, wait_actual, deadline_override).await
     })
     .await
     .map_err(|_| MutationFailure::Credential(CredError::WriteFailed))?
@@ -2173,9 +2222,14 @@ async fn change_credentials_mode(
     supplied: Option<AccountLease>,
     preowner: Option<PersistenceOwner>,
     mode: Interaction,
+    wait_actual: Option<Arc<std::sync::atomic::AtomicBool>>,
+    deadline_override: Option<tokio::time::Instant>,
 ) -> Result<CredentialCompletion, MutationFailure> {
     use std::sync::atomic::Ordering::SeqCst;
-    let deadline = op.deadline();
+    let deadline = match (op.deadline(), deadline_override) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    };
     check_deadline(deadline)?;
     let interactive = matches!(mode, Interaction::Interactive);
     if WRITE_PARKED.load(SeqCst) {
@@ -2285,6 +2339,17 @@ async fn change_credentials_mode(
         Err(_) => {
             warn!("[keychain] the credentials write did not finish in time; changes wait until it returns");
             WRITE_PARKED.store(true, SeqCst);
+            if let Some(flag) = wait_actual {
+                flag.store(true, SeqCst);
+                let result = task.await.unwrap_or(Err(CredError::WriteFailed.into()));
+                let _ = finish_credential_change(state, result);
+                WRITE_PARKED.store(false, SeqCst);
+                drop(held);
+                drop(owner);
+                #[cfg(test)]
+                test_write_finished();
+                return Err(CredError::WriteFailed.into());
+            }
             let state = Arc::clone(state);
             tokio::spawn(async move {
                 let result = task.await.unwrap_or(Err(CredError::WriteFailed.into()));
@@ -2311,6 +2376,8 @@ pub(crate) async fn change_credentials_quiet(
         None,
         None,
         Interaction::Quiet,
+        None,
+        None,
     )
     .await
     .map(|c| (c.applied.ids, c.version))
@@ -2338,6 +2405,7 @@ fn change_test_file(
     check_deadline(deadline)?;
     #[cfg(test)]
     test_pause_write();
+    check_deadline(deadline)?;
     mailvault_core::fsx::write_atomic(path, json.as_bytes()).map_err(|_| CredError::WriteFailed)?;
     Ok(applied)
 }

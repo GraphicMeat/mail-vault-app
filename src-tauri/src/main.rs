@@ -3061,6 +3061,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         "accounts.list" | "accounts.get" => Some(Duration::from_secs(30)),
         "accounts.save" => Some(Duration::from_secs(95)),
         "accounts.add" | "accounts.update" => Some(Duration::from_secs(305)),
+        "accounts.remove_local" => Some(Duration::from_secs(185)),
         "accounts.put" | "accounts.remove" | "accounts.reorder" | "accounts.replace_all" => {
             Some(Duration::from_secs(50))
         }
@@ -5354,6 +5355,7 @@ mod accounts_fallback_tests {
             ("accounts.get", 30),
             ("accounts.put", 50),
             ("accounts.remove", 50),
+            ("accounts.remove_local", 185),
             ("accounts.reorder", 50),
             ("accounts.replace_all", 50),
         ] {

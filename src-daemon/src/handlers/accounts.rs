@@ -30,6 +30,9 @@ pub(crate) async fn route(
     params: &Value,
     id: Value,
 ) -> Option<RpcResponse> {
+    if method == "accounts.remove_local" {
+        return Some(crate::account_removal::route(state, params, id).await);
+    }
     if matches!(method, "accounts.add" | "accounts.update") {
         return Some(
             Box::pin(crate::account_workflows::account_workflow(
@@ -43,6 +46,11 @@ pub(crate) async fn route(
     }
     if method == "accounts.save" {
         return Some(crate::account_workflows::save(state, params, id).await);
+    }
+    // Full retirement is owned by accounts.remove_local. The metadata-only
+    // public route must not run its legacy-secret preservation first.
+    if method == "accounts.remove" {
+        return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid"));
     }
     if !accounts_doc::METHODS.contains(&method) {
         return None;
@@ -174,6 +182,7 @@ async fn run_owned(
     let mut owner: Option<PersistenceOwner> = None;
     let mut zip_owners: Option<(String, Vec<(crate::backup_zip::AccountsJsonEntry, PersistenceOwner)>)> = None;
     let mut preserved = None;
+    let mut fenced = None;
     let mut recovery = None;
     if accounts_doc::writes(method) {
         if !state.account_lifecycle.is_ready() {
@@ -187,6 +196,16 @@ async fn run_owned(
         let Some(listed) = listed else {
             return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.accountsWriteFailed");
         };
+        if method == "accounts.replace_all" {
+            let Some(entries) = params.get("entries").and_then(Value::as_array) else {
+                return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+            };
+            let present = accounts_doc::authoritative_ids(&listed.accounts);
+            let retained = accounts_doc::authoritative_ids(entries);
+            if listed.recovered.is_some() || !present.is_subset(&retained) {
+                return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+            }
+        }
         let mut scope = match scope(Some(&listed), method, params) {
             Ok(s) => s,
             Err(e) => return RpcResponse::error(id, ipc::INVALID_PARAMS, e.catalog_key()),
@@ -209,6 +228,14 @@ async fn run_owned(
             Ok(l) => l,
             Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e.catalog_key()),
         };
+        if method == "accounts.replace_all" {
+            let reread = Arc::clone(&doc);
+            let current = tokio::task::spawn_blocking(move || accounts_doc::list(&reread)).await;
+            if !matches!(current, Ok(Ok(ref now)) if now == &listed && now.recovered.is_none()) {
+                return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.accountsConflict");
+            }
+            fenced = Some(listed.clone());
+        }
         let mut lifecycle_scope = scope;
         let present = accounts_doc::authoritative_ids(&listed.accounts);
         if method == "accounts.remove" {
@@ -361,10 +388,11 @@ async fn run_owned(
         let _zip_owners = zip_owners;
         #[cfg(test)]
         let _done = pause_document(&state.app_dir);
-        let policy = preserved
-            .as_ref()
-            .map(accounts_doc::LiveScrub::Preserved)
-            .unwrap_or(accounts_doc::LiveScrub::Preserve);
+        let policy = match (preserved.as_ref(), fenced.as_ref()) {
+            (Some(proof), _) => accounts_doc::LiveScrub::Preserved(proof),
+            (None, Some(proof)) => accounts_doc::LiveScrub::Fenced(proof),
+            (None, None) => accounts_doc::LiveScrub::Preserve,
+        };
         let out = accounts_doc::run(&doc, &method, &params, policy)?;
         if let Some((marker, lease)) = recovery {
             let listing = accounts_doc::Listing {
@@ -881,6 +909,128 @@ mod tests {
             Some(e) => Err(e.message),
             None => Ok(resp.result.unwrap_or(Value::Null)),
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_public_remove_refuses_before_effects() {
+        use mailvault_core::app_db::{self, compose_receipts as receipts};
+        let (dir, state) = rig();
+        let metadata = json!([
+            {"id":"a","email":"a@example.test","imapHost":"h"},
+            {"id":"b","email":"b@example.test","imapHost":"h"}
+        ]);
+        let credentials = json!({"a":json!({"id":"a","email":"a@example.test"}).to_string(),
+            "b":json!({"id":"b","email":"b@example.test"}).to_string()});
+        std::fs::write(dir.path().join("accounts.json"), metadata.to_string()).unwrap();
+        std::fs::write(dir.path().join("credentials.json"), credentials.to_string()).unwrap();
+        state.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let scope = receipts::Scope::new("a", "Sent", 1, "a@example.test").unwrap();
+        let receipt = receipts::Receipt::present(receipts::Identity::from_bytes(
+            scope.clone(), b"Message-ID: <a@example.test>\r\n\r\nbody",
+        ).unwrap());
+        app_db::with(&state.app_dir, |c| receipts::save(c, &receipt)).unwrap();
+        let removed = call(&state, "accounts.remove", json!({"id":"a"})).await;
+        let receipt_intact = app_db::with(&state.app_dir, |c| receipts::load(c, &scope)).unwrap() == vec![receipt];
+        assert!(removed.is_err() && on_disk(&dir) == metadata
+            && serde_json::from_slice::<Value>(&std::fs::read(dir.path().join("credentials.json")).unwrap()).unwrap() == credentials
+            && receipt_intact && state.account_lifecycle.capture("a").is_ok(),
+            "S24_PUBLIC_REMOVE_RED: public metadata removal must refuse with document, credentials, receipt and lifecycle unchanged");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_replace_all_cannot_retire_authoritative_id() {
+        let (dir, state) = rig();
+        let metadata = json!([
+            {"id":"a","email":"a@example.test","imapHost":"h"},
+            {"id":"b","email":"b@example.test","imapHost":"h","password":"legacy-b"}
+        ]);
+        std::fs::write(dir.path().join("accounts.json"), metadata.to_string()).unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        state.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let replaced = call(&state, "accounts.replace_all", json!({"entries":[metadata[0].clone()]})).await;
+        let credential_after: Value = serde_json::from_slice(&std::fs::read(dir.path().join("credentials.json")).unwrap()).unwrap();
+        assert!(replaced.is_err() && on_disk(&dir) == metadata && credential_after == json!({})
+            && state.account_lifecycle.capture("b").is_ok(),
+            "S24_REPLACE_RETIRE_RED: dropping authoritative B must refuse before legacy preservation or document retirement");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_stale_replace_all_retirement_refuses_before_preservation() {
+        let (dir, state) = rig();
+        let metadata = json!([
+            {"id":"a","email":"a@example.test","imapHost":"h"},
+            {"id":"b","email":"b@example.test","imapHost":"h","password":"legacy-b"}
+        ]);
+        std::fs::write(dir.path().join("accounts.json"), metadata.to_string()).unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        state.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let doc = accounts_doc::shared(dir.path());
+        let initial = accounts_doc::list(&doc).unwrap();
+        let advanced = accounts_doc::run(&doc, "accounts.put",
+            &json!({"entry":{"id":"a","name":"newer"},"baseVersion":initial.version}),
+            accounts_doc::LiveScrub::Preserve).unwrap();
+        assert!(advanced.changed.is_some());
+        let before = on_disk(&dir);
+        let stale = call(&state, "accounts.replace_all",
+            json!({"entries":[before[0].clone()],"baseVersion":initial.version})).await;
+        let after_credentials: Value = serde_json::from_slice(&std::fs::read(dir.path().join("credentials.json")).unwrap()).unwrap();
+        assert!(stale.is_err() && on_disk(&dir) == before && after_credentials == json!({}),
+            "S24_STALE_REPLACE_RED: stale retiring request must refuse before legacy credential preservation");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_nonretiring_replace_all_stays_supported() {
+        let (dir, state) = rig();
+        let metadata = json!([
+            {"id":"a","email":"a@example.test","imapHost":"h"},
+            {"id":"b","email":"b@example.test","imapHost":"h"}
+        ]);
+        std::fs::write(dir.path().join("accounts.json"), metadata.to_string()).unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        state.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let mut next = metadata.clone();
+        next[0]["name"] = json!("edited");
+        let out = call(&state, "accounts.replace_all", json!({"entries":next.clone()})).await;
+        assert!(out.is_ok() && on_disk(&dir) == next
+            && state.account_lifecycle.capture("a").is_ok()
+            && state.account_lifecycle.capture("b").is_ok(),
+            "nonretiring authoritative replacement remains available: {out:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_unrepresentable_legacy_replacement_fences_actual_commit() {
+        let (dir, state) = rig();
+        let metadata = json!([
+            {"id":"a","email":"a@example.test","imapHost":"h"},
+            {"id":"dup","email":"dup@example.test","imapHost":"h","password":"legacy"},
+            {"id":"dup","email":"dup@example.test","imapHost":"h"}
+        ]);
+        assert!(!accounts_doc::legacy_secrets_representable(metadata.as_array().unwrap()));
+        std::fs::write(dir.path().join("accounts.json"), metadata.to_string()).unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        state.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(dir.path())).unwrap());
+        let pause = (Arc::new(tokio::sync::Notify::new()), Arc::new(tokio::sync::Notify::new()));
+        preservation_pauses().lock().unwrap().insert(state.app_dir.clone(), pause.clone());
+        let guard = PauseGuard(state.app_dir.clone(), pause.clone());
+        let mut incoming = metadata.clone();
+        incoming[0]["name"] = json!("requested");
+        let held = Arc::clone(&state);
+        let pending = tokio::spawn(async move {
+            call(&held, "accounts.replace_all", json!({"entries":incoming})).await
+        });
+        pause.0.notified().await;
+        let doc = accounts_doc::shared(dir.path());
+        accounts_doc::run(&doc, "accounts.put",
+            &json!({"entry":{"id":"late","email":"late@example.test","imapHost":"h"}}),
+            accounts_doc::LiveScrub::Preserve).unwrap();
+        let after_late = on_disk(&dir);
+        pause.1.notify_one();
+        drop(guard);
+        let result = pending.await.unwrap();
+        let late_survives = on_disk(&dir).as_array().unwrap().iter().any(|row| row["id"] == "late");
+        let unchanged = on_disk(&dir) == after_late;
+        assert!(result.is_err() && late_survives && unchanged,
+            "S24_ACTUAL_FENCE_RED: stale replacement must not retire late authoritative ID; result={result:?}, late_survives={late_survives}, unchanged={unchanged}");
     }
 
     struct PauseGuard(std::path::PathBuf, PreservationPause);

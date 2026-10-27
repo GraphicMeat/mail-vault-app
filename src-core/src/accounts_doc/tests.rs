@@ -732,6 +732,24 @@ fn proof_checks_full_values_even_when_the_version_matches() {
     assert!(disk(d.path())[0].get("password").is_some());
     assert!(!d.path().join(SPEC.backup_name(1)).exists());
 }
+
+#[test]
+fn s24_fenced_proof_checks_commit_without_scrubbing_legacy_secrets() {
+    let d = dir();
+    seed(d.path(), json!([{"id":"a","password":"legacy"}]));
+    let doc = doc(d.path());
+    let proof = list(&doc).unwrap();
+    run(&doc, "accounts.put", &json!({"entry":{"id":"b"}}),
+        LiveScrub::Fenced(&proof)).unwrap();
+    let after = disk(d.path());
+    assert_eq!(after[0]["password"], "legacy");
+    assert_eq!(authoritative_ids(after.as_array().unwrap()),
+        ["a".to_owned(), "b".to_owned()].into());
+    let stale = run(&doc, "accounts.replace_all",
+        &json!({"entries":[{"id":"a"}]}), LiveScrub::Fenced(&proof));
+    assert!(matches!(stale, Err(AccountsError::Conflict { .. })));
+    assert_eq!(disk(d.path()), after);
+}
 #[test]
 fn proof_rejects_stale_caller_base_without_substitution() {
     let d = dir();

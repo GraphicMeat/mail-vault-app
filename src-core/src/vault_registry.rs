@@ -509,6 +509,25 @@ impl VaultRegistry {
         self.invalidate_dir(&account, &dir);
     }
 
+    /// Retirement removes exact-account registry rows after its tree is gone.
+    /// A missing registry connection is unknown, never confirmed empty.
+    pub fn forget_account(&self, account: &str) -> Result<(), String> {
+        {
+            let guard = guard(&self.conn);
+            let conn = guard.as_ref().ok_or("vault registry unavailable")?;
+            conn.execute("DELETE FROM files WHERE account_id = ?1", [account])
+                .map_err(|e| e.to_string())?;
+            let remains: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM files WHERE account_id = ?1", [account], |row| row.get(0))
+                .map_err(|e| e.to_string())?;
+            if remains != 0 { return Err("vault registry rows remain".into()); }
+        }
+        let mut verified = guard(&self.verified);
+        verified.set.retain(|(id, _)| id != account);
+        verified.gens.retain(|(id, _), _| id != account);
+        Ok(())
+    }
+
     /// Every mailbox is listed again on its next read (vault reopen, startup migration).
     pub fn invalidate_all(&self) {
         {

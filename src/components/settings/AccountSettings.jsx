@@ -114,6 +114,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
   const [googleClients, setGoogleClients] = useState(null);
   const [googleClientPick, setGoogleClientPick] = useState(null);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(null);
+  const [removingAccount, setRemovingAccount] = useState(false);
+  const [removeError, setRemoveError] = useState(null);
   const [billingWarning, setBillingWarning] = useState(null);
   const [accountMailboxes, setAccountMailboxes] = useState([]);
   const [sentOverride, setSentOverride] = useState('');
@@ -1023,7 +1025,7 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                 {t('settings.accounts.removingDeletesEverythingLocal')}
               </p>
               <Button variant="dangerTint"
-                onClick={() => setShowRemoveConfirm(selectedAccountId)}
+                onClick={() => { setRemoveError(null); setShowRemoveConfirm(selectedAccountId); }}
               >
                 <Trash2 size={16} />
                 {t('settings.accounts.removeAccount2')}
@@ -1052,17 +1054,29 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                       <div className="flex items-center gap-2 mt-3">
                         <button
                           onClick={async () => {
-                            const isLast = accounts.length === 1;
-                            const result = await removeAccount(selectedAccountId);
-                            setShowRemoveConfirm(false);
-                            if (!isLast) {
-                              const nextAccount = accounts.find(a => a.id !== selectedAccountId);
-                              setSelectedAccountId(nextAccount?.id || null);
-                            }
-                            if (result?.billingLogoutWarning) {
-                              setBillingWarning(result.billingLogoutWarning);
+                            if (removingAccount) return;
+                            setRemovingAccount(true);
+                            setRemoveError(null);
+                            try {
+                              const isLast = accounts.length === 1;
+                              const result = await removeAccount(selectedAccountId);
+                              setShowRemoveConfirm(false);
+                              if (!isLast) {
+                                const nextAccount = accounts.find(a => a.id !== selectedAccountId);
+                                setSelectedAccountId(nextAccount?.id || null);
+                              }
+                              if (result?.billingLogoutWarning) {
+                                setBillingWarning(result.billingLogoutWarning);
+                              }
+                            } catch (error) {
+                              setRemoveError(error?.outcome === 'busy' ? 'settings.accounts.removeBusy'
+                                : error?.outcome === 'incomplete' ? 'settings.accounts.removeIncomplete'
+                                  : 'settings.accounts.removeFailed');
+                            } finally {
+                              setRemovingAccount(false);
                             }
                           }}
+                          disabled={removingAccount}
                           className="px-4 py-2 bg-mail-danger hover:bg-mail-danger/80
                                     text-white rounded-lg transition-colors text-sm font-medium"
                         >
@@ -1070,12 +1084,16 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                         </button>
                         <button
                           onClick={() => setShowRemoveConfirm(false)}
+                          disabled={removingAccount}
                           className="px-4 py-2 bg-mail-border hover:bg-mail-border/80
                                     text-mail-text rounded-lg transition-colors text-sm"
                         >
                           {t('common.cancel')}
                         </button>
                       </div>
+                      {removeError && <p role="alert" className="mt-3 text-sm text-mail-danger">
+                        {t(removeError)}
+                      </p>}
                     </div>
                   </motion.div>
                 )}

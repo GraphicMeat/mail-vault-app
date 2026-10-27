@@ -1344,6 +1344,12 @@ async fn run_account_workflow(
     }
     // Normalize once before origin comparison and provider selection.
     let mut config = normalize_candidate(&mut candidate)?;
+    // A complete password/IMAP server replacement is the change-server form.
+    // Ordinary sparse updates keep their accepted single-provider probe.
+    let probe_smtp = matches!(&request, Request::Patch { fields, .. }
+        if !config.is_oauth2() && !config.uses_jmap()
+            && ["imapHost", "imapPort", "imapSecurity", "smtpHost", "smtpPort", "password"]
+                .iter().all(|key| fields.contains_key(*key)));
     if rows.iter().any(|(id, row)| {
         (add || id != &target)
             && accounts_doc::logical_key(row) == accounts_doc::logical_key(&candidate)
@@ -1462,6 +1468,39 @@ async fn run_account_workflow(
             return Ok(workflow_failure(Some("blocked_or_timeout"), host, port));
         }
     };
+    if probe_smtp {
+        let host = config.smtp_host.as_deref();
+        let port = config.smtp_port.unwrap_or(587);
+        let smtp_deadline = (Instant::now() + Duration::from_secs(15)).min(probe_deadline);
+        if Instant::now() >= smtp_deadline {
+            return Ok(workflow_failure(Some("blocked_or_timeout"), host, Some(port)));
+        }
+        match tokio::time::timeout_at(
+            smtp_deadline,
+            mailvault_core::net_activity::with_purpose(
+                "account setup",
+                mailvault_core::smtp::test_connection(&config),
+            ),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                return Ok(workflow_failure(
+                    Some(mailvault_core::net::classify_connection_error(&error).code()),
+                    host,
+                    Some(port),
+                ))
+            }
+            Err(_) => {
+                return Ok(workflow_failure(
+                    Some("blocked_or_timeout"),
+                    host,
+                    Some(port),
+                ))
+            }
+        }
+    }
     #[cfg(test)]
     let _stage = probe_pause(&state.app_dir).await;
     if Instant::now() + Duration::from_secs(90) > overall {
@@ -2124,6 +2163,114 @@ mod tests {
         let still_nonopen = rig.state.account_lifecycle.capture("a").is_err();
         assert!(public_delete.is_err() && forbidden_save.is_err() && unchanged && bound_delete.is_ok() && absent && still_nonopen,
             "claim-bound real cleanup: public_delete_refused={}, forbidden_save_refused={}, unchanged={unchanged}, bound_delete_ok={}, absent={absent}, still_nonopen={still_nonopen}", public_delete.is_err(), forbidden_save.is_err(), bound_delete.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_claim_survives_actual_document_removal() {
+        let a = row("a", "a@example.test", "h");
+        let b = row("b", "b@example.test", "h");
+        let rig = Rig::new(vec![a.clone(), b.clone()], vec![clean(a), clean(b)]);
+        let lease = rig.state.account_admission.try_reserve(scope("a", "a@example.test", "h")).unwrap();
+        let mut claim = rig.state.account_lifecycle.try_close(lease.clone(), "a").unwrap();
+        let drained = claim.wait_local_until(Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        let exact = AccountWriteScope { ids: ["a".into()].into(), ..Default::default() };
+        let authority = claim.cleanup_authority().unwrap();
+        let document_owner = rig.state.account_lifecycle
+            .try_persistence(lease.clone(), &exact, authority.clone()).unwrap();
+        let doc = accounts_doc::shared(&rig.state.app_dir);
+        let proof = accounts_doc::list(&doc).unwrap();
+        let written = accounts_doc::run(
+            &doc,
+            "accounts.remove",
+            &json!({"id":"a","baseVersion":proof.version}),
+            accounts_doc::LiveScrub::Preserved(&proof),
+        ).unwrap();
+        assert_eq!(written.membership.removed, ["a".to_owned()].into());
+        rig.state.account_lifecycle.apply_committed_membership(Some(&document_owner), &written.membership);
+        drop(document_owner);
+
+        let still_closing = matches!(rig.state.account_lifecycle.capture("a"), Err(crate::account_lifecycle::LifecycleError::Busy));
+        let b_open = rig.state.account_lifecycle.capture("b").is_ok();
+        let credential_owner = rig.state.account_lifecycle
+            .try_persistence(lease, &exact, authority);
+        let deleted = match credential_owner {
+            Ok(owner) => credentials::change_credentials_admitted_owned(
+                &rig.state, CredChange::Delete(vec!["a".into()]), owner,
+            ).await.is_ok(),
+            Err(_) => false,
+        };
+        let credential_absent = !rig.blob().contains_key("a");
+        let document_absent = rig.meta().as_array().unwrap().iter().all(|v| v["id"] != "a");
+        assert!(still_closing && b_open && deleted && credential_absent && document_absent,
+            "S24_CLAIM_DOCUMENT_RED: actual removal must preserve Closing and real claim-bound credential delete; still_closing={still_closing}, b_open={b_open}, deleted={deleted}, credential_absent={credential_absent}, document_absent={document_absent}");
+        claim.finish_retired().unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_absent_retry_never_opens_account() {
+        let a = row("a", "a@example.test", "h");
+        let rig = Rig::new(vec![a], vec![]);
+        let doc = accounts_doc::shared(&rig.state.app_dir);
+        let proof = accounts_doc::list(&doc).unwrap();
+        assert!(proof.accounts.is_empty() && proof.recovered.is_none());
+        let lease = rig.state.account_admission.try_reserve(scope("a", "a@example.test", "h")).unwrap();
+        // This is the restart shape: authoritative metadata is absent while
+        // a credential from an interrupted full removal still exists.
+        let mut uncertain = proof.clone();
+        uncertain.recovered = Some("corrupt".into());
+        assert!(rig.state.account_lifecycle.try_close_absent(lease.clone(), "a", &uncertain).is_err());
+        let mut present = proof.clone();
+        present.accounts.push(row("a", "a@example.test", "h"));
+        assert!(rig.state.account_lifecycle.try_close_absent(lease.clone(), "a", &present).is_err());
+        assert!(matches!(rig.state.account_lifecycle.capture("a"), Err(crate::account_lifecycle::LifecycleError::Unknown)));
+        let first = rig.state.account_lifecycle.try_close_absent(lease.clone(), "a", &proof).unwrap();
+        assert!(matches!(rig.state.account_lifecycle.capture("a"), Err(crate::account_lifecycle::LifecycleError::Busy)));
+        drop(first);
+        assert!(matches!(rig.state.account_lifecycle.capture("a"), Err(crate::account_lifecycle::LifecycleError::Unknown)),
+            "pre-effect refused retry cannot publish Open");
+        let mut claim = rig.state.account_lifecycle.try_close_absent(lease.clone(), "a", &proof).unwrap();
+        let drained = claim.wait_local_until(Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        let exact = AccountWriteScope { ids: ["a".into()].into(), ..Default::default() };
+        let owner = rig.state.account_lifecycle
+            .try_persistence(lease.clone(), &exact, claim.cleanup_authority().unwrap()).unwrap();
+        credentials::change_credentials_admitted_owned(
+            &rig.state, CredChange::Delete(vec!["a".into()]), owner,
+        ).await.unwrap();
+        assert!(!rig.blob().contains_key("a"));
+        drop(claim);
+        assert!(matches!(rig.state.account_lifecycle.capture("a"), Err(crate::account_lifecycle::LifecycleError::Busy)),
+            "post-effect interrupted retry must retain Closing");
+        let mut resumed = rig.state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = resumed.wait_local_until(Instant::now() + Duration::from_secs(5)).await.unwrap();
+        resumed.mark_effects_started(drained).unwrap();
+        resumed.finish_retired().unwrap();
+        assert!(matches!(rig.state.account_lifecycle.capture("a"), Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_semantic_busy_has_zero_receipt_effects() {
+        use mailvault_core::app_db::{self, compose_receipts as receipts};
+        let a = row("a", "a@example.test", "h");
+        let b = row("b", "b@example.test", "h");
+        let rig = Rig::new(vec![a.clone(), b.clone()], vec![clean(a), clean(b)]);
+        let receipt_scope = receipts::Scope::new("a", "Sent", 42, "native@example.test").unwrap();
+        let receipt = receipts::Receipt::present(receipts::Identity::from_bytes(
+            receipt_scope.clone(), b"Message-ID: <native@example.test>\r\n\r\nbody",
+        ).unwrap());
+        app_db::with(&rig.state.app_dir, |conn| receipts::save(conn, &receipt)).unwrap();
+        let before_blob = rig.blob();
+        let before_meta = rig.meta();
+        let operation = rig.state.account_lifecycle.try_operation(&[rig.state.account_lifecycle.capture("a").unwrap()]).unwrap();
+        let lease = rig.state.account_admission.try_reserve(scope("a", "a@example.test", "h")).unwrap();
+        let refused = rig.state.account_lifecycle.try_close(lease, "a");
+        let receipt_intact = app_db::with(&rig.state.app_dir, |conn| receipts::load(conn, &receipt_scope)).unwrap() == vec![receipt];
+        assert!(matches!(refused, Err(crate::account_lifecycle::LifecycleError::Busy))
+            && receipt_intact && rig.blob() == before_blob && rig.meta() == before_meta
+            && rig.state.account_lifecycle.capture("b").is_ok(),
+            "S24_SEMANTIC_BUSY: admitted operation must refuse claim before receipts or other effects");
+        drop(operation);
     }
 
     fn backend(
@@ -2875,6 +3022,209 @@ mod tests {
             )
             .await
             .is_err());
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_change_server_refuses_bad_smtp_before_account_or_credential_write() {
+        let rig = Rig::new(vec![], vec![]);
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let added = rig.call("accounts.add", json!({"account": {
+            "id": "a", "email": "a@example.test", "imapHost": server.host(),
+            "imapPort": server.port(), "imapSecure": false, "smtpHost": server.host(),
+            "smtpPort": server.smtp_port(), "smtpSecure": false,
+            "password": "synthetic-old-password"
+        }})).await.unwrap();
+        assert_eq!(added["ok"], true);
+        let before_meta = rig.meta();
+        let before_credential = rig.stored("a");
+        let reply = rig.call("accounts.update", json!({
+            "id": "a", "fields": {
+                "imapHost": server.host(), "imapPort": server.port(),
+                "imapSecurity": "ssl", "smtpHost": server.host(), "smtpPort": 1,
+                "password": "synthetic-new-password"
+            },
+            "expected": {"fields": {}, "absent": []}
+        })).await.unwrap();
+        let after_meta = rig.meta();
+        let after_credential = rig.stored("a");
+        eprintln!("S24_CHANGE_SERVER_SMTP_ACTUAL: ok={}, stage={}, beforePort={}, afterPort={}, credentialChanged={}, smtpCommands={:?}",
+            reply["ok"], reply["stage"],
+            before_meta[0]["smtpPort"], after_meta[0]["smtpPort"],
+            before_credential != after_credential, server.smtp_commands());
+        assert_eq!(reply["ok"], false, "bad SMTP must fail the real native update before persistence");
+        assert_eq!(reply["stage"], "probe");
+        assert_eq!(after_meta, before_meta);
+        assert_eq!(after_credential, before_credential);
+        assert!(server.smtp_commands().is_empty(), "the closed SMTP port was selected");
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_change_server_probes_real_imap_and_smtp_before_exact_save() {
+        let rig = Rig::new(vec![], vec![]);
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let added = rig.call("accounts.add", json!({"account": {
+            "id": "a", "email": "a@example.test", "imapHost": server.host(),
+            "imapPort": server.port(), "imapSecure": false, "smtpHost": server.host(),
+            "smtpPort": server.smtp_port(), "smtpSecure": false,
+            "password": "synthetic-old-password"
+        }})).await.unwrap();
+        assert_eq!(added["ok"], true);
+        assert!(server.smtp_commands().is_empty(), "accounts.add must keep its accepted IMAP-only probe");
+        let before_imap = server.connection_count();
+        let updated = rig.call("accounts.update", json!({
+            "id": "a", "fields": {
+                "imapHost": server.host(), "imapPort": server.port(),
+                "imapSecurity": "ssl", "smtpHost": server.host(),
+                "smtpPort": server.smtp_port(), "password": "synthetic-new-password"
+            }, "expected": {"fields": {}, "absent": []}
+        })).await.unwrap();
+        let smtp = server.smtp_commands();
+        assert_eq!(updated["ok"], true, "{updated}");
+        assert_eq!(updated["account"]["id"], "a");
+        assert_eq!(updated["hostChanged"], false, "same-endpoint full replacement still probes both legs");
+        assert!(updated["account"].get("password").is_none());
+        assert!(server.connection_count() > before_imap, "real IMAP probe must enter the server");
+        assert!(smtp.iter().any(|command| command.starts_with("EHLO ")), "real SMTP probe must enter the SMTP listener");
+        assert!(!smtp.iter().any(|command| command.starts_with("MAIL ") || command == "DATA"),
+            "verification must not send a message");
+        assert_eq!(rig.stored("a")["password"], "synthetic-new-password");
+        assert_eq!(rig.meta()[0]["smtpPort"], server.smtp_port());
+        let smtp_count = smtp.len();
+        let sparse = rig.call("accounts.update", json!({
+            "id": "a", "fields": {"password": "synthetic-third-password"},
+            "expected": {"fields": {}, "absent": []}
+        })).await.unwrap();
+        assert_eq!(sparse["ok"], true);
+        assert_eq!(server.smtp_commands().len(), smtp_count,
+            "a sparse password update retains accepted IMAP-only behavior");
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_change_server_smtp_timeout_names_smtp_and_writes_nothing() {
+        let rig = Rig::new(vec![], vec![]);
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        assert_eq!(rig.call("accounts.add", json!({"account": {
+            "id": "a", "email": "a@example.test", "imapHost": server.host(),
+            "imapPort": server.port(), "imapSecure": false, "smtpHost": server.host(),
+            "smtpPort": server.smtp_port(), "smtpSecure": false,
+            "password": "synthetic-old-password"
+        }})).await.unwrap()["ok"], true);
+        let before_meta = rig.meta();
+        let before_credential = rig.stored("a");
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let held_port = listener.local_addr().unwrap().port();
+        let (accepted_tx, accepted_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let held = std::thread::spawn(move || {
+            let (_socket, _) = listener.accept().unwrap();
+            accepted_tx.send(()).unwrap();
+            let _ = release_rx.recv_timeout(Duration::from_secs(30));
+        });
+        let started = Instant::now();
+        let workflow = rig.call("accounts.update", json!({
+            "id": "a", "fields": {
+                "imapHost": server.host(), "imapPort": server.port(),
+                "imapSecurity": "ssl", "smtpHost": server.host(),
+                "smtpPort": held_port, "password": "synthetic-new-password"
+            }, "expected": {"fields": {}, "absent": []}
+        }));
+        tokio::pin!(workflow);
+        let accepted = tokio::task::spawn_blocking(move || accepted_rx.recv_timeout(Duration::from_secs(10)));
+        tokio::select! {
+            reached = accepted => reached.unwrap().unwrap(),
+            _ = &mut workflow => panic!("SMTP probe returned before opening the held endpoint"),
+        };
+        let reply = workflow.await.unwrap();
+        let elapsed = started.elapsed();
+        release_tx.send(()).unwrap();
+        held.join().unwrap();
+        assert_eq!(reply["ok"], false);
+        assert_eq!(reply["stage"], "probe");
+        assert_eq!(reply["host"], server.host());
+        assert_eq!(reply["port"], held_port);
+        assert!(elapsed <= Duration::from_secs(25), "whole SMTP probe exceeded its finite wall budget: {elapsed:?}");
+        assert_eq!(rig.meta(), before_meta);
+        assert_eq!(rig.stored("a"), before_credential);
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_change_server_stale_source_after_both_probes_refuses_save() {
+        let rig = Rig::new(vec![], vec![]);
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        assert_eq!(rig.call("accounts.add", json!({"account": {
+            "id": "a", "email": "a@example.test", "imapHost": server.host(),
+            "imapPort": server.port(), "imapSecure": false, "smtpHost": server.host(),
+            "smtpPort": server.smtp_port(), "smtpSecure": false,
+            "password": "synthetic-old-password"
+        }})).await.unwrap()["ok"], true);
+        let before_meta = rig.meta();
+        let (entered, release) = arm_probe(&rig);
+        let params = json!({"id":"a","fields":{
+            "imapHost":server.host(),"imapPort":server.port(),"imapSecurity":"ssl",
+            "smtpHost":server.host(),"smtpPort":server.smtp_port(),
+            "password":"synthetic-replacement-password"
+        },"expected":{"fields":{},"absent":[]}});
+        let workflow = account_workflow(&rig.state, &params, json!(1), false);
+        tokio::pin!(workflow);
+        tokio::select! {
+            notice = entered => notice.unwrap(),
+            _ = &mut workflow => panic!("full replacement did not reach both probes"),
+        };
+        assert!(server.smtp_commands().iter().any(|command| command.starts_with("EHLO ")));
+        credentials::change_credentials(
+            &rig.state,
+            CredChange::Update {
+                id: "a".into(),
+                fields: json!({"password":"synthetic-competing-password"}).as_object().unwrap().clone(),
+                chain: None,
+            },
+        ).await.unwrap();
+        release.send(()).unwrap();
+        let reply = workflow.await;
+        assert_eq!(reply.error.unwrap().message, "errors.accountsConflict");
+        assert_eq!(rig.meta(), before_meta);
+        assert_eq!(rig.stored("a")["password"], "synthetic-competing-password");
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_change_server_retiring_account_refuses_after_both_probes() {
+        let rig = Rig::new(vec![], vec![]);
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        assert_eq!(rig.call("accounts.add", json!({"account": {
+            "id": "a", "email": "a@example.test", "imapHost": server.host(),
+            "imapPort": server.port(), "imapSecure": false, "smtpHost": server.host(),
+            "smtpPort": server.smtp_port(), "smtpSecure": false,
+            "password": "synthetic-old-password"
+        }})).await.unwrap()["ok"], true);
+        let before_meta = rig.meta();
+        let before_credential = rig.stored("a");
+        let (entered, release) = arm_probe(&rig);
+        let params = json!({"id":"a","fields":{
+            "imapHost":server.host(),"imapPort":server.port(),"imapSecurity":"ssl",
+            "smtpHost":server.host(),"smtpPort":server.smtp_port(),
+            "password":"synthetic-replacement-password"
+        },"expected":{"fields":{},"absent":[]}});
+        let workflow = account_workflow(&rig.state, &params, json!(1), false);
+        tokio::pin!(workflow);
+        tokio::select! {
+            notice = entered => notice.unwrap(),
+            _ = &mut workflow => panic!("full replacement did not reach both probes"),
+        };
+        assert!(server.smtp_commands().iter().any(|command| command.starts_with("EHLO ")));
+        let claim = rig.state.account_lifecycle.try_close(
+            AccountLease::detached_for_test(scope("a", "a@example.test", &server.host())), "a",
+        ).unwrap();
+        release.send(()).unwrap();
+        let reply = workflow.await;
+        assert!(reply.error.is_some(), "Closing must refuse a successful pre-claim probe");
+        assert_eq!(rig.meta(), before_meta);
+        assert_eq!(rig.stored("a"), before_credential);
+        drop(claim);
     }
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn s23_native_jmap_is_fresh_and_preserves_safe_failure_classification() {

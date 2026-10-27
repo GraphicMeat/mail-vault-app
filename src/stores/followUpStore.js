@@ -73,13 +73,12 @@ export function dismissFollowUpsAt(targets) {
   return Promise.all(ended.map(r => useFollowUpStore.getState().dismiss(r.id)));
 }
 
-/// A removed account's reminders, waiting or due: nothing will check them
-/// again, and nothing can open them.
-export async function dismissAccountFollowUps(accountId) {
-  const rows = await daemonCall('follow_up.list', { accountId });
-  await Promise.all((Array.isArray(rows) ? rows : [])
-    .filter(r => r.accountId === accountId)
-    .map(r => useFollowUpStore.getState().dismiss(r.id)));
+/// Native removal already dismissed the account's reminders in the database.
+/// Drop its visible rows only after the complete native result.
+export function dismissAccountFollowUps(accountId) {
+  useFollowUpStore.setState(state => ({
+    rows: state.rows.filter(row => row.accountId !== accountId),
+  }));
 }
 
 /// Rows that are back in the inbox: due, with a Sent copy to open.

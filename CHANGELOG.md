@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Remove a local account only after its active work finishes, then clear its account record, password and local mail under the configured vault. If a send is in progress, Settings keeps the account and offers a retry. Change server now verifies both IMAP and SMTP through the native account workflow before saving the new endpoint and password.
+
 - Reimporting a retired account remaps only its refused ID once after a confirmed no-effect native refusal. ZIP restore now publishes new accounts only after complete extraction and exact metadata completion, before applying settings. The legacy direct password command refuses writes while its remaining caller moves to the native workflow.
 
 - Keep Archive & delete jobs and each cleanup account pass attached to their original account until the job and its started disk work finish. Stale previews and cleanup selections cannot restart work for a retired account.
