@@ -2030,6 +2030,34 @@ pub(crate) async fn read_account_save_snapshot() -> Result<BlobSnapshot, CredErr
     })
 }
 
+/// Keep the credential writer excluded while an account-save caller proves a
+/// pre-effect alternate reply against the current blob and document.
+pub(crate) async fn read_account_save_serialized(
+    deadline: tokio::time::Instant,
+) -> Result<(BlobSnapshot, tokio::sync::MutexGuard<'static, ()>), CredError> {
+    use std::sync::atomic::Ordering::SeqCst;
+    if WRITE_PARKED.load(SeqCst) {
+        return Err(CredError::Busy);
+    }
+    let held = tokio::time::timeout_at(
+        deadline,
+        tokio::time::timeout(APP_LOCK_WAIT, APP_WRITE.lock()),
+    )
+    .await
+    .map_err(|_| CredError::Busy)?
+    .map_err(|_| CredError::Busy)?;
+    if WRITE_PARKED.load(SeqCst) {
+        return Err(CredError::Busy);
+    }
+    let snapshot = tokio::time::timeout_at(deadline, read_account_save_snapshot())
+        .await
+        .map_err(|_| CredError::Busy)??;
+    if WRITE_PARKED.load(SeqCst) || tokio::time::Instant::now() >= deadline {
+        return Err(CredError::Busy);
+    }
+    Ok((snapshot, held))
+}
+
 /// Applies `change` to the stored blob. `Ok((ids, version))`: the ids it
 /// changed (none: nothing was written) and the write generation after it.
 /// At most `APP_LOCK_WAIT` + the read's clock + `write_timeout()` long.

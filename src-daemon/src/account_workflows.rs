@@ -841,16 +841,17 @@ async fn save_owned(
     .await
     .map_err(|_| AccountSaveError::WriteFailed)?
     .map_err(|_| AccountSaveError::WriteFailed)?;
-    let _discovery_generation = snapshot.generation;
-    let input = AccountSaveInput {
+    let mut input = AccountSaveInput {
         source,
         request,
         proof,
         deadline,
     };
-    let (_, preview, scope) = prepare(&snapshot.records, &input)?;
+    let (_, mut preview, mut scope) = prepare(&snapshot.records, &input)?;
+    #[cfg(test)]
+    before_admission_pause(&state.app_dir).await;
     let lease = state.account_admission.try_reserve(scope.clone())?;
-    let newly_added: BTreeSet<String> = preview
+    let mut newly_added: BTreeSet<String> = preview
         .prepared
         .as_ref()
         .unwrap()
@@ -865,6 +866,60 @@ async fn save_owned(
         })
         .cloned()
         .collect();
+    // capture is only a hint to select the proof path. It cannot authorize a
+    // retired-ID reply; the final classifier below still owns that decision.
+    let retired_candidate = matches!(
+        &input.request,
+        Request::Create { if_absent: true, .. }
+    ) && input.source.is_none()
+        && newly_added.iter().any(|id| {
+            matches!(
+                state.account_lifecycle.capture(id),
+                Err(LifecycleError::RetiredIds(_))
+            )
+        });
+    let credential_guard = if retired_candidate {
+        let (fresh, held) = credentials::read_account_save_serialized(deadline).await?;
+        let read = Arc::clone(&doc);
+        let fresh_proof = tokio::task::spawn_blocking(move || {
+            check_deadline(Some(deadline))?;
+            accounts_doc::list(&read)
+                .map_err(|_| MutationFailure::Account(AccountSaveError::WriteFailed))
+        })
+        .await
+        .map_err(|_| AccountSaveError::WriteFailed)??;
+        if fresh.generation != snapshot.generation
+            || fresh.records != snapshot.records
+            || fresh_proof != input.proof
+        {
+            return Err(CredError::Busy.into());
+        }
+        input.proof = fresh_proof;
+        let (_, current_preview, current_scope) = prepare(&fresh.records, &input)?;
+        if !lease.covers(&current_scope) {
+            return Err(CredError::Busy.into());
+        }
+        preview = current_preview;
+        scope = current_scope;
+        newly_added = preview
+            .prepared
+            .as_ref()
+            .unwrap()
+            .accepted
+            .iter()
+            .filter(|id| {
+                !input
+                    .proof
+                    .accounts
+                    .iter()
+                    .any(|row| row.get("id").and_then(Value::as_str) == Some(id.as_str()))
+            })
+            .cloned()
+            .collect();
+        Some(held)
+    } else {
+        None
+    };
     let lifecycle_scope =
         lifecycle_scope_for_save(&scope, &input.proof, preview.prepared.as_ref().unwrap());
     let authority = if let Request::Create { if_absent, .. } = &input.request {
@@ -880,7 +935,7 @@ async fn save_owned(
             ) {
                 Ok(reservation) => PersistenceAuthority::Create(reservation),
                 Err(LifecycleError::RetiredIds(retired))
-                    if *if_absent && input.source.is_none()
+                    if credential_guard.is_some() && *if_absent && input.source.is_none()
                         && Instant::now() < deadline && !reply.is_closed() =>
                 {
                     return Ok(json!({"outcome":"retiredIdsRefused","effects":"none","retiredIds":retired}));
@@ -891,6 +946,7 @@ async fn save_owned(
     } else {
         PersistenceAuthority::Ordinary
     };
+    drop(credential_guard);
     let persistence = state
         .account_lifecycle
         .try_persistence(lease.clone(), &lifecycle_scope, authority)
@@ -995,6 +1051,29 @@ fn save_read_pause(path: &std::path::Path) -> Option<credentials::TestTaskDone> 
         let _ = g.gate.recv_timeout(Duration::from_secs(5));
         credentials::TestTaskDone(g.done)
     })
+}
+
+#[cfg(test)]
+struct BeforeAdmissionGate {
+    entered: tokio::sync::oneshot::Sender<()>,
+    release: tokio::sync::oneshot::Receiver<()>,
+}
+#[cfg(test)]
+fn before_admission_gates() -> &'static Mutex<HashMap<std::path::PathBuf, BeforeAdmissionGate>> {
+    static G: std::sync::OnceLock<Mutex<HashMap<std::path::PathBuf, BeforeAdmissionGate>>> =
+        std::sync::OnceLock::new();
+    G.get_or_init(Default::default)
+}
+#[cfg(test)]
+async fn before_admission_pause(path: &std::path::Path) {
+    let gate = before_admission_gates()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(path);
+    if let Some(gate) = gate {
+        let _ = gate.entered.send(());
+        let _ = gate.release.await;
+    }
 }
 
 #[cfg(test)]
@@ -1560,6 +1639,54 @@ mod tests {
         s
     }
 
+    struct BeforeAdmissionPause {
+        path: std::path::PathBuf,
+        entered: Option<tokio::sync::oneshot::Receiver<()>>,
+        release: Option<tokio::sync::oneshot::Sender<()>>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+        spawned: bool,
+    }
+    impl BeforeAdmissionPause {
+        fn arm(rig: &Rig) -> Self {
+            let (entered, notice) = tokio::sync::oneshot::channel();
+            let (release, gate) = tokio::sync::oneshot::channel();
+            before_admission_gates().lock().unwrap().insert(
+                rig.state.app_dir.clone(),
+                BeforeAdmissionGate { entered, release: gate },
+            );
+            Self {
+                path: rig.state.app_dir.clone(),
+                entered: Some(notice),
+                release: Some(release),
+                done: Some(workflow_done(rig)),
+                spawned: false,
+            }
+        }
+        async fn entered(&mut self) {
+            self.entered.take().unwrap().await.expect("save reached the post-preview barrier");
+        }
+        fn release(&mut self) {
+            self.release.take();
+        }
+        fn finish(&mut self) {
+            self.release();
+            before_admission_gates().lock().unwrap().remove(&self.path);
+            if self.spawned {
+                if self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).is_err() {
+                    std::process::abort();
+                }
+            }
+            workflow_completions().lock().unwrap().remove(&self.path);
+        }
+    }
+    impl Drop for BeforeAdmissionPause {
+        fn drop(&mut self) {
+            if self.done.is_some() {
+                self.finish();
+            }
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p1_closing_refuses_real_save_b_independent() {
         let a = row("a", "a@example.test", "h");
@@ -1747,6 +1874,55 @@ mod tests {
         assert_eq!(result["skipped"], json!({"retired":"live"}));
         assert!(rig.state.account_lifecycle.capture("retired").is_err());
         assert!(rig.state.account_lifecycle.capture("fresh").is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p6_completed_intervening_logical_update_cannot_authorize_retired_remap() {
+        let retired = row("retired", "retired@example.test", "h");
+        let live = row("live", "live@example.test", "h");
+        let rig = Rig::new(vec![live.clone()], vec![clean(retired), clean(live)]);
+        rig.call("accounts.remove", json!({"id":"retired"})).await.unwrap();
+        assert!(matches!(rig.state.account_lifecycle.capture("retired"),
+            Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))));
+        let mut pause = BeforeAdmissionPause::arm(&rig);
+        let request = json!({"entries":[
+            row("retired", "retired@example.test", "h"),
+            row("fresh", "fresh@example.test", "h")
+        ],"ifAbsent":true});
+        let state = Arc::clone(&rig.state);
+        pause.spawned = true;
+        let pending = tokio::spawn(async move {
+            crate::server::handle_request_for_test(&state, "accounts.save", request).await
+        });
+        pause.entered().await;
+
+        // This real native update completes after A+C's credential/document
+        // discovery and before that request takes account admission.
+        let updated = rig.save(json!({"patch":{"id":"live","fields":{
+            "email":"retired@example.test"
+        }}})).await.unwrap();
+        assert_eq!(updated["accepted"], json!(["live"]));
+        assert_eq!(rig.stored("live")["email"], "retired@example.test");
+        assert_eq!(rig.meta().as_array().unwrap().iter().find(|r| r["id"] == "live").unwrap()["email"],
+                   "retired@example.test");
+        let before_blob = rig.blob();
+        let before_meta = rig.meta();
+        let before_generation = credentials::write_generation();
+        let mut events = rig.state.events.subscribe();
+        pause.release();
+        let response = pending.await.unwrap();
+        pause.finish();
+        println!("P6_STALE_REFUSAL_FRAME {}", serde_json::to_value(&response).unwrap());
+
+        assert!(response.result.is_none(), "stale preview must not grant a remap");
+        assert!(matches!(response.error.as_ref().map(|e| e.message.as_str()),
+            Some("errors.accountsConflict" | "errors.keychainBusy")));
+        assert_eq!(rig.blob(), before_blob);
+        assert_eq!(rig.meta(), before_meta);
+        assert_eq!(credentials::write_generation(), before_generation);
+        assert!(events.try_recv().is_err());
+        assert!(rig.state.account_lifecycle.capture("fresh").is_err());
+        assert!(rig.state.account_lifecycle.capture("live").is_ok());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
