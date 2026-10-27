@@ -159,17 +159,37 @@ pub fn build_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<B
 /// Editable local drafts reopen their envelope from these bytes. Unlike a
 /// frozen scheduled/send message, this local-only copy retains Bcc. Callers
 /// must prepare a fresh outgoing message through the existing send owner.
+///
+/// It is also the one builder that never refuses recipient text. Autosave runs
+/// on every typing pause, so To holds `prime@` for a moment and the save must
+/// not fail on it; and the draft is reopened from these bytes, so whatever was
+/// typed has to come back. To, Cc and Bcc are therefore written as header text
+/// after the build (see `recipient_header_line`), never as typed mailboxes.
+/// Nothing here is ever submitted: a reopened draft goes through `build_mime`
+/// like any other message, and that still refuses a bad address.
 pub fn build_local_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<Vec<u8>, String> {
     let built = build_mime_opts(account, email, true, true)?;
-    let bcc = email.bcc.as_deref().and_then(|raw| parse_address_list(raw).ok()).unwrap_or_default();
-    Ok(with_bcc_header(built.raw_rfc2822, &bcc))
+    let mut raw = built.raw_rfc2822;
+    for (name, text) in [
+        ("To", Some(email.to.as_str())),
+        ("Cc", email.cc.as_deref()),
+        ("Bcc", email.bcc.as_deref()),
+    ] {
+        if let Some(line) = text.and_then(|text| recipient_header_line(name, text)) {
+            raw = insert_header_line(raw, name, line);
+        }
+    }
+    Ok(raw)
 }
 
 fn build_mime_opts(
     account: &ImapConfig,
     email: &OutgoingEmail,
     allow_no_recipients: bool,
-    local_attachment_bytes: bool,
+    // The editable local draft (`build_local_draft_mime`) and nothing else:
+    // attachments keep their exact bytes, and the recipients are not built
+    // here at all (the caller writes them as header text).
+    local_draft: bool,
 ) -> Result<BuiltMime, String> {
     // Identity, not credentials: `from_address()` honours the per-account
     // send-as override. Authentication still uses `account.email`.
@@ -188,11 +208,14 @@ fn build_mime_opts(
         Mailbox::new(name.map(String::from), addr)
     };
 
-    let to_mailboxes = parse_address_list(&email.to)
-        .map_err(|e| format!("Invalid to address: {}", e))?;
-    let no_recipients =
-        to_mailboxes.is_empty() && email.cc.as_deref().unwrap_or("").trim().is_empty()
-            && email.bcc.as_deref().unwrap_or("").trim().is_empty();
+    let to_mailboxes = if local_draft {
+        Vec::new()
+    } else {
+        parse_address_list(&email.to).map_err(|e| format!("Invalid to address: {}", e))?
+    };
+    let no_recipients = local_draft
+        || (to_mailboxes.is_empty() && email.cc.as_deref().unwrap_or("").trim().is_empty()
+            && email.bcc.as_deref().unwrap_or("").trim().is_empty());
     if to_mailboxes.is_empty() && !allow_no_recipients {
         return Err("Invalid to address: no recipients".to_string());
     }
@@ -247,18 +270,20 @@ fn build_mime_opts(
     // prove at compile time that the header type exists in the current lettre.
     let _phantom_header: Option<MessageId> = None;
 
-    if let Some(ref cc) = email.cc {
-        if let Ok(list) = parse_address_list(cc) {
-            for mb in list {
-                builder = builder.cc(mb);
+    if !local_draft {
+        if let Some(ref cc) = email.cc {
+            if let Ok(list) = parse_address_list(cc) {
+                for mb in list {
+                    builder = builder.cc(mb);
+                }
             }
         }
-    }
 
-    if let Some(ref bcc) = email.bcc {
-        if let Ok(list) = parse_address_list(bcc) {
-            for mb in list {
-                builder = builder.bcc(mb);
+        if let Some(ref bcc) = email.bcc {
+            if let Ok(list) = parse_address_list(bcc) {
+                for mb in list {
+                    builder = builder.bcc(mb);
+                }
             }
         }
     }
@@ -296,7 +321,7 @@ fn build_mime_opts(
     };
 
     let attachment_body = |bytes: Vec<u8>| -> Result<lettre::message::Body, String> {
-        if local_attachment_bytes {
+        if local_draft {
             lettre::message::Body::new_with_encoding(bytes, lettre::message::header::ContentTransferEncoding::Base64)
                 .map_err(|_| "local draft attachment encoding failed".into())
         } else { Ok(lettre::message::Body::new(bytes)) }
@@ -600,6 +625,68 @@ fn with_bcc_header(raw: Vec<u8>, bcc: &[Mailbox]) -> Vec<u8> {
     if bcc.is_empty() {
         return raw;
     }
+    let mut headers = lettre::message::header::Headers::new();
+    headers.set(lettre::message::header::Bcc::from(bcc.iter().cloned().collect::<lettre::message::Mailboxes>()));
+    insert_header_line(raw, "Bcc", headers.to_string())
+}
+
+/// `Name: value\r\n` for the recipient text of a LOCAL draft, or None when
+/// there is none. A valid entry is rendered by lettre exactly as a typed
+/// mailbox would be (a non-ASCII display name becomes an RFC 2047 encoded
+/// word, quoted where needed). An entry that does not parse (`prime@`, `bad`,
+/// `Zoë <zoe@x`) is kept as typed, with control characters, CR and LF among
+/// them, replaced by spaces and any non-ASCII encoded the way lettre encodes a
+/// Subject. The value therefore cannot end its header line or start another.
+/// Empty entries are skipped, as for a valid list.
+fn recipient_header_line(name: &str, raw: &str) -> Option<String> {
+    use lettre::message::header::{HeaderName, HeaderValue, Headers, To};
+    // lettre writes `To: value\r\n`, the value already folded.
+    let value_of = |headers: Headers| {
+        let text = headers.to_string();
+        text.strip_prefix("To: ").and_then(|t| t.strip_suffix("\r\n")).map(str::to_string)
+    };
+    let mut value = String::new();
+    // Width of the line being written, to fold between entries near 76.
+    let mut column = name.len() + 2;
+    for token in split_address_line(raw) {
+        let piece = match token.parse::<Mailbox>() {
+            Ok(mailbox) => {
+                let mut headers = Headers::new();
+                headers.set(To::from(std::iter::once(mailbox).collect::<lettre::message::Mailboxes>()));
+                value_of(headers)
+            }
+            Err(_) => {
+                let typed: String = token.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+                let mut headers = Headers::new();
+                headers.insert_raw(HeaderValue::new(HeaderName::new_from_ascii_str("To"), typed));
+                value_of(headers)
+            }
+        };
+        let Some(piece) = piece else { continue };
+        if !value.is_empty() {
+            value.push(',');
+            let first_line = piece.split("\r\n").next().unwrap_or("").len();
+            if column + 1 + first_line > 76 {
+                value.push_str("\r\n ");
+                column = 1;
+            } else {
+                value.push(' ');
+                column += 2;
+            }
+        }
+        value.push_str(&piece);
+        column = match piece.rfind("\r\n") {
+            Some(at) => piece.len() - at - 2,
+            None => column + piece.len(),
+        };
+    }
+    if value.is_empty() { None } else { Some(format!("{name}: {value}\r\n")) }
+}
+
+/// Put one CRLF-terminated header line at the end of `raw`'s header block, in
+/// the block's own line ending, unless a header of that name is already there
+/// (the message's own wins).
+fn insert_header_line(raw: Vec<u8>, name: &str, line: String) -> Vec<u8> {
     // The first blank line ends the header block, whichever line ending it
     // has: a CRLF one further down a bare-LF message is in its body.
     let crlf_end = raw.windows(4).position(|w| w == b"\r\n\r\n");
@@ -611,18 +698,14 @@ fn with_bcc_header(raw: Vec<u8>, bcc: &[Mailbox]) -> Vec<u8> {
         (None, None) => (None, true),
     };
     let block = &raw[..block_end.unwrap_or(0)];
-    let has_bcc = block
+    let prefix = format!("{name}:");
+    let present = block
         .split(|b| *b == b'\n')
-        .any(|line| line.len() >= 4 && line[..4].eq_ignore_ascii_case(b"bcc:"));
-    if has_bcc {
+        .any(|l| l.len() >= prefix.len() && l[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes()));
+    if present {
         return raw;
     }
-    let mut headers = lettre::message::header::Headers::new();
-    headers.set(lettre::message::header::Bcc::from(bcc.iter().cloned().collect::<lettre::message::Mailboxes>()));
-    let mut line = headers.to_string();
-    if !crlf {
-        line = line.replace("\r\n", "\n");
-    }
+    let line = if crlf { line } else { line.replace("\r\n", "\n") };
     let at = block_end.unwrap_or(0);
     let mut out = Vec::with_capacity(raw.len() + line.len());
     out.extend_from_slice(&raw[..at]);
@@ -1279,6 +1362,50 @@ mod tests {
         let built = build_draft_mime(&account("me@x.com", None), &outgoing()).expect("build_draft_mime");
         let raw = String::from_utf8_lossy(&built.raw_rfc2822);
         assert!(raw.contains("To: someone@example.com"));
+    }
+
+    #[test]
+    fn local_draft_writes_valid_recipients_as_the_sending_builder_does() {
+        let mut email = outgoing();
+        email.to = "Jos\u{e9} <jose@x.com>, b@x.com".to_string();
+        email.cc = Some("c@x.com".to_string());
+        email.bcc = Some("d@x.com".to_string());
+        let acct = account("me@x.com", None);
+        let sent = String::from_utf8(build_mime(&acct, &email).unwrap().raw_rfc2822).unwrap();
+        let local = String::from_utf8(build_local_draft_mime(&acct, &email).unwrap()).unwrap();
+        let line = |raw: &str, name: &str| {
+            raw.split("\r\n\r\n").next().unwrap().split("\r\n").find(|l| l.starts_with(name)).map(str::to_string)
+        };
+        for name in ["To:", "Cc:"] {
+            assert!(line(&sent, name).is_some());
+            assert_eq!(line(&local, name), line(&sent, name), "{name}");
+        }
+        assert_eq!(line(&local, "Bcc:").as_deref(), Some("Bcc: d@x.com"));
+        assert!(line(&sent, "Bcc:").is_none(), "a sent message never carries Bcc");
+    }
+
+    #[test]
+    fn local_draft_folds_a_long_recipient_list_on_entry_boundaries() {
+        let mut email = outgoing();
+        email.to = (0..30).map(|i| format!("person{i}@example.com")).collect::<Vec<_>>().join(", ") + ", prime@";
+        let raw = String::from_utf8(build_local_draft_mime(&account("me@x.com", None), &email).unwrap()).unwrap();
+        let headers = raw.split("\r\n\r\n").next().unwrap();
+        assert!(headers.split("\r\n").all(|l| l.len() <= 78), "{headers}");
+        let mail = mailparse::parse_mail(raw.as_bytes()).unwrap();
+        use mailparse::MailHeaderMap;
+        let to = mail.headers.get_first_value("To").unwrap();
+        assert_eq!(to.split(',').count(), 31);
+        assert!(to.ends_with("prime@"));
+    }
+
+    #[test]
+    fn only_the_local_draft_builder_tolerates_an_unparseable_recipient() {
+        let mut email = outgoing();
+        email.to = "a@x.com, prime@".to_string();
+        let acct = account("me@x.com", None);
+        assert!(build_mime(&acct, &email).is_err());
+        assert!(build_draft_mime(&acct, &email).is_err());
+        assert!(build_local_draft_mime(&acct, &email).is_ok());
     }
 
     // ── send-as identity ─────────────────────────────────────────────────

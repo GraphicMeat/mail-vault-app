@@ -68,6 +68,7 @@
 - **The helper decides which new mail raises a banner.** Quiet hours, priority senders and the account and folder switches in Settings, Notifications are now applied by the helper that syncs your mail, from your saved settings, instead of by the window. The rules are unchanged. If the helper cannot be reached, the banner is shown, and the notification log in Settings says the rules could not be checked.
 
 ### Fixed
+- **Drafts save while you type an address.** A half-typed recipient no longer shows "The draft could not be saved"; the draft keeps exactly what you typed in To, Cc and Bcc, and sending still checks every address.
 - **You can see what you type in To, Cc and Bcc with many recipients.** The typing space used to shrink to a sliver after a long row of chips; it now moves to its own line.
 - **Security updates for the TLS and DNS libraries.** The helper now uses rustls 0.23.46 and hickory-resolver 0.26.3, which close a TLS 1.3 handshake acceptance flaw and three DNS lookup flaws (an endless retry loop, CNAME records that did not belong, and DNSSEC failures that went unreported).
 - **No new-mail banner for mail you sent.** The copy of a message you just sent lands in your Sent folder, and MailVault announced it as new mail. Anything arriving in a Sent folder (an account's own Sent, Sent Items, Gmail's Sent Mail, a folder you chose as Sent, or a localized name such as Gesendet) is now left out of banners, whoever the From says.
