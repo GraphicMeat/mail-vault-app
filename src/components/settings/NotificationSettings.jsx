@@ -21,6 +21,7 @@ const REASON_I18N_KEY = {
   'account-muted': 'notifyPolicy.reason.accountMuted',
   'folder-not-watched': 'notifyPolicy.reason.folderNotWatched',
   'delivered-default': 'notifyPolicy.reason.deliveredDefault',
+  'already-announced': 'notifyPolicy.reason.alreadyAnnounced',
   'policy-unavailable': 'notifyPolicy.reason.policyUnavailable',
 };
 const reasonI18nKey = (reason) => REASON_I18N_KEY[reason] || reason;

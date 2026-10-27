@@ -32,7 +32,7 @@ const dispatchNotifications = (perAccountResults) => {
   const selectedSound = normalizeNotificationSound(sound);
 
   for (const result of perAccountResults) {
-    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress, newestCode } = result;
+    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress, newestCode, uids } = result;
 
     // A click opens the message the banner shows, in the folder it arrived
     // in. Without a preview the banner names no message, so it opens the folder.
@@ -54,7 +54,10 @@ const dispatchNotifications = (perAccountResults) => {
     // for. The policy implements view-muted and is tested for it; the control
     // stays out of Settings until arrival-time matching exists, because a
     // switch that silently never fires is worse than no switch.
-    const mailCtx = { accountId, folder, from, viewIds: [] };
+    // The messages the banner is for, when the caller can name them (a scheduled
+    // refresh can): the daemon allows one banner per message, so a refresh that
+    // sees the same arrival again cannot raise it twice.
+    const mailCtx = { accountId, folder, from, viewIds: [], ...(Array.isArray(uids) && uids.length ? { uids } : {}) };
     const notifyEmail = (title, body) => selectedSound === 'none'
       ? notify(title, body, undefined, target, mailCtx)
       : notify(title, body, selectedSound, target, mailCtx);

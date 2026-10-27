@@ -146,6 +146,7 @@ describe('the active account (the open list)', () => {
       accountId: 'acct-1',
       folder: 'INBOX',
       newCount: 2,
+      uids: [5, 4],
       newestUid: 5,
       newestSubject: 'hello',
       newestSender: 'Rokas',
@@ -208,7 +209,7 @@ describe('what is not a delivery is never announced', () => {
     const { perAccountResults } = await refreshAllAccounts();
 
     expect(perAccountResults).toHaveLength(1);
-    expect(perAccountResults[0]).toMatchObject({ newCount: 1, newestUid: 6 });
+    expect(perAccountResults[0]).toMatchObject({ newCount: 1, uids: [6], newestUid: 6 });
   });
 
   it('active: the user switching folder during the refresh does not diff another folder\'s rows', async () => {

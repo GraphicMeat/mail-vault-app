@@ -1298,6 +1298,7 @@
   "notifyPolicy.quietHours.hint": "このアカウントの通知を毎日決まった時間帯だけ止めます。",
   "notifyPolicy.quietHours.title": "サイレント時間",
   "notifyPolicy.reason.accountMuted": "アカウントがミュート",
+  "notifyPolicy.reason.alreadyAnnounced": "表示済み",
   "notifyPolicy.reason.deliveredDefault": "配信済み",
   "notifyPolicy.reason.focusHold": "フォーカスセッション中",
   "notifyPolicy.reason.notificationsOff": "通知はオフになっています",

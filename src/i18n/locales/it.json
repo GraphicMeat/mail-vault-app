@@ -1298,6 +1298,7 @@
   "notifyPolicy.quietHours.hint": "Sospende le notifiche di questo account durante una fascia oraria giornaliera.",
   "notifyPolicy.quietHours.title": "Ore silenziose",
   "notifyPolicy.reason.accountMuted": "Account silenziato",
+  "notifyPolicy.reason.alreadyAnnounced": "Già mostrato",
   "notifyPolicy.reason.deliveredDefault": "Consegnata",
   "notifyPolicy.reason.focusHold": "Sessione di concentrazione",
   "notifyPolicy.reason.notificationsOff": "Le notifiche sono disattivate",

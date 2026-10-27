@@ -32,6 +32,9 @@ pub const VIEW_MUTED: &str = "view-muted";
 pub const ACCOUNT_MUTED: &str = "account-muted";
 pub const FOLDER_NOT_WATCHED: &str = "folder-not-watched";
 pub const DELIVERED_DEFAULT: &str = "delivered-default";
+/// The daemon's own answer, not `decide`'s: every message the banner is for
+/// already had one (`handlers::notify`).
+pub const ALREADY_ANNOUNCED: &str = "already-announced";
 
 /// Every reason `decide` answers (the app maps each to a catalog key).
 pub const REASONS: [&str; 8] = [
