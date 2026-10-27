@@ -102,6 +102,14 @@
         "@type": "Answer",
         "text": "Scegli Fastmail quando aggiungi un account e incolla un token API con accesso a Mail e Submission dalle impostazioni di Fastmail. Per un altro server, scegli JMAP e usa la sua password o il suo token API. MailVault rileva l'URL di sessione quando il dominio lo pubblica; altrimenti inserisci l'URL di sessione HTTPS completo. Conferma un server rilevato che non conosci prima di inviare le credenziali. La nuova posta arriva tramite push, con interrogazioni periodiche come alternativa, e gli indirizzi di invio provengono dalle identità del server. Fastmail offre anche un'opzione IMAP con password per app."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I add an iCloud or Apple Account email address?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at account.apple.com under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. Step-by-step guide: https://mailvaultapp.com/it/guides/add-icloud-mail-to-mailvault.html"
+      }
     }
   ]
 }
@@ -209,7 +217,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Provider di posta</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>In questa pagina</summary><ul><li><a href="#help-section-1">MailVault funziona con Gmail e Outlook?</a></li><li><a href="#help-section-2">Come collego il mio account Outlook.com?</a></li><li><a href="#help-section-3">Come uso MailVault con Proton Mail?</a></li><li><a href="#help-section-4">Posso inviare da un indirizzo diverso da quello con cui accedo?</a></li><li><a href="#help-section-5">Come invio da un alias?</a></li><li><a href="#help-section-6">Come collego Fastmail o un altro account JMAP?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Provider di posta</h1><!-- help-intro:start --><form class="mv-help-search" action="/it/docs.html" method="get" role="search"><label for="help-q">Cerca nella documentazione, nelle FAQ e negli articoli</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Cerca in tutte le guide e risposte" required><button type="submit">Ricerca</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>In questa pagina</summary><ul><li><a href="#help-section-1">MailVault funziona con Gmail e Outlook?</a></li><li><a href="#help-section-2">Come collego il mio account Outlook.com?</a></li><li><a href="#help-section-3">Come uso MailVault con Proton Mail?</a></li><li><a href="#help-section-4">Posso inviare da un indirizzo diverso da quello con cui accedo?</a></li><li><a href="#help-section-5">Come invio da un alias?</a></li><li><a href="#help-section-6">Come collego Fastmail o un altro account JMAP?</a></li><li><a href="#help-section-7">How do I add an iCloud or Apple Account email address?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Collega Gmail, Microsoft 365, Outlook.com, Proton Mail e server JMAP come Fastmail e invia da un alias.</p>
 
       <div class="space-y-4">
@@ -298,6 +306,11 @@
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Come collego Fastmail o un altro account JMAP?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Scegli Fastmail quando aggiungi un account e incolla un token API con accesso a Mail e Submission dalle impostazioni di Fastmail. Per un altro server, scegli JMAP e usa la sua password o il suo token API. MailVault rileva l'URL di sessione quando il dominio lo pubblica; altrimenti inserisci l'URL di sessione HTTPS completo. Conferma un server rilevato che non conosci prima di inviare le credenziali. La nuova posta arriva tramite push, con interrogazioni periodiche come alternativa, e gli indirizzi di invio provengono dalle identità del server. Fastmail offre anche un'opzione IMAP con password per app.</p></div>
+        </article>
+
+        <article id="icloud-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">How do I add an iCloud or Apple Account email address?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at <a href="https://account.apple.com" target="_blank" rel="noopener" class="text-primary-500 hover:underline">account.apple.com</a> under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. See the <a href="/it/guides/add-icloud-mail-to-mailvault.html" class="text-primary-500 hover:underline">step-by-step guide</a>.</p></div>
         </article>
 
       </div>

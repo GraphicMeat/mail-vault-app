@@ -102,6 +102,14 @@
         "@type": "Answer",
         "text": "アカウント追加時に Fastmail を選び、Fastmail の設定で Mail と Submission へのアクセスを許可した API トークンを貼り付けます。ほかのサーバーでは JMAP を選び、そのパスワードまたは API トークンを使います。ドメインがセッション URL を公開していれば、MailVault が検出します。公開していなければ、完全な HTTPS セッション URL を入力してください。検出されたサーバーに見覚えがない場合は、認証情報を送る前に確認してください。新着メールはプッシュで取得し、利用できない場合はポーリングに切り替えます。送信アドレスにはサーバーの差出人情報を使います。Fastmail では IMAP 用のアプリパスワードも利用できます。"
       }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I add an iCloud or Apple Account email address?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at account.apple.com under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. Step-by-step guide: https://mailvaultapp.com/ja/guides/add-icloud-mail-to-mailvault.html"
+      }
     }
   ]
 }
@@ -209,7 +217,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">メールプロバイダ</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultはGmailやOutlookで使えますか？</a></li><li><a href="#help-section-2">Outlook.com のアカウントを接続するには？</a></li><li><a href="#help-section-3">Proton MailでMailVaultを使うにはどうすればよいですか？</a></li><li><a href="#help-section-4">ログインに使うアドレスとは別のアドレスから送信できますか？</a></li><li><a href="#help-section-5">エイリアスから送信するには？</a></li><li><a href="#help-section-6">Fastmail やほかの JMAP アカウントにはどう接続しますか？</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">メールプロバイダ</h1><!-- help-intro:start --><form class="mv-help-search" action="/ja/docs.html" method="get" role="search"><label for="help-q">ドキュメント、よくある質問、記事を検索</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="すべてのガイドと回答を検索" required><button type="submit">検索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>このページの内容</summary><ul><li><a href="#help-section-1">MailVaultはGmailやOutlookで使えますか？</a></li><li><a href="#help-section-2">Outlook.com のアカウントを接続するには？</a></li><li><a href="#help-section-3">Proton MailでMailVaultを使うにはどうすればよいですか？</a></li><li><a href="#help-section-4">ログインに使うアドレスとは別のアドレスから送信できますか？</a></li><li><a href="#help-section-5">エイリアスから送信するには？</a></li><li><a href="#help-section-6">Fastmail やほかの JMAP アカウントにはどう接続しますか？</a></li><li><a href="#help-section-7">How do I add an iCloud or Apple Account email address?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail、Microsoft 365、Outlook.com、Proton Mail、Fastmail などの JMAP サーバーに接続し、エイリアスから送信します。</p>
 
       <div class="space-y-4">
@@ -298,6 +306,11 @@
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Fastmail やほかの JMAP アカウントにはどう接続しますか？</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>アカウント追加時に Fastmail を選び、Fastmail の設定で Mail と Submission へのアクセスを許可した API トークンを貼り付けます。ほかのサーバーでは JMAP を選び、そのパスワードまたは API トークンを使います。ドメインがセッション URL を公開していれば、MailVault が検出します。公開していなければ、完全な HTTPS セッション URL を入力してください。検出されたサーバーに見覚えがない場合は、認証情報を送る前に確認してください。新着メールはプッシュで取得し、利用できない場合はポーリングに切り替えます。送信アドレスにはサーバーの差出人情報を使います。Fastmail では IMAP 用のアプリパスワードも利用できます。</p></div>
+        </article>
+
+        <article id="icloud-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">How do I add an iCloud or Apple Account email address?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Choose iCloud Mail when adding an account, enter your full iCloud address and paste an app-specific password. iCloud Mail does not accept your regular Apple Account password from other apps. Create the app-specific password at <a href="https://account.apple.com" target="_blank" rel="noopener" class="text-primary-500 hover:underline">account.apple.com</a> under Sign-In and Security, then App-Specific Passwords; two-factor authentication must be on. The info button beside the password field in MailVault explains the same steps. If sign-in later fails, a changed Apple Account password has revoked it, so create a new one. See the <a href="/ja/guides/add-icloud-mail-to-mailvault.html" class="text-primary-500 hover:underline">step-by-step guide</a>.</p></div>
         </article>
 
       </div>
