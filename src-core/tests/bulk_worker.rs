@@ -357,6 +357,23 @@ fn purge_supported_pending_keeps_unknown_nested_identity_as_unresolved_evidence(
     assert!(reopened.status(dir.path()).is_err());assert!(reopened.resume_worker(dir.path(),"nested").is_err());
     assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(),Some(raw));
 }
+/// A finished delete everywhere stays on disk until the next bulk action claims
+/// over it. The record an earlier build wrote has no `alreadyGone`; a build that
+/// writes the key into every target makes that record read back different from
+/// what is on disk, and a delete record that does is refused as invalid, which
+/// refuses every later bulk start until it is cleared.
+#[test]
+fn purge_pending_written_before_already_gone_existed_still_loads() {
+    let dir=tempfile::tempdir().unwrap();let w=purge_work();
+    let mut owner=mailvault_core::bulk::Coordinator::load(dir.path());owner.claim(dir.path(),"old-build",w.intent.clone()).unwrap();owner.checkpoint(dir.path(),"old-build",&w).unwrap();
+    let mut raw=mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap().unwrap();
+    for target in raw["worker"]["purgeTargets"].as_array_mut().unwrap() {target.as_object_mut().unwrap().remove("alreadyGone");}
+    mailvault_core::op_journal::pending_operation_save(dir.path(),&raw).unwrap();
+    let mut reopened=mailvault_core::bulk::Coordinator::load(dir.path());
+    let status=reopened.status(dir.path());
+    assert!(status.is_ok(),"a record an older build wrote reads as invalid: {status:?}");
+    assert_eq!(mailvault_core::op_journal::pending_operation_read(dir.path()).unwrap(),Some(raw));
+}
 #[test]
 fn purge_nonfile_uid_artifact_is_never_confirmed_absence() {
     let dir=tempfile::tempdir().unwrap();let mailbox=mailvault_core::message_store::mailbox_dir(dir.path(),"acc","INBOX");

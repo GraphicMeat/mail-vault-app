@@ -6,6 +6,7 @@
 mod abd_local;
 mod abd_worker;
 mod bulk_worker;
+mod recent_actions;
 mod cleanup_worker;
 mod backup_worker;
 mod ai_gate;
@@ -515,6 +516,7 @@ async fn daemon_main() {
         pool
     };
     let state = Arc::new(server::DaemonState {
+        recent: Default::default(),
         token,
         data_dir: mail_dir.clone(),
         app_dir: data_dir.clone(),

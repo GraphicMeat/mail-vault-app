@@ -696,6 +696,16 @@ impl Ports for MailPorts {
         Ok(())
     }
     async fn purge_prepare(&mut self,t:&PurgeTarget,hint:&mailvault_core::bulk::TargetHint)->Result<PurgeProof,String> {
+        // A delete clicked again on a row that outlived the first: the server copy
+        // is gone and no vault copy is left, so there is nothing to prove or remove.
+        // Whatever the list or the header cache still holds of it goes too.
+        let native=hint.native_identity.as_ref().map(|n|(n.uid_validity,n.origin_hash.as_str()));
+        if self.state.recent.was_purged(&t.account_id,&t.mailbox,t.uid,hint.message_id.as_deref(),native)
+            && self.local_inventory(t).is_ok_and(|inventory|inventory.candidates.get(&t.uid).is_none_or(Vec::is_empty)) {
+            let (state,target)=(self.state.clone(),t.clone());
+            let _=common::blocking(move||crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::remove_headers(c,&target.account_id,&target.mailbox,&[target.uid]).map(|_|()))).await;
+            return Err(bulk_worker::ALREADY_GONE.into());
+        }
         let inventory=self.local_inventory(t)?;
         if hint.native_identity.is_none() {
             let email = crate::credentials::resolve_account_credentials_quiet(&t.account_id).await.ok().map(|config|config.email).filter(|email|!email.is_empty());
@@ -739,20 +749,14 @@ impl Ports for MailPorts {
         Ok(PurgeProof::Server{email:config.email,origin,identity,stored})
     }
     async fn purge_server(&mut self,t:&PurgeTarget,cancel:Arc<AtomicBool>)->Result<(),String> {
-        let Some(PurgeProof::Server{identity,origin,email,..})=&t.proof else { return Err("errors.bulkIdentityUncertain".into()); };
-        let config=self.config(&t.group()).await?;
-        if bulk_worker::origin_hash(&config) != *origin || config.email!=*email || !identity.matches_transport(&config) { return Err("errors.bulkIdentityChanged".into()); }
-        if cancel.load(Ordering::SeqCst) { return Err("errors.bulkIdentityUncertain".into()); }
-        if let Identity::Graph{ids}=identity {
-            let id=ids.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
-            // Revalidate original ledger binding immediately before Graph IO.
-            let now=self.identity(&t.group()).await?.0;
-            if !identity.matches(&now,&[t.uid]) { return Err("errors.bulkIdentityChanged".into()); }
-            let token=config.access_token.as_deref().ok_or("errors.bulkAccountUnavailable")?;
-            return mailvault_core::graph::GraphClient::new(token).delete_message(id).await;
+        let removed=self.delete_on_server(t,cancel).await;
+        if removed.is_ok() {
+            // Remembered for a second delete of the same message (`purge_prepare`).
+            let selected=self.selected.get(&(t.account_id.clone(),t.mailbox.clone()));
+            let message_id=selected.and_then(|s|s.message_ids.get(&t.uid)).cloned();
+            self.state.recent.note_purged(&t.account_id,&t.mailbox,t.uid,message_id.as_deref(),selected.and_then(|s|s.validity),selected.and_then(|s|s.origin_hash.as_deref()));
         }
-        let (_,deleted)=archive::delete_provider_only(&self.state,t.account_id.clone(),config,t.mailbox.clone(),vec![t.uid],cancel,Some(identity)).await?;
-        if deleted == [t.uid] { Ok(()) } else { Err("errors.bulkOperationFailed".into()) }
+        removed
     }
     async fn purge_local(&mut self,t:&PurgeTarget)->Result<PurgeEffect,String> {
         if let Some(PurgeProof::Server{origin,email,..})=&t.proof {
@@ -1318,6 +1322,26 @@ async fn read_imap_identity(
         return Err("errors.bulkIdentityChanged".into());
     }
     Ok(expected)
+}
+
+impl MailPorts {
+    /// The server half of a purge: the identity re-proved, then the one message removed.
+    async fn delete_on_server(&mut self,t:&PurgeTarget,cancel:Arc<AtomicBool>)->Result<(),String> {
+        let Some(PurgeProof::Server{identity,origin,email,..})=&t.proof else { return Err("errors.bulkIdentityUncertain".into()); };
+        let config=self.config(&t.group()).await?;
+        if bulk_worker::origin_hash(&config) != *origin || config.email!=*email || !identity.matches_transport(&config) { return Err("errors.bulkIdentityChanged".into()); }
+        if cancel.load(Ordering::SeqCst) { return Err("errors.bulkIdentityUncertain".into()); }
+        if let Identity::Graph{ids}=identity {
+            let id=ids.get(&t.uid).ok_or("errors.bulkIdentityUncertain")?;
+            // Revalidate original ledger binding immediately before Graph IO.
+            let now=self.identity(&t.group()).await?.0;
+            if !identity.matches(&now,&[t.uid]) { return Err("errors.bulkIdentityChanged".into()); }
+            let token=config.access_token.as_deref().ok_or("errors.bulkAccountUnavailable")?;
+            return mailvault_core::graph::GraphClient::new(token).delete_message(id).await;
+        }
+        let (_,deleted)=archive::delete_provider_only(&self.state,t.account_id.clone(),config,t.mailbox.clone(),vec![t.uid],cancel,Some(identity)).await?;
+        if deleted == [t.uid] { Ok(()) } else { Err("errors.bulkOperationFailed".into()) }
+    }
 }
 
 #[cfg(test)]
@@ -2271,6 +2295,39 @@ mod tests {
             assert_eq!(pending["result"]["deleted"],0);assert_eq!(pending["result"]["failed"],usize::from(!import));
             assert!(server.commands().is_empty());assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().as_deref(),Some(PURGE_RAW));
             assert!(mailvault_core::app_db::with(dir.path(),mailvault_core::app_db::ops::purge_items).unwrap().is_empty());
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+    /// A delete everywhere clicked again on a row that outlived the first (a
+    /// ghost the list or the cache put back): the message is already gone from
+    /// the server and the vault, which is done. It used to come back refused as
+    /// "needs resync", whatever the hint carried, because nothing is left to prove.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_of_a_message_already_deleted_here_is_done_not_needs_resync() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for with_identity in [true,false] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let provider=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&provider);
+            let owner=mailvault_core::imap::NativeHeaderIdentity::new(&cfg,"acc","INBOX",Some(1));publish_purge_owner(&state,&owner,json!([{"uid":7,"messageId":"selected@test"}]));
+            let scope=original_scope(&cfg,"INBOX",Some("selected@test"));
+            let first=handle_request_for_test(&state,"bulk.start",json!({"operationId":"first","type":"delete_everywhere","scope":scope,"externalStatus":"unavailable"})).await;
+            assert!(first.error.is_none(),"{:?}",first.error);let pending=wait_drained(&state).await;
+            assert_eq!((&pending["result"]["deleted"],&pending["result"]["failed"],&pending["result"]["needsResync"]),(&json!(1),&json!(0),&json!(0)),"the first delete: {pending}");
+            let expunges=||provider.commands().iter().filter(|c|c.contains("EXPUNGE")).count();let first_expunges=expunges();assert_eq!(first_expunges,1);
+
+            // The ghost: something writes the deleted message's header row back.
+            crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::save_headers(c,"acc","INBOX",&json!({"emails":[{"uid":7,"messageId":"selected@test","subject":"ghost"}]}).to_string())).unwrap();
+            let rows=||crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc","INBOX",&[7])).unwrap();
+            assert_eq!(rows().len(),1,"precondition: the ghost row is in the header cache");
+            let mut again=scope.clone();if !with_identity {again["targetHints"][0]["nativeIdentity"]=Value::Null;}
+            let second=handle_request_for_test(&state,"bulk.start",json!({"operationId":"second","type":"delete_everywhere","scope":again,"externalStatus":"unavailable"})).await;
+            assert!(second.error.is_none(),"{:?}",second.error);let pending=wait_drained(&state).await;
+            assert_eq!(pending["result"],json!({"deleted":1,"failed":0,"queuedBackup":0,"needsResync":0}),"with_identity={with_identity}: {pending}");
+            let target=&pending["worker"]["purgeTargets"][0];
+            assert_eq!((&target["refused"],&target["needsResync"],&target["alreadyGone"]),(&json!(false),&json!(false),&json!(true)),"{target}");
+            assert_eq!(expunges(),first_expunges,"nothing is sent to the server for a message already deleted");
+            assert!(rows().is_empty(),"the ghost's header row goes with it");
         }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }

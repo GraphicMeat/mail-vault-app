@@ -34,6 +34,8 @@ pub struct RunTokens {
 
 /// Daemon server state shared across connections.
 pub struct DaemonState {
+    /// What was already purged or announced (`recent_actions`).
+    pub recent: crate::recent_actions::RecentActions,
     pub token: String,
     /// Where the mail lives — the user-selected vault folder when set.
     pub data_dir: PathBuf,
@@ -981,6 +983,7 @@ impl DaemonState {
             crate::blitz::RenderHost::new(events.clone(), crate::blitz::WorkerCommand::current_exe().expect("current_exe"))
         }));
         let state = Arc::new(DaemonState {
+            recent: Default::default(),
             net,
             idle,
             token: "a".repeat(64),

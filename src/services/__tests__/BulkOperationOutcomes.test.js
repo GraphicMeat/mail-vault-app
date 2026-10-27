@@ -122,6 +122,17 @@ async function run(rawChange = (raw) => raw, events = []) {
 it('binds durable outcomes to operation, accepted attempt and full original Scope', async () => {
   expect((await run()).outcomes).toEqual([{ hint, target }]);
 });
+// A delete clicked again on a row that outlived the first: the daemon finds the
+// message already deleted and answers a skipped target flagged `alreadyGone`. The
+// manager must carry it through, not refuse the unknown field as a foreign shape.
+it('keeps a target the daemon found already deleted', async () => {
+  const gone = { ...target, proof: null, server: 'pending', local: 'pending', mirror: 'pending', skipped: true, alreadyGone: true };
+  const operation = await run((raw) => {
+    raw.worker.purgeTargets = [gone];
+    return raw;
+  });
+  expect(operation.outcomes).toEqual([{ hint, target: gone }]);
+});
 it.each([
   'operation',
   'attempt',

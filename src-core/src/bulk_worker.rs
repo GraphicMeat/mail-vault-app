@@ -206,6 +206,10 @@ pub struct Workflow {
     pub purge_current: Option<usize>,
 }
 
+/// What `Ports::purge_prepare` answers for a message an earlier delete
+/// everywhere already removed: not a refusal, the target is done.
+pub const ALREADY_GONE: &str = "errors.bulkAlreadyGone";
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PurgeCounts {
@@ -255,6 +259,14 @@ pub struct PurgeTarget {
     pub skipped: bool,
     pub needs_resync: bool,
     pub last_error: Option<String>,
+    /// The message was already deleted by an earlier delete everywhere (its server
+    /// copy is gone, nothing local is left): this one has nothing to prove or
+    /// remove, and counts as deleted. Never refused, never "needs resync".
+    // Written only when set: a delete record an earlier build wrote has no such
+    // key, and one that read back different from what is on disk is refused
+    // (`bulk::Pending::parse`), which would refuse every bulk start after it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub already_gone: bool,
 }
 impl PurgeTarget {
     pub fn group(&self) -> Group {
@@ -308,7 +320,7 @@ impl Workflow {
             crate::bulk::group_targets(intent.scope()).groups.into_iter().flat_map(|g| {
                 g.uids.into_iter().map(move |uid| PurgeTarget {account_id:g.account_id.clone(),mailbox:g.mailbox.clone(),uid,
                     proof:None,server:PurgeEffect::Pending,local:PurgeEffect::Pending,mirror:PurgeEffect::Pending,mirror_removed:0,mirror_issue:None,
-                    refused:false,skipped:false,needs_resync:false,last_error:None})
+                    refused:false,skipped:false,needs_resync:false,last_error:None,already_gone:false})
             }).collect()
         } else { vec![] };
         Self {
@@ -399,7 +411,7 @@ impl Workflow {
     }
     pub fn completed_keys(&self) -> Vec<serde_json::Value> {
         if self.intent.action() == Action::DeleteEverywhere {
-            let approved: HashSet<_> = self.purge_targets.iter().filter(|t| t.approved() && !(t.local_only() && t.local==PurgeEffect::Conflict))
+            let approved: HashSet<_> = self.purge_targets.iter().filter(|t| (t.approved() && !(t.local_only() && t.local==PurgeEffect::Conflict)) || t.already_gone)
                 .map(|t| (t.account_id.as_str(),t.mailbox.as_str(),t.uid)).collect();
             return self.intent.scope().keys.iter().filter(|key| {
                 crate::bulk::target(key,self.intent.scope()).is_some_and(|(a,m,u)| approved.contains(&(a.as_str(),m.as_str(),u)))
@@ -498,7 +510,7 @@ fn purge_counts(w: &mut Workflow) {
     let mut result = PurgeCounts::default();
     let mut resync = HashSet::new();
     for t in &w.purge_targets {
-        if t.approved() && !(t.local_only() && t.local==PurgeEffect::Conflict) { result.deleted += 1; }
+        if (t.approved() && !(t.local_only() && t.local==PurgeEffect::Conflict)) || t.already_gone { result.deleted += 1; }
         if t.refused || matches!(t.server,PurgeEffect::Failed|PurgeEffect::Attempted) || t.local == PurgeEffect::Conflict { result.failed += 1; }
         if t.mirror == PurgeEffect::Queued { result.queued_backup += 1; }
         if t.needs_resync { resync.insert((&t.account_id,&t.mailbox)); }
@@ -538,6 +550,11 @@ async fn run_purge(p: &mut impl Ports,w: &mut Workflow,cancel: Arc<AtomicBool>,r
                     w.purge_targets[i].needs_resync = true;
                     w.purge_targets[i].last_error = Some("errors.bulkIdentityChanged".into());
                 }
+            }
+            Err(error) if error == ALREADY_GONE => {
+                // Skipped like any target with nothing left to do, and counted as deleted.
+                w.purge_targets[i].skipped = true;
+                w.purge_targets[i].already_gone = true;
             }
             Err(error) => {
                 w.purge_targets[i].refused = true;
