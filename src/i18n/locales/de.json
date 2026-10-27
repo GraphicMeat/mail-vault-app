@@ -1298,6 +1298,7 @@
   "notifyPolicy.quietHours.hint": "Unterdrückt Benachrichtigungen für dieses Konto in einem täglichen Zeitfenster.",
   "notifyPolicy.quietHours.title": "Ruhezeiten",
   "notifyPolicy.reason.accountMuted": "Konto stummgeschaltet",
+  "notifyPolicy.reason.alreadyAnnounced": "Bereits angezeigt",
   "notifyPolicy.reason.deliveredDefault": "Zugestellt",
   "notifyPolicy.reason.focusHold": "Fokus-Sitzung",
   "notifyPolicy.reason.notificationsOff": "Benachrichtigungen sind ausgeschaltet",

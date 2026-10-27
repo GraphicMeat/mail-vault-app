@@ -1298,6 +1298,7 @@
   "notifyPolicy.quietHours.hint": "在每天的固定时段内暂停此账户的通知。",
   "notifyPolicy.quietHours.title": "免打扰时段",
   "notifyPolicy.reason.accountMuted": "账户已静音",
+  "notifyPolicy.reason.alreadyAnnounced": "已显示",
   "notifyPolicy.reason.deliveredDefault": "已送达",
   "notifyPolicy.reason.focusHold": "专注会话",
   "notifyPolicy.reason.notificationsOff": "通知已关闭",

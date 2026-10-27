@@ -397,6 +397,28 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       { accountId: 'a2', folder: 'INBOX', from: 'c@three.co', viewIds: [] });
   });
 
+  // The scheduled refresh knows exactly which messages it announces. The daemon
+  // allows one banner per message, so it is told which: a refresh that sees the
+  // same arrival again (a row that outlived a delete) cannot raise it twice.
+  it('names the messages a scheduled refresh announces in the notification context', async () => {
+    settingsStore.setState({ refreshOnLaunch: true });
+    mailStore.setState({
+      accounts: [IMAP_A],
+      activeAccountId: 'a1',
+      activeMailbox: 'INBOX',
+      refreshAllAccounts: vi.fn().mockResolvedValue({
+        perAccountResults: [{ accountId: 'a1', accountEmail: 'a@one.co', folder: 'INBOX', newCount: 2, uids: [9, 8],
+          newestSender: 'Sender', newestSubject: 'Subject', newestUid: 9, newestFromAddress: 's@x.co' }],
+      }),
+    });
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify.mock.calls[0][4]).toEqual({ accountId: 'a1', folder: 'INBOX', from: 's@x.co', viewIds: [], uids: [9, 8] });
+  });
+
   // A launch after a night closed collects every arrival at once. The preview
   // is the folder's newest message, so one banner per change repeated that
   // same message once per arrival: one banner per folder, counting them all.

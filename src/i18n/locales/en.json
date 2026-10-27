@@ -1298,6 +1298,7 @@
   "notifyPolicy.quietHours.hint": "Hold notifications for this account during a daily window.",
   "notifyPolicy.quietHours.title": "Quiet hours",
   "notifyPolicy.reason.accountMuted": "Account muted",
+  "notifyPolicy.reason.alreadyAnnounced": "Already shown",
   "notifyPolicy.reason.deliveredDefault": "Delivered",
   "notifyPolicy.reason.focusHold": "Focus session",
   "notifyPolicy.reason.notificationsOff": "Notifications are switched off",

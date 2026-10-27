@@ -14,6 +14,7 @@ mod backup_zip;
 #[cfg(feature = "blitz-render")]
 mod blitz;
 mod bulk_worker;
+mod recent_actions;
 mod channel;
 pub mod classification;
 mod classification_worker;
@@ -575,6 +576,7 @@ async fn daemon_main() {
         pool
     };
     let state = Arc::new(server::DaemonState {
+        recent: Default::default(),
         token,
         data_dir: mail_dir.clone(),
         app_dir: data_dir.clone(),

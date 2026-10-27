@@ -98,6 +98,8 @@ const targetFields = [
   'skipped',
   'needsResync',
   'lastError',
+  // Deleted by an earlier delete everywhere: nothing left to prove or remove.
+  'alreadyGone',
 ];
 function supportedTarget(target) {
   return (

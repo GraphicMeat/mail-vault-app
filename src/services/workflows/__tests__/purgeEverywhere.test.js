@@ -110,6 +110,24 @@ it('restores the exact refused optimistic row and lifts its tombstone', async ()
   ).toEqual([1, 2]);
   expect(useMailStore.getState().deleteTombstones.size).toBe(0);
 });
+// A row that outlived the first delete (a ghost the list or the cache put
+// back) is deleted again: the daemon finds the message already gone and answers
+// a skipped, `alreadyGone` target. That is proof the message is gone, so the row
+// stays out of the list instead of being put back as a refused delete.
+it('keeps the row gone when the daemon found the message already deleted', async () => {
+  native.start.mockImplementation(async ({ scope }) => ({
+    status: 'complete',
+    result: { deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 },
+    outcomes: scope.targetHints.map((hint) => ({
+      hint,
+      target: { ...refused(hint), refused: false, skipped: true, alreadyGone: true },
+    })),
+  }));
+  const result = await purgeEverywhere([1]);
+  expect(result).toEqual({ deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 });
+  expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
+  expect(useMailStore.getState().deleteTombstones.size).toBe(1);
+});
 it('refreshes and restores conservatively when A outcomes were replaced by B', async () => {
   native.start.mockResolvedValue({
     status: 'complete',

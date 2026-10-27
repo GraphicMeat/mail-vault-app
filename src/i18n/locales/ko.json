@@ -1298,6 +1298,7 @@
   "notifyPolicy.quietHours.hint": "매일 정해진 시간 동안 이 계정의 알림을 보류합니다.",
   "notifyPolicy.quietHours.title": "방해 금지 시간",
   "notifyPolicy.reason.accountMuted": "계정 음소거됨",
+  "notifyPolicy.reason.alreadyAnnounced": "이미 표시됨",
   "notifyPolicy.reason.deliveredDefault": "전달됨",
   "notifyPolicy.reason.focusHold": "포커스 세션",
   "notifyPolicy.reason.notificationsOff": "알림이 꺼져 있습니다",

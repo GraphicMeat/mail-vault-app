@@ -1298,6 +1298,7 @@
   "notifyPolicy.quietHours.hint": "Suspend les notifications de ce compte pendant une plage horaire quotidienne.",
   "notifyPolicy.quietHours.title": "Heures de silence",
   "notifyPolicy.reason.accountMuted": "Compte en sourdine",
+  "notifyPolicy.reason.alreadyAnnounced": "Déjà affiché",
   "notifyPolicy.reason.deliveredDefault": "Livrée",
   "notifyPolicy.reason.focusHold": "Session de concentration",
   "notifyPolicy.reason.notificationsOff": "Les notifications sont désactivées",

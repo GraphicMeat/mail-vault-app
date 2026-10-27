@@ -2658,8 +2658,12 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
   const replaced = new Set();
   for (const target of targets) {
     const outcome = outcomes.get(originalTargetId(hintsById.get(_targetId(target))));
-    // A count, finished frame or empty Active is never row-level evidence.
-    if (!outcome || outcome.refused || outcome.skipped || !outcome.proof
+    // A count, finished frame or empty Active is never row-level evidence. A
+    // target the daemon found already deleted (a row that outlived the first
+    // delete) is the one skipped outcome that is proof: the row stays gone.
+    if (!outcome) restore.add(_targetId(target));
+    else if (outcome.alreadyGone) continue;
+    else if (outcome.refused || outcome.skipped || !outcome.proof
         || (outcome.proof.kind === 'server' && outcome.server !== 'complete')
         || (outcome.proof.kind === 'local' && outcome.local !== 'complete')) restore.add(_targetId(target));
   }
@@ -2713,7 +2717,7 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
   const tombstones = new Set(get().deleteTombstones);
   for (const target of targets) {
     const outcome = outcomes.get(originalTargetId(hintsById.get(_targetId(target))));
-    if (!outcome || restore.has(_targetId(target)) || replaced.has(_targetId(target)) || outcome.refused || outcome.skipped || outcome.local === 'conflict') tombstones.delete(_targetId(target));
+    if (!outcome || restore.has(_targetId(target)) || replaced.has(_targetId(target)) || outcome.refused || (outcome.skipped && !outcome.alreadyGone) || outcome.local === 'conflict') tombstones.delete(_targetId(target));
   }
   store.setState({ deleteTombstones: tombstones });
   const search = useSearchStore.getState();

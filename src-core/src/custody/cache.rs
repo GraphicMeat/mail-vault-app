@@ -297,6 +297,140 @@ pub fn flags_by_uids(conn: &Connection, account: &str, mailbox: &str, uids: &[u3
     Ok(rows)
 }
 
+/// A cached header's read state as the server holds it (sync keeps it current;
+/// a vault file's name keeps the state the file was stored with), and the
+/// Message-ID that says which message the row is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadState {
+    pub seen: bool,
+    /// Normalized (`message_id_key`); `None` when the header carries none.
+    pub message_id: Option<String>,
+}
+
+impl ReadState {
+    /// Whether this row speaks for a vault message with `message_id`. A uid
+    /// alone is weak proof: a UIDVALIDITY reissue or a recreated mailbox gives
+    /// the number to another message. A side with no Message-ID cannot
+    /// contradict the other.
+    pub fn applies_to(&self, message_id: Option<&str>) -> bool {
+        match (&self.message_id, message_id.and_then(message_id_key)) {
+            (Some(ours), Some(theirs)) => *ours == theirs,
+            _ => true,
+        }
+    }
+}
+
+/// A Message-ID as the search index compares it, the same trim on both sides
+/// (`query::MSG_KEY_SQL`'s `trim(x, '<> ')`): without angle brackets or spaces
+/// at either end, `None` when nothing is left.
+pub fn message_id_key(id: &str) -> Option<String> {
+    let key = id.trim_matches(['<', '>', ' ']);
+    (!key.is_empty()).then(|| key.to_string())
+}
+
+/// The most header rows one custody hold reads for the search's read state.
+pub const READ_STATE_UNIT: usize = UID_CHUNK;
+
+/// The server paths the header cache holds rows for, by the vault folder each
+/// is filed under (`vault_dir_name`). Read once per account and passed to the
+/// readers below, which each take the paths of one folder.
+pub fn vault_folders(conn: &Connection, account: &str) -> Result<HashMap<String, Vec<String>>, String> {
+    let mut folders: HashMap<String, Vec<String>> = HashMap::new();
+    for (_, mailbox) in mailboxes_with_headers(conn, Some(account))? {
+        folders.entry(crate::search_index::text::vault_dir_name(&mailbox)).or_default().push(mailbox);
+    }
+    Ok(folders)
+}
+
+/// Keeps a uid's state, or nothing when two server paths that spell one vault
+/// folder disagree on it.
+fn keep_read_state(states: &mut HashMap<u32, Option<ReadState>>, uid: u32, state: ReadState) {
+    match states.entry(uid) {
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert(Some(state));
+        }
+        std::collections::hash_map::Entry::Occupied(mut slot) => {
+            if slot.get().as_ref() != Some(&state) {
+                slot.insert(None);
+            }
+        }
+    }
+}
+
+/// `uid`'s read state in each of `mailboxes` (the server paths of one vault
+/// folder) for the uids the `WHERE` tail picks. `json_valid` in the WHERE, so
+/// the select list never sees a malformed row.
+fn read_rows(conn: &Connection, account: &str, mailboxes: &[String], tail: &str, extra: Vec<rusqlite::types::Value>, states: &mut HashMap<u32, Option<ReadState>>) -> Result<(), String> {
+    let marks = std::iter::repeat_n("?", mailboxes.len()).collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT uid, EXISTS(SELECT 1 FROM json_each(header_json, '$.flags') WHERE lower(value) = '\\seen'), \
+         CASE WHEN json_type(header_json, '$.messageId') = 'text' THEN json_extract(header_json, '$.messageId') END \
+         FROM header_cache WHERE account_id=? AND mailbox_path IN ({marks}) AND json_valid(header_json) {tail}"
+    );
+    let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into()];
+    args.extend(mailboxes.iter().map(|m| rusqlite::types::Value::from(m.clone())));
+    args.extend(extra);
+    let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
+    let rows = stmt
+        .query_map(params_from_iter(args), |r| Ok((r.get::<_, u32>(0)?, r.get::<_, bool>(1)?, r.get::<_, Option<String>>(2)?)))
+        .map_err(err)?;
+    for row in rows {
+        let (uid, seen, id) = row.map_err(err)?;
+        keep_read_state(states, uid, ReadState { seen, message_id: id.as_deref().and_then(message_id_key) });
+    }
+    Ok(())
+}
+
+fn settled(states: HashMap<u32, Option<ReadState>>) -> HashMap<u32, ReadState> {
+    states.into_iter().filter_map(|(uid, state)| state.map(|state| (uid, state))).collect()
+}
+
+/// One unit of the read state of a vault folder's cached headers: the uids
+/// above `after`, at most `READ_STATE_UNIT` of them, and the cursor for the next
+/// unit (`None` once the folder is read out). `mailboxes` are the folder's
+/// server paths (`vault_folders`). The one rule for the search filter, the
+/// result rows and the scan lane. A row whose JSON does not parse says nothing,
+/// and so does a uid two server paths disagree on. A caller takes the custody
+/// lock per unit, so a mark-read or a sync write waits for 900 rows at most.
+pub fn read_states_after(conn: &Connection, account: &str, mailboxes: &[String], after: u32) -> Result<(HashMap<u32, ReadState>, Option<u32>), String> {
+    if mailboxes.is_empty() {
+        return Ok((HashMap::new(), None));
+    }
+    let marks = std::iter::repeat_n("?", mailboxes.len()).collect::<Vec<_>>().join(",");
+    let sql = format!("SELECT uid FROM header_cache WHERE account_id=? AND mailbox_path IN ({marks}) AND uid > ? GROUP BY uid ORDER BY uid LIMIT {}", READ_STATE_UNIT + 1);
+    let mut args: Vec<rusqlite::types::Value> = vec![account.to_string().into()];
+    args.extend(mailboxes.iter().map(|m| rusqlite::types::Value::from(m.clone())));
+    args.push(i64::from(after).into());
+    let mut stmt = conn.prepare_cached(&sql).map_err(err)?;
+    let uids = stmt
+        .query_map(params_from_iter(args), |r| r.get::<_, u32>(0))
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err)?;
+    let (unit, next) = match uids.get(READ_STATE_UNIT) {
+        Some(_) => (&uids[..READ_STATE_UNIT], Some(uids[READ_STATE_UNIT - 1])),
+        None => (&uids[..], None),
+    };
+    let Some(&last) = unit.last() else { return Ok((HashMap::new(), None)) };
+    let mut states = HashMap::new();
+    read_rows(conn, account, mailboxes, "AND uid > ? AND uid <= ?", vec![i64::from(after).into(), i64::from(last).into()], &mut states)?;
+    Ok((settled(states), next))
+}
+
+/// The read state of the cached headers of `uids` (at most `READ_STATE_UNIT`;
+/// the caller takes the lock per unit) in the vault folder whose server paths
+/// are `mailboxes`; same rule as `read_states_after`.
+pub fn read_states_of(conn: &Connection, account: &str, mailboxes: &[String], uids: &[u32]) -> Result<HashMap<u32, ReadState>, String> {
+    if mailboxes.is_empty() || uids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    debug_assert!(uids.len() <= READ_STATE_UNIT);
+    let marks = std::iter::repeat_n("?", uids.len()).collect::<Vec<_>>().join(",");
+    let mut states = HashMap::new();
+    read_rows(conn, account, mailboxes, &format!("AND uid IN ({marks})"), uids.iter().map(|u| i64::from(*u).into()).collect(), &mut states)?;
+    Ok(settled(states))
+}
+
 pub fn list_uids(conn: &Connection, account: &str, mailbox: &str, since_ms: Option<f64>) -> Result<Value, String> {
     let mut stmt = conn.prepare("SELECT uid,updated_ms FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 ORDER BY uid").map_err(err)?;
     let rows = stmt.query_map(params![account, mailbox], |r| Ok((r.get::<_, u32>(0)?, r.get::<_, i64>(1)?))).map_err(err)?
@@ -1202,6 +1336,102 @@ mod tests {
             })
             .collect();
         assert_eq!(got, expected);
+    }
+
+    fn put_header(c: &Connection, account: &str, mailbox: &str, uid: u32, header: &str) {
+        c.execute(
+            "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,0,0,?4)",
+            params![account, mailbox, uid, header],
+        ).unwrap();
+    }
+
+    /// The vault names a folder by `vault_dir_name`, the header cache by the
+    /// server path: the answer is keyed the way the search index keys a row. A
+    /// header with no `\Seen` is unread (whatever case the server spells it);
+    /// one that does not parse says nothing; two server paths that spell one
+    /// vault folder and disagree on a uid say nothing about it; `uids` narrows
+    /// the read; a Message-ID rides along to tell a reissued uid.
+    #[test]
+    fn read_states_resolve_one_vault_folder_by_one_rule() {
+        let (_t, c) = store();
+        let put = |account: &str, mailbox: &str, uid: u32, header: &str| put_header(&c, account, mailbox, uid, header);
+        put("a", "INBOX", 1, &json!({"uid": 1, "messageId": "<one@x.test>", "flags": ["\\Seen"]}).to_string());
+        put("a", "INBOX", 2, &json!({"uid": 2, "flags": ["\\Flagged"]}).to_string());
+        put("a", "INBOX", 3, &json!({"uid": 3}).to_string());
+        put("a", "INBOX", 4, "{not json");
+        put("a", "INBOX", 5, &json!({"uid": 5, "flags": ["\\SEEN"]}).to_string());
+        put("a", "Projects/2026", 1, &json!({"uid": 1, "flags": ["\\Seen"]}).to_string());
+        put("a", "Clash a", 7, &json!({"uid": 7, "flags": ["\\Seen"]}).to_string());
+        put("a", "Clash/a", 7, &json!({"uid": 7, "flags": []}).to_string());
+        put("a", "Clash/a", 8, &json!({"uid": 8, "flags": []}).to_string());
+        put("b", "INBOX", 1, &json!({"uid": 1, "flags": ["\\Seen"]}).to_string());
+
+        let folders = vault_folders(&c, "a").unwrap();
+        let mut names: Vec<&String> = folders.keys().collect();
+        names.sort();
+        assert_eq!(names, vec!["Clash_a", "INBOX", "Projects_2026"]);
+        assert_eq!(folders["Clash_a"].len(), 2, "two server paths, one vault folder");
+
+        let (inbox, next) = read_states_after(&c, "a", &folders["INBOX"], 0).unwrap();
+        assert_eq!(next, None);
+        let got: Vec<(u32, bool)> = { let mut v: Vec<_> = inbox.iter().map(|(u, s)| (*u, s.seen)).collect(); v.sort_unstable(); v };
+        assert_eq!(got, vec![(1, true), (2, false), (3, false), (5, true)], "uid 4 does not parse");
+        assert_eq!(inbox[&1].message_id.as_deref(), Some("one@x.test"), "angle brackets come off");
+        assert_eq!(inbox[&2].message_id, None);
+
+        let only = read_states_of(&c, "a", &folders["INBOX"], &[2, 5, 99]).unwrap();
+        assert_eq!(only.keys().copied().collect::<std::collections::BTreeSet<_>>(), [2, 5].into(), "narrowed; an uncached uid is absent");
+
+        let (clash, _) = read_states_after(&c, "a", &folders["Clash_a"], 0).unwrap();
+        assert_eq!(clash.keys().copied().collect::<Vec<_>>(), vec![8], "uid 7 is read in one path and unread in the other");
+        assert_eq!(read_states_after(&c, "a", &folders["Projects_2026"], 0).unwrap().0.len(), 1);
+        assert!(read_states_after(&c, "a", &[], 0).unwrap().0.is_empty());
+    }
+
+    /// A folder is read a unit at a time, across the server paths that share
+    /// it, and every uid comes out once, with the cursor never skipping or
+    /// repeating one.
+    #[test]
+    fn read_states_walk_a_folder_in_bounded_units() {
+        let (_t, mut c) = store();
+        let total = READ_STATE_UNIT as u32 * 2 + 50;
+        {
+            let tx = c.transaction().unwrap();
+            for uid in 1..=total {
+                // Even uids live under one server path, odd under the other; a
+                // spare (uid 3) is in both and agrees.
+                let mailbox = if uid % 2 == 0 { "Clash a" } else { "Clash/a" };
+                let flags = if uid % 3 == 0 { json!(["\\Seen"]) } else { json!([]) };
+                let header = json!({"uid": uid, "flags": flags}).to_string();
+                put_header(&tx, "a", mailbox, uid, &header);
+                if uid == 3 {
+                    put_header(&tx, "a", "Clash a", uid, &header);
+                }
+            }
+            tx.commit().unwrap();
+        }
+        let paths = vault_folders(&c, "a").unwrap().remove("Clash_a").unwrap();
+        let (mut after, mut units, mut seen_uids) = (0u32, 0, Vec::new());
+        loop {
+            let (unit, next) = read_states_after(&c, "a", &paths, after).unwrap();
+            assert!(unit.len() <= READ_STATE_UNIT, "a custody hold reads {} rows", unit.len());
+            units += 1;
+            seen_uids.extend(unit.iter().map(|(uid, state)| { assert_eq!(state.seen, uid % 3 == 0); *uid }));
+            match next { Some(cursor) => after = cursor, None => break }
+        }
+        seen_uids.sort_unstable();
+        assert_eq!(units, 3);
+        assert_eq!(seen_uids, (1..=total).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_read_state_speaks_for_a_message_unless_the_message_ids_differ() {
+        let state = |id: Option<&str>| ReadState { seen: true, message_id: id.and_then(message_id_key) };
+        assert!(state(Some("<a@x.test>")).applies_to(Some(" a@x.test ")), "brackets and spaces do not matter");
+        assert!(!state(Some("<a@x.test>")).applies_to(Some("<b@x.test>")), "a reissued uid: another message");
+        assert!(state(None).applies_to(Some("<b@x.test>")), "a header with no Message-ID cannot say");
+        assert!(state(Some("<a@x.test>")).applies_to(None));
+        assert!(state(Some("<a@x.test>")).applies_to(Some("<>")), "an empty one is none");
     }
 
     #[test]
