@@ -2420,6 +2420,99 @@ mod tests {
         assert_eq!(left, 0, "the overlay does not outlive the request that installed it");
     }
 
+    /// The inbox list reads the header cache; search reads the index. They
+    /// answer one question ("which of these are unread") and must not disagree
+    /// about a message both hold, in the starting state and after every change
+    /// the sync makes: read elsewhere, unread elsewhere, expunged on the server.
+    /// Only a message the inbox does not list (vault-only) or lists as ANOTHER
+    /// message (a reissued uid) may differ, and then it is the vault file's
+    /// name that speaks for the message search found.
+    #[test]
+    fn search_and_the_inbox_agree_on_what_is_unread_and_follow_every_change() {
+        use mailvault_core::search_index::{db, lock, query::SearchRequest};
+        use std::collections::BTreeSet;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "INBOX", 8);
+        // Files kept unread by name: uids 3, 4, 5 (also listed) and 7 (vault-only).
+        let cur = root.join("Maildir/acct/INBOX/cur");
+        for uid in [3, 4, 5, 7] {
+            std::fs::rename(cur.join(format!("{uid}{INFO_PREFIX}S.eml")), cur.join(format!("{uid}{INFO_PREFIX}.eml"))).unwrap();
+        }
+        let (st, custody) = with_custody(root);
+        let header = |uid: u32, id: &str, flags: &[&str]| serde_json::json!({"uid": uid, "messageId": id, "flags": flags});
+        save_listing(&custody, "acct", "INBOX", serde_json::json!({ "emails": [
+            header(1, "<1@x.test>", &["\\Seen"]),
+            header(2, "<2@x.test>", &[]),
+            header(3, "<3@x.test>", &["\\Seen"]),
+            header(4, "<4@x.test>", &[]),
+            header(5, "<5@x.test>", &["\\SEEN"]),
+            // uid 8 now belongs to another message: its state is not this file's.
+            header(8, "<reissued@x.test>", &[]),
+        ]}));
+        sweep_now(&st, root, Some(vec![("acct".to_string(), "INBOX".to_string())]));
+        db::meta_set(lock(&st.db).as_ref().unwrap(), db::FIRST_PASS_DONE, "1").unwrap();
+
+        let search_unread = |unread: bool| -> BTreeSet<u32> {
+            let req = SearchRequest { account_id: "acct".into(), mailboxes: Some(vec!["INBOX".into()]), unread: Some(unread), ..Default::default() };
+            crate::search_index::search_page(&st, &req).unwrap().expect("the index answers").hits.iter().map(|h| h.uid).collect()
+        };
+        // The inbox: every cached row, unread when it carries no \Seen (any spelling).
+        let inbox = || -> (BTreeSet<u32>, BTreeSet<u32>) {
+            let g = mailvault_core::custody::lock(&custody);
+            let rows = mailvault_core::custody::cache::all_headers(g.as_ref().unwrap(), "acct", "INBOX").unwrap();
+            let listed = rows.iter().map(|r| r["uid"].as_u64().unwrap() as u32).collect();
+            let unread = rows.iter()
+                .filter(|r| !r["flags"].as_array().is_some_and(|f| f.iter().any(|f| f.as_str().is_some_and(|f| f.eq_ignore_ascii_case("\\seen")))))
+                .map(|r| r["uid"].as_u64().unwrap() as u32)
+                .collect();
+            (listed, unread)
+        };
+        let set = |uids: &[u32]| uids.iter().copied().collect::<BTreeSet<u32>>();
+        // What search must say: the inbox's answer for the messages both hold,
+        // the file's for the rest (uid 6 read, uid 7 unread, uid 8's file read).
+        let agree = |label: &str, search_only_unread: &[u32]| {
+            let (listed, unread) = inbox();
+            let mut want: BTreeSet<u32> = unread.iter().copied().filter(|uid| *uid != 8).collect();
+            want.extend(search_only_unread);
+            assert_eq!(search_unread(true), want, "{label}: unread");
+            let all = set(&[1, 2, 3, 4, 5, 6, 7, 8]);
+            assert_eq!(search_unread(false), all.difference(&want).copied().collect::<BTreeSet<u32>>(), "{label}: read is the rest");
+            assert!(listed.is_superset(&set(&[1, 2, 3, 4, 5, 8])), "{label}: the inbox still lists its rows");
+        };
+
+        // Start: the file names say 3, 4, 5 and 7 are unread, the inbox says 2 and 4.
+        assert_eq!(inbox().1, set(&[2, 4, 8]));
+        agree("start", &[7]);
+        assert_eq!(search_unread(true), set(&[2, 4, 7]));
+
+        let patch = |uid: u32, flags: &[&str]| {
+            let g = mailvault_core::custody::lock(&custody);
+            let flags = flags.iter().map(|f| f.to_string()).collect();
+            assert_eq!(mailvault_core::custody::cache::patch_flags(g.as_ref().unwrap(), "acct", "INBOX", &[(uid, flags)]).unwrap(), 1);
+        };
+        // Read on another device: the sync patches the header, no re-sweep, no file touched.
+        patch(2, &["\\Seen"]);
+        agree("2 read elsewhere", &[7]);
+        assert_eq!(search_unread(true), set(&[4, 7]));
+        // Unread again elsewhere, and a message the file thinks unread read.
+        patch(1, &[]);
+        patch(4, &["\\Seen"]);
+        agree("1 unread and 4 read elsewhere", &[7]);
+        assert_eq!(search_unread(true), set(&[1, 7]));
+        // Starred on the server keeps the read state the flag list carries.
+        patch(1, &["\\Seen", "\\Flagged"]);
+        agree("1 read and starred", &[7]);
+        assert_eq!(search_unread(true), set(&[7]));
+
+        // Expunged on the server: no header row, so the vault copy's file speaks again.
+        let g = mailvault_core::custody::lock(&custody);
+        mailvault_core::custody::cache::remove_headers(g.as_ref().unwrap(), "acct", "INBOX", &[3, 5]).unwrap();
+        drop(g);
+        assert_eq!(search_unread(true), set(&[3, 5, 7]), "3 and 5 are unread by their files, now that the inbox holds no word on them");
+        assert_eq!(search_unread(true).len() + search_unread(false).len(), 8, "every message is on exactly one side");
+    }
+
     #[test]
     fn with_read_state_swaps_both_spellings_of_seen_and_keeps_the_rest() {
         let mut flags: Vec<String> = ["archived", "seen", "\\SEEN", "flagged"].map(String::from).to_vec();

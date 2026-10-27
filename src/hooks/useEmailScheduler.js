@@ -32,7 +32,7 @@ const dispatchNotifications = (perAccountResults) => {
   const selectedSound = normalizeNotificationSound(sound);
 
   for (const result of perAccountResults) {
-    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress, newestCode, uids } = result;
+    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress, newestCode, uids, rearm } = result;
 
     // A click opens the message the banner shows, in the folder it arrived
     // in. Without a preview the banner names no message, so it opens the folder.
@@ -57,7 +57,7 @@ const dispatchNotifications = (perAccountResults) => {
     // The messages the banner is for, when the caller can name them (a scheduled
     // refresh can): the daemon allows one banner per message, so a refresh that
     // sees the same arrival again cannot raise it twice.
-    const mailCtx = { accountId, folder, from, viewIds: [], ...(Array.isArray(uids) && uids.length ? { uids } : {}) };
+    const mailCtx = { accountId, folder, from, viewIds: [], ...(Array.isArray(uids) && uids.length ? { uids } : {}), ...(rearm ? { rearm: true } : {}) };
     const notifyEmail = (title, body) => selectedSound === 'none'
       ? notify(title, body, undefined, target, mailCtx)
       : notify(title, body, selectedSound, target, mailCtx);
@@ -90,8 +90,10 @@ const dispatchNotifications = (perAccountResults) => {
 /// One banner: `count` new in `folder` of `accountId`, previewing `header`
 /// (a cached list row, or null) and the one-time `code` found in it, if any.
 /// The change feed and a local snooze's wake (stores/snoozeStore.js) both
-/// announce through it.
-export function notifyArrival(accountId, folder, count, header, code = null) {
+/// announce through it. `announce` names the message(s) the banner is for
+/// (`uids`) so the daemon holds back a second banner for them; `rearm` marks a
+/// banner that must show though the message was announced before (a wake).
+export function notifyArrival(accountId, folder, count, header, code = null, announce = {}) {
   const state = useMailStore.getState();
   const account = state.accounts.find(a => a.id === accountId);
   // Mail filed in Sent is mail the user sent, whoever the From says: a copy
@@ -111,6 +113,8 @@ export function notifyArrival(accountId, folder, count, header, code = null) {
     newestUid: header?.uid,
     newestFromAddress: fromAddress,
     newestCode: code,
+    ...(announce.uids?.length ? { uids: announce.uids } : {}),
+    ...(announce.rearm ? { rearm: true } : {}),
   }]);
 }
 

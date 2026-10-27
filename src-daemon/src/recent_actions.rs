@@ -112,6 +112,17 @@ impl RecentActions {
         }
         fresh
     }
+
+    /// Records a banner that is always shown: a wake brings a message back that
+    /// was announced when it first arrived, so its earlier banner must not
+    /// hold this one back. It still counts, so a refresh that reports the same
+    /// message right after cannot raise a second.
+    pub fn reannounce(&self, account: &str, folder: &str, uids: &[u32]) {
+        let mut announced = lock(&self.announced);
+        for uid in uids {
+            announced.put((account.to_string(), folder.to_string(), *uid), ());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -161,6 +172,19 @@ mod tests {
         assert!(recent.announce("b", "INBOX", &[5]), "another account");
         assert!(recent.announce("a", "INBOX", &[]), "a banner that names no message is never held back");
         assert!(recent.announce("a", "INBOX", &[]));
+    }
+
+    #[test]
+    fn a_wake_is_shown_again_and_holds_back_the_refresh_that_follows() {
+        let recent = RecentActions::default();
+        assert!(recent.announce("a", "INBOX", &[5]), "the arrival");
+        recent.reannounce("a", "INBOX", &[5]);
+        assert!(!recent.announce("a", "INBOX", &[5]), "a refresh seeing the woken message is no second banner");
+        recent.reannounce("a", "INBOX", &[]);
+        for uid in 1..=CAPACITY as u32 {
+            recent.announce("a", "INBOX", &[100 + uid]);
+        }
+        assert!(recent.announce("a", "INBOX", &[5]), "a re-announce does not live past the bound either");
     }
 
     #[test]

@@ -85,10 +85,30 @@ describe('the wake of a local snooze', () => {
     expect(mockGetEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX');
     expect(mockNotify).toHaveBeenCalledTimes(1);
     expect(mockNotify).toHaveBeenCalledWith('Ada', 'Back again', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 5 },
-      { accountId: 'a1', folder: 'INBOX', from: 'ada@one.co', viewIds: [] });
+      { accountId: 'a1', folder: 'INBOX', from: 'ada@one.co', viewIds: [], uids: [5], rearm: true });
     // The row is history, so the list shows the message again.
     expect(useSnoozeStore.getState().rows.map(r => r.id)).toEqual(['server']);
     expect(mockReload).toHaveBeenCalled();
+  });
+
+  // The daemon holds back a second banner for a message by (account, folder,
+  // uid); the wake names its message that way and says it is a wake, so the
+  // arrival banner it already had does not swallow it.
+  it('names the account and the message, and asks to be shown though the arrival was announced', async () => {
+    await fire({ id: 'local', state: 'woken', woke: true });
+
+    const [, , , target, mailCtx] = mockNotify.mock.calls[0];
+    expect(mailCtx).toMatchObject({ accountId: 'a1', folder: 'INBOX', uids: [5], rearm: true });
+    expect(target).toMatchObject({ accountId: 'a1', mailbox: 'INBOX', uid: 5 });
+  });
+
+  it('still announces a message the cache no longer holds, naming none', async () => {
+    mockGetEmailHeaders.mockResolvedValueOnce({ totalEmails: 1, emails: [{ uid: 9, messageId: '<newest@x>', from: { address: 'n@x.co' }, subject: 'Not this one' }] });
+    await fire({ id: 'local', state: 'woken', woke: true });
+
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    const [, , , , mailCtx] = mockNotify.mock.calls[0];
+    expect(mailCtx).toEqual({ accountId: 'a1', folder: 'INBOX', from: '', viewIds: [] });
   });
 
   it('says nothing for an undo, which is no wake', async () => {
