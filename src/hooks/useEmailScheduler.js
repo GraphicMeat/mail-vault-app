@@ -122,19 +122,39 @@ export function notifyArrival(accountId, folder, count, header, code = null, ann
 // body) before it goes without the code. The bubble still gets a late code.
 const CODE_WAIT_MS = 3000;
 
-/// The change feed's banner and code bubble for one folder's arrivals: one
-/// code read feeds both.
-async function announceArrival(accountId, mailbox, count, header) {
+/// One folder's arrivals offered to the code bubble; the code for the banner
+/// of a lone arrival (null for several, none, or a read slower than
+/// CODE_WAIT_MS). One code read feeds both.
+async function arrivalCode(accountId, mailbox, count, header) {
   const offered = offerCodeFromArrival(accountId, mailbox, header).catch(error => {
     console.warn('[scheduler] Could not offer the code bubble:', error);
     return null;
   });
+  if (count !== 1) return null;
   let timer;
-  const code = count === 1
-    ? await Promise.race([offered, new Promise(resolve => { timer = setTimeout(resolve, CODE_WAIT_MS, null); })])
-    : null;
+  const code = await Promise.race([offered, new Promise(resolve => { timer = setTimeout(resolve, CODE_WAIT_MS, null); })]);
   clearTimeout(timer);
-  notifyArrival(accountId, mailbox, count, header, code);
+  return code;
+}
+
+/// The change feed's banner and code bubble for one folder's arrivals.
+async function announceArrival(accountId, mailbox, count, header) {
+  notifyArrival(accountId, mailbox, count, header, await arrivalCode(accountId, mailbox, count, header));
+}
+
+/// A scheduled refresh's banners and code bubbles. A refresh that lists a
+/// code mail before the daemon's IDLE does leaves the change feed nothing to
+/// announce, so the refresh reads the code itself.
+async function announceRefresh(perAccountResults) {
+  dispatchNotifications(await Promise.all(perAccountResults.map(async r => ({
+    ...r,
+    newestCode: await arrivalCode(r.accountId, r.folder, r.newCount, {
+      uid: r.newestUid,
+      subject: r.newestSubject,
+      snippet: r.newestSnippet,
+      from: { name: r.newestSender, address: r.newestFromAddress },
+    }),
+  }))));
 }
 
 // Fire-and-forget, loaded late: both stores sit on top of the mail store this
@@ -449,8 +469,9 @@ export function useEmailScheduler() {
       console.log('[scheduler] Refresh completed:', result);
 
       // Dispatch per-account notifications (replaces old aggregate notification)
-      if (result && result.perAccountResults) {
-        dispatchNotifications(result.perAccountResults);
+      if (result?.perAccountResults?.length) {
+        announceRefresh(result.perAccountResults)
+          .catch(error => console.warn('[scheduler] Could not announce the refresh:', error));
       }
 
       // Update badge to reflect total unread across ALL accounts

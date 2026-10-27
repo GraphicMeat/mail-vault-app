@@ -202,6 +202,7 @@ export async function refreshAllAccounts(options = {}) {
             newestSubject: newest.subject || '',
             newestUid: newest.uid,
             newestFromAddress: senderAddress(newest),
+            newestSnippet: newest.snippet || '',
           });
         }
       } else if (isGraphAccount(account)) {
@@ -236,6 +237,7 @@ export async function refreshAllAccounts(options = {}) {
                 newestSubject: newest.subject || '',
                 newestUid: newest.uid,
                 newestFromAddress: senderAddress(newest),
+                newestSnippet: newest.snippet || '',
               });
             }
           }
@@ -289,6 +291,7 @@ export async function refreshAllAccounts(options = {}) {
               newestSubject: newest.subject || '',
               newestUid: newest.uid,
               newestFromAddress: senderAddress(newest),
+              newestSnippet: newest.snippet || '',
             });
           }
         } catch (e) {

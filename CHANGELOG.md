@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A one-time code in mail that a scheduled refresh picks up now shows in the corner bubble and in the new-mail banner. Before, only mail the live inbox watch found first got the bubble, so a code that arrived between watch wake-ups showed neither.
+
 - Add an info button beside the password field when adding an iCloud account. It says where to create the app-specific password Apple requires (account.apple.com, Sign-In and Security, App-Specific Passwords, with two-factor authentication on) and links to Apple's instructions and to a new step-by-step guide on mailvaultapp.com. The iCloud note above the form is now translated.
 
 - Deleting a message that is already gone no longer stops with "needs to resync". When a row outlives its first delete and is deleted again, the second delete counts as removed, sends nothing to the server, drops the stale cached row, and the row stays out of the list instead of coming back.
