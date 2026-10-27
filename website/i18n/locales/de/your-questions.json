@@ -1,0 +1,14 @@
+{
+  "a595ffc30a12": "Deine Fragen",
+  "ae427e10682c": "Kann ich MailVault ohne Abonnement nutzen?",
+  "33321fa3bc31": "Ja. Lesen, Schreiben, Antworten, Suchen und manuelles Archivieren bleiben dauerhaft kostenlos. Premium ist optional und ergänzt Automatisierung und erweiterte Werkzeuge. Wenn du Premium kündigst, gehören deine gespeicherten E-Mails weiterhin dir und die kostenlosen Funktionen bleiben verfügbar.",
+  "29dc94430d3c": "Gibt es einen lebenslangen Zugang oder einen Einmalkauf?",
+  "6130a5f23d40": "Aktuell gibt es keinen lebenslangen Tarif. Der Entwickler hat noch nicht entschieden, ob er einen anbieten wird. Monatliche und jährliche Premium-Abonnements helfen, laufende Wartung und Support zu finanzieren. Ein Einmalkauf bringt einmal Umsatz, während Kosten jahrelang weiterlaufen können; die Abhängigkeit von neuen Verkäufen kann zukünftige Updates gefährden.",
+  "5e0ca784272b": "Was passiert mit meinen E-Mails, wenn MailVault nicht mehr weiterentwickelt wird?",
+  "588c07b4d0b9": "Deine lokalen Archivdateien bleiben unabhängig vom Unternehmen auf deinem Computer. Im standardmäßigen Maildir-Speicher ist jede E-Mail eine normale .eml-Datei, die kompatible E-Mail-Apps öffnen können. Bei optionalem JMAP-Speicher kannst du in den Einstellungen zu Maildir konvertieren, solange MailVault verfügbar ist. Zukünftige Änderungen am Betriebssystem könnten die App beeinträchtigen. Bewahre deshalb unabhängige Sicherungskopien deines Archivs auf. Der Entwickler von MailVault nutzt die App täglich und setzt sich für ihre langfristige Pflege ein. Der Quellcode ist öffentlich und kann von allen geprüft werden.",
+  "1d211adbeaf7": "Kostenlose und Premium-Funktionen ansehen",
+  "8b955036c1a0": "Mehr zu Speicher und Backups",
+  "183416f38efb": "Deine Fragen — MailVault FAQ",
+  "419f8b8ae12a": "/ Deine Fragen",
+  "035e10145d45": "Antworten zu kostenloser Nutzung, Einmalkäufen und der Zukunft deines Archivs."
+}

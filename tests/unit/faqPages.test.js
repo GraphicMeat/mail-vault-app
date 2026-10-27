@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
+import { JSDOM } from 'jsdom';
+import { collect, loadDict, LOCALES } from '../../website/i18n/i18n.mjs';
 
-const TOPICS = ['getting-started', 'storage-and-vault', 'providers', 'premium', 'backup-and-restore', 'troubleshooting'];
+const ORIGINAL_TOPICS = ['getting-started', 'storage-and-vault', 'providers', 'premium', 'backup-and-restore', 'troubleshooting'];
+const TOPICS = [...ORIGINAL_TOPICS, 'your-questions'];
 const hub = () => readFileSync('website/faq.html', 'utf8');
 const topic = (t) => readFileSync(`website/faq/${t}.html`, 'utf8');
 
@@ -16,16 +19,16 @@ const questionsIn = (html) => {
 };
 
 describe('FAQ hub and topic pages', () => {
-  it('creates all six topic pages', () => {
+  it('creates all required topic pages', () => {
     for (const t of TOPICS) expect(existsSync(`website/faq/${t}.html`), t).toBe(true);
   });
 
   it('keeps every one of the 23 original answers, each on exactly one topic page', () => {
-    const all = TOPICS.flatMap(t => questionsIn(topic(t)));
+    const all = ORIGINAL_TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus every answer added since
-    // (the latest: #contacts, #jmap-storage and #jmap-accounts, each with its hub row).
-    expect(all.length).toBe(35);
-    expect(new Set(all).size).toBe(35);
+    // across the six original topics; new topics have separate coverage below.
+    expect(all.length).toBe(38);
+    expect(new Set(all).size).toBe(38);
   });
 
   // Every answer on a topic page has its row in the hub's index, which the
@@ -53,6 +56,39 @@ describe('FAQ hub and topic pages', () => {
       expect(topic(t), t).not.toMatch(/[$€£]\s?\d/);
     }
     expect(hub()).not.toMatch(/[$€£]\s?\d/);
+  });
+
+  it('publishes all three new answers with matching visible and structured text in every language', () => {
+    const source = topic('your-questions');
+    for (const loc of [{ dir: '' }, ...LOCALES]) {
+      const prefix = loc.dir ? `${loc.dir}/` : '';
+      const html = readFileSync(`website/${prefix}faq/your-questions.html`, 'utf8');
+      const dom = new JSDOM(html);
+      const doc = dom.window.document;
+      expect(doc.querySelectorAll('article[id]')).toHaveLength(3);
+      const schema = [...doc.querySelectorAll('script[type="application/ld+json"]')]
+        .map(script => JSON.parse(script.textContent)).find(item => item['@type'] === 'FAQPage');
+      expect(schema.mainEntity).toHaveLength(3);
+      for (const [i, article] of [...doc.querySelectorAll('article[id]')].entries()) {
+        expect(article.querySelector('h2').textContent).toBe(schema.mainEntity[i].name);
+        expect(article.querySelector('p').textContent).toBe(schema.mainEntity[i].acceptedAnswer.text);
+      }
+      expect(html).toContain(`href="/${prefix}pricing.html"`);
+      expect(html).not.toMatch(/[$€£]\s?\d/);
+      expect(html).not.toMatch(/bytemail/i);
+      const localHub = readFileSync(`website/${prefix}faq.html`, 'utf8');
+      expect(localHub).toContain(`faq/your-questions.html#lifetime-purchase`);
+      expect(localHub).not.toMatch(/bytemail/i);
+      const index = readFileSync(`website/${prefix}search-index.json`, 'utf8');
+      expect(index).toContain('faq/your-questions.html');
+      expect(index).not.toMatch(/bytemail/i);
+      dom.window.close();
+      if (loc.dir) {
+        const dict = loadDict(loc);
+        for (const entry of collect(source)) expect(dict[entry.key], `${loc.dir}: ${entry.text}`).toBeTruthy();
+        expect(questionsIn(html)).not.toContain('Can I use MailVault without a subscription?');
+      }
+    }
   });
 
   it('registers the new directory with the localizer', () => {

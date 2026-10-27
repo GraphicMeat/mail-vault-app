@@ -1,0 +1,14 @@
+{
+  "a595ffc30a12": "Suas perguntas",
+  "ae427e10682c": "Posso usar o MailVault sem assinatura?",
+  "33321fa3bc31": "Sim. Ler, escrever, responder, pesquisar e arquivar manualmente é grátis para sempre. O Premium é opcional e acrescenta automação e ferramentas avançadas. Se você cancelar o Premium, seus emails salvos continuam sendo seus e os recursos gratuitos permanecem disponíveis.",
+  "29dc94430d3c": "Vocês oferecem uma compra vitalícia ou um pagamento único?",
+  "6130a5f23d40": "Não há um plano vitalício atualmente. O desenvolvedor ainda não decidiu se oferecerá um. As assinaturas Premium mensais e anuais ajudam a financiar a manutenção e o suporte contínuos. Uma compra vitalícia gera receita uma única vez, enquanto os custos podem continuar por anos; depender de novas vendas pode colocar futuras atualizações em risco.",
+  "5e0ca784272b": "O que acontece com meus emails se o desenvolvimento do MailVault parar?",
+  "588c07b4d0b9": "Os arquivos do seu arquivo local permanecem no computador independentemente da empresa. Com o armazenamento Maildir padrão, cada email é um arquivo .eml comum que aplicativos de email compatíveis podem abrir. Se você usa o armazenamento JMAP opcional, pode convertê-lo para Maildir nos Ajustes enquanto o MailVault estiver disponível. Mudanças futuras no sistema operacional podem afetar o aplicativo, por isso mantenha backups independentes do seu arquivo. O desenvolvedor do MailVault usa o aplicativo todos os dias e está comprometido com sua manutenção a longo prazo. O código-fonte é público para qualquer pessoa examinar.",
+  "1d211adbeaf7": "Ver os recursos gratuitos e Premium",
+  "8b955036c1a0": "Saiba mais sobre armazenamento e backups",
+  "183416f38efb": "Suas perguntas — MailVault FAQ",
+  "419f8b8ae12a": "/ Suas perguntas",
+  "035e10145d45": "Respostas sobre uso gratuito, compras vitalícias e o futuro do seu arquivo."
+}

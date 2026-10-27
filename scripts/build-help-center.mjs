@@ -68,7 +68,7 @@ const entries = files.map(rel => {
   return { rel, title:plain(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || rel), description:html.match(/<meta name="description" content="([^"]*)"/)?.[1] || '' };
 });
 const topics = entries.filter(e => e.rel.startsWith('faq/'));
-const order = ['getting-started','storage-and-vault','providers','backup-and-restore','explorer-and-insights','scheduled-send','premium','troubleshooting'];
+const order = ['getting-started','storage-and-vault','providers','backup-and-restore','explorer-and-insights','scheduled-send','premium','your-questions','troubleshooting'];
 topics.sort((a,b) => order.indexOf(path.basename(a.rel,'.html')) - order.indexOf(path.basename(b.rel,'.html')));
 const questions = topics.flatMap(topic => {
   const document = new JSDOM(read(topic.rel)).window.document;

@@ -1,0 +1,14 @@
+{
+  "a595ffc30a12": "Tus preguntas",
+  "ae427e10682c": "¿Puedo usar MailVault sin suscripción?",
+  "33321fa3bc31": "Sí. Leer, redactar, responder, buscar y archivar manualmente es gratis para siempre. Premium es opcional y añade automatización y herramientas avanzadas. Si cancelas Premium, tu correo guardado sigue siendo tuyo y las funciones gratuitas siguen disponibles.",
+  "29dc94430d3c": "¿Ofrecéis una compra de por vida o un pago único?",
+  "6130a5f23d40": "Actualmente no hay un plan de por vida. El desarrollador aún no ha decidido si ofrecerá uno. Las suscripciones Premium mensuales y anuales ayudan a financiar el mantenimiento y el soporte continuos. Una compra de por vida genera ingresos una sola vez, mientras los costes pueden continuar durante años; depender de nuevas ventas puede poner en riesgo futuras actualizaciones.",
+  "5e0ca784272b": "¿Qué pasa con mis correos si MailVault deja de desarrollarse?",
+  "588c07b4d0b9": "Los archivos de tu archivo local permanecen en tu ordenador independientemente de la empresa. Con el almacenamiento Maildir predeterminado, cada correo es un archivo .eml estándar que pueden abrir las aplicaciones de correo compatibles. Si utilizas el almacenamiento JMAP opcional, puedes convertirlo a Maildir en Ajustes mientras MailVault esté disponible. Los futuros cambios del sistema operativo podrían afectar a la aplicación, así que conserva copias de seguridad independientes de tu archivo. El desarrollador de MailVault lo usa a diario y está comprometido con su mantenimiento a largo plazo. El código fuente es público para que cualquiera pueda examinarlo.",
+  "1d211adbeaf7": "Ver las funciones gratuitas y Premium",
+  "8b955036c1a0": "Más sobre almacenamiento y copias de seguridad",
+  "183416f38efb": "Tus preguntas — MailVault FAQ",
+  "419f8b8ae12a": "/ Tus preguntas",
+  "035e10145d45": "Respuestas sobre el uso gratuito, las compras de por vida y el futuro de tu archivo."
+}
