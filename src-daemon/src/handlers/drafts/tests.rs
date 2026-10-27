@@ -140,8 +140,14 @@ async fn drafts_save_accepts_a_half_typed_recipient_and_a_later_revision_replace
     assert_eq!(first["disposition"], "saved");
     let eml = reopened(first.clone()).await;
     assert_eq!(eml["to"][0]["address"], "prime@");
+    // The trailing comma is only in the typed text.
     assert_eq!(eml["cc"][0]["address"], "bad");
-    assert_eq!(eml["bcc"][0]["address"], "blind@example.test");
+    assert_eq!(eml["draftRecipients"]["to"], "prime@");
+    assert_eq!(eml["draftRecipients"]["cc"], "bad,");
+    assert_eq!(eml["draftRecipients"]["bcc"], "blind@example.test");
+    // The same text from the stable-id read Compose opens a draft with.
+    let by_id = rpc(&h.s, "drafts.list", json!({"draftId":"typing","includeContent":true})).await.unwrap();
+    assert_eq!(by_id["drafts"][0]["eml"]["draftRecipients"], eml["draftRecipients"]);
 
     let mut p = req("typing", 2, "body");
     p["snapshot"]["to"] = json!("prime@example.test");
@@ -151,6 +157,18 @@ async fn drafts_save_accepts_a_half_typed_recipient_and_a_later_revision_replace
     let eml = reopened(second).await;
     assert_eq!(eml["to"].as_array().unwrap().len(), 1);
     assert_eq!(eml["to"][0]["address"], "prime@example.test");
+    assert_eq!(eml["draftRecipients"]["to"], "prime@example.test");
+    assert_eq!(eml["draftRecipients"]["cc"], "copy@example.test");
+
+    // A named address beside an entry without an @: the parse cannot split it,
+    // the typed text comes back whole, and clearing a field drops its text.
+    let mut p = req("typing", 3, "body");
+    p["snapshot"]["to"] = json!("\"Doe, Zo\u{eb}\" <zoe@x.com>, bad");
+    p["snapshot"]["cc"] = json!("");
+    let third = saved(&h.s, p).await;
+    let eml = reopened(third).await;
+    assert_eq!(eml["draftRecipients"]["to"], "\"Doe, Zo\u{eb}\" <zoe@x.com>, bad");
+    assert!(eml["draftRecipients"].get("cc").is_none());
 }
 #[tokio::test]
 async fn drafts_duplicate_revision_conflict_clear_and_zero_bytes() {

@@ -179,7 +179,62 @@ pub fn build_local_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Re
             raw = insert_header_line(raw, name, line);
         }
     }
+    // The text exactly as typed, for reopening (see `DRAFT_TYPED_HEADERS`).
+    for (header, text) in [
+        (DRAFT_TYPED_HEADERS[0].1, Some(email.to.as_str())),
+        (DRAFT_TYPED_HEADERS[1].1, email.cc.as_deref()),
+        (DRAFT_TYPED_HEADERS[2].1, email.bcc.as_deref()),
+    ] {
+        if let Some(line) = text.and_then(|text| typed_header_line(header, text)) {
+            raw = insert_header_line(raw, header, line);
+        }
+    }
     Ok(raw)
+}
+
+/// The private headers a LOCAL draft keeps the recipient text in, as the user
+/// typed it, keyed by the field they restore. The To/Cc/Bcc headers beside
+/// them are parsed back into addresses, which loses a trailing comma and, when
+/// one entry has no `@`, splits nothing at all; these give the text back
+/// whole. Only `build_local_draft_mime` writes them, and `build_mime` and
+/// `build_draft_mime` build their headers from scratch, so no sent or
+/// scheduled message carries them. A reader (`local_draft_recipients`) prefers
+/// them and falls back to the parsed headers when they are absent.
+pub const DRAFT_TYPED_HEADERS: [(&str, &str); 3] = [
+    ("to", "X-MailVault-Draft-To"),
+    ("cc", "X-MailVault-Draft-Cc"),
+    ("bcc", "X-MailVault-Draft-Bcc"),
+];
+
+/// `Name: value\r\n` with `raw` as the value, or None when it is blank.
+/// Control characters, CR and LF among them, become spaces, so the value cannot
+/// end its header line or start another; lettre folds it and encodes non-ASCII
+/// as RFC 2047, the way it does a Subject.
+fn typed_header_line(name: &'static str, raw: &str) -> Option<String> {
+    use lettre::message::header::{HeaderName, HeaderValue, Headers};
+    let typed: String = raw.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    if typed.trim().is_empty() {
+        return None;
+    }
+    let mut headers = Headers::new();
+    headers.insert_raw(HeaderValue::new(HeaderName::new_from_ascii_str(name), typed));
+    Some(headers.to_string())
+}
+
+/// The recipient text a local draft was saved with: `{"to": ..., "cc": ...,
+/// "bcc": ...}`, each key present only when its private header is, decoded
+/// from the header. None for bytes that carry none (a draft saved before these
+/// headers existed, or made elsewhere).
+pub fn local_draft_recipients(raw: &[u8]) -> Option<serde_json::Value> {
+    let (headers, _) = mailparse::parse_headers(raw).ok()?;
+    let mut out = serde_json::Map::new();
+    for (field, header) in DRAFT_TYPED_HEADERS {
+        let value = headers.iter().find(|h| h.get_key().eq_ignore_ascii_case(header)).map(|h| h.get_value());
+        if let Some(value) = value.filter(|v| !v.trim().is_empty()) {
+            out.insert(field.to_string(), serde_json::Value::String(value));
+        }
+    }
+    if out.is_empty() { None } else { Some(serde_json::Value::Object(out)) }
 }
 
 fn build_mime_opts(
@@ -1406,6 +1461,75 @@ mod tests {
         assert!(build_mime(&acct, &email).is_err());
         assert!(build_draft_mime(&acct, &email).is_err());
         assert!(build_local_draft_mime(&acct, &email).is_ok());
+    }
+
+    #[test]
+    fn local_draft_keeps_the_typed_text_in_private_headers_only_for_non_empty_fields() {
+        let acct = account("me@x.com", None);
+        let mut email = outgoing();
+        email.to = "a@x.com, prime@".to_string();
+        email.cc = Some("bad,".to_string());
+        email.bcc = Some("   ".to_string());
+        let raw = build_local_draft_mime(&acct, &email).unwrap();
+        let typed = local_draft_recipients(&raw).unwrap();
+        assert_eq!(typed, serde_json::json!({"to": "a@x.com, prime@", "cc": "bad,"}));
+        let head = String::from_utf8(raw).unwrap().to_lowercase();
+        assert!(!head.contains("x-mailvault-draft-bcc"));
+        email.to = String::new();
+        email.cc = None;
+        email.bcc = None;
+        assert!(local_draft_recipients(&build_local_draft_mime(&acct, &email).unwrap()).is_none());
+    }
+
+    #[test]
+    fn typed_headers_fold_long_text_on_word_boundaries() {
+        let acct = account("me@x.com", None);
+        let mut email = outgoing();
+        email.to = (0..40).map(|i| format!("person{i}@example.com")).collect::<Vec<_>>().join(", ") + ", prime@";
+        email.cc = Some((0..40).map(|i| format!("Zo\u{eb} {i} <z{i}@example.com>")).collect::<Vec<_>>().join(", "));
+        let raw = build_local_draft_mime(&acct, &email).unwrap();
+        let end = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+        let head = std::str::from_utf8(&raw[..end]).unwrap();
+        assert!(head.split("\r\n").all(|l| l.len() <= 78), "{head}");
+        let typed = local_draft_recipients(&raw).unwrap();
+        assert_eq!(typed["to"], email.to.as_str());
+        assert_eq!(typed["cc"], email.cc.as_deref().unwrap());
+    }
+
+    #[test]
+    fn typed_text_with_one_word_longer_than_a_line_still_round_trips() {
+        // lettre cannot break a single ASCII word, so such a line stays long;
+        // the text must still come back whole.
+        let acct = account("me@x.com", None);
+        let mut email = outgoing();
+        email.to = format!("a@x.com, {}", "x".repeat(2500));
+        let raw = build_local_draft_mime(&acct, &email).unwrap();
+        assert_eq!(local_draft_recipients(&raw).unwrap()["to"], email.to.as_str());
+    }
+
+    #[test]
+    fn typed_headers_cannot_be_ended_by_the_text_they_hold() {
+        let acct = account("me@x.com", None);
+        let mut email = outgoing();
+        email.to = "a@x.com\r\nX-Injected: 1\u{85}\u{0}\tz".to_string();
+        let raw = build_local_draft_mime(&acct, &email).unwrap();
+        let mail = mailparse::parse_mail(&raw).unwrap();
+        use mailparse::MailHeaderMap;
+        assert!(mail.headers.get_first_value("X-Injected").is_none());
+        assert_eq!(local_draft_recipients(&raw).unwrap()["to"], "a@x.com  X-Injected: 1   z");
+    }
+
+    #[test]
+    fn sending_builders_never_write_the_typed_headers() {
+        let acct = account("me@x.com", None);
+        let mut email = outgoing();
+        email.to = "a@x.com".to_string();
+        email.cc = Some("c@x.com".to_string());
+        email.bcc = Some("d@x.com".to_string());
+        for raw in [build_mime(&acct, &email).unwrap().raw_rfc2822, build_draft_mime(&acct, &email).unwrap().raw_rfc2822] {
+            assert!(!String::from_utf8(raw).unwrap().to_lowercase().contains("x-mailvault-draft"));
+        }
+        assert!(local_draft_recipients(&build_local_draft_mime(&acct, &email).unwrap()).is_some());
     }
 
     // ── send-as identity ─────────────────────────────────────────────────

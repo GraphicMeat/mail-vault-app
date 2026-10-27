@@ -220,6 +220,23 @@ describe('draftToInitialData', () => {
     expect(data.body).toBe('<p>the body I was writing</p>');
   });
 
+  it('shows the recipient text exactly as typed when the draft carries it', () => {
+    // The parsed lists above are what an older save leaves: a trailing comma
+    // or an entry without an @ cannot be read back from them.
+    const typed = { to: '"Doe, Zoë" <zoe@x.com>, bad', cc: 'bad,', bcc: 'a@x.com, prime@' };
+    const data = shape({ eml: { ...eml, to: [{ address: 'Doe, Zoë <zoe@x.com>, bad' }], draftRecipients: typed } });
+    expect(data.to).toBe(typed.to);
+    expect(data.cc).toBe(typed.cc);
+    expect(data.bcc).toBe(typed.bcc);
+  });
+
+  it('takes each field from the parsed list when the draft has no typed text for it', () => {
+    const data = shape({ eml: { ...eml, draftRecipients: { cc: 'bad,' } } });
+    expect(data.to).toBe('a@example.com, b@example.com');
+    expect(data.cc).toBe('bad,');
+    expect(data.bcc).toBe('');
+  });
+
   it('carries the attachment bytes, not just its name', () => {
     // A reopened draft has to be sendable. Attachment metadata with no content
     // is a draft that silently loses its files at send.
