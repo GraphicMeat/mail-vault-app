@@ -194,7 +194,7 @@ pub(crate) async fn end_follow_ups_at(state: &Arc<DaemonState>, account_id: &str
     }
 }
 
-async fn end_follow_ups_at_owned(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32], owner: &OperationPermit) {
+pub(crate) async fn end_follow_ups_at_owned(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32], owner: &OperationPermit) {
     if uids.is_empty() {
         return;
     }

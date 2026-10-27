@@ -40,6 +40,7 @@
 
 use crate::abd_local::DaemonLocal;
 use crate::abd_worker::{self, JobOps, Kind};
+use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::handlers::common;
 use crate::imap::ImapConfig;
 use crate::server::DaemonState;
@@ -68,6 +69,55 @@ const STARTUP_DELAY: Duration = Duration::from_secs(5 * 60);
 const CHECK_EVERY: Duration = Duration::from_secs(60 * 60);
 /// A wait the engine asks for longer than this ends the job instead.
 const MAX_WAIT_MS: i64 = 2 * 60 * 1000;
+
+#[cfg(test)]
+pub(crate) struct SelectionPause {
+    pub entered: std::sync::mpsc::Sender<()>,
+    pub release: std::sync::mpsc::Receiver<()>,
+    pub done: std::sync::mpsc::Sender<()>,
+}
+
+#[cfg(test)]
+pub(crate) fn selection_pauses() -> &'static Mutex<HashMap<PathBuf, SelectionPause>> {
+    static PAUSES: OnceLock<Mutex<HashMap<PathBuf, SelectionPause>>> = OnceLock::new();
+    PAUSES.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+fn pause_after_selection(app_dir: &Path) {
+    struct Done(std::sync::mpsc::Sender<()>);
+    impl Drop for Done {
+        fn drop(&mut self) { let _ = self.0.send(()); }
+    }
+    let Some(pause) = selection_pauses().lock().unwrap().remove(app_dir) else { return };
+    let _done = Done(pause.done);
+    let _ = pause.entered.send(());
+    let _ = pause.release.recv();
+}
+
+#[cfg(test)]
+pub(crate) struct SummaryPause {
+    pub entered: std::sync::mpsc::Sender<()>,
+    pub release: std::sync::mpsc::Receiver<()>,
+    pub done: std::sync::mpsc::Sender<()>,
+}
+
+#[cfg(test)]
+pub(crate) fn summary_pauses() -> &'static Mutex<HashMap<PathBuf, SummaryPause>> {
+    static PAUSES: OnceLock<Mutex<HashMap<PathBuf, SummaryPause>>> = OnceLock::new();
+    PAUSES.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+fn pause_before_summary(app_dir: &Path) -> Option<impl Drop> {
+    struct Done(std::sync::mpsc::Sender<()>);
+    impl Drop for Done { fn drop(&mut self) { let _ = self.0.send(()); } }
+    let pause = summary_pauses().lock().unwrap().remove(app_dir)?;
+    let done = Done(pause.done);
+    let _ = pause.entered.send(());
+    let _ = pause.release.recv();
+    Some(done)
+}
 
 /// What the last run did, as the Storage settings line shows it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -121,6 +171,16 @@ impl CleanupState {
     pub(crate) fn send(&self, cmd: Cmd) -> Result<(), String> {
         let tx = self.tx.get().ok_or_else(|| "errors.cleanupUnavailable".to_string())?;
         tx.send(cmd).map_err(|_| "errors.cleanupUnavailable".to_string())
+    }
+}
+
+struct HeldAccount {
+    state: Arc<DaemonState>,
+}
+
+impl Drop for HeldAccount {
+    fn drop(&mut self) {
+        self.state.cleanup.release_account();
     }
 }
 
@@ -363,6 +423,7 @@ pub(crate) fn group(state: &Arc<DaemonState>, candidates: Vec<Candidate>) -> Vec
 
 struct CleanupEnv {
     state: Arc<DaemonState>,
+    _owner: OperationPermit,
     account_id: String,
     host: String,
     graph: bool,
@@ -533,6 +594,8 @@ fn job_done(job: &JobFile, action: Action) -> JobDone {
 
 struct AccountRun<'a> {
     state: &'a Arc<DaemonState>,
+    original: AccountStamp,
+    owner: OperationPermit,
     account_id: String,
     cfg: ImapConfig,
     kind: Kind,
@@ -596,12 +659,14 @@ impl AccountRun<'_> {
         }
         let env = CleanupEnv {
             state: Arc::clone(self.state),
+            _owner: self.owner.clone(),
             account_id: account_id.clone(),
             host: self.cfg.host.clone(),
             graph: self.kind == Kind::Graph,
             dir: dir.clone(),
         };
         let local = DaemonLocal::new(Arc::clone(self.state), &account_id, &self.cfg.email)
+            .with_owner(self.original.clone(), self.owner.clone())
             .with_jmap(self.kind == Kind::Jmap)
             .with_mirror(self.mirror.clone());
         let ctl = Control::new();
@@ -695,6 +760,8 @@ async fn run_account<S: JobOps>(ar: &AccountRun<'_>, ops: &mut S, work: &Account
 /// One account's share of a run, with the account already held.
 async fn account_pass(
     state: &Arc<DaemonState>,
+    original: AccountStamp,
+    owner: OperationPermit,
     w: &AccountWork,
     n: u64,
     mirror: &Option<PathBuf>,
@@ -719,7 +786,7 @@ async fn account_pass(
     if matches!(kind, Kind::Graph | Kind::ImapOauth) {
         abd_worker::lease_daemon_token(state, &w.account_id, None).await;
     }
-    let ar = AccountRun { state, account_id: w.account_id.clone(), cfg: cfg.clone(), kind, mirror: mirror.clone(), validity };
+    let ar = AccountRun { state, original, owner, account_id: w.account_id.clone(), cfg: cfg.clone(), kind, mirror: mirror.clone(), validity };
     let email = cfg.email.clone();
     mailvault_core::net_activity::with_account(email, async {
         match kind {
@@ -752,12 +819,17 @@ pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<Strin
         let mirror = mirror_configured(&settings);
         pick(&st, &settings, now).map(|p| {
             let work = group(&st, p.selection.candidates);
-            (work, p.validity, mirror)
+            let originals: HashMap<String, AccountStamp> = work.iter()
+                .filter_map(|w| st.account_lifecycle.capture(&w.account_id).ok().map(|stamp| (w.account_id.clone(), stamp)))
+                .collect();
+            #[cfg(test)]
+            pause_after_selection(&st.app_dir);
+            (work, p.validity, mirror, originals)
         })
     })
     .await
     .ok()?;
-    let (work, validity, mirror_wanted) = match picked {
+    let (work, validity, mirror_wanted, originals) = match picked {
         Ok(p) => p,
         Err(NoPick::Unavailable) => {
             info!("cleanup: the vault or its caches cannot be read; nothing ran, the next check tries again");
@@ -784,17 +856,30 @@ pub(crate) async fn run_once(state: &Arc<DaemonState>, mirror_root: Option<Strin
             tally.skipped += w.protected;
             continue;
         }
+        let Some(original) = originals.get(&w.account_id) else {
+            tally.skipped += n + w.protected;
+            continue;
+        };
+        let Ok(owner) = state.account_lifecycle.try_operation(&[original.clone()]) else {
+            tally.skipped += n + w.protected;
+            continue;
+        };
         // Held BEFORE the abd check: `abd.start` checks the hold after it has
         // registered its job, so of two that race, one always sees the other.
         state.cleanup.hold_account(&w.account_id);
-        let t = account_pass(state, w, n, &mirror, mirror_wanted, &validity).await;
-        state.cleanup.release_account();
+        let held = HeldAccount { state: Arc::clone(state) };
+        let t = account_pass(state, original.clone(), owner, w, n, &mirror, mirror_wanted, &validity).await;
+        drop(held);
         tally.add(t);
     }
     let result = RunResult { archived: tally.archived, deleted: tally.deleted, skipped: tally.skipped, at: state.clock.now_ms() };
     let st = Arc::clone(state);
     let saved = result.clone();
-    let _ = common::blocking(move || save_last_run(&st, &saved)).await;
+    let _ = common::blocking(move || {
+        #[cfg(test)]
+        let _done = pause_before_summary(&st.app_dir);
+        save_last_run(&st, &saved)
+    }).await;
     info!("cleanup: run done (archived {}, deleted {}, skipped {})", result.archived, result.deleted, result.skipped);
     Some(result)
 }

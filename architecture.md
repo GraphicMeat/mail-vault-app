@@ -325,6 +325,8 @@ Automatic Time Capsule manifests run through the existing synchronous helper on 
 
 ## Process and Thread Model
 
+ABD previews carry an original account stamp through listing; only a confirmed start acquires a finite operation before job registration and the first job-file write. Unfinished jobs keep that owner while parked. Startup adoption waits for successful authoritative account bootstrap and refuses mismatched, missing or retired account files before mutation or provider work. The runner and started archive, custody, ledger, mirror and delete-bookkeeping children retain the same owner through their actual completion, including after timeout or waiter drop. Cleanup captures each selected account's original stamp with its cache snapshot, admits one account at a time before credentials or provider work, and releases the held-account flag through RAII on completion or unwind. A stale account is counted skipped while later accounts proceed. No account owner spans the global last-run save or daily idle wait; mirror copies remain shared backup data outside account erasure.
+
 One box, one thread. Every separate action runs on a thread of its own, and nothing that can be slow shares a thread with the socket.
 
 **App process (Tauri shell).** The webview owns the UI thread and never does file work. Each `daemon_rpc` call opens its own connection (Unix socket, or named pipe on Windows) on the app's runtime, so one slow reply cannot queue behind another; the long-lived event channel (`daemon_channel`) is a separate connection with its own pump. Spawning, build-checking and token reads for the daemon go through `spawn_blocking`, never the UI thread.

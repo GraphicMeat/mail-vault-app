@@ -50,6 +50,10 @@ impl Rig {
     /// INBOX 1..=3 (3 is fresh) and an empty Trash, the account known to the
     /// app and the caches, premium on, `rules` stored.
     fn new(sc: Scenario, rules: Value) -> Rig {
+        Self::new_with_secondary(sc, None, rules)
+    }
+
+    fn new_with_secondary(sc: Scenario, second: Option<&MockImap>, rules: Value) -> Rig {
         let lock = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
         let dir = std::env::temp_dir().join(format!("mv-cleanup-{}", uuid::Uuid::new_v4()));
@@ -57,10 +61,17 @@ impl Rig {
         let mock = MockImap::start(sc);
         let account = json!({"id": ACCT, "email": EMAIL, "password": "hunter2", "imapHost": mock.host(), "imapPort": mock.port(), "imapSecure": true});
         let creds = dir.join("credentials.json");
-        std::fs::write(&creds, json!({ ACCT: account.to_string() }).to_string()).unwrap();
+        let mut credential_rows = json!({ ACCT: account.to_string() });
+        if let Some(other) = second {
+            credential_rows["acc2"] = json!({"id": "acc2", "email": "other@example.com", "password": "hunter2", "imapHost": other.host(), "imapPort": other.port(), "imapSecure": true}).to_string().into();
+        }
+        std::fs::write(&creds, credential_rows.to_string()).unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
-        std::fs::write(dir.join("accounts.json"), json!([{"id": ACCT, "email": EMAIL}]).to_string()).unwrap();
+        let mut accounts = vec![json!({"id": ACCT, "email": EMAIL})];
+        if second.is_some() { accounts.push(json!({"id": "acc2", "email": "other@example.com"})); }
+        std::fs::write(dir.join("accounts.json"), json!(accounts).to_string()).unwrap();
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         let rig = Rig { dir, state, mock, _lock: lock };
         rig.settings(json!({
             "billingProfile": {"hasSubscription": true, "status": "active", "premiumAccess": true},
@@ -156,6 +167,181 @@ fn inbox_and_trash() -> Scenario {
 
 fn counts(r: &RunResult) -> (u64, u64, u64) {
     (r.deleted, r.archived, r.skipped)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_stale_selection_skips_a_and_processes_b() {
+    struct Drain {
+        release: Option<std::sync::mpsc::Sender<()>>,
+        done: Option<std::sync::mpsc::Receiver<()>>,
+    }
+    impl Drain {
+        fn finish(&mut self) {
+            let _ = self.release.take().unwrap().send(());
+            if self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).is_err() {
+                std::process::abort();
+            }
+        }
+    }
+    impl Drop for Drain {
+        fn drop(&mut self) {
+            if let Some(release) = self.release.take() { let _ = release.send(()); }
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+    let second = MockImap::start(inbox_and_trash());
+    let rig = Rig::new_with_secondary(inbox_and_trash(), Some(&second), json!([rule(json!({}))]));
+    rig.headers("INBOX", &[1]);
+    rig.archived("INBOX", 1);
+    crate::custody::with_conn(&rig.state, |c| {
+        mailvault_core::custody::cache::save_mailboxes(c, "acc2", &json!({"mailboxes": [
+            {"path": "INBOX", "name": "INBOX"}, {"path": "Trash", "name": "Trash", "specialUse": "\\Trash"}
+        ]}).to_string())?;
+        mailvault_core::custody::cache::save_headers(c, "acc2", "INBOX", &json!({"emails": [
+            {"uid": 1, "date": OLD_DATE, "messageId": "<INBOX-m1@t.test>"}
+        ], "totalEmails": 1}).to_string())
+    }).unwrap();
+    let cur = vault_files::cur_path(&rig.dir, "acc2", "INBOX");
+    std::fs::create_dir_all(&cur).unwrap();
+    std::fs::write(cur.join(vault_files::build_maildir_filename(1, &["archived".to_string()])), raw("INBOX-m1")).unwrap();
+    crate::custody::with_conn(&rig.state, |c| entries::upsert(c, "acc2", "INBOX", &[json!({"uid": 1, "source": "local"})])).unwrap();
+
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    selection_pauses().lock().unwrap().insert(rig.state.app_dir.clone(), SelectionPause { entered: entered_tx, release: release_rx, done: done_tx });
+    let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+    let local = tokio::task::LocalSet::new();
+    local.run_until(async {
+    let state = Arc::clone(&rig.state);
+    let task = tokio::task::spawn_local(async move { run_once(&state, None).await });
+    let entered = tokio::task::spawn_blocking(move || entered_rx.recv_timeout(Duration::from_secs(5))).await.unwrap().is_ok();
+    assert!(entered, "real pick/group did not reach its barrier");
+    let lease = crate::account_workflows::AccountLease::detached_for_test(
+        crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+    );
+    let mut claim = rig.state.account_lifecycle.try_close(lease, ACCT).expect("selection has no owner yet");
+    let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+    claim.mark_effects_started(drained).unwrap();
+    claim.finish_retired().unwrap();
+    std::fs::write(rig.dir.join("accounts.json"), r#"[{"id":"acc2","email":"other@example.com"}]"#).unwrap();
+    drain.finish();
+    let result = task.await.unwrap().expect("selected run");
+    let a_remaining: Vec<u32> = rig.mock.state().find("INBOX").unwrap().messages.iter().map(|m| m.uid).collect();
+    let b_remaining: Vec<u32> = second.state().find("INBOX").unwrap().messages.iter().map(|m| m.uid).collect();
+    assert_eq!(b_remaining, vec![2, 3], "B must perform a real delete after stale A");
+    assert_eq!(a_remaining, vec![1, 2, 3], "stale selection dialed and deleted A after A retired");
+    assert_eq!(result.deleted, 1, "only B's selected copy is deleted");
+    assert_eq!(rig.mock.count_commands("UID MOVE"), 0, "retired A must receive no delete command");
+    }).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_account_pass_child_survives_parent_drop_and_unwind() {
+    for panic_after in [false, true] {
+        struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                let _ = self.release.take().unwrap().send(());
+                if self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(release) = self.release.take() { let _ = release.send(()); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let rig = Rig::new(inbox_and_trash(), json!([rule(json!({}))]));
+        rig.headers("INBOX", &[1]);
+        rig.archived("INBOX", 1);
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        crate::abd_local::bookkeeping_pauses().lock().unwrap().insert(rig.dir.clone(), crate::abd_local::BookkeepingPause {
+            entered: entered_tx, release: release_rx, done: done_tx, panic_after,
+        });
+        let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+        let local = tokio::task::LocalSet::new();
+        local.run_until(async {
+            let state = Arc::clone(&rig.state);
+            let task = tokio::task::spawn_local(async move { run_once(&state, None).await });
+            let entered = tokio::task::spawn_blocking(move || entered_rx.recv_timeout(Duration::from_secs(10))).await.unwrap().is_ok();
+            assert!(entered, "actual cleanup bookkeeping child did not start");
+            assert_eq!(rig.uids("INBOX"), vec![2, 3], "server delete precedes bookkeeping child");
+            task.abort();
+            assert!(task.await.err().is_some_and(|e| e.is_cancelled()), "cleanup parent future must be destroyed");
+            assert!(!rig.state.cleanup.holds(ACCT), "held-account flag must unwind with parent");
+            let lease = crate::account_workflows::AccountLease::detached_for_test(
+                crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+            );
+            assert!(matches!(rig.state.account_lifecycle.try_close(lease, ACCT), Err(crate::account_lifecycle::LifecycleError::Busy)),
+                "actual SQL child must keep A Busy after parent destruction");
+            drain.finish();
+            if !panic_after {
+                assert_eq!(rig.entry("INBOX", 1)["serverDeleted"], json!(true), "real custody SQL must finish after parent destruction");
+            }
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let lease = crate::account_workflows::AccountLease::detached_for_test(
+                        crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+                    );
+                    if let Ok(claim) = rig.state.account_lifecycle.try_close(lease, ACCT) { drop(claim); break; }
+                    tokio::task::yield_now().await;
+                }
+            }).await.expect("actual child owner did not drain");
+        }).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_account_owner_releases_before_idle_and_summary() {
+    struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+    impl Drain {
+        fn finish(&mut self) {
+            let _ = self.release.take().unwrap().send(());
+            if self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+        }
+    }
+    impl Drop for Drain {
+        fn drop(&mut self) {
+            if let Some(release) = self.release.take() { let _ = release.send(()); }
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+    let rig = Rig::new(inbox_and_trash(), json!([rule(json!({}))]));
+    rig.headers("INBOX", &[1]);
+    rig.archived("INBOX", 1);
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    summary_pauses().lock().unwrap().insert(rig.dir.clone(), SummaryPause { entered: entered_tx, release: release_rx, done: done_tx });
+    let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+    let local = tokio::task::LocalSet::new();
+    local.run_until(async {
+        let state = Arc::clone(&rig.state);
+        let task = tokio::task::spawn_local(async move { run_once(&state, None).await });
+        let entered = tokio::task::spawn_blocking(move || entered_rx.recv_timeout(Duration::from_secs(10))).await.unwrap().is_ok();
+        assert!(entered, "global last-run save did not start");
+        assert_eq!(rig.uids("INBOX"), vec![2, 3]);
+        assert_eq!(rig.entry("INBOX", 1)["serverDeleted"], json!(true));
+        assert!(!rig.state.cleanup.holds(ACCT), "held flag must end before global summary");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        let claim = rig.state.account_lifecycle.try_close(lease, ACCT).expect("account owner must end before global summary");
+        drop(claim);
+        drain.finish();
+        assert_eq!(task.await.unwrap().unwrap().deleted, 1);
+    }).await;
+    assert_eq!(last_run(&rig.state).unwrap().deleted, 1);
+    assert!(!rig.state.cleanup.holds(ACCT));
 }
 
 /// The e2e's question: the copy the vault holds goes to Trash (moved, not

@@ -21,6 +21,7 @@
 //! never in `job.json`, a frame, an RPC result, a plan file or a log line.
 
 use crate::abd_local::DaemonLocal;
+use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::credentials;
 use crate::handlers::common;
 use crate::imap::ImapConfig;
@@ -266,6 +267,7 @@ pub(crate) async fn lease_daemon_token(state: &Arc<DaemonState>, account_id: &st
 /// The dry-run listing of one account, and the local counts worked out for it.
 pub(crate) struct PreviewEntry {
     pub preview_id: String,
+    pub original: AccountStamp,
     pub listing: Arc<PreviewListing>,
     pub email: String,
     pub host: String,
@@ -282,12 +284,15 @@ pub(crate) struct CachedCounts {
 }
 
 pub(crate) enum WorkerCmd {
-    Preview { account_id: String, preview_id: String },
-    Start { job: Box<JobFile>, preview: Arc<PreviewListing>, handle: Arc<JobHandle> },
+    Preview { account_id: String, preview_id: String, original: AccountStamp },
+    Start { job: Box<JobFile>, preview: Arc<PreviewListing>, handle: Arc<JobHandle>, original: AccountStamp, owner: OperationPermit },
+    BootstrapReady,
     /// Test only: stop the worker where it stands, jobs and all, as a killed
     /// daemon would (nothing settles, nothing is saved).
     #[cfg(test)]
     Shutdown,
+    #[cfg(test)]
+    Barrier(std::sync::mpsc::Sender<()>),
 }
 
 #[cfg(test)]
@@ -356,6 +361,13 @@ impl AbdState {
     pub(crate) fn stop_worker_for_test(&self) {
         let _ = self.send(WorkerCmd::Shutdown);
     }
+
+    #[cfg(test)]
+    pub(crate) fn barrier_for_test(&self) {
+        let (done, rx) = std::sync::mpsc::channel();
+        self.send(WorkerCmd::Barrier(done)).unwrap();
+        rx.recv_timeout(Duration::from_secs(5)).expect("ABD worker barrier");
+    }
 }
 
 // ── Worker thread ───────────────────────────────────────────────────────────
@@ -393,20 +405,34 @@ pub(crate) fn start(state: Arc<DaemonState>) {
     }
 }
 
+/// Successful authoritative bootstrap calls this after releasing its admission lease.
+pub(crate) fn bootstrap_ready(state: &Arc<DaemonState>) {
+    let _ = state.abd.send(WorkerCmd::BootstrapReady);
+}
+
 async fn worker_loop(state: Arc<DaemonState>, mut rx: UnboundedReceiver<WorkerCmd>, resume: bool) {
-    if resume {
+    let mut adopted = false;
+    if resume && state.account_lifecycle.is_ready() {
         adopt_existing(&state);
+        adopted = true;
     }
     while let Some(cmd) = rx.recv().await {
         match cmd {
-            WorkerCmd::Preview { account_id, preview_id } => {
-                tokio::task::spawn_local(do_preview(Arc::clone(&state), account_id, preview_id));
+            WorkerCmd::Preview { account_id, preview_id, original } => {
+                tokio::task::spawn_local(do_preview(Arc::clone(&state), account_id, preview_id, original));
             }
-            WorkerCmd::Start { job, preview, handle } => {
-                tokio::task::spawn_local(run_job(Arc::clone(&state), handle, *job, Some(preview)));
+            WorkerCmd::Start { job, preview, handle, original, owner } => {
+                tokio::task::spawn_local(run_job(Arc::clone(&state), handle, *job, Some(preview), original, owner));
             }
+            WorkerCmd::BootstrapReady if resume && !adopted && state.account_lifecycle.is_ready() => {
+                adopt_existing(&state);
+                adopted = true;
+            }
+            WorkerCmd::BootstrapReady => {}
             #[cfg(test)]
             WorkerCmd::Shutdown => break,
+            #[cfg(test)]
+            WorkerCmd::Barrier(done) => { let _ = done.send(()); }
         }
     }
 }
@@ -429,6 +455,22 @@ fn adopt_existing(state: &Arc<DaemonState>) {
                 lock(&state.abd.jobs).insert(account_id.clone(), JobHandle::unreadable(&account_id, &e, now));
             }
             Ok(Some(mut job)) => {
+                if job.account_id != account_id {
+                    warn!("abd: job directory/account mismatch for {account_id}");
+                    continue;
+                }
+                let Ok(original) = state.account_lifecycle.capture(&account_id) else {
+                    // Status can still read the file; a retired or missing account cannot run it.
+                    continue;
+                };
+                let owner = if job.status.is_finished() {
+                    None
+                } else {
+                    match state.account_lifecycle.try_operation(&[original.clone()]) {
+                        Ok(owner) => Some(owner),
+                        Err(_) => continue,
+                    }
+                };
                 if !job.status.is_finished() && job.folders.is_empty() {
                     // Killed while it was being prepared: the dry run is gone, so it cannot go on.
                     job.status = JobStatus::Failed { error: INTERRUPTED_WHILE_PLANNING.to_string() };
@@ -451,7 +493,7 @@ fn adopt_existing(state: &Arc<DaemonState>) {
                     handle.ctl.pause.store(true, SeqCst);
                 }
                 info!("abd: resuming the job of {account_id}");
-                tokio::task::spawn_local(run_job(Arc::clone(state), handle, job, None));
+                tokio::task::spawn_local(run_job(Arc::clone(state), handle, job, None, original, owner.expect("unfinished job was admitted")));
             }
         }
     }
@@ -727,9 +769,9 @@ pub(crate) fn with_lease(state: &Arc<DaemonState>, mut cfg: ImapConfig, account_
 
 // ── One job ─────────────────────────────────────────────────────────────────
 
-async fn run_job(state: Arc<DaemonState>, handle: Arc<JobHandle>, job: JobFile, preview: Option<Arc<PreviewListing>>) {
+async fn run_job(state: Arc<DaemonState>, handle: Arc<JobHandle>, job: JobFile, preview: Option<Arc<PreviewListing>>, original: AccountStamp, owner: OperationPermit) {
     let email = job.account_email.clone();
-    let task = job_main(Arc::clone(&state), Arc::clone(&handle), job, preview);
+    let task = job_main(Arc::clone(&state), Arc::clone(&handle), job, preview, original, owner.clone());
     let outcome = std::panic::AssertUnwindSafe(mailvault_core::net_activity::with_account(email, task))
         .catch_unwind()
         .await;
@@ -737,6 +779,7 @@ async fn run_job(state: Arc<DaemonState>, handle: Arc<JobHandle>, job: JobFile, 
         error!("abd: the job task of {} panicked; it stays resumable", handle.account_id);
     }
     handle.finished.store(true, SeqCst);
+    drop(owner);
 }
 
 struct Rt {
@@ -755,7 +798,7 @@ struct Rt {
 /// before it waits for the app instead.
 const DAEMON_RENEWAL_EVERY: Duration = Duration::from_secs(60);
 
-async fn job_main(state: Arc<DaemonState>, handle: Arc<JobHandle>, mut job: JobFile, preview: Option<Arc<PreviewListing>>) {
+async fn job_main(state: Arc<DaemonState>, handle: Arc<JobHandle>, mut job: JobFile, preview: Option<Arc<PreviewListing>>, original: AccountStamp, owner: OperationPermit) {
     let account_id = job.account_id.clone();
     // The kind is known only once the credentials are read; the Env needs it for
     // the token check, so it starts as a password account and is set below.
@@ -783,7 +826,9 @@ async fn job_main(state: Arc<DaemonState>, handle: Arc<JobHandle>, mut job: JobF
     };
     let kind = kind_of(&cfg);
     let env = DaemonEnv { graph: kind == Kind::Graph, ..env };
-    let local = DaemonLocal::new(Arc::clone(&state), &account_id, &job.account_email).with_jmap(kind == Kind::Jmap);
+    let local = DaemonLocal::new(Arc::clone(&state), &account_id, &job.account_email)
+        .with_owner(original, owner)
+        .with_jmap(kind == Kind::Jmap);
     let rt = Rt { state: Arc::clone(&state), handle: Arc::clone(&handle), env, local, kind, used_seq: Cell::new(0), renewed_at: Cell::new(None) };
     if kind == Kind::Graph {
         let mut ops = new_graph_ops(&state, &cfg.email, &account_id);
@@ -1074,10 +1119,14 @@ fn emit_preview(state: &Arc<DaemonState>, account_id: &str, preview_id: &str, st
     state.events.emit(PREVIEW_EVENT, p);
 }
 
-async fn do_preview(state: Arc<DaemonState>, account_id: String, preview_id: String) {
+async fn do_preview(state: Arc<DaemonState>, account_id: String, preview_id: String, original: AccountStamp) {
     emit_preview(&state, &account_id, &preview_id, "listing", None, 0, None);
-    match preview_inner(&state, &account_id, &preview_id).await {
+    match preview_inner(&state, &account_id, &preview_id, original).await {
         Ok(entry) => {
+            if state.account_lifecycle.capture(&account_id).map_or(true, |now| now.epoch() != entry.original.epoch()) {
+                emit_preview(&state, &account_id, &preview_id, "failed", None, 0, Some("The account changed during the preview"));
+                return;
+            }
             let total: usize = entry.listing.folders.iter().map(|f| f.2.len()).sum::<usize>()
                 + entry.listing.all_mail.as_ref().map_or(0, |a| a.2.len());
             {
@@ -1094,7 +1143,7 @@ async fn do_preview(state: Arc<DaemonState>, account_id: String, preview_id: Str
     }
 }
 
-async fn preview_inner(state: &Arc<DaemonState>, account_id: &str, preview_id: &str) -> Result<Arc<PreviewEntry>, String> {
+async fn preview_inner(state: &Arc<DaemonState>, account_id: &str, preview_id: &str, original: AccountStamp) -> Result<Arc<PreviewEntry>, String> {
     jobfile::job_dir(&state.app_dir, account_id)?;
     let cfg = crate::oauth_tokens::resolve(state, account_id, crate::oauth_tokens::Read::Quiet).await?;
     let (email, host) = (cfg.email.clone(), cfg.host.clone());
@@ -1122,6 +1171,7 @@ async fn preview_inner(state: &Arc<DaemonState>, account_id: &str, preview_id: &
     };
     Ok(Arc::new(PreviewEntry {
         preview_id: preview_id.to_string(),
+        original,
         listing: Arc::new(listing),
         email,
         host,

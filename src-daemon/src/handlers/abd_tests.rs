@@ -90,7 +90,9 @@ impl Rig {
         let creds = dir.join("credentials.json");
         std::fs::write(&creds, json!({ ACCT: account.to_string() }).to_string()).unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        std::fs::write(dir.join("accounts.json"), json!([{"id": ACCT, "email": EMAIL}, {"id": "acc2", "email": "other@example.com"}]).to_string()).unwrap();
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         Rig { dir, state, mock, _lock: lock }
     }
 
@@ -117,6 +119,7 @@ impl Rig {
         self.state.abd.stop_worker_for_test();
         tokio::time::sleep(Duration::from_millis(700)).await;
         self.state = DaemonState::for_test(self.dir.clone(), self.dir.clone(), true);
+        self.state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&self.dir)).unwrap());
         abd_worker::start(Arc::clone(&self.state));
     }
 
@@ -803,6 +806,264 @@ fn seed_graph_job(dir: &Path) -> JobFile {
 }
 
 #[tokio::test]
+async fn p5_startup_adoption_keeps_parked_account_busy() {
+    let mock = MockImap::start(Scenario::new());
+    let rig = Rig::build(
+        mock,
+        json!({"id": ACCT, "email": EMAIL, "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"}),
+    );
+    let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
+    seed_graph_job(&rig.dir);
+    rig.start_worker();
+    rig.status_is("paused", "sign_in_needed").await;
+
+    let lease = crate::account_workflows::AccountLease::detached_for_test(
+        crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+    );
+    let close = rig.state.account_lifecycle.try_close(lease, ACCT);
+    let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+    if let Ok(mut claim) = close {
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+    }
+    let before = std::fs::read(rig.dir.join("abd").join(ACCT).join("job.json")).unwrap();
+    rig.rpc("abd.cancel", json!({"accountId": ACCT})).await.unwrap();
+    rig.finished().await;
+    let after = std::fs::read(rig.dir.join("abd").join(ACCT).join("job.json")).unwrap();
+    let persisted: JobFile = serde_json::from_slice(&after).unwrap();
+    assert_ne!(before, after, "cancel must make a real job-file write after the close attempt");
+    assert!(persisted.status.is_finished(), "cancel must persist the terminal job state");
+    assert!(rig.state.account_lifecycle.try_operation(&[rig.state.account_lifecycle.capture("acc2").unwrap()]).is_ok());
+    assert!(busy, "a parked ABD job rewrote its real job file after A retired: changed=true");
+    let state = Arc::clone(&rig.state);
+    let claim = wait_for("the cancelled ABD owner to drain", 10, move || {
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        state.account_lifecycle.try_close(lease, ACCT).ok()
+    }).await;
+    drop(claim);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_start_owner_precedes_job_persistence_and_enqueue_cleanup() {
+    struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+    impl Drain {
+        fn finish(&mut self) {
+            let _ = self.release.take().unwrap().send(());
+            if self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+        }
+    }
+    impl Drop for Drain {
+        fn drop(&mut self) {
+            if let Some(release) = self.release.take() { let _ = release.send(()); }
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+    let rig = Rig::ready(scenario(1));
+    rig.preview().await;
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    lock(start_save_pauses()).insert(rig.dir.clone(), StartSavePause { entered: entered_tx, release: release_rx, done: done_tx });
+    let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+    let local = tokio::task::LocalSet::new();
+    local.run_until(async {
+        let state = Arc::clone(&rig.state);
+        let task = tokio::task::spawn_local(async move { start(&state, &archive_params()).await });
+        let entered = tokio::task::spawn_blocking(move || entered_rx.recv_timeout(Duration::from_secs(5))).await.unwrap().is_ok();
+        assert!(entered, "the real initial job save did not start");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        assert!(matches!(rig.state.account_lifecycle.try_close(lease, ACCT), Err(crate::account_lifecycle::LifecycleError::Busy)));
+        assert!(rig.state.account_lifecycle.try_operation(&[rig.state.account_lifecycle.capture("acc2").unwrap()]).is_ok());
+        assert!(!rig.dir.join("abd").join(ACCT).join("job.json").exists());
+        drain.finish();
+        task.await.unwrap().unwrap();
+        assert!(rig.dir.join("abd").join(ACCT).join("job.json").exists());
+    }).await;
+    rig.finished().await;
+}
+
+#[tokio::test]
+async fn p5_start_enqueue_failure_cleans_with_owner() {
+    let rig = Rig::ready(scenario(1));
+    rig.preview().await;
+    rig.state.abd.stop_worker_for_test();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (done, _rx) = std::sync::mpsc::channel();
+            if rig.state.abd.send(WorkerCmd::Barrier(done)).is_err() { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.expect("ABD worker did not stop");
+    let err = rig.start(archive_params()).await.unwrap_err();
+    assert!(err.contains("archive worker is not running"), "{err}");
+    assert!(rig.state.abd.handle(ACCT).is_none(), "failed enqueue must undo registration");
+    assert!(!rig.dir.join("abd").join(ACCT).join("job.json").exists(), "failed enqueue must remove the real job file");
+    let lease = crate::account_workflows::AccountLease::detached_for_test(
+        crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+    );
+    assert!(rig.state.account_lifecycle.try_close(lease, ACCT).is_ok(), "failed enqueue cleanup must release owner");
+}
+
+#[tokio::test]
+async fn p5_stale_preview_refuses_before_job_effect() {
+    let rig = Rig::ready(scenario(1));
+    rig.preview().await;
+    let commands = rig.mock.commands().len();
+    let lease = crate::account_workflows::AccountLease::detached_for_test(
+        crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+    );
+    let mut claim = rig.state.account_lifecycle.try_close(lease, ACCT).unwrap();
+    let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+    claim.mark_effects_started(drained).unwrap();
+    claim.finish_retired().unwrap();
+    let err = rig.start(archive_params()).await.unwrap_err();
+    assert!(err.starts_with("E_ABD_PREVIEW_EXPIRED:"), "{err}");
+    assert!(!rig.dir.join("abd").join(ACCT).join("job.json").exists());
+    assert!(rig.state.abd.handle(ACCT).is_none());
+    assert_eq!(rig.mock.commands().len(), commands, "stale preview must not dial the server again");
+}
+
+#[tokio::test]
+async fn p5_retired_startup_job_never_rewrites_or_dials() {
+    let mock = MockImap::start(Scenario::new());
+    let rig = Rig::build(mock, json!({"id": ACCT, "email": EMAIL, "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"}));
+    let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
+    seed_graph_job(&rig.dir);
+    let file = rig.dir.join("abd").join(ACCT).join("job.json");
+    let before = std::fs::read(&file).unwrap();
+    let lease = crate::account_workflows::AccountLease::detached_for_test(
+        crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+    );
+    let mut claim = rig.state.account_lifecycle.try_close(lease, ACCT).unwrap();
+    let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+    claim.mark_effects_started(drained).unwrap();
+    claim.finish_retired().unwrap();
+    rig.start_worker();
+    rig.state.abd.barrier_for_test();
+    let status = rig.rpc("abd.status", json!({"accountId": ACCT})).await.unwrap();
+    assert_eq!(status["jobs"].as_array().unwrap().len(), 1, "status remains truthful from disk");
+    assert!(rig.state.abd.handle(ACCT).is_none(), "retired job must not be adopted");
+    assert_eq!(std::fs::read(&file).unwrap(), before, "retired startup must not rewrite the job file");
+    assert!(crate::handlers::graph::test_graph_requests().is_empty(), "retired startup must not dial Graph");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_startup_adopts_once_in_both_bootstrap_orders() {
+    for request_first in [true, false] {
+        let mock = MockImap::start(Scenario::new());
+        let rig = Rig::build(mock, json!({"id": ACCT, "email": EMAIL, "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"}));
+        let _graph = crate::handlers::graph::test_graph_mock_with(Vec::new());
+        seed_graph_job(&rig.dir);
+        let next = DaemonState::for_test(rig.dir.clone(), rig.dir.clone(), true);
+        if request_first {
+            abd_worker::start(Arc::clone(&next));
+            next.abd.barrier_for_test();
+            assert!(next.abd.handle(ACCT).is_none(), "unready startup cannot adopt");
+        }
+        crate::account_lifecycle::start_bootstrap(Arc::clone(&next));
+        wait_for("authoritative bootstrap", 5, || next.account_lifecycle.is_ready().then_some(())).await;
+        if !request_first { abd_worker::start(Arc::clone(&next)); }
+        let paused = wait_for("one adopted parked job", 10, || {
+            let h = next.abd.handle(ACCT)?;
+            (h.frame()["status"]["reason"] == json!("sign_in_needed")).then_some(h)
+        }).await;
+        let first = Arc::clone(&paused);
+        next.abd.barrier_for_test();
+        assert!(Arc::ptr_eq(&first, &next.abd.handle(ACCT).unwrap()), "bootstrap must dispatch adoption once");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        assert!(matches!(next.account_lifecycle.try_close(lease, ACCT), Err(crate::account_lifecycle::LifecycleError::Busy)));
+        next.abd.stop_worker_for_test();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_failed_bootstrap_does_not_adopt_startup_job() {
+    let mock = MockImap::start(Scenario::new());
+    let rig = Rig::build(mock, json!({"id": ACCT, "email": EMAIL, "imapHost": "outlook.office365.com", "authType": "oauth2", "oauth2Transport": "graph"}));
+    seed_graph_job(&rig.dir);
+    let before = std::fs::read(rig.dir.join("abd").join(ACCT).join("job.json")).unwrap();
+    let accounts = rig.dir.join("accounts.json");
+    let saved = std::fs::read(&accounts).unwrap();
+    std::fs::remove_file(&accounts).unwrap();
+    std::fs::create_dir(&accounts).unwrap();
+    let next = DaemonState::for_test(rig.dir.clone(), rig.dir.clone(), true);
+    abd_worker::start(Arc::clone(&next));
+    let (entered, release, done) = crate::account_lifecycle::pause_bootstrap_for_test(&next.app_dir);
+    crate::account_lifecycle::start_bootstrap(Arc::clone(&next));
+    assert!(entered.recv_timeout(Duration::from_secs(5)).is_ok());
+    release.send(()).unwrap();
+    assert!(done.recv_timeout(Duration::from_secs(5)).is_ok());
+    next.abd.barrier_for_test();
+    assert!(!next.account_lifecycle.is_ready() && next.abd.handle(ACCT).is_none());
+    assert_eq!(std::fs::read(rig.dir.join("abd").join(ACCT).join("job.json")).unwrap(), before);
+    std::fs::remove_dir(&accounts).unwrap();
+    std::fs::write(&accounts, saved).unwrap();
+    crate::account_lifecycle::start_bootstrap(Arc::clone(&next));
+    wait_for("successful bootstrap retry", 5, || next.account_lifecycle.is_ready().then_some(())).await;
+    wait_for("deferred startup adoption", 10, || next.abd.handle(ACCT)).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_mirror_timeout_terminal_frame_keeps_started_copy() {
+    struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+    impl Drain {
+        fn finish(&mut self) {
+            let _ = self.release.take().unwrap().send(());
+            if self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+        }
+    }
+    impl Drop for Drain {
+        fn drop(&mut self) {
+            if let Some(release) = self.release.take() { let _ = release.send(()); }
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+    let rig = Rig::ready(scenario(1));
+    let mirror = temp_dir("mirror-timeout");
+    rig.preview().await;
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    crate::abd_local::mirror_pauses().lock().unwrap().insert(rig.dir.clone(), crate::abd_local::MirrorPause {
+        entered: entered_tx, release: release_rx, done: done_tx,
+    });
+    crate::abd_local::mirror_budgets().lock().unwrap().insert(rig.dir.clone(), Duration::from_millis(200));
+    let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+    rig.start(start_params("archive_backup_delete", "move_to_trash", "after_all", &["INBOX"], Some(&mirror))).await.unwrap();
+    assert!(entered_rx.recv_timeout(Duration::from_secs(10)).is_ok(), "real mirror copy child did not start");
+    rig.rpc("abd.cancel", json!({"accountId": ACCT})).await.unwrap();
+    let terminal = rig.finished().await;
+    assert_eq!(terminal["finished"], json!(true), "existing cancel must produce terminal frame");
+    let lease = crate::account_workflows::AccountLease::detached_for_test(
+        crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+    );
+    assert!(matches!(rig.state.account_lifecycle.try_close(lease, ACCT), Err(crate::account_lifecycle::LifecycleError::Busy)),
+        "terminal frame and timed-out waiter must not release started mirror child");
+    drain.finish();
+    let cur = maildir::mirror_cur(&mirror, EMAIL, "INBOX").unwrap();
+    let copies = maildir::mirror_file_map(&cur);
+    assert_eq!(copies.len(), 1, "real mirror bytes must land after the terminal frame");
+    assert_eq!(std::fs::read(copies.get(&1).unwrap()).unwrap(), raw("m1").as_bytes());
+    wait_for("timed-out mirror child owner to drain", 10, || {
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: [ACCT.to_owned()].into(), ..Default::default() },
+        );
+        rig.state.account_lifecycle.try_close(lease, ACCT).ok()
+    }).await;
+}
+
+#[tokio::test]
 async fn a_graph_job_without_a_token_pauses_and_set_token_resumes_it_and_the_token_goes_nowhere() {
     // The process-wide Graph base is the Graph handler tests' loopback mock
     // (an empty queue: every request it gets is a 500), so whatever the job does
@@ -1268,7 +1529,7 @@ async fn unsafe_mirror_summary_is_an_error_without_cached_on_drive_proof() {
         let mut listing = (*original.listing).clone();
         listing.folders[0].0.path = folder.to_string();
         let entry = PreviewEntry {
-            preview_id: "unsafe".to_string(), listing: Arc::new(listing), email: email.to_string(),
+            preview_id: "unsafe".to_string(), original: original.original.clone(), listing: Arc::new(listing), email: email.to_string(),
             host: original.host.clone(), made: Instant::now(), counts: std::sync::Mutex::new(None),
         };
         let result = local_counts(&rig.state, ACCT, &entry, Some(mirror.to_str().unwrap()), true);

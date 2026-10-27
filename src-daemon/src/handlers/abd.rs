@@ -45,6 +45,30 @@ pub(crate) const E_NO_JOB: &str = "E_ABD_NO_JOB: There is no job for this accoun
 /// The drive and vault counts behind a summary are reused for this long.
 const COUNTS_TTL: Duration = Duration::from_secs(60);
 
+#[cfg(test)]
+struct StartSavePause {
+    entered: std::sync::mpsc::Sender<()>,
+    release: std::sync::mpsc::Receiver<()>,
+    done: std::sync::mpsc::Sender<()>,
+}
+
+#[cfg(test)]
+fn start_save_pauses() -> &'static std::sync::Mutex<HashMap<std::path::PathBuf, StartSavePause>> {
+    static PAUSES: std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::PathBuf, StartSavePause>>> = std::sync::OnceLock::new();
+    PAUSES.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+fn pause_start_save(app_dir: &Path) -> Option<impl Drop> {
+    struct Done(std::sync::mpsc::Sender<()>);
+    impl Drop for Done { fn drop(&mut self) { let _ = self.0.send(()); } }
+    let pause = lock(start_save_pauses()).remove(app_dir)?;
+    let done = Done(pause.done);
+    let _ = pause.entered.send(());
+    let _ = pause.release.recv();
+    Some(done)
+}
+
 // ── Params ──────────────────────────────────────────────────────────────────
 
 fn text(params: &Value, key: &str) -> Result<String, String> {
@@ -114,7 +138,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 fn preview(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
     let account_id = account_arg(state, params)?;
     let preview_id = text(params, "previewId")?;
-    state.abd.send(WorkerCmd::Preview { account_id, preview_id: preview_id.clone() })?;
+    let original = state.account_lifecycle.capture(&account_id)
+        .map_err(|e| format!("{E_PREVIEW_EXPIRED} ({e:?})"))?;
+    state.abd.send(WorkerCmd::Preview { account_id, preview_id: preview_id.clone(), original })?;
     Ok(json!({ "previewId": preview_id }))
 }
 
@@ -233,6 +259,8 @@ async fn start(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String
     if !can_delete || (delete_mode == DeleteMode::MoveToTrashAndEmpty && !can_empty) {
         return Err(E_CANNOT_DELETE.to_string());
     }
+    let owner = state.account_lifecycle.try_operation(&[entry.original.clone()])
+        .map_err(|e| format!("{E_PREVIEW_EXPIRED} ({e:?})"))?;
 
     let mut job = JobFile::create(NewJob {
         account_id: account.clone(),
@@ -271,7 +299,13 @@ async fn start(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String
     // two leaves a file the next start reads, not a job nobody knows about.
     let saved = {
         let (dir, first) = (dir.clone(), job.clone());
+        let save_owner = owner.clone();
+        #[cfg(test)]
+        let app_dir = state.app_dir.clone();
         common::blocking(move || -> Result<(), String> {
+            let _owner = save_owner;
+            #[cfg(test)]
+            let _done = pause_start_save(&app_dir);
             jobfile::remove_job(&dir)?;
             jobfile::save_job(&dir, &first)
         })
@@ -291,10 +325,14 @@ async fn start(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String
     }
     let job_id = handle.job_id.clone();
     state.events.emit(PROGRESS_EVENT, handle.frame());
-    if let Err(e) = state.abd.send(WorkerCmd::Start { job: Box::new(job), preview: Arc::clone(&entry.listing), handle: Arc::clone(&handle) }) {
+    let cleanup_owner = owner.clone();
+    if let Err(e) = state.abd.send(WorkerCmd::Start { job: Box::new(job), preview: Arc::clone(&entry.listing), handle: Arc::clone(&handle), original: entry.original.clone(), owner }) {
         undo(state, &handle);
         let dir = dir.clone();
-        let _ = common::blocking(move || jobfile::remove_job(&dir)).await;
+        let _ = common::blocking(move || {
+            let _owner = cleanup_owner;
+            jobfile::remove_job(&dir)
+        }).await;
         return Err(e);
     }
     // The listing has done its work; do not hold it for the rest of its life.
@@ -399,7 +437,12 @@ async fn dismiss(state: &Arc<DaemonState>, params: &Value) -> Result<Value, Stri
         return Err(E_JOB_UNFINISHED.to_string());
     }
     let dir = jobfile::job_dir(&state.app_dir, &account)?;
+    let original = state.account_lifecycle.capture(&account)
+        .map_err(|e| format!("Could not dismiss the job: {e:?}"))?;
+    let permit = state.account_lifecycle.try_commit(&[original])
+        .map_err(|e| format!("Could not dismiss the job: {e:?}"))?;
     let removed = common::blocking(move || -> Result<bool, String> {
+        let _permit = permit;
         if let Ok(Some(j)) = jobfile::load_job(&dir) {
             if !j.status.is_finished() {
                 return Err(E_JOB_UNFINISHED.to_string());
