@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何把你的 Apple 账户（iCloud 邮件）添加到 MailVault - MailVault</title>
+  <meta name="description" content="把 @icloud.com、@me.com 或 @mac.com 地址添加到 MailVault。在 Apple 账户中创建 App 专用密码，粘贴进来，并排查常见的登录错误。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/add-icloud-mail-to-mailvault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/add-icloud-mail-to-mailvault.html">
+  <meta property="og:title" content="如何把你的 Apple 账户（iCloud 邮件）添加到 MailVault - MailVault">
+  <meta property="og:description" content="把 @icloud.com、@me.com 或 @mac.com 地址添加到 MailVault。在 Apple 账户中创建 App 专用密码，粘贴进来，并排查常见的登录错误。">
+  <meta property="og:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="如何把你的 Apple 账户（iCloud 邮件）添加到 MailVault - MailVault">
+  <meta name="twitter:description" content="把 @icloud.com、@me.com 或 @mac.com 地址添加到 MailVault。在 Apple 账户中创建 App 专用密码，粘贴进来，并排查常见的登录错误。">
+  <meta name="twitter:image:alt" content="MailVault：快速搜索。私密邮件。永久归你。免费支持 macOS、Windows 和 Linux，附应用预览。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "如何把你的 Apple 账户（iCloud 邮件）添加到 MailVault",
+  "description": "把 @icloud.com、@me.com 或 @mac.com 地址添加到 MailVault。在 Apple 账户中创建 App 专用密码，粘贴进来，并排查常见的登录错误。",
+  "url": "https://mailvaultapp.com/zh/guides/add-icloud-mail-to-mailvault.html",
+  "datePublished": "2026-10-27",
+  "dateModified": "2026-10-27",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "把 iCloud 邮件添加到 MailVault 需要 App 专用密码吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "需要。MailVault 通过 IMAP 登录 iCloud 邮件，而 Apple 对此要求使用 App 专用密码，而不是你常规的 Apple 账户密码。你的 Apple 账户必须先开启双重认证，才能创建 App 专用密码。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "在哪里创建 App 专用密码？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "登录 account.apple.com，打开“登录与安全”，选择“App 专用密码”，然后生成一个新的。在 MailVault 中，密码栏旁边的小信息按钮会说明这些步骤，并链接到 Apple 的说明。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "为什么 MailVault 提示我的 iCloud 登录失败？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "常见原因有：用了常规的 Apple 账户密码而不是 App 专用密码、App 专用密码已被撤销，或者 Apple 账户密码被重置过。更改 Apple 账户密码会撤销所有 App 专用密码，所以请创建一个新的，重新输入。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "我可以有多少个 App 专用密码？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Apple 最多允许同时有 25 个有效的 App 专用密码。你可以在同一个“App 专用密码”页面撤销其中一个，或全部撤销。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">跳至内容</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault 首页"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">由 Graphic Meat 制作</a></div>
+<nav class="mv-navlinks" aria-label="主导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="在 GitHub 上给 MailVault 加星" title="在 GitHub 上给 MailVault 加星"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="给 MailVault 发送爱心" title="给 MailVault 发送爱心"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="选择语言"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/add-icloud-mail-to-mailvault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/add-icloud-mail-to-mailvault.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/add-icloud-mail-to-mailvault.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/add-icloud-mail-to-mailvault.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/add-icloud-mail-to-mailvault.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/add-icloud-mail-to-mailvault.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/add-icloud-mail-to-mailvault.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/add-icloud-mail-to-mailvault.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/add-icloud-mail-to-mailvault.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="切换颜色主题" title="切换颜色主题"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">演示</a><a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">菜单</span></summary>
+<nav aria-label="移动端导航"><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/faq.html">常见问题</a><a href="/demo/?lang=zh-Hans" target="_blank" rel="noopener" aria-label="在新窗口中打开 MailVault 演示">试用演示</a><a href="/zh/get-started.html?plan=free">免费下载</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>切换颜色主题</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>帮助主题</summary><nav aria-label="帮助中心主题"><a href="/zh/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault 帮助</a><a href="/zh/faq/getting-started.html">快速上手</a><a href="/zh/faq/storage-and-vault.html">存储与你的保险库</a><a href="/zh/faq/providers.html">邮件服务商</a><a href="/zh/faq/backup-and-restore.html">备份与恢复</a><a href="/zh/faq/explorer-and-insights.html">Explorer 与 邮件分析</a><a href="/zh/faq/scheduled-send.html">定时发送</a><a href="/zh/faq/premium.html">免费版与 Premium</a><a href="/zh/faq/your-questions.html">你关心的问题</a><a href="/zh/faq/troubleshooting.html">疑难解答</a><a href="/zh/docs.html#guides" class="mv-help-divider">实用指南</a><a href="/zh/docs.html#articles">文章</a><a href="/zh/features.html">功能参考</a><a href="/changelog.html">发行说明</a></nav><div class="mv-help-version"><div>版本 <span translate="no">2.20.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何把你的 Apple 账户（iCloud 邮件）添加到 MailVault</h1><!-- help-intro:start --><form class="mv-help-search" action="/zh/docs.html" method="get" role="search"><label for="help-q">搜索文档、常见问题和文章</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="搜索所有指南和解答" required><button type="submit">搜索</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>4 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            把 iCloud 地址添加到 MailVault 大约需要两分钟，其中有一步是 Apple 特有的：iCloud 邮件不接受其他 App 使用你常规的 Apple 账户密码。你需要在 Apple 网站上另外创建一个 <strong>App 专用密码</strong>，然后把它粘贴到 MailVault 中。@icloud.com、@me.com 和 @mac.com 地址都适用。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">开始之前</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>你的 Apple 账户必须已开启双重认证。Apple 只有在开启后才允许创建 App 专用密码。</li>
+            <li>已在你的 Mac、Windows 电脑或 Linux 设备上安装 MailVault。如果还没有，可以<a href="/zh/get-started.html?plan=free" class="text-primary-500 hover:text-primary-600 underline">免费下载</a>。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 1 步：在 Apple 创建 App 专用密码</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>打开 <a href="https://account.apple.com" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">account.apple.com</a>，用你的 Apple 账户登录。</li>
+            <li>在“登录与安全”部分，选择 <strong>App 专用密码</strong>。</li>
+            <li>选择“密码”旁边的加号按钮，生成一个新密码。</li>
+            <li>输入一个标签，例如“MailVault”，方便以后认出这个密码，然后选择<strong>创建</strong>。</li>
+            <li>Apple 会要求你确认 Apple 账户密码。输入后选择<strong>继续</strong>。</li>
+            <li>Apple 会显示新的 App 专用密码。把它复制下来并保留，直到你把它粘贴到 MailVault 中。</li>
+          </ol>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-sign-in-security.webp"><img src="/assets/guides/apple-account-sign-in-security.webp" width="1400" height="1329" loading="lazy" alt="Apple 账户的“登录与安全”页面，左下方是“App 专用密码”卡片" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Apple 账户中的“登录与安全”。选择“App 专用密码”卡片。</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-app-specific-passwords.webp"><img src="/assets/guides/apple-account-app-specific-passwords.webp" width="1400" height="1327" loading="lazy" alt="“App 专用密码”窗口，列出一个标签为 MailVault 的密码，并带有用于添加另一个密码的加号按钮和“全部撤销”按钮" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">“App 专用密码”窗口。加号按钮用于添加新密码，密码旁边的减号按钮用于撤销该密码。</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-generate-app-specific-password.webp"><img src="/assets/guides/apple-account-generate-app-specific-password.webp" width="1400" height="1324" loading="lazy" alt="“生成 App 专用密码”窗口，已输入标签 MailVault，并带有“创建”按钮" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">按将要使用该密码的 App 来命名，然后选择“创建”。</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-confirm-password.webp"><img src="/assets/guides/apple-account-confirm-password.webp" width="1400" height="1337" loading="lazy" alt="“确认您的密码”窗口，要求输入 Apple 账户密码，并带有“继续”和“取消”按钮" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">在显示新的 App 专用密码之前，Apple 会先要求你输入一次 Apple 账户密码。</figcaption>
+          </figure>
+
+          <p>
+            这些步骤依据 Apple 的官方说明：<a href="https://support.apple.com/en-us/102654" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">使用 App 专用密码通过 Apple 账户登录 App</a>。Apple 的菜单会不时变化，如果某个标签与此处不同，请以该页面为准。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 2 步：在 MailVault 中添加账户</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>打开“添加账户”对话框，选择 <strong>iCloud 邮件</strong>。</li>
+            <li>输入你完整的 iCloud 地址。</li>
+            <li>把 App 专用密码粘贴到密码栏。如果不确定在哪里获取，密码标签旁边的小<strong>信息按钮</strong>会说明步骤，并链接到 Apple 的页面和本指南。</li>
+            <li>选择“添加账户”。MailVault 已知道 iCloud 的服务器设置，不需要再填写其他内容。</li>
+          </ol>
+
+          <p>
+            账户连接后，MailVault 会下载你的文件夹，并把每封邮件作为单独的 <code>.eml</code> 文件保存在你自己的磁盘上。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">如果 MailVault 无法登录</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>你用了常规的 Apple 账户密码。</strong>这里无法使用。请创建 App 专用密码并改用它。</li>
+            <li><strong>你更改过 Apple 账户密码。</strong>主密码被更改或重置时，Apple 会撤销所有 App 专用密码。请创建一个新的，重新输入。</li>
+            <li><strong>密码已被撤销。</strong>当 App 的密码从“App 专用密码”列表中移除时，Apple 会让该 App 退出登录。请重新生成一个。</li>
+            <li><strong>双重认证未开启。</strong>请先开启它，之后才能使用“App 专用密码”选项。</li>
+          </ul>
+
+          <p>
+            Apple 最多允许同时有 25 个有效的 App 专用密码。你可以在同一页面撤销其中一个，或全部撤销。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">iCloud 邮件的服务器设置</h3>
+
+          <p>
+            MailVault 会自动为你填好这些内容。列在这里，是为了方便你手动设置其他 App，数据来自 Apple 发布的 <a href="https://support.apple.com/en-us/102525" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">iCloud 邮件服务器设置</a>页面。
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>IMAP 服务器</strong>：<code>imap.mail.me.com</code>，端口 993，SSL/TLS。</li>
+            <li><strong>SMTP 服务器</strong>：<code>smtp.mail.me.com</code>，端口 587，需要身份验证。</li>
+            <li><strong>密码</strong>：App 专用密码，收信和发信都用它。</li>
+          </ul>
+
+          <p>
+            iCloud 邮件只支持 IMAP 和 SMTP，不支持 POP。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">把你的 iCloud 邮件保存在自己的磁盘上</p>
+            <p class="text-sm mb-4">MailVault 使用 App 专用密码连接 iCloud 邮件，并把每封邮件保存为可搜索的 .eml 文件。免费，源代码已在 GitHub 公开。</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/zh/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                下载 MailVault
+              </a>
+              <a href="/zh/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                查看定价
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">把 iCloud 邮件添加到 MailVault 需要 App 专用密码吗？</p>
+            <p>需要。MailVault 通过 IMAP 登录 iCloud 邮件，而 Apple 对此要求使用 App 专用密码，而不是你常规的 Apple 账户密码。你的 Apple 账户必须先开启双重认证，才能创建 App 专用密码。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">在哪里创建 App 专用密码？</p>
+            <p>登录 account.apple.com，打开“登录与安全”，选择“App 专用密码”，然后生成一个新的。在 MailVault 中，密码栏旁边的小信息按钮会说明这些步骤，并链接到 Apple 的说明。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">为什么 MailVault 提示我的 iCloud 登录失败？</p>
+            <p>常见原因有：用了常规的 Apple 账户密码而不是 App 专用密码、App 专用密码已被撤销，或者 Apple 账户密码被重置过。更改 Apple 账户密码会撤销所有 App 专用密码，所以请创建一个新的，重新输入。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">我可以有多少个 App 专用密码？</p>
+            <p>Apple 最多允许同时有 25 个有效的 App 专用密码。你可以在同一个“App 专用密码”页面撤销其中一个，或全部撤销。</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            相关阅读：<a href="/zh/guides/export-icloud-mail.html" class="text-primary-500 hover:text-primary-600 underline">如何把 iCloud 邮件导出到你的电脑</a>、<a href="/zh/faq/providers.html" class="text-primary-500 hover:text-primary-600 underline">邮件服务商常见问题</a>，以及<a href="/zh/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">IMAP 本地归档的工作方式</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>版本 <span translate="no">2.20.0</span></div><div>审核日期 <time datetime="2026-10-22">2026年10月22日</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Graphic Meat 出品</p><h2 id="studio-title">认识 MailVault 背后的人。</h2><p>我们是 Graphic Meat，一家自 2013 年起打造实用软件的独立产品工作室。MailVault 是我们的产品之一。来认识我们，也看看我们还在做什么。</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">认识 Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="访问 MailVault 背后的工作室 Graphic Meat"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Graphic Meat 的其他产品</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>把你的照片制作成可印刷的书。</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>用于笔记和代码的本地工作区。</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>将你的邮件迁移到新的服务商。</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>阅读你的邮件。保留你的邮件。</p>
+</div>
+<nav aria-label="探索 MailVault"><a href="/zh/use-cases.html">使用场景</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">最新动态</a><a href="/zh/mentioned-in.html">相关报道</a><a href="/zh/faq.html">常见问题</a><a href="/zh/docs.html">帮助</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">GitHub 上的代码 ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">社区 ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">联系团队 ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault。制作方： <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="产品截图"><button type="button">关闭截图</button><p></p></dialog><script defer src="/assets/help-center.js?v=2"></script>
+</body>
+</html>

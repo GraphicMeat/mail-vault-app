@@ -36,6 +36,7 @@
 - [Free up space in Hotmail and Outlook.com](https://mailvaultapp.com/guides/free-up-space-hotmail-outlook-com.html): step by step, keeping a local copy before deleting
 - [Back up Outlook.com email to a Mac](https://mailvaultapp.com/guides/back-up-outlook-com-email-to-mac.html): four methods compared, and how to verify the backup
 
+- [Add your Apple Account (iCloud Mail) to MailVault](https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html): create an app-specific password at Apple, paste it into MailVault, and fix sign-in errors
 - [Back up Gmail to EML](https://mailvaultapp.com/guides/backup-gmail-to-eml.html): individual downloads, mailbox archiving, formats, and backup verification
 - [Export Outlook to EML](https://mailvaultapp.com/guides/export-outlook-to-eml.html): new Outlook and web downloads, whole-account archiving, and PST/MSG differences
 - [Download all emails on Mac](https://mailvaultapp.com/guides/download-all-emails-mac.html): Apple Mail exports and local EML archives, with offline verification

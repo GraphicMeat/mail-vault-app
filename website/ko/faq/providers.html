@@ -102,6 +102,14 @@
         "@type": "Answer",
         "text": "계정을 추가할 때 Fastmail을 선택하고, Fastmail 설정에서 Mail 및 Submission 접근 권한을 부여한 API 토큰을 붙여 넣습니다. 다른 서버라면 JMAP을 선택하고 해당 서버의 비밀번호 또는 API 토큰을 사용합니다. 도메인이 세션 URL을 공개하면 MailVault가 이를 찾습니다. 그렇지 않으면 전체 HTTPS 세션 URL을 입력하십시오. 검색된 서버가 낯설다면 자격 증명을 보내기 전에 확인하십시오. 새 메일은 푸시로 수신하며, 사용할 수 없으면 폴링으로 전환합니다. 보내는 주소는 서버의 발신자 정보에서 가져옵니다. Fastmail은 IMAP 앱 비밀번호 옵션도 제공합니다."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "iCloud 또는 Apple 계정 이메일 주소는 어떻게 추가하나요?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "iCloud Mail을 선택해 계정을 추가하고, iCloud 전체 주소를 입력한 뒤 앱 암호를 붙여넣으세요. iCloud Mail은 다른 앱에서 일반 Apple 계정 암호를 받지 않습니다. 앱 암호는 account.apple.com의 로그인 및 보안, 앱 암호에서 만들며, 2단계 인증이 켜져 있어야 합니다. MailVault의 암호 입력란 옆 정보 버튼도 같은 단계를 안내합니다. 나중에 로그인이 실패한다면 Apple 계정 암호를 바꾸면서 앱 암호가 철회된 것이므로 새로 만드세요. 단계별 가이드: https://mailvaultapp.com/ko/guides/add-icloud-mail-to-mailvault.html"
+      }
     }
   ]
 }
@@ -209,7 +217,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">이메일 제공업체</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">MailVault는 Gmail과 Outlook에서도 작동합니까?</a></li><li><a href="#help-section-2">Outlook.com 계정은 어떻게 연결합니까?</a></li><li><a href="#help-section-3">Proton Mail에서 MailVault를 어떻게 사용합니까?</a></li><li><a href="#help-section-4">로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?</a></li><li><a href="#help-section-5">별칭으로 보내려면 어떻게 합니까?</a></li><li><a href="#help-section-6">Fastmail 또는 다른 JMAP 계정은 어떻게 연결하나요?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">이메일 제공업체</h1><!-- help-intro:start --><form class="mv-help-search" action="/ko/docs.html" method="get" role="search"><label for="help-q">문서, 자주 묻는 질문 및 글 검색</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="모든 가이드와 답변 검색" required><button type="submit">검색</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>이 페이지의 내용</summary><ul><li><a href="#help-section-1">MailVault는 Gmail과 Outlook에서도 작동합니까?</a></li><li><a href="#help-section-2">Outlook.com 계정은 어떻게 연결합니까?</a></li><li><a href="#help-section-3">Proton Mail에서 MailVault를 어떻게 사용합니까?</a></li><li><a href="#help-section-4">로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?</a></li><li><a href="#help-section-5">별칭으로 보내려면 어떻게 합니까?</a></li><li><a href="#help-section-6">Fastmail 또는 다른 JMAP 계정은 어떻게 연결하나요?</a></li><li><a href="#help-section-7">iCloud 또는 Apple 계정 이메일 주소는 어떻게 추가하나요?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail, Microsoft 365, Outlook.com, Proton Mail 및 Fastmail 같은 JMAP 서버에 연결하고 별칭으로 메일을 보냅니다.</p>
 
       <div class="space-y-4">
@@ -298,6 +306,11 @@
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Fastmail 또는 다른 JMAP 계정은 어떻게 연결하나요?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>계정을 추가할 때 Fastmail을 선택하고, Fastmail 설정에서 Mail 및 Submission 접근 권한을 부여한 API 토큰을 붙여 넣습니다. 다른 서버라면 JMAP을 선택하고 해당 서버의 비밀번호 또는 API 토큰을 사용합니다. 도메인이 세션 URL을 공개하면 MailVault가 이를 찾습니다. 그렇지 않으면 전체 HTTPS 세션 URL을 입력하십시오. 검색된 서버가 낯설다면 자격 증명을 보내기 전에 확인하십시오. 새 메일은 푸시로 수신하며, 사용할 수 없으면 폴링으로 전환합니다. 보내는 주소는 서버의 발신자 정보에서 가져옵니다. Fastmail은 IMAP 앱 비밀번호 옵션도 제공합니다.</p></div>
+        </article>
+
+        <article id="icloud-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">iCloud 또는 Apple 계정 이메일 주소는 어떻게 추가하나요?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>iCloud Mail을 선택해 계정을 추가하고, iCloud 전체 주소를 입력한 뒤 앱 암호를 붙여넣으세요. iCloud Mail은 다른 앱에서 일반 Apple 계정 암호를 받지 않습니다. 앱 암호는 <a href="https://account.apple.com" target="_blank" rel="noopener" class="text-primary-500 hover:underline">account.apple.com</a>의 로그인 및 보안, 앱 암호에서 만들며, 2단계 인증이 켜져 있어야 합니다. MailVault의 암호 입력란 옆 정보 버튼도 같은 단계를 안내합니다. 나중에 로그인이 실패한다면 Apple 계정 암호를 바꾸면서 앱 암호가 철회된 것이므로 새로 만드세요. <a href="/ko/guides/add-icloud-mail-to-mailvault.html" class="text-primary-500 hover:underline">단계별 가이드</a>를 참고하세요.</p></div>
         </article>
 
       </div>

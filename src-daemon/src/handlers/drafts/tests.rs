@@ -244,6 +244,41 @@ async fn drafts_real_save_readback_and_provenance_in_both_formats() {
     }
 }
 #[tokio::test]
+async fn drafts_save_accepts_a_half_typed_recipient_and_a_later_revision_replaces_it() {
+    let h = Harness::new();
+    let reopened = |v: Value| {
+        let h = &h;
+        async move {
+            let list = rpc(
+                &h.s,
+                "drafts.list",
+                json!({"accountId":"one","identity":loc(&v),"includeContent":true}),
+            )
+            .await
+            .unwrap();
+            list["drafts"][0]["eml"].clone()
+        }
+    };
+    let mut p = req("typing", 1, "body");
+    p["snapshot"]["to"] = json!("prime@");
+    p["snapshot"]["cc"] = json!("bad,");
+    let first = saved(&h.s, p).await;
+    assert_eq!(first["disposition"], "saved");
+    let eml = reopened(first.clone()).await;
+    assert_eq!(eml["to"][0]["address"], "prime@");
+    assert_eq!(eml["cc"][0]["address"], "bad");
+    assert_eq!(eml["bcc"][0]["address"], "blind@example.test");
+
+    let mut p = req("typing", 2, "body");
+    p["snapshot"]["to"] = json!("prime@example.test");
+    let second = saved(&h.s, p).await;
+    assert_eq!(second["disposition"], "saved");
+    assert_eq!(second["revision"], 2);
+    let eml = reopened(second).await;
+    assert_eq!(eml["to"].as_array().unwrap().len(), 1);
+    assert_eq!(eml["to"][0]["address"], "prime@example.test");
+}
+#[tokio::test]
 async fn drafts_duplicate_revision_conflict_clear_and_zero_bytes() {
     let h = Harness::new();
     let p = req("edit", 1, "first");

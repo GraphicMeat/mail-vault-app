@@ -12,10 +12,16 @@ import { describeConnectionError } from '../utils/connectionError';
 import { formatCount } from '../utils/formatCount';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { Private } from './privacy/Private';
+import { InfoPopover } from './ui/InfoPopover';
+import { ExternalLink } from './ui/ExternalLink';
 import { usePrivateAttr, usePrivateInputClass } from '../hooks/usePrivacy';
 import { appLink } from '../services/appLink.js';
 import { jmapSessionHost } from '../services/providerKind';
 import { JmapFields, EMPTY_JMAP, jmapReady } from './account/JmapFields';
+
+// Where the password is made. Apple's how-to page (support.apple.com/en-us/102654) is linked from the guide.
+const APPLE_APP_PASSWORD_URL = 'https://account.apple.com';
+const ICLOUD_GUIDE_URL = appLink('https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html', 'icloud_app_password');
 
 // Common email provider configurations
 export const PROVIDER_CONFIGS = () => ({
@@ -59,8 +65,8 @@ export const PROVIDER_CONFIGS = () => ({
     imapPort: 993,
     smtpHost: 'smtp.mail.me.com',
     smtpPort: 587,
-    note: 'iCloud requires an App-Specific Password',
-    helpUrl: 'https://support.apple.com/en-us/102654',
+    note: tr('account.icloudRequiresAppPassword'),
+    helpUrl: APPLE_APP_PASSWORD_URL,
     helpLabel: tr('account.generateAppSpecificPassword')
   },
   aol: {
@@ -987,9 +993,24 @@ export function AccountModal({ onClose, onSuccess }) {
               {/* Password — only show for password auth */}
               {authType === 'password' && (
                 <div>
-                  <label className="block text-sm text-mail-text-muted mb-1.5">
-                    {isJmap && jmap.auth === 'bearer' ? <>{t('account.jmapApiToken')} *</> : t('account.passwordRequired')}
-                  </label>
+                  <div className="flex items-center gap-1 mb-1.5">
+                    <label className="block text-sm text-mail-text-muted">
+                      {isJmap && jmap.auth === 'bearer' ? <>{t('account.jmapApiToken')} *</> : t('account.passwordRequired')}
+                    </label>
+                    {provider === 'icloud' && (
+                      <InfoPopover label={t('account.appleAppPasswordInfoLabel')} data-testid="icloud-app-password-info">
+                        <p className="text-mail-text-muted mb-3">{t('account.appleAppPasswordInfoSteps')}</p>
+                        <div className="flex flex-col gap-1.5">
+                          <ExternalLink href={APPLE_APP_PASSWORD_URL} className="text-mail-accent-text hover:underline font-medium">
+                            {t('account.appleAppPasswordInfoCreate')} &rarr;
+                          </ExternalLink>
+                          <ExternalLink href={ICLOUD_GUIDE_URL} className="text-mail-accent-text hover:underline font-medium">
+                            {t('account.appleAppPasswordInfoGuide')} &rarr;
+                          </ExternalLink>
+                        </div>
+                      </InfoPopover>
+                    )}
+                  </div>
                   <div className="relative">
                     <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
                     <input aria-label={isJmap && jmap.auth === 'bearer' ? t('account.jmapApiToken') : t('account.passwordRequired')}

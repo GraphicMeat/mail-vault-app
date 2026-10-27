@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cómo añadir tu cuenta de Apple (iCloud Mail) a MailVault - MailVault</title>
+  <meta name="description" content="Añade una dirección @icloud.com, @me.com o @mac.com a MailVault. Crea una contraseña específica de la app en tu cuenta de Apple, pégala y resuelve los errores de inicio de sesión más comunes.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/es/guides/add-icloud-mail-to-mailvault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/es/guides/add-icloud-mail-to-mailvault.html">
+  <meta property="og:title" content="Cómo añadir tu cuenta de Apple (iCloud Mail) a MailVault - MailVault">
+  <meta property="og:description" content="Añade una dirección @icloud.com, @me.com o @mac.com a MailVault. Crea una contraseña específica de la app en tu cuenta de Apple, pégala y resuelve los errores de inicio de sesión más comunes.">
+  <meta property="og:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="es_ES">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Cómo añadir tu cuenta de Apple (iCloud Mail) a MailVault - MailVault">
+  <meta name="twitter:description" content="Añade una dirección @icloud.com, @me.com o @mac.com a MailVault. Crea una contraseña específica de la app en tu cuenta de Apple, pégala y resuelve los errores de inicio de sesión más comunes.">
+  <meta name="twitter:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Cómo añadir tu cuenta de Apple (iCloud Mail) a MailVault",
+  "description": "Añade una dirección @icloud.com, @me.com o @mac.com a MailVault. Crea una contraseña específica de la app en tu cuenta de Apple, pégala y resuelve los errores de inicio de sesión más comunes.",
+  "url": "https://mailvaultapp.com/es/guides/add-icloud-mail-to-mailvault.html",
+  "datePublished": "2026-10-27",
+  "dateModified": "2026-10-27",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/assets/og-mailvault-en-v3.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "¿Necesito una contraseña específica de la app para añadir iCloud Mail a MailVault?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sí. MailVault inicia sesión en iCloud Mail por IMAP, y Apple exige para ello una contraseña específica de la app, no la contraseña normal de tu cuenta de Apple. Tu cuenta de Apple necesita tener activada la autenticación de dos factores antes de poder crear una."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Dónde creo una contraseña específica de la app?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Inicia sesión en account.apple.com, abre Inicio de sesión y seguridad, elige Contraseñas específicas de la app y genera una nueva. En MailVault, el pequeño botón de información junto al campo de contraseña explica estos pasos y enlaza con las instrucciones de Apple."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Por qué MailVault dice que falló mi inicio de sesión de iCloud?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Las causas habituales son usar la contraseña normal de tu cuenta de Apple en lugar de una específica de la app, una contraseña específica de la app que fue revocada, o un restablecimiento de la contraseña de tu cuenta de Apple. Cambiar la contraseña de tu cuenta de Apple revoca todas las contraseñas específicas de la app, así que crea una nueva e introdúcela de nuevo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Cuántas contraseñas específicas de la app puedo tener?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Apple permite hasta 25 contraseñas específicas de la app activas a la vez. Puedes revocar una, o todas, desde la misma página de Contraseñas específicas de la app."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/add-icloud-mail-to-mailvault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+<link rel="stylesheet" href="/assets/help-center.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Saltar al contenido</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/es/" aria-label="Inicio de MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">por Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Navegación principal"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Dar una estrella a MailVault en GitHub" title="Dar una estrella a MailVault en GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Enviar un corazón a MailVault" title="Enviar un corazón a MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Seleccionar idioma"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Español</span><span class="mv-language-code" aria-hidden="true">ES</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/guides/add-icloud-mail-to-mailvault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/guides/add-icloud-mail-to-mailvault.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/guides/add-icloud-mail-to-mailvault.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/guides/add-icloud-mail-to-mailvault.html" lang="es" hreflang="es" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/guides/add-icloud-mail-to-mailvault.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/guides/add-icloud-mail-to-mailvault.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/guides/add-icloud-mail-to-mailvault.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/guides/add-icloud-mail-to-mailvault.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/guides/add-icloud-mail-to-mailvault.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Cambiar tema de color" title="Cambiar tema de color"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Demo</a><a class="mv-button mv-nav-download" href="/es/get-started.html?plan=free">Descargar</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menú</span></summary>
+<nav aria-label="Navegación móvil"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a><a href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Probar la demo</a><a href="/es/get-started.html?plan=free">Descargar gratis</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Cambiar tema de color</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <!-- help-shell:start --><div class="mv-wrap mv-help-layout"><details class="mv-help-sidebar" open><summary>Temas de ayuda</summary><nav aria-label="Temas del centro de ayuda"><a href="/es/docs.html" class="mv-help-home"><img src="/icon-128.webp" width="28" height="28" alt="">Ayuda de MailVault</a><a href="/es/faq/getting-started.html">Primeros pasos</a><a href="/es/faq/storage-and-vault.html">Almacenamiento y tu bóveda</a><a href="/es/faq/providers.html">Proveedores de correo</a><a href="/es/faq/backup-and-restore.html">Copias de seguridad y restauración</a><a href="/es/faq/explorer-and-insights.html">Explorer e Estadísticas</a><a href="/es/faq/scheduled-send.html">Envío programado</a><a href="/es/faq/premium.html">Gratis y Premium</a><a href="/es/faq/your-questions.html">Tus preguntas</a><a href="/es/faq/troubleshooting.html">Solución de problemas</a><a href="/es/docs.html#guides" class="mv-help-divider">Guías prácticas</a><a href="/es/docs.html#articles">Artículos</a><a href="/es/features.html">Referencia de funciones</a><a href="/changelog.html">Notas de la versión</a></nav><div class="mv-help-version"><div>Versión <span translate="no">2.20.0</span></div><div>Revisado el <time datetime="2026-10-22">22 de octubre de 2026</time></div></div></details><!-- help-main:start --><main id="main" class="mv-help-main"><div class="mv-help-content">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/es/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Volver al inicio
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Cómo añadir tu cuenta de Apple (iCloud Mail) a MailVault</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><!-- help-contents:end -->
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>4 min de lectura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Añadir una dirección de iCloud a MailVault lleva unos dos minutos, con un paso propio de Apple: iCloud Mail no acepta la contraseña normal de tu cuenta de Apple desde otras apps. En su lugar, creas una <strong>contraseña específica de la app</strong> en el sitio de Apple y la pegas en MailVault. Funciona con direcciones @icloud.com, @me.com y @mac.com.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Antes de empezar</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>Tu cuenta de Apple debe tener activada la autenticación de dos factores. Apple solo permite crear contraseñas específicas de la app cuando está activada.</li>
+            <li>MailVault instalado en tu Mac, tu PC con Windows o tu equipo con Linux. <a href="/es/get-started.html?plan=free" class="text-primary-500 hover:text-primary-600 underline">Descárgalo gratis</a> si aún no lo tienes.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Paso 1: crea una contraseña específica de la app en Apple</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Ve a <a href="https://account.apple.com" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">account.apple.com</a> e inicia sesión con tu cuenta de Apple.</li>
+            <li>En la sección Inicio de sesión y seguridad, elige <strong>Contraseñas específicas de la app</strong>.</li>
+            <li>Elige el botón con el signo más junto a Contraseñas para generar una nueva.</li>
+            <li>Escribe una etiqueta como "MailVault" para reconocer la contraseña más adelante y luego elige <strong>Crear</strong>.</li>
+            <li>Apple te pide que confirmes la contraseña de tu cuenta de Apple. Introdúcela y elige <strong>Continuar</strong>.</li>
+            <li>Apple muestra la nueva contraseña específica de la app. Cópiala y consérvala hasta que la hayas pegado en MailVault.</li>
+          </ol>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-sign-in-security.webp"><img src="/assets/guides/apple-account-sign-in-security.webp" width="1400" height="1329" loading="lazy" alt="La página Inicio de sesión y seguridad de una cuenta de Apple, con la tarjeta Contraseñas específicas de la app abajo a la izquierda" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Inicio de sesión y seguridad en tu cuenta de Apple. Elige la tarjeta Contraseñas específicas de la app.</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-app-specific-passwords.webp"><img src="/assets/guides/apple-account-app-specific-passwords.webp" width="1400" height="1327" loading="lazy" alt="La ventana Contraseñas específicas de la app con una contraseña llamada MailVault, un botón con el signo más para añadir otra y un botón Revocar todo" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">La ventana Contraseñas específicas de la app. El botón con el signo más añade una contraseña nueva y el botón con el signo menos junto a una contraseña la revoca.</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-generate-app-specific-password.webp"><img src="/assets/guides/apple-account-generate-app-specific-password.webp" width="1400" height="1324" loading="lazy" alt="La ventana Generar contraseña específica de la app con la etiqueta MailVault escrita y un botón Crear" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Pon a la contraseña el nombre de la app que la usará y luego elige Crear.</figcaption>
+          </figure>
+
+          <figure class="my-6">
+            <a data-help-image="" aria-haspopup="dialog" href="/assets/guides/apple-account-confirm-password.webp"><img src="/assets/guides/apple-account-confirm-password.webp" width="1400" height="1337" loading="lazy" alt="La ventana Confirma tu contraseña que pide la contraseña de la cuenta de Apple, con los botones Continuar y Cancelar" class="rounded-xl border border-slate-200 dark:border-slate-700 w-full h-auto"></a>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Apple te pide la contraseña de tu cuenta de Apple una vez antes de mostrar la nueva contraseña específica de la app.</figcaption>
+          </figure>
+
+          <p>
+            Estos pasos siguen las instrucciones de Apple: <a href="https://support.apple.com/en-us/102654" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Inicia sesión en las apps con tu cuenta de Apple mediante contraseñas específicas de la app</a>. Los menús de Apple cambian de vez en cuando, así que, si una etiqueta se ve distinta, esa página es la referencia.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Paso 2: añade la cuenta en MailVault</h3>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li>Abre el diálogo Añadir cuenta y elige <strong>iCloud Mail</strong>.</li>
+            <li>Introduce tu dirección completa de iCloud.</li>
+            <li>Pega la contraseña específica de la app en el campo de contraseña. Si no sabes dónde conseguir una, el pequeño <strong>botón de información</strong> junto a la etiqueta de la contraseña explica los pasos y enlaza con la página de Apple y con esta guía.</li>
+            <li>Elige Añadir cuenta. MailVault ya conoce los ajustes del servidor de iCloud, así que no hay nada más que rellenar.</li>
+          </ol>
+
+          <p>
+            Cuando la cuenta está conectada, MailVault descarga tus carpetas y guarda cada mensaje como un archivo <code>.eml</code> individual en tu propio disco.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Si MailVault no puede iniciar sesión</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Usaste la contraseña normal de tu cuenta de Apple.</strong> Aquí no funciona. Crea una contraseña específica de la app y usa esa.</li>
+            <li><strong>Cambiaste la contraseña de tu cuenta de Apple.</strong> Apple revoca todas las contraseñas específicas de la app cuando se cambia o restablece la contraseña principal. Crea una nueva e introdúcela de nuevo.</li>
+            <li><strong>La contraseña fue revocada.</strong> Apple cierra la sesión de la app cuando se elimina su contraseña de la lista de Contraseñas específicas de la app. Genera una nueva.</li>
+            <li><strong>La autenticación de dos factores está desactivada.</strong> Actívala primero y la opción Contraseñas específicas de la app pasará a estar disponible.</li>
+          </ul>
+
+          <p>
+            Apple permite hasta 25 contraseñas específicas de la app activas a la vez. Puedes revocar una sola, o todas, desde la misma página.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ajustes del servidor de iCloud Mail</h3>
+
+          <p>
+            MailVault los rellena por ti. Se listan aquí por si configuras otra app a mano, tal como los publica Apple en su página de <a href="https://support.apple.com/en-us/102525" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">ajustes del servidor de iCloud Mail</a>.
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Servidor IMAP</strong>: <code>imap.mail.me.com</code>, puerto 993, SSL/TLS.</li>
+            <li><strong>Servidor SMTP</strong>: <code>smtp.mail.me.com</code>, puerto 587, autenticación obligatoria.</li>
+            <li><strong>Contraseña</strong>: la contraseña específica de la app, tanto para el correo entrante como para el saliente.</li>
+          </ul>
+
+          <p>
+            iCloud Mail solo admite IMAP y SMTP, no POP.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Guarda tu correo de iCloud en tu propio disco</p>
+            <p class="text-sm mb-4">MailVault se conecta a iCloud Mail con una contraseña específica de la app y guarda cada mensaje como un archivo .eml en el que se puede buscar. Gratis, con el código fuente disponible en GitHub.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/es/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Descargar MailVault
+              </a>
+              <a href="/es/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Ver precios
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Preguntas frecuentes</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Necesito una contraseña específica de la app para añadir iCloud Mail a MailVault?</p>
+            <p>Sí. MailVault inicia sesión en iCloud Mail por IMAP, y Apple exige para ello una contraseña específica de la app, no la contraseña normal de tu cuenta de Apple. Tu cuenta de Apple necesita tener activada la autenticación de dos factores antes de poder crear una.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Dónde creo una contraseña específica de la app?</p>
+            <p>Inicia sesión en account.apple.com, abre Inicio de sesión y seguridad, elige Contraseñas específicas de la app y genera una nueva. En MailVault, el pequeño botón de información junto al campo de contraseña explica estos pasos y enlaza con las instrucciones de Apple.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Por qué MailVault dice que falló mi inicio de sesión de iCloud?</p>
+            <p>Las causas habituales son usar la contraseña normal de tu cuenta de Apple en lugar de una específica de la app, una contraseña específica de la app que fue revocada, o un restablecimiento de la contraseña de tu cuenta de Apple. Cambiar la contraseña de tu cuenta de Apple revoca todas las contraseñas específicas de la app, así que crea una nueva e introdúcela de nuevo.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">¿Cuántas contraseñas específicas de la app puedo tener?</p>
+            <p>Apple permite hasta 25 contraseñas específicas de la app activas a la vez. Puedes revocar una, o todas, desde la misma página de Contraseñas específicas de la app.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Lecturas relacionadas: <a href="/es/guides/export-icloud-mail.html" class="text-primary-500 hover:text-primary-600 underline">cómo exportar iCloud Mail a tu ordenador</a>, las <a href="/es/faq/providers.html" class="text-primary-500 hover:text-primary-600 underline">preguntas frecuentes sobre proveedores de correo</a> y <a href="/es/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">cómo funciona el archivado local de IMAP</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  <!-- help-version:start --><footer class="mv-help-review"><div class="mv-help-version"><div>Versión <span translate="no">2.20.0</span></div><div>Revisado el <time datetime="2026-10-22">22 de octubre de 2026</time></div></div></footer><!-- help-version:end --></div></main><!-- help-main:end --></div><!-- help-shell:end -->
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creación de Graphic Meat</p><h2 id="studio-title">Conoce a las personas detrás de MailVault.</h2><p>Somos Graphic Meat, un estudio de productos independiente que crea software útil desde 2013. MailVault es una de las cosas que hacemos. Ven a conocernos y descubre en qué más estamos trabajando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conoce Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, el estudio detrás de MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Más de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Convierte tus fotos en un libro listo para imprimir.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espacio de trabajo local para notas y código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mueve tu correo a un proveedor nuevo.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/es/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Lee tu correo. Conserva tu correo.</p>
+</div>
+<nav aria-label="Explora MailVault"><a href="/es/use-cases.html">Casos de uso</a><a href="/es/blog.html">Blog</a><a href="/changelog.html">Novedades</a><a href="/es/mentioned-in.html">Menciones</a><a href="/es/faq.html">FAQ</a><a href="/es/docs.html">Ayuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código en GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidad ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contacta con el equipo ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Creado por <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+
+  <script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="redesign-2026-09"></script>
+<script defer src="/assets/english-site.js?v=20261008-light"></script>
+<dialog class="mv-help-lightbox" aria-label="Captura del producto"><button type="button">Cerrar captura</button><p></p></dialog><script defer src="/assets/help-center.js?v=2"></script>
+</body>
+</html>

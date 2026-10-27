@@ -102,6 +102,14 @@
         "@type": "Answer",
         "text": "Elige Fastmail al añadir una cuenta y pega un token de API con acceso a Mail y Submission desde los ajustes de Fastmail. Para otro servidor, elige JMAP y usa su contraseña o token de API. MailVault descubre la URL de sesión cuando el dominio la publica; si no, introduce la URL de sesión HTTPS completa. Confirma cualquier servidor descubierto que no conozcas antes de enviar las credenciales. El correo nuevo usa notificaciones push, con sondeo como alternativa, y las direcciones de envío proceden de las identidades del servidor. Fastmail también ofrece la opción de IMAP con contraseña de aplicación."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Cómo añado una dirección de correo de iCloud o de una cuenta de Apple?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Elige iCloud Mail al añadir una cuenta, introduce tu dirección completa de iCloud y pega una contraseña específica de la app. iCloud Mail no acepta la contraseña normal de tu cuenta de Apple desde otras apps. Crea la contraseña específica de la app en account.apple.com, en Inicio de sesión y seguridad y luego Contraseñas específicas de la app; la autenticación de dos factores debe estar activada. El botón de información junto al campo de contraseña en MailVault explica los mismos pasos. Si el inicio de sesión falla más adelante, un cambio de contraseña de tu cuenta de Apple la ha revocado, así que crea una nueva. Guía paso a paso: https://mailvaultapp.com/es/guides/add-icloud-mail-to-mailvault.html"
+      }
     }
   ]
 }
@@ -209,7 +217,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">Proveedores de correo</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">¿MailVault funciona con Gmail y Outlook?</a></li><li><a href="#help-section-2">¿Cómo conecto mi cuenta de Outlook.com?</a></li><li><a href="#help-section-3">¿Cómo uso MailVault con Proton Mail?</a></li><li><a href="#help-section-4">¿Puedo enviar desde una dirección distinta de aquella con la que inicio sesión?</a></li><li><a href="#help-section-5">¿Cómo envío desde un alias?</a></li><li><a href="#help-section-6">¿Cómo conecto Fastmail u otra cuenta JMAP?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">Proveedores de correo</h1><!-- help-intro:start --><form class="mv-help-search" action="/es/docs.html" method="get" role="search"><label for="help-q">Buscar en la documentación, las preguntas frecuentes y los artículos</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Buscar en todas las guías y respuestas" required><button type="submit">Búsqueda</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>En esta página</summary><ul><li><a href="#help-section-1">¿MailVault funciona con Gmail y Outlook?</a></li><li><a href="#help-section-2">¿Cómo conecto mi cuenta de Outlook.com?</a></li><li><a href="#help-section-3">¿Cómo uso MailVault con Proton Mail?</a></li><li><a href="#help-section-4">¿Puedo enviar desde una dirección distinta de aquella con la que inicio sesión?</a></li><li><a href="#help-section-5">¿Cómo envío desde un alias?</a></li><li><a href="#help-section-6">¿Cómo conecto Fastmail u otra cuenta JMAP?</a></li><li><a href="#help-section-7">¿Cómo añado una dirección de correo de iCloud o de una cuenta de Apple?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Conecta Gmail, Microsoft 365, Outlook.com, Proton Mail y servidores JMAP como Fastmail, y envía desde un alias.</p>
 
       <div class="space-y-4">
@@ -298,6 +306,11 @@
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">¿Cómo conecto Fastmail u otra cuenta JMAP?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Elige Fastmail al añadir una cuenta y pega un token de API con acceso a Mail y Submission desde los ajustes de Fastmail. Para otro servidor, elige JMAP y usa su contraseña o token de API. MailVault descubre la URL de sesión cuando el dominio la publica; si no, introduce la URL de sesión HTTPS completa. Confirma cualquier servidor descubierto que no conozcas antes de enviar las credenciales. El correo nuevo usa notificaciones push, con sondeo como alternativa, y las direcciones de envío proceden de las identidades del servidor. Fastmail también ofrece la opción de IMAP con contraseña de aplicación.</p></div>
+        </article>
+
+        <article id="icloud-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">¿Cómo añado una dirección de correo de iCloud o de una cuenta de Apple?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Elige iCloud Mail al añadir una cuenta, introduce tu dirección completa de iCloud y pega una contraseña específica de la app. iCloud Mail no acepta la contraseña normal de tu cuenta de Apple desde otras apps. Crea la contraseña específica de la app en <a href="https://account.apple.com" target="_blank" rel="noopener" class="text-primary-500 hover:underline">account.apple.com</a>, en Inicio de sesión y seguridad y luego Contraseñas específicas de la app; la autenticación de dos factores debe estar activada. El botón de información junto al campo de contraseña en MailVault explica los mismos pasos. Si el inicio de sesión falla más adelante, un cambio de contraseña de tu cuenta de Apple la ha revocado, así que crea una nueva. Consulta la <a href="/es/guides/add-icloud-mail-to-mailvault.html" class="text-primary-500 hover:underline">guía paso a paso</a>.</p></div>
         </article>
 
       </div>

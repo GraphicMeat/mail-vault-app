@@ -24,6 +24,8 @@
 
 - Persist refreshed OAuth token pairs quietly in the daemon, with guarded writes and retries even when no app saver is listening. Failed or unfinished saves remain memory-only until confirmed.
 
+- Add an info button beside the password field when adding an iCloud account. It says where to create the app-specific password Apple requires (account.apple.com, Sign-In and Security, App-Specific Passwords, with two-factor authentication on) and links to Apple's instructions and to a new step-by-step guide on mailvaultapp.com. The iCloud note above the form is now translated.
+
 - Deleting a message that is already gone no longer stops with "needs to resync". When a row outlives its first delete and is deleted again, the second delete counts as removed, sends nothing to the server, drops the stale cached row, and the row stays out of the list instead of coming back.
 
 - A new-mail banner is shown once per message. A scheduled refresh that meets the same arrival again no longer raises the banner again every few minutes, and the notification log says "Already shown" for the repeats. A message woken from a local snooze is announced by its account and message, so it still gets its banner after the arrival one, and the refresh that sees it back raises no second.
@@ -90,6 +92,7 @@
 - **The helper decides which new mail raises a banner.** Quiet hours, priority senders and the account and folder switches in Settings, Notifications are now applied by the helper that syncs your mail, from your saved settings, instead of by the window. The rules are unchanged. If the helper cannot be reached, the banner is shown, and the notification log in Settings says the rules could not be checked.
 
 ### Fixed
+- **Drafts save while you type an address.** A half-typed recipient no longer shows "The draft could not be saved"; the draft keeps exactly what you typed in To, Cc and Bcc, and sending still checks every address.
 - **You can see what you type in To, Cc and Bcc with many recipients.** The typing space used to shrink to a sliver after a long row of chips; it now moves to its own line.
 - **Security updates for the TLS and DNS libraries.** The helper now uses rustls 0.23.46 and hickory-resolver 0.26.3, which close a TLS 1.3 handshake acceptance flaw and three DNS lookup flaws (an endless retry loop, CNAME records that did not belong, and DNSSEC failures that went unreported).
 - **No new-mail banner for mail you sent.** The copy of a message you just sent lands in your Sent folder, and MailVault announced it as new mail. Anything arriving in a Sent folder (an account's own Sent, Sent Items, Gmail's Sent Mail, a folder you chose as Sent, or a localized name such as Gesendet) is now left out of banners, whoever the From says.

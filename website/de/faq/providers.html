@@ -102,6 +102,14 @@
         "@type": "Answer",
         "text": "Wähle beim Hinzufügen eines Kontos Fastmail und füge einen API-Token mit Mail- und Submission-Zugriff aus den Fastmail-Einstellungen ein. Für einen anderen Server wählst du JMAP und verwendest dessen Passwort oder API-Token. MailVault ermittelt die Sitzungs-URL, wenn die Domain sie veröffentlicht; andernfalls gibst du die vollständige HTTPS-Sitzungs-URL ein. Bestätige einen unbekannten ermittelten Server, bevor Zugangsdaten gesendet werden. Neue E-Mails kommen per Push mit regelmäßiger Abfrage als Ausweichlösung; Absenderadressen stammen aus den Identitäten des Servers. Fastmail bietet auch eine IMAP-Option mit App-Passwort."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "Wie füge ich eine iCloud- oder Apple-Account-E-Mail-Adresse hinzu?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Wähle beim Hinzufügen eines Kontos iCloud Mail, gib deine vollständige iCloud-Adresse ein und füge ein App-spezifisches Passwort ein. iCloud Mail akzeptiert das normale Passwort deines Apple Accounts nicht in anderen Apps. Erstelle das App-spezifische Passwort auf account.apple.com unter „Anmeldung und Sicherheit“, dann „App-spezifische Passwörter“; die Zwei-Faktor-Authentifizierung muss aktiv sein. Der Info-Button neben dem Passwortfeld in MailVault erklärt dieselben Schritte. Schlägt die Anmeldung später fehl, hat ein geändertes Passwort deines Apple Accounts es widerrufen. Erstelle dann ein neues. Schritt-für-Schritt-Anleitung: https://mailvaultapp.com/de/guides/add-icloud-mail-to-mailvault.html"
+      }
     }
   ]
 }
@@ -209,7 +217,7 @@
         </ol>
       </nav>
 
-      <h1 class="text-4xl font-bold mb-2">E-Mail-Anbieter</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">Funktioniert MailVault mit Gmail und Outlook?</a></li><li><a href="#help-section-2">Wie verbinde ich mein Outlook.com-Konto?</a></li><li><a href="#help-section-3">Wie nutze ich MailVault mit Proton Mail?</a></li><li><a href="#help-section-4">Kann ich von einer anderen Adresse senden als der, mit der ich mich anmelde?</a></li><li><a href="#help-section-5">Wie sende ich von einem Alias?</a></li><li><a href="#help-section-6">Wie verbinde ich Fastmail oder ein anderes JMAP-Konto?</a></li></ul></details><!-- help-contents:end -->
+      <h1 class="text-4xl font-bold mb-2">E-Mail-Anbieter</h1><!-- help-intro:start --><form class="mv-help-search" action="/de/docs.html" method="get" role="search"><label for="help-q">Dokumentation, FAQ und Artikel durchsuchen</label><div class="mv-help-search-row"><input id="help-q" type="search" name="q" placeholder="Alle Anleitungen und Antworten durchsuchen" required><button type="submit">Suche</button></div></form><!-- help-intro:end --><!-- help-contents:start --><details class="mv-help-contents" open><summary>Auf dieser Seite</summary><ul><li><a href="#help-section-1">Funktioniert MailVault mit Gmail und Outlook?</a></li><li><a href="#help-section-2">Wie verbinde ich mein Outlook.com-Konto?</a></li><li><a href="#help-section-3">Wie nutze ich MailVault mit Proton Mail?</a></li><li><a href="#help-section-4">Kann ich von einer anderen Adresse senden als der, mit der ich mich anmelde?</a></li><li><a href="#help-section-5">Wie sende ich von einem Alias?</a></li><li><a href="#help-section-6">Wie verbinde ich Fastmail oder ein anderes JMAP-Konto?</a></li><li><a href="#help-section-7">Wie füge ich eine iCloud- oder Apple-Account-E-Mail-Adresse hinzu?</a></li></ul></details><!-- help-contents:end -->
       <p class="text-slate-500 dark:text-slate-400 mb-10">Verbinde Gmail, Microsoft 365, Outlook.com, Proton Mail und JMAP-Server wie Fastmail und sende von einem Alias.</p>
 
       <div class="space-y-4">
@@ -298,6 +306,11 @@
         <article id="jmap-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-6">Wie verbinde ich Fastmail oder ein anderes JMAP-Konto?</h2>
           <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Wähle beim Hinzufügen eines Kontos Fastmail und füge einen API-Token mit Mail- und Submission-Zugriff aus den Fastmail-Einstellungen ein. Für einen anderen Server wählst du JMAP und verwendest dessen Passwort oder API-Token. MailVault ermittelt die Sitzungs-URL, wenn die Domain sie veröffentlicht; andernfalls gibst du die vollständige HTTPS-Sitzungs-URL ein. Bestätige einen unbekannten ermittelten Server, bevor Zugangsdaten gesendet werden. Neue E-Mails kommen per Push mit regelmäßiger Abfrage als Ausweichlösung; Absenderadressen stammen aus den Identitäten des Servers. Fastmail bietet auch eine IMAP-Option mit App-Passwort.</p></div>
+        </article>
+
+        <article id="icloud-accounts" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2" id="help-section-7">Wie füge ich eine iCloud- oder Apple-Account-E-Mail-Adresse hinzu?</h2>
+          <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5"><p>Wähle beim Hinzufügen eines Kontos iCloud Mail, gib deine vollständige iCloud-Adresse ein und füge ein App-spezifisches Passwort ein. iCloud Mail akzeptiert das normale Passwort deines Apple Accounts nicht in anderen Apps. Erstelle das App-spezifische Passwort auf <a href="https://account.apple.com" target="_blank" rel="noopener" class="text-primary-500 hover:underline">account.apple.com</a> unter „Anmeldung und Sicherheit“, dann „App-spezifische Passwörter“; die Zwei-Faktor-Authentifizierung muss aktiv sein. Der Info-Button neben dem Passwortfeld in MailVault erklärt dieselben Schritte. Schlägt die Anmeldung später fehl, hat ein geändertes Passwort deines Apple Accounts es widerrufen. Erstelle dann ein neues. Siehe die <a href="/de/guides/add-icloud-mail-to-mailvault.html" class="text-primary-500 hover:underline">Schritt-für-Schritt-Anleitung</a>.</p></div>
         </article>
 
       </div>
