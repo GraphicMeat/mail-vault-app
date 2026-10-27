@@ -103,5 +103,21 @@
   "07153fc42772": "La page Connexion et sécurité d'un compte Apple, avec la carte Mots de passe pour app en bas à gauche",
   "7573b63d0434": "La fenêtre Mots de passe pour app, avec un mot de passe nommé MailVault, un bouton plus pour en ajouter un autre et un bouton Tout révoquer",
   "60e54feb33f2": "La fenêtre Générer un mot de passe pour app, avec le libellé MailVault saisi et un bouton Créer",
-  "5337fa52d020": "La fenêtre Confirmer votre mot de passe, qui demande le mot de passe du compte Apple, avec les boutons Continuer et Annuler"
+  "5337fa52d020": "La fenêtre Confirmer votre mot de passe, qui demande le mot de passe du compte Apple, avec les boutons Continuer et Annuler",
+  "fa8f34e32c35": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><a href=\"/features/network-activity.html\" class=\"text-primary-500 hover:text-primary-600 underline\">Activité réseau</a> : chaque connexion établie par MailVault et son service en arrière-plan, avec l’hôte, le motif et les données envoyées et reçues, conservée uniquement sur votre ordinateur</span>",
+  "e6b960ae908e": "Voir les 11 possibilités",
+  "4e613f306794": "Chaque connexion, listée.<br><span class=\"hm-grad\">Conservée sur votre ordinateur.</span>",
+  "18c9c8334837": "<strong>Chaque connexion</strong><span>Synchronisation et envoi du courrier, connexions aux comptes, requêtes DNS, sauvegardes et plus encore, chacune avec l’hôte, le port, le motif, le compte et les données envoyées et reçues.</span>",
+  "0c791aa82920": "<strong>Les pays sur une carte</strong><span>Une carte du monde montre les pays vers lesquels ces connexions sont allées, placés hors ligne grâce à la base de pays gratuite de DB-IP.</span>",
+  "aca795494a7a": "<strong>L’historique reste local</strong><span>Conservé sur votre ordinateur pendant 24 heures, 7 jours, 2 semaines ou un mois, puis supprimé. Filtrez par période, compte, protocole ou motif, ou copiez-le en texte.</span>",
+  "4fd45b77845e": "<strong>Ce qui n’y figure pas</strong><span>Le contenu web à l’intérieur des e-mails, les requêtes faites par la fenêtre de l’app elle-même et les téléchargements de mises à jour.</span>",
+  "fba3bae53e44": "<span>Où le trouver</span>Paramètres → Activité réseau",
+  "56e139808948": "Activité réseau : chaque connexion, listée | MailVault",
+  "353f33ea2361": "Activité réseau",
+  "26d0ddd71045": "Voyez à quels serveurs MailVault parle, pourquoi, et combien de données il a envoyées et reçues. La liste couvre l’app et son service en arrière-plan, les plus récentes en premier, et ne quitte jamais votre ordinateur.",
+  "5b57716e9922": "L’activité réseau liste chaque connexion établie par MailVault et son service en arrière-plan, avec l’hôte, le motif et les données envoyées et reçues. L’historique reste sur votre ordinateur.",
+  "ffcaefc20ba7": "Activité réseau : chaque connexion, listée",
+  "a84c92e8a4c3": "Agrandir : activité réseau dans MailVault",
+  "94f2b1407f8c": "Réglages Activité réseau : hôtes contactés, données envoyées et reçues, et carte du monde des pays auxquels MailVault s’est connecté",
+  "26c1670de5c0": "Vidéo : activité réseau dans MailVault"
 }

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Actividad de red: cada conexión, en una lista | MailVault</title>
+  <meta name="description" content="Actividad de red lista cada conexión que hacen MailVault y su proceso en segundo plano, con host, propósito y datos enviados y recibidos. El historial se queda en tu ordenador.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="email archive mac, email backup locally, free up email storage, IMAP backup, offline email archive, local email retention, archive emails before deleting, mailbox full solution, eml files, Maildir, MailStore alternative mac">
+  <link rel="canonical" href="https://mailvaultapp.com/es/features/network-activity.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/es/features/network-activity.html">
+  <meta property="og:title" content="Actividad de red: cada conexión, en una lista">
+  <meta property="og:description" content="Actividad de red lista cada conexión que hacen MailVault y su proceso en segundo plano, con host, propósito y datos enviados y recibidos. El historial se queda en tu ordenador.">
+  <meta property="og:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="es_ES">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Actividad de red: cada conexión, en una lista">
+  <meta name="twitter:description" content="Actividad de red lista cada conexión que hacen MailVault y su proceso en segundo plano, con host, propósito y datos enviados y recibidos. El historial se queda en tu ordenador.">
+  <meta name="twitter:image:alt" content="MailVault: búsqueda rápida. Correo privado. Tuyo para siempre. Gratis para macOS, Windows y Linux, con un adelanto de la app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v3.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+<!-- Structured Data -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "MailVault",
+      "item": "https://mailvaultapp.com/es/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Funciones",
+      "item": "https://mailvaultapp.com/es/features.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Actividad de red",
+      "item": "https://mailvaultapp.com/es/features/network-activity.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html">
+  <!-- /i18n:alternates -->
+
+  <link rel="stylesheet" href="/assets/english-site.css?v=20261008-light">
+<link rel="stylesheet" href="/assets/home.css?v=23">
+</head>
+<body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Saltar al contenido</a>
+<header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/es/" aria-label="Inicio de MailVault"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">por Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Navegación principal"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a>
+</nav>
+<div class="mv-navtools">
+<div class="mv-nav-social"><a class="mv-social" href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" aria-label="Dar una estrella a MailVault en GitHub" title="Dar una estrella a MailVault en GitHub"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span class="mv-social-count" data-github-stars hidden></span></a><button type="button" class="mv-social mv-love" data-vote aria-pressed="false" aria-label="Enviar un corazón a MailVault" title="Enviar un corazón a MailVault"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.6-4.6-9.3-9.5C1.5 7.4 3.8 4 7.2 4c2.1 0 3.8 1.1 4.8 2.8C13 5.1 14.7 4 16.8 4c3.4 0 5.7 3.4 4.5 7-1.7 4.9-9.3 9.5-9.3 9.5Z"/></svg><span class="mv-social-count" data-vote-count hidden></span></button></div>
+<details class="mv-language" translate="no">
+<summary aria-label="Seleccionar idioma"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Español</span><span class="mv-language-code" aria-hidden="true">ES</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/features/network-activity.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/features/network-activity.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/features/network-activity.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/features/network-activity.html" lang="es" hreflang="es" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/features/network-activity.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/features/network-activity.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/features/network-activity.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/features/network-activity.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/features/network-activity.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Cambiar tema de color" title="Cambiar tema de color"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-secondary mv-nav-download" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Demo</a><a class="mv-button mv-nav-download" href="/es/get-started.html?plan=free">Descargar</a>
+<details class="mv-mobile-menu">
+<summary><svg class="mv-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="mv-menu-label">Menú</span></summary>
+<nav aria-label="Navegación móvil"><a href="/es/features.html">Funciones</a><a href="/es/pricing.html">Precios</a><a href="/es/faq.html">FAQ</a><a href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Abrir la demo de MailVault en una ventana nueva">Probar la demo</a><a href="/es/get-started.html?plan=free">Descargar gratis</a>
+<button type="button" class="mv-theme mv-menu-theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><span>Cambiar tema de color</span></button></nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+<main id="main" class="hm fp" style="--hue:#8b5cf6;--hue2:#8b5cf6">
+<section class="fp-hero" aria-labelledby="fp-title">
+<div class="mv-wrap">
+<nav class="fp-crumbs" aria-label="Ruta de navegación"><a href="/es/features.html">Funciones</a><span aria-hidden="true">/</span><span aria-current="page">Actividad de red</span></nav>
+<p class="mv-eyebrow">Actividad de red</p>
+<h1 id="fp-title">Cada conexión, en una lista.<br><span class="hm-grad">Guardada en tu ordenador.</span></h1>
+<p class="hm-body fp-lead">Mira con qué servidores habla MailVault, por qué y cuánto envió y recibió. La lista cubre la app y su proceso en segundo plano, de la más reciente a la más antigua, y nunca sale de tu ordenador.</p>
+<div class="mv-actions"><a class="mv-button" data-hero-platform="mac" data-download="mac" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest">Descargar para macOS</a><a class="mv-button" data-hero-platform="windows" data-download="windows" data-download-page href="/es/thank-you.html?platform=windows&amp;start=1" hidden>Descargar para Windows</a><a class="mv-button" data-hero-platform="linux" data-download="amd64" data-linux-deb href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" hidden>Descargar para Linux (.deb)</a><a class="mv-button" data-hero-platform="mobile" href="/es/get-started.html?plan=free" hidden>Descargar MailVault</a></div>
+<div class="fp-links"><a class="mv-text-link" href="/es/get-started.html?plan=free#platforms">Otras plataformas y formatos →</a>
+<a class="mv-text-link" href="/demo/?lang=es" target="_blank" rel="noopener" aria-label="Probar la demo en directo en una ventana nueva">Probar la demo en directo ↗</a></div>
+<figure class="fp-closeup"><button class="mv-shot" type="button" data-image aria-label="Ampliar: Actividad de red en MailVault"><img src="/screenshots/network-activity-light-1440.webp" srcset="/screenshots/network-activity-light-720.webp 720w, /screenshots/network-activity-light-1440.webp 1440w, /screenshots/network-activity-light-1768.webp 1768w" sizes="(max-width: 900px) 92vw, 760px" width="884" height="704" alt="Ajustes de Actividad de red: hosts contactados, datos enviados y recibidos, y un mapa del mundo con los países a los que se conectó MailVault · Reviewed for MailVault version 2.20.0" fetchpriority="high" decoding="async" data-mailvault-version="2.20.0" data-mailvault-version-kind="reviewed" title="Reviewed for MailVault version 2.20.0"></button></figure>
+</div>
+</section>
+<section class="mv-section" aria-labelledby="fp-how">
+<div class="mv-wrap fp-grid">
+<div>
+<h2 id="fp-how">Cómo funciona</h2>
+<ul class="fp-how"><li><strong>Cada conexión</strong><span>Sincronización y envío de correo, inicios de sesión, consultas DNS, copias de seguridad y más, cada una con host, puerto, propósito, cuenta y datos enviados y recibidos.</span></li><li><strong>Países en un mapa</strong><span>Un mapa del mundo muestra a qué países fueron esas conexiones, ubicados sin conexión con la base de datos de países gratuita de DB-IP.</span></li><li><strong>El historial se queda en local</strong><span>Se guarda en tu ordenador durante 24 horas, 7 días, 2 semanas o un mes, y luego se borra. Filtra por tiempo, cuenta, protocolo o propósito, o cópialo como texto.</span></li><li><strong>Lo que no incluye</strong><span>El contenido web dentro de los correos, las solicitudes que hace la propia ventana de la app y las descargas de actualizaciones.</span></li></ul>
+
+<p class="fp-plan fp-free"><strong>Gratis.</strong> Forma parte de la app gratuita, sin cuenta atrás de prueba ni cuenta que crear.</p>
+<p class="fp-where"><span>Dónde encontrarlo</span>Ajustes → Actividad de red</p>
+</div>
+<section class="fp-video" data-youtube-id="" hidden aria-label="Vídeo: Actividad de red en MailVault">
+<h2>Mira cómo funciona</h2>
+<p class="mv-small">Se reproduce desde YouTube solo cuando pulsas play.</p>
+<button class="fp-play" type="button">Reproducir vídeo</button>
+</section>
+</div>
+</section>
+<section class="mv-section" aria-labelledby="fp-related">
+<div class="mv-wrap">
+<h2 id="fp-related">Funciones relacionadas</h2>
+<div class="hm-cards fp-related"><a href="/es/features/no-account.html"><strong>Sin cuenta de MailVault</strong><span>Sin cuenta con nosotros.</span></a><a href="/es/features/email-tracker-blocking.html"><strong>Bloqueo de rastreadores</strong><span>Ve todos los rastreadores, y detenlos.</span></a><a href="/es/features/link-safety.html"><strong>Seguridad de enlaces</strong><span>Los enlaces que mienten quedan atrapados.</span></a></div>
+<p><a class="mv-text-link" href="/es/features.html">Todas las funciones →</a></p>
+</div>
+</section>
+</main>
+
+<aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">Una creación de Graphic Meat</p><h2 id="studio-title">Conoce a las personas detrás de MailVault.</h2><p>Somos Graphic Meat, un estudio de productos independiente que crea software útil desde 2013. MailVault es una de las cosas que hacemos. Ven a conocernos y descubre en qué más estamos trabajando.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Conoce Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visita Graphic Meat, el estudio detrás de MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>Más de Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Convierte tus fotos en un libro listo para imprimir.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>Un espacio de trabajo local para notas y código.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Mueve tu correo a un proveedor nuevo.</span></a></div></div></aside>
+<footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/es/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Lee tu correo. Conserva tu correo.</p>
+</div>
+<nav aria-label="Explora MailVault"><a href="/es/use-cases.html">Casos de uso</a><a href="/es/blog.html">Blog</a><a href="/changelog.html">Novedades</a><a href="/es/mentioned-in.html">Menciones</a><a href="/es/faq.html">FAQ</a><a href="/es/docs.html">Ayuda</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Código en GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Comunidad ↗</a><a href="https://discord.gg/gECE37RpD" target="_blank" rel="noopener">Discord ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contacta con el equipo ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Creado por <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacidad</a><a href="/terms.html">Términos</a>
+</div>
+</div>
+</div>
+</footer>
+<dialog class="mv-lightbox" aria-label="Captura del producto"><button type="button" class="mv-button mv-secondary" data-close-image>Cerrar captura</button><img src="/screenshots/es/thread-view-1440.webp" alt="Bandeja de entrada de MailVault · MailVault version 2.16.0" data-mailvault-version="2.16.0" data-mailvault-version-kind="capture" title="MailVault version 2.16.0">
+<p>
+</p>
+</dialog>
+<script id="mv-runtime-copy" type="application/json">
+{
+  "newsletterSubscribed": "Ya estás en la lista. Busca el correo de bienvenida.",
+  "newsletterQueryError": "No se pudo enviar. Comprueba tu dirección de correo e inténtalo de nuevo.",
+  "newsletterSubmitting": "Suscribiendo…",
+  "newsletterOffline": "Parece que no tienes conexión. Vuelve a conectarte e inténtalo de nuevo.",
+  "newsletterRateLimit": "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
+  "newsletterSaveError": "No pudimos guardar tu correo. Inténtalo de nuevo dentro de un momento.",
+  "newsletterReachError": "No pudimos contactar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
+  "voteThanks": "¡Gracias por tu apoyo!",
+  "voteAlreadyCounted": "Tu voto ya se ha contado. ¡Gracias!",
+  "voteSupporting": "¡Gracias por apoyar MailVault!",
+  "voteSendError": "No se pudo enviar tu voto. Inténtalo de nuevo dentro de poco."
+}
+  </script>
+<script defer src="/assets/english-site.js?v=20261008-light">
+</script>
+<script defer src="/gm.js?v=30715e4" data-site="mailvault" data-tag="conversion-2026-10">
+</script>
+<script defer src="/assets/community-support.js?v=3"></script>
+</body>
+</html>

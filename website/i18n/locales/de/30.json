@@ -103,5 +103,21 @@
   "07153fc42772": "Die Seite „Anmeldung und Sicherheit“ eines Apple Accounts, mit der Karte „App-spezifische Passwörter“ unten links",
   "7573b63d0434": "Das Fenster „App-spezifische Passwörter“ mit einem Passwort namens MailVault, einer Plus-Taste zum Hinzufügen eines weiteren und der Taste „Alle widerrufen“",
   "60e54feb33f2": "Das Fenster „App-spezifisches Passwort erstellen“ mit der eingegebenen Bezeichnung MailVault und der Taste „Erstellen“",
-  "5337fa52d020": "Das Fenster „Passwort bestätigen“, das nach dem Passwort des Apple Accounts fragt, mit den Tasten „Fortfahren“ und „Abbrechen“"
+  "5337fa52d020": "Das Fenster „Passwort bestätigen“, das nach dem Passwort des Apple Accounts fragt, mit den Tasten „Fortfahren“ und „Abbrechen“",
+  "fa8f34e32c35": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><a href=\"/features/network-activity.html\" class=\"text-primary-500 hover:text-primary-600 underline\">Netzwerkaktivität</a>: jede Verbindung, die MailVault und sein Hintergrunddienst aufbauen, mit Host, Zweck sowie gesendeten und empfangenen Daten, gespeichert nur auf deinem Computer</span>",
+  "e6b960ae908e": "Alle 11 Funktionen ansehen",
+  "4e613f306794": "Jede Verbindung, aufgelistet.<br><span class=\"hm-grad\">Auf deinem Computer gespeichert.</span>",
+  "18c9c8334837": "<strong>Jede Verbindung</strong><span>Mail-Abgleich und Versand, Anmeldungen, DNS-Abfragen, Backups und mehr, jeweils mit Host, Port, Zweck, Konto sowie gesendeten und empfangenen Daten.</span>",
+  "0c791aa82920": "<strong>Länder auf einer Karte</strong><span>Eine Weltkarte zeigt, in welche Länder diese Verbindungen gingen, offline zugeordnet mit der kostenlosen Länderdatenbank von DB-IP.</span>",
+  "aca795494a7a": "<strong>Verlauf bleibt lokal</strong><span>Auf deinem Computer für 24 Stunden, 7 Tage, 2 Wochen oder einen Monat aufbewahrt, dann gelöscht. Filtere nach Zeit, Konto, Protokoll oder Zweck, oder kopiere ihn als Text.</span>",
+  "4fd45b77845e": "<strong>Was nicht enthalten ist</strong><span>Webinhalte in E-Mails, Anfragen, die das App-Fenster selbst stellt, und Downloads von App-Updates.</span>",
+  "fba3bae53e44": "<span>So findest du es</span>Einstellungen → Netzwerkaktivität",
+  "56e139808948": "Netzwerkaktivität: Jede Verbindung, aufgelistet | MailVault",
+  "353f33ea2361": "Netzwerkaktivität",
+  "26d0ddd71045": "Sieh, mit welchen Servern MailVault spricht, warum, und wie viel es gesendet und empfangen hat. Die Liste umfasst die App und ihren Hintergrunddienst, neueste zuerst, und verlässt nie deinen Computer.",
+  "5b57716e9922": "Die Netzwerkaktivität listet jede Verbindung, die MailVault und sein Hintergrunddienst aufbauen, mit Host, Zweck sowie gesendeten und empfangenen Daten. Der Verlauf bleibt auf deinem Computer.",
+  "ffcaefc20ba7": "Netzwerkaktivität: Jede Verbindung, aufgelistet",
+  "a84c92e8a4c3": "Vergrößern: Netzwerkaktivität in MailVault",
+  "94f2b1407f8c": "Netzwerkaktivität in den Einstellungen: kontaktierte Hosts, gesendete und empfangene Daten und eine Weltkarte der Länder, mit denen MailVault verbunden war",
+  "26c1670de5c0": "Video: Netzwerkaktivität in MailVault"
 }

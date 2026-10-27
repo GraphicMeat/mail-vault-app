@@ -534,7 +534,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -549,7 +549,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/de/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -564,7 +564,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/fr/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -579,7 +579,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/es/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -594,7 +594,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/it/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -609,7 +609,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/ja/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -624,7 +624,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/ko/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -639,7 +639,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/zh/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -654,7 +654,7 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/pt-br/features.html</loc>
-    <lastmod>2026-10-17</lastmod>
+    <lastmod>2026-10-27</lastmod>
     <priority>0.9</priority>
       <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features.html"/>
       <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features.html"/>
@@ -12483,6 +12483,132 @@
       <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/native-app.html"/>
       <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/native-app.html"/>
       <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/native-app.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/de/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/fr/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/es/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/it/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ja/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/ko/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/zh/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/pt-br/features/network-activity.html</loc>
+    <lastmod>2026-10-27</lastmod>
+      <xhtml:link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/network-activity.html"/>
+      <xhtml:link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/network-activity.html"/>
   </url>
   <url>
     <loc>https://mailvaultapp.com/features/no-account.html</loc>

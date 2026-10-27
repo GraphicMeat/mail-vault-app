@@ -182,6 +182,14 @@
         "/assets/videos/guides/search-local-archive-full-window-v4.mp4",
         "/assets/videos/guides/search-local-archive-full-window-v4.jpg"
       ]
+    },
+    {
+      "version": "2.20.0",
+      "kind": "reviewed",
+      "evidence": "Visual review on 2026-10-28 of the Network Activity screenshot (Product Hunt still, commit cc337e363) against the 2.20.0 Network Activity settings tab: intro text, Keep history for, Last 24 hours, All accounts, Hosts contacted, Sent, Received and the country map tooltip with Top hosts match the shipped en strings. Original recording version is not recorded; this is a compatibility review, not a capture claim.",
+      "assets": [
+        "/screenshots/network-activity"
+      ]
     }
   ]
 }
