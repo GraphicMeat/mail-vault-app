@@ -33,6 +33,9 @@ impl AccountWriteScope {
 pub(crate) struct AccountAdmission(Mutex<Vec<Weak<AccountWriteScope>>>);
 #[derive(Clone)]
 pub(crate) struct AccountLease(Arc<AccountWriteScope>);
+/// A short, private exclusion for a claimed removal's selected local unlink.
+/// It carries no `covers` authority and drops when the actual unlink child ends.
+pub(crate) struct AccountDeletionExclusion { _scope: Arc<AccountWriteScope> }
 impl AccountLease {
     pub fn covers(&self, scope: &AccountWriteScope) -> bool {
         self.0.whole_store
@@ -46,6 +49,22 @@ impl AccountLease {
     }
 }
 impl AccountAdmission {
+    pub(crate) fn try_exclude_for_removal(&self, retained: &AccountLease)
+        -> Result<AccountDeletionExclusion, CredError> {
+        let mut active = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        active.retain(|scope| scope.strong_count() > 0);
+        let live: Vec<_> = active.iter().filter_map(Weak::upgrade).collect();
+        // A matching ID is not enough: only the exact lease retained by this
+        // admission instance may be ignored. Already-started other owners
+        // make this optional destructive unit refuse immediately.
+        if !live.iter().any(|scope| Arc::ptr_eq(scope, &retained.0))
+            || live.iter().any(|scope| !Arc::ptr_eq(scope, &retained.0)) {
+            return Err(CredError::Busy);
+        }
+        let scope = Arc::new(AccountWriteScope { whole_store: true, ..Default::default() });
+        active.push(Arc::downgrade(&scope));
+        Ok(AccountDeletionExclusion { _scope: scope })
+    }
     pub fn known_conflict(&self, ids: &BTreeSet<String>) -> bool {
         self.0
             .lock()
@@ -1676,6 +1695,32 @@ mod tests {
         let mut s = AccountWriteScope::default();
         s.record(id, &row(id, email, host));
         s
+    }
+    #[test]
+    fn s24_deletion_exclusion_requires_exact_own_lease_and_releases_after_child() {
+        let admission = AccountAdmission::default();
+        let retained = admission.try_reserve(AccountWriteScope {
+            ids: ["a".to_owned()].into(), ..Default::default()
+        }).unwrap();
+        let foreign = AccountAdmission::default().try_reserve(AccountWriteScope {
+            ids: ["a".to_owned()].into(), ..Default::default()
+        }).unwrap();
+        assert!(admission.try_exclude_for_removal(&foreign).is_err(),
+            "a same-ID foreign lease cannot borrow this admission's authority");
+        let other = admission.try_reserve(AccountWriteScope {
+            ids: ["b".to_owned()].into(), ..Default::default()
+        }).unwrap();
+        assert!(admission.try_exclude_for_removal(&retained).is_err(),
+            "another actual lease must make optional deletion refuse");
+        drop(other);
+        let exclusion = admission.try_exclude_for_removal(&retained).unwrap();
+        assert!(admission.try_reserve(AccountWriteScope {
+            ids: ["b".to_owned()].into(), ..Default::default()
+        }).is_err(), "whole-store deletion unit must exclude native publication");
+        drop(exclusion);
+        assert!(admission.try_reserve(AccountWriteScope {
+            ids: ["b".to_owned()].into(), ..Default::default()
+        }).is_ok(), "dropping the actual child guard must release publication");
     }
 
     struct BeforeAdmissionPause {

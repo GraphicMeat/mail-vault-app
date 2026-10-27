@@ -2030,6 +2030,20 @@ pub(crate) async fn read_account_save_snapshot() -> Result<BlobSnapshot, CredErr
     })
 }
 
+/// Optional local-delete proof: never ask the OS to display a credential
+/// prompt while a short whole-store admission exclusion is held.
+pub(crate) async fn read_account_removal_snapshot_quiet(
+    deadline: tokio::time::Instant,
+) -> Result<BlobSnapshot, CredError> {
+    let generation = BLOB_READ.generation();
+    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+    if remaining.is_zero() { return Err(CredError::Unavailable); }
+    let records = guarded(CREDENTIALS_KEY, raw_read(false, generation),
+        std::cmp::min(remaining, AI_KEY_TIMEOUT))
+        .await.map_err(|_| CredError::Unavailable)?.unwrap_or_default();
+    Ok(BlobSnapshot { records, generation })
+}
+
 /// Keep the credential writer excluded while an account-save caller proves a
 /// pre-effect alternate reply against the current blob and document.
 pub(crate) async fn read_account_save_serialized(
