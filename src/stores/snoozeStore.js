@@ -67,7 +67,10 @@ async function announceLocalWake(row) {
   const id = normalizeMessageId(row.messageId);
   const cache = await getEmailHeaders(row.accountId, row.fromMailbox);
   const header = cache?.emails?.find(e => normalizeMessageId(e.messageId) === id) || null;
-  notifyArrival(row.accountId, row.fromMailbox, 1, header);
+  // Named by account and uid: the daemon then counts this banner as the
+  // message's own, so the refresh that sees it back raises no second one.
+  const uid = Number(header?.uid);
+  notifyArrival(row.accountId, row.fromMailbox, 1, header, null, uid > 0 ? { uids: [uid], rearm: true } : {});
 }
 
 // The daemon's sync wrote the cleared \Seen into the header cache, and the

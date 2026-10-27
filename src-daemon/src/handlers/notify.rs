@@ -3,9 +3,11 @@
 //! (the settings document) and the local time. The app hands over the
 //! arrival and only renders what this answers.
 //!
-//! - `notify.decide {accountId, folder, from, domain?, viewIds?, focusHeld?, uids?}`
+//! - `notify.decide {accountId, folder, from, domain?, viewIds?, focusHeld?, uids?, rearm?}`
 //!   answers `{deliver, reason}`, `reason` one of `notify_policy::REASONS`, or
-//!   `already-announced` when every one of `uids` already had its banner.
+//!   `already-announced` when every one of `uids` already had its banner, unless
+//!   `rearm` (a snooze's wake, which brings back a message announced on arrival)
+//!   asks for this banner regardless; it still counts as the message's latest.
 //!   `domain` defaults to what follows the first `@` of `from`. `focusHeld`
 //!   is the window's Focus session: the shell holds those banners itself and
 //!   flushes them when the session ends.
@@ -35,6 +37,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         .and_then(Value::as_array)
         .map(|uids| uids.iter().filter_map(|uid| uid.as_u64().and_then(|uid| u32::try_from(uid).ok())).collect())
         .unwrap_or_default();
+    let rearm = params.get("rearm").and_then(Value::as_bool).unwrap_or(false);
     let place = ctx.account_id.clone().zip(ctx.folder.as_ref().and_then(Value::as_str).map(str::to_owned));
     let for_policy = ctx.clone();
     // Reads the settings file: off the async workers.
@@ -47,7 +50,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // A banner (shown now, or held by a Focus session to be shown) is
             // allowed once per message: the policy's answer stands for the first.
             let shown = d.deliver || d.reason == notify_policy::FOCUS_HOLD;
-            let again = shown && place.is_some_and(|(account, folder)| !state.recent.announce(&account, &folder, &uids));
+            let again = shown
+                && place.is_some_and(|(account, folder)| {
+                    if rearm {
+                        state.recent.reannounce(&account, &folder, &uids);
+                        false
+                    } else {
+                        !state.recent.announce(&account, &folder, &uids)
+                    }
+                });
             if again {
                 RpcResponse::success(id, json!({"deliver": false, "reason": notify_policy::ALREADY_ANNOUNCED}))
             } else {
@@ -146,6 +157,19 @@ mod tests {
         assert_eq!(decide(&state, muted.clone()).await, json!({"deliver": false, "reason": "notifications-off"}));
         save(&dir, json!({"enabled": true}));
         assert_eq!(decide(&state, muted).await["deliver"], true);
+    }
+
+    /// A local snooze's wake brings back a message whose arrival banner was
+    /// shown: the wake is a banner of its own, and a refresh right after it is not.
+    #[tokio::test]
+    async fn a_wake_banner_is_shown_after_the_arrival_and_holds_back_the_refresh() {
+        let (_dir, state) = rig();
+        let arrival = json!({"accountId": "a1", "folder": "INBOX", "uids": [5]});
+        assert_eq!(decide(&state, arrival.clone()).await["deliver"], true);
+        let wake = json!({"accountId": "a1", "folder": "INBOX", "uids": [5], "rearm": true});
+        assert_eq!(decide(&state, wake.clone()).await["deliver"], true, "announced on arrival, shown again on wake");
+        assert_eq!(decide(&state, arrival).await["reason"], "already-announced", "the refresh after the wake");
+        assert_eq!(decide(&state, wake).await["deliver"], true, "snoozed and woken a second time");
     }
 
     /// A Focus session holds the banner and shows it when the session ends: that
