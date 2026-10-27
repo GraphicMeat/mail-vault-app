@@ -261,31 +261,48 @@ async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
     }
     let lease = match state.account_admission.try_reserve(scope) {
         Ok(lease) => lease,
-        Err(_) => return Ok(busy(&id)),
+        Err(_) => {
+            tracing::info!("S24_REMOVE_BUSY stage=admission");
+            return Ok(busy(&id));
+        }
     };
     let reread = Arc::clone(&doc);
     let fresh = tokio::task::spawn_blocking(move || accounts_doc::list(&reread)).await;
     if !matches!(fresh, Ok(Ok(ref current)) if current == &listed && current.recovered.is_none()) {
+        tracing::info!("S24_REMOVE_BUSY stage=fresh_proof");
         return Ok(busy(&id));
     }
     let mut claim = match state.account_lifecycle.try_close(lease.clone(), &id) {
         Ok(claim) => claim,
         Err(LifecycleError::Unknown) => match state.account_lifecycle.try_close_absent(lease.clone(), &id, &listed) {
             Ok(claim) => claim,
-            Err(_) => return Ok(busy(&id)),
+            Err(_) => {
+                tracing::info!("S24_REMOVE_BUSY stage=absent_claim");
+                return Ok(busy(&id));
+            }
         },
-        Err(_) => return Ok(busy(&id)),
+        Err(_) => {
+            tracing::info!("S24_REMOVE_BUSY stage=lifecycle_claim");
+            return Ok(busy(&id));
+        }
     };
     let drained = match claim.wait_local_until(std::cmp::min(Instant::now() + DRAIN, deadline)).await {
         Ok(drained) => drained,
-        Err(_) => return Ok(busy(&id)),
+        Err(_) => {
+            tracing::info!("S24_REMOVE_BUSY stage=local_drain");
+            return Ok(busy(&id));
+        }
     };
     {
         let mut stage = progress.lock().unwrap_or_else(|e| e.into_inner());
         if !stage.waiter_alive || stage.stage == Stage::Expired || Instant::now() >= deadline {
+            tracing::info!("S24_REMOVE_BUSY stage=pre_effect_waiter_or_deadline");
             return Ok(busy(&id));
         }
-        if claim.mark_effects_started(drained).is_err() { return Ok(busy(&id)); }
+        if claim.mark_effects_started(drained).is_err() {
+            tracing::info!("S24_REMOVE_BUSY stage=pre_effect_claim");
+            return Ok(busy(&id));
+        }
         stage.stage = Stage::Receipt;
     }
     let claim = Arc::new(claim);

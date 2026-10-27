@@ -741,25 +741,35 @@ impl AccountLifecycle {
             ids: [id.to_owned()].into(),
             ..Default::default()
         }) {
+            tracing::info!("S24_CLOSE_REFUSED reason=scope");
             return Err(LifecycleError::Busy);
         }
         let mut s = self.lock();
         if !s.ready {
+            tracing::info!("S24_CLOSE_REFUSED reason=unready");
             return Err(LifecycleError::Unready);
         }
         if s.unscoped > 0 {
+            tracing::info!("S24_CLOSE_REFUSED reason=unscoped count={}", s.unscoped);
             return Err(LifecycleError::Busy);
         }
         let Some(e) = s.entries.get(id) else {
             return Err(LifecycleError::Unknown);
         };
-        if e.operations > 0
-            || e.claim_active
-            || !matches!(e.phase, Phase::Open | Phase::Retired | Phase::Closing)
-        {
+        if e.operations > 0 {
+            tracing::info!("S24_CLOSE_REFUSED reason=operations count={} local={}", e.operations, e.local);
+            return Err(LifecycleError::Busy);
+        }
+        if e.claim_active {
+            tracing::info!("S24_CLOSE_REFUSED reason=claim_active local={}", e.local);
+            return Err(LifecycleError::Busy);
+        }
+        if !matches!(e.phase, Phase::Open | Phase::Retired | Phase::Closing) {
+            tracing::info!("S24_CLOSE_REFUSED reason=phase");
             return Err(LifecycleError::Busy);
         }
         if e.phase == Phase::Closing && e.local > 0 {
+            tracing::info!("S24_CLOSE_REFUSED reason=closing_local count={}", e.local);
             return Err(LifecycleError::Busy);
         }
         let previous = e.phase;
