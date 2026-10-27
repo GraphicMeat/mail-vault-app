@@ -10,6 +10,7 @@ use mailvault_core::accounts_doc::{self, Listing, LiveScrub};
 use mailvault_core::app_db::{self, compose_receipts, follow_up};
 use mailvault_core::custody::cache as sql_cache;
 use mailvault_core::json_doc::Change;
+use mailvault_core::imap::{pool::same_connection_key, ImapConfig, ImapPool};
 use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -496,6 +497,102 @@ fn may_start(progress: &Progress, deadline: Instant) -> bool {
     current.waiter_alive && current.stage != Stage::Expired && Instant::now() < deadline
 }
 
+/// Pre-effect native connection evidence. A record can be present in either
+/// the document or the credential blob; retain both exact interpretations.
+struct PoolContext {
+    target: Vec<ImapConfig>,
+    others: Vec<ImapConfig>,
+    non_imap_target: bool,
+    unknown_target: bool,
+    unknown_other: bool,
+}
+impl PoolContext {
+    fn capture(id: &str, listed: &Listing, snapshot: &credentials::BlobSnapshot) -> Self {
+        let mut proof = Self { target: Vec::new(), others: Vec::new(),
+            non_imap_target: false, unknown_target: false, unknown_other: false };
+        for row in &listed.accounts {
+            if let Some(row_id) = row.get("id").and_then(Value::as_str) {
+                proof.record(id, row_id, row);
+            }
+        }
+        for (row_id, raw) in &snapshot.records {
+            match serde_json::from_str::<Value>(raw) {
+                Ok(row) if row.get("id").is_some_and(|value| value.as_str() != Some(row_id)) => {
+                    if row_id == id { proof.unknown_target = true; }
+                    else { proof.unknown_other = true; }
+                }
+                Ok(row) => proof.record(id, row_id, &row),
+                Err(_) if row_id == id => proof.unknown_target = true,
+                Err(_) => proof.unknown_other = true,
+            }
+        }
+        proof
+    }
+
+    fn record(&mut self, id: &str, row_id: &str, row: &Value) {
+        match credentials::config_from_record(row) {
+            Ok(config) if config.uses_graph() || config.uses_jmap() => {
+                if row_id == id { self.non_imap_target = true; }
+            }
+            Ok(config) => {
+                let into = if row_id == id { &mut self.target } else { &mut self.others };
+                if !into.iter().any(|prior| same_connection_key(prior, &config)) {
+                    into.push(config);
+                }
+            }
+            Err(_) if row_id == id => self.unknown_target = true,
+            Err(_) => self.unknown_other = true,
+        }
+    }
+
+    fn reserve_aliases(&self, scope: &mut AccountWriteScope) {
+        for config in &self.target {
+            let joined = format!("{}-{}", config.email, config.host);
+            for (boundary, _) in joined.match_indices('-') {
+                let host = &joined[boundary + 1..];
+                if !host.is_empty() {
+                    scope.keys.insert(accounts_doc::logical_key(&json!({
+                        "email":&joined[..boundary], "imapHost":host
+                    })));
+                }
+            }
+        }
+    }
+
+    async fn retire(self, pool: &ImapPool, progress: &Progress, deadline: Instant)
+        -> Result<(), String> {
+        if self.unknown_target && !pool.idle_sessions_empty().await {
+            return Err("target pool context unavailable".into());
+        }
+        if self.target.is_empty() {
+            if self.non_imap_target || pool.idle_sessions_empty().await { return Ok(()); }
+            return Err("unattributable idle sessions remain".into());
+        }
+        let mut exclusive = Vec::new();
+        for config in self.target {
+            if self.others.iter().any(|other| same_connection_key(&config, other)) {
+                continue;
+            }
+            let unprovable = self.unknown_other
+                || format!("{}-{}", config.email, config.host).ends_with('-');
+            if unprovable {
+                if pool.has_idle_sessions_for(&config).await {
+                    return Err("idle session ownership is unprovable".into());
+                }
+                continue;
+            }
+            exclusive.push(config);
+        }
+        for config in exclusive {
+            if !may_start(progress, deadline) {
+                return Err("pool retirement caller or deadline expired".into());
+            }
+            pool.disconnect(&config).await;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, params: &Value, id: Value) -> RpcResponse {
     let Some(account_id) = params.as_object().filter(|p| p.len() == 1)
         .and_then(|p| p.get("accountId")).and_then(Value::as_str)
@@ -541,6 +638,7 @@ async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
     let snapshot = tokio::time::timeout_at(deadline, credentials::read_account_save_snapshot())
         .await.map_err(|_| "errors.keychainUnavailable".to_owned())?
         .map_err(|e| e.catalog_key().to_owned())?;
+    let pool_context = PoolContext::capture(&id, &listed, &snapshot);
     let (projected, custody_ids) = account_bound_cache_projection(&state, &id)?;
     let mut other_ids: BTreeSet<String> = listed.accounts.iter()
         .filter_map(|row| row.get("id").and_then(Value::as_str)).map(str::to_owned).collect();
@@ -575,6 +673,7 @@ async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
             scope.record(record_id, &value);
         }
     }
+    pool_context.reserve_aliases(&mut scope);
     let lease = match state.account_admission.try_reserve(scope) {
         Ok(lease) => lease,
         Err(_) => {
@@ -689,13 +788,23 @@ async fn remove_owned(state: Arc<DaemonState>, id: String, deadline: Instant,
     let idle = Arc::clone(&state);
     let watched = id.clone();
     let watched_claim = Arc::clone(&claim);
-    let unwatch = tokio::spawn(async move {
+    let bookkeeping_progress = Arc::clone(&progress);
+    let bookkeeping = tokio::spawn(async move {
         let _claim = watched_claim;
+        if !may_start(&bookkeeping_progress, deadline) {
+            return Err("bookkeeping caller or deadline expired".to_owned());
+        }
         idle.idle.unwatch(&watched).await;
-        Ok::<_, String>(())
+        if !may_start(&bookkeeping_progress, deadline) {
+            return Err("pool retirement caller or deadline expired".to_owned());
+        }
+        pool_context.retire(&idle.imap_pool, &bookkeeping_progress, deadline).await
     });
-    if let Err(kind) = actual(deadline, unwatch).await {
+    if let Err(kind) = actual(deadline, bookkeeping).await {
         return Ok(stage_failure(&id, Stage::Bookkeeping, kind, &["followUps"]));
+    }
+    if !may_start(&progress, deadline) {
+        return Ok(failed(&id, Stage::Bookkeeping, &["followUps"]));
     }
     let Ok(claim) = Arc::try_unwrap(claim) else {
         return Ok(failed(&id, Stage::Bookkeeping, &["custody"]));
@@ -868,6 +977,23 @@ mod tests {
     use super::*;
     use mailvault_core::app_db::compose_receipts as receipts;
 
+    struct ImapPlaintextRestore(Option<std::ffi::OsString>);
+    impl ImapPlaintextRestore {
+        fn set() -> Self {
+            let prior = std::env::var_os("MAILVAULT_IMAP_PLAINTEXT");
+            std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+            Self(prior)
+        }
+    }
+    impl Drop for ImapPlaintextRestore {
+        fn drop(&mut self) {
+            match self.0.take() {
+                Some(prior) => std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", prior),
+                None => std::env::remove_var("MAILVAULT_IMAP_PLAINTEXT"),
+            }
+        }
+    }
+
     async fn received(rx: std::sync::mpsc::Receiver<()>) {
         tokio::task::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(10)))
             .await.unwrap().unwrap();
@@ -929,6 +1055,425 @@ mod tests {
             app_db::with(&self.app(), |conn| receipts::save(conn, &receipt)).unwrap();
             scope
         }
+
+        fn mock_imap_account(&self, id: &str, email: &str, server: &mock_imap::MockImap)
+            -> mailvault_core::imap::ImapConfig {
+            let record = json!({"id":id,"email":email,
+                "imapHost":server.host(),"imapPort":server.port(),
+                "imapSecure":false,"authType":"password","password":"synthetic"});
+            accounts_doc::run(&accounts_doc::shared(&self.app()), "accounts.put",
+                &json!({"entry":record}), LiveScrub::Preserve).unwrap();
+            let mut blob = self.blob();
+            blob.insert(id.to_owned(), record.to_string());
+            fs::write(self.app().join("credentials.json"), json!(blob).to_string()).unwrap();
+            credentials::blob_written_elsewhere();
+            credentials::config_from_record(&record).unwrap()
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_exclusive_idle_sessions_retire_without_touching_b() {
+        let rig = Rig::new(&["a", "b"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let a_server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let b_server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let a = rig.mock_imap_account("a", "a@example.test", &a_server);
+        let b = rig.mock_imap_account("b", "b@example.test", &b_server);
+        let a_background = rig.state.imap_pool.get_background(&a).await.unwrap();
+        rig.state.imap_pool.return_background(&a, a_background).await;
+        let a_priority = rig.state.imap_pool.get_priority(&a).await.unwrap();
+        rig.state.imap_pool.return_priority(&a, a_priority).await;
+        let b_background = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, b_background).await;
+        let a_connections = a_server.connection_count();
+        let b_connections = b_server.connection_count();
+        let result = rig.remove("a").await;
+        let a_logouts = a_server.count_commands("LOGOUT");
+        let b_logouts = b_server.count_commands("LOGOUT");
+        let b_reused = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, b_reused).await;
+        let b_connections_after = b_server.connection_count();
+        assert!(result["outcome"] == "complete" && a_connections == 2
+            && a_logouts == 2 && b_connections == 1 && b_logouts == 0
+            && b_connections_after == b_connections,
+            "S24_MINOR_POOL_EXCLUSIVE: result={result} a_connections={a_connections} \
+             a_logouts={a_logouts} b_connections={b_connections} \
+             b_logouts={b_logouts} b_connections_after={b_connections_after}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_encoded_pool_key_publication_waits_for_retirement() {
+        let rig = Rig::new(&["a"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let a = rig.mock_imap_account("a", "a@b.example-c.example", &server);
+        let pooled = rig.state.imap_pool.get_background(&a).await.unwrap();
+        rig.state.imap_pool.return_background(&a, pooled).await;
+        let (entered, release, done) = arm(local_gates(), rig.app());
+        let state = Arc::clone(&rig.state);
+        let pending = tokio::spawn(async move {
+            route(&state, &json!({"accountId":"a"}), json!(1)).await
+        });
+        received(entered).await;
+        // Distinct logical account key, but the pool's actual concatenated
+        // email-host:port key is identical to A's captured connection key.
+        let b_host = format!("c.example-{}", server.host());
+        let b_entry = json!({"entry":{"id":"b","email":"a@b.example","imapHost":b_host,
+            "imapPort":server.port(),"authType":"password"}});
+        let same_entry = json!({"entry":{"id":"same","email":"a@b.example-c.example",
+            "imapHost":server.host(),"imapPort":server.port(),"authType":"password"}});
+        let unrelated_entry = json!({"entry":{"id":"other","email":"other@example.test",
+            "imapHost":"unrelated-host","authType":"password"}});
+        let same = crate::handlers::accounts::route(&rig.state, "accounts.put",
+            &same_entry, json!(2)).await.unwrap();
+        let unrelated = crate::handlers::accounts::route(&rig.state, "accounts.put",
+            &unrelated_entry, json!(3)).await.unwrap();
+        let put = crate::handlers::accounts::route(&rig.state, "accounts.put",
+            &b_entry, json!(4)).await.unwrap();
+        let same_blocked = same.error.as_ref().is_some_and(|error| error.message == "errors.keychainBusy")
+            && rig.rows().as_array().unwrap().iter().all(|row| row["id"] != "same");
+        let unrelated_published = unrelated.error.is_none()
+            && rig.rows().as_array().unwrap().iter().any(|row| row["id"] == "other");
+        let blocked = put.error.as_ref().is_some_and(|error| error.message == "errors.keychainBusy")
+            && rig.rows().as_array().unwrap().iter().all(|row| row["id"] != "b");
+        release.send(()).unwrap();
+        received(done).await;
+        let removal = pending.await.unwrap();
+        let result = removal.result.unwrap_or(Value::Null);
+        let logouts = server.count_commands("LOGOUT");
+        let retried = crate::handlers::accounts::route(&rig.state, "accounts.put",
+            &b_entry, json!(5)).await.unwrap();
+        let published_after_release = retried.error.is_none()
+            && rig.rows().as_array().unwrap().iter().any(|row| row["id"] == "b");
+        assert!(same_blocked && unrelated_published && blocked && published_after_release
+            && result["outcome"] == "complete" && logouts == 1,
+            "S24_MINOR_POOL_ENCODED_ALIAS: same_blocked={same_blocked} same_error={:?} \
+             unrelated_published={unrelated_published} unrelated_error={:?} \
+             blocked={blocked} put_error={:?} published_after_release={published_after_release} \
+             retry_error={:?} result={result} logouts={logouts}",
+             same.error, unrelated.error, put.error, retried.error);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_known_shared_pool_key_keeps_b_session_and_completes() {
+        let rig = Rig::new(&["a", "b"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let a = rig.mock_imap_account("a", "shared@example.test", &server);
+        let b = rig.mock_imap_account("b", "shared@example.test", &server);
+        let session = rig.state.imap_pool.get_background(&a).await.unwrap();
+        rig.state.imap_pool.return_background(&a, session).await;
+        let before = server.connection_count();
+        let result = rig.remove("a").await;
+        let logouts = server.count_commands("LOGOUT");
+        let reused = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, reused).await;
+        let after = server.connection_count();
+        assert!(result == json!({"outcome":"complete","accountId":"a"})
+            && before == 1 && after == before && logouts == 0
+            && rig.blob().contains_key("b") && rig.rows().as_array().unwrap()
+                .iter().any(|row| row["id"] == "b"),
+            "S24_MINOR_POOL_SHARED: result={result} before={before} after={after} logouts={logouts}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_absent_retry_empty_idle_maps_ignores_b_checked_out_request() {
+        let rig = Rig::new(&["b"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let b = rig.mock_imap_account("b", "b@example.test", &server);
+        let held = rig.state.imap_pool.get_background(&b).await.unwrap();
+        let before = server.connection_count();
+        let result = rig.remove("a").await;
+        let no_logout = server.count_commands("LOGOUT") == 0;
+        rig.state.imap_pool.return_background(&b, held).await;
+        let reused = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, reused).await;
+        let after = server.connection_count();
+        assert!(result == json!({"outcome":"complete","accountId":"a"})
+            && before == 1 && after == before && no_logout
+            && rig.blob().contains_key("b") && rig.rows().as_array().unwrap()
+                .iter().any(|row| row["id"] == "b"),
+            "S24_MINOR_POOL_ABSENT_EMPTY: result={result} before={before} after={after} no_logout={no_logout}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_absent_retry_nonempty_unattributable_pool_is_incomplete() {
+        let rig = Rig::new(&["b"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let b = rig.mock_imap_account("b", "b@example.test", &server);
+        let session = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, session).await;
+        let before = server.connection_count();
+        let result = rig.remove("a").await;
+        let logouts = server.count_commands("LOGOUT");
+        let reused = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, reused).await;
+        let after = server.connection_count();
+        assert!(result["outcome"] == "incomplete" && result["stage"] == "bookkeeping"
+            && result["residuals"].as_array().is_some_and(|r| r.contains(&json!("followUps")))
+            && before == 1 && after == before && logouts == 0
+            && rig.blob().contains_key("b"),
+            "S24_MINOR_POOL_ABSENT_UNATTRIBUTABLE: result={result} before={before} after={after} logouts={logouts}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_unprovable_trailing_key_keeps_real_idle_session() {
+        let rig = Rig::new(&["a", "b"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let normal = rig.mock_imap_account("a", "a@example.test", &server);
+        let session = rig.state.imap_pool.get_background(&normal).await.unwrap();
+        let record = json!({"id":"a","email":"a@example.test",
+            "imapHost":format!("{}-", server.host()),"imapPort":server.port(),
+            "imapSecure":false,"authType":"password","password":"synthetic"});
+        let trailing = credentials::config_from_record(&record).unwrap();
+        accounts_doc::run(&accounts_doc::shared(&rig.app()), "accounts.put",
+            &json!({"entry":record}), LiveScrub::Preserve).unwrap();
+        let mut blob = rig.blob();
+        blob.insert("a".into(), record.to_string());
+        fs::write(rig.app().join("credentials.json"), json!(blob).to_string()).unwrap();
+        credentials::blob_written_elsewhere();
+        // This test-local rekey puts an authenticated real MockImap session
+        // under the accepted trailing key. It does not claim that host dials.
+        rig.state.imap_pool.return_background(&trailing, session).await;
+        let before = server.connection_count();
+        let result = rig.remove("a").await;
+        let logouts = server.count_commands("LOGOUT");
+        let reused = rig.state.imap_pool.get_background(&trailing).await.unwrap();
+        rig.state.imap_pool.return_background(&trailing, reused).await;
+        let after = server.connection_count();
+        assert!(result["outcome"] == "incomplete" && result["stage"] == "bookkeeping"
+            && result["residuals"].as_array().is_some_and(|r| r.contains(&json!("followUps")))
+            && before == 1 && after == before && logouts == 0
+            && rig.blob().contains_key("b"),
+            "S24_MINOR_POOL_TRAILING_KEY: result={result} before={before} after={after} logouts={logouts}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_trailing_key_with_no_matching_session_can_complete() {
+        let rig = Rig::new(&["a", "b"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let b = rig.mock_imap_account("b", "b@example.test", &server);
+        let session = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, session).await;
+        let trailing = json!({"id":"a","email":"a@example.test","imapHost":"h-",
+            "authType":"password","password":"synthetic"});
+        accounts_doc::run(&accounts_doc::shared(&rig.app()), "accounts.put",
+            &json!({"entry":trailing}), LiveScrub::Preserve).unwrap();
+        let mut blob = rig.blob();
+        blob.insert("a".into(), trailing.to_string());
+        fs::write(rig.app().join("credentials.json"), json!(blob).to_string()).unwrap();
+        credentials::blob_written_elsewhere();
+        let before = server.connection_count();
+        let result = rig.remove("a").await;
+        let reused = rig.state.imap_pool.get_background(&b).await.unwrap();
+        rig.state.imap_pool.return_background(&b, reused).await;
+        let after = server.connection_count();
+        let logouts = server.count_commands("LOGOUT");
+        assert!(result == json!({"outcome":"complete","accountId":"a"})
+            && before == 1 && after == before && logouts == 0,
+            "S24_MINOR_POOL_TRAILING_EMPTY: result={result} before={before} after={after} logouts={logouts}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_graph_and_jmap_contexts_do_not_retire_b_imap_session() {
+        let mut all_preserved = true;
+        let mut observations = Vec::new();
+        for (label, record) in [
+            ("graph", json!({"id":"a","email":"a@example.test","imapHost":"",
+                "authType":"oauth2","oauth2Transport":"graph"})),
+            ("jmap", json!({"id":"a","email":"a@example.test","imapHost":"h",
+                "jmapSessionUrl":"https://jmap.example.test/api","jmapAuth":"bearer",
+                "password":"synthetic"})),
+        ] {
+            let rig = Rig::new(&["a", "b"]);
+            let _plaintext = ImapPlaintextRestore::set();
+            let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+            let b = rig.mock_imap_account("b", "b@example.test", &server);
+            let session = rig.state.imap_pool.get_background(&b).await.unwrap();
+            rig.state.imap_pool.return_background(&b, session).await;
+            accounts_doc::run(&accounts_doc::shared(&rig.app()), "accounts.put",
+                &json!({"entry":record}), LiveScrub::Preserve).unwrap();
+            let mut blob = rig.blob();
+            blob.insert("a".into(), record.to_string());
+            fs::write(rig.app().join("credentials.json"), json!(blob).to_string()).unwrap();
+            credentials::blob_written_elsewhere();
+            let result = rig.remove("a").await;
+            let logouts = server.count_commands("LOGOUT");
+            let before = server.connection_count();
+            let reused = rig.state.imap_pool.get_background(&b).await.unwrap();
+            rig.state.imap_pool.return_background(&b, reused).await;
+            let after = server.connection_count();
+            all_preserved &= result == json!({"outcome":"complete","accountId":"a"})
+                && logouts == 0 && before == 1 && after == before;
+            observations.push(format!("provider={label} result={result} logouts={logouts} before={before} after={after}"));
+        }
+        assert!(all_preserved, "S24_MINOR_PROVIDER_NOOP: {}", observations.join("; "));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_waiter_loss_inside_unwatch_starts_no_pool_disconnect() {
+        let rig = Rig::new(&["a"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let a = rig.mock_imap_account("a", "a@example.test", &server);
+        let session = rig.state.imap_pool.get_background(&a).await.unwrap();
+        rig.state.imap_pool.return_background(&a, session).await;
+        let (entered, release, done) = crate::idle_watch::arm_unwatch_for_test("a");
+        let (owned, owned_finished) = std::sync::mpsc::channel();
+        owned_done().lock().unwrap().insert(rig.app(), owned);
+        let state = Arc::clone(&rig.state);
+        let waiter = tokio::spawn(async move {
+            route(&state, &json!({"accountId":"a"}), json!(1)).await
+        });
+        received(entered).await;
+        let held_before_loss = !waiter.is_finished()
+            && matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy));
+        waiter.abort();
+        let _ = waiter.await;
+        release.send(()).unwrap();
+        received(done).await;
+        received(owned_finished).await;
+        let logouts = server.count_commands("LOGOUT");
+        let still_idle = rig.state.imap_pool.has_idle_sessions_for(&a).await;
+        let document_absent = rig.rows().as_array().unwrap().iter().all(|row| row["id"] != "a");
+        let credential_absent = !rig.blob().contains_key("a");
+        assert!(held_before_loss && logouts == 0 && still_idle
+            && document_absent && credential_absent
+            && matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy)),
+            "S24_MINOR_UNWATCH_LOSS: held_before_loss={held_before_loss} logouts={logouts} \
+             still_idle={still_idle} document_absent={document_absent} credential_absent={credential_absent}");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn s24_minor_deadline_expiry_inside_unwatch_starts_no_pool_disconnect() {
+        let rig = Rig::new(&["a"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let a = rig.mock_imap_account("a", "a@example.test", &server);
+        let session = rig.state.imap_pool.get_background(&a).await.unwrap();
+        rig.state.imap_pool.return_background(&a, session).await;
+        let (entered, release, done) = crate::idle_watch::arm_unwatch_for_test("a");
+        let (owned, owned_finished) = std::sync::mpsc::channel();
+        owned_done().lock().unwrap().insert(rig.app(), owned);
+        let state = Arc::clone(&rig.state);
+        let pending = tokio::spawn(async move {
+            route(&state, &json!({"accountId":"a"}), json!(1)).await
+        });
+        received(entered).await;
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_secs(181)).await;
+        let reply = pending.await.unwrap();
+        let result = reply.result.unwrap_or(Value::Null);
+        let claim_busy = matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy));
+        let early_done = owned_finished.try_recv().is_ok();
+        tokio::time::resume();
+        release.send(()).unwrap();
+        received(done).await;
+        let settled = if early_done { false } else {
+            tokio::task::spawn_blocking(move || owned_finished.recv_timeout(Duration::from_secs(10)).is_ok())
+                .await.unwrap()
+        };
+        let logouts = server.count_commands("LOGOUT");
+        let still_idle = rig.state.imap_pool.has_idle_sessions_for(&a).await;
+        let closing_after = matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy));
+        assert!(result["outcome"] == "incomplete" && result["stage"] == "bookkeeping"
+            && result["completion"] == "unknown" && claim_busy && !early_done && settled
+            && logouts == 0 && still_idle && closing_after,
+            "S24_MINOR_UNWATCH_DEADLINE: result={result} claim_busy={claim_busy} \
+             early_done={early_done} settled={settled} logouts={logouts} \
+             still_idle={still_idle} closing_after={closing_after}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_started_logout_keeps_removal_claim_until_actual_completion() {
+        let rig = Rig::new(&["a"]);
+        let _plaintext = ImapPlaintextRestore::set();
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new());
+        let a = rig.mock_imap_account("a", "a@example.test", &server);
+        let session = rig.state.imap_pool.get_background(&a).await.unwrap();
+        rig.state.imap_pool.return_background(&a, session).await;
+        let mut paused = server.pause_command("LOGOUT");
+        let (owned, owned_finished) = std::sync::mpsc::channel();
+        owned_done().lock().unwrap().insert(rig.app(), owned);
+        let state = Arc::clone(&rig.state);
+        let waiter = tokio::spawn(async move {
+            route(&state, &json!({"accountId":"a"}), json!(1)).await
+        });
+        let entered = paused.entered(Duration::from_secs(10));
+        let claim_busy = matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy));
+        let early_done_before_loss = owned_finished.try_recv().is_ok();
+        let child_open = !waiter.is_finished() && !early_done_before_loss;
+        waiter.abort();
+        let _ = waiter.await;
+        let early_done_after_loss = owned_finished.try_recv().is_ok();
+        let still_owned = matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy))
+            && !early_done_after_loss;
+        paused.release();
+        let settled = if early_done_before_loss || early_done_after_loss { false } else {
+            tokio::task::spawn_blocking(move || owned_finished.recv_timeout(Duration::from_secs(10)).is_ok())
+                .await.unwrap()
+        };
+        let logouts = server.count_commands("LOGOUT");
+        let closing_after_loss = matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy));
+        assert!(entered && claim_busy && child_open && still_owned && settled && logouts == 1
+            && closing_after_loss,
+            "S24_MINOR_LOGOUT_CUSTODY: entered={entered} claim_busy={claim_busy} \
+             child_open={child_open} still_owned={still_owned} settled={settled} \
+             closing_after_loss={closing_after_loss} logouts={logouts}");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn s24_minor_remaining_overall_write_wait_keeps_unknown_and_stops_local() {
+        let rig = Rig::new(&["a"]);
+        let backend = credentials::TestKeychainGuard::install(rig.app().join("credentials.json"));
+        let tree = rig.mail().join("Maildir/a");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join("keep.eml"), b"target").unwrap();
+        let (entered, release, receipt_done) = arm(receipt_gates(), rig.app());
+        let (owned, owned_finished) = std::sync::mpsc::channel();
+        owned_done().lock().unwrap().insert(rig.app(), owned);
+        let mut paused = credentials::TestWritePause::arm_with_timeout(0);
+        let state = Arc::clone(&rig.state);
+        let pending = tokio::spawn(async move {
+            route(&state, &json!({"accountId":"a"}), json!(1)).await
+        });
+        received(entered).await;
+        tokio::time::pause();
+        // Leave ten seconds on the unchanged 180-second overall clock when
+        // the actual credential write begins: less than its normal 20.
+        tokio::time::advance(Duration::from_secs(170)).await;
+        release.send(()).unwrap();
+        received(receipt_done).await;
+        let mut paused = tokio::task::spawn_blocking(move || {
+            paused.wait_until_entered();
+            paused
+        }).await.unwrap();
+        tokio::time::advance(Duration::from_secs(11)).await;
+        let parked = tokio::time::timeout(Duration::from_secs(1), async {
+            while !credentials::WRITE_PARKED.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+        }).await.is_ok();
+        let reply = pending.await.unwrap();
+        let result = reply.result.unwrap_or(Value::Null);
+        let custody_before_release = matches!(rig.state.account_lifecycle.capture("a"), Err(LifecycleError::Busy))
+            && tree.join("keep.eml").is_file() && rig.blob().contains_key("a");
+        tokio::time::resume();
+        tokio::task::spawn_blocking(move || paused.finish()).await.unwrap();
+        received(owned_finished).await;
+        let modes = backend.0.modes.lock().unwrap().clone();
+        let late_write_settled = !rig.blob().contains_key("a");
+        assert!(parked && custody_before_release && late_write_settled
+            && result["outcome"] == "incomplete" && result["stage"] == "credentials"
+            && result["completion"] == "unknown" && tree.join("keep.eml").is_file()
+            && modes.iter().any(|mode| *mode == ("write", true)),
+            "S24_MINOR_REMOVAL_WRITE: parked={parked} custody_before_release={custody_before_release} \
+             late_write_settled={late_write_settled} result={result} tree_retained={} modes={modes:?}",
+             tree.join("keep.eml").is_file());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

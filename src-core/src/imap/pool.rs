@@ -109,6 +109,11 @@ fn conn_key(config: &ImapConfig) -> String {
     format!("{}-{}:{}", config.email, config.host, config.effective_port())
 }
 
+/// Compare using the exact key the idle maps use, including its effective port.
+pub fn same_connection_key(a: &ImapConfig, b: &ImapConfig) -> bool {
+    conn_key(a) == conn_key(b)
+}
+
 /// `Err` for a JMAP account (`uses_jmap`): it has no IMAP server, and a path
 /// that reaches a session-opening entry with one forgot to branch on it. The
 /// first check of every such entry (`connection_slot`, `get_background`,
@@ -233,6 +238,22 @@ impl ImapPool {
             priority_sem: Arc::new(Mutex::new(HashMap::new())),
             budget: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Snapshot actual idle sessions in both lanes. Capability and semaphore
+    /// entries alone are not sessions; hold both map locks in this fixed order.
+    pub async fn idle_sessions_empty(&self) -> bool {
+        let background = self.background.lock().await;
+        let priority = self.priority.lock().await;
+        background.values().all(Vec::is_empty) && priority.values().all(Vec::is_empty)
+    }
+
+    pub async fn has_idle_sessions_for(&self, config: &ImapConfig) -> bool {
+        let key = conn_key(config);
+        let background = self.background.lock().await;
+        let priority = self.priority.lock().await;
+        background.get(&key).is_some_and(|sessions| !sessions.is_empty())
+            || priority.get(&key).is_some_and(|sessions| !sessions.is_empty())
     }
 
     /// One of the account's `MAX_CONNECTIONS_PER_ACCOUNT` connection slots,
@@ -1111,6 +1132,39 @@ mod connection_budget_tests {
     use crate::imap::{create_imap_session, select_mailbox};
     use mock_imap::state::synthetic_mailbox;
     use mock_imap::{Action, MockImap, Scenario, Trigger};
+
+    #[tokio::test]
+    async fn retirement_snapshot_and_disconnect_keep_other_real_session() {
+        let a_server = MockImap::start(Scenario::new());
+        let b_server = MockImap::start(Scenario::new());
+        let a = config_for(&a_server);
+        let b = config_for(&b_server);
+        let pool = ImapPool::new();
+        assert!(pool.idle_sessions_empty().await);
+        let a_background = pool.get_background(&a).await.unwrap();
+        pool.return_background(&a, a_background).await;
+        let a_priority = pool.get_priority(&a).await.unwrap();
+        pool.return_priority(&a, a_priority).await;
+        let b_background = pool.get_background(&b).await.unwrap();
+        pool.return_background(&b, b_background).await;
+        assert!(!same_connection_key(&a, &b)
+            && !pool.idle_sessions_empty().await
+            && pool.has_idle_sessions_for(&a).await
+            && pool.has_idle_sessions_for(&b).await);
+        pool.disconnect(&a).await;
+        let a_logouts = a_server.count_commands("LOGOUT");
+        let b_logouts = b_server.count_commands("LOGOUT");
+        let b_connections = b_server.connection_count();
+        let reused = pool.get_background(&b).await.unwrap();
+        pool.return_background(&b, reused).await;
+        assert!(a_logouts == 2 && b_logouts == 0 && !pool.has_idle_sessions_for(&a).await
+            && pool.has_idle_sessions_for(&b).await && !pool.idle_sessions_empty().await
+            && b_server.connection_count() == b_connections,
+            "S24_MINOR_POOL_CORE: a_logouts={a_logouts} b_logouts={b_logouts} \
+             b_connections={b_connections} b_after={}", b_server.connection_count());
+        pool.disconnect(&b).await;
+        assert!(pool.idle_sessions_empty().await);
+    }
 
     /// Six clicks and six background reads at once. Each lane alone caps at
     /// MAX_POOL_SIZE, so the two together used to open ten connections to

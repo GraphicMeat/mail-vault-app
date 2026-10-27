@@ -1962,6 +1962,11 @@ fn write_timeout() -> Duration {
     AI_KEY_TIMEOUT
 }
 
+fn remaining_wait(ceiling: Duration, deadline: Option<tokio::time::Instant>) -> Duration {
+    deadline.map(|end| ceiling.min(end.saturating_duration_since(tokio::time::Instant::now())))
+        .unwrap_or(ceiling)
+}
+
 /// The write generation now (the `version` the credentials RPCs answer).
 pub(crate) fn write_generation() -> u64 {
     BLOB_READ.generation()
@@ -2250,7 +2255,7 @@ async fn change_credentials_mode(
         return Err(CredError::Busy.into());
     }
     let held = if interactive {
-        tokio::time::timeout(APP_LOCK_WAIT, APP_WRITE.lock())
+        tokio::time::timeout(remaining_wait(APP_LOCK_WAIT, deadline), APP_WRITE.lock())
             .await
             .map_err(|_| CredError::Busy)?
     } else {
@@ -2292,7 +2297,7 @@ async fn change_credentials_mode(
         let mut blob = guarded(
             CREDENTIALS_KEY,
             raw_read(interactive, since),
-            AI_KEY_TIMEOUT,
+            remaining_wait(AI_KEY_TIMEOUT, deadline),
         )
         .await
         .map_err(|_| CredError::Unavailable)?
@@ -2338,7 +2343,7 @@ async fn change_credentials_mode(
             .map(TestTaskDone);
         job()
     });
-    match tokio::time::timeout(write_timeout(), &mut task).await {
+    match tokio::time::timeout(remaining_wait(write_timeout(), deadline), &mut task).await {
         Ok(result) => {
             let result = finish_credential_change(
                 state,
@@ -2688,6 +2693,157 @@ mod tests {
         drop(held);
         assert!(matches!(result, Ok(Err(CredError::Busy))));
         assert!(backend.0.modes.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_interactive_serializer_wait_clips_to_remaining_deadline() {
+        let _env = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = TestEnvRestore::capture();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        std::fs::write(&path, json!({"acct-1":sample_account_json()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let backend = TestKeychainGuard::install(path);
+        let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        let held = APP_WRITE.lock().await;
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(500);
+        let mut pending = tokio::spawn(async move {
+            change_credentials_mode(&state,
+                CredentialOp::Change(CredChange::Delete(vec!["acct-1".into()])),
+                None, None, Interaction::Interactive, None, Some(deadline)).await
+        });
+        let observed = tokio::time::timeout(Duration::from_millis(1200), &mut pending).await;
+        let clipped = observed.is_ok();
+        drop(held);
+        let result = match observed {
+            Ok(joined) => joined.unwrap(),
+            Err(_) => pending.await.unwrap(),
+        };
+        let category = result.err().map(|error| error.catalog_key());
+        let modes = backend.0.modes.lock().unwrap().clone();
+        assert!(clipped && category == Some("errors.keychainBusy") && modes.is_empty(),
+            "S24_MINOR_SERIALIZER_CLIP: clipped={clipped} category={category:?} modes={modes:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_interactive_read_wait_clips_to_remaining_deadline() {
+        let _env = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = TestEnvRestore::capture();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        std::fs::write(&path, json!({"acct-1":sample_account_json()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let backend = TestKeychainGuard::install(path);
+        let (release, gate) = std::sync::mpsc::channel();
+        let (captured, entered) = std::sync::mpsc::channel();
+        let (finished, completed) = std::sync::mpsc::channel();
+        *backend.0.shared.gate.lock().unwrap() = Some(gate);
+        *backend.0.shared.captured.lock().unwrap() = Some(captured);
+        *backend.0.shared.finished.lock().unwrap() = Some(finished);
+        let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+        let mut pending = tokio::spawn(async move {
+            change_credentials_mode(&state,
+                CredentialOp::Change(CredChange::Delete(vec!["acct-1".into()])),
+                None, None, Interaction::Interactive, None, Some(deadline)).await
+        });
+        entered.recv_timeout(Duration::from_secs(5)).expect("real credential read entered");
+        let observed = tokio::time::timeout(Duration::from_secs(2), &mut pending).await;
+        let clipped = observed.is_ok();
+        drop(release);
+        completed.recv_timeout(Duration::from_secs(5)).expect("actual credential read drained");
+        let result = match observed {
+            Ok(joined) => joined.unwrap(),
+            Err(_) => pending.await.unwrap(),
+        };
+        let category = result.err().map(|error| error.catalog_key());
+        let modes = backend.0.modes.lock().unwrap().clone();
+        let active = backend.0.shared.active.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(clipped && category == Some("errors.keychainUnavailable")
+            && modes == vec![("read", true)] && active == 0,
+            "S24_MINOR_READ_CLIP: clipped={clipped} category={category:?} modes={modes:?} active={active}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_started_write_wait_clips_but_keeps_actual_child() {
+        let _env = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = TestEnvRestore::capture();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        std::fs::write(&path, json!({"a":json!({"id":"a","email":"a@example.test",
+            "imapHost":"h","password":"synthetic"}).to_string()}).to_string()).unwrap();
+        std::fs::write(dir.path().join("accounts.json"),
+            json!([{"id":"a","email":"a@example.test","imapHost":"h"}]).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let backend = TestKeychainGuard::install(path.clone());
+        let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
+        let mut paused = TestWritePause::arm_with_timeout(0);
+        let timed_out = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = Arc::clone(&timed_out);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        let mut pending = tokio::spawn(async move {
+            change_credentials_mode(&state,
+                CredentialOp::Change(CredChange::Delete(vec!["a".into()])),
+                None, None, Interaction::Interactive, Some(flag), Some(deadline)).await
+        });
+        paused.wait_until_entered();
+        let clipped = tokio::time::timeout(Duration::from_secs(3), async {
+            while !timed_out.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+        }).await.is_ok();
+        let held_until_release = !pending.is_finished() && APP_WRITE.try_lock().is_err()
+            && serde_json::from_slice::<HashMap<String, String>>(&std::fs::read(&path).unwrap())
+                .unwrap().contains_key("a");
+        paused.finish();
+        let result = pending.await.unwrap();
+        let category = result.err().map(|error| error.catalog_key());
+        let persisted = serde_json::from_slice::<HashMap<String, String>>(&std::fs::read(&path).unwrap())
+            .unwrap().contains_key("a");
+        let modes = backend.0.modes.lock().unwrap().clone();
+        assert!(clipped && held_until_release && category == Some("errors.keychainWriteFailed")
+            && !persisted && modes == vec![("read", true), ("write", true)],
+            "S24_MINOR_WRITE_CLIP: clipped={clipped} held_until_release={held_until_release} \
+             category={category:?} target_persisted={persisted} modes={modes:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_minor_no_deadline_interactive_write_keeps_success_and_failure() {
+        let _env = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = TestEnvRestore::capture();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.json");
+        std::fs::write(&path, json!({"a":json!({"id":"a","email":"a@example.test",
+            "imapHost":"h","password":"synthetic"}).to_string()}).to_string()).unwrap();
+        std::fs::write(dir.path().join("accounts.json"),
+            json!([{"id":"a","email":"a@example.test","imapHost":"h"}]).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
+        let backend = TestKeychainGuard::install(path.clone());
+        let state = DaemonState::for_test(dir.path().join("mail"), dir.path().to_path_buf(), true);
+        state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(dir.path())).unwrap());
+        let updated = change_credentials_mode(&state,
+            CredentialOp::Change(CredChange::Update { id:"a".into(),
+                fields:json!({"name":"changed"}).as_object().unwrap().clone(), chain:None }),
+            None, None, Interaction::Interactive, None, None).await.is_ok();
+        let after_success = std::fs::read(&path).unwrap();
+        backend.0.fail_write.store(true, std::sync::atomic::Ordering::SeqCst);
+        let failed = change_credentials_mode(&state,
+            CredentialOp::Change(CredChange::Delete(vec!["a".into()])),
+            None, None, Interaction::Interactive, None, None).await;
+        let failure = failed.err().map(|error| error.catalog_key());
+        let after_failure = std::fs::read(&path).unwrap();
+        let stored: HashMap<String, String> = serde_json::from_slice(&after_failure).unwrap();
+        let renamed = stored.get("a").and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+            .is_some_and(|row| row["name"] == "changed");
+        let modes = backend.0.modes.lock().unwrap().clone();
+        assert!(updated && failure == Some("errors.keychainWriteFailed")
+            && after_success == after_failure && renamed
+            && modes == vec![("read", true), ("write", true), ("read", true), ("write", true)],
+            "S24_MINOR_NORMAL_WRITE: updated={updated} failure={failure:?} \
+             bytes_preserved={} renamed={renamed} modes={modes:?}", after_success == after_failure);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -91,6 +91,31 @@ pub struct IdleWatchers {
     push_timing: Mutex<crate::jmap_push::PushTiming>,
 }
 
+#[cfg(test)]
+struct UnwatchGate {
+    entered: std::sync::mpsc::Sender<()>,
+    release: std::sync::mpsc::Receiver<()>,
+    done: std::sync::mpsc::Sender<()>,
+}
+
+#[cfg(test)]
+fn unwatch_gates() -> &'static Mutex<HashMap<String, UnwatchGate>> {
+    static GATES: std::sync::OnceLock<Mutex<HashMap<String, UnwatchGate>>> = std::sync::OnceLock::new();
+    GATES.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+pub(crate) fn arm_unwatch_for_test(account_id: &str) -> (
+    std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>,
+) {
+    let (entered, entered_rx) = std::sync::mpsc::channel();
+    let (release, release_rx) = std::sync::mpsc::channel();
+    let (done, done_rx) = std::sync::mpsc::channel();
+    unwatch_gates().lock().unwrap_or_else(|error| error.into_inner())
+        .insert(account_id.to_owned(), UnwatchGate { entered, release: release_rx, done });
+    (entered_rx, release, done_rx)
+}
+
 impl IdleWatchers {
     pub fn new(
         engine: Arc<SyncEngine>,
@@ -209,7 +234,21 @@ impl IdleWatchers {
     }
 
     pub async fn unwatch(&self, account_id: &str) {
-        if let Some(w) = self.tasks.lock().await.remove(account_id) {
+        let mut tasks = self.tasks.lock().await;
+        #[cfg(test)]
+        let gate = unwatch_gates().lock().unwrap_or_else(|error| error.into_inner())
+            .remove(account_id);
+        #[cfg(test)]
+        if let Some(gate) = gate {
+            let _ = gate.entered.send(());
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = gate.release.recv();
+                let _ = gate.done.send(());
+            }).await;
+        }
+        let watcher = tasks.remove(account_id);
+        drop(tasks);
+        if let Some(w) = watcher {
             w.handle.abort();
             info!("[idle] stopped watching {}", account_id);
         }
