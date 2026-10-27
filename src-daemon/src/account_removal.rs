@@ -799,7 +799,9 @@ fn cleanup_local(state: &Arc<DaemonState>, proof: &RootProof, local: &LocalProof
             || fresh.custody_generation != state.custody.gen.load(std::sync::atomic::Ordering::Acquire)) {
             return Err("errors.vaultUnavailable".into());
         }
-        if cleanup_sidecars(root, id, local, &fresh).is_err() { residuals.push("headerCache"); }
+        let (ambiguous, projected_residual) = cleanup_sidecars(root, id, local, &fresh)?;
+        if projected_residual { return Err("projected header cache remains".into()); }
+        if ambiguous { residuals.push("headerCache"); }
         proof.check(state, root)?;
         if selected && (fresh.credential_generation != credentials::write_generation()
             || fresh.custody_generation != state.custody.gen.load(std::sync::atomic::Ordering::Acquire)) {
@@ -838,15 +840,17 @@ fn cleanup_local(state: &Arc<DaemonState>, proof: &RootProof, local: &LocalProof
 }
 
 fn cleanup_sidecars(root: &Path, id: &str, local: &LocalProof,
-    fresh: &FreshLocalProof) -> Result<(), String> {
+    fresh: &FreshLocalProof) -> Result<(bool, bool), String> {
     let lock = mailvault_core::header_cache::lock_tree(root);
     let _held = lock.write().unwrap_or_else(|e| e.into_inner());
     let known = local.known_ids(id, &fresh.ids)?;
     local.check_sidecars_locked(id, &known)?;
     let mut ambiguous = false;
+    let mut projected_residual = false;
     for sidecar in &local.sidecars {
         if !sidecar.owned || !fresh.projected.contains(&sidecar.name) {
             ambiguous = true;
+            projected_residual |= fresh.projected.contains(&sidecar.name);
             continue;
         }
         sidecar.path.check()?;
@@ -856,7 +860,7 @@ fn cleanup_sidecars(root: &Path, id: &str, local: &LocalProof,
         } else { fs::remove_file(path).map_err(|e| e.to_string())?; }
         if path.exists() { return Err("header cache remains".into()); }
     }
-    if ambiguous { Err("ambiguous header cache remains".into()) } else { Ok(()) }
+    Ok((ambiguous, projected_residual))
 }
 
 #[cfg(test)]
@@ -1295,6 +1299,207 @@ mod tests {
             "S24_BOUND_SIDECAR: {outcome}");
         assert!(!target.exists() && sibling.join("sibling.json").is_file()
             && rig.blob().contains_key("b") && rig.state.account_lifecycle.capture("b").is_ok());
+    }
+
+    #[cfg(any(target_os = "macos", windows))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_projected_sidecar_unlink_failure_retains_absent_retry_authority() {
+        let rig = Rig::new(&["a", "b"]);
+        let root_identity = fs_identity(&rig.mail()).unwrap();
+        let a_tree = rig.mail().join("Maildir/a");
+        let b_tree = rig.mail().join("Maildir/b");
+        for tree in [&a_tree, &b_tree] { fs::create_dir_all(tree).unwrap(); }
+        fs::write(a_tree.join("target.eml"), b"target").unwrap();
+        fs::write(b_tree.join("sibling.eml"), b"sibling").unwrap();
+        let target = mailvault_core::header_cache::sidecar_dir(&rig.mail(), "a", "INBOX");
+        let sibling = mailvault_core::header_cache::sidecar_dir(&rig.mail(), "b", "INBOX");
+        fs::create_dir_all(&target).unwrap();
+        fs::create_dir_all(&sibling).unwrap();
+        fs::write(target.join("blocked.keep"), b"target cache").unwrap();
+        fs::write(sibling.join("sibling.keep"), b"sibling cache").unwrap();
+        crate::custody::with_conn(&rig.state, |conn| conn.execute_batch(
+            "INSERT INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json)
+             VALUES ('a','INBOX',1,1,1,'{}'),('b','INBOX',2,1,1,'{}');
+             INSERT INTO header_cache_meta(account_id,mailbox_path,meta_json)
+             VALUES ('a','INBOX','{}'),('b','INBOX','{}');"
+        ).map_err(|error| error.to_string())).unwrap();
+        let projection = |state: &Arc<DaemonState>, id: &str| {
+            crate::custody::with_conn(state, |conn| {
+                let headers: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM header_cache WHERE account_id=?1 AND mailbox_path='INBOX'",
+                    [id], |row| row.get(0)).map_err(|error| error.to_string())?;
+                let meta: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM header_cache_meta WHERE account_id=?1 AND mailbox_path='INBOX'",
+                    [id], |row| row.get(0)).map_err(|error| error.to_string())?;
+                Ok((headers, meta))
+            }).unwrap()
+        };
+        let original_b_row = rig.rows().as_array().unwrap().iter()
+            .find(|row| row["id"] == "b").unwrap().clone();
+        let original_b_credential = rig.blob()["b"].clone();
+        assert_eq!(projection(&rig.state, "a"), (1, 1));
+        assert_eq!(projection(&rig.state, "b"), (1, 1));
+
+        let (entered, release, done) = arm(receipt_gates(), rig.app());
+        let state = Arc::clone(&rig.state);
+        let pending = tokio::spawn(async move {
+            route(&state, &json!({"accountId":"a"}), json!(1)).await
+        });
+        received(entered).await;
+
+        // The actual OS unlink, not a synthetic production failure hook,
+        // must fail after preflight while the selected sidecar is attributed.
+        // The receipt child is parked before its first persistence effect.
+        // These holders restore their obstruction on unwind as well as on the
+        // explicit release before the restart retry.
+        #[cfg(target_os = "macos")]
+        struct RestoreParent(PathBuf, fs::Permissions);
+        #[cfg(target_os = "macos")]
+        impl Drop for RestoreParent {
+            fn drop(&mut self) { let _ = fs::set_permissions(&self.0, self.1.clone()); }
+        }
+        #[cfg(target_os = "macos")]
+        let blocker = {
+            use std::os::unix::fs::PermissionsExt;
+            let parent = target.parent().unwrap().to_path_buf();
+            let old = fs::metadata(&parent).unwrap().permissions();
+            fs::set_permissions(&parent, fs::Permissions::from_mode(0o500)).unwrap();
+            RestoreParent(parent, old)
+        };
+        #[cfg(windows)]
+        let blocker = {
+            use std::os::windows::fs::OpenOptionsExt;
+            fs::OpenOptions::new().read(true).share_mode(0)
+                .open(target.join("blocked.keep")).unwrap()
+        };
+        let preflight_can_read = fs::read_dir(target.parent().unwrap()).is_ok();
+        release.send(()).unwrap();
+        received(done).await;
+        let first_reply = pending.await.unwrap();
+        let first_error = format!("{:?}", first_reply.error);
+        let first = first_reply.result.unwrap_or(Value::Null);
+        let first_a_projection = projection(&rig.state, "a");
+        let first_b_projection = projection(&rig.state, "b");
+        let first_target_retained = target.is_dir();
+        let first_account_absent = rig.rows().as_array().unwrap().iter().all(|row| row["id"] != "a");
+        let first_credential_absent = !rig.blob().contains_key("a");
+        let first_b_files = b_tree.join("sibling.eml").is_file()
+            && sibling.join("sibling.keep").is_file();
+        let first_root_stable = fs_identity(&rig.mail()).unwrap() == root_identity;
+        drop(blocker);
+
+        // A real restart closes the old exclusive custody connection and
+        // retries the now absent account against the same configured root.
+        *mailvault_core::custody::lock(&rig.state.custody.db) = None;
+        let restarted = DaemonState::for_test(rig.mail(), rig.app(), true);
+        restarted.account_lifecycle.seed(&accounts_doc::list(&accounts_doc::shared(&rig.app())).unwrap());
+        let reply = route(&restarted, &json!({"accountId":"a"}), json!(2)).await;
+        let retry_error = format!("{:?}", reply.error);
+        let second = reply.result.unwrap_or(Value::Null);
+        let second_a_projection = projection(&restarted, "a");
+        let second_b_projection = projection(&restarted, "b");
+        let second_target_absent = !target.exists();
+        let second_b_files = b_tree.join("sibling.eml").is_file()
+            && sibling.join("sibling.keep").is_file();
+        let second_b_row = rig.rows().as_array().unwrap().iter()
+            .find(|row| row["id"] == "b").cloned();
+        let second_b_credential = rig.blob().get("b").cloned();
+        let second_root_stable = fs_identity(&rig.mail()).unwrap() == root_identity;
+        let first_residual = first["residuals"].as_array().is_some_and(|items|
+            items.contains(&json!("headerCache")));
+        assert!(preflight_can_read && first["outcome"] == "incomplete"
+            && first["stage"] == "local" && first_residual && first_target_retained
+            && first_a_projection == (1, 1) && first_b_projection == (1, 1)
+            && first_account_absent && first_credential_absent && first_b_files && first_root_stable
+            && second == json!({"outcome":"complete","accountId":"a"})
+            && second_a_projection == (0, 0) && second_b_projection == (1, 1)
+            && second_target_absent && second_b_files && second_root_stable
+            && second_b_row.as_ref() == Some(&original_b_row)
+            && second_b_credential.as_deref() == Some(original_b_credential.as_str()),
+            "S24_R1_RETRY_PROJECTION: first={first}, first_error={first_error}, first_a_projection={first_a_projection:?}, first_b_projection={first_b_projection:?}, first_target_retained={first_target_retained}, first_account_absent={first_account_absent}, first_credential_absent={first_credential_absent}, first_b_files={first_b_files}, first_root_stable={first_root_stable}, second={second}, retry_error={retry_error}, second_a_projection={second_a_projection:?}, second_b_projection={second_b_projection:?}, second_target_absent={second_target_absent}, second_b_files={second_b_files}, second_root_stable={second_root_stable}");
+    }
+
+    #[cfg(any(target_os = "macos", windows))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s24_projected_sidecar_retry_preserves_new_sibling_conflict() {
+        let rig = Rig::new(&["a", "b"]);
+        let root_identity = fs_identity(&rig.mail()).unwrap();
+        let target = mailvault_core::header_cache::sidecar_dir(&rig.mail(), "a", "x_INBOX");
+        assert_eq!(target, mailvault_core::header_cache::sidecar_dir(&rig.mail(), "a_x", "INBOX"));
+        let b_tree = rig.mail().join("Maildir/b");
+        fs::create_dir_all(rig.mail().join("Maildir/a")).unwrap();
+        fs::create_dir_all(&b_tree).unwrap();
+        fs::write(b_tree.join("sibling.eml"), b"B").unwrap();
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("blocked.keep"), b"A cache").unwrap();
+        crate::custody::with_conn(&rig.state, |conn| conn.execute(
+            "INSERT INTO header_cache_meta(account_id,mailbox_path,meta_json) VALUES ('a','x_INBOX','{}')",
+            []
+        ).map(|_| ()).map_err(|error| error.to_string())).unwrap();
+        let target_projection = || crate::custody::with_conn(&rig.state, |conn| conn.query_row(
+            "SELECT COUNT(*) FROM header_cache_meta WHERE account_id='a' AND mailbox_path='x_INBOX'",
+            [], |row| row.get::<_, i64>(0)).map_err(|error| error.to_string())).unwrap();
+        let (entered, release, done) = arm(receipt_gates(), rig.app());
+        let state = Arc::clone(&rig.state);
+        let pending = tokio::spawn(async move {
+            route(&state, &json!({"accountId":"a"}), json!(1)).await
+        });
+        received(entered).await;
+        #[cfg(target_os = "macos")]
+        struct RestoreParent(PathBuf, fs::Permissions);
+        #[cfg(target_os = "macos")]
+        impl Drop for RestoreParent {
+            fn drop(&mut self) { let _ = fs::set_permissions(&self.0, self.1.clone()); }
+        }
+        #[cfg(target_os = "macos")]
+        let blocker = {
+            use std::os::unix::fs::PermissionsExt;
+            let parent = target.parent().unwrap().to_path_buf();
+            let old = fs::metadata(&parent).unwrap().permissions();
+            fs::set_permissions(&parent, fs::Permissions::from_mode(0o500)).unwrap();
+            RestoreParent(parent, old)
+        };
+        #[cfg(windows)]
+        let blocker = {
+            use std::os::windows::fs::OpenOptionsExt;
+            fs::OpenOptions::new().read(true).share_mode(0)
+                .open(target.join("blocked.keep")).unwrap()
+        };
+        release.send(()).unwrap();
+        received(done).await;
+        let first_reply = pending.await.unwrap();
+        let first_error = format!("{:?}", first_reply.error);
+        let first = first_reply.result.unwrap_or(Value::Null);
+        let projection_after_failure = target_projection();
+        let sidecar_after_failure = target.is_dir();
+        drop(blocker);
+
+        let put = crate::handlers::accounts::route(&rig.state, "accounts.put",
+            &json!({"entry":{"id":"a_x","email":"a-x@fresh.test",
+                "imapHost":"fresh-host","authType":"password"}}), json!(2)).await.unwrap();
+        let published = put.error.is_none()
+            && rig.rows().as_array().unwrap().iter().any(|row| row["id"] == "a_x");
+        if target.is_dir() { fs::write(target.join("new-sibling.keep"), b"new sibling").unwrap(); }
+        let retry_reply = route(&rig.state, &json!({"accountId":"a"}), json!(3)).await;
+        let retry_error = format!("{:?}", retry_reply.error);
+        let retry = retry_reply.result.unwrap_or(Value::Null);
+        let projection_after_conflict = target_projection();
+        let new_sibling_retained = target.join("new-sibling.keep").is_file()
+            && rig.rows().as_array().unwrap().iter().any(|row| row["id"] == "a_x");
+        let b_retained = b_tree.join("sibling.eml").is_file()
+            && rig.rows().as_array().unwrap().iter().any(|row| row["id"] == "b")
+            && rig.blob().contains_key("b");
+        let root_stable = fs_identity(&rig.mail()).unwrap() == root_identity;
+        let first_residual = first["residuals"].as_array().is_some_and(|items|
+            items.contains(&json!("headerCache")));
+        let retry_residual = retry["residuals"].as_array().is_some_and(|items|
+            items.contains(&json!("headerCache")));
+        assert!(first["outcome"] == "incomplete" && first["stage"] == "local"
+            && first_residual && sidecar_after_failure && projection_after_failure == 1
+            && published && retry["outcome"] == "incomplete" && retry["stage"] == "local"
+            && retry_residual && projection_after_conflict == 1
+            && new_sibling_retained && b_retained && root_stable,
+            "S24_R1_RETRY_CONFLICT: first={first}, first_error={first_error}, projection_after_failure={projection_after_failure}, sidecar_after_failure={sidecar_after_failure}, put_error={:?}, published={published}, retry={retry}, retry_error={retry_error}, projection_after_conflict={projection_after_conflict}, new_sibling_retained={new_sibling_retained}, b_retained={b_retained}, root_stable={root_stable}", put.error);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
