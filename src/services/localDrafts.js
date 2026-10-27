@@ -154,6 +154,17 @@ export function setComposeOpener(fn) { _composeOpener = fn; }
 
 const _addressList = (list) => (list || []).map(a => a?.address).filter(Boolean).join(', ');
 
+// What To, Cc or Bcc shows when a saved message is reopened for editing. A
+// local draft carries the text exactly as it was typed (`draftRecipients`,
+// from the draft's private headers), and that wins: the parsed address list
+// drops a trailing comma and, when one entry has no `@`, cannot split the
+// others into recipients. A draft without it (saved before the headers
+// existed, or made elsewhere) falls back to the parsed list.
+const _recipientText = (eml, field) => {
+  const typed = eml?.draftRecipients?.[field];
+  return typeof typed === 'string' ? typed : _addressList(eml?.[field]);
+};
+
 const _escapeHtml = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
 // A reply's or forward's original goes back beside the body, never into the
@@ -192,9 +203,9 @@ export function draftToInitialData({ accountId, mailbox, uid, entry, eml, draftI
   const { body: html, cidIn, original } = _withOriginal(eml.html, eml.attachments);
   const body = html || (eml.text ? _escapeHtml(eml.text).replace(/\r?\n/g, '<br>') : '');
   return {
-    to: _addressList(eml.to),
-    cc: _addressList(eml.cc),
-    bcc: _addressList(eml.bcc),
+    to: _recipientText(eml, 'to'),
+    cc: _recipientText(eml, 'cc'),
+    bcc: _recipientText(eml, 'bcc'),
     subject: eml.subject || '',
     body,
     inReplyTo: entry?.in_reply_to || '',

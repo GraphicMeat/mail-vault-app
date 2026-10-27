@@ -212,6 +212,21 @@ pub fn drafts_mailbox(boxes: &Value) -> String {
         .or_else(|| find(boxes, false))
         .unwrap_or_else(|| "Drafts".into())
 }
+/// The `eml` a reopened draft is shown from: the parsed message, plus
+/// `draftRecipients`, the To/Cc/Bcc text exactly as it was typed when the
+/// bytes carry it (`smtp::local_draft_recipients`). The parsed address lists
+/// cannot give that text back whole (a trailing comma is dropped, and one
+/// entry without an `@` beside a named address turns the header into a single
+/// pseudo-address). The window prefers `draftRecipients` and falls back to the
+/// parsed lists when it is absent (`_recipientText` in localDrafts.js).
+pub fn reopened_eml(raw: &[u8], uid: u32) -> Result<Value, String> {
+    let parsed = crate::vault_eml::parse_eml_bytes(raw, uid, FLAGS.map(String::from).to_vec())?;
+    let mut eml = serde_json::to_value(parsed).map_err(|e| e.to_string())?;
+    if let Some(typed) = crate::smtp::local_draft_recipients(raw) {
+        eml["draftRecipients"] = typed;
+    }
+    Ok(eml)
+}
 pub fn editable(row: &Value) -> bool {
     row["source"] == "local_draft"
         && ["archived", "draft"].iter().all(|f| {

@@ -1071,12 +1071,7 @@ fn list_id(
             let Some(raw) = read_copy(s, copy, true)? else {
                 return Ok(json!({"drafts":[],"managed":[view],"missingBody":true}));
             };
-            view["eml"] = serde_json::to_value(mailvault_core::vault_eml::parse_eml_bytes(
-                &raw,
-                copy.identity.scope.uid,
-                drafts::FLAGS.map(String::from).to_vec(),
-            )?)
-            .map_err(|error| error.to_string())?;
+            view["eml"] = drafts::reopened_eml(&raw, copy.identity.scope.uid)?;
         }
         return Ok(
             json!({"drafts":[view.clone()],"managed":[response(&record,"unchanged")],"missingBody":false}),
@@ -1213,12 +1208,7 @@ fn list(s: &Arc<DaemonState>, params: &Value) -> Result<Value, String> {
                 let Some(raw) = read_copy(s, copy, true)? else {
                     return Ok(json!({"drafts":[],"missingBody":true}));
                 };
-                let parsed = mailvault_core::vault_eml::parse_eml_bytes(
-                    &raw,
-                    copy.identity.scope.uid,
-                    drafts::FLAGS.map(String::from).to_vec(),
-                )?;
-                view["eml"] = serde_json::to_value(parsed).map_err(|e| e.to_string())?;
+                view["eml"] = drafts::reopened_eml(&raw, copy.identity.scope.uid)?;
             }
         }
         if r.current.is_some() {
