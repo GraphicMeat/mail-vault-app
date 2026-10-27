@@ -448,11 +448,18 @@ fn adopt_existing(state: &Arc<DaemonState>) {
         if !dir.is_dir() {
             continue;
         }
+        // abd.start registers in this same map before its first save. Hold the
+        // per-account decision through any interrupted-planning rewrite and
+        // insertion, so a live in-process start cannot be adopted a second time.
+        let mut jobs = lock(&state.abd.jobs);
+        if jobs.contains_key(&account_id) {
+            continue;
+        }
         match jobfile::load_job(&dir) {
             Ok(None) => {}
             Err(e) => {
                 warn!("abd: {account_id}: {e}");
-                lock(&state.abd.jobs).insert(account_id.clone(), JobHandle::unreadable(&account_id, &e, now));
+                jobs.insert(account_id.clone(), JobHandle::unreadable(&account_id, &e, now));
             }
             Ok(Some(mut job)) => {
                 if job.account_id != account_id {
@@ -481,7 +488,8 @@ fn adopt_existing(state: &Arc<DaemonState>) {
                     }
                 }
                 let handle = JobHandle::new(&job);
-                lock(&state.abd.jobs).insert(account_id.clone(), Arc::clone(&handle));
+                jobs.insert(account_id.clone(), Arc::clone(&handle));
+                drop(jobs);
                 if job.status.is_finished() {
                     continue;
                 }

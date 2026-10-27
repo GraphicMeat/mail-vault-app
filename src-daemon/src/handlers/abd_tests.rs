@@ -109,6 +109,18 @@ impl Rig {
         rig
     }
 
+    fn ready_without_bootstrap_handoff(sc: Scenario) -> Rig {
+        let mut rig = Rig::idle(sc);
+        rig.state = DaemonState::for_test(rig.dir.clone(), rig.dir.clone(), true);
+        rig.start_worker();
+        rig.state.abd.barrier_for_test();
+        assert!(!rig.state.account_lifecycle.is_ready());
+        rig.state.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&rig.dir)).unwrap(),
+        );
+        rig
+    }
+
     fn start_worker(&self) {
         abd_worker::start(Arc::clone(&self.state));
     }
@@ -983,6 +995,86 @@ async fn p5_startup_adopts_once_in_both_bootstrap_orders() {
         assert!(matches!(next.account_lifecycle.try_close(lease, ACCT), Err(crate::account_lifecycle::LifecycleError::Busy)));
         next.abd.stop_worker_for_test();
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_deferred_adoption_skips_registered_initial_save() {
+    struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+    impl Drain {
+        fn finish(&mut self) {
+            let _ = self.release.take().unwrap().send(());
+            if self.done.take().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+        }
+    }
+    impl Drop for Drain {
+        fn drop(&mut self) {
+            if let Some(release) = self.release.take() { let _ = release.send(()); }
+            if let Some(done) = self.done.take() {
+                if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+            }
+        }
+    }
+    let rig = Rig::ready_without_bootstrap_handoff(scenario(1));
+    rig.preview().await;
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    lock(start_enqueue_pauses()).insert(rig.dir.clone(), StartSavePause { entered: entered_tx, release: release_rx, done: done_tx });
+    let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+    let file = rig.dir.join("abd").join(ACCT).join("job.json");
+    let local = tokio::task::LocalSet::new();
+    local.run_until(async {
+        let state = Arc::clone(&rig.state);
+        let task = tokio::task::spawn_local(async move { start(&state, &archive_params()).await });
+        let entered = tokio::task::spawn_blocking(move || entered_rx.recv_timeout(Duration::from_secs(5))).await.unwrap().is_ok();
+        assert!(entered, "real initial job save did not finish before enqueue");
+        let before = std::fs::read(&file).unwrap();
+        let job: JobFile = serde_json::from_slice(&before).unwrap();
+        assert!(job.folders.is_empty(), "new job must still be in initial planning");
+        let handle = rig.state.abd.handle(ACCT).unwrap();
+        abd_worker::bootstrap_ready(&rig.state);
+        rig.state.abd.barrier_for_test();
+        let after = std::fs::read(&file).unwrap();
+        assert!(after == before, "deferred adoption rewrote the registered live job as interrupted");
+        assert!(Arc::ptr_eq(&handle, &rig.state.abd.handle(ACCT).unwrap()));
+        drain.finish();
+        task.await.unwrap().unwrap();
+    }).await;
+    rig.finished().await;
+    assert_eq!(rig.vault_uids("INBOX"), vec![1], "the one admitted runner must archive the message");
+    assert_eq!(rig.fetched(), 1, "a normal start must run once");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn p5_deferred_adoption_skips_running_job() {
+    let rig = Rig::ready_without_bootstrap_handoff(scenario(1));
+    rig.preview().await;
+    // Planning's Message-ID lookup is the first FETCH; the second is the
+    // body's real download after the plan and job file are durable.
+    let mut fetch = rig.mock.pause_command_nth("FETCH", 2);
+    rig.start(archive_params()).await.unwrap();
+    let original = rig.state.abd.handle(ACCT).unwrap();
+    let file = rig.dir.join("abd").join(ACCT).join("job.json");
+    assert!(fetch.entered(Duration::from_secs(15)), "the first real FETCH did not park");
+    let job: JobFile = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    assert!(!job.folders.is_empty(), "the running job plan must be durable before handoff");
+    assert_eq!(rig.fetched(), 1, "the parked command must be the first real body FETCH");
+    abd_worker::bootstrap_ready(&rig.state);
+    rig.state.abd.barrier_for_test();
+    let duplicate_fetch = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if rig.fetched() > 1 { break; }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }).await.is_ok();
+    fetch.release();
+    wait_for("the original runner to finish", 30, || original.is_finished().then_some(())).await;
+    let registered = rig.state.abd.handle(ACCT).unwrap();
+    wait_for("the registered runner to finish", 30, || registered.is_finished().then_some(())).await;
+    assert!(!duplicate_fetch, "deferred adoption launched a second real FETCH for the live job");
+    assert_eq!(rig.fetched(), 1, "deferred adoption launched a second real FETCH for the live job");
+    assert!(Arc::ptr_eq(&original, &rig.state.abd.handle(ACCT).unwrap()), "controls must retain the live runner handle");
+    assert_eq!(rig.vault_uids("INBOX"), vec![1]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

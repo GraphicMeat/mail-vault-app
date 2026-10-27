@@ -69,6 +69,24 @@ fn pause_start_save(app_dir: &Path) -> Option<impl Drop> {
     Some(done)
 }
 
+#[cfg(test)]
+fn start_enqueue_pauses() -> &'static std::sync::Mutex<HashMap<std::path::PathBuf, StartSavePause>> {
+    static PAUSES: std::sync::OnceLock<std::sync::Mutex<HashMap<std::path::PathBuf, StartSavePause>>> = std::sync::OnceLock::new();
+    PAUSES.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+async fn pause_after_start_save(app_dir: &Path) {
+    struct Done(std::sync::mpsc::Sender<()>);
+    impl Drop for Done { fn drop(&mut self) { let _ = self.0.send(()); } }
+    let Some(pause) = lock(start_enqueue_pauses()).remove(app_dir) else { return };
+    let _ = common::blocking(move || {
+        let _done = Done(pause.done);
+        let _ = pause.entered.send(());
+        let _ = pause.release.recv();
+    }).await;
+}
+
 // ── Params ──────────────────────────────────────────────────────────────────
 
 fn text(params: &Value, key: &str) -> Result<String, String> {
@@ -315,6 +333,8 @@ async fn start(state: &Arc<DaemonState>, params: &Value) -> Result<Value, String
         undo(state, &handle);
         return Err(format!("Could not start the job: {e}"));
     }
+    #[cfg(test)]
+    pause_after_start_save(&state.app_dir).await;
     match &mirror {
         Some(m) if mode == Mode::ArchiveBackupDelete => {
             lock(&state.abd.mirrors).insert(account.clone(), m.clone());
