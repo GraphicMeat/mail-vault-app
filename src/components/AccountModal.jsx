@@ -19,7 +19,8 @@ import { appLink } from '../services/appLink.js';
 import { jmapSessionHost } from '../services/providerKind';
 import { JmapFields, EMPTY_JMAP, jmapReady } from './account/JmapFields';
 
-const APPLE_APP_PASSWORD_URL = 'https://support.apple.com/en-us/102654';
+// Where the password is made. Apple's how-to page (support.apple.com/en-us/102654) is linked from the guide.
+const APPLE_APP_PASSWORD_URL = 'https://account.apple.com';
 const ICLOUD_GUIDE_URL = appLink('https://mailvaultapp.com/guides/add-icloud-mail-to-mailvault.html', 'icloud_app_password');
 
 // Common email provider configurations
@@ -1001,7 +1002,7 @@ export function AccountModal({ onClose, onSuccess }) {
                         <p className="text-mail-text-muted mb-3">{t('account.appleAppPasswordInfoSteps')}</p>
                         <div className="flex flex-col gap-1.5">
                           <ExternalLink href={APPLE_APP_PASSWORD_URL} className="text-mail-accent-text hover:underline font-medium">
-                            {t('account.appleAppPasswordInfoApple')} &rarr;
+                            {t('account.appleAppPasswordInfoCreate')} &rarr;
                           </ExternalLink>
                           <ExternalLink href={ICLOUD_GUIDE_URL} className="text-mail-accent-text hover:underline font-medium">
                             {t('account.appleAppPasswordInfoGuide')} &rarr;

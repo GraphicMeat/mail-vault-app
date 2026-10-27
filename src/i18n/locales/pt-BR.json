@@ -17,7 +17,7 @@
   "account.allEnteredDetailsWillLost": "Todos os dados inseridos serão perdidos.",
   "account.aolMail": "AOL Mail",
   "account.aolRequiresAppPassword": "O AOL exige uma senha de aplicativo",
-  "account.appleAppPasswordInfoApple": "Instruções da Apple",
+  "account.appleAppPasswordInfoCreate": "Criar uma senha específica do aplicativo",
   "account.appleAppPasswordInfoGuide": "Guia passo a passo",
   "account.appleAppPasswordInfoLabel": "Onde consigo uma senha específica do aplicativo?",
   "account.appleAppPasswordInfoSteps": "Entre em account.apple.com (a autenticação de dois fatores precisa estar ativada), abra «Login e segurança», escolha «Senhas específicas de apps», gere uma e cole aqui. A senha normal da sua conta Apple não funciona.",

@@ -17,7 +17,7 @@
   "account.allEnteredDetailsWillLost": "已输入的内容将全部丢失。",
   "account.aolMail": "AOL Mail",
   "account.aolRequiresAppPassword": "AOL 需要应用专用密码",
-  "account.appleAppPasswordInfoApple": "Apple 的说明",
+  "account.appleAppPasswordInfoCreate": "创建 App 专用密码",
   "account.appleAppPasswordInfoGuide": "分步指南",
   "account.appleAppPasswordInfoLabel": "在哪里获取 App 专用密码？",
   "account.appleAppPasswordInfoSteps": "登录 account.apple.com（须已开启双重认证），打开“登录与安全”，选择“App 专用密码”，生成一个并粘贴到这里。你的 Apple 账户常规密码无法使用。",

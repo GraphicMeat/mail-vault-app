@@ -17,7 +17,7 @@
   "account.allEnteredDetailsWillLost": "입력한 내용이 모두 사라집니다.",
   "account.aolMail": "AOL Mail",
   "account.aolRequiresAppPassword": "AOL은 앱 비밀번호가 필요합니다",
-  "account.appleAppPasswordInfoApple": "Apple 안내",
+  "account.appleAppPasswordInfoCreate": "앱 암호 만들기",
   "account.appleAppPasswordInfoGuide": "단계별 가이드",
   "account.appleAppPasswordInfoLabel": "앱 암호는 어디서 만드나요?",
   "account.appleAppPasswordInfoSteps": "account.apple.com에 로그인하고(2단계 인증이 켜져 있어야 합니다) “로그인 및 보안”을 열어 “앱 암호”를 선택한 뒤 하나를 생성해 여기에 붙여넣으세요. Apple 계정의 일반 암호는 사용할 수 없습니다.",

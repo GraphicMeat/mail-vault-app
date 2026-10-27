@@ -17,7 +17,7 @@
   "account.allEnteredDetailsWillLost": "Alle eingegebenen Daten gehen verloren.",
   "account.aolMail": "AOL Mail",
   "account.aolRequiresAppPassword": "AOL verlangt ein App-Passwort",
-  "account.appleAppPasswordInfoApple": "Anleitung von Apple",
+  "account.appleAppPasswordInfoCreate": "App-spezifisches Passwort erstellen",
   "account.appleAppPasswordInfoGuide": "Schritt-für-Schritt-Anleitung",
   "account.appleAppPasswordInfoLabel": "Wo bekomme ich ein app-spezifisches Passwort?",
   "account.appleAppPasswordInfoSteps": "Melde dich auf account.apple.com an (die Zwei-Faktor-Authentifizierung muss aktiv sein), öffne „Anmeldung und Sicherheit“, wähle „App-spezifische Passwörter“, erzeuge eines und füge es hier ein. Das normale Passwort deines Apple-Accounts funktioniert nicht.",

@@ -17,7 +17,7 @@
   "account.allEnteredDetailsWillLost": "入力した内容はすべて失われます。",
   "account.aolMail": "AOL Mail",
   "account.aolRequiresAppPassword": "AOL にはアプリパスワードが必要です",
-  "account.appleAppPasswordInfoApple": "Apple の手順",
+  "account.appleAppPasswordInfoCreate": "App 用パスワードを作成",
   "account.appleAppPasswordInfoGuide": "手順ガイド",
   "account.appleAppPasswordInfoLabel": "App 用パスワードはどこで作成しますか？",
   "account.appleAppPasswordInfoSteps": "account.apple.com にサインインし（2 ファクタ認証が有効である必要があります）、「サインインとセキュリティ」を開いて「App 用パスワード」を選び、パスワードを生成してここに貼り付けます。Apple アカウントの通常のパスワードは使えません。",

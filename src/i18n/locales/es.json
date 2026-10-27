@@ -17,7 +17,7 @@
   "account.allEnteredDetailsWillLost": "Se perderán todos los datos introducidos.",
   "account.aolMail": "AOL Mail",
   "account.aolRequiresAppPassword": "AOL requiere una contraseña de aplicación",
-  "account.appleAppPasswordInfoApple": "Instrucciones de Apple",
+  "account.appleAppPasswordInfoCreate": "Crear una contraseña específica de aplicación",
   "account.appleAppPasswordInfoGuide": "Guía paso a paso",
   "account.appleAppPasswordInfoLabel": "¿Dónde consigo una contraseña específica de aplicación?",
   "account.appleAppPasswordInfoSteps": "Inicia sesión en account.apple.com (la autenticación de dos factores debe estar activada), abre «Inicio de sesión y seguridad», elige «Contraseñas específicas de la app», genera una y pégala aquí. La contraseña normal de tu cuenta de Apple no funcionará.",

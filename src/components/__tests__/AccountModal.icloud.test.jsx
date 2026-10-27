@@ -2,7 +2,7 @@
 
 // Adding an Apple account asks for an app-specific password, which Apple makes
 // on its own site. The password field carries an info button that says where,
-// and links to Apple's page and to MailVault's step-by-step guide.
+// and links to Apple's page that creates it and to MailVault's step-by-step guide.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
@@ -69,12 +69,12 @@ describe('AccountModal: Apple app-specific password help', () => {
     expect(panel.textContent).toContain('App-Specific Passwords');
   });
 
-  it('links to Apple\'s instructions and to the MailVault guide, opened outside the app', () => {
+  it('links to where Apple creates the password and to the MailVault guide, opened outside the app', () => {
     openStep2('iCloud Mail');
     fireEvent.click(screen.getByRole('button', { name: 'Where do I get an app-specific password?' }));
 
-    const apple = screen.getByRole('link', { name: /Apple's instructions/ });
-    expect(apple.getAttribute('href')).toBe('https://support.apple.com/en-us/102654');
+    const create = screen.getByRole('link', { name: /Create an app-specific password/ });
+    expect(create.getAttribute('href')).toBe('https://account.apple.com');
     const guide = screen.getByRole('link', { name: /Step-by-step guide/ });
     expect(guide.getAttribute('href')).toMatch(
       /^https:\/\/mailvaultapp\.com\/guides\/add-icloud-mail-to-mailvault\.html\?utm_source=app&utm_medium=icloud_app_password$/);
