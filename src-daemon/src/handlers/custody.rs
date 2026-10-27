@@ -350,6 +350,27 @@ pub(crate) fn repair_generation_for(state: &Arc<DaemonState>, stamp: &AccountSta
 /// folder waits at most one chunk.
 const REHOME_CHUNK: usize = 1000;
 
+#[cfg(test)]
+struct RehomePause { entered: std::sync::mpsc::Sender<()>, release: std::sync::mpsc::Receiver<()> }
+#[cfg(test)]
+fn rehome_pauses() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, RehomePause>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, RehomePause>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn rehome_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn rehome_stamp_pause(state: &Arc<DaemonState>) {
+    let gate = rehome_pauses().lock().unwrap().remove(&state.app_dir);
+    if let Some(gate) = gate {
+        let _ = gate.entered.send(());
+        let _ = gate.release.recv();
+    }
+}
+
 /// A folder's pass in flight, one at a time per folder whoever starts it; it
 /// leaves the in-flight set however the pass ends, a panic included.
 struct Running(Arc<DaemonState>, (String, String));
@@ -380,13 +401,23 @@ pub(crate) fn rehome_imports_soon(state: &Arc<DaemonState>, account_id: &str, ma
     if mailbox_dir.join(import_rehome::DONE_FILE).exists() {
         return;
     }
+    let Ok(owner) = state.account_lifecycle.try_operation(std::slice::from_ref(&stamp)) else { return };
     let Some(running) = Running::claim(state, account_id, mailbox) else { return };
     let spawned = std::thread::Builder::new().name("import-rehome".into()).spawn(move || {
         crate::mbox_upload_job::background_qos();
-        let (account_id, mailbox) = &running.1;
-        if let Err(e) = rehome_pass(&running.0, &stamp, mailbox) {
-            warn!("import rehome {account_id}/{mailbox}: {e}");
+        #[cfg(test)]
+        let done = rehome_done_registry().lock().unwrap().remove(&running.0.app_dir).map(crate::credentials::TestTaskDone);
+        let _owner = owner;
+        {
+            let running = running;
+            let (account_id, mailbox) = &running.1;
+            if let Err(e) = rehome_pass(&running.0, &stamp, mailbox) {
+                warn!("import rehome {account_id}/{mailbox}: {e}");
+            }
         }
+        drop(_owner);
+        #[cfg(test)]
+        drop(done);
     });
     if let Err(e) = spawned {
         warn!("import rehome {account_id}/{mailbox}: the pass did not start: {e}");
@@ -403,8 +434,13 @@ fn mailbox_dir(root: &std::path::Path, account_id: &str, mailbox: &str) -> Optio
 /// vault-only one, or it is not ready (below).
 pub(crate) fn rehome_imports_for(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Result<Option<import_rehome::Report>, String> {
     let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
-    let Some(_running) = Running::claim(state, account_id, mailbox) else { return Ok(None) };
-    rehome_pass(state, &stamp, mailbox)
+    let owner = state.account_lifecycle.try_operation(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
+    rehome_imports_for_owned(state, &stamp, &owner, mailbox)
+}
+
+pub(crate) fn rehome_imports_for_owned(state: &Arc<DaemonState>, original: &AccountStamp, _owner: &OperationPermit, mailbox: &str) -> Result<Option<import_rehome::Report>, String> {
+    let Some(_running) = Running::claim(state, original.id(), mailbox) else { return Ok(None) };
+    rehome_pass(state, original, mailbox)
 }
 
 /// Moves the folder's old mbox imports out of the server's uid range, and
@@ -496,6 +532,8 @@ fn rehome_pass(state: &Arc<DaemonState>, stamp: &AccountStamp, mailbox: &str) ->
         report.absorb(part);
     }
     if !stamped && report.errors == 0 && report.skipped == 0 {
+        #[cfg(test)]
+        rehome_stamp_pause(state);
         with_mailbox_write(state, account_id, mailbox, |root| {
             let dir = mailbox_dir(root, account_id, mailbox).ok_or("Maildir path has no parent")?;
             std::fs::write(dir.join(import_rehome::DONE_FILE), b"").map_err(|e| format!("Failed to write {}: {}", import_rehome::DONE_FILE, e))
@@ -768,6 +806,54 @@ mod tests {
         let headers = json!({"uidValidity": 2, "totalEmails": total, "emails": [{"uid": 5, "messageId": "<real@x.test>"}]});
         daemon_custody::with_conn(s, |c| cache::save_headers(c, "acc", "INBOX", &headers.to_string())).unwrap();
         cur.parent().unwrap().to_path_buf()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn p4_rehome_thread_owns_through_done_file() {
+        struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                let _ = self.release.take().unwrap().send(());
+                if self.done.as_ref().unwrap().recv_timeout(std::time::Duration::from_secs(5)).is_err() { std::process::abort(); }
+                self.done.take();
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(release) = self.release.take() { let _ = release.send(()); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(std::time::Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (v, s) = st(true);
+        let _ = daemon_custody::open_into(&s);
+        let dir = seed_old_import(&s, v.path(), 1);
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        rehome_pauses().lock().unwrap().insert(s.app_dir.clone(), RehomePause { entered: entered_tx, release: release_rx });
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        rehome_done_registry().lock().unwrap().insert(s.app_dir.clone(), done_tx);
+        rehome_imports_soon(&s, "acc", "INBOX");
+        let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+        let entered = entered_rx.recv_timeout(std::time::Duration::from_secs(5)).is_ok();
+        let before = dir.join(import_rehome::DONE_FILE).exists();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc".to_owned()].into(), ..Default::default() });
+        let close = s.account_lifecycle.try_close(lease, "acc");
+        let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+        if let Ok(mut claim) = close {
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+        }
+        drain.finish();
+        let after = dir.join(import_rehome::DONE_FILE).exists();
+        assert!(entered && !before && after, "real rehome stamp observation failed: entered={entered} before={before} after={after}");
+        assert!(busy, "rehome DONE_FILE wrote after A retired");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc".to_owned()].into(), ..Default::default() });
+        assert!(s.account_lifecycle.try_close(lease, "acc").is_ok());
     }
 
     #[tokio::test]

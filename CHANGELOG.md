@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep archive, bulk delete, restore, upload, format conversion and rehome work attached to their original account lifecycle owner through actual child completion. ZIP imports now bind existing targets to the current account document and keep new targets private until confirmed metadata activation; partial imports are not replayed.
+
 - Keep delayed compose, send, scheduled-send, draft, and deleted-mail work attached to its original account until the actual child finishes. A lifecycle closing claim waits for those admitted writes; work prepared before retirement cannot publish a late local copy. Accepted sends keep their Sent-copy recovery and event work, while an uncertain scheduled send is not sent again automatically. Complete account removal remains staged.
 
 - Keep retired accounts from receiving delayed sync, body, attachment, contact, decrypt, hoarder, eviction and legacy-import writes. Startup import now runs once after account bootstrap while the helper remains responsive.

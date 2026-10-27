@@ -21,6 +21,24 @@ use mailvault_core::imap::ImapConfig;
 use serde_json::Value;
 use std::sync::Arc;
 
+#[cfg(test)]
+fn restore_done(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+    restore_done_registry().lock().unwrap().remove(path).map(crate::credentials::TestTaskDone)
+}
+
+#[cfg(test)]
+fn arm_restore_done(path: &std::path::Path) -> std::sync::mpsc::Receiver<()> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    restore_done_registry().lock().unwrap().insert(path.to_path_buf(), tx);
+    rx
+}
+
+#[cfg(test)]
+fn restore_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+
 fn mailbox_concurrency(params: &Value) -> usize {
     params.get("mailboxConcurrency").and_then(Value::as_u64).unwrap_or(1).clamp(1, 5) as usize
 }
@@ -57,12 +75,24 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(e) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Bad account JSON: {e}"))),
             };
 
+            let original = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
+            let owner = match state.account_lifecycle.try_operation(&[original]) {
+                Ok(owner) => owner,
+                Err(_) =>
+                    return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
+
             let guard = RunGuard::register(state, "restore");
             let cancel = guard.cancel();
             let state = Arc::clone(state);
             tokio::spawn(async move {
+                #[cfg(test)]
+                let _done = restore_done(&state.app_dir);
                 let _guard = guard;
-                if let Err(e) = restore::run_restore(state, config, account_id, folders, cancel, mailbox_concurrency).await {
+                if let Err(e) = restore::run_restore(state, config, account_id, folders, cancel, mailbox_concurrency, owner).await {
                     tracing::error!("[restore] run_restore failed: {}", e);
                 }
             });
@@ -99,6 +129,8 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), mail_dir_ok);
+        std::fs::write(app_dir.path().join("accounts.json"), r#"[{"id":"acct1"},{"id":"acct2"},{"id":"other"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (vault, app_dir, s)
     }
 
@@ -198,6 +230,68 @@ mod tests {
     }
 
     // ── A real restore over the mock IMAP server ─────────────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn p4_restore_append_child_owns_until_real_server_effect() {
+        struct Drain { gate: Option<mock_imap::CommandPause>, done: Option<std::sync::mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                self.gate.take().unwrap().release();
+                if self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                self.done.take();
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(mut gate) = self.gate.take() { gate.release(); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (v, _a, s) = st(true);
+        seed_local_messages(v.path(), "acct1", "INBOX", 1);
+        let dest = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)));
+        let gate = dest.pause_command("APPEND");
+        let done = arm_restore_done(&s.app_dir);
+        let mut events = s.events.subscribe();
+        let resp = call(&s, "start_restore", json!({
+            "account": account_json(&dest, "restore-dest@example.com"),
+            "accountId": "acct1", "folders": ["INBOX"]
+        })).await;
+        assert!(resp.error.is_none(), "restore admission: {:?}", resp.error);
+        let mut drain = Drain { gate: Some(gate), done: Some(done) };
+        let append_entered = drain.gate.as_ref().unwrap().entered(Duration::from_secs(5));
+        let before = dest.state().mailboxes.iter().find(|mailbox| mailbox.name == "INBOX").unwrap().messages.len();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct1".to_owned()].into(), ..Default::default() });
+        let close = s.account_lifecycle.try_close(lease, "acct1");
+        let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+        if let Ok(mut claim) = close {
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+        }
+        drain.gate.as_mut().unwrap().release();
+        let completed = tokio::time::timeout(Duration::from_secs(15), async {
+            loop {
+                let line = events.recv().await.unwrap();
+                if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                    if name == "restore-progress" && payload["status"] == "completed" { return payload; }
+                }
+            }
+        }).await.expect("actual restore runner did not drain");
+        drain.finish();
+        let task_done = true;
+        let uploaded = dest.state().mailboxes.iter().find(|mailbox| mailbox.name == "INBOX").unwrap().messages.len();
+        assert!(append_entered && before == 0 && completed["uploaded_emails"] == 1 && uploaded == 1 && task_done,
+            "actual APPEND observation failed: entered={append_entered} before={before} completed={completed} uploaded={uploaded} done={task_done}");
+        assert!(s.account_lifecycle.try_operation(&[s.account_lifecycle.capture("other").unwrap()]).is_ok());
+        assert!(busy, "restore APPEND landed after A retired");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct1".to_owned()].into(), ..Default::default() });
+        assert!(s.account_lifecycle.try_close(lease, "acct1").is_ok());
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn a_restore_reuploads_local_messages_and_emits_progress() {

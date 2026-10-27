@@ -17,6 +17,22 @@ use mailvault_core::imap::ImapConfig;
 use serde_json::Value;
 use std::sync::Arc;
 
+#[cfg(test)]
+fn migration_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn arm_migration_done(path: &std::path::Path) -> std::sync::mpsc::Receiver<()> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    migration_done_registry().lock().unwrap().insert(path.to_path_buf(), tx);
+    rx
+}
+#[cfg(test)]
+fn migration_done(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+    migration_done_registry().lock().unwrap().remove(path).map(crate::credentials::TestTaskDone)
+}
+
 macro_rules! req {
     ($result:expr) => {
         match $result {
@@ -53,13 +69,17 @@ fn spawn_migration(
     source_account_json: String,
     dest_account_json: String,
     folder_mappings: Vec<FolderMapping>,
-) {
+) -> Result<(), String> {
+    let owner = state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
     let guard = RunGuard::register_with_pause(state, "migration");
     let cancel = guard.cancel();
     let pause = guard.pause();
     let notify = guard.notify();
     let state = Arc::clone(state);
     tokio::spawn(async move {
+        #[cfg(test)]
+        let _done = migration_done(&state.app_dir);
+        let _owner = owner;
         // Keep the guard alive for the whole run so the token stays
         // registered (and reachable by cancel_migration/pause_migration)
         // until this task actually finishes -- it drops here on every exit
@@ -83,6 +103,7 @@ fn spawn_migration(
             tracing::error!("[migration] run_migration failed: {}", e);
         }
     });
+    Ok(())
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
@@ -101,7 +122,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let source_config = req!(parse_imap_config(&id, &source_account, "source"));
             let dest_config = req!(parse_imap_config(&id, &dest_account, "dest"));
 
-            spawn_migration(
+            if let Err(error) = spawn_migration(
                 state,
                 source_config,
                 dest_config,
@@ -110,7 +131,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 source_account,
                 dest_account,
                 folder_mappings,
-            );
+            ) { return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, error)); }
             RpcResponse::success(id, Value::Null)
         }
         "cancel_migration" => RpcResponse::success(id, serde_json::json!({"cancelled": cancel_kind(state, "migration")})),
@@ -139,7 +160,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
             let remaining: Vec<FolderMapping> = loaded.folder_mappings.into_iter().filter(|f| f.status != "completed").collect();
 
-            spawn_migration(
+            if let Err(error) = spawn_migration(
                 state,
                 source_config,
                 dest_config,
@@ -148,7 +169,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 source_account,
                 dest_account,
                 remaining,
-            );
+            ) { return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, error)); }
             RpcResponse::success(id, Value::Null)
         }
         "get_migration_state" => {
@@ -210,6 +231,8 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), mail_dir_ok);
+        std::fs::write(app_dir.path().join("accounts.json"), r#"[{"id":"a"},{"id":"b"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (vault, app_dir, s)
     }
 
@@ -283,6 +306,65 @@ mod tests {
     }
 
     // ── A real two-account run over the mock IMAP server ───────────────────
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn p4_migration_unscoped_owner_lasts_through_append() {
+        struct Drain { gate: Option<mock_imap::CommandPause>, done: Option<std::sync::mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                self.gate.take().unwrap().release();
+                if self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                self.done.take();
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(mut gate) = self.gate.take() { gate.release(); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (_v, _a, s) = st(true);
+        let source = MockImap::start(Scenario::new().mailbox(inbox_with(&[1])));
+        let dest = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)));
+        let gate = dest.pause_command("APPEND");
+        let done = arm_migration_done(&s.app_dir);
+        let mappings = vec![FolderMapping {
+            source_path: "INBOX".into(), dest_path: "INBOX".into(), source_special_use: None,
+            dest_folder_id: None, email_count: 1, status: "pending".into(), migrated: 0,
+            skipped: 0, failed: 0, failed_uids: Vec::new(),
+        }];
+        let resp = call(&s, "start_migration", json!({
+            "sourceAccount": account_json(&source, "source@example.com"),
+            "destAccount": account_json(&dest, "dest@example.com"),
+            "sourceTransport": "imap", "destTransport": "imap", "folderMappings": mappings,
+        })).await;
+        assert!(resp.error.is_none(), "migration admission: {:?}", resp.error);
+        let mut drain = Drain { gate: Some(gate), done: Some(done) };
+        let append_entered = drain.gate.as_ref().unwrap().entered(Duration::from_secs(5));
+        let before = dest.state().mailboxes.iter().find(|mailbox| mailbox.name == "INBOX").unwrap().messages.len();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() });
+        let close = s.account_lifecycle.try_close(lease, "a");
+        let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+        if let Ok(mut claim) = close {
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+        }
+        drain.gate.as_mut().unwrap().release();
+        let completed = wait_for(|| migration::load_migration_state(&s.app_dir).ok().flatten().is_some_and(|state| state.status == "completed"), Duration::from_secs(15)).await;
+        drain.finish();
+        let task_done = true;
+        let uploaded = dest.state().mailboxes.iter().find(|mailbox| mailbox.name == "INBOX").unwrap().messages.len();
+        assert!(append_entered && before == 0 && completed && uploaded == 1 && task_done,
+            "actual migration APPEND observation failed: entered={append_entered} before={before} completed={completed} uploaded={uploaded} done={task_done}");
+        assert!(busy, "migration APPEND landed after A retired");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["b".to_owned()].into(), ..Default::default() });
+        assert!(s.account_lifecycle.try_close(lease, "b").is_ok(), "finite unscoped owner must release");
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn a_two_account_migration_copies_messages_and_emits_progress() {

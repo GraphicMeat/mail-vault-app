@@ -479,6 +479,9 @@ impl ResumeSeed {
     }
 }
 impl PreparedResume {
+    pub fn work(&self) -> &crate::bulk_worker::Workflow {
+        &self.work
+    }
     pub fn persist(&self, data_dir: &Path) -> Result<(), String> {
         op_journal::pending_operation_save_encoded(data_dir, &self.encoded)
             .map_err(|_| "errors.bulkPendingWrite".into())

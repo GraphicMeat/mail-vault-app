@@ -31,6 +31,7 @@
 //! each email leaves the mailbox by the label semantics rule.
 
 use crate::handlers::common::{self, blocking, cancel_kind, done, str_arg, vec_arg, with_vault_write, RunGuard};
+use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::archive::{self, ArchiveCtx, ArchiveGate, ArchiveSinks};
@@ -94,12 +95,38 @@ pub(crate) fn archive_ctx(state: &Arc<DaemonState>, root: std::path::PathBuf) ->
     })
 }
 
+/// The operation stays counted in the core runner and in either blocking
+/// child after its RPC waiter has gone away.
+pub(crate) fn archive_ctx_owned(state: &Arc<DaemonState>, root: std::path::PathBuf, owner: OperationPermit) -> Arc<ArchiveCtx> {
+    let base = archive_ctx(state, root);
+    let gate = base.gate.clone();
+    let gate_owner = owner.clone();
+    let custody_append = base.sinks.custody_append.clone();
+    Arc::new(ArchiveCtx {
+        root: base.root.clone(),
+        pool: base.pool.clone(),
+        gate: Arc::new(move |work| {
+            let _owner = &gate_owner;
+            gate(work)
+        }),
+        registry: base.registry.clone(),
+        sinks: ArchiveSinks {
+            emit: base.sinks.emit.clone(),
+            custody_append: Arc::new(move |account, mailbox, rows| {
+                let _owner = &owner;
+                custody_append(account, mailbox, rows)
+            }),
+        },
+    })
+}
+
 /// Every uid of a permanent bulk delete into the deleted-mail bin, five at a
 /// time on the background lane. Returns the uids to delete (kept, or already
 /// gone from the server) and how many were refused because no copy could be
 /// kept. A cancel stops capturing; what was not reached is not deleted.
 async fn capture_all(
     state: &Arc<DaemonState>,
+    original: &AccountStamp,
     account_id: &str,
     config: &crate::imap::ImapConfig,
     mailbox: &str,
@@ -124,12 +151,12 @@ async fn capture_all(
                     crate::handlers::deleted::Source::Imap { config, permanent: true, priority: false }
                 }
             };
-            let mut captured = crate::handlers::deleted::capture(state, account_id, mailbox, uid, source()).await;
+            let mut captured = crate::handlers::deleted::capture_stamped(state, original.clone(), account_id, mailbox, uid, source()).await;
             // A JMAP session that expired or was revoked read nothing: forgotten,
             // and the copy is tried once more on a fresh one.
             if config.uses_jmap() && matches!(&captured, Err(e) if crate::handlers::jmap_bridge::is_auth_error(e)) {
                 state.jmap.forget(config);
-                captured = crate::handlers::deleted::capture(state, account_id, mailbox, uid, source()).await;
+                captured = crate::handlers::deleted::capture_stamped(state, original.clone(), account_id, mailbox, uid, source()).await;
             }
             match captured {
                 Ok(_) => Some(uid),
@@ -156,11 +183,25 @@ async fn capture_all(
 /// points at nothing now: it ends, and the app hears so off the `follow-up`
 /// event. Only the uids the server really removed.
 pub(crate) async fn end_follow_ups_at(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]) {
+    if uids.is_empty() { return; }
+    let (st, account_id, mailbox, uids) = (Arc::clone(state), account_id.to_string(), mailbox.to_string(), uids.to_vec());
+    let ended = blocking(move || {
+        mailvault_core::app_db::with(&st.app_dir, |c| mailvault_core::app_db::follow_up::dismiss_at(c, &account_id, &mailbox, &uids))
+    }).await.and_then(|r| r);
+    match ended {
+        Ok(ids) => for id in ids { crate::follow_up_worker::emit(state, &id, "dismissed"); },
+        Err(e) => tracing::warn!("[bulk-delete] could not end the follow-up reminders of deleted copies: {e}"),
+    }
+}
+
+async fn end_follow_ups_at_owned(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32], owner: &OperationPermit) {
     if uids.is_empty() {
         return;
     }
     let (st, account_id, mailbox, uids) = (Arc::clone(state), account_id.to_string(), mailbox.to_string(), uids.to_vec());
+    let owner = owner.clone();
     let ended = blocking(move || {
+        let _owner = owner;
         mailvault_core::app_db::with(&st.app_dir, |c| mailvault_core::app_db::follow_up::dismiss_at(c, &account_id, &mailbox, &uids))
     })
     .await
@@ -296,21 +337,27 @@ async fn bulk_delete_jmap_bound(
 }
 
 /// Cleanup lists what is classified: a deleted message must leave that list.
-async fn forget_classifications_at(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32]) {
+async fn forget_classifications_at(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: &[u32], owner: &OperationPermit) {
     if uids.is_empty() {
         return;
     }
     let (app_dir, account_id, mailbox, uids) = (state.app_dir.clone(), account_id.to_string(), mailbox.to_string(), uids.to_vec());
-    let _ = blocking(move || crate::classification::forget_at(&app_dir, &account_id, &mailbox, &uids)).await;
+    let owner = owner.clone();
+    let _ = blocking(move || {
+        let _owner = owner;
+        crate::classification::forget_at(&app_dir, &account_id, &mailbox, &uids)
+    }).await;
 }
 
-async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>) {
+async fn record_server_deleted(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uids: Vec<u32>, owner: &OperationPermit) {
     if uids.is_empty() {
         return;
     }
     let st = Arc::clone(state);
+    let owner = owner.clone();
     let (account_id, mailbox) = (account_id.to_string(), mailbox.to_string());
     let result = blocking(move || {
+        let _owner = owner;
         crate::custody::with_conn(&st, |c| {
             mailvault_core::custody::cache::save_headers(c, &account_id, &mailbox, &serde_json::json!({ "removedUids": uids }).to_string())?;
             stamp_server_deleted(c, &account_id, &mailbox, &uids)
@@ -364,11 +411,13 @@ pub(crate) async fn delete_with_outcomes(
     bin: bool,
     cancel: Arc<std::sync::atomic::AtomicBool>,
     identity: Option<&mailvault_core::bulk_worker::Identity>,
+    original: AccountStamp,
+    owner: OperationPermit,
 ) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
     let config: crate::imap::ImapConfig =
         serde_json::from_str(&account_json).map_err(|e| e.to_string())?;
     delete_with_config(
-        state, account_id, config, mailbox, uids, bin, cancel, identity,
+        state, account_id, config, mailbox, uids, bin, cancel, identity, original, owner,
     )
     .await
 }
@@ -382,7 +431,10 @@ pub(crate) async fn delete_with_config(
     bin: bool,
     cancel: Arc<std::sync::atomic::AtomicBool>,
     identity: Option<&mailvault_core::bulk_worker::Identity>,
+    original: AccountStamp,
+    owner: OperationPermit,
 ) -> Result<(archive::ArchiveProgress, Vec<u32>), String> {
+    if original.id() != account_id { return Err("errors.keychainBusy".into()); }
     if identity.is_some_and(|identity| !identity.matches_transport(&config)) {
         return Err("errors.bulkIdentityChanged".into());
     }
@@ -394,6 +446,7 @@ pub(crate) async fn delete_with_config(
     let (uids, refused) = if bin {
         capture_all(
             state,
+            &original,
             &account_id,
             &config,
             &mailbox,
@@ -406,10 +459,10 @@ pub(crate) async fn delete_with_config(
         (uids, 0)
     };
     let (acct, mb) = (account_id.clone(), mailbox.clone());
-    let (mut p, deleted) = delete_provider_only(state,account_id,config,mailbox,uids,cancel,identity).await?;
-    end_follow_ups_at(state, &acct, &mb, &deleted).await;
-    forget_classifications_at(state, &acct, &mb, &deleted).await;
-    record_server_deleted(state, &acct, &mb, deleted.clone()).await;
+    let (mut p, deleted) = delete_provider_only(state,account_id,config,mailbox,uids,cancel,identity,owner.clone()).await?;
+    end_follow_ups_at_owned(state, &acct, &mb, &deleted, &owner).await;
+    forget_classifications_at(state, &acct, &mb, &deleted, &owner).await;
+    record_server_deleted(state, &acct, &mb, deleted.clone(), &owner).await;
     p.total += refused;
     p.errors += refused;
     Ok((p, deleted))
@@ -421,6 +474,7 @@ pub(crate) async fn delete_provider_only(
     state: &Arc<DaemonState>, account_id:String, config:crate::imap::ImapConfig,
     mailbox:String,uids:Vec<u32>,cancel:Arc<std::sync::atomic::AtomicBool>,
     identity:Option<&mailvault_core::bulk_worker::Identity>,
+    owner: OperationPermit,
 ) -> Result<(archive::ArchiveProgress,Vec<u32>),String> {
     if identity.is_some_and(|i| !i.matches_transport(&config)) { return Err("errors.bulkIdentityChanged".into()); }
     if !config.uses_jmap() && config.uses_graph() { return Err("errors.bulkGraphDeleteUnsupported".into()); }
@@ -436,7 +490,7 @@ pub(crate) async fn delete_provider_only(
             _ => return Err("errors.bulkIdentityChanged".into()),
         };
         archive::bulk_delete_config(
-            archive_ctx(state, std::path::PathBuf::new()),
+            archive_ctx_owned(state, std::path::PathBuf::new(), owner.clone()),
             account_id,
             config,
             mailbox,
@@ -447,6 +501,7 @@ pub(crate) async fn delete_provider_only(
         )
         .await
     };
+    drop(owner);
     result
 }
 
@@ -464,11 +519,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // asked for stays in front.
             let background = params.get("background").and_then(Value::as_bool).unwrap_or(false);
             let state = Arc::clone(state);
+            let original = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
+            let owner = match state.account_lifecycle.try_operation(&[original]) {
+                Ok(owner) => owner,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             let root = match common::vault_root(&state) {
                 Ok(r) => r,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
-            let ctx = archive_ctx(&state, root);
+            let ctx = archive_ctx_owned(&state, root, owner);
             let guard = RunGuard::register(&state, "archive");
             let cancel = guard.cancel();
             let result = archive::run(ctx, account_id, account_json, mailbox, uids, cancel, background).await;
@@ -487,8 +550,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let mailbox = req!(str_arg(&id, params, "mailbox"));
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
             let state = Arc::clone(state);
+            let original = match state.account_lifecycle.capture(&account_id) {
+                Ok(stamp) => stamp,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
+            let owner = match state.account_lifecycle.try_operation(std::slice::from_ref(&original)) {
+                Ok(owner) => owner,
+                Err(_) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")),
+            };
             let guard = RunGuard::register(&state, "bulk_delete");
-            let result = delete_with_outcomes(&state,account_id,account_json,mailbox,uids,params.get("bin").and_then(Value::as_bool).unwrap_or(true),guard.cancel(),None).await.map(|(p,_)|p);
+            let result = delete_with_outcomes(&state,account_id,account_json,mailbox,uids,params.get("bin").and_then(Value::as_bool).unwrap_or(true),guard.cancel(),None,original,owner).await.map(|(p,_)|p);
             drop(guard);
             progress_reply(id, result)
         }
@@ -539,11 +610,173 @@ mod tests {
     use serde_json::json;
     use std::sync::atomic::Ordering;
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p4_archive_custody_child_outlives_waiter() {
+        use std::sync::{mpsc, Mutex};
+        use std::time::Duration;
+        struct ChildDrain {
+            release: Option<mpsc::Sender<()>>,
+            done: Option<mpsc::Receiver<String>>,
+        }
+        impl ChildDrain {
+            fn finish(&mut self) -> String {
+                self.release.take().unwrap().send(()).unwrap();
+                let result = self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5));
+                let Ok(result) = result else { std::process::abort(); };
+                self.done.take();
+                result
+            }
+        }
+        impl Drop for ChildDrain {
+            fn drop(&mut self) {
+                if let Some(release) = self.release.take() { let _ = release.send(()); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (v, s) = st(true);
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(inbox_with_one(9)));
+        let stamp = s.account_lifecycle.capture("acc").unwrap();
+        let owner = s.account_lifecycle.try_operation(&[stamp]).unwrap();
+        let original = archive_ctx_owned(&s, v.path().to_path_buf(), owner);
+        let append = original.sinks.custody_append.clone();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let release_rx = Mutex::new(release_rx);
+        let ctx = Arc::new(ArchiveCtx {
+            root: original.root.clone(), pool: original.pool.clone(), gate: original.gate.clone(),
+            registry: original.registry.clone(),
+            sinks: ArchiveSinks {
+                emit: original.sinks.emit.clone(),
+                custody_append: Arc::new(move |account, mailbox, rows| {
+                    let _ = entered_tx.send(());
+                    release_rx.lock().unwrap().recv().map_err(|e| e.to_string())?;
+                    append(account, mailbox, rows)
+                }),
+            },
+        });
+        drop(original);
+        let (done_tx, done_rx) = mpsc::channel();
+        let account_json = account_json_for(&server);
+        let waiter = tokio::spawn(async move {
+            let result = archive::run(ctx, "acc".into(), account_json, "INBOX".into(), vec![9],
+                Arc::new(std::sync::atomic::AtomicBool::new(false)), false).await;
+            let _ = done_tx.send(format!("{:?}", result.map(|progress| progress.completed)));
+        });
+        let mut child = ChildDrain { release: Some(release_tx), done: Some(done_rx) };
+        entered_rx.recv_timeout(Duration::from_secs(5)).expect("actual core custody child entered");
+        drop(waiter);
+        assert_eq!(vault_names(v.path(), "acc", "INBOX").len(), 1, "real archive file landed before custody child");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc".to_owned()].into(), ..Default::default() },
+        );
+        let close = s.account_lifecycle.try_close(lease, "acc");
+        let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+        if let Ok(mut claim) = close {
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+        }
+        let result = child.finish();
+        let rows = crate::custody::with_conn(&s, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap_or_default();
+        assert!(rows.contains("9"), "custody child did not perform real SQL write: {result:?} {rows}");
+        assert!(s.account_lifecycle.try_operation(&[s.account_lifecycle.capture("other").unwrap()]).is_ok());
+        assert!(busy, "close succeeded before surviving custody child wrote SQL after retirement: {rows}");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc".to_owned()].into(), ..Default::default() },
+        );
+        assert!(s.account_lifecycle.try_close(lease, "acc").is_ok(), "last actual child drop releases owner");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p4_archive_custody_child_survives_parent_abort() {
+        use std::sync::{mpsc, Mutex};
+        use std::time::Duration;
+        struct TaskDone(mpsc::Sender<()>);
+        impl Drop for TaskDone { fn drop(&mut self) { let _ = self.0.send(()); } }
+        struct Drain { release: Option<mpsc::Sender<()>>, done: Option<mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                self.release.take().unwrap().send(()).unwrap();
+                let result = self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5));
+                if result.is_err() { std::process::abort(); }
+                self.done.take();
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(release) = self.release.take() { let _ = release.send(()); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (vault, state) = st(true);
+        let server = mock_imap::MockImap::start(mock_imap::Scenario::new().mailbox(inbox_with_one(9)));
+        let stamp = state.account_lifecycle.capture("acc").unwrap();
+        let owner = state.account_lifecycle.try_operation(&[stamp]).unwrap();
+        let original = archive_ctx_owned(&state, vault.path().to_path_buf(), owner);
+        let append = original.sinks.custody_append.clone();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let task_done = TaskDone(done_tx);
+        let release_rx = Mutex::new(release_rx);
+        let ctx = Arc::new(ArchiveCtx {
+            root: original.root.clone(), pool: original.pool.clone(), gate: original.gate.clone(),
+            registry: original.registry.clone(),
+            sinks: ArchiveSinks {
+                emit: original.sinks.emit.clone(),
+                custody_append: Arc::new(move |account, mailbox, rows| {
+                    let _ = &task_done;
+                    let _ = entered_tx.send(());
+                    release_rx.lock().unwrap().recv().map_err(|e| e.to_string())?;
+                    append(account, mailbox, rows)
+                }),
+            },
+        });
+        drop(original);
+        let account_json = account_json_for(&server);
+        let parent = tokio::spawn(async move {
+            archive::run(ctx, "acc".into(), account_json, "INBOX".into(), vec![9],
+                Arc::new(std::sync::atomic::AtomicBool::new(false)), false).await
+        });
+        let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+        entered_rx.recv_timeout(Duration::from_secs(5)).expect("real custody child entered");
+        parent.abort();
+        let cancelled = match parent.await { Err(err) => err.is_cancelled(), Ok(_) => false };
+        assert!(cancelled, "outer run must actually be destroyed");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acc".to_owned()].into(), ..Default::default() });
+        assert!(matches!(state.account_lifecycle.try_close(lease, "acc"), Err(crate::account_lifecycle::LifecycleError::Busy)),
+            "started child lost ownership when its parent was cancelled");
+        drain.finish();
+        let rows = crate::custody::with_conn(&state, |c| entries::read(c, "acc", "INBOX")).unwrap().unwrap_or_default();
+        assert!(rows.contains("9"), "started child did not publish its actual custody SQL");
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let lease = crate::account_workflows::AccountLease::detached_for_test(
+                crate::account_workflows::AccountWriteScope { ids: ["acc".to_owned()].into(), ..Default::default() });
+            if state.account_lifecycle.try_close(lease, "acc").is_ok() { break; }
+            assert!(tokio::time::Instant::now() < deadline, "actual child completion did not release owner");
+            tokio::task::yield_now().await;
+        }
+    }
+
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir, mail_dir_ok);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"acc"},{"id":"acct1"},{"id":"other"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         (vault, s)
+    }
+
+    fn admitted(s: &Arc<DaemonState>, id: &str) -> (AccountStamp, OperationPermit) {
+        let stamp = s.account_lifecycle.capture(id).unwrap();
+        let owner = s.account_lifecycle.try_operation(std::slice::from_ref(&stamp)).unwrap();
+        (stamp, owner)
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
@@ -1225,6 +1458,7 @@ mod tests {
             validity: 1,
             message_ids: std::collections::HashMap::new(),
         };
+        let (original, owner) = admitted(&s, "acc");
         let (p, deleted) = delete_with_outcomes(
             &s,
             "acc".into(),
@@ -1234,6 +1468,7 @@ mod tests {
             false,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&proof),
+            original, owner,
         )
         .await
         .unwrap();
@@ -1265,6 +1500,7 @@ mod tests {
             validity: 1,
             message_ids: std::collections::HashMap::new(),
         };
+        let (original, owner) = admitted(&s, "acc");
         let (p, deleted) = delete_with_outcomes(
             &s,
             "acc".into(),
@@ -1274,6 +1510,7 @@ mod tests {
             false,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&proof),
+            original, owner,
         )
         .await
         .unwrap();
@@ -1303,6 +1540,7 @@ mod tests {
             validity: 1,
             message_ids: std::collections::HashMap::new(),
         };
+        let (original, owner) = admitted(&s, "acc");
         let (p, deleted) = delete_with_outcomes(
             &s,
             "acc".into(),
@@ -1312,6 +1550,7 @@ mod tests {
             false,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&proof),
+            original, owner,
         )
         .await
         .unwrap();
@@ -1325,6 +1564,7 @@ mod tests {
     #[tokio::test]
     async fn bulk_bound_graph_delete_fails_before_capture_or_imap() {
         let (_v, s) = st(true);
+        let (original, owner) = admitted(&s, "acc");
         let result = delete_with_outcomes(
             &s,
             "acc".into(),
@@ -1334,6 +1574,7 @@ mod tests {
             true,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&mailvault_core::bulk_worker::Identity::Graph{ids:std::collections::HashMap::new()}),
+            original, owner,
         )
         .await;
         assert!(matches!(result,Err(ref error) if error=="errors.bulkGraphDeleteUnsupported"));
@@ -1372,6 +1613,7 @@ mod tests {
             mailbox_id: "mb-inbox".into(),
             ids,
         };
+        let (original, owner) = admitted(&s, "acct1");
         let (p, deleted) = delete_with_config(
             &s,
             "acct1".into(),
@@ -1381,6 +1623,7 @@ mod tests {
             true,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&proof),
+            original, owner,
         )
         .await
         .unwrap();
@@ -1406,6 +1649,7 @@ mod tests {
             mailbox_id: "mb-inbox".into(),
             ids: std::collections::HashMap::new(),
         };
+        let (original, owner) = admitted(&s, "acct1");
         let result = delete_with_config(
             &s,
             "acct1".into(),
@@ -1415,6 +1659,7 @@ mod tests {
             false,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&proof),
+            original, owner,
         )
         .await;
         assert!(matches!(result,Err(ref error) if error=="errors.bulkIdentityChanged"));
@@ -1435,6 +1680,7 @@ mod tests {
                 "another-message@example.test".into(),
             )]),
         };
+        let (original, owner) = admitted(&s, "acc");
         let (p, deleted) = delete_with_outcomes(
             &s,
             "acc".into(),
@@ -1444,6 +1690,7 @@ mod tests {
             false,
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Some(&proof),
+            original, owner,
         )
         .await
         .unwrap();

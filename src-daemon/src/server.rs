@@ -183,6 +183,7 @@ pub struct DaemonState {
     pub tokens: crate::oauth_tokens::TokenStore,
     pub(crate) account_admission: crate::account_workflows::AccountAdmission,
     pub(crate) account_lifecycle: crate::account_lifecycle::AccountLifecycle,
+    pub(crate) zip_intents: crate::backup_zip::ZipIntents,
     /// Snooze's wake signal and pass lock — `handlers::snooze` pokes it on
     /// create/reschedule and holds the lock for an immediate unsnooze.
     pub snooze: crate::snooze_worker::SnoozeState,
@@ -1054,6 +1055,7 @@ impl DaemonState {
             tokens: crate::oauth_tokens::TokenStore::default(),
             account_admission: Default::default(),
             account_lifecycle,
+            zip_intents: Default::default(),
             snooze: crate::snooze_worker::SnoozeState::default(),
             follow_up: crate::follow_up_worker::FollowUpState::default(),
             auto_tag_worker,

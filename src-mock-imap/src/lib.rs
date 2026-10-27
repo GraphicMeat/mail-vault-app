@@ -32,6 +32,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
 use std::time::Duration;
 
 pub struct MockImap {
@@ -50,6 +51,28 @@ pub struct MockImap {
     peak: Arc<AtomicUsize>,
     /// What the SMTP listener took in — see `smtp.rs`.
     smtp: Arc<smtp::SmtpRecorder>,
+    command_pause: Arc<Mutex<Option<CommandPauseArm>>>,
+}
+
+struct CommandPauseArm {
+    name: String,
+    nth: usize,
+    seen: usize,
+    entered: mpsc::Sender<()>,
+    release: mpsc::Receiver<()>,
+}
+
+/// One command is stopped after its literal is read and before server mutation.
+pub struct CommandPause {
+    entered: mpsc::Receiver<()>,
+    release: Option<mpsc::Sender<()>>,
+}
+impl CommandPause {
+    pub fn entered(&self, timeout: Duration) -> bool { self.entered.recv_timeout(timeout).is_ok() }
+    pub fn release(&mut self) { if let Some(tx) = self.release.take() { let _ = tx.send(()); } }
+}
+impl Drop for CommandPause {
+    fn drop(&mut self) { self.release(); }
 }
 
 impl MockImap {
@@ -79,6 +102,7 @@ impl MockImap {
         let live = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));
         let counts: Arc<Mutex<HashMap<String, usize>>> = Arc::new(Mutex::new(HashMap::new()));
+        let command_pause = Arc::new(Mutex::new(None));
         let faults = Arc::new(Mutex::new(scenario.faults.clone()));
         let smtp_recorder = Arc::new(smtp::SmtpRecorder::new());
         let smtp_addr = smtp::start(scenario.smtp.clone(), stop.clone(), smtp_recorder.clone(), check.clone());
@@ -91,6 +115,7 @@ impl MockImap {
             let (live, peak) = (live.clone(), peak.clone());
             let faults = faults.clone();
             let counts = counts.clone();
+            let command_pause = command_pause.clone();
             let check = check.clone();
             let greeting = scenario
                 .greeting
@@ -106,22 +131,37 @@ impl MockImap {
                     let conn_no = connections.fetch_add(1, Ordering::SeqCst) + 1;
                     peak.fetch_max(live.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
                     let open = Open(live.clone());
-                    let (state, log, faults, counts, greeting, check) = (
+                    let (state, log, faults, counts, greeting, check, command_pause) = (
                         state.clone(),
                         log.clone(),
                         faults.clone(),
                         counts.clone(),
                         greeting.clone(),
                         check.clone(),
+                        command_pause.clone(),
                     );
                     std::thread::spawn(move || {
-                        let _ = handle_conn(conn, state, log, faults, counts, greeting, open, conn_no, check);
+                        let _ = handle_conn(conn, state, log, faults, counts, greeting, open, conn_no, check, command_pause);
                     });
                 }
             });
         }
 
-        MockImap { addr, smtp_addr, state, stop, log, faults, counts, connections, peak, smtp: smtp_recorder }
+        MockImap { addr, smtp_addr, state, stop, log, faults, counts, connections, peak, smtp: smtp_recorder, command_pause }
+    }
+
+    pub fn pause_command(&self, name: &str) -> CommandPause {
+        self.pause_command_nth(name, 1)
+    }
+
+    pub fn pause_command_nth(&self, name: &str, nth: usize) -> CommandPause {
+        assert!(nth > 0);
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let mut arm = self.command_pause.lock().unwrap();
+        assert!(arm.is_none(), "only one command pause can be armed");
+        *arm = Some(CommandPauseArm { name: name.to_uppercase(), nth, seen: 0, entered: entered_tx, release: release_rx });
+        CommandPause { entered: entered_rx, release: Some(release_tx) }
     }
 
     /// Change provider state/faults without changing the account endpoint.
@@ -239,6 +279,7 @@ fn handle_conn(
     open: Open,
     conn_no: usize,
     check: Option<Arc<dyn oauth::TokenCheck>>,
+    command_pause: Arc<Mutex<Option<CommandPauseArm>>>,
 ) -> std::io::Result<()> {
     // The bearer token this session signed in with, when a check is on.
     let mut signed_in_with: Option<(String, String)> = None;
@@ -293,6 +334,18 @@ fn handle_conn(
             continue;
         };
         cmd.literal = literal;
+
+        let arm = {
+            let mut pending = command_pause.lock().unwrap();
+            if let Some(arm) = pending.as_mut() {
+                if arm.name == cmd.name { arm.seen += 1; }
+            }
+            if pending.as_ref().is_some_and(|arm| arm.name == cmd.name && arm.seen == arm.nth) { pending.take() } else { None }
+        };
+        if let Some(arm) = arm {
+            let _ = arm.entered.send(());
+            let _ = arm.release.recv();
+        }
 
         // A token that stopped being valid (expired, revoked) ends the session
         // at its next command, when the check says the provider does that.
@@ -767,11 +820,54 @@ fn write_line(out: &mut impl Write, line: &[u8]) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{fault_haystack, idle_handshake, match_faults, Message, ServerState};
+    use super::{fault_haystack, idle_handshake, match_faults, Message, MockImap, Scenario, ServerState};
     use crate::scenario::{Action, Fault, Trigger};
     use std::collections::HashMap;
-    use std::io::{self, Write};
+    use std::io::{self, BufRead, BufReader, Write};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn p4_nth_command_pause_stops_before_response() {
+        let server = MockImap::start(Scenario::new());
+        let mut pause = server.pause_command_nth("NOOP", 2);
+        let mut stream = std::net::TcpStream::connect((server.host().as_str(), server.port())).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.starts_with("* OK"));
+        stream.write_all(b"A1 NOOP\r\n").unwrap();
+        line.clear();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.starts_with("A1 OK"));
+        stream.write_all(b"A2 NOOP\r\n").unwrap();
+        assert!(pause.entered(std::time::Duration::from_secs(5)));
+        reader.get_ref().set_read_timeout(Some(std::time::Duration::from_millis(100))).unwrap();
+        line.clear();
+        assert!(reader.read_line(&mut line).is_err(), "held command replied before release");
+        reader.get_ref().set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        pause.release();
+        line.clear();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.starts_with("A2 OK"));
+    }
+
+    #[test]
+    fn p4_command_pause_drop_releases_server() {
+        let server = MockImap::start(Scenario::new());
+        let pause = server.pause_command("NOOP");
+        let mut stream = std::net::TcpStream::connect((server.host().as_str(), server.port())).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        stream.write_all(b"A1 NOOP\r\n").unwrap();
+        assert!(pause.entered(std::time::Duration::from_secs(5)));
+        drop(pause);
+        line.clear();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.starts_with("A1 OK"));
+    }
 
     #[test]
     fn idle_handshake_baseline_precedes_every_publication_change() {

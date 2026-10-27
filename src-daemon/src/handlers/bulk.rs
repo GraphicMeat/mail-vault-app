@@ -91,6 +91,7 @@ pub(crate) async fn route(
                 if let Some(snapshot) = crate::bulk_worker::duplicate_start(&state, operation_id, &attempt, action, &scope)? {
                     return Ok(snapshot);
                 }
+                let owner = crate::bulk_worker::admit_scope(&state, &scope)?;
                 let work = crate::bulk_worker::freeze(&state, action, scope)?;
                 let (snapshot, duplicate) = crate::bulk_worker::prepare_claim(&state, operation_id, &attempt, work.intent.clone())?;
                 if !duplicate {
@@ -119,6 +120,7 @@ pub(crate) async fn route(
                         params["mirrorRoot"].as_str().map(str::to_owned),
                         params["externalStatus"].as_str().map(str::to_owned),
                         false,
+                        owner,
                     ) {
                         let _journal = state
                             .journal
@@ -146,7 +148,7 @@ pub(crate) async fn route(
                     }
                     return Err("errors.operationRunning".into());
                 }
-                let (work, snapshot) =
+                let (work, snapshot, owner) =
                     crate::bulk_worker::prepare_resume(&state, operation_id, &attempt)?;
                 if let Err(error) = crate::bulk_worker::launch(
                     state.clone(),
@@ -156,6 +158,7 @@ pub(crate) async fn route(
                     params["mirrorRoot"].as_str().map(str::to_owned),
                     params["externalStatus"].as_str().map(str::to_owned),
                     true,
+                    owner,
                 ) {
                     let _journal = state
                         .journal

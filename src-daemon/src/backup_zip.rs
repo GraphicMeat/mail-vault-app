@@ -6,12 +6,10 @@
 //! calls these and the porting notes below for the two places this module's
 //! signature had to diverge from the app version's.
 //!
-//! `accounts.json` (plan decision 2): this module never writes it. `import`'s
-//! new-account detection still runs: it decides which UUID a manifest
-//! account's vault files get extracted under, and the caller (the app, via
-//! `src/services/db/accounts.js`) needs those same descriptors to save, but
-//! the write itself stays app-side. `export` never wrote it either (only
-//! `import` did, in the original code), so no fix was needed there.
+//! This module never writes `accounts.json`. ZIP import reads a fresh native
+//! listing under account admission, keeps generated targets privately
+//! reserved, and returns descriptors plus an opaque intent reference. Public
+//! metadata activation is a later workflow.
 //!
 //! Two porting notes beyond the plan's own inventory (the plan's Task 4.3
 //! only named `app_handle.emit -> emit` and `vault::root(&app_handle)? ->
@@ -23,22 +21,23 @@
 //!    `import_backup`'s call, missing this one. Since decision 2 only
 //!    forbids a daemon WRITE to this file, not a read, `export` keeps doing
 //!    this lookup, but as a plain argument (`accounts_entries`) supplied by
-//!    the router's own read, the same shape `import`'s `existing_accounts`
-//!    already takes, so this module stays read-only-by-construction like
-//!    `import` rather than reading the file itself.
+//!    the router's own read. Import ignores its former caller snapshot and
+//!    obtains the mapping from the native account document itself.
 //! 2. `export`'s original body also takes `dest_path` (where to write the
 //!    ZIP), omitted from the plan's abbreviated signature list entirely.
 //!    Restored here; there is no other way to write a ZIP file.
 //!
-//! Per-file gate (decision 10): `export`'s walk resolves the vault root once
-//! up front (a read, not gate-sensitive); `import`'s extraction loop calls
-//! `common::with_vault_write` inside the loop, once per file, and breaks
-//! cleanly on a gate refusal instead of propagating it as a hard error,
-//! matching this repo's "resilient over noisy" rule: a vault move mid-import
-//! stops further writes but still returns whatever imported before it did.
+//! Export's read-only walk resolves the vault root once. Import holds finite
+//! existing-target ownership, checks exact target publication per file, and
+//! uses the vault gate for each write. A gate refusal stops extraction with
+//! a truthful incomplete result and retained private reservation only when
+//! a file effect may already have occurred.
 
 use crate::handlers::common;
+use crate::account_lifecycle::{AccountStamp, ImportTargetReservation, ImportTargetStamp, OperationPermit};
+use crate::account_workflows::AccountWriteScope;
 use crate::server::DaemonState;
+use mailvault_core::accounts_doc;
 use mailvault_core::maildir::{has_info, info_flags};
 use mailvault_core::message_store;
 use serde::{Deserialize, Serialize};
@@ -94,9 +93,12 @@ pub struct ImportResult {
     pub new_accounts: Vec<AccountsJsonEntry>,
     #[serde(rename = "settingsJson")]
     pub settings_json: Option<String>,
+    #[serde(rename = "importIntentId")]
+    pub import_intent_id: String,
+    pub complete: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountsJsonEntry {
     pub id: String,
     pub email: Option<String>,
@@ -108,6 +110,82 @@ pub struct AccountsJsonEntry {
     pub smtp_server: Option<String>,
     #[serde(rename = "createdAt")]
     pub created_at: Option<String>,
+}
+
+#[derive(Clone)]
+enum ImportTarget {
+    Existing { id: String, stamp: AccountStamp },
+    New { id: String, stamp: ImportTargetStamp, descriptor: AccountsJsonEntry, reservation: ImportTargetReservation },
+}
+impl ImportTarget {
+    fn id(&self) -> &str {
+        match self { Self::Existing { id, .. } | Self::New { id, .. } => id }
+    }
+}
+
+struct PendingImport {
+    targets: HashMap<String, ImportTarget>,
+    consumed: std::collections::HashSet<String>,
+    had_file_effect: bool,
+    complete: bool,
+}
+#[derive(Default)]
+pub(crate) struct ZipIntents(std::sync::Mutex<HashMap<String, PendingImport>>);
+impl ZipIntents {
+    fn install(&self, targets: HashMap<String, ImportTarget>) -> String {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.0.lock().unwrap().insert(id.clone(), PendingImport { targets, consumed: Default::default(), had_file_effect: false, complete: false });
+        id
+    }
+    fn mark_effect(&self, intent: &str) {
+        if let Some(pending) = self.0.lock().unwrap().get_mut(intent) { pending.had_file_effect = true; }
+    }
+    fn finish(&self, intent: &str) {
+        let mut intents = self.0.lock().unwrap();
+        let no_new = if let Some(pending) = intents.get_mut(intent) {
+            pending.complete = true;
+            pending.targets.values().all(|target| matches!(target, ImportTarget::Existing { .. }))
+        } else { false };
+        if no_new { intents.remove(intent); }
+    }
+    fn remove_if_unused(&self, intent: &str) {
+        let mut intents = self.0.lock().unwrap();
+        if intents.get(intent).is_some_and(|pending| !pending.had_file_effect && !pending.complete) { intents.remove(intent); }
+    }
+    /// Lookup for a future metadata transaction; this is not public account
+    /// authority. P6 must still acquire persistence and confirm MembershipDelta.
+    pub(crate) fn reservation_for(&self, intent: &str, descriptor: &AccountsJsonEntry) -> Option<ImportTargetReservation> {
+        let intents = self.0.lock().unwrap();
+        let pending = intents.get(intent)?;
+        if !pending.complete || pending.consumed.contains(&descriptor.id) { return None; }
+        let target = pending.targets.get(descriptor.email.as_ref()?)?;
+        match target {
+            ImportTarget::New { descriptor: expected, reservation, .. } if expected == descriptor => Some(reservation.clone()),
+            _ => None,
+        }
+    }
+    /// P6 supplies confirmed membership and consumes this exact reservation.
+    pub(crate) fn consume_confirmed(&self, intent: &str, descriptor: &AccountsJsonEntry, added: &std::collections::BTreeSet<String>) -> Option<ImportTargetReservation> {
+        if !added.contains(&descriptor.id) { return None; }
+        let mut intents = self.0.lock().unwrap();
+        let pending = intents.get_mut(intent)?;
+        if !pending.complete { return None; }
+        if pending.consumed.contains(&descriptor.id) { return None; }
+        let email = descriptor.email.as_ref()?;
+        let target = pending.targets.get(email)?;
+        match target {
+            ImportTarget::New { descriptor: expected, reservation, .. } if expected == descriptor => {
+                let reservation = reservation.clone();
+                pending.consumed.insert(descriptor.id.clone());
+                Some(reservation)
+            }
+            _ => None,
+        }
+    }
+}
+struct ImportAttempt<'a> { intents: &'a ZipIntents, id: String }
+impl Drop for ImportAttempt<'_> {
+    fn drop(&mut self) { self.intents.remove_if_unused(&self.id); }
 }
 
 /// `accounts_entries`: the router's own one-time read of `accounts.json`
@@ -280,12 +358,28 @@ fn is_dot_segment(seg: &str) -> bool {
     seg.chars().all(|c| c == '.')
 }
 
-/// `existing_accounts`: the router's own one-time read of `accounts.json`,
-/// read-only (decision 2): this function never reads or writes that file.
+#[cfg(test)]
+struct ImportWritePause { entered: std::sync::mpsc::Sender<()>, release: std::sync::mpsc::Receiver<()> }
+#[cfg(test)]
+fn import_write_pauses() -> &'static std::sync::Mutex<HashMap<PathBuf, ImportWritePause>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<HashMap<PathBuf, ImportWritePause>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn import_write_pause(state: &Arc<DaemonState>) {
+    let gate = import_write_pauses().lock().unwrap().remove(&state.app_dir);
+    if let Some(gate) = gate {
+        let _ = gate.entered.send(());
+        let _ = gate.release.recv();
+    }
+}
+
+/// The caller's former account snapshot is ignored. The native document read
+/// under account admission supplies the only target mapping.
 pub fn import(
     state: &Arc<DaemonState>,
     source_path: PathBuf,
-    existing_accounts: Vec<AccountsJsonEntry>,
+    _existing_accounts: Vec<AccountsJsonEntry>,
     emit: impl Fn(&str, Value),
 ) -> Result<ImportResult, String> {
     info!("import_backup called: source={}", source_path.display());
@@ -309,17 +403,20 @@ pub fn import(
         manifest.exported_at
     );
 
-    let mut existing_accounts = existing_accounts;
-    let mut email_to_id: HashMap<String, String> = HashMap::new();
-    for entry in &existing_accounts {
-        if let Some(ref email) = entry.email {
-            email_to_id.insert(email.clone(), entry.id.clone());
+    // Whole-store admission makes the document proof and the complete target
+    // reservation one short, coherent transaction. No lease survives ZIP IO.
+    let lease = state.account_admission.try_reserve(AccountWriteScope { whole_store: true, ..Default::default() })
+        .map_err(|e| format!("ZIP account admission refused: {e:?}"))?;
+    let listing = accounts_doc::list(&accounts_doc::shared(&state.app_dir))
+        .map_err(|e| format!("ZIP account listing failed: {e:?}"))?;
+    state.account_lifecycle.seed(&listing);
+    let authoritative = accounts_doc::authoritative_ids(&listing.accounts);
+    let mut email_to_id = HashMap::<String, String>::new();
+    for row in &listing.accounts {
+        if let (Some(id), Some(email)) = (row.get("id").and_then(Value::as_str), row.get("email").and_then(Value::as_str)) {
+            if authoritative.contains(id) { email_to_id.insert(email.to_owned(), id.to_owned()); }
         }
     }
-
-    // Still runs in full (decision 2's carve-out is the write, not this
-    // detection): every extracted file needs to land under the right UUID
-    // directory, and the caller needs these descriptors back either way.
     let mut new_accounts: Vec<AccountsJsonEntry> = Vec::new();
     for manifest_acct in &manifest.accounts {
         if !email_to_id.contains_key(&manifest_acct.email) {
@@ -334,12 +431,34 @@ pub fn import(
                 smtp_server: manifest_acct.smtp_server.clone(),
                 created_at: Some(chrono::Utc::now().to_rfc3339()),
             };
-            existing_accounts.push(entry.clone());
             new_accounts.push(entry);
         }
     }
-    // No `write_accounts_json` call (decision 2): the app merges
-    // `new_accounts` into `accounts.json` itself, via `db/accounts.js`.
+    let mut targets = HashMap::<String, ImportTarget>::new();
+    let mut existing_stamps = Vec::new();
+    let manifest_emails: std::collections::HashSet<_> = manifest.accounts.iter().map(|account| account.email.as_str()).collect();
+    for (email, id) in &email_to_id {
+        if !manifest_emails.contains(email.as_str()) || new_accounts.iter().any(|entry| &entry.id == id) { continue; }
+        let stamp = state.account_lifecycle.capture(id)
+            .map_err(|e| format!("ZIP existing target refused: {e:?}"))?;
+        existing_stamps.push(stamp.clone());
+        targets.insert(email.clone(), ImportTarget::Existing { id: id.clone(), stamp });
+    }
+    let existing_owner: Option<OperationPermit> = if existing_stamps.is_empty() { None } else {
+        Some(state.account_lifecycle.try_operation(&existing_stamps)
+            .map_err(|e| format!("ZIP existing targets refused: {e:?}"))?)
+    };
+    for descriptor in &new_accounts {
+        let reservation = state.account_lifecycle.reserve_import_target(&lease, &listing, &descriptor.id)
+            .map_err(|e| format!("ZIP new target refused: {e:?}"))?;
+        let stamp = reservation.stamp(&descriptor.id)
+            .map_err(|e| format!("ZIP new target stamp refused: {e:?}"))?;
+        targets.insert(descriptor.email.clone().unwrap(), ImportTarget::New {
+            id: descriptor.id.clone(), stamp, descriptor: descriptor.clone(), reservation,
+        });
+    }
+    let attempt = ImportAttempt { intents: &state.zip_intents, id: state.zip_intents.install(targets.clone()) };
+    drop(lease);
 
     let mut email_count: u32 = 0;
     let email_prefix = "mailvault-backup/emails/";
@@ -360,8 +479,18 @@ pub fn import(
         serde_json::json!({"total": total_entries, "completed": 0, "active": true}),
     );
 
+    let mut complete = true;
+    let mut had_effect = false;
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+        let mut entry = match archive.by_index(i) {
+            Ok(entry) => entry,
+            Err(e) if had_effect => {
+                warn!("import_backup: incomplete ZIP after a file effect: {e}");
+                complete = false;
+                break;
+            }
+            Err(e) => return Err(format!("Failed to read ZIP entry: {e}")),
+        };
         let entry_name = entry.name().to_string();
 
         if !entry_name.starts_with(email_prefix) || entry.is_dir() {
@@ -398,22 +527,28 @@ pub fn import(
             continue;
         }
 
-        let account_id = match email_to_id.get(email_addr) {
-            Some(id) => id.clone(),
+        let target = match targets.get(email_addr) {
+            Some(target) => target,
             None => {
                 warn!("No account ID for email {}, skipping", email_addr);
                 continue;
             }
         };
+        let account_id = target.id();
 
         let mut content = Vec::new();
-        entry.read_to_end(&mut content).map_err(|e| format!("Failed to read .eml from ZIP: {}", e))?;
+        if let Err(e) = entry.read_to_end(&mut content) {
+            if !had_effect { return Err(format!("Failed to read .eml from ZIP: {e}")); }
+            warn!("import_backup: incomplete ZIP content after a file effect: {e}");
+            complete = false;
+            break;
+        }
 
         // account_id joins the same filesystem path as mailbox; sanitize it
         // the same way rather than trusting the accounts-map value verbatim.
-        let safe_account_id = common::sanitize_mailbox_name(&account_id);
+        let safe_account_id = common::sanitize_mailbox_name(account_id);
         let safe_mailbox = common::sanitize_mailbox_name(mailbox);
-        if is_dot_segment(&safe_account_id) || is_dot_segment(&safe_mailbox) {
+        if safe_account_id != account_id || is_dot_segment(&safe_account_id) || is_dot_segment(&safe_mailbox) {
             warn!("Skipping backup entry whose account id or mailbox is a dot-only path: {}", entry_name);
             continue;
         }
@@ -437,6 +572,15 @@ pub fn import(
         // sanitized names, the directory itself). A name the registry's
         // listing reads a uid from lands as a row right after its write; any
         // other name is not a vault message to it, as on a relisting.
+        let _commit = match target {
+            ImportTarget::Existing { stamp, .. } => state.account_lifecycle.try_commit(&[stamp.clone()]),
+            ImportTarget::New { stamp, .. } => state.account_lifecycle.try_import_commit(stamp),
+        };
+        let _commit = match _commit { Ok(permit) => permit, Err(e) => {
+            warn!("import_backup: target commit refused, stopping import: {e:?}");
+            complete = false;
+            break;
+        }};
         let wrote = match common::with_mailbox_write(state, &safe_account_id, &safe_mailbox, |root| -> Result<bool, String> {
             // The directory named as is: `safe_mailbox` keeps a `.` or `..`
             // that `message_store::mailbox_dir` would rename.
@@ -448,6 +592,10 @@ pub fn import(
                 return Ok(false);
             }
             let uid = message_store::uid_in_name(&filename_owned);
+            #[cfg(test)]
+            import_write_pause(state);
+            state.zip_intents.mark_effect(&attempt.id);
+            had_effect = true;
             if let Err(e) = message_store::write_named_at(&folder, &filename_owned, &content) {
                 if uid.is_some() {
                     // A failed plain write can leave a partial file.
@@ -463,6 +611,7 @@ pub fn import(
             Ok(w) => w,
             Err(e) => {
                 warn!("import_backup: vault gate refused a write, stopping the import early: {}", e);
+                complete = false;
                 break;
             }
         };
@@ -490,24 +639,121 @@ pub fn import(
         crate::search_index::sweep_soon(&state.search_index);
     }
 
+    if complete { state.zip_intents.finish(&attempt.id); }
+    drop(existing_owner);
     Ok(ImportResult {
         email_count,
         account_count: manifest.accounts.len() as u32,
         new_accounts,
         settings_json,
+        import_intent_id: attempt.id.clone(),
+        complete,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write as _;
 
     fn state(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir, mail_dir_ok);
         (vault, s)
+    }
+
+    fn import_fixture(state: &Arc<DaemonState>, path: PathBuf, existing: Vec<AccountsJsonEntry>, emit: impl Fn(&str, Value)) -> Result<ImportResult, String> {
+        if !existing.is_empty() {
+            std::fs::write(state.app_dir.join("accounts.json"), serde_json::to_vec(&existing).unwrap()).unwrap();
+        }
+        import(state, path, Vec::new(), emit)
+    }
+
+    #[test]
+    fn p4_zip_private_new_target_handoff_is_exact_and_one_use() {
+        let (vault, state) = state(true);
+        let manifest = manifest_for(vec![BackupAccount { email: "new@test.com".into(), imap_server: Some("imap.test".into()), smtp_server: None }]);
+        let zip = build_zip(&state.app_dir, "p4-new.zip", &[("mailvault-backup/emails/new@test.com/INBOX/8:2,.eml", b"body")], &manifest);
+        let result = import(&state, zip, Vec::new(), |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 1);
+        assert!(result.complete);
+        let descriptor = &result.new_accounts[0];
+        assert!(message_store::read_raw(vault.path(), &descriptor.id, "INBOX", 8).unwrap().is_some());
+        assert!(matches!(state.account_lifecycle.capture(&descriptor.id), Err(crate::account_lifecycle::LifecycleError::Busy)));
+        let mut forged = descriptor.clone();
+        forged.imap_server = Some("forged.test".into());
+        assert!(state.zip_intents.reservation_for(&result.import_intent_id, &forged).is_none());
+        let reservation = state.zip_intents.reservation_for(&result.import_intent_id, descriptor).unwrap();
+        let added = [descriptor.id.clone()].into();
+        assert!(state.zip_intents.consume_confirmed(&result.import_intent_id, &forged, &added).is_none());
+        assert!(state.zip_intents.consume_confirmed("foreign", descriptor, &added).is_none());
+        assert!(state.zip_intents.consume_confirmed(&result.import_intent_id, descriptor, &Default::default()).is_none());
+        let scope = AccountWriteScope { ids: [descriptor.id.clone()].into(), ..Default::default() };
+        let lease = crate::account_workflows::AccountLease::detached_for_test(scope.clone());
+        let owner = state.account_lifecycle.try_import_persistence(lease, &scope, &reservation).unwrap();
+        let outcome = accounts_doc::run(&accounts_doc::shared(&state.app_dir), "accounts.put",
+            &serde_json::json!({"entry": descriptor, "ifAbsent": true}), accounts_doc::LiveScrub::Preserve).unwrap();
+        assert_eq!(outcome.membership.added, added);
+        state.account_lifecycle.apply_committed_membership(Some(&owner), &outcome.membership);
+        assert!(state.account_lifecycle.capture(&descriptor.id).is_ok());
+        let consumed = state.zip_intents.consume_confirmed(&result.import_intent_id, descriptor, &outcome.membership.added).unwrap();
+        assert!(consumed.stamp(&descriptor.id).is_ok());
+        assert!(state.zip_intents.consume_confirmed(&result.import_intent_id, descriptor, &outcome.membership.added).is_none());
+        let restarted = DaemonState::for_test(vault.path().to_path_buf(), state.app_dir.clone(), true);
+        assert!(restarted.zip_intents.reservation_for(&result.import_intent_id, descriptor).is_none());
+    }
+
+    #[test]
+    fn p4_zip_ignores_stale_caller_mapping_and_uses_authoritative_target() {
+        let (vault, state) = state(true);
+        std::fs::write(state.app_dir.join("accounts.json"), r#"[{"id":"actual","email":"same@test.com"}]"#).unwrap();
+        let zip = build_zip(&state.app_dir, "p4-mapping.zip", &[("mailvault-backup/emails/same@test.com/INBOX/6:2,.eml", b"body")],
+            &manifest_for(vec![BackupAccount { email: "same@test.com".into(), imap_server: None, smtp_server: None }]));
+        let stale = vec![AccountsJsonEntry { id: "caller-stale".into(), email: Some("same@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+        let result = import(&state, zip, stale, |_, _| {}).unwrap();
+        assert!(result.complete);
+        assert_eq!(result.email_count, 1);
+        assert!(result.new_accounts.is_empty());
+        assert!(message_store::read_raw(vault.path(), "actual", "INBOX", 6).unwrap().is_some());
+        assert!(message_store::read_raw(vault.path(), "caller-stale", "INBOX", 6).unwrap().is_none());
+    }
+
+    #[test]
+    fn p4_zip_pre_effect_unwind_releases_intent_and_reservation() {
+        let (_vault, state) = state(true);
+        let zip = build_zip(&state.app_dir, "p4-unwind.zip", &[("mailvault-backup/emails/new@test.com/INBOX/4:2,.eml", b"body")],
+            &manifest_for(vec![BackupAccount { email: "new@test.com".into(), imap_server: None, smtp_server: None }]));
+        let id = std::sync::Mutex::new(None::<String>);
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = import(&state, zip, Vec::new(), |_, _| {
+                let intents = state.zip_intents.0.lock().unwrap();
+                let pending = intents.values().next().unwrap();
+                *id.lock().unwrap() = Some(pending.targets.values().next().unwrap().id().to_owned());
+                drop(intents);
+                panic!("synthetic progress listener unwind before file effect");
+            });
+        }));
+        assert!(caught.is_err());
+        assert!(state.zip_intents.0.lock().unwrap().is_empty());
+        let id = id.lock().unwrap().clone().unwrap();
+        assert!(matches!(state.account_lifecycle.capture(&id), Err(crate::account_lifecycle::LifecycleError::Unknown)));
+    }
+
+    #[tokio::test]
+    async fn p4_zip_close_first_refuses_before_file_effect() {
+        let (vault, state) = state(true);
+        std::fs::write(state.app_dir.join("accounts.json"), r#"[{"id":"a","email":"a@test.com"}]"#).unwrap();
+        let listing = accounts_doc::list(&accounts_doc::shared(&state.app_dir)).unwrap();
+        state.account_lifecycle.seed(&listing);
+        let lease = crate::account_workflows::AccountLease::detached_for_test(AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() });
+        let mut claim = state.account_lifecycle.try_close(lease, "a").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        let zip = build_zip(&state.app_dir, "p4-retired.zip", &[("mailvault-backup/emails/a@test.com/INBOX/9:2,.eml", b"body")],
+            &manifest_for(vec![BackupAccount { email: "a@test.com".into(), imap_server: None, smtp_server: None }]));
+        assert!(import(&state, zip, Vec::new(), |_, _| {}).is_err());
+        assert!(message_store::read_raw(vault.path(), "a", "INBOX", 9).unwrap().is_none());
     }
 
     fn seed_file(root: &std::path::Path, account: &str, mailbox: &str, uid: u32, flags: &[&str], body: &[u8]) {
@@ -543,6 +789,65 @@ mod tests {
 
     fn manifest_for(accounts: Vec<BackupAccount>) -> BackupManifest {
         BackupManifest { version: 2, exported_at: "2026-01-01T00:00:00Z".into(), accounts, settings: None }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn p4_zip_existing_target_child_blocks_close() {
+        struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<Result<u32,String>>> }
+        impl Drain {
+            fn finish(&mut self) -> Result<u32,String> {
+                let _ = self.release.take().unwrap().send(());
+                let result = self.done.as_ref().unwrap().recv_timeout(std::time::Duration::from_secs(5));
+                let Ok(result) = result else { std::process::abort(); };
+                self.done.take();
+                result
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(release) = self.release.take() { let _ = release.send(()); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(std::time::Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (vault, s) = state(true);
+        std::fs::write(s.app_dir.join("accounts.json"), r#"[{"id":"a","email":"a@test.com"},{"id":"b","email":"b@test.com"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+        let manifest = manifest_for(vec![BackupAccount { email: "a@test.com".into(), imap_server: None, smtp_server: None }]);
+        let zip_path = build_zip(&s.app_dir, "p4.zip", &[("mailvault-backup/emails/a@test.com/INBOX/7:2,.eml", b"Subject: imported\r\n\r\nbody")], &manifest);
+        let existing = vec![AccountsJsonEntry { id: "a".into(), email: Some("a@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        import_write_pauses().lock().unwrap().insert(s.app_dir.clone(), ImportWritePause { entered: entered_tx, release: release_rx });
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker_state = s.clone();
+        let waiter = std::thread::spawn(move || {
+            let result = import(&worker_state, zip_path, existing, |_, _| {}).map(|result| result.email_count);
+            let _ = done_tx.send(result);
+        });
+        let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+        let entered = entered_rx.recv_timeout(std::time::Duration::from_secs(5)).is_ok();
+        drop(waiter);
+        let before = message_store::read_raw(vault.path(), "a", "INBOX", 7).unwrap();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() });
+        let close = s.account_lifecycle.try_close(lease, "a");
+        let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+        if let Ok(mut claim) = close {
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+        }
+        let imported = drain.finish().unwrap();
+        let after = message_store::read_raw(vault.path(), "a", "INBOX", 7).unwrap();
+        assert!(entered && before.is_none() && after.is_some() && imported == 1,
+            "real ZIP write observation failed: entered={entered} before={before:?} after={after:?} imported={imported}");
+        assert!(s.account_lifecycle.try_operation(&[s.account_lifecycle.capture("b").unwrap()]).is_ok());
+        assert!(busy, "ZIP file landed after A retired");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["a".to_owned()].into(), ..Default::default() });
+        assert!(s.account_lifecycle.try_close(lease, "a").is_ok());
     }
 
     // ── export ───────────────────────────────────────────────────────────
@@ -763,7 +1068,7 @@ mod tests {
         );
         let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
 
-        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        let result = import_fixture(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.new_accounts.len(), 0, "an already-known email must not mint a new account");
         assert_eq!(result.email_count, 1);
     }
@@ -789,7 +1094,7 @@ mod tests {
             &manifest_for(vec![BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None }]),
         );
         let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
-        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        let result = import_fixture(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 2);
 
         assert_eq!(reg.uid_sets(v.path(), "acct-known", "INBOX"), Some((vec![1, 5], vec![1, 5])));
@@ -821,7 +1126,7 @@ mod tests {
         let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
 
         let s2 = Arc::clone(&s);
-        let result = import(&s, zip_path, existing, move |name, payload| {
+        let result = import_fixture(&s, zip_path, existing, move |name, payload| {
             if name == "import-progress" && payload["completed"].as_u64() == Some(1) {
                 s2.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
             }
@@ -829,6 +1134,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.email_count, 1, "must stop after the first file once the gate starts refusing");
+        assert!(!result.complete);
+        assert!(s.zip_intents.0.lock().unwrap().contains_key(&result.import_intent_id));
         let inbox = std::fs::read_dir(mailvault_core::vault_files::cur_path(v.path(), "acct-known", "INBOX")).unwrap().count();
         let archive = mailvault_core::vault_files::cur_path(v.path(), "acct-known", "Archive");
         assert_eq!(inbox, 1, "the file that landed before the refusal must still be on disk");
@@ -847,7 +1154,7 @@ mod tests {
         );
         let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
 
-        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        let result = import_fixture(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 0, "a path-traversal filename must be skipped, not written");
         assert!(!std::path::Path::new("/tmp/evil").exists(), "nothing may land outside the vault's Maildir tree");
         let inbox = mailvault_core::vault_files::cur_path(v.path(), "acct-known", "INBOX");
@@ -886,7 +1193,7 @@ mod tests {
             AccountsJsonEntry { id: "..".into(), email: Some("..".into()), imap_server: None, smtp_server: None, created_at: None },
         ];
 
-        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        let result = import_fixture(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 1, "only the entry with real segments may be written");
         let written = files_under(&v.path().join("Maildir"));
         assert_eq!(written.len(), 1, "nothing else may land anywhere in Maildir: {written:?}");
@@ -896,7 +1203,7 @@ mod tests {
     }
 
     #[test]
-    fn import_sanitizes_a_path_traversal_account_id() {
+    fn import_refuses_a_path_traversal_account_id_without_aliasing_it() {
         let (v, s) = state(true);
         let dir = tempfile::tempdir().unwrap();
         let zip_path = build_zip(
@@ -908,25 +1215,15 @@ mod tests {
         let existing =
             vec![AccountsJsonEntry { id: "../../../../../../tmp/evil".into(), email: Some("evil@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
 
-        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
-        assert_eq!(result.email_count, 1);
-        // The write must land under the sanitized id INSIDE the vault, not escape it.
+        let result = import_fixture(&s, zip_path, existing, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 0);
+        // A sanitized alias has no account admission and cannot be published.
         let escaped_name = format!("/tmp/evil/INBOX/cur/1{}A.eml", mailvault_core::maildir::INFO_PREFIX);
         let escaped = std::path::Path::new(&escaped_name);
         assert!(!escaped.exists(), "must not escape the vault root via account_id");
 
-        // The sanitizer keeps '.', so the escaped-looking id becomes one
-        // dot-and-underscore-laden component, not a clean name -- check
-        // containment (single component, still under the vault root), not
-        // the absence of ".." as a substring.
         let maildir = v.path().join("Maildir");
-        let entries: Vec<_> = std::fs::read_dir(&maildir).unwrap().map(|e| e.unwrap()).collect();
-        assert_eq!(entries.len(), 1, "exactly one sanitized account dir, not a tree of '..' components");
-        let account_dir = entries[0].path();
-        assert_eq!(account_dir.components().count(), maildir.components().count() + 1, "must be a single path component under Maildir/, not a multi-level escape");
-        let canonical_root = v.path().canonicalize().unwrap();
-        let canonical_written = account_dir.canonicalize().unwrap();
-        assert!(canonical_written.starts_with(&canonical_root), "escaped the vault root: {:?} not under {:?}", canonical_written, canonical_root);
+        assert!(!maildir.exists() || std::fs::read_dir(&maildir).unwrap().next().is_none());
     }
 
     #[test]
@@ -942,7 +1239,7 @@ mod tests {
         let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
         seed_file(v.path(), "acct-known", "INBOX", 1, &["A"], b"already there");
 
-        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        let result = import_fixture(&s, zip_path, existing, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 0, "an existing file is skipped, not overwritten or double-counted");
     }
 

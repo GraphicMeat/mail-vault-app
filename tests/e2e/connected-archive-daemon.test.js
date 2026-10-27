@@ -534,48 +534,73 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   });
 
   it('(d): THE KEY REGRESSION TEST - cancel_archive does not stop an in-flight bulk delete (N4, fixed in Task 3.4/3.5)', async function () {
-    await runBulkDeleteOnRange('Yesterday', batchD);
-
-    // Confirm the delete is genuinely in flight (STORE already landed,
-    // EXPUNGE stalling yoda's mock 4s per uid) before touching cancel_archive.
-    await browser.waitUntil(async () => (await rawEvents('bulk-operation-progress'))
-      .some((e) => e.payload.phase === 'delete' && e.payload.total === COUNT_D && e.payload.active === true), {
-      timeout: 30_000, interval: 200, timeoutMsg: 'bulk-operation-progress never reported the delete as active',
+    const before = (await rawEvents('bulk-operation-progress')).length;
+    // Native bulk work sends at most five UIDs per provider delete call, so
+    // six selected rows produce two distinct progress groups (5 and 1).
+    // Fire cancel_archive on the page's event loop after a real completion
+    // while the current group is still active. A WebDriver round trip after
+    // seeing a historical active frame could miss that in-flight window.
+    const listening = await browser.executeAsync((done) => {
+      window.__BULK_D_CANCELLED__ = false;
+      window.__TAURI__.event.listen('bulk-operation-progress', (e) => {
+        const p = e.payload;
+        if (window.__BULK_D_CANCELLED__ || p.phase !== 'delete' || !p.active || p.completed < 1 || p.completed >= p.total) return;
+        window.__BULK_D_CANCELLED__ = true;
+        // This is the same store function the Archive Cancel button calls.
+        window.__MAIL_STORE__.getState().cancelArchive();
+      }).then((unlisten) => {
+        window.__BULK_D_UNLISTEN__ = unlisten;
+        done(true);
+      }, () => done(false));
     });
+    expect(listening).toBe(true);
 
-    // No archive is running right now, so there is no Cancel button on
-    // screen to click for it (`BulkSaveProgress` renders nothing without an
-    // active `bulkSaveProgress`) - `accountSlice.cancelArchive` is the exact
-    // function the UI's own Cancel button calls in test (c) above; invoking
-    // it directly here still goes through `send('cancel_archive')` and the
-    // real daemon RPC, which is what this test is actually checking.
-    const cancelled = await browser.execute(() => {
-      window.__MAIL_STORE__.getState().cancelArchive();
-      return true;
-    });
-    expect(cancelled).toBe(true);
-
-    let finalFrame = null;
-    await browser.waitUntil(async () => {
-      const events = await rawEvents('bulk-operation-progress');
-      finalFrame = events.find((e) => e.payload.phase === 'delete' && e.payload.total === COUNT_D && e.payload.active === false);
-      return !!finalFrame;
-    }, { timeout: 60_000, interval: 300, timeoutMsg: 'bulk-operation-progress never reported the delete as finished' });
-
-    // The regression signature: a conflated single-slot cancel shows up as
-    // fewer completed than total with ZERO errors - a task cancel skips
-    // before it can either succeed or fail, it does not count as either.
-    expect(finalFrame.payload.completed).toBe(COUNT_D);
-    expect(finalFrame.payload.errors).toBe(0);
-
-    // The messages are really gone from the server, not just "reported done".
-    await browser.waitUntil(async () => {
-      const remaining = await withYoda(async (client) => {
-        const lock = await client.getMailboxLock('INBOX');
-        try { return await uidsForSubjects(client, batchD.map((m) => m.subject)); } finally { lock.release(); }
+    try {
+      await runBulkDeleteOnRange('Yesterday', batchD);
+      await browser.waitUntil(() => browser.execute(() => window.__BULK_D_CANCELLED__), {
+        timeout: 30_000, interval: 200, timeoutMsg: 'cancel_archive was not sent while a delete group was active',
       });
-      return remaining.length === 0;
-    }, { timeout: 30_000, interval: 500, timeoutMsg: "batch D's messages never left yoda's INBOX on the server" });
+
+      const groups = async () => {
+        const frames = (await rawEvents('bulk-operation-progress')).slice(before)
+          .filter((e) => e.payload.phase === 'delete');
+        const runs = [];
+        for (const { payload } of frames) {
+          if (payload.active && payload.completed === 0 && payload.errors === 0) {
+            runs.push({ total: payload.total, final: null });
+          } else if (!payload.active && runs.length && !runs.at(-1).final && payload.total === runs.at(-1).total) {
+            runs.at(-1).final = payload;
+          }
+        }
+        return runs;
+      };
+      let finished = [];
+      await browser.waitUntil(async () => {
+        finished = await groups();
+        return finished.reduce((n, g) => n + g.total, 0) === COUNT_D
+          && finished.every((g) => g.final);
+      }, { timeout: 60_000, interval: 300, timeoutMsg: 'all delete groups did not finish' });
+
+      // A conflated cancel skips UIDs before they can succeed or fail.
+      // Group each terminal frame with its own initial frame, count it once,
+      // and still demand all six successful deletes with zero errors.
+      expect(finished.reduce((n, g) => n + g.final.completed, 0)).toBe(COUNT_D);
+      expect(finished.reduce((n, g) => n + g.final.errors, 0)).toBe(0);
+
+      // The messages are really gone from the server, not just "reported done".
+      await browser.waitUntil(async () => {
+        const remaining = await withYoda(async (client) => {
+          const lock = await client.getMailboxLock('INBOX');
+          try { return await uidsForSubjects(client, batchD.map((m) => m.subject)); } finally { lock.release(); }
+        });
+        return remaining.length === 0;
+      }, { timeout: 30_000, interval: 500, timeoutMsg: "batch D's messages never left yoda's INBOX on the server" });
+    } finally {
+      await browser.execute(() => {
+        window.__BULK_D_UNLISTEN__?.();
+        delete window.__BULK_D_UNLISTEN__;
+      });
+    }
   });
 
   it('(e): daemon.pid never changed across the whole run', async function () {

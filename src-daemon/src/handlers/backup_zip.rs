@@ -83,9 +83,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let source_path = req!(str_arg(&id, params, "sourcePath"));
             let state = Arc::clone(state);
             let result: Result<Value, String> = blocking(move || -> Result<Value, String> {
-                let existing_accounts = read_accounts_entries(&state.app_dir)?;
                 let emit = bus_emit(&state);
-                let out = backup_zip::import(&state, PathBuf::from(&source_path), existing_accounts, emit)?;
+                let out = backup_zip::import(&state, PathBuf::from(&source_path), Vec::new(), emit)?;
                 serde_json::to_value(out).map_err(|e| e.to_string())
             })
             .await

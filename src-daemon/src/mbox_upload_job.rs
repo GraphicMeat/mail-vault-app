@@ -62,6 +62,7 @@
 //! folder names or credentials.
 
 use crate::handlers::common::blocking;
+use crate::account_lifecycle::{AccountStamp, OperationPermit};
 use crate::mbox::{for_each_mbox_span, Span};
 use crate::mbox_upload::{FailKind, MboxUpload, Outcome};
 use crate::server::DaemonState;
@@ -743,8 +744,10 @@ fn not_found(id: &str) -> String {
 /// `E_MBOX_SERVER_GRAPH`), the file must open, the account must have no job
 /// in this daemon, and the file no journal for this account.
 pub(crate) async fn start(state: &Arc<DaemonState>, req: Request) -> Result<Value, String> {
+    let original = state.account_lifecycle.capture(&req.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let config = crate::raw_message::account_config(state, &req.account_id).await.map_err(|e| format!("{E_MBOX_UPLOAD_SIGN_IN}: {e}"))?;
     let pipeline = MboxUpload::new(Arc::clone(state), config.clone(), req.account_id.clone(), req.fallback.clone(), req.use_labels)?;
+    let owner = state.account_lifecycle.try_operation(std::slice::from_ref(&original)).map_err(|_| "errors.keychainBusy".to_owned())?;
     let st = Arc::clone(state);
     blocking(move || {
         let (size, mtime_ms) = identity(&req.source_path)?;
@@ -796,7 +799,7 @@ pub(crate) async fn start(state: &Arc<DaemonState>, req: Request) -> Result<Valu
         for j in &old {
             remove_journal(&st.app_dir, &j.job_id);
         }
-        if let Err(e) = spawn(&st, &mut jobs, journal, pipeline, config, carried) {
+        if let Err(e) = spawn(&st, &mut jobs, journal, pipeline, config, carried, original, owner) {
             remove_journal(&st.app_dir, &id);
             return Err(e);
         }
@@ -831,8 +834,10 @@ pub(crate) async fn resume(state: &Arc<DaemonState>, job_id: String, source_path
         Ok(journal) => journal,
         Err(resumed) => return Ok(json!({"jobId": job_id, "resumed": resumed, "restarted": false})),
     };
+    let original = state.account_lifecycle.capture(&journal.account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
     let config = crate::raw_message::account_config(state, &journal.account_id).await.map_err(|e| format!("{E_MBOX_UPLOAD_SIGN_IN}: {e}"))?;
     let pipeline = MboxUpload::new(Arc::clone(state), config.clone(), journal.account_id.clone(), journal.fallback.clone(), journal.use_labels)?;
+    let owner = state.account_lifecycle.try_operation(std::slice::from_ref(&original)).map_err(|_| "errors.keychainBusy".to_owned())?;
     let st = Arc::clone(state);
     blocking(move || {
         let mut jobs = st.mbox_uploads.lock();
@@ -841,6 +846,7 @@ pub(crate) async fn resume(state: &Arc<DaemonState>, job_id: String, source_path
         }
         // Read again under the lock: a discard may have come in between.
         let mut journal = read_journal(&st.app_dir, &job_id).ok_or_else(|| not_found(&job_id))?;
+        if journal.account_id != original.id() { return Err("errors.keychainBusy".to_owned()); }
         let path = source_path.unwrap_or_else(|| PathBuf::from(&journal.source_path));
         let (size, mtime_ms) = identity(&path)?;
         let path = path.to_string_lossy().into_owned();
@@ -855,7 +861,7 @@ pub(crate) async fn resume(state: &Arc<DaemonState>, job_id: String, source_path
         journal.error = None;
         journal.updated_at = now_ms();
         write_journal(&st.app_dir, &journal)?;
-        spawn(&st, &mut jobs, journal, pipeline, config, done_before)?;
+        spawn(&st, &mut jobs, journal, pipeline, config, done_before, original, owner)?;
         Ok(json!({"jobId": job_id, "resumed": true, "restarted": restarted}))
     })
     .await
@@ -947,6 +953,22 @@ pub(crate) fn status(state: &DaemonState) -> Value {
 
 /// Registers the job and starts its worker. `jobs` is the registry, locked
 /// by the caller: the worker's own unregister waits for this insert.
+#[cfg(test)]
+fn upload_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn arm_upload_done(path: &std::path::Path) -> std::sync::mpsc::Receiver<()> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    upload_done_registry().lock().unwrap().insert(path.to_path_buf(), tx);
+    rx
+}
+#[cfg(test)]
+fn upload_done(path: &std::path::Path) -> Option<crate::credentials::TestTaskDone> {
+    upload_done_registry().lock().unwrap().remove(path).map(crate::credentials::TestTaskDone)
+}
+
 fn spawn(
     state: &Arc<DaemonState>,
     jobs: &mut HashMap<String, Arc<Job>>,
@@ -954,6 +976,8 @@ fn spawn(
     pipeline: MboxUpload,
     config: ImapConfig,
     done_before: Finished,
+    original: AccountStamp,
+    owner: OperationPermit,
 ) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -970,6 +994,8 @@ fn spawn(
         tuning,
         pipeline,
         config,
+        original,
+        owner,
         run_from: journal.offset,
         journal,
         tail: None,
@@ -990,6 +1016,9 @@ fn spawn(
         .name("mbox-upload".into())
         .spawn(move || {
             background_qos();
+            #[cfg(test)]
+            let _done = upload_done(&runner.state.app_dir);
+            let _owner = runner.owner.clone();
             let _registered = Registered(Arc::clone(&runner.state), Arc::clone(&runner.job));
             runner.run();
         })
@@ -1009,6 +1038,8 @@ struct Runner {
     tuning: Tuning,
     pipeline: MboxUpload,
     config: ImapConfig,
+    original: AccountStamp,
+    owner: OperationPermit,
     journal: Journal,
     /// The byte this run started at.
     run_from: u64,
@@ -1572,7 +1603,8 @@ impl Runner {
                 }
             }
         }
-        crate::handlers::custody::rehome_imports_for(&self.state, account_id, folder).is_ok()
+        if account_id != self.original.id() { return false; }
+        crate::handlers::custody::rehome_imports_for_owned(&self.state, &self.original, &self.owner, folder).is_ok()
     }
 }
 
@@ -1769,6 +1801,8 @@ mod tests {
         let server = MockImap::start(scenario);
         let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        std::fs::write(app.path().join("accounts.json"), r#"[{"id":"acct1"},{"id":"other"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), config(&server));
         *lock(&s.mbox_uploads.tuning) = Some(tuning);
         let rx = s.events.subscribe();
@@ -2394,6 +2428,28 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn p4_retired_disk_resume_preserves_journal_and_provider() {
+        let rig = setup(gmail(), fast());
+        let file = mbox(&rig, &[msg("a@x", "one")]);
+        let journal = journal_for(&file, 0, PAUSED);
+        write_journal(&rig.s.app_dir, &journal).unwrap();
+        let path = journal_path(&rig.s.app_dir, &journal.job_id);
+        let before = std::fs::read(&path).unwrap();
+        let commands = rig.server.commands();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct1".to_owned()].into(), ..Default::default() });
+        let mut claim = rig.s.account_lifecycle.try_close(lease, "acct1").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        let reply = call(&rig.s, "mbox_upload_resume", json!({"jobId":journal.job_id})).await;
+        assert_eq!(reply.error.unwrap().message, "errors.keychainBusy");
+        assert_eq!(std::fs::read(&path).unwrap(), before, "retired disk resume rewrote journal");
+        assert_eq!(rig.server.commands(), commands, "retired disk resume dialed provider");
+        assert!(rig.s.mbox_uploads.live(&journal.job_id).is_none());
+    }
+
     async fn wait_for(what: &str, mut ready: impl FnMut() -> bool) {
         for _ in 0..2000 {
             if ready() {
@@ -2544,7 +2600,10 @@ mod tests {
         assert_eq!((held["paused"].clone(), held["throttled"].clone(), held["state"].clone()), (json!(false), json!(true), json!(RUNNING)));
         assert_eq!((held["failedCount"].clone(), held["bytesDone"].clone()), (json!(4), json!(fifth)));
 
-        tokio::time::sleep(Duration::from_millis(600)).await;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while rig.server.count_commands("APPEND") <= 5 && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
         assert!(rig.server.count_commands("APPEND") > 5, "the fifth is tried again while held");
         let listed = status_of(&rig, &job).await;
         assert_eq!((listed["failedCount"].clone(), listed["bytesDone"].clone()), (json!(4), json!(fifth)), "nothing counted, nothing moved on");
@@ -2829,6 +2888,57 @@ mod tests {
 
     /// M8: while the job ends (its refresh signing in, held up here), every
     /// control answers false, and the job ends done as it said.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn p4_upload_final_refresh_owns_until_registered_drop() {
+        struct Drain { gate: Option<mock_imap::CommandPause>, done: Option<std::sync::mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                self.gate.take().unwrap().release();
+                if self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(10)).is_err() { std::process::abort(); }
+                self.done.take();
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(mut gate) = self.gate.take() { gate.release(); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(10)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let mut rig = setup(gmail(), fast());
+        let gate = rig.server.pause_command_nth("LOGIN", 2);
+        let done = arm_upload_done(&rig.s.app_dir);
+        let file = mbox(&rig, &[msg("a@x", "one")]);
+        let job = start(&rig, &file, false).await;
+        let mut drain = Drain { gate: Some(gate), done: Some(done) };
+        let entered = drain.gate.as_ref().unwrap().entered(Duration::from_secs(10));
+        let uploaded_before = subjects(&rig.server, "INBOX").iter().any(|subject| subject == "one");
+        let journal_before = read_journal(&rig.s.app_dir, &job).is_some();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct1".to_owned()].into(), ..Default::default() });
+        let close = rig.s.account_lifecycle.try_close(lease, "acct1");
+        let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+        if let Ok(mut claim) = close {
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+        }
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["other".to_owned()].into(), ..Default::default() });
+        let independent = rig.s.account_lifecycle.try_close(lease, "other").is_ok();
+        drain.gate.as_mut().unwrap().release();
+        let last = next(&mut rig.rx, |event| event["active"] == json!(false)).await;
+        drain.finish();
+        let journal_removed = read_journal(&rig.s.app_dir, &job).is_none();
+        assert!(entered && uploaded_before && journal_before && independent && last["state"] == DONE && journal_removed,
+            "real final refresh observation failed: entered={entered} uploaded={uploaded_before} journal={journal_before} independent={independent} last={last} removed={journal_removed}");
+        assert!(busy, "upload final refresh wrote after A retired");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct1".to_owned()].into(), ..Default::default() });
+        assert!(rig.s.account_lifecycle.try_close(lease, "acct1").is_ok());
+    }
+
     #[tokio::test]
     async fn a_control_during_the_final_refresh_answers_false() {
         let slow_sign_in = Action::Delay(Duration::from_millis(800));
@@ -2908,6 +3018,8 @@ mod tests {
         let (trap, port) = crate::jmap_test_support::imap_trap();
         let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
+        std::fs::write(app.path().join("accounts.json"), r#"[{"id":"acct1"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), crate::jmap_test_support::config(&m, port));
         *lock(&s.mbox_uploads.tuning) = Some(fast());
         let mut rx = s.events.subscribe();

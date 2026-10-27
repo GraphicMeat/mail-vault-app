@@ -613,6 +613,7 @@ async fn daemon_main() {
         tokens: oauth_tokens::TokenStore::default(),
         account_admission: Default::default(),
         account_lifecycle,
+        zip_intents: Default::default(),
         snooze: snooze_worker::SnoozeState::default(),
         follow_up: follow_up_worker::FollowUpState::default(),
         auto_tag_worker,

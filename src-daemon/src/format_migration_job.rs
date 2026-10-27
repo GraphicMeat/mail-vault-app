@@ -324,6 +324,8 @@ pub(crate) struct Migrations {
     /// The daemon is quitting (`pause_all_and_wait`): the worker stops at its
     /// next message boundary with its journal still `running`.
     quitting: AtomicBool,
+    startup_requested: AtomicBool,
+    startup_dispatched: AtomicBool,
     #[cfg(test)]
     pub(crate) faults: Mutex<Faults>,
 }
@@ -612,11 +614,40 @@ fn other(to: message_store::Format) -> message_store::Format {
 /// the vault's own format ("Convert remaining") only while there is
 /// something to convert: a stopped job, or a message left in the other
 /// format; else `E_FORMAT_SAME`.
+fn ensure_no_retired_targets(state: &Arc<DaemonState>, root: &Path) -> Result<Option<String>, String> {
+    // Read account components only. A damaged or unreadable child mailbox is
+    // reported by the journaled runner, as before this lifecycle preflight.
+    let listed = match std::fs::read_dir(root.join("Maildir")) {
+        Ok(listed) => listed,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Ok(Some(failed(E_FORMAT_UNREADABLE, "the vault could not be listed", e))),
+    };
+    for entry in listed {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => return Ok(Some(failed(E_FORMAT_UNREADABLE, "the vault could not be listed", e))),
+        };
+        let kind = match entry.file_type() {
+            Ok(kind) => kind,
+            Err(e) => return Ok(Some(failed(E_FORMAT_UNREADABLE, "the vault could not be listed", e))),
+        };
+        if !kind.is_dir() || entry.file_name().to_string_lossy().starts_with('.') { continue; }
+        let account = entry.file_name().to_string_lossy().into_owned();
+        match state.account_lifecycle.capture(&account) {
+            Ok(_) | Err(crate::account_lifecycle::LifecycleError::Unknown) => {}
+            Err(_) => return Err("errors.keychainBusy".to_owned()),
+        }
+    }
+    Ok(None)
+}
+
 pub(crate) fn start(state: &Arc<DaemonState>, root: &Path, to: message_store::Format, old_files: OldFiles) -> Result<Value, String> {
     // A live job refuses at once; else the vault is sized outside the lock.
     if let Some(job) = state.format_migration.live() {
         return Err(busy(&job.id));
     }
+    let owner = state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
+    let preflight_error = ensure_no_retired_targets(state, root)?;
     // Toward the vault's own format, a start goes on while the vault still
     // holds a message in the other one (a generation repair's files, a
     // delete-mode conflict a retire-mode run sets aside): looked for outside
@@ -677,7 +708,7 @@ pub(crate) fn start(state: &Arc<DaemonState>, root: &Path, to: message_store::Fo
     }
     let id = journal.job_id.clone();
     info!("[format_migration] job {id}: converting to {to:?}, old files {old_files:?}");
-    spawn(state, &mut live, root, journal)?;
+    spawn(state, &mut live, root, journal, owner, preflight_error)?;
     Ok(json!({"jobId": id}))
 }
 
@@ -697,6 +728,25 @@ pub(crate) fn pause_all_and_wait(state: &DaemonState, limit: Duration) -> bool {
 /// cut it off while it ran (its journal says `running`). One the user paused
 /// or cancelled, or one that failed, waits for Settings. Blocking.
 pub(crate) fn resume_journaled(state: &Arc<DaemonState>) {
+    state.format_migration.startup_requested.store(true, Ordering::SeqCst);
+    dispatch_startup_if_ready(state);
+}
+
+/// Called only by the successful authoritative account bootstrap after its
+/// short admission lease is released.
+pub(crate) fn bootstrap_ready(state: &Arc<DaemonState>) {
+    dispatch_startup_if_ready(state);
+}
+
+fn dispatch_startup_if_ready(state: &Arc<DaemonState>) {
+    if !state.account_lifecycle.is_ready() || !state.format_migration.startup_requested.load(Ordering::SeqCst) {
+        return;
+    }
+    if state.format_migration.startup_dispatched.swap(true, Ordering::SeqCst) { return; }
+    resume_journaled_ready(state);
+}
+
+fn resume_journaled_ready(state: &Arc<DaemonState>) {
     if vault_root(state).is_err() {
         return;
     }
@@ -726,6 +776,11 @@ pub(crate) fn pause(state: &DaemonState, root: &Path) -> Result<Value, String> {
 /// `storage_format_resume`: wakes a held job, or starts the stopped one again
 /// from its journal, toward the same format.
 pub(crate) fn resume(state: &Arc<DaemonState>, root: &Path) -> Result<Value, String> {
+    if let Some(job) = state.format_migration.live() {
+        return Ok(json!({"jobId": job.id, "resumed": job.request(Ctl::Run)}));
+    }
+    let owner = state.account_lifecycle.try_unscoped_operation().map_err(|_| "errors.keychainBusy".to_owned())?;
+    let preflight_error = ensure_no_retired_targets(state, root)?;
     let mut live = state.format_migration.lock();
     if let Some(job) = live.as_ref() {
         return Ok(json!({"jobId": job.id, "resumed": job.request(Ctl::Run)}));
@@ -743,7 +798,7 @@ pub(crate) fn resume(state: &Arc<DaemonState>, root: &Path) -> Result<Value, Str
     mark_started(root, &journal).map_err(|e| failed(E_FORMAT_IO, "the marker was not written", e))?;
     let id = journal.job_id.clone();
     info!("[format_migration] job {id}: resumed at {} of {}", journal.done, journal.total);
-    spawn(state, &mut live, root, journal)?;
+    spawn(state, &mut live, root, journal, owner, preflight_error)?;
     Ok(json!({"jobId": id, "resumed": true}))
 }
 
@@ -867,15 +922,58 @@ pub(crate) fn reclaim(state: &DaemonState, root: &Path) -> Result<Value, String>
 /// Starts the worker of `journal` and registers it as the vault's live job.
 /// The caller holds the registry lock, so the worker cannot unregister before
 /// it is registered.
-fn spawn(state: &Arc<DaemonState>, live: &mut Option<Arc<Job>>, root: &Path, journal: Journal) -> Result<(), String> {
+#[cfg(test)]
+struct FormatFinishPause { entered: std::sync::mpsc::Sender<()>, release: std::sync::mpsc::Receiver<()> }
+#[cfg(test)]
+fn format_start_pauses() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, FormatFinishPause>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, FormatFinishPause>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn format_start_pause(state: &Arc<DaemonState>) {
+    let gate = format_start_pauses().lock().unwrap().remove(&state.app_dir);
+    if let Some(gate) = gate {
+        let _ = gate.entered.send(());
+        let _ = gate.release.recv();
+    }
+}
+#[cfg(test)]
+fn format_finish_pauses() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, FormatFinishPause>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, FormatFinishPause>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn format_done_registry() -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, std::sync::mpsc::Sender<()>>> {
+    static ARMED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, std::sync::mpsc::Sender<()>>>> = std::sync::OnceLock::new();
+    ARMED.get_or_init(Default::default)
+}
+#[cfg(test)]
+fn format_finish_pause(state: &Arc<DaemonState>) {
+    let gate = format_finish_pauses().lock().unwrap().remove(&state.app_dir);
+    if let Some(gate) = gate {
+        let _ = gate.entered.send(());
+        let _ = gate.release.recv();
+    }
+}
+
+fn spawn(state: &Arc<DaemonState>, live: &mut Option<Arc<Job>>, root: &Path, journal: Journal, owner: crate::account_lifecycle::OperationPermit, preflight_error: Option<String>) -> Result<(), String> {
     let job = Arc::new(Job::new(&journal.job_id, view(&journal, true, RUNNING)));
-    let runner = Runner { state: Arc::clone(state), root: root.to_path_buf(), job: Arc::clone(&job), journal, emitted: None, seen: 0, link: false, damaged_now: 0 };
+    let runner = Runner { state: Arc::clone(state), root: root.to_path_buf(), job: Arc::clone(&job), journal, preflight_error, emitted: None, seen: 0, link: false, damaged_now: 0 };
     std::thread::Builder::new()
         .name("format-migration".into())
         .spawn(move || {
             crate::mbox_upload_job::background_qos();
+            #[cfg(test)]
+            let done = format_done_registry().lock().unwrap().remove(&runner.state.app_dir).map(crate::credentials::TestTaskDone);
+            #[cfg(test)]
+            format_start_pause(&runner.state);
+            let _owner = owner;
             let _registered = Registered(Arc::clone(&runner.state), Arc::clone(&runner.job));
             runner.run();
+            drop(_registered);
+            drop(_owner);
+            #[cfg(test)]
+            drop(done);
         })
         .map_err(|e| failed(E_FORMAT_IO, "the worker thread did not start", e))?;
     *live = Some(job);
@@ -890,6 +988,7 @@ struct Runner {
     root: PathBuf,
     job: Arc<Job>,
     journal: Journal,
+    preflight_error: Option<String>,
     emitted: Option<Instant>,
     /// Messages this run has tried.
     seen: u64,
@@ -904,7 +1003,10 @@ struct Runner {
 impl Runner {
     fn run(mut self) {
         self.progress(RUNNING, true, true);
-        let ended = convert(&mut self);
+        let ended = match self.preflight_error.take() {
+            Some(error) => Ended::Failed(error),
+            None => convert(&mut self),
+        };
         self.finish(ended);
     }
 
@@ -1022,6 +1124,8 @@ impl Runner {
     /// start is not refused as busy.
     fn finish(&mut self, ended: Ended) {
         self.job.end();
+        #[cfg(test)]
+        format_finish_pause(&self.state);
         let state = match &ended {
             Ended::Done => DONE,
             Ended::Cancelled => CANCELLED,
@@ -1614,6 +1718,8 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        std::fs::write(app_dir.path().join("accounts.json"), r#"[{"id":"acct"},{"id":"acct0"},{"id":"acct1"},{"id":"acct2"},{"id":"other"}]"#).unwrap();
+        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
         crate::custody::open_into(&s).unwrap();
         (vault, app_dir, s)
     }
@@ -1774,6 +1880,110 @@ mod tests {
 
     fn file_of(root: &Path, account: &str, mailbox: &str, uid: u32) -> Option<message_store::Held> {
         message_store::held_in(root, account, mailbox, uid, Format::Maildir)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn p4_format_thread_owns_through_final_marker_and_event() {
+        struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                let _ = self.release.take().unwrap().send(());
+                if self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                self.done.take();
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(release) = self.release.take() { let _ = release.send(()); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (v, _a, s) = st();
+        let root = v.path();
+        fixture(root, 1, 1, 1);
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        format_finish_pauses().lock().unwrap().insert(s.app_dir.clone(), FormatFinishPause { entered: entered_tx, release: release_rx });
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        format_done_registry().lock().unwrap().insert(s.app_dir.clone(), done_tx);
+        let mut events = s.events.subscribe();
+        start(&s, root, Format::Jmap, OldFiles::Delete).unwrap();
+        let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+        let entered = entered_rx.recv_timeout(Duration::from_secs(5)).is_ok();
+        let converted = record_of(root, "acct0", "INBOX", 1).is_some();
+        let marker_before = marker(root, MIGRATION_KEY).unwrap_or_default();
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct0".to_owned()].into(), ..Default::default() });
+        let close = s.account_lifecycle.try_close(lease, "acct0");
+        let busy = matches!(&close, Err(crate::account_lifecycle::LifecycleError::Busy));
+        if let Ok(mut claim) = close {
+            let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+            claim.mark_effects_started(drained).unwrap();
+            claim.finish_retired().unwrap();
+        }
+        drain.finish();
+        let last = end_of(&mut events);
+        let marker_after = marker(root, MIGRATION_KEY).unwrap_or_default();
+        let journal_removed = pending_journal(&s.app_dir, root).is_none();
+        assert!(entered && converted && !marker_before.is_empty() && marker_after.is_empty() && journal_removed && last["state"] == DONE,
+            "format final marker observation failed: entered={entered} converted={converted} before={marker_before} after={marker_after} removed={journal_removed} last={last}");
+        assert!(busy, "format final marker cleared after A retired");
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct0".to_owned()].into(), ..Default::default() });
+        assert!(s.account_lifecycle.try_close(lease, "acct0").is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn p4_startup_resume_admits_in_both_readiness_orders() {
+        for request_first in [true, false] {
+            let (v, a, s) = st();
+            let root = v.path();
+            fixture(root, 1, 1, 2);
+            faults(&s).panic_after_write_at = Some(1);
+            let cut = run(&s, root, Format::Jmap, OldFiles::Delete);
+            assert_eq!(cut["state"], "paused");
+            let pending = journal_of(&s, root);
+            assert_eq!(pending.state, RUNNING);
+            std::fs::write(message_store::mailbox_dir(root, "acct0", "INBOX").join(import_rehome::DONE_FILE), b"").unwrap();
+            let next = DaemonState::for_test(root.to_path_buf(), a.path().to_path_buf(), true);
+            let mut events = next.events.subscribe();
+            if request_first {
+                resume_journaled(&next);
+                assert!(!next.account_lifecycle.is_ready());
+                assert_eq!(journal_of(&next, root), pending, "request before bootstrap must not rewrite journal");
+            }
+            crate::account_lifecycle::start_bootstrap(next.clone());
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while !next.account_lifecycle.is_ready() { tokio::time::sleep(Duration::from_millis(5)).await; }
+            }).await.expect("authoritative bootstrap did not finish");
+            if !request_first {
+                assert_eq!(journal_of(&next, root), pending, "bootstrap before request must not adopt early");
+                resume_journaled(&next);
+            }
+            let last = end_of(&mut events);
+            assert_eq!(last["state"], DONE, "request_first={request_first} {last}");
+            assert!(pending_journal(&next.app_dir, root).is_none());
+            assert!(record_of(root, "acct0", "INBOX", 2).is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn p4_format_refuses_known_retired_target_before_journal() {
+        let (v, _a, s) = st();
+        fixture(v.path(), 1, 1, 1);
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope { ids: ["acct0".to_owned()].into(), ..Default::default() });
+        let mut claim = s.account_lifecycle.try_close(lease, "acct0").unwrap();
+        let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        assert_eq!(start(&s, v.path(), Format::Jmap, OldFiles::Delete).unwrap_err(), "errors.keychainBusy");
+        assert!(pending_journal(&s.app_dir, v.path()).is_none());
+        assert!(marker(v.path(), MIGRATION_KEY).unwrap_or_default().is_empty());
+        assert!(file_of(v.path(), "acct0", "INBOX", 1).is_some());
+        assert!(record_of(v.path(), "acct0", "INBOX", 1).is_none());
     }
 
     /// The global constraint: `.eml -> jmap -> .eml` gives back every message
@@ -2137,6 +2347,7 @@ mod tests {
         // rehome is done, so the next one need not read the header cache.
         std::fs::write(message_store::mailbox_dir(root, "acct0", "INBOX").join(import_rehome::DONE_FILE), b"").unwrap();
         let next = DaemonState::for_test(root.to_path_buf(), a.path().to_path_buf(), true);
+        next.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&next.app_dir)).unwrap());
         let mut rx = next.events.subscribe();
         resume_journaled(&next);
         let end = end_of(&mut rx);
@@ -2197,6 +2408,62 @@ mod tests {
         assert_eq!(journal.expect("the journal is kept").state, FAILED);
         assert!(file_of(root, "acct", "INBOX", 1).is_some() && record_of(root, "acct", "INBOX", 1).is_none(), "nothing converted");
         assert!(file_of(root, "acct", "Work", 2).is_some(), "nothing removed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn p4_top_level_preflight_error_stays_failed_after_readability_returns() {
+        use std::os::unix::fs::PermissionsExt;
+        struct Unlock(PathBuf);
+        impl Drop for Unlock {
+            fn drop(&mut self) { let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755)); }
+        }
+        struct Drain { release: Option<std::sync::mpsc::Sender<()>>, done: Option<std::sync::mpsc::Receiver<()>> }
+        impl Drain {
+            fn finish(&mut self) {
+                self.release.take().unwrap().send(()).unwrap();
+                if self.done.as_ref().unwrap().recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                self.done.take();
+            }
+        }
+        impl Drop for Drain {
+            fn drop(&mut self) {
+                if let Some(release) = self.release.take() { let _ = release.send(()); }
+                if let Some(done) = self.done.take() {
+                    if done.recv_timeout(Duration::from_secs(5)).is_err() { std::process::abort(); }
+                }
+            }
+        }
+        let (vault, _app, state) = st();
+        let root = vault.path();
+        message_store::write(root, "acct", "INBOX", 1, b"Subject: one\r\n\r\none", &[]).unwrap();
+        let maildir = root.join("Maildir");
+        std::fs::set_permissions(&maildir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let unlock = Unlock(maildir.clone());
+        if std::fs::read_dir(&maildir).is_ok() { return; }
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        format_start_pauses().lock().unwrap().insert(state.app_dir.clone(), FormatFinishPause { entered: entered_tx, release: release_rx });
+        format_done_registry().lock().unwrap().insert(state.app_dir.clone(), done_tx);
+        let mut events = state.events.subscribe();
+        let started = start(&state, root, Format::Jmap, OldFiles::Delete);
+        if let Err(error) = &started {
+            format_start_pauses().lock().unwrap().remove(&state.app_dir);
+            format_done_registry().lock().unwrap().remove(&state.app_dir);
+            panic!("top-level failure must enter journaled runner: {error}");
+        }
+        let mut drain = Drain { release: Some(release_tx), done: Some(done_rx) };
+        entered_rx.recv_timeout(Duration::from_secs(5)).expect("actual format thread parked before runner");
+        drop(unlock);
+        assert!(std::fs::read_dir(&maildir).is_ok(), "directory became readable before runner continued");
+        drain.finish();
+        let end = end_of(&mut events);
+        assert_eq!(end["state"], json!(FAILED));
+        assert_eq!(end["error"], json!(format!("{E_FORMAT_UNREADABLE}: see the daemon log")));
+        assert_eq!(pending_journal(&state.app_dir, root).unwrap().state, FAILED);
+        assert!(file_of(root, "acct", "INBOX", 1).is_some());
+        assert!(record_of(root, "acct", "INBOX", 1).is_none(), "deferred preflight error forbids late conversion");
     }
 
     /// A folder whose on-disk name does not survive `vault_dir_name` (an NFD
@@ -2369,6 +2636,7 @@ mod tests {
         // rehome is done, so the next one need not read the header cache.
         std::fs::write(message_store::mailbox_dir(root, "acct0", "INBOX").join(import_rehome::DONE_FILE), b"").unwrap();
         let next = DaemonState::for_test(root.to_path_buf(), a.path().to_path_buf(), true);
+        next.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&next.app_dir)).unwrap());
         let mut rx = next.events.subscribe();
         resume_journaled(&next);
         let end = end_of(&mut rx);

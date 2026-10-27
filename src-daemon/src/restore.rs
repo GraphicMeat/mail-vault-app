@@ -137,6 +137,7 @@ pub async fn run_restore(
     folders: Vec<String>,
     cancel: Arc<AtomicBool>,
     mailbox_concurrency: usize,
+    owner: crate::account_lifecycle::OperationPermit,
 ) -> Result<(), String> {
     let email = account.email.clone();
 
@@ -147,7 +148,9 @@ pub async fn run_restore(
         let state = Arc::clone(&state);
         let account = account_id.clone();
         let folders = folders.clone();
+        let owner = owner.clone();
         tokio::task::spawn_blocking(move || -> Result<Vec<(String, Vec<LocalMsg>)>, String> {
+            let _owner = owner;
             let mut out = Vec::new();
             for folder in &folders {
                 let msgs = list_local_messages(&state, &account, folder)?;
@@ -185,7 +188,9 @@ pub async fn run_restore(
         let account = account.clone();
         let cancel = Arc::clone(&cancel);
         let permit = Arc::clone(&permit);
+        let owner = owner.clone();
         tasks.spawn(async move {
+            let _owner = owner;
             let _permit = permit.acquire_owned().await.map_err(|e| e.to_string())?;
             let counts = restore_folder(&state, &account, &folder, &msgs, &cancel).await;
             Ok::<_, String>((folder, counts))

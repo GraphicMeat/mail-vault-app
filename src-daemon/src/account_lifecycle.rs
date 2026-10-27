@@ -37,6 +37,7 @@ pub(crate) fn start_bootstrap(state: Arc<crate::server::DaemonState>) {
                 drop(done);
                 if seeded {
                     crate::custody::dispatch_pending_import(&state);
+                    crate::format_migration_job::bootstrap_ready(&state);
                 }
             }
             Err(_) => state.account_lifecycle.fail_bootstrap(),
