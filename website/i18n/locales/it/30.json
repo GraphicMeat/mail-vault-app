@@ -103,5 +103,21 @@
   "07153fc42772": "La pagina Accesso e sicurezza di un Account Apple, con la scheda Password specifiche per app in basso a sinistra",
   "7573b63d0434": "La finestra Password specifiche per app con una password chiamata MailVault, un pulsante più per aggiungerne un'altra e un pulsante Revoca tutte",
   "60e54feb33f2": "La finestra Genera password specifica per app con l'etichetta MailVault scritta e un pulsante Crea",
-  "5337fa52d020": "La finestra Conferma la tua password che chiede la password dell'Account Apple, con i pulsanti Continua e Annulla"
+  "5337fa52d020": "La finestra Conferma la tua password che chiede la password dell'Account Apple, con i pulsanti Continua e Annulla",
+  "fa8f34e32c35": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><a href=\"/features/network-activity.html\" class=\"text-primary-500 hover:text-primary-600 underline\">Attività di rete</a>: ogni connessione che MailVault e il suo processo in background aprono, con host, scopo e dati inviati e ricevuti, conservata solo sul tuo computer</span>",
+  "e6b960ae908e": "Vedi tutte le 11 funzionalità",
+  "4e613f306794": "Ogni connessione, in elenco.<br><span class=\"hm-grad\">Conservata sul tuo computer.</span>",
+  "18c9c8334837": "<strong>Ogni connessione</strong><span>Sincronizzazione e invio della posta, accessi, ricerche DNS, backup e altro, ognuna con host, porta, scopo, account e dati inviati e ricevuti.</span>",
+  "0c791aa82920": "<strong>Paesi su una mappa</strong><span>Una mappa del mondo mostra verso quali paesi sono andate quelle connessioni, collocate offline con il database gratuito dei paesi di DB-IP.</span>",
+  "aca795494a7a": "<strong>La cronologia resta in locale</strong><span>Conservata sul tuo computer per 24 ore, 7 giorni, 2 settimane o un mese, poi eliminata. Filtra per periodo, account, protocollo o scopo, oppure copiala come testo.</span>",
+  "4fd45b77845e": "<strong>Cosa non include</strong><span>I contenuti web all’interno delle email, le richieste fatte dalla finestra dell’app stessa e i download degli aggiornamenti.</span>",
+  "fba3bae53e44": "<span>Dove trovarlo</span>Impostazioni → Attività di rete",
+  "56e139808948": "Attività di rete: ogni connessione, in elenco | MailVault",
+  "353f33ea2361": "Attività di rete",
+  "26d0ddd71045": "Scopri con quali server parla MailVault, perché, e quanti dati ha inviato e ricevuto. L’elenco copre l’app e il suo processo in background, dal più recente, e non lascia mai il tuo computer.",
+  "5b57716e9922": "Attività di rete elenca ogni connessione che MailVault e il suo processo in background aprono, con host, scopo e dati inviati e ricevuti. La cronologia resta sul tuo computer.",
+  "ffcaefc20ba7": "Attività di rete: ogni connessione, in elenco",
+  "a84c92e8a4c3": "Ingrandisci: Attività di rete in MailVault",
+  "94f2b1407f8c": "Impostazioni Attività di rete: host contattati, dati inviati e ricevuti e una mappa del mondo dei paesi a cui MailVault si è collegato",
+  "26c1670de5c0": "Video: Attività di rete in MailVault"
 }
