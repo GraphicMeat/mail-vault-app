@@ -354,6 +354,15 @@ pub(crate) fn attachment_texts(raw: &[u8]) -> Vec<String> {
     out
 }
 
+/// `flags` with its read state replaced: both spellings of seen (`seen`, the
+/// name's; `\\Seen`, the server's) come off, and go back on when `seen`.
+pub(crate) fn with_read_state(flags: &mut Vec<String>, seen: bool) {
+    flags.retain(|f| !f.eq_ignore_ascii_case("seen") && !f.eq_ignore_ascii_case("\\Seen"));
+    if seen {
+        flags.extend(["seen".to_string(), "\\Seen".to_string()]);
+    }
+}
+
 /// One row per hit from the stored header cache. Current filename flags remain
 /// authoritative; the reader revalidates the message when a result is opened.
 pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {
@@ -385,7 +394,12 @@ pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {
             if h.attach_matched {
                 matched_in.push("attachment");
             }
-            let flags = message_store::flags_in_name(&h.filename);
+            let mut flags = message_store::flags_in_name(&h.filename);
+            // The header cache's read state, where `fill_hit_seen` found a row, is
+            // the server's; the file name's lags a change made elsewhere.
+            if let Some(seen) = h.seen {
+                with_read_state(&mut flags, seen);
+            }
             let obj = row.as_object_mut()?;
             obj.insert("uid".into(), h.uid.into());
             obj.insert("vaultDir".into(), h.vault_dir.clone().into());
@@ -465,7 +479,7 @@ pub(crate) fn search_page_reply(
     st: &SearchIndexState,
     request: &core::query::SearchRequest,
 ) -> Result<Result<SearchPageReply, &'static str>, String> {
-    let reply = match with_index(st, request, |conn| {
+    let mut reply = match with_index(st, request, |conn| {
         core::query::search(conn, request).and_then(|page| {
             db::scope_coverage(conn, &request.account_id, request.mailboxes.as_deref())
                 .map(|coverage| SearchPageReply { page, coverage })
@@ -474,10 +488,10 @@ pub(crate) fn search_page_reply(
         Ok(reply) => reply,
         Err(reason) => return Ok(Err(reason)),
     };
+    fill_hit_seen(st, &mut reply.page);
     // A requested folder the index never listed may be one the vault has no
     // mail in at all; only the disk can tell, read here with the index lock
     // released so a slow drive never stalls another reader.
-    let mut reply = reply;
     db::settle_unlisted_folders(&mut reply.coverage, &st.vault_root.join("Maildir"), &request.account_id);
     #[cfg(test)]
     {
@@ -495,7 +509,12 @@ pub(crate) fn search_page(
     st: &SearchIndexState,
     request: &core::query::SearchRequest,
 ) -> Result<Result<core::query::SearchPage, &'static str>, String> {
-    with_index(st, request, |conn| core::query::search(conn, request))
+    let mut page = match with_index(st, request, |conn| core::query::search(conn, request))? {
+        Ok(page) => page,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    fill_hit_seen(st, &mut page);
+    Ok(Ok(page))
 }
 
 /// Who sent what a request finds, most mail first, over every account
@@ -526,13 +545,152 @@ fn with_index<T>(
     request: &core::query::SearchRequest,
     query: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
 ) -> Result<Result<T, &'static str>, String> {
+    // Read before the index lock is taken: custody has its own lock.
+    let header_seen = header_seen_for(st, request);
+    let unread = request.unread.is_some();
     with_ready_index(st, |conn| {
         #[cfg(test)]
         g(&st.search_scopes).push(request.mailboxes.clone());
-        #[cfg(not(test))]
-        let _ = request;
-        query(conn)
+        if unread {
+            // A failed overlay (a full temp store) must not read as a broken
+            // index, which this closure's `Err` would start recovering: the
+            // file names decide instead.
+            if let Err(error) = core::query::install_header_seen(conn, &header_seen) {
+                warn!("search read state: overlay not installed, file names stand: {error}");
+                let _ = core::query::install_header_seen(conn, &[]);
+            }
+        }
+        let result = query(conn);
+        if unread {
+            // Never outlives its request: a later caller that filters on read
+            // state without installing its own reads the file names.
+            let _ = core::query::install_header_seen(conn, &[]);
+        }
+        result
     })
+}
+
+/// Whether the index will answer a query now (on, first pass done): the gate
+/// `with_ready_index` applies, asked ahead so a search that will get
+/// `building` or `off` back does not first read custody for it. The index lock
+/// is taken and released here, before custody's.
+fn index_answers(st: &SearchIndexState) -> bool {
+    if *g(&st.enabled) == Some(false) {
+        return false;
+    }
+    let guard = lock(&st.db);
+    guard.as_ref().is_some_and(|conn| db::first_pass_done_checked(conn).unwrap_or(false))
+}
+
+/// The header cache's read state for the messages an `unread` filter will
+/// judge: every cached header of the request's accounts (and mailboxes, when it
+/// names some). Read state lives there, kept by sync; a vault file's name keeps
+/// the state it was stored with. Empty when the request has no such filter, the
+/// index will not answer, or custody does not: the filter then reads the file
+/// names, as before. A custody hold reads one unit of rows
+/// (`cache::READ_STATE_UNIT`), so a mark-read or a sync write waits for 900
+/// rows at most, however large the folder.
+fn header_seen_for(st: &SearchIndexState, request: &core::query::SearchRequest) -> Vec<core::query::HeaderSeen> {
+    use mailvault_core::custody::{cache, lock as custody_lock};
+    if request.unread.is_none() || !index_answers(st) {
+        return Vec::new();
+    }
+    let accounts: Vec<&String> = if request.account_ids.is_empty() { vec![&request.account_id] } else { request.account_ids.iter().collect() };
+    let named: Option<Vec<String>> = request
+        .mailboxes
+        .as_ref()
+        .filter(|boxes| !boxes.is_empty())
+        .map(|boxes| boxes.iter().map(|b| core::text::vault_dir_name(b)).collect());
+    let Some(custody) = g(&st.custody_db).clone() else { return Vec::new() };
+    let mut rows = Vec::new();
+    for account in accounts {
+        let folders = {
+            let guard = custody_lock(&custody);
+            let Some(conn) = guard.as_ref() else { return Vec::new() };
+            match cache::vault_folders(conn, account) {
+                Ok(folders) => folders,
+                Err(error) => {
+                    warn!("search read state: header cache folders unreadable, file names stand: {error}");
+                    continue;
+                }
+            }
+        };
+        for (dir, paths) in &folders {
+            if named.as_ref().is_some_and(|named| !named.contains(dir)) {
+                continue;
+            }
+            let mut after = 0;
+            loop {
+                let guard = custody_lock(&custody);
+                let Some(conn) = guard.as_ref() else { return Vec::new() };
+                let unit = cache::read_states_after(conn, account, paths, after);
+                drop(guard);
+                let (states, next) = match unit {
+                    Ok(unit) => unit,
+                    Err(error) => {
+                        warn!("search read state: header cache folder unreadable, file names stand: {error}");
+                        break;
+                    }
+                };
+                rows.extend(states.into_iter().map(|(uid, state)| core::query::HeaderSeen {
+                    account_id: account.clone(),
+                    vault_dir: dir.clone(),
+                    uid,
+                    seen: state.seen,
+                    message_id: state.message_id,
+                }));
+                match next {
+                    Some(cursor) => after = cursor,
+                    None => break,
+                }
+            }
+        }
+    }
+    rows
+}
+
+/// Stamps each hit the header cache holds a row for with its read state
+/// (`SearchHit::seen`), for the result row to show: the same rule as the
+/// filter (`cache::read_states_*`, and a state whose Message-ID contradicts the
+/// hit's speaks for another message). A hit with no row (gone from the server,
+/// local-only, not cached yet) keeps what its file name says.
+fn fill_hit_seen(st: &SearchIndexState, page: &mut core::query::SearchPage) {
+    use mailvault_core::custody::{cache, lock as custody_lock};
+    if page.hits.is_empty() {
+        return;
+    }
+    let Some(custody) = g(&st.custody_db).clone() else { return };
+    let mut wanted: std::collections::HashMap<String, std::collections::HashMap<String, Vec<u32>>> = std::collections::HashMap::new();
+    for hit in &page.hits {
+        wanted.entry(hit.account_id.clone()).or_default().entry(hit.vault_dir.clone()).or_default().push(hit.uid);
+    }
+    let mut states = std::collections::HashMap::new();
+    for (account, dirs) in wanted {
+        let folders = {
+            let guard = custody_lock(&custody);
+            let Some(conn) = guard.as_ref() else { return };
+            match cache::vault_folders(conn, &account) {
+                Ok(folders) => folders,
+                Err(_) => continue,
+            }
+        };
+        for (dir, uids) in dirs {
+            let Some(paths) = folders.get(&dir) else { continue };
+            for unit in uids.chunks(cache::READ_STATE_UNIT) {
+                let guard = custody_lock(&custody);
+                let Some(conn) = guard.as_ref() else { return };
+                if let Ok(found) = cache::read_states_of(conn, &account, paths, unit) {
+                    states.extend(found.into_iter().map(|(uid, state)| ((account.clone(), dir.clone(), uid), state)));
+                }
+            }
+        }
+    }
+    for hit in &mut page.hits {
+        hit.seen = states
+            .get(&(hit.account_id.clone(), hit.vault_dir.clone(), hit.uid))
+            .filter(|state| state.applies_to(hit.message_id.as_deref()))
+            .map(|state| state.seen);
+    }
 }
 
 /// `with_index` without a search request: one index lock hold, or why the
@@ -1950,6 +2108,7 @@ mod tests {
                 date_utc: 1,
                 row_id: 7,
                 snippet: None,
+                seen: None,
             }],
             total: 1,
             needles: vec!["indexed".into()],
@@ -1977,6 +2136,7 @@ mod tests {
                 date_utc: 1,
                 row_id: 5,
                 snippet: None,
+                seen: None,
             }],
             total: 1,
             needles: vec!["budget".into()],
@@ -2123,6 +2283,129 @@ mod tests {
     fn save_listing(custody: &mailvault_core::custody::SharedConn, account: &str, mailbox: &str, data: serde_json::Value) {
         let g = mailvault_core::custody::lock(custody);
         mailvault_core::custody::cache::save_headers(g.as_ref().unwrap(), account, mailbox, &data.to_string()).unwrap();
+    }
+
+    /// The server's read state lives in the header cache (sync patches it); the
+    /// vault file name keeps whatever the file was stored with. Search read the
+    /// name, so mail read on another device listed as unread and the reverse.
+    /// Where a header row exists it decides, for the filter and for the row's
+    /// flags; a message with no row (gone from the server, kept in the vault)
+    /// keeps the name's.
+    #[test]
+    fn search_takes_read_state_from_the_header_cache_where_a_row_exists() {
+        use mailvault_core::search_index::{db, lock, query::SearchRequest};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // `seed` names every file `:2,S`: all three read, by the file.
+        seed(root, "acct", "Projects_2026", 3);
+        let (st, custody) = with_custody(root);
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({ "emails": [
+            {"uid": 1, "messageId": "<1@x.test>", "subject": "Seed 1", "flags": []},
+            {"uid": 2, "messageId": "<2@x.test>", "subject": "Seed 2", "flags": ["\\Seen"]},
+        ]}));
+        sweep_now(&st, root, Some(vec![("acct".to_string(), "Projects_2026".to_string())]));
+        db::meta_set(lock(&st.db).as_ref().unwrap(), db::FIRST_PASS_DONE, "1").unwrap();
+
+        let rows = |unread: Option<bool>| -> Vec<serde_json::Value> {
+            let req = SearchRequest { account_id: "acct".into(), unread, ..Default::default() };
+            let reply = crate::search_index::search_reply(&st, &req).unwrap();
+            assert_eq!(reply["available"], true, "{reply}");
+            reply["rows"].as_array().unwrap().clone()
+        };
+        let uids = |rows: &[serde_json::Value]| -> Vec<u64> {
+            let mut uids: Vec<u64> = rows.iter().map(|r| r["uid"].as_u64().unwrap()).collect();
+            uids.sort_unstable();
+            uids
+        };
+        let has_seen = |row: &serde_json::Value| row["flags"].as_array().unwrap().iter().any(|f| f == "seen" || f == "\\Seen");
+
+        assert_eq!(uids(&rows(Some(true))), vec![1], "uid 1 is unread on the server, whatever its file says");
+        assert_eq!(uids(&rows(Some(false))), vec![2, 3], "uid 2 is read on the server; uid 3 has no row, so its file's `S` stands");
+        let all = rows(None);
+        let seen: Vec<(u64, bool)> = { let mut s: Vec<_> = all.iter().map(|r| (r["uid"].as_u64().unwrap(), has_seen(r))).collect(); s.sort_unstable(); s };
+        assert_eq!(seen, vec![(1, false), (2, true), (3, true)], "the row's own flags say the same as the filter");
+    }
+
+    /// The direction that was reported: mail read elsewhere, its vault file still
+    /// unread by name. Plus what the overlay must not break: a request over
+    /// several accounts, a folder-scoped one, a header that is another message
+    /// (a reissued uid: its Message-ID differs from the file's), a server that
+    /// spells the flag in capitals, and the overlay not outliving its request.
+    #[test]
+    fn the_header_cache_read_state_holds_across_accounts_scopes_and_spellings() {
+        use mailvault_core::search_index::{db, lock, query::SearchRequest};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        seed(root, "acct", "Projects_2026", 3);
+        seed(root, "other", "Projects_2026", 2);
+        // A folder the index holds and the header cache has no rows for: its files' names stand.
+        seed(root, "acct", "Notes", 2);
+        // A vault file with no Message-ID, read by name; the header (which has one) says unread.
+        let no_id = root.join("Maildir/acct/NoId/cur");
+        std::fs::create_dir_all(&no_id).unwrap();
+        std::fs::write(no_id.join(format!("1{INFO_PREFIX}S.eml")), "From: a@x.test\r\nSubject: No id\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n").unwrap();
+        // acct uid 1: read on the server, but its file name says unread.
+        let cur = root.join("Maildir/acct/Projects_2026/cur");
+        std::fs::rename(cur.join(format!("1{INFO_PREFIX}S.eml")), cur.join(format!("1{INFO_PREFIX}.eml"))).unwrap();
+        let (st, custody) = with_custody(root);
+        save_listing(&custody, "acct", "Projects/2026", serde_json::json!({ "emails": [
+            {"uid": 1, "messageId": "<1@x.test>", "flags": ["\\SEEN"]},
+            // Another message's header now holds uid 2: its "unread" is not this file's.
+            {"uid": 2, "messageId": "<reissued@x.test>", "flags": []},
+            {"uid": 3, "messageId": "<3@x.test>", "flags": []},
+        ]}));
+        save_listing(&custody, "other", "Projects/2026", serde_json::json!({ "emails": [
+            {"uid": 1, "messageId": "<1@x.test>", "flags": []},
+        ]}));
+        save_listing(&custody, "acct", "NoId", serde_json::json!({ "emails": [
+            {"uid": 1, "messageId": "<z@x.test>", "flags": []},
+        ]}));
+        let both = Some(vec![
+            ("acct".to_string(), "Projects_2026".to_string()), ("other".to_string(), "Projects_2026".to_string()),
+            ("acct".to_string(), "Notes".to_string()), ("acct".to_string(), "NoId".to_string()),
+        ]);
+        sweep_now(&st, root, both);
+        db::meta_set(lock(&st.db).as_ref().unwrap(), db::FIRST_PASS_DONE, "1").unwrap();
+
+        let hits = |req: SearchRequest| -> Vec<(String, u32)> {
+            let page = crate::search_index::search_page(&st, &req).unwrap().expect("the index answers");
+            let mut hits: Vec<_> = page.hits.iter().map(|h| (h.account_id.clone(), h.uid)).collect();
+            hits.sort();
+            hits
+        };
+        let acct = |unread: Option<bool>| SearchRequest { account_id: "acct".into(), unread, ..Default::default() };
+        let key = |a: &str, u: u32| (a.to_string(), u);
+
+        // Account-wide: Projects (uid 3 unread), Notes (files read, no header rows), NoId (header says unread).
+        assert_eq!(hits(acct(Some(true))), vec![key("acct", 1), key("acct", 3)], "uid 1 of Projects is read (header, any spelling), uid 2 keeps its file's `S`; NoId's uid 1 is unread by its header");
+        assert_eq!(hits(acct(Some(false))), vec![key("acct", 1), key("acct", 1), key("acct", 2), key("acct", 2)], "Projects 1 and 2, Notes 1 and 2");
+        let several = |unread| SearchRequest { account_ids: vec!["acct".into(), "other".into()], unread, ..Default::default() };
+        assert_eq!(hits(several(Some(true))), vec![key("acct", 1), key("acct", 3), key("other", 1)], "one statement, two accounts, each its own header cache");
+        let scoped = |mailbox: &str, unread: bool| SearchRequest { mailboxes: Some(vec![mailbox.into()]), ..acct(Some(unread)) };
+        assert_eq!(hits(scoped("Projects/2026", true)), vec![key("acct", 3)]);
+        assert!(hits(scoped("Notes", true)).is_empty(), "no header rows for the folder: its files' `S` stands");
+        assert_eq!(hits(scoped("Notes", false)), vec![key("acct", 1), key("acct", 2)]);
+        assert_eq!(hits(scoped("NoId", true)), vec![key("acct", 1)], "a file with no Message-ID cannot contradict the header's");
+
+        // The rows say what the filter judged, and the capitals read as read.
+        let reply = crate::search_index::search_reply(&st, &SearchRequest { mailboxes: Some(vec!["Projects/2026".into()]), ..acct(None) }).unwrap();
+        let mut seen: Vec<(u64, bool)> = reply["rows"].as_array().unwrap().iter()
+            .map(|r| (r["uid"].as_u64().unwrap(), r["flags"].as_array().unwrap().iter().any(|f| f == "seen" || f == "\\Seen")))
+            .collect();
+        seen.sort_unstable();
+        assert_eq!(seen, vec![(1, true), (2, true), (3, false)]);
+
+        let left: i64 = lock(&st.db).as_ref().unwrap().query_row("SELECT count(*) FROM temp.header_seen", [], |r| r.get(0)).unwrap();
+        assert_eq!(left, 0, "the overlay does not outlive the request that installed it");
+    }
+
+    #[test]
+    fn with_read_state_swaps_both_spellings_of_seen_and_keeps_the_rest() {
+        let mut flags: Vec<String> = ["archived", "seen", "\\SEEN", "flagged"].map(String::from).to_vec();
+        crate::search_index::with_read_state(&mut flags, false);
+        assert_eq!(flags, vec!["archived", "flagged"]);
+        crate::search_index::with_read_state(&mut flags, true);
+        assert_eq!(flags, vec!["archived", "flagged", "seen", "\\Seen"]);
     }
 
     /// H3b (a): the header cache of an evicted folder is emptied (cleared by a

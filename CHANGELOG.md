@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Search shows and filters read and unread by what the mailbox says, not by the saved copy's file name: mail you read on another device no longer lists as unread, and mail still unread there no longer lists as read, in Unread filters, saved views and the result rows. A message the mailbox no longer holds keeps the state its saved copy had, and a message whose Message-ID differs from the mailbox entry at the same number is left as it was.
+
 - Delete everywhere no longer stops with "needs to resync" on a message cached before the update: the mailbox is synced, the message is re-proved by its Message-ID, and the delete runs, while a message whose Message-ID changed is left alone. Every cached mailbox of every account is now synced once shortly after launch, not only the Inbox.
 
 - Keep completed OAuth token rotations across unrelated credential changes, and refresh credential caches reliably after retry.

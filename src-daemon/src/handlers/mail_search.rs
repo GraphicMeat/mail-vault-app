@@ -911,6 +911,16 @@ async fn run_local_lane(
                         .iter()
                         .map(|summary| summary.uid)
                         .collect::<Vec<_>>();
+                    // Read state is the header cache's where it has a row (the file
+                    // name lags a change made elsewhere). A search that filters on it
+                    // judges every message by it; any other stamps the rows it keeps.
+                    // Custody closed: the names stand.
+                    let filters_on_read_state = request.unread.is_some();
+                    let server_state = if filters_on_read_state {
+                        server_read_states(&state_for_blocking, &folder_for_blocking.account_id, &folder_for_blocking.vault_dir, &uids)
+                    } else {
+                        HashMap::new()
+                    };
                     // One message at a time, so a cancelled search stops within
                     // a message and a folder is never held in memory whole.
                     let mut rows = Vec::new();
@@ -925,7 +935,10 @@ async fn run_local_lane(
                                 failed = Some("cancelled".to_string());
                                 return false;
                             }
-                            let Some(email) = email else { return true };
+                            let Some(mut email) = email else { return true };
+                            if let Some(state) = server_state.get(&email.uid).filter(|state| state.applies_to(email.message_id.as_deref())) {
+                                crate::search_index::with_read_state(&mut email.flags, state.seen);
+                            }
                             if !matches_local_row(&email, &request) {
                                 return true;
                             }
@@ -956,6 +969,18 @@ async fn run_local_lane(
                     );
                     if let Some(error) = failed {
                         return Err(error);
+                    }
+                    if !filters_on_read_state && !rows.is_empty() {
+                        let kept: Vec<u32> = rows.iter().filter_map(|row| row.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok())).collect();
+                        let states = server_read_states(&state_for_blocking, &folder_for_blocking.account_id, &folder_for_blocking.vault_dir, &kept);
+                        for row in &mut rows {
+                            let state = row.get("uid").and_then(Value::as_u64).and_then(|uid| u32::try_from(uid).ok()).and_then(|uid| states.get(&uid));
+                            if let Some(state) = state.filter(|state| state.applies_to(row.get("messageId").and_then(Value::as_str))) {
+                                let mut flags: Vec<String> = row.get("flags").and_then(Value::as_array).map(|flags| flags.iter().filter_map(|f| f.as_str().map(str::to_owned)).collect()).unwrap_or_default();
+                                crate::search_index::with_read_state(&mut flags, state.seen);
+                                row["flags"] = json!(flags);
+                            }
+                        }
                     }
                     Ok((rows, uids.len() as u64))
                 })
@@ -1391,6 +1416,24 @@ fn failure(account_id: &str, mailbox: &str, code: &str) -> SearchFailure {
     }
 }
 
+/// The header cache's read state of `uids` in one vault folder, a unit of rows
+/// per custody hold. Empty when custody does not answer: file names stand.
+fn server_read_states(state: &DaemonState, account: &str, dir: &str, uids: &[u32]) -> HashMap<u32, mailvault_core::custody::cache::ReadState> {
+    use mailvault_core::custody::cache;
+    let paths = match crate::custody::with_conn(state, |conn| cache::vault_folders(conn, account)) {
+        Ok(mut folders) => folders.remove(dir).unwrap_or_default(),
+        Err(_) => return HashMap::new(),
+    };
+    let mut states = HashMap::new();
+    for unit in uids.chunks(cache::READ_STATE_UNIT) {
+        match crate::custody::with_conn(state, |conn| cache::read_states_of(conn, account, &paths, unit)) {
+            Ok(found) => states.extend(found),
+            Err(_) => return HashMap::new(),
+        }
+    }
+    states
+}
+
 pub(crate) fn matches_local_row(row: &LightEmail, request: &MailSearchStart) -> bool {
     let query = request.query.trim().to_lowercase();
     let haystack = [
@@ -1733,6 +1776,48 @@ mod tests {
             .expect("a non-terminal frame with the vault lane's time");
         assert_eq!(lane_done["lane"], "local", "{frames:?}");
         assert_eq!(lane_done["localSearched"], 3, "{frames:?}");
+    }
+
+    /// The scan lane (no index) reads vault files, whose names lag a read made
+    /// elsewhere; where the header cache has a row its state decides, for the
+    /// unread filter and for the rows a search without one returns.
+    #[tokio::test]
+    async fn the_scan_lane_judges_and_shows_read_state_by_the_header_cache() {
+        let (tmp, state) = state();
+        // Both file names say unread (`:2,`).
+        write_mail(tmp.path(), "acct", "INBOX", 1, "first", "body");
+        write_mail(tmp.path(), "acct", "INBOX", 2, "second", "body");
+        crate::custody::open_into(&state).unwrap();
+        crate::custody::with_conn(&state, |conn| {
+            mailvault_core::custody::cache::save_headers(
+                conn,
+                "acct",
+                "INBOX",
+                &json!({"emails": [{"uid": 1, "flags": ["\\Seen"]}, {"uid": 2, "flags": []}]}).to_string(),
+            )
+        })
+        .unwrap();
+        let rows = |id: &'static str, unread: Option<bool>| {
+            let (state, mut req) = (Arc::clone(&state), request(id, 1));
+            if let Some(unread) = unread {
+                req["unread"] = json!(unread);
+            }
+            async move {
+                let mut rx = state.events.subscribe();
+                assert_eq!(call(&state, "mail_search_start", req).await.result.unwrap()["started"], true);
+                let frames = collect_until_terminal(&mut rx, id).await;
+                let mut rows: Vec<(u64, bool)> = frames
+                    .iter()
+                    .flat_map(|f| f["rows"].as_array().cloned().unwrap_or_default())
+                    .map(|r| (r["uid"].as_u64().unwrap(), r["flags"].as_array().unwrap().iter().any(|f| f == "seen" || f == "\\Seen")))
+                    .collect();
+                rows.sort_unstable();
+                rows
+            }
+        };
+        assert_eq!(rows("scan-unread", Some(true)).await, vec![(2, false)], "uid 1 is read on the server, whatever its file name says");
+        assert_eq!(rows("scan-read", Some(false)).await, vec![(1, true)]);
+        assert_eq!(rows("scan-all", None).await, vec![(1, true), (2, false)], "rows show the header cache's state too");
     }
 
     #[tokio::test]

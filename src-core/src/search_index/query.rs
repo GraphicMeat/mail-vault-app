@@ -112,6 +112,52 @@ pub struct SearchHit {
     /// Internal merge keys preserving SQLite's existing newest-first order across mailbox batches.
     pub date_utc: i64,
     pub row_id: i64,
+    /// The read state the header cache holds for this message, when the caller
+    /// looked it up (`None` here: the index knows only the file name's). A
+    /// result row shows it ahead of the name's.
+    pub seen: Option<bool>,
+}
+
+/// One message's read state as the header cache (the server's) holds it, for
+/// `install_header_seen`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeaderSeen {
+    pub account_id: String,
+    pub vault_dir: String,
+    pub uid: u32,
+    pub seen: bool,
+    /// The header's normalized Message-ID (`custody::cache::message_id_key`). A
+    /// uid alone can name another message after a UIDVALIDITY reissue: the state
+    /// applies to a vault message only when the two Message-IDs do not differ
+    /// (a side with none cannot contradict the other).
+    pub message_id: Option<String>,
+}
+
+const HEADER_SEEN_TABLE: &str = "CREATE TEMP TABLE IF NOT EXISTS header_seen \
+    (account_id TEXT NOT NULL, vault_dir TEXT NOT NULL, uid INTEGER NOT NULL, seen INTEGER NOT NULL, message_id TEXT, \
+     PRIMARY KEY (account_id, vault_dir, uid)) WITHOUT ROWID";
+
+/// Replaces the read states the `unread` filter takes ahead of a file name's.
+/// The index's `flags` come off the vault file's name, which a flag change the
+/// server reports (read on another device) never renames; the header cache is
+/// kept current by sync. A temp table, like `view_keys`: per connection, so it
+/// holds until the next call, and the cache's rows outnumber a statement's
+/// parameters. A message it names nothing for keeps its file's flags.
+pub fn install_header_seen(conn: &rusqlite::Connection, rows: &[HeaderSeen]) -> Result<(), String> {
+    conn.execute_batch(&format!("{HEADER_SEEN_TABLE}; DELETE FROM temp.header_seen;")).map_err(|e| e.to_string())?;
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    {
+        let mut insert = tx
+            .prepare_cached("INSERT OR REPLACE INTO temp.header_seen(account_id, vault_dir, uid, seen, message_id) VALUES (?1, ?2, ?3, ?4, ?5)")
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            insert.execute(rusqlite::params![row.account_id, row.vault_dir, row.uid, row.seen, row.message_id]).map_err(|e| e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Default)]
@@ -500,9 +546,20 @@ fn where_clause(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<(Str
     if req.has_attachments {
         clauses.push("m.has_attachments = 1".into());
     }
-    for (letter, wanted) in [('S', req.unread.map(|u| !u)), ('F', req.starred), ('R', req.answered)] {
+    for (letter, wanted) in [('F', req.starred), ('R', req.answered)] {
         let Some(wanted) = wanted else { continue };
         clauses.push(format!("instr(m.flags, '{letter}') {} 0", if wanted { ">" } else { "=" }));
+    }
+    if let Some(unread) = req.unread {
+        // The header cache's read state where it has a row (`install_header_seen`),
+        // the file name's where it has none.
+        conn.execute_batch(HEADER_SEEN_TABLE).map_err(|e| e.to_string())?;
+        clauses.push(format!(
+            "COALESCE((SELECT hs.seen FROM temp.header_seen hs WHERE hs.account_id = m.account_id AND hs.vault_dir = m.vault_dir AND hs.uid = m.uid \
+             AND (hs.message_id IS NULL OR NULLIF(trim(m.message_id, '<> '), '') IS NULL OR hs.message_id = trim(m.message_id, '<> '))), \
+             instr(m.flags, 'S') > 0) = {}",
+            if unread { 0 } else { 1 }
+        ));
     }
     if !req.to_any.is_empty() {
         let mut branches = Vec::new();
@@ -604,7 +661,7 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     let hits = st
         .query_map(rusqlite::params_from_iter(select_args.iter()), |r| {
             let filename = crate::message_store::flags_name(&r.get::<_, String>(2)?, &r.get::<_, String>(10)?);
-            Ok(SearchHit { account_id: r.get(11)?, vault_dir: r.get(0)?, uid: r.get(1)?, filename, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)?, snippet: r.get(9)? })
+            Ok(SearchHit { account_id: r.get(11)?, vault_dir: r.get(0)?, uid: r.get(1)?, filename, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)?, snippet: r.get(9)?, seen: None })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
@@ -1078,6 +1135,45 @@ mod tests {
         assert_eq!(unread.len(), 3, "the other three luke messages are unread");
         let read = uids(&db, SearchRequest { unread: Some(false), ..req("luke", "") });
         assert_eq!(read, vec![("INBOX".to_string(), 2)]);
+    }
+
+    /// The read state a caller installs (the header cache's) wins over the
+    /// file's, per message; a message it names no state for keeps the file's,
+    /// and so does one whose Message-ID the state's contradicts (a reissued
+    /// uid). It applies to the connection until the next `install_header_seen`.
+    #[test]
+    fn unread_prefers_the_installed_header_state_over_the_file_flags() {
+        let (tmp, db) = fixture();
+        star(&tmp, &db, "luke", "INBOX", 2, "S");
+        let seen = |uid: u32, seen: bool, id: Option<&str>| HeaderSeen {
+            account_id: "luke".into(), vault_dir: "INBOX".into(), uid, seen, message_id: id.map(str::to_string),
+        };
+        let install = |rows: &[HeaderSeen]| {
+            let g = crate::search_index::lock(&db);
+            install_header_seen(g.as_ref().unwrap(), rows).unwrap();
+        };
+        // uid 2: read by its file, unread on the server. uid 1: the reverse.
+        install(&[seen(2, false, Some("luke.INBOX.2@x.test")), seen(1, true, None)]);
+        let unread = uids(&db, SearchRequest { unread: Some(true), ..req("luke", "") });
+        assert!(unread.contains(&("INBOX".to_string(), 2)), "the server says uid 2 is unread");
+        assert!(!unread.contains(&("INBOX".to_string(), 1)), "the server says uid 1 is read (no Message-ID to contradict)");
+        assert_eq!(unread.len(), 3, "uid 3 and the Projects message have no installed state: their files say unread");
+        let read = uids(&db, SearchRequest { unread: Some(false), ..req("luke", "") });
+        assert_eq!(read, vec![("INBOX".to_string(), 1)]);
+
+        // The header at uid 1 is another message now: its state is not this file's.
+        install(&[seen(1, true, Some("someone.else@x.test"))]);
+        let read = uids(&db, SearchRequest { unread: Some(false), ..req("luke", "") });
+        assert_eq!(read, vec![("INBOX".to_string(), 2)], "a Message-ID mismatch leaves the file flags in charge");
+
+        // An effective row first, so clearing is what the last assertion tests.
+        install(&[seen(1, true, None)]);
+        let mut read = uids(&db, SearchRequest { unread: Some(false), ..req("luke", "") });
+        read.sort();
+        assert_eq!(read, vec![("INBOX".to_string(), 1), ("INBOX".to_string(), 2)], "uid 1 is read on the server");
+        install(&[]);
+        let read = uids(&db, SearchRequest { unread: Some(false), ..req("luke", "") });
+        assert_eq!(read, vec![("INBOX".to_string(), 2)], "installing nothing puts the file flags back in charge");
     }
 
     #[test]
