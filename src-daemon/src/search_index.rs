@@ -2513,6 +2513,131 @@ mod tests {
         assert_eq!(search_unread(true).len() + search_unread(false).len(), 8, "every message is on exactly one side");
     }
 
+    /// All Inboxes: one request over three accounts' INBOXes, each shaped like an
+    /// account that misbehaved. The unread filter and the per-account counts the
+    /// list shows must follow each account's own header cache, change by change.
+    /// - "gmail": every saved file is named unread (the phantom 89), the server
+    ///   says most are read; one message has no header row at all (vault-only).
+    /// - "ltg": the server's unread mail is read by name, and a message deleted
+    ///   here left its header row behind as a ghost (the repeated banner and
+    ///   "needs resync" report): the inbox counts it and so does search, until
+    ///   the row is dropped.
+    /// - "me": capitals and extra flags on the server's `\Seen`, a reissued uid
+    ///   whose header is another message, and a folder outside the INBOX scope.
+    #[test]
+    fn all_inboxes_over_three_accounts_follow_each_accounts_own_read_state() {
+        use mailvault_core::search_index::{db, lock, query::SearchRequest};
+        use std::collections::{BTreeMap, BTreeSet};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let unread_by_name = |account: &str, dir: &str, uids: &[u32]| {
+            let cur = root.join("Maildir").join(account).join(dir).join("cur");
+            for uid in uids {
+                std::fs::rename(cur.join(format!("{uid}{INFO_PREFIX}S.eml")), cur.join(format!("{uid}{INFO_PREFIX}.eml"))).unwrap();
+            }
+        };
+        seed(root, "gmail", "INBOX", 6);
+        unread_by_name("gmail", "INBOX", &[1, 2, 3, 4, 5, 6]);
+        seed(root, "ltg", "INBOX", 4);
+        std::fs::remove_file(root.join(format!("Maildir/ltg/INBOX/cur/4{INFO_PREFIX}S.eml"))).unwrap();
+        seed(root, "ltg", "Archive", 2);
+        unread_by_name("ltg", "Archive", &[1, 2]);
+        seed(root, "me", "INBOX", 3);
+        unread_by_name("me", "INBOX", &[1, 2, 3]);
+
+        let (st, custody) = with_custody(root);
+        let header = |uid: u32, id: &str, flags: &[&str]| serde_json::json!({"uid": uid, "messageId": id, "flags": flags});
+        save_listing(&custody, "gmail", "INBOX", serde_json::json!({ "emails": [
+            header(1, "<1@x.test>", &["\\Seen"]), header(2, "<2@x.test>", &["\\Seen"]),
+            header(3, "<3@x.test>", &["\\Seen"]), header(4, "<4@x.test>", &["\\Seen"]),
+            header(5, "<5@x.test>", &[]),
+        ]}));
+        save_listing(&custody, "ltg", "INBOX", serde_json::json!({ "emails": [
+            header(1, "<1@x.test>", &[]), header(2, "<2@x.test>", &[]), header(3, "<3@x.test>", &["\\Seen"]),
+            header(4, "<4@x.test>", &[]),
+        ]}));
+        save_listing(&custody, "me", "INBOX", serde_json::json!({ "emails": [
+            header(1, "<1@x.test>", &["\\SEEN"]), header(2, "<2@x.test>", &["\\Seen", "\\Flagged"]),
+            header(3, "<reissued@x.test>", &[]),
+        ]}));
+        let folders = ["gmail", "ltg", "me"].map(|a| (a.to_string(), "INBOX".to_string()));
+        let mut swept = folders.to_vec();
+        swept.push(("ltg".to_string(), "Archive".to_string()));
+        sweep_now(&st, root, Some(swept));
+        db::meta_set(lock(&st.db).as_ref().unwrap(), db::FIRST_PASS_DONE, "1").unwrap();
+
+        // All Inboxes, or the same accounts with every folder.
+        let unread = |inbox_only: bool| -> BTreeMap<String, BTreeSet<u32>> {
+            let req = SearchRequest {
+                account_ids: ["gmail", "ltg", "me"].map(String::from).to_vec(),
+                mailboxes: inbox_only.then(|| vec!["INBOX".to_string()]),
+                unread: Some(true),
+                ..Default::default()
+            };
+            let mut by_account: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+            for hit in crate::search_index::search_page(&st, &req).unwrap().expect("the index answers").hits {
+                by_account.entry(hit.account_id).or_default().insert(hit.uid);
+            }
+            by_account
+        };
+        // The badge the inbox shows: its cached rows without a \Seen of any spelling.
+        let inbox_unread = |account: &str| -> BTreeSet<u32> {
+            let g = mailvault_core::custody::lock(&custody);
+            mailvault_core::custody::cache::all_headers(g.as_ref().unwrap(), account, "INBOX").unwrap().iter()
+                .filter(|r| !r["flags"].as_array().is_some_and(|f| f.iter().any(|f| f.as_str().is_some_and(|f| f.eq_ignore_ascii_case("\\seen")))))
+                .map(|r| r["uid"].as_u64().unwrap() as u32)
+                .collect()
+        };
+        let set = |uids: &[u32]| uids.iter().copied().collect::<BTreeSet<u32>>();
+        let expect = |label: &str, gmail: &[u32], ltg: &[u32], me: &[u32]| {
+            let want: BTreeMap<String, BTreeSet<u32>> = [("gmail", gmail), ("ltg", ltg), ("me", me)].into_iter()
+                .filter(|(_, uids)| !uids.is_empty()).map(|(a, uids)| (a.to_string(), set(uids))).collect();
+            assert_eq!(unread(true), want, "{label}");
+        };
+        let patch = |account: &str, uid: u32, flags: &[&str]| {
+            let g = mailvault_core::custody::lock(&custody);
+            let flags = flags.iter().map(|f| f.to_string()).collect();
+            assert_eq!(mailvault_core::custody::cache::patch_flags(g.as_ref().unwrap(), account, "INBOX", &[(uid, flags)]).unwrap(), 1);
+        };
+
+        // Start. gmail: 1-4 read on the server despite their names, 5 unread, 6 (no row) by its name.
+        // ltg: 1 and 2 unread on the server though read by name; the ghost 4 has no file.
+        // me: 1 and 2 read (capitals, starred); 3's header is another message, so its own file's name stands.
+        expect("start", &[5, 6], &[1, 2, 4], &[3]);
+        assert_eq!(inbox_unread("gmail"), set(&[5]), "the inbox never lists the vault-only 6");
+        // The index also holds a placeholder for a server message with no saved
+        // file, so the ghost shows in search exactly as it shows in the inbox.
+        assert_eq!(inbox_unread("ltg"), set(&[1, 2, 4]));
+        let everywhere = |unread: bool| -> usize {
+            let req = SearchRequest { account_ids: ["gmail", "ltg", "me"].map(String::from).to_vec(), unread: Some(unread), ..Default::default() };
+            crate::search_index::search_page(&st, &req).unwrap().expect("the index answers").hits.len()
+        };
+        assert_eq!(everywhere(true), 6 + 2, "every folder: the INBOXes' six, and the Archive's two files unread by name");
+
+        // The delete fix drops the ghost's header row. Search forgets its
+        // placeholder at the next sweep; both then say the same about ltg.
+        {
+            let g = mailvault_core::custody::lock(&custody);
+            mailvault_core::custody::cache::remove_headers(g.as_ref().unwrap(), "ltg", "INBOX", &[4]).unwrap();
+        }
+        assert_eq!(inbox_unread("ltg"), set(&[1, 2]));
+        sweep_now(&st, root, Some(folders.to_vec()));
+        expect("ghost dropped", &[5, 6], &[1, 2], &[3]);
+
+        // Every account changes at once, with no sweep and no file touched.
+        patch("gmail", 5, &["\\Seen"]);
+        patch("ltg", 1, &["\\Seen"]);
+        patch("me", 1, &[]);
+        patch("me", 3, &["\\Seen"]);
+        expect("read and unread elsewhere", &[6], &[2], &[1, 3]);
+        assert_eq!(inbox_unread("me"), set(&[1]), "the reissued 3 is another message in the inbox, but still this file's in search");
+
+        // The same request again after nothing changed: the overlay left nothing behind.
+        expect("repeated", &[6], &[2], &[1, 3]);
+        let left: i64 = lock(&st.db).as_ref().unwrap().query_row("SELECT count(*) FROM temp.header_seen", [], |r| r.get(0)).unwrap();
+        assert_eq!(left, 0);
+    }
+
     #[test]
     fn with_read_state_swaps_both_spellings_of_seen_and_keeps_the_rest() {
         let mut flags: Vec<String> = ["archived", "seen", "\\SEEN", "flagged"].map(String::from).to_vec();
