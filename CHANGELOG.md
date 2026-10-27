@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add an info button beside the password field when adding an iCloud account. It says where to create the app-specific password Apple requires (account.apple.com, Sign-In and Security, App-Specific Passwords, with two-factor authentication on) and links to Apple's instructions and to a new step-by-step guide on mailvaultapp.com. The iCloud note above the form is now translated.
+
 - Deleting a message that is already gone no longer stops with "needs to resync". When a row outlives its first delete and is deleted again, the second delete counts as removed, sends nothing to the server, drops the stale cached row, and the row stays out of the list instead of coming back.
 
 - A new-mail banner is shown once per message. A scheduled refresh that meets the same arrival again no longer raises the banner again every few minutes, and the notification log says "Already shown" for the repeats. A message woken from a local snooze is announced by its account and message, so it still gets its banner after the arrival one, and the refresh that sees it back raises no second.
