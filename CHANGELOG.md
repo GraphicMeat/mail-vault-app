@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A one-time code in mail that a scheduled refresh picks up now shows in the corner bubble and in the new-mail banner. Before, only mail the live inbox watch found first got the bubble, so a code that arrived between watch wake-ups showed neither.
+
 - Retire the app's OAuth token saver and legacy credential write commands after native account cutover. The daemon saves refreshed tokens without an open window, while the app reads completed credentials only to refresh visible account state. Native removal now decides which IMAP sessions to close, including shared connections.
 
 - Remove a local account only after its active work finishes, then clear its account record, password and local mail under the configured vault. If a send is in progress, Settings keeps the account and offers a retry. Ambiguous legacy caches stay in place and report incomplete so deletion never guesses another account's ownership. Native removal now also logs out exclusively owned idle IMAP sessions while preserving shared or unattributable sessions; credential waits respect the remaining removal deadline without abandoning a started write. Change server now verifies both IMAP and SMTP through the native account workflow before saving the new endpoint and password.

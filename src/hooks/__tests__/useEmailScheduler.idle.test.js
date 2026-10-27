@@ -419,6 +419,34 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockNotify.mock.calls[0][4]).toEqual({ accountId: 'a1', folder: 'INBOX', from: 's@x.co', viewIds: [], uids: [9, 8] });
   });
 
+  // A code that a scheduled refresh finds before the daemon's IDLE does never
+  // reaches the change feed: the refresh hands it to the bubble and the banner.
+  it('offers the code in a mail a scheduled refresh finds', async () => {
+    settingsStore.setState({ refreshOnLaunch: true });
+    mockOfferCode.mockResolvedValueOnce('906919');
+    mailStore.setState({
+      accounts: [IMAP_A],
+      activeAccountId: 'a1',
+      activeMailbox: 'INBOX',
+      refreshAllAccounts: vi.fn().mockResolvedValue({
+        perAccountResults: [{ accountId: 'a1', accountEmail: 'a@one.co', folder: 'INBOX', newCount: 1, uids: [9],
+          newestSender: 'Privacy Guides', newestSubject: '906919 is your login code', newestUid: 9,
+          newestFromAddress: 'discourse@privacyguides.org', newestSnippet: 'Use this code' }],
+      }),
+    });
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockOfferCode).toHaveBeenCalledWith('a1', 'INBOX', {
+      uid: 9, subject: '906919 is your login code', snippet: 'Use this code',
+      from: { name: 'Privacy Guides', address: 'discourse@privacyguides.org' },
+    });
+    expect(mockNotify).toHaveBeenCalledWith('Privacy Guides', '906919\n906919 is your login code', undefined,
+      { accountId: 'a1', mailbox: 'INBOX', uid: 9, code: '906919' },
+      { accountId: 'a1', folder: 'INBOX', from: 'discourse@privacyguides.org', viewIds: [], uids: [9] });
+  });
+
   // A launch after a night closed collects every arrival at once. The preview
   // is the folder's newest message, so one banner per change repeated that
   // same message once per arrival: one banner per folder, counting them all.
