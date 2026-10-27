@@ -1,6 +1,6 @@
 {
   "version": "2.20.0",
-  "sourceCommit": "168f33e72a967c5e1f30c962eaf0210e846b52b7",
+  "sourceCommit": "4f20748b3c0e05e9e5e66b32ef5b0d99591419b1",
   "note": "Recorded from the minijob snapshot of the source commit plus uncommitted scripts/footage files; the app code is the commit's.",
   "locales": {
     "de": {
