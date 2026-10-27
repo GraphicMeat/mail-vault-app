@@ -883,45 +883,11 @@ async fn get_credentials(app_handle: tauri::AppHandle) -> Result<serde_json::Val
     }
 }
 
-// Legacy function - store single password (kept for migration)
+// Keep the legacy command registered until the caller cutover, but never
+// let it mutate credentials outside the native account workflow.
 #[tauri::command]
-fn store_password(account_id: String, password: String) -> Result<(), String> {
-    // Portable: nothing secret on the host. The caller saves the account
-    // right after, which seals the new password on the drive.
-    if mailvault_core::paths::portable_root().is_some() {
-        return Ok(());
-    }
-    info!("=== STORE PASSWORD START ===");
-    info!("store_password called for account: {}", account_id);
-    info!("Service name: {}", KEYRING_SERVICE);
-
-    let entry = Entry::new(KEYRING_SERVICE, &account_id);
-    info!("Entry::new result: {:?}", entry.is_ok());
-    if let Err(ref e) = entry {
-        error!("Entry::new error details: {:?}", e);
-    }
-
-    let entry = entry.map_err(|e| {
-        error!("Failed to create keyring entry: {} - {:?}", e, e);
-        format!("Failed to create keyring entry: {}", e)
-    })?;
-
-    info!("Attempting to set password in keyring...");
-    let result = entry.set_password(&password);
-    match &result {
-        Ok(_) => {
-            info!("Password stored successfully for account: {}", account_id);
-            // Verify it was stored by reading it back
-            match entry.get_password() {
-                Ok(_) => info!("Verification: Password can be retrieved after storing"),
-                Err(e) => warn!("Verification failed: Cannot retrieve password after storing: {}", e),
-            }
-        },
-        Err(e) => error!("Failed to store password for account {}: {} - {:?}", account_id, e, e),
-    }
-    info!("=== STORE PASSWORD END ===");
-
-    result.map_err(|e| format!("Failed to store password: {}", e))
+fn store_password(_account_id: String, _password: String) -> Result<(), String> {
+    Err("errors.daemonOutdated".into())
 }
 
 // Off the main thread: a sync command runs there, and the Logs tab stalled the
@@ -5355,6 +5321,11 @@ fn reply_timeout_bounds_account_workflows() {
 
 #[cfg(test)]
 mod accounts_fallback_tests {
+    #[test]
+    fn p6_store_password_refuses_before_backend_access() {
+        let result = crate::store_password("synthetic-account".into(), "synthetic-password".into());
+        assert_eq!(result, Err("errors.daemonOutdated".into()));
+    }
     #[test]
     fn account_save_has_its_own_whole_attempt_budget() {
         assert_eq!(

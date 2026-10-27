@@ -177,6 +177,11 @@ impl ZipIntents {
             ImportTarget::New { descriptor: expected, reservation, .. } if expected == descriptor => {
                 let reservation = reservation.clone();
                 pending.consumed.insert(descriptor.id.clone());
+                let all_new_consumed = pending.targets.values().all(|target| match target {
+                    ImportTarget::Existing { .. } => true,
+                    ImportTarget::New { descriptor, .. } => pending.consumed.contains(&descriptor.id),
+                });
+                if all_new_consumed { intents.remove(intent); }
                 Some(reservation)
             }
             _ => None,

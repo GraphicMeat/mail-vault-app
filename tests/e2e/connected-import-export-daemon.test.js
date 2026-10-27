@@ -20,9 +20,10 @@
  *
  * This file therefore clicks the "Export Backup" button (real UI, proves the
  * button and its confirmation dialog render) and stops there rather than
- * clicking through to the native panel; every actual export/import
- * operation is driven the same way the migration and restore daemon
- * commands prove their non-UI-reachable paths (cancel, pause) -- a direct
+ * clicking through to the native panel. The P6 ZIP case enters the mounted
+ * production import handler with a fixture path through a VITE_E2E-only hook,
+ * exercising metadata completion and settings in the real app. Other operations
+ * use the same direct
  * `daemon_rpc` call against the real running daemon binary, asserting on
  * the real `export-progress`/`import-progress`/`mbox-*-progress` events
  * over the real channel via `window.__TAURI__.event.listen` (not app
@@ -121,7 +122,7 @@ async function clickButton(text) {
 //    matches `mailvault-backup/manifest.json` + `mailvault-backup/emails/<email>/<mailbox>/<uid>:2,<flags>.eml`,
 //    the exact layout `backup_zip.rs`'s own Rust tests build with `zip::ZipWriter`) ──
 
-function buildBackupZip(destZipPath, { accountEmail, mailbox, files }) {
+function buildBackupZip(destZipPath, { accountEmail, mailbox, files, settings = null }) {
   const staging = mkdtempSync(join(tmpdir(), 'mv-backup-fixture-'));
   try {
     const root = join(staging, 'mailvault-backup');
@@ -129,7 +130,7 @@ function buildBackupZip(destZipPath, { accountEmail, mailbox, files }) {
     mkdirSync(emailsDir, { recursive: true });
     for (const f of files) writeFileSync(join(emailsDir, f.name), f.body);
     writeFileSync(join(root, 'manifest.json'), JSON.stringify({
-      version: 2, exportedAt: new Date().toISOString(), accounts: [{ email: accountEmail }], settings: null,
+      version: 2, exportedAt: new Date().toISOString(), accounts: [{ email: accountEmail }], settings,
     }));
     // Windows has no `zip`; its bundled bsdtar writes a zip archive with `-a`. Named by path: under
     // Git Bash a bare `tar` is GNU tar, which reads `C:` as a remote host and cannot write a zip.
@@ -260,8 +261,8 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
   });
 
   it('(c) the daemon route itself never touches accounts.json', async function () {
-    // A second import of the SAME already-known account (from test (b))
-    // discovers zero new accounts, so if the daemon write path exists at
+    // An import of the already-known Luke account discovers zero new
+    // accounts, so if the daemon write path exists at
     // all, this is exactly where it would fire.
     const repeatZip = join(workDir, 'repeat-known-account.zip');
     buildBackupZip(repeatZip, {
@@ -349,6 +350,57 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     const after = existsSync(cur) ? readdirSync(cur) : [];
     expect(after).toContain(written);
     expect(after.length).toBe(before);
+  });
+
+  it('p6 ZIP completion publishes reserved metadata without repeating extraction', async function () {
+    const email = 'p6-zip-completion@mock.test';
+    const zipPath = join(workDir, 'p6-zip-completion.zip');
+    const beforeAccounts = await daemonRpc('accounts.list', {});
+    const beforeSettings = await daemonRpc('settings.get', {});
+    expect(beforeAccounts.ok).toBe(true);
+    expect(beforeSettings.ok).toBe(true);
+    expect(beforeAccounts.v.accounts.some((account) => account.email === email)).toBe(false);
+    const previousTheme = beforeSettings.v.values['mailvault-theme'];
+    const theme = previousTheme === 'dark' ? 'light' : 'dark';
+    const completedBefore = (await rawEvents('import-progress')).filter((event) => event.payload.active === false).length;
+    buildBackupZip(zipPath, {
+      accountEmail: email,
+      mailbox: 'INBOX',
+      files: [{ name: `777001${INFO_PREFIX}A.eml`, body: emlBody('P6 exact ZIP completion', 'p6-zip-completion') }],
+      settings: { theme },
+    });
+
+    await browser.waitUntil(() => browser.execute(() => typeof window.__P6_IMPORT_BACKUP_FROM_PATH__ === 'function'), {
+      timeout: 15_000, interval: 200, timeoutMsg: 'production ZIP import flow was not exposed to the connected test',
+    });
+    const flow = await browser.executeAsync((sourcePath, done) => {
+      window.__P6_IMPORT_BACKUP_FROM_PATH__(sourcePath)
+        .then((result) => done({ ok: true, result }), (error) => done({ ok: false, message: String(error) }));
+    }, zipPath);
+    expect(flow.ok).toBe(true);
+    expect(flow.result?.complete).toBe(true);
+    expect(flow.result?.newAccounts).toHaveLength(1);
+    const descriptor = flow.result.newAccounts[0];
+    expect(descriptor.email).toBe(email);
+    expect(typeof flow.result.importIntentId).toBe('string');
+    expect(flow.result.importIntentId.length).toBeGreaterThan(0);
+
+    const cur = join(appDataDir(browser.testDataDir), 'Maildir', descriptor.id, 'INBOX', 'cur');
+    expect(existsSync(cur)).toBe(true);
+    expect(readdirSync(cur).filter((name) => name.startsWith(`777001${INFO_SEP}`))).toHaveLength(1);
+    const afterAccounts = await daemonRpc('accounts.list', {});
+    expect(afterAccounts.ok).toBe(true);
+    expect(afterAccounts.v.accounts.filter((account) => account.id === descriptor.id && account.email === email)).toHaveLength(1);
+    expect(readAccountsJson(browser.testDataDir).some((account) => account.id === descriptor.id)).toBe(true);
+    const completedAfter = (await rawEvents('import-progress')).filter((event) => event.payload.active === false).length;
+    expect(completedAfter - completedBefore).toBe(1);
+
+    await browser.waitUntil(async () => {
+      try {
+        const settings = await daemonRpc('settings.get', {});
+        return settings.ok && settings.v.values['mailvault-theme'] === theme;
+      } catch { return false; }
+    }, { timeout: 15_000, interval: 200, timeoutMsg: 'ZIP settings were not applied after native metadata completion' });
   });
 
   it('(f) daemon.pid never changed across the whole run', function () {

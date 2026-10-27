@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Reimporting a retired account remaps only its refused ID once after a confirmed no-effect native refusal. ZIP restore now publishes new accounts only after complete extraction and exact metadata completion, before applying settings. The legacy direct password command refuses writes while its remaining caller moves to the native workflow.
+
 - Keep Archive & delete jobs and each cleanup account pass attached to their original account until the job and its started disk work finish. Stale previews and cleanup selections cannot restart work for a retired account.
 
 - Keep archive, bulk delete, restore, upload, format conversion and rehome work attached to their original account lifecycle owner through actual child completion. ZIP imports now bind existing targets to the current account document and keep new targets private until confirmed metadata activation; partial imports are not replayed.

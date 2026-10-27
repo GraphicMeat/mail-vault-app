@@ -91,6 +91,15 @@ function isReply(method, r, params = {}) {
   if (workflowMethod(method)) return isWorkflowReply(r) && (r.ok === false
     || r.account.id === (method === 'accounts.add' ? params.account?.id : params.id)
       && (method !== 'accounts.update' && r.account.oauth2Transport !== 'graph' || r.connectionCheck === null));
+  if (method === 'accounts.save' && object(r) && Object.hasOwn(r, 'outcome')) {
+    const ids = r.retiredIds;
+    const requested = params.entries?.map(entry => entry?.id);
+    return params.ifAbsent === true && Array.isArray(requested)
+      && r.outcome === 'retiredIdsRefused' && r.effects === 'none'
+      && Object.keys(r).length === 3 && Array.isArray(ids) && ids.length > 0
+      && ids.every(id => typeof id === 'string' && id.length > 0 && requested.includes(id))
+      && new Set(ids).size === ids.length;
+  }
   if (!object(r) || !Number.isInteger(r.version) || r.version < 0) return false;
   if (method === 'accounts.list') return Array.isArray(r.accounts);
   if (method === 'accounts.get') return r.account === null || object(r.account);
@@ -320,6 +329,7 @@ export async function saveAccounts(entries) {
   }
   const requested = new Set(entries.map(e => e.id));
   const reply = await persistAccount({ entries, ifAbsent: true });
+  if (reply.outcome === 'retiredIdsRefused') return reply;
   const completed = [...reply.accepted, ...Object.keys(reply.skipped)];
   if (completed.length !== requested.size || new Set(completed).size !== completed.length || completed.some(id => !requested.has(id))) {
     markNativeMutationUncertain();
@@ -400,6 +410,25 @@ export async function ensureAccountsInFile(accounts) {
   const reply = await accountsCall('accounts.put', { entries, ifAbsent: true });
   const added = Array.isArray(reply.changed) ? reply.changed.length : 0;
   if (added > 0) console.log('[db.js] Backfilled', added, 'accounts to accounts.json');
+}
+
+// Complete the exact private ZIP intent returned by import_backup. The daemon
+// checks every descriptor against its live reservation before admitting the
+// batch; this wrapper does not sanitize or rebuild those descriptors.
+export async function completeZipImportAccounts(entries, importIntentId) {
+  if (!Array.isArray(entries) || !entries.length || typeof importIntentId !== 'string' || !importIntentId
+    || entries.some(entry => !object(entry) || typeof entry.id !== 'string' || !entry.id)
+    || new Set(entries.map(entry => entry.id)).size !== entries.length) {
+    throw new Error('errors.accountsInvalid');
+  }
+  const reply = await accountsCall('accounts.put', { entries, ifAbsent: true, importIntentId });
+  const expected = new Set(entries.map(entry => entry.id));
+  if (reply.changed.length !== expected.size || new Set(reply.changed).size !== expected.size
+    || reply.changed.some(id => !expected.has(id))) {
+    markNativeMutationUncertain();
+    throw new Error('errors.accountsWriteFailed');
+  }
+  return reply;
 }
 
 export async function getAccounts() {

@@ -86,7 +86,7 @@ export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
 
   const idMap = {};
   const importedIds = new Set();
-  const toSave = [];
+  let toSave = [];
   for (const file of bundle.accounts || []) {
     const key = accountLogicalKey(file);
     const match = existingByKey.get(key);
@@ -102,7 +102,20 @@ export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
   }
 
   // Throws E_KEYCHAIN_UNAVAILABLE before any write, E_KEYCHAIN_WRITE if a write fails.
-  const accepted = await saveAccounts(toSave);
+  let accepted = await saveAccounts(toSave);
+  if (accepted.outcome === 'retiredIdsRefused') {
+    const remapped = new Map(accepted.retiredIds.map(id => [id, crypto.randomUUID()]));
+    for (const [fileId, targetId] of Object.entries(idMap)) {
+      if (remapped.has(targetId)) idMap[fileId] = remapped.get(targetId);
+    }
+    toSave = toSave.map(row => remapped.has(row.id) ? { ...row, id: remapped.get(row.id) } : row);
+    for (const [oldId, newId] of remapped) {
+      existingIds.delete(oldId);
+      existingIds.add(newId);
+    }
+    accepted = await saveAccounts(toSave);
+    if (accepted.outcome === 'retiredIdsRefused') throw new Error('E_KEYCHAIN_WRITE: errors.keychainBusy');
+  }
   const acceptedIds = new Set(accepted.accepted);
   for (const [fileId, targetId] of Object.entries(idMap)) {
     if (Object.hasOwn(accepted.skipped, targetId)) idMap[fileId] = accepted.skipped[targetId];

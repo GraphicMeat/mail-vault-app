@@ -61,6 +61,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 const { default: BackupRestore } = await import('../BackupRestore');
 const { useMailStore } = await import('../../../stores/mailStore');
+const { safeStorage } = await import('../../../stores/safeStorage');
 
 const NEW_ACCOUNTS = [
   { id: 'new-alice', email: 'alice@test.com', imapHost: 'imap.alice.test', smtpHost: 'smtp.alice.test', createdAt: '2026-01-01T00:00:00Z' },
@@ -79,6 +80,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   delete window.__MAILVAULT_DEMO__;
   delete window.__TAURI__;
   vi.unstubAllGlobals();
@@ -87,7 +89,7 @@ afterEach(() => {
 it('merges import_backup\'s newAccounts descriptors into accounts.json and lists their emails, not [object Object]', async () => {
   sendMock.mockImplementation((cmd, args) => {
     if (cmd === 'import_backup') {
-      return Promise.resolve({ emailCount: 5, accountCount: 2, newAccounts: NEW_ACCOUNTS, settingsJson: null });
+      return Promise.resolve({ emailCount: 5, accountCount: 2, newAccounts: NEW_ACCOUNTS, settingsJson: null, complete: true, importIntentId: 'intent-exact' });
     }
     return sendDefault(cmd, args);
   });
@@ -101,6 +103,8 @@ it('merges import_backup\'s newAccounts descriptors into accounts.json and lists
   expect(onDisk.find((a) => a.email === 'existing@test.com')).toBeTruthy();
   expect(onDisk.find((a) => a.email === 'alice@test.com')).toMatchObject({ id: 'new-alice', imapHost: 'imap.alice.test' });
   expect(onDisk.find((a) => a.email === 'bob@test.com')).toMatchObject({ id: 'new-bob' });
+  const completion = sendMock.mock.calls.find(([cmd]) => cmd === 'accounts.put');
+  expect(completion[1]).toEqual({ entries: NEW_ACCOUNTS, ifAbsent: true, importIntentId: 'intent-exact' });
 
   const msg = window.alert.mock.calls.map((c) => c[0]).join('\n');
   expect(msg).toContain('alice@test.com');
@@ -124,7 +128,7 @@ it('round-trips account hosts: export manifest -> import -> accounts.json', asyn
     if (cmd === 'import_backup') {
       // The daemon mints a fresh id per manifest account it does not know.
       const newAccounts = manifestAccounts.map((a) => ({ ...a, id: 'restored-carol', createdAt: '2026-01-01T00:00:00Z' }));
-      return Promise.resolve({ emailCount: 1, accountCount: 1, newAccounts, settingsJson: null });
+      return Promise.resolve({ emailCount: 1, accountCount: 1, newAccounts, settingsJson: null, complete: true, importIntentId: 'intent-exact' });
     }
     return sendDefault(cmd, args);
   });
@@ -144,6 +148,73 @@ it('round-trips account hosts: export manifest -> import -> accounts.json', asyn
   expect(onDisk).toEqual([expect.objectContaining({
     id: 'restored-carol', email: 'carol@test.com', imapHost: 'imap.carol.test', smtpHost: 'smtp.carol.test',
   })]);
+});
+
+it('incomplete ZIP import does not publish metadata or settings and never repeats extraction', async () => {
+  const before = fsFiles[ACCOUNTS_PATH];
+  const settingsWrites = vi.spyOn(safeStorage, 'setItem');
+  sendMock.mockImplementation((cmd, args) => cmd === 'import_backup'
+    ? Promise.resolve({ emailCount: 1, accountCount: 2, newAccounts: NEW_ACCOUNTS,
+      settingsJson: JSON.stringify({ theme: 'light', settings: '{"language":"lt"}' }),
+      complete: false, importIntentId: 'partial-intent' })
+    : sendDefault(cmd, args));
+
+  render(<BackupRestore />);
+  fireEvent.click(screen.getByRole('button', { name: /Import Backup/i }));
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+
+  expect(sendMock.mock.calls.filter(([cmd]) => cmd === 'import_backup')).toHaveLength(1);
+  expect(sendMock.mock.calls.filter(([cmd]) => cmd === 'accounts.put')).toHaveLength(0);
+  expect(fsFiles[ACCOUNTS_PATH]).toBe(before);
+  expect(settingsWrites).not.toHaveBeenCalled();
+  expect(window.alert.mock.calls[0][0]).toMatch(/incomplete/i);
+});
+
+it('incomplete existing-account-only ZIP still blocks settings and success', async () => {
+  const settingsWrites = vi.spyOn(safeStorage, 'setItem');
+  sendMock.mockImplementation((cmd, args) => cmd === 'import_backup'
+    ? Promise.resolve({ emailCount: 1, accountCount: 1, newAccounts: [],
+      settingsJson: JSON.stringify({ theme: 'light' }), complete: false, importIntentId: 'partial' })
+    : sendDefault(cmd, args));
+  render(<BackupRestore />);
+  fireEvent.click(screen.getByRole('button', { name: /Import Backup/i }));
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+  expect(sendMock.mock.calls.filter(([cmd]) => cmd === 'import_backup')).toHaveLength(1);
+  expect(sendMock.mock.calls.filter(([cmd]) => cmd === 'accounts.put')).toHaveLength(0);
+  expect(settingsWrites).not.toHaveBeenCalled();
+  expect(window.alert.mock.calls[0][0]).toMatch(/incomplete/i);
+});
+
+it('complete existing-account-only ZIP restores settings without metadata completion', async () => {
+  const settingsWrites = vi.spyOn(safeStorage, 'setItem');
+  sendMock.mockImplementation((cmd, args) => cmd === 'import_backup'
+    ? Promise.resolve({ emailCount: 1, accountCount: 1, newAccounts: [],
+      settingsJson: JSON.stringify({ theme: 'light' }), complete: true, importIntentId: 'finished' })
+    : sendDefault(cmd, args));
+  render(<BackupRestore />);
+  fireEvent.click(screen.getByRole('button', { name: /Import Backup/i }));
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+  expect(sendMock.mock.calls.filter(([cmd]) => cmd === 'accounts.put')).toHaveLength(0);
+  expect(settingsWrites).toHaveBeenCalledWith('mailvault-theme', 'light');
+  expect(window.alert.mock.calls[0][0]).toContain('Backup restored');
+});
+
+it('unknown ZIP metadata completion blocks settings and does not repeat extraction', async () => {
+  const settingsWrites = vi.spyOn(safeStorage, 'setItem');
+  sendMock.mockImplementation((cmd, args) => {
+    if (cmd === 'import_backup') return Promise.resolve({ emailCount: 2, accountCount: 2,
+      newAccounts: NEW_ACCOUNTS, settingsJson: JSON.stringify({ theme: 'light' }),
+      complete: true, importIntentId: 'intent-exact' });
+    if (cmd === 'accounts.put') return Promise.resolve({ version: 2, changed: ['new-alice'] });
+    return sendDefault(cmd, args);
+  });
+  render(<BackupRestore />);
+  fireEvent.click(screen.getByRole('button', { name: /Import Backup/i }));
+  await waitFor(() => expect(window.alert).toHaveBeenCalled(), { timeout: 3000 });
+  expect(sendMock.mock.calls.filter(([cmd]) => cmd === 'import_backup')).toHaveLength(1);
+  expect(sendMock.mock.calls.filter(([cmd]) => cmd === 'accounts.put')).toHaveLength(1);
+  expect(settingsWrites).not.toHaveBeenCalled();
+  expect(window.alert.mock.calls[0][0]).not.toContain('Backup restored');
 });
 
 // Importing an MBOX twice skips what the folder already holds; the success

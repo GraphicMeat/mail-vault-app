@@ -23,6 +23,7 @@ export {
   getAccountsWithoutPasswords,
   accountLogicalKey,
   ensureAccountsInFile,
+  completeZipImportAccounts,
   getAccounts,
   getAccount,
   updateOAuth2Tokens,

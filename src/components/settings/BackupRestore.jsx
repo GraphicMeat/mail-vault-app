@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useMailStore } from '../../stores/mailStore';
@@ -104,17 +104,20 @@ export default function BackupRestore() {
     }
   };
 
-  const handleImportData = async () => {
+  const handleImportData = async (sourcePathOverride) => {
     if (!invoke) {
       alert(t('settings.backup.restore.importingBackupOnlyAvailableDesktop'));
       return;
     }
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
-      const sourcePath = await open({
-        filters: [{ name: t('settings.backup.restore.zipArchives'), extensions: ['zip'] }],
-        multiple: false,
-      });
+      // The connected test reaches this same production flow with a fixture
+      // path because its native driver cannot operate the macOS file picker.
+      const sourcePath = import.meta.env.VITE_E2E === '1' && typeof sourcePathOverride === 'string'
+        ? sourcePathOverride
+        : await (await import('@tauri-apps/plugin-dialog')).open({
+          filters: [{ name: t('settings.backup.restore.zipArchives'), extensions: ['zip'] }],
+          multiple: false,
+        });
       if (!sourcePath) return;
 
       const store = useMailStore.getState();
@@ -135,14 +138,18 @@ export default function BackupRestore() {
         unlisten();
       }
 
-      // Decision 2: the daemon route never writes accounts.json (a
-      // cross-process race against this file's own JS writer otherwise);
-      // it only returns the new-account descriptors it discovered. The app
-      // merges them itself, before reload, reusing the same batch
-      // read-merge-write helper `init()` already calls for this file.
+      if (result?.complete !== true || !Array.isArray(result.newAccounts)) {
+        throw new Error('Backup import incomplete');
+      }
+      // A complete import still needs its native metadata transaction before
+      // settings or reload. The exact descriptors and private intent must
+      // reach the daemon unchanged.
       if (result.newAccounts.length > 0) {
+        if (typeof result.importIntentId !== 'string' || !result.importIntentId) {
+          throw new Error('Backup import incomplete');
+        }
         const db = await import('../../services/db');
-        await db.ensureAccountsInFile(result.newAccounts);
+        await db.completeZipImportAccounts(result.newAccounts, result.importIntentId);
       }
 
       if (result.settingsJson) {
@@ -170,12 +177,19 @@ export default function BackupRestore() {
           window.location.reload();
         }
       }, 1500);
+      return result;
     } catch (error) {
       console.error('Import error:', error);
       useMailStore.getState().dismissExportProgress();
       alert(t('settings.backup.restore.couldReadBackupFilePick') + (error.message || error));
     }
   };
+
+  useEffect(() => {
+    if (import.meta.env.VITE_E2E !== '1') return undefined;
+    window.__P6_IMPORT_BACKUP_FROM_PATH__ = (path) => handleImportData(path);
+    return () => { delete window.__P6_IMPORT_BACKUP_FROM_PATH__; };
+  }, [handleImportData]);
 
   // ── MBOX Export / Import ──────────────────────────────────────────────────
 

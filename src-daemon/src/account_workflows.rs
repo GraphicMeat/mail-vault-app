@@ -1,6 +1,6 @@
 //! Native account workflows and persistence. Credential IO stays in the common credential
 //! engine; document IO owns its lease through actual blocking completion.
-use crate::account_lifecycle::{PersistenceAuthority, PersistenceOwner};
+use crate::account_lifecycle::{LifecycleError, PersistenceAuthority, PersistenceOwner};
 use crate::credentials::{self, CredChange, CredError};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -865,18 +865,32 @@ async fn save_owned(
         })
         .cloned()
         .collect();
-    let authority = if matches!(&input.request, Request::Create { .. }) && !newly_added.is_empty() {
-        PersistenceAuthority::Create(
-            state
-                .account_lifecycle
-                .reserve_creation(&lease, &input.proof, &newly_added)
-                .map_err(|_| CredError::Busy)?,
-        )
+    let lifecycle_scope =
+        lifecycle_scope_for_save(&scope, &input.proof, preview.prepared.as_ref().unwrap());
+    let authority = if let Request::Create { if_absent, .. } = &input.request {
+        if newly_added.is_empty() {
+            PersistenceAuthority::Ordinary
+        } else {
+            match state.account_lifecycle.reserve_creation_for_save(
+                &lease,
+                &input.proof,
+                &newly_added,
+                &lifecycle_scope,
+                *if_absent && input.source.is_none(),
+            ) {
+                Ok(reservation) => PersistenceAuthority::Create(reservation),
+                Err(LifecycleError::RetiredIds(retired))
+                    if *if_absent && input.source.is_none()
+                        && Instant::now() < deadline && !reply.is_closed() =>
+                {
+                    return Ok(json!({"outcome":"retiredIdsRefused","effects":"none","retiredIds":retired}));
+                }
+                Err(_) => return Err(CredError::Busy.into()),
+            }
+        }
     } else {
         PersistenceAuthority::Ordinary
     };
-    let lifecycle_scope =
-        lifecycle_scope_for_save(&scope, &input.proof, preview.prepared.as_ref().unwrap());
     let persistence = state
         .account_lifecycle
         .try_persistence(lease.clone(), &lifecycle_scope, authority)
@@ -1679,6 +1693,71 @@ mod tests {
         let b_open = rig.state.account_lifecycle.capture("b").is_ok();
         assert!(removed.is_ok() && document_removed && !a_open && b_open,
             "real document retire: removed_ok={}, document_removed={document_removed}, a_open={a_open}, b_open={b_open}", removed.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p6_retired_batch_refuses_before_any_effect() {
+        let a = row("retired", "retired@example.test", "h");
+        let b = row("live", "live@example.test", "h");
+        let rig = Rig::new(vec![b.clone()], vec![clean(a), clean(b)]);
+        rig.call("accounts.remove", json!({"id":"retired"})).await.unwrap();
+        assert!(!rig.blob().contains_key("retired"));
+        assert!(rig.meta().as_array().unwrap().iter().all(|row| row["id"] != "retired"));
+        assert!(matches!(rig.state.account_lifecycle.capture("retired"), Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))));
+        let before_blob = rig.blob();
+        let before_meta = rig.meta();
+        let mut events = rig.state.events.subscribe();
+        let request = json!({"entries":[
+            row("retired", "retired@example.test", "h"),
+            row("fresh", "fresh@example.test", "h")
+        ],"ifAbsent":true});
+        let response = crate::server::handle_request_for_test(&rig.state, "accounts.save", request.clone()).await;
+        println!("P6_NATIVE_REFUSAL_FRAME {}", json!({"request":request,"response":serde_json::to_value(&response).unwrap()}));
+        assert_eq!(rig.blob(), before_blob);
+        assert_eq!(rig.meta(), before_meta);
+        assert!(events.try_recv().is_err());
+        assert!(rig.state.account_lifecycle.capture("fresh").is_err());
+        assert!(rig.state.account_lifecycle.capture("live").is_ok());
+        assert_eq!(response.result, Some(json!({"outcome":"retiredIdsRefused","effects":"none","retiredIds":["retired"]})));
+        assert!(response.error.is_none());
+
+        let retry = json!({"entries":[
+            row("remapped", "retired@example.test", "h"),
+            row("fresh", "fresh@example.test", "h")
+        ],"ifAbsent":true});
+        let accepted = crate::server::handle_request_for_test(&rig.state, "accounts.save", retry.clone()).await;
+        println!("P6_NATIVE_ACCEPTED_FRAME {}", json!({"request":retry,"response":serde_json::to_value(&accepted).unwrap()}));
+        assert!(accepted.error.is_none());
+        assert_eq!(accepted.result.as_ref().unwrap()["accepted"], json!(["remapped", "fresh"]));
+        assert!(rig.state.account_lifecycle.capture("retired").is_err());
+        assert!(rig.state.account_lifecycle.capture("remapped").is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p6_retired_refusal_excludes_live_logical_skips() {
+        let a = row("retired", "retired@example.test", "h");
+        let b = row("live", "live@example.test", "h");
+        let rig = Rig::new(vec![b.clone()], vec![clean(a), clean(b)]);
+        rig.call("accounts.remove", json!({"id":"retired"})).await.unwrap();
+        let result = rig.save(json!({"entries":[
+            row("retired", "live@example.test", "h"),
+            row("fresh", "fresh@example.test", "h")
+        ],"ifAbsent":true})).await.unwrap();
+        assert_eq!(result["accepted"], json!(["fresh"]));
+        assert_eq!(result["skipped"], json!({"retired":"live"}));
+        assert!(rig.state.account_lifecycle.capture("retired").is_err());
+        assert!(rig.state.account_lifecycle.capture("fresh").is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p6_unknown_save_never_claims_pre_effect_refusal() {
+        let rig = Rig::new(vec![], vec![]);
+        post_commit_uncertainty_paths().lock().unwrap().insert(rig.state.app_dir.clone());
+        let result = crate::server::handle_request_for_test(&rig.state, "accounts.save",
+            json!({"entries":[row("fresh", "fresh@example.test", "h")],"ifAbsent":true})).await;
+        assert!(result.error.is_some());
+        assert!(result.result.is_none());
+        assert!(rig.meta().as_array().unwrap().iter().any(|row| row["id"] == "fresh"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

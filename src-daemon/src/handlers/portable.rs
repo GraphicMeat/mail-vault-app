@@ -444,6 +444,38 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn p6_unlocked_portable_set_credentials_refuses_without_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("credentials.sealed");
+        let sealed = crate::credentials::TestSealedGuard::install(path.clone());
+        sealed.0.unlock("drive passphrase").unwrap();
+        let original = std::collections::HashMap::from([(
+            "live-account".to_string(),
+            r#"{"email":"live@example.com","password":"original"}"#.to_string(),
+        )]);
+        sealed.0.set_credentials(original.clone()).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let state = st();
+
+        let response = route(
+            &state,
+            "portable.set_credentials",
+            &json!({"credentials":{"live-account":"replacement","new-account":"new"}}),
+            json!(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.error.unwrap().message, "errors.daemonOutdated");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(sealed.0.secrets().unwrap().credentials, original);
+        let read = route(&state, "portable.get_credentials", &json!({}), json!(2))
+            .await
+            .unwrap();
+        assert_eq!(read.result.unwrap()["credentials"]["live-account"],
+                   json!(r#"{"email":"live@example.com","password":"original"}"#));
+    }
+
     /// A host whose mail sits in the app data dir, one account in the (test)
     /// keychain, and a stub app bundle to copy.
     struct Host {

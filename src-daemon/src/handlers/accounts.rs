@@ -15,7 +15,7 @@
 //! changed something emits `accounts-changed {ids, version}`: ids only.
 //! Errors are catalog keys (`errors.accounts*`).
 
-use crate::account_lifecycle::{PersistenceAuthority, PersistenceOwner};
+use crate::account_lifecycle::{ImportTargetReservation, PersistenceAuthority, PersistenceOwner};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::accounts_doc::{self, AccountsError};
@@ -128,6 +128,42 @@ fn scope(
     Ok(scope)
 }
 
+fn zip_completion(
+    state: &DaemonState,
+    method: &str,
+    params: &Value,
+) -> Result<Option<(String, Vec<(crate::backup_zip::AccountsJsonEntry, ImportTargetReservation)>)>, AccountsError> {
+    let Some(fields) = params.as_object() else { return Err(AccountsError::Invalid) };
+    if !fields.contains_key("importIntentId") { return Ok(None); }
+    if method != "accounts.put" || fields.len() != 3
+        || fields.get("ifAbsent") != Some(&Value::Bool(true))
+    {
+        return Err(AccountsError::Invalid);
+    }
+    let intent = fields.get("importIntentId").and_then(Value::as_str)
+        .filter(|value| !value.is_empty()).ok_or(AccountsError::Invalid)?;
+    let entries = fields.get("entries").and_then(Value::as_array)
+        .filter(|entries| !entries.is_empty()).ok_or(AccountsError::Invalid)?;
+    let mut ids = std::collections::BTreeSet::new();
+    let mut emails = std::collections::BTreeSet::new();
+    let mut targets = Vec::with_capacity(entries.len());
+    for raw in entries {
+        let descriptor: crate::backup_zip::AccountsJsonEntry = serde_json::from_value(raw.clone())
+            .map_err(|_| AccountsError::Invalid)?;
+        if serde_json::to_value(&descriptor).map_err(|_| AccountsError::Invalid)? != *raw
+            || descriptor.id.is_empty()
+            || !ids.insert(descriptor.id.clone())
+            || !descriptor.email.as_ref().is_some_and(|email| !email.is_empty() && emails.insert(email.clone()))
+        {
+            return Err(AccountsError::Invalid);
+        }
+        let reservation = state.zip_intents.reservation_for(intent, &descriptor)
+            .ok_or(AccountsError::Invalid)?;
+        targets.push((descriptor, reservation));
+    }
+    Ok(Some((intent.to_owned(), targets)))
+}
+
 async fn run_owned(
     state: &Arc<DaemonState>,
     method: &str,
@@ -136,6 +172,7 @@ async fn run_owned(
 ) -> RpcResponse {
     let doc = accounts_doc::shared(&state.app_dir);
     let mut owner: Option<PersistenceOwner> = None;
+    let mut zip_owners: Option<(String, Vec<(crate::backup_zip::AccountsJsonEntry, PersistenceOwner)>)> = None;
     let mut preserved = None;
     let mut recovery = None;
     if accounts_doc::writes(method) {
@@ -152,6 +189,10 @@ async fn run_owned(
         };
         let mut scope = match scope(Some(&listed), method, params) {
             Ok(s) => s,
+            Err(e) => return RpcResponse::error(id, ipc::INVALID_PARAMS, e.catalog_key()),
+        };
+        let zip_targets = match zip_completion(state, method, params) {
+            Ok(targets) => targets,
             Err(e) => return RpcResponse::error(id, ipc::INVALID_PARAMS, e.catalog_key()),
         };
         if scope.whole_store {
@@ -223,34 +264,49 @@ async fn run_owned(
             _ => Default::default(),
         };
         lifecycle_scope.ids.extend(additions.iter().cloned());
-        for skipped in skipped_put {
-            if !present.contains(&skipped) && !additions.contains(&skipped) {
-                lifecycle_scope.ids.remove(&skipped);
+        for skipped in &skipped_put {
+            if !present.contains(skipped) && !additions.contains(skipped) {
+                lifecycle_scope.ids.remove(skipped);
             }
         }
-        let authority = if additions.is_empty() {
-            PersistenceAuthority::Ordinary
-        } else {
-            match state
-                .account_lifecycle
-                .reserve_creation(&held, &listed, &additions)
-            {
-                Ok(reservation) => PersistenceAuthority::Create(reservation),
-                Err(_) => {
-                    return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")
-                }
+        let held_owner = if let Some((intent, targets)) = zip_targets {
+            let target_ids: std::collections::BTreeSet<_> = targets.iter().map(|(descriptor, _)| descriptor.id.clone()).collect();
+            if additions != target_ids || !skipped_put.is_empty() {
+                return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.accountsConflict");
             }
-        };
-        let held_owner =
-            match state
-                .account_lifecycle
-                .try_persistence(held, &lifecycle_scope, authority)
-            {
-                Ok(owner) => owner,
-                Err(_) => {
-                    return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy")
+            let preservation_ids: std::collections::BTreeSet<_> = lifecycle_scope.ids.difference(&additions).cloned().collect();
+            let mut acquired = Vec::with_capacity(targets.len());
+            for (descriptor, reservation) in targets {
+                let mut ids = preservation_ids.clone();
+                ids.insert(descriptor.id.clone());
+                let target_scope = crate::account_workflows::AccountWriteScope {
+                    ids, keys: lifecycle_scope.keys.clone(), whole_store: false,
+                };
+                let acquired_owner = match state.account_lifecycle.try_import_persistence(
+                    held.clone(), &target_scope, &reservation,
+                ) {
+                    Ok(owner) => owner,
+                    Err(_) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy"),
+                };
+                acquired.push((descriptor, acquired_owner));
+            }
+            let preservation_owner = acquired[0].1.clone();
+            zip_owners = Some((intent, acquired));
+            preservation_owner
+        } else {
+            let authority = if additions.is_empty() {
+                PersistenceAuthority::Ordinary
+            } else {
+                match state.account_lifecycle.reserve_creation(&held, &listed, &additions) {
+                    Ok(reservation) => PersistenceAuthority::Create(reservation),
+                    Err(_) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy"),
                 }
             };
+            match state.account_lifecycle.try_persistence(held, &lifecycle_scope, authority) {
+                Ok(owner) => owner,
+                Err(_) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, "errors.keychainBusy"),
+            }
+        };
         {
             if accounts_doc::legacy_secrets_representable(&listed.accounts) {
                 let records: std::collections::HashMap<_, _> =
@@ -280,7 +336,7 @@ async fn run_owned(
                 }
             }
         }
-        owner = Some(held_owner);
+        if zip_owners.is_none() { owner = Some(held_owner); }
         #[cfg(test)]
         pause_after_preservation(&state.app_dir).await;
     } else if method == "accounts.list" {
@@ -302,6 +358,7 @@ async fn run_owned(
     let state = Arc::clone(state);
     let joined = tokio::task::spawn_blocking(move || {
         let _owner = owner;
+        let _zip_owners = zip_owners;
         #[cfg(test)]
         let _done = pause_document(&state.app_dir);
         let policy = preserved
@@ -326,9 +383,14 @@ async fn run_owned(
                 .account_lifecycle
                 .recover_uncertain_membership(&marker, &lease, &listing);
         }
-        state
-            .account_lifecycle
-            .apply_committed_membership(_owner.as_ref(), &out.membership);
+        if let Some((intent, owners)) = &_zip_owners {
+            for (descriptor, owner) in owners {
+                state.account_lifecycle.apply_committed_membership(Some(owner), &out.membership);
+                state.zip_intents.consume_confirmed(intent, descriptor, &out.membership.added);
+            }
+        } else {
+            state.account_lifecycle.apply_committed_membership(_owner.as_ref(), &out.membership);
+        }
         if let Some(change) = &out.changed {
             state.events.emit(
                 CHANGED_EVENT,
@@ -402,6 +464,32 @@ async fn pause_after_preservation(path: &std::path::Path) {
 mod tests {
     use super::*;
     use crate::server::{handle_request_for_test, DaemonState};
+    use std::io::Write;
+
+    fn p6_zip_fixture(dir: &std::path::Path) -> std::path::PathBuf {
+        let path = dir.join("p6-accounts.zip");
+        let file = std::fs::File::create(&path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        let manifest = crate::backup_zip::BackupManifest {
+            version: 2,
+            exported_at: "2026-01-01T00:00:00Z".into(),
+            accounts: ["alice@test.com", "bob@test.com"].into_iter().map(|email| {
+                crate::backup_zip::BackupAccount {
+                    email: email.into(), imap_server: Some("imap.test".into()), smtp_server: None,
+                }
+            }).collect(),
+            settings: None,
+        };
+        zip.start_file("mailvault-backup/manifest.json", options).unwrap();
+        zip.write_all(serde_json::to_string(&manifest).unwrap().as_bytes()).unwrap();
+        for (email, uid) in [("alice@test.com", 11u32), ("bob@test.com", 12u32)] {
+            zip.start_file(format!("mailvault-backup/emails/{email}/INBOX/{uid}:2,.eml"), options).unwrap();
+            zip.write_all(b"Subject: imported\r\n\r\nsynthetic body").unwrap();
+        }
+        zip.finish().unwrap();
+        path
+    }
 
     struct DocPause {
         release: Option<std::sync::mpsc::Sender<()>>,
@@ -485,6 +573,90 @@ mod tests {
             },
             state,
         )
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p6_zip_batch_activates_only_exact_reserved_descriptors() {
+        let (dir, state) = rig();
+        std::fs::write(dir.path().join("accounts.json"), "[]").unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        let imported = crate::backup_zip::import(&state, p6_zip_fixture(dir.path()), Vec::new(), |_, _| {}).unwrap();
+        assert!(imported.complete);
+        assert_eq!(imported.new_accounts.len(), 2);
+        let entries = serde_json::to_value(&imported.new_accounts).unwrap();
+        for descriptor in &imported.new_accounts {
+            let uid = if descriptor.email.as_deref() == Some("alice@test.com") { 11u32 } else { 12u32 };
+            assert!(mailvault_core::message_store::read_raw(&dir.path().join("mail"), &descriptor.id, "INBOX", uid).unwrap().is_some());
+            assert!(state.account_lifecycle.capture(&descriptor.id).is_err());
+        }
+        assert_eq!(call(&state, "accounts.put", json!({"entries":entries.clone(),"ifAbsent":true})).await,
+            Err("errors.keychainBusy".into()));
+        assert_eq!(on_disk(&dir), json!([]));
+        let mut forged = entries.clone();
+        forged[0]["imapHost"] = json!("forged.test");
+        assert!(call(&state, "accounts.put", json!({"entries":forged,"ifAbsent":true,"importIntentId":imported.import_intent_id.clone()})).await.is_err());
+        assert_eq!(on_disk(&dir), json!([]));
+        let completed = call(&state, "accounts.put", json!({"entries":entries,"ifAbsent":true,"importIntentId":imported.import_intent_id})).await.unwrap();
+        assert_eq!(completed["changed"].as_array().unwrap().len(), 2);
+        assert_eq!(on_disk(&dir).as_array().unwrap().len(), 2);
+        for descriptor in &imported.new_accounts {
+            assert!(state.account_lifecycle.capture(&descriptor.id).is_ok());
+            assert!(state.zip_intents.reservation_for(&imported.import_intent_id, descriptor).is_none());
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p6_zip_late_document_child_consumes_actual_membership() {
+        let (dir, state) = rig();
+        std::fs::write(dir.path().join("accounts.json"), "[]").unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        let imported = crate::backup_zip::import(&state, p6_zip_fixture(dir.path()), Vec::new(), |_, _| {}).unwrap();
+        let entries = serde_json::to_value(&imported.new_accounts).unwrap();
+        let mut pause = DocPause::arm(&state);
+        let held = Arc::clone(&state);
+        let intent = imported.import_intent_id.clone();
+        let waiter = tokio::spawn(async move {
+            call(&held, "accounts.put", json!({"entries":entries,"ifAbsent":true,"importIntentId":intent})).await
+        });
+        pause.entered();
+        assert_eq!(on_disk(&dir), json!([]));
+        for descriptor in &imported.new_accounts {
+            assert!(state.account_lifecycle.capture(&descriptor.id).is_err());
+        }
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        pause.finish();
+        assert_eq!(on_disk(&dir).as_array().unwrap().len(), 2);
+        for descriptor in &imported.new_accounts {
+            assert!(state.account_lifecycle.capture(&descriptor.id).is_ok());
+            assert!(state.zip_intents.reservation_for(&imported.import_intent_id, descriptor).is_none());
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn p6_zip_failed_or_unknown_commit_never_fabricates_activation() {
+        let (dir, state) = rig();
+        std::fs::write(dir.path().join("accounts.json"), "[]").unwrap();
+        std::fs::write(dir.path().join("credentials.json"), "{}").unwrap();
+        let imported = crate::backup_zip::import(&state, p6_zip_fixture(dir.path()), Vec::new(), |_, _| {}).unwrap();
+        let entries = serde_json::to_value(&imported.new_accounts).unwrap();
+        let mut pause = DocPause::arm(&state);
+        let held = Arc::clone(&state);
+        let intent = imported.import_intent_id.clone();
+        let waiter = tokio::spawn(async move {
+            call(&held, "accounts.put", json!({"entries":entries,"ifAbsent":true,"importIntentId":intent})).await
+        });
+        pause.entered();
+        let path = dir.path().join("accounts.json");
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        pause.finish();
+        for descriptor in &imported.new_accounts {
+            assert!(state.account_lifecycle.capture(&descriptor.id).is_err());
+            assert!(state.zip_intents.reservation_for(&imported.import_intent_id, descriptor).is_some());
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

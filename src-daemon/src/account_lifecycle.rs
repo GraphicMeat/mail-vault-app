@@ -360,6 +360,25 @@ impl AccountLifecycle {
         proof: &Listing,
         ids: &BTreeSet<String>,
     ) -> Result<CreationReservation, LifecycleError> {
+        self.reserve_creation_checked(lease, proof, ids, None)
+    }
+    pub fn reserve_creation_for_save(
+        &self,
+        lease: &AccountLease,
+        proof: &Listing,
+        ids: &BTreeSet<String>,
+        scope: &AccountWriteScope,
+        allow_retired_refusal: bool,
+    ) -> Result<CreationReservation, LifecycleError> {
+        self.reserve_creation_checked(lease, proof, ids, Some((scope, allow_retired_refusal)))
+    }
+    fn reserve_creation_checked(
+        &self,
+        lease: &AccountLease,
+        proof: &Listing,
+        ids: &BTreeSet<String>,
+        save_scope: Option<(&AccountWriteScope, bool)>,
+    ) -> Result<CreationReservation, LifecycleError> {
         if ids.is_empty() || ids.iter().any(|id| id.is_empty()) {
             return Err(LifecycleError::Unknown);
         }
@@ -368,6 +387,9 @@ impl AccountLifecycle {
             ..Default::default()
         };
         if !lease.covers(&required) {
+            return Err(LifecycleError::Busy);
+        }
+        if save_scope.is_some_and(|(scope, _)| !lease.covers(scope)) {
             return Err(LifecycleError::Busy);
         }
         if proof.accounts.iter().any(|row| {
@@ -381,8 +403,27 @@ impl AccountLifecycle {
         if !s.ready {
             return Err(LifecycleError::Unready);
         }
-        if ids.iter().any(|id| s.entries.contains_key(id)) {
-            return Err(LifecycleError::Busy);
+        if let Some((scope, _)) = save_scope {
+            for id in scope.ids.difference(ids) {
+                match s.entries.get(id) {
+                    Some(entry) if entry.phase == Phase::Open => (),
+                    Some(_) => return Err(LifecycleError::Busy),
+                    None => return Err(LifecycleError::Unknown),
+                }
+            }
+        }
+        let mut retired = BTreeSet::new();
+        for id in ids {
+            match s.entries.get(id) {
+                None => (),
+                Some(entry) if entry.phase == Phase::Retired && save_scope.is_some_and(|(_, allow)| allow) => {
+                    retired.insert(id.clone());
+                }
+                Some(_) => return Err(LifecycleError::Busy),
+            }
+        }
+        if !retired.is_empty() {
+            return Err(LifecycleError::RetiredIds(retired));
         }
         let mut reserved = BTreeMap::new();
         for id in ids {
