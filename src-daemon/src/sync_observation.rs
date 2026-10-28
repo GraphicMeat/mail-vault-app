@@ -249,6 +249,8 @@ pub(crate) async fn cache(state: &Arc<DaemonState>, origin: &Origin, mailbox: &s
     let account_id = origin.original.id().to_owned();
     let mailbox = mailbox.to_owned();
     blocking(move || {
+        #[cfg(test)]
+        crate::handlers::sync_observation::sample_worker_thread_for_test("cache-blocking", &mailbox);
         crate::custody::with_conn(&state, |conn| {
             let meta = mailvault_core::custody::cache::load_meta(conn, &account_id, &mailbox)?
                 .map(|text| serde_json::from_str(&text).map_err(|_| "errors.bulkIdentityUncertain".to_owned()))

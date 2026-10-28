@@ -2176,6 +2176,143 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn sync_observation_rejects_unknown_account_fields_before_credential_lookup() {
+            use std::sync::atomic::Ordering::SeqCst;
+
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let credentials = state.app_dir.join("credentials.json");
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &credentials);
+            let backend = crate::credentials::TestKeychainGuard::install(credentials);
+            let (release, gate) = std::sync::mpsc::channel::<()>();
+            *backend.0.shared.gate.lock().unwrap() = Some(gate);
+
+            let oauth_account = json!({
+                "id": "acc1", "email": "user@example.com", "authType": "oauth2",
+                "imapHost": server.host(), "imapPort": server.port(),
+            });
+            let mut requests = Vec::new();
+            for (method, base) in [
+                ("sync.probe", json!({"op":"check", "accountId":"acc1", "mailbox":"INBOX"})),
+                ("sync.probe", json!({"op":"mark", "accountId":"acc1", "mailbox":"INBOX", "verificationRef":"proof"})),
+                ("sync.probe", json!({"op":"invalidate", "accountId":"acc1", "mailbox":"INBOX"})),
+                ("folders.status", json!({"op":"refresh", "accountId":"acc1", "activeMailbox":"INBOX", "mailboxes":[{"path":"Sent"}]})),
+                ("folders.status", json!({"op":"invalidate", "accountId":"acc1"})),
+            ] {
+                for field in ["account", "accountJson", "targets"] {
+                    let mut params = base.clone();
+                    params[field] = match field {
+                        "account" => oauth_account.clone(),
+                        "accountJson" => json!(oauth_account.to_string()),
+                        _ => json!([{"accountId":"acc1", "account":oauth_account}]),
+                    };
+                    requests.push((method, field, params));
+                }
+            }
+
+            let mut pending = Vec::new();
+            for (method, field, params) in &requests {
+                let state = Arc::clone(&state);
+                let method = *method;
+                let field = *field;
+                let params = params.clone();
+                pending.push(tokio::spawn(async move {
+                    (method, field, boxed_request(&state, req(method, params)).await)
+                }));
+            }
+            let prompt = tokio::time::timeout(std::time::Duration::from_secs(2),
+                futures::future::join_all(pending.iter_mut())).await;
+            let credential_reads = backend.0.shared.starts.load(SeqCst);
+            let token_reads = backend.0.modes.lock().unwrap().len();
+            let _ = release.send(());
+            if prompt.is_err() {
+                for task in &pending { task.abort(); }
+            }
+            let replies = prompt.expect(
+                "strict observation requests must answer before the held credential gate");
+            assert_eq!(credential_reads, 0,
+                "invalid observation fields must perform zero credential reads");
+            assert_eq!(token_reads, 0,
+                "invalid observation fields must perform zero token lookups");
+            for reply in replies {
+                let (method, field, reply) = reply.expect("dispatcher task must not panic");
+                assert_eq!(reply.error.expect("strict request must reject").code,
+                    ipc::INVALID_PARAMS, "{method} accepted forbidden {field}");
+            }
+            assert!(server.commands().is_empty(),
+                "invalid observation requests must perform zero provider commands");
+        }
+
+        #[tokio::test]
+        async fn sync_observation_provider_children_run_on_background_worker() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailboxes(vec![
+                synthetic_mailbox("WorkerProbe", 2), Mailbox::new("WorkerFolder"),
+            ]));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let started = boxed_request(&state, req("sync.now", json!({
+                "account": account, "mailbox": "WorkerProbe", "autoClassify": false,
+            }))).await;
+            let ticket = started.result.expect("seed sync must start")["ticket"]
+                .as_u64().expect("seed sync ticket");
+            let completed = boxed_request(&state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(completed.result.expect("seed sync must finish")["success"], json!(true));
+
+            let capture = crate::handlers::sync_observation::WorkerSampleGuard::start();
+            let probe = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "WorkerProbe",
+            }))).await;
+            assert_eq!(probe.result.expect("probe must answer")["reason"], json!("modseq-match"));
+            let folder = boxed_request(&state, req("folders.status", json!({
+                "op": "refresh", "accountId": "acc1", "activeMailbox": "WorkerProbe",
+                "mailboxes": [{"path": "WorkerFolder"}],
+            }))).await;
+            assert_eq!(folder.result.expect("folder sweep must answer")["rows"]
+                .as_array().map(Vec::len), Some(1));
+
+            let samples = capture.take();
+            let probe_index = samples.iter().position(|sample|
+                sample.kind == "provider-probe" && sample.mailbox == "WorkerProbe")
+                .expect("actual probe provider child must be observed");
+            let probe_worker = &samples[probe_index];
+            let folder_worker = samples.iter().find(|sample|
+                sample.kind == "provider-folder" && sample.mailbox == "WorkerFolder")
+                .expect("actual folder provider child must be observed");
+            for sample in [probe_worker, folder_worker] {
+                assert!(sample.thread_name.as_deref().is_some_and(|name|
+                    name.starts_with("sync-observation-worker")),
+                    "provider child must run on the named background worker: {sample:?}");
+            }
+            let post_provider_cache = samples.iter().skip(probe_index + 1).find(|sample|
+                sample.kind == "cache-blocking" && sample.mailbox == "WorkerProbe")
+                .expect("probe revalidation must include the actual blocking cache child");
+            #[cfg(target_os = "macos")]
+            {
+                let background = libc::qos_class_t::QOS_CLASS_BACKGROUND as u32;
+                for sample in [probe_worker, folder_worker, post_provider_cache] {
+                    assert_eq!(sample.qos, Some(background),
+                        "observation provider and blocking children must use background QoS: {sample:?}");
+                }
+                for sample in [probe_worker, folder_worker] {
+                    assert!(sample.stack_bytes.is_some_and(|bytes| bytes >= 8 * 1024 * 1024),
+                        "observation provider thread must have an explicit 8 MiB stack: {sample:?}");
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = post_provider_cache;
+        }
+
+        #[tokio::test]
         async fn sync_observation_red_equal_modseq_reaches_one_real_select() {
             let _env_lock = crate::credentials::test_env_lock().lock()
                 .unwrap_or_else(|error| error.into_inner());

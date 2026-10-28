@@ -11,6 +11,69 @@ use std::time::Duration;
 const PROBE_DEADLINE: Duration = Duration::from_secs(25);
 const FOLDER_DEADLINE: Duration = Duration::from_secs(120);
 
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(crate) struct WorkerSample {
+    pub kind: &'static str,
+    pub mailbox: String,
+    pub thread_name: Option<String>,
+    #[cfg(target_os = "macos")]
+    pub qos: Option<u32>,
+    #[cfg(target_os = "macos")]
+    pub stack_bytes: Option<usize>,
+}
+
+#[cfg(test)]
+static WORKER_SAMPLES: std::sync::Mutex<Option<Vec<WorkerSample>>> = std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub(crate) struct WorkerSampleGuard;
+
+#[cfg(test)]
+impl WorkerSampleGuard {
+    pub(crate) fn start() -> Self {
+        *WORKER_SAMPLES.lock().unwrap_or_else(|error| error.into_inner()) = Some(Vec::new());
+        Self
+    }
+
+    pub(crate) fn take(&self) -> Vec<WorkerSample> {
+        let mut samples = WORKER_SAMPLES.lock().unwrap_or_else(|error| error.into_inner());
+        samples.as_mut().map(std::mem::take).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+impl Drop for WorkerSampleGuard {
+    fn drop(&mut self) {
+        *WORKER_SAMPLES.lock().unwrap_or_else(|error| error.into_inner()) = None;
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn sample_worker_thread_for_test(kind: &'static str, mailbox: &str) {
+    #[cfg(target_os = "macos")]
+    let (qos, stack_bytes) = unsafe {
+        let thread = libc::pthread_self();
+        let mut class = libc::qos_class_t::QOS_CLASS_UNSPECIFIED;
+        let mut priority = 0;
+        let rc = libc::pthread_get_qos_class_np(thread, &mut class, &mut priority);
+        (if rc == 0 { Some(class as u32) } else { None },
+            Some(libc::pthread_get_stacksize_np(thread) as usize))
+    };
+    let sample = WorkerSample {
+        kind, mailbox: mailbox.to_owned(),
+        thread_name: std::thread::current().name().map(str::to_owned),
+        #[cfg(target_os = "macos")]
+        qos,
+        #[cfg(target_os = "macos")]
+        stack_bytes,
+    };
+    if let Some(samples) = WORKER_SAMPLES.lock()
+        .unwrap_or_else(|error| error.into_inner()).as_mut() {
+        samples.push(sample);
+    }
+}
+
 fn invalid(id: Value) -> RpcResponse {
     RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid")
 }
@@ -99,6 +162,8 @@ async fn check(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Val
     let mailbox = mailbox.to_owned();
     let mut child = tokio::spawn(async move {
         let _operation = operation;
+        #[cfg(test)]
+        sample_worker_thread_for_test("provider-probe", &mailbox);
         let status = if config.uses_jmap() {
             crate::handlers::jmap_bridge::observation_probe_status(&state, &config,
                 current.original.id(), &mailbox, &current.original).await
@@ -183,6 +248,8 @@ async fn refresh(state: &Arc<DaemonState>, account_id: &str, active: Option<&str
     let state = Arc::clone(state);
     let mut child = tokio::spawn(async move {
         let _operation = operation;
+        #[cfg(test)]
+        sample_worker_thread_for_test("provider-folder", paths.first().map(String::as_str).unwrap_or(""));
         let statuses = if config.uses_jmap() {
             crate::handlers::jmap_bridge::observation_folder_status(&state, &config,
                 current.original.id(), paths, &current.original).await

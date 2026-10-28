@@ -1,6 +1,6 @@
 // Source ownership guard for the native observation routes and thin adapters.
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const read = (file) => readFileSync(file, 'utf8');
 const code = (source) => source.split('\n')
@@ -54,5 +54,26 @@ describe('sync observation policy is native', () => {
     const shell = code(read('src-tauri/src/main.rs'));
     expect(shell).toMatch(/"sync\.probe"\s*=>\s*Some\(Duration::from_secs\(30\)\)/);
     expect(shell).toMatch(/"folders\.status"\s*=>\s*Some\(Duration::from_secs\(125\)\)/);
+  });
+
+  it('pins the sized background worker, heap jobs, blocking QoS and foreground yield', () => {
+    const files = [
+      'src-daemon/src/handlers/sync_observation.rs',
+      'src-daemon/src/sync_observation.rs',
+      'src-daemon/src/observation_worker.rs',
+    ];
+    const observation = code(files.filter(existsSync).map(read).join('\n'));
+    expect(observation, 'observation jobs need an owned OS worker thread')
+      .toMatch(/std::thread::Builder::new\s*\(/);
+    expect(observation, 'observation worker needs an explicit 8 MiB stack')
+      .toMatch(/\.stack_size\s*\(\s*8\s*\*\s*1024\s*\*\s*1024\s*\)/);
+    expect(observation, 'observation worker and blocking children need background QoS')
+      .toMatch(/QOS_CLASS_BACKGROUND/);
+    expect(observation, 'long observation futures must be heap spawned on their worker')
+      .toMatch(/(?:tokio::(?:task::)?spawn(?:_local)?|\.spawn_local)\s*\(\s*Box::pin/);
+    expect(observation, 'observation work must yield to foreground reads')
+      .toMatch(/wait_foreground_quiet\s*\(/);
+    expect(observation, 'observation disk reads must use the worker blocking pool')
+      .toMatch(/spawn_blocking\s*\(/);
   });
 });

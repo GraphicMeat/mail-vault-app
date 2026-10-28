@@ -132,6 +132,62 @@ describe('native sync probe adapter', () => {
     expect(await mailboxIsUnchanged(account, id, 'INBOX')).toEqual(settled());
   });
 
+  it('failed INBOX invalidation requires whole-account recovery before Sent can restore trust', async () => {
+    const id = nextId();
+    let invalidations = 0;
+    bridge.send.mockImplementation(async (_method, params) => {
+      if (params.op === 'invalidate' && invalidations++ === 0) {
+        throw new Error('errors.daemonUnavailable');
+      }
+      return params.op === 'invalidate' ? { invalidated: true } : settled();
+    });
+
+    await expect(invalidate(id, 'INBOX')).resolves.toEqual({ invalidated: false });
+    expect(await mailboxIsUnchanged(account, id, 'INBOX'))
+      .toEqual({ unchanged: false, reason: 'probe-failed' });
+    await expect(invalidate(id, 'Sent')).resolves.toEqual({ invalidated: true });
+
+    const sentRecovery = bridge.send.mock.calls
+      .filter(([, params]) => params.op === 'invalidate')[1][1];
+    expect(sentRecovery, 'account-wide uncertainty needs a whole-account native invalidation')
+      .toEqual({ op: 'invalidate', accountId: id });
+    expect(await mailboxIsUnchanged(account, id, 'INBOX')).toEqual(settled());
+  });
+
+  it('late expired invalidation cannot clear a later failure', async () => {
+    vi.useFakeTimers();
+    try {
+      const id = nextId();
+      const firstNative = deferred();
+      let invalidations = 0;
+      bridge.send.mockImplementation((_method, params) => {
+        if (params.op === 'invalidate') {
+          invalidations += 1;
+          return invalidations === 1
+            ? firstNative.promise : Promise.reject(new Error('errors.daemonUnavailable'));
+        }
+        return Promise.resolve(settled());
+      });
+
+      const first = invalidate(id, 'INBOX');
+      const later = invalidate(id, 'Sent');
+      await vi.advanceTimersByTimeAsync(31_000);
+      expect(await first).toEqual({ invalidated: false });
+      expect(await later).toEqual({ invalidated: false });
+      expect(invalidations).toBe(2);
+
+      firstNative.resolve({ invalidated: true });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await mailboxIsUnchanged(account, id, 'INBOX'),
+        'late expired success must not clear the later failed mutation')
+        .toEqual({ unchanged: false, reason: 'probe-failed' });
+      expect(bridge.send.mock.calls.filter(([, params]) => params.op === 'check'))
+        .toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails conservatively when the native check is unavailable, with no legacy fallback', async () => {
     const id = nextId();
     bridge.send.mockRejectedValue(new Error('errors.daemonOutdated'));
