@@ -4061,5 +4061,6 @@
   "errors.accountsInvalid": "That account change could not be saved because it is not valid.",
   "errors.accountsWriteFailed": "Your account change could not be completed.",
   "errors.accountRemovalBusy": "This account is busy. Wait for the current operation to finish, then try again.",
-  "errors.accountRemovalIncomplete": "Account removal did not finish. Retry after the current operation settles."
+  "errors.accountRemovalIncomplete": "Account removal did not finish. Retry after the current operation settles.",
+  "errors.bulkAlreadyGone": "This message was already deleted."
 }

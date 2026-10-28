@@ -2729,6 +2729,16 @@ mod tests {
     async fn s24_minor_interactive_read_wait_clips_to_remaining_deadline() {
         let _env = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
         let _restore = TestEnvRestore::capture();
+        // The synthetic read cannot clear the gate after guarded times out.
+        // Keep the timeout observable through the assertions, then restore it
+        // before another credential fixture takes the shared test lock.
+        struct ClearCredentialGate;
+        impl Drop for ClearCredentialGate {
+            fn drop(&mut self) {
+                GATE.clear(CREDENTIALS_KEY);
+            }
+        }
+        let _clear_credential_gate = ClearCredentialGate;
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("credentials.json");
         std::fs::write(&path, json!({"acct-1":sample_account_json()}).to_string()).unwrap();

@@ -10,8 +10,8 @@
 //! that is not active".
 
 use super::tests::{
-    call, config, control, fast, gmail, idless, labelled, mbox, mbox_bytes, msg, next, ok, setup, slow_appends, start, status_of, subjects,
-    wait_until_not_live, wait_until_uploaded, Rig, DATE,
+    call, config, control, fast, gmail, idless, labelled, mbox, mbox_bytes, msg, next, ok, setup, setup_with_accounts,
+    slow_appends, start, status_of, subjects, wait_until_not_live, wait_until_uploaded, Rig, DATE,
 };
 use super::*;
 use crate::ipc;
@@ -450,7 +450,7 @@ fn server_copies(rig: &Rig, id: &str) -> usize {
 /// acct1's (the fallback is All Mail).
 #[tokio::test]
 async fn a_malformed_file_imports_the_same_whole_messages_in_every_mode() {
-    let mut rig = setup(gmail(), fast());
+    let mut rig = setup_with_accounts(gmail(), fast(), &["acct2", "acct3"]);
     let (bytes, stored) = messy();
     let escaped = String::from_utf8_lossy(&stored[0]);
     assert!(escaped.contains("\r\nFrom the start of a line, escaped\r\n") && !escaped.contains(">From"), "`>From ` is unescaped: {escaped}");
@@ -623,7 +623,7 @@ async fn importing_into_one_account_never_reads_or_writes_another() {
 /// though B's header rows list the message under both keys.
 #[tokio::test]
 async fn a_graph_import_files_under_its_own_accounts_storage_keys() {
-    let rig = setup(gmail(), fast());
+    let rig = setup_with_accounts(gmail(), fast(), &["graph-a", "graph-b"]);
     let g = |name: &str, path: &str, special: &str| {
         json!({"name": name, "path": path, "specialUse": special, "flags": [], "delimiter": "/", "noselect": false, "children": [], "_graphFolderId": "AAMk"})
     };
@@ -659,6 +659,7 @@ async fn hostile_account_ids_and_folder_names_stay_inside_the_maildir_tree() {
         std::fs::create_dir_all(dir).unwrap();
     }
     let s = DaemonState::for_test(vault.clone(), app.clone(), true);
+    s.seed_accounts_for_test(&["acct1"]);
     let long = "x".repeat(300);
 
     // Folder names in the cached list, each the home of one message by its

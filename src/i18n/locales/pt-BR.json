@@ -4055,5 +4055,12 @@
   "svc.backupScheduler.uncertain": "Estado do backup incerto; aguardando o processo nativo.",
   "errors.accountsConflict": "Sua lista de contas mudou em outra janela. Tente novamente.",
   "errors.accountsInvalid": "Essa alteração de conta não pôde ser salva porque não é válida.",
-  "errors.accountsWriteFailed": "Não foi possível concluir a alteração da sua conta."
+  "errors.accountsWriteFailed": "Não foi possível concluir a alteração da sua conta.",
+  "errors.accountRemovalBusy": "Esta conta está ocupada. Aguarde a operação atual terminar e tente novamente.",
+  "errors.accountRemovalIncomplete": "A remoção da conta não foi concluída. Tente novamente depois que a operação atual terminar.",
+  "errors.bulkAlreadyGone": "Esta mensagem já foi excluída.",
+  "settings.accounts.removeBusy": "Esta conta está ocupada. Aguarde a operação atual terminar e tente novamente.",
+  "settings.accounts.removeFailed": "Não foi possível remover esta conta. Tente novamente.",
+  "settings.accounts.removeIncomplete": "A remoção da conta não foi concluída. Tente novamente depois que a operação atual terminar.",
+  "settings.storage.emptyVaultFailed": "Não foi possível esvaziar o cofre. Algumas contas ou dados ainda podem estar presentes. Tente novamente após o término da operação atual."
 }

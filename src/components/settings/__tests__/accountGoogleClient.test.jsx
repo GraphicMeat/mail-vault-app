@@ -12,9 +12,15 @@ import { t } from '../../../i18n';
 // through the chosen app) and keeps the CURRENT app on a plain Reconnect:
 // Reconnect must never move an account between apps.
 
-const mockSaveAccount = vi.fn(async () => {});
-vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [], saveAccount: (...a) => mockSaveAccount(...a) }));
-vi.mock('../../../services/db/index.js', () => ({ getCachedMailboxes: async () => [], saveAccount: (...a) => mockSaveAccount(...a) }));
+const mockPatchAccount = vi.fn(async () => {});
+vi.mock('../../../services/db', () => ({ getCachedMailboxes: async () => [],
+  patchAccount: (...args) => mockPatchAccount(...args),
+  accountExpectedContext: account => ({ fields: { email: account.email, authType: account.authType,
+    oauth2Provider: account.oauth2Provider } }) }));
+vi.mock('../../../services/db/index.js', () => ({ getCachedMailboxes: async () => [],
+  patchAccount: (...args) => mockPatchAccount(...args),
+  accountExpectedContext: account => ({ fields: { email: account.email, authType: account.authType,
+    oauth2Provider: account.oauth2Provider } }) }));
 
 const mockGetOAuth2AuthUrl = vi.fn();
 const mockExchangeOAuth2Code = vi.fn();
@@ -46,12 +52,13 @@ async function open(account) {
 
 const current = () => screen.getByTestId('google-client-current').textContent;
 const savedAccount = async () => {
-  await waitFor(() => expect(mockSaveAccount).toHaveBeenCalledTimes(1));
-  return mockSaveAccount.mock.calls[0][0];
+  await waitFor(() => expect(mockPatchAccount).toHaveBeenCalledTimes(1));
+  expect(mockPatchAccount.mock.calls[0][0]).toBe('g1');
+  return mockPatchAccount.mock.calls[0][1];
 };
 
 beforeEach(() => {
-  mockSaveAccount.mockClear();
+  mockPatchAccount.mockClear();
   mockGetGoogleClients.mockReset().mockResolvedValue(CLIENTS);
   mockGetOAuth2AuthUrl.mockReset().mockResolvedValue({ authUrl: 'https://accounts.google.com/o/oauth2/v2/auth?x=1', state: 's1' });
   mockExchangeOAuth2Code.mockReset().mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt', expiresAt: 99, clientId: OWN_ID });
@@ -170,7 +177,7 @@ describe('Settings > Accounts: a plain Reconnect keeps the current Google app', 
     fireEvent.click(screen.getByRole('button', { name: t('settings.accounts.reconnect') }));
     await waitFor(() => expect(window.alert).toHaveBeenCalled());
     expect(window.alert.mock.calls[0][0]).toContain(t('googleClient.ownUnavailable'));
-    expect(mockSaveAccount).not.toHaveBeenCalled();
+    expect(mockPatchAccount).not.toHaveBeenCalled();
   });
 });
 

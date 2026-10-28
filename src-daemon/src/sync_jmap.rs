@@ -929,6 +929,7 @@ mod tests {
             true,
             Arc::new(|| Box::pin(async { false })),
         );
+        state.seed_accounts_for_test(&["acct-1"]);
         assert!(!state.net.note_failure("network is unreachable").await, "the gate is shut");
         let account = sync_account(json!({
             "id": "acct-1",

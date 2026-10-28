@@ -114,7 +114,9 @@ export async function applyImport(bundle, { selectedIds, applyAppSettings }) {
       existingIds.add(newId);
     }
     accepted = await saveAccounts(toSave);
-    if (accepted.outcome === 'retiredIdsRefused') throw new Error('E_KEYCHAIN_WRITE: errors.keychainBusy');
+    if (accepted.outcome === 'retiredIdsRefused') {
+      throw new Error(`${keychainSession.E_KEYCHAIN_WRITE}: errors.keychainBusy`);
+    }
   }
   const acceptedIds = new Set(accepted.accepted);
   for (const [fileId, targetId] of Object.entries(idMap)) {

@@ -932,6 +932,17 @@ fn lift_open_file_limit() {
 
 #[cfg(test)]
 impl DaemonState {
+    /// Explicitly prepare an authoritative account fixture before any route
+    /// can bootstrap this state's lifecycle. `for_test` itself stays Unready.
+    pub(crate) fn seed_accounts_for_test(&self, ids: &[&str]) {
+        assert!(!self.account_lifecycle.is_ready(), "seed before the first route");
+        let rows = Value::Array(ids.iter().map(|id| serde_json::json!({"id": id})).collect());
+        std::fs::write(self.app_dir.join("accounts.json"), rows.to_string()).unwrap();
+        self.account_lifecycle.seed(
+            &mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&self.app_dir)).unwrap(),
+        );
+    }
+
     /// A state wired the way main.rs wires it, but pointed at scratch dirs.
     pub(crate) fn for_test(
         mail_dir: PathBuf,
@@ -1133,6 +1144,7 @@ mod tests {
         .unwrap();
         std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &path);
         let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        state.seed_accounts_for_test(&["a", "b"]);
         let response = handle_request(
             &state,
             req(
@@ -1277,6 +1289,7 @@ mod tests {
     async fn bulk_worker_start_finishes_empty_frozen_selection() {
         let dir = tempfile::tempdir().unwrap();
         let state = DaemonState::for_test(dir.path().join("vault"), dir.path().to_path_buf(), true);
+        state.seed_accounts_for_test(&["a"]);
         let reply = handle_request_for_test(&state, "bulk.start", json!({"operationId":"empty-worker","type":"archive","scope":{"accountId":"a","mailbox":"INBOX","keys":[]}})).await;
         assert!(
             reply.error.is_none(),
@@ -1439,6 +1452,7 @@ mod tests {
         for action in [Action::Delete, Action::ArchiveBackupDelete] {
             let dir = tempfile::tempdir().unwrap();
             let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+            state.seed_accounts_for_test(&["a"]);
             let intent = FrozenIntent::freeze(
                 action,
                 Scope {
@@ -1582,6 +1596,7 @@ mod tests {
         for action in [Action::Delete, Action::ArchiveBackupDelete] {
             let dir = tempfile::tempdir().unwrap();
             let state = DaemonState::for_test(dir.path().into(), dir.path().into(), true);
+            state.seed_accounts_for_test(&["a"]);
             let intent = FrozenIntent::freeze(
                 action,
                 serde_json::from_value(json!({
@@ -1975,6 +1990,7 @@ mod tests {
 
         let dir = scratch("syncnow-creds");
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        state.seed_accounts_for_test(&["acc1"]);
 
         std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
 
@@ -2301,6 +2317,7 @@ mod tests {
         let (imap_trap, imap_port) = crate::jmap_test_support::imap_trap();
         let account = crate::jmap_test_support::account_json(&mock, imap_port);
         let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        state.seed_accounts_for_test(&["acct1"]);
         let token = state.token.clone();
         spawn_on_own_thread(Arc::clone(&state), path.clone(), |why| panic!("server died: {why}"))
             .unwrap();

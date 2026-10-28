@@ -1798,11 +1798,16 @@ mod tests {
     }
 
     pub(super) fn setup(scenario: Scenario, tuning: Tuning) -> Rig {
+        setup_with_accounts(scenario, tuning, &[])
+    }
+
+    pub(super) fn setup_with_accounts(scenario: Scenario, tuning: Tuning, extra: &[&str]) -> Rig {
         let server = MockImap::start(scenario);
         let (vault, app) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let s = DaemonState::for_test(vault.path().to_path_buf(), app.path().to_path_buf(), true);
-        std::fs::write(app.path().join("accounts.json"), r#"[{"id":"acct1"},{"id":"other"}]"#).unwrap();
-        s.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&s.app_dir)).unwrap());
+        let mut accounts = vec!["acct1", "other"];
+        accounts.extend_from_slice(extra);
+        s.seed_accounts_for_test(&accounts);
         s.raw_messages.accounts.lock().unwrap().insert("acct1".into(), config(&server));
         *lock(&s.mbox_uploads.tuning) = Some(tuning);
         let rx = s.events.subscribe();

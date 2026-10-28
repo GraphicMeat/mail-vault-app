@@ -446,6 +446,9 @@ mod tests {
 
     #[tokio::test]
     async fn p6_unlocked_portable_set_credentials_refuses_without_write() {
+        let _env = crate::credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("credentials.sealed");
         let sealed = crate::credentials::TestSealedGuard::install(path.clone());

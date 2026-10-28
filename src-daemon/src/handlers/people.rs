@@ -243,6 +243,7 @@ mod tests {
     fn state(ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), ok);
+        s.seed_accounts_for_test(&["a1", "a2"]);
         (dir, s)
     }
 

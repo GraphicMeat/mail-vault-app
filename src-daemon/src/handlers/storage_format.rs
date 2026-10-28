@@ -76,6 +76,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), mail_dir_ok);
+        s.seed_accounts_for_test(&[]);
         // These tests steer a job; they do not convert. The job holds before
         // it plans, at 0 of 0, until it is paused or cancelled.
         crate::format_migration_job::faults(&s).hold = true;

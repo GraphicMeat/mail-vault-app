@@ -456,7 +456,11 @@ fn insights_metadata_index_and_uid_generation_changes_still_make_snapshot_stale(
                 seed(&custody, "account-a", "INBOX", vec![header(1), header(2)]);
                 gen += 1;
             }
-            _ => fs::write(generation, "5").unwrap(),
+            // Windows watches length plus mtime; make this change observable
+            // even when the filesystem gives both writes the same timestamp.
+            "generation" => fs::write(generation, "5\n").unwrap(),
+            "missing-generation" => fs::write(generation, "5").unwrap(),
+            _ => unreachable!("unknown generation fixture"),
         }
         assert_eq!(
             state

@@ -1137,6 +1137,7 @@ mod tests {
             ),
         );
         let (_dir, state) = rig(&server);
+        state.seed_accounts_for_test(&["acct"]);
         crate::custody::open_into(&state).expect("custody opens");
         let sync_account: crate::sync_engine::SyncAccount = serde_json::from_value(json!({
             "id": "acct", "email": "me@example.com",

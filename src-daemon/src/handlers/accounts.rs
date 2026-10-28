@@ -67,6 +67,24 @@ pub(crate) async fn route(
     )
 }
 
+// Exercise the retained metadata-only operation without registering a public RPC.
+#[cfg(test)]
+pub(crate) async fn internal_remove_for_test(
+    state: &Arc<DaemonState>,
+    params: Value,
+) -> Result<Value, String> {
+    let state = Arc::clone(state);
+    let response = tokio::spawn(async move {
+        run_owned(&state, "accounts.remove", &params, json!(1)).await
+    })
+    .await
+    .unwrap();
+    match response.error {
+        Some(error) => Err(error.message),
+        None => Ok(response.result.unwrap_or(Value::Null)),
+    }
+}
+
 fn scope(
     listed: Option<&accounts_doc::Listing>,
     method: &str,
@@ -706,20 +724,16 @@ mod tests {
         pause.finish();
         let added = pending.await.unwrap();
         let open = state.account_lifecycle.capture("a").is_ok();
-        let replaced = call(
-            &state,
-            "accounts.replace_all",
-            json!({"entries":[{"id":"b"}]}),
-        )
-        .await;
+        let added_b = call(&state, "accounts.put", json!({"entry":{"id":"b"}})).await;
+        let removed_a = internal_remove_for_test(&state, json!({"id":"a"})).await;
         let retired = matches!(
             state.account_lifecycle.capture("a"),
             Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))
         );
         let b_open = state.account_lifecycle.capture("b").is_ok();
         let retry = call(&state, "accounts.put", json!({"entry":{"id":"a"}})).await;
-        assert!(before && added.is_ok() && open && replaced.is_ok() && retired && b_open && retry == Err("errors.keychainBusy".into()),
-            "N2 reservation: before={before}, added={}, open={open}, replaced={}, retired={retired}, b_open={b_open}, retry={retry:?}", added.is_ok(), replaced.is_ok());
+        assert!(before && added.is_ok() && open && added_b.is_ok() && removed_a.is_ok() && retired && b_open && retry == Err("errors.keychainBusy".into()),
+            "N2 reservation: before={before}, added={}, open={open}, added_b={}, removed_a={}, retired={retired}, b_open={b_open}, retry={retry:?}", added.is_ok(), added_b.is_ok(), removed_a.is_ok());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -905,14 +919,7 @@ mod tests {
 
     // Exercise the retained metadata-only helper without publishing a route.
     async fn internal_remove(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
-        let state = Arc::clone(state);
-        let resp = tokio::spawn(async move {
-            run_owned(&state, "accounts.remove", &params, json!(1)).await
-        }).await.unwrap();
-        match resp.error {
-            Some(e) => Err(e.message),
-            None => Ok(resp.result.unwrap_or(Value::Null)),
-        }
+        internal_remove_for_test(state, params).await
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

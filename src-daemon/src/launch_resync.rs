@@ -104,6 +104,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mv-launch-resync-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        state.seed_accounts_for_test(&["acct"]);
         crate::custody::open_into(&state).expect("custody opens");
         let account: SyncAccount = serde_json::from_value(serde_json::json!({
             "id": "acct", "email": "me@example.com",

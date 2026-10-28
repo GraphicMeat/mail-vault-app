@@ -4055,5 +4055,12 @@
   "svc.backupScheduler.uncertain": "Stato del backup incerto; in attesa del processo nativo.",
   "errors.accountsConflict": "L'elenco degli account è cambiato in un'altra finestra. Riprova.",
   "errors.accountsInvalid": "Questa modifica dell'account non è stata salvata perché non è valida.",
-  "errors.accountsWriteFailed": "Non è stato possibile completare la modifica del tuo account."
+  "errors.accountsWriteFailed": "Non è stato possibile completare la modifica del tuo account.",
+  "errors.accountRemovalBusy": "Questo account è occupato. Attendi che l’operazione in corso finisca, poi riprova.",
+  "errors.accountRemovalIncomplete": "La rimozione dell’account non è stata completata. Riprova quando l’operazione in corso sarà terminata.",
+  "errors.bulkAlreadyGone": "Questo messaggio era già stato eliminato.",
+  "settings.accounts.removeBusy": "Questo account è occupato. Attendi che l’operazione in corso finisca, poi riprova.",
+  "settings.accounts.removeFailed": "Impossibile rimuovere questo account. Riprova.",
+  "settings.accounts.removeIncomplete": "La rimozione dell’account non è stata completata. Riprova quando l’operazione in corso sarà terminata.",
+  "settings.storage.emptyVaultFailed": "Impossibile svuotare la cassaforte. Alcuni account o dati potrebbero essere ancora presenti. Riprova al termine dell’operazione in corso."
 }

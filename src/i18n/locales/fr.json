@@ -4055,5 +4055,12 @@
   "svc.backupScheduler.uncertain": "État incertain ; en attente du processus natif.",
   "errors.accountsConflict": "Votre liste de comptes a changé dans une autre fenêtre. Réessayez.",
   "errors.accountsInvalid": "Cette modification de compte n'a pas pu être enregistrée car elle n'est pas valide.",
-  "errors.accountsWriteFailed": "La modification de votre compte n’a pas pu être effectuée."
+  "errors.accountsWriteFailed": "La modification de votre compte n’a pas pu être effectuée.",
+  "errors.accountRemovalBusy": "Ce compte est occupé. Attendez la fin de l’opération en cours, puis réessayez.",
+  "errors.accountRemovalIncomplete": "La suppression du compte ne s’est pas terminée. Réessayez une fois l’opération en cours achevée.",
+  "errors.bulkAlreadyGone": "Ce message a déjà été supprimé.",
+  "settings.accounts.removeBusy": "Ce compte est occupé. Attendez la fin de l’opération en cours, puis réessayez.",
+  "settings.accounts.removeFailed": "Impossible de retirer ce compte. Réessayez.",
+  "settings.accounts.removeIncomplete": "La suppression du compte ne s’est pas terminée. Réessayez une fois l’opération en cours achevée.",
+  "settings.storage.emptyVaultFailed": "Impossible de vider le coffre. Certains comptes ou certaines données peuvent encore être présents. Réessayez une fois l’opération en cours achevée."
 }

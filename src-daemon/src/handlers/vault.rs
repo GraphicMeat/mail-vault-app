@@ -452,6 +452,7 @@ mod tests {
         let (app, src, dst) = (scratch("live-app"), scratch("live-src"), scratch("live-dst"));
         one_message(&src);
         let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        state.seed_accounts_for_test(&[]);
         crate::format_migration_job::faults(&state).hold = true;
         let call = |method: &'static str, params: Value| {
             let state = Arc::clone(&state);

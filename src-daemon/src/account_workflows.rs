@@ -1671,6 +1671,9 @@ mod tests {
         async fn save(&self, params: Value) -> Result<Value, String> {
             self.call("accounts.save", params).await
         }
+        async fn internal_remove(&self, params: Value) -> Result<Value, String> {
+            crate::handlers::accounts::internal_remove_for_test(&self.state, params).await
+        }
     }
     impl Drop for Rig {
         fn drop(&mut self) {
@@ -1893,7 +1896,7 @@ mod tests {
         let a = row("a", "a@example.test", "h");
         let b = row("b", "b@example.test", "h");
         let rig = Rig::new(vec![a.clone(), b.clone()], vec![clean(a), clean(b)]);
-        let removed = rig.call("accounts.remove", json!({"id":"a"})).await;
+        let removed = rig.internal_remove(json!({"id":"a"})).await;
         let document_removed = rig
             .meta()
             .as_array()
@@ -1911,7 +1914,7 @@ mod tests {
         let a = row("retired", "retired@example.test", "h");
         let b = row("live", "live@example.test", "h");
         let rig = Rig::new(vec![b.clone()], vec![clean(a), clean(b)]);
-        rig.call("accounts.remove", json!({"id":"retired"})).await.unwrap();
+        rig.internal_remove(json!({"id":"retired"})).await.unwrap();
         assert!(!rig.blob().contains_key("retired"));
         assert!(rig.meta().as_array().unwrap().iter().all(|row| row["id"] != "retired"));
         assert!(matches!(rig.state.account_lifecycle.capture("retired"), Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))));
@@ -1949,7 +1952,7 @@ mod tests {
         let a = row("retired", "retired@example.test", "h");
         let b = row("live", "live@example.test", "h");
         let rig = Rig::new(vec![b.clone()], vec![clean(a), clean(b)]);
-        rig.call("accounts.remove", json!({"id":"retired"})).await.unwrap();
+        rig.internal_remove(json!({"id":"retired"})).await.unwrap();
         let result = rig.save(json!({"entries":[
             row("retired", "live@example.test", "h"),
             row("fresh", "fresh@example.test", "h")
@@ -1965,7 +1968,7 @@ mod tests {
         let retired = row("retired", "retired@example.test", "h");
         let live = row("live", "live@example.test", "h");
         let rig = Rig::new(vec![live.clone()], vec![clean(retired), clean(live)]);
-        rig.call("accounts.remove", json!({"id":"retired"})).await.unwrap();
+        rig.internal_remove(json!({"id":"retired"})).await.unwrap();
         assert!(matches!(rig.state.account_lifecycle.capture("retired"),
             Err(crate::account_lifecycle::LifecycleError::RetiredIds(_))));
         let mut pause = BeforeAdmissionPause::arm(&rig);
@@ -2104,7 +2107,7 @@ mod tests {
     async fn p1_retired_primitives_refuse_save_update_save_if_absent_but_delete_cleans() {
         let a = row("a", "a@example.test", "h");
         let rig = Rig::new(vec![a.clone()], vec![clean(a.clone())]);
-        rig.call("accounts.remove", json!({"id":"a"}))
+        rig.internal_remove(json!({"id":"a"}))
             .await
             .unwrap();
         let before = rig.blob();
@@ -2701,6 +2704,7 @@ mod tests {
         for cancel in [false, true] {
             let a = row("a", "a@example.test", "h");
             let rig = Rig::new(vec![a.clone()], vec![clean(a)]);
+            let before_credentials = rig.stored("a");
             let done = workflow_done(&rig);
             let _drain = credentials::TestTaskDrain(done);
             let mut pause = credentials::TestWritePause::arm_with_timeout(1000);
@@ -2740,7 +2744,12 @@ mod tests {
                 .try_reserve(scope("a", "a@example.test", "h"))
                 .is_ok());
             assert!(rig.meta()[0].get("name").is_none());
-            assert_eq!(rig.stored("a")["name"], "late");
+            if cancel {
+                assert_eq!(rig.stored("a")["name"], "late");
+            } else {
+                // The accepted post-pause deadline fence refuses this write.
+                assert_eq!(rig.stored("a"), before_credentials);
+            }
         }
     }
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -3612,7 +3621,7 @@ mod tests {
             metadata_present: true,
         });
         assert!(rig
-            .call("accounts.remove", json!({"ids":["a"]}))
+            .internal_remove(json!({"ids":["a"]}))
             .await
             .is_ok());
         let request =

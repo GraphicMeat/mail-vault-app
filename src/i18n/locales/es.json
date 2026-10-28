@@ -4055,5 +4055,12 @@
   "svc.backupScheduler.uncertain": "Estado de copia incierto; esperando al proceso nativo.",
   "errors.accountsConflict": "Tu lista de cuentas cambió en otra ventana. Inténtalo de nuevo.",
   "errors.accountsInvalid": "Ese cambio de cuenta no se pudo guardar porque no es válido.",
-  "errors.accountsWriteFailed": "No se pudo completar el cambio de tu cuenta."
+  "errors.accountsWriteFailed": "No se pudo completar el cambio de tu cuenta.",
+  "errors.accountRemovalBusy": "Esta cuenta está ocupada. Espera a que termine la operación actual y vuelve a intentarlo.",
+  "errors.accountRemovalIncomplete": "No se completó la eliminación de la cuenta. Vuelve a intentarlo cuando termine la operación actual.",
+  "errors.bulkAlreadyGone": "Este mensaje ya se había eliminado.",
+  "settings.accounts.removeBusy": "Esta cuenta está ocupada. Espera a que termine la operación actual y vuelve a intentarlo.",
+  "settings.accounts.removeFailed": "No se pudo quitar esta cuenta. Vuelve a intentarlo.",
+  "settings.accounts.removeIncomplete": "No se completó la eliminación de la cuenta. Vuelve a intentarlo cuando termine la operación actual.",
+  "settings.storage.emptyVaultFailed": "No se pudo vaciar la bóveda. Puede que todavía haya cuentas o datos. Vuelve a intentarlo cuando termine la operación actual."
 }

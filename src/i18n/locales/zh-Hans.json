@@ -4055,5 +4055,12 @@
   "svc.backupScheduler.uncertain": "备份状态不确定，正在等待原生进程。",
   "errors.accountsConflict": "你的账户列表已在另一个窗口中更改。请重试。",
   "errors.accountsInvalid": "此账户更改无效，未能保存。",
-  "errors.accountsWriteFailed": "无法完成你的账户更改。"
+  "errors.accountsWriteFailed": "无法完成你的账户更改。",
+  "errors.accountRemovalBusy": "此账户正忙。请等待当前操作完成后重试。",
+  "errors.accountRemovalIncomplete": "账户移除尚未完成。请在当前操作结束后重试。",
+  "errors.bulkAlreadyGone": "这封邮件已被删除。",
+  "settings.accounts.removeBusy": "此账户正忙。请等待当前操作完成后重试。",
+  "settings.accounts.removeFailed": "无法移除此账户。请重试。",
+  "settings.accounts.removeIncomplete": "账户移除尚未完成。请在当前操作结束后重试。",
+  "settings.storage.emptyVaultFailed": "无法清空保险库。部分账户或数据可能仍然存在。请在当前操作完成后重试。"
 }

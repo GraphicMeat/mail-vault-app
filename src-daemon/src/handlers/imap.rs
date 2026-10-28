@@ -393,6 +393,11 @@ impl SearchFilters {
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     if let Some(resp) = crate::handlers::jmap_bridge::intercept(state, method, &id, params).await { return Some(resp); }
+    route_imap(state, method, params, id).await
+}
+
+// Keep the native IMAP match's poll frame off a JMAP request's worker stack.
+async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "imap_get_mailboxes" => {
             let account = req!(account_arg(&id, params));

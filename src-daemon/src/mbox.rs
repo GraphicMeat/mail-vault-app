@@ -929,6 +929,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir, mail_dir_ok);
+        s.seed_accounts_for_test(&["acct1"]);
         (vault, s)
     }
 

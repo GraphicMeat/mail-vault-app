@@ -10,9 +10,10 @@
  * release-time regeneration) still line up with it.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { ITEMS, DOWNLOAD_HREF, navPages, renderNav, applyNav } from '../../website/i18n/nav.mjs';
+import { LOCALES, sourcePages } from '../../website/i18n/i18n.mjs';
 
 // The legacy generator still serves localized pages. English pages now use
 // the shared mv-header shell, applied after changelog generation.
@@ -64,7 +65,16 @@ describe('website nav', () => {
         expect(doc.querySelector('.mv-mobile-menu summary .mv-menu-label')?.textContent, file).toBeTruthy();
         expect([...doc.querySelectorAll('.mv-navtools > a.mv-button')].map(a => a.getAttribute('href')), file).toEqual(['/demo/?lang=en', '/get-started.html?plan=free']);
         expect(doc.querySelector('.mv-mobile-menu summary'), file).not.toBeNull();
-        expect(doc.querySelector('.mv-language a[hreflang="de"]'), file).not.toBeNull();
+        if (file === 'website/start.html') {
+          // The noindex ad landing is intentionally English-only; there are no
+          // localized start pages for a language picker to link to.
+          expect(sourcePages()).not.toContain('start.html');
+          expect(doc.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex, nofollow');
+          expect(LOCALES.every(locale => !existsSync(`website/${locale.dir}/start.html`))).toBe(true);
+          expect(doc.querySelector('.mv-language')).toBeNull();
+        } else {
+          expect(doc.querySelector('.mv-language a[hreflang="de"]'), file).not.toBeNull();
+        }
         expect(doc.querySelector('script[src^="/assets/english-site.js"]'), file).not.toBeNull();
       } finally { dom.window.close(); }
     }

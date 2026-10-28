@@ -1710,7 +1710,8 @@ async fn backup_access_real_blocking_mirror_drain_retains_scope_after_terminal()
     let attempt = access_attempt(&r, &ack, "shell-a");
     access_attach(&r, &attempt, &stamp, mirror.path().to_str().unwrap()).await;
     entered_rx.await.unwrap();
-    rpc(&r.state, "backup.cancel", json!({"runId":ack["runId"]})).await;
+    // The terminal frame is already emitted; cancellation here could skip
+    // the queued purge before it reaches the held real mirror lock.
     let before = access_query(&r, &attempt, true).await;
     let claimed = r.state.backup_runs.lock().unwrap().contains_key("one");
     let file_remains = cur.join("7.eml").exists();

@@ -64,6 +64,7 @@ describe('the notification policy lives in the daemon', () => {
     expect(REASONS).toEqual([
       'focus-hold', 'notifications-off', 'priority-allowlist', 'quiet-hours',
       'view-muted', 'account-muted', 'folder-not-watched', 'delivered-default',
+      'already-announced',
     ]);
     for (const reason of [...REASONS, 'policy-unavailable']) {
       const key = settingsPanel.match(new RegExp(`'${reason}': '(notifyPolicy\\.reason\\.[A-Za-z]+)'`))?.[1];

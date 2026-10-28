@@ -3227,6 +3227,7 @@ mod tests {
             let m = mock_jmap::MockJmap::start(support::scenario());
             let (trap, port) = support::imap_trap();
             let (_tmp, state) = state();
+            state.seed_accounts_for_test(&["acct1"]);
             let mut rx = state.events.subscribe();
             let started = call(
                 &state,

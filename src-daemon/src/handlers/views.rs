@@ -965,7 +965,9 @@ mod tests {
     fn st() -> Arc<DaemonState> {
         let dir = std::env::temp_dir().join(format!("mv-views-handler-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        DaemonState::for_test(dir.clone(), dir, true)
+        let state = DaemonState::for_test(dir.clone(), dir, true);
+        state.seed_accounts_for_test(&["a"]);
+        state
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> Value {

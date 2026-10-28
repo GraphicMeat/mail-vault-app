@@ -4055,5 +4055,12 @@
   "svc.backupScheduler.uncertain": "バックアップの状態が不明です。ネイティブ処理を待っています。",
   "errors.accountsConflict": "別のウィンドウでアカウント一覧が変更されました。もう一度お試しください。",
   "errors.accountsInvalid": "このアカウントの変更は有効でないため保存できませんでした。",
-  "errors.accountsWriteFailed": "アカウントの変更を完了できませんでした。"
+  "errors.accountsWriteFailed": "アカウントの変更を完了できませんでした。",
+  "errors.accountRemovalBusy": "このアカウントは処理中です。現在の操作が完了してから、もう一度お試しください。",
+  "errors.accountRemovalIncomplete": "アカウントの削除が完了しませんでした。現在の操作が落ち着いてから、もう一度お試しください。",
+  "errors.bulkAlreadyGone": "このメッセージはすでに削除されています。",
+  "settings.accounts.removeBusy": "このアカウントは処理中です。現在の操作が完了してから、もう一度お試しください。",
+  "settings.accounts.removeFailed": "このアカウントを削除できませんでした。もう一度お試しください。",
+  "settings.accounts.removeIncomplete": "アカウントの削除が完了しませんでした。現在の操作が落ち着いてから、もう一度お試しください。",
+  "settings.storage.emptyVaultFailed": "保管庫を空にできませんでした。アカウントやデータが残っている可能性があります。現在の操作が完了してから、もう一度お試しください。"
 }

@@ -25,10 +25,10 @@ describe('FAQ hub and topic pages', () => {
 
   it('keeps every one of the 23 original answers, each on exactly one topic page', () => {
     const all = ORIGINAL_TOPICS.flatMap(t => questionsIn(topic(t)));
-    // 23 from the original single-page FAQ, plus every answer added since
-    // across the six original topics; new topics have separate coverage below.
-    expect(all.length).toBe(38);
-    expect(new Set(all).size).toBe(38);
+    // 23 from the original single-page FAQ, plus later answers including
+    // iCloud across the six original topics; new topics have separate coverage below.
+    expect(all.length).toBe(39);
+    expect(new Set(all).size).toBe(39);
   });
 
   // Every answer on a topic page has its row in the hub's index, which the

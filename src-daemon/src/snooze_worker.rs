@@ -445,6 +445,7 @@ mod tests {
         );
         let dir = app_dir();
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        state.seed_accounts_for_test(&["acct"]);
         let creds = dir.join("credentials.json");
         let account = serde_json::json!({
             "id": "acct", "email": "user@example.com", "password": "hunter2",
