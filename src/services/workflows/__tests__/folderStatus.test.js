@@ -165,6 +165,39 @@ describe('native closed-folder status adapter', () => {
     expect(state.folderStatus[A.id].Archive.unseen).toBe(3);
   });
 
+  it('publishes real rows after keychain hydration replaces the account during a throttled sweep', async () => {
+    const account = { ...A, imapHost: 'imap.mock.test', imapPort: 993, imapSecurity: 'ssl' };
+    state.accounts = [account, B];
+    const held = deferred();
+    bridge.send.mockReturnValueOnce(held.promise).mockResolvedValueOnce(null);
+
+    const first = refreshFolderStatus(account, tree, 'INBOX');
+    const hydrated = { ...account, password: 'hydrated-credential' };
+    state.accounts = [hydrated, B];
+    expect(await refreshFolderStatus(hydrated, tree, 'INBOX')).toBeNull();
+    held.resolve({ rows: [{ path: 'Archive', unseen: 3 }] });
+
+    expect(await first, 'same-source hydration must not discard real STATUS rows after a throttle')
+      .toEqual({ Archive: { path: 'Archive', unseen: 3 } });
+    expect(state.folderStatus[account.id]?.Archive?.unseen).toBe(3);
+    expect(state.folderStatus[B.id]).toBeUndefined();
+  });
+
+  it('fences a held native row after the same account id moves to another IMAP source', async () => {
+    const account = { ...A, imapHost: 'old.mock.test', imapPort: 993, imapSecurity: 'ssl' };
+    state.accounts = [account, B];
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+
+    const stale = refreshFolderStatus(account, tree, 'INBOX');
+    state.accounts = [{ ...account, imapHost: 'new.mock.test' }, B];
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+
+    expect(await stale).toBeNull();
+    expect(state.folderStatus[account.id], 'old server STATUS must not publish after source replacement')
+      .toBeUndefined();
+  });
+
   it('never calls old STATUS after a native transport error', async () => {
     bridge.send.mockRejectedValue(new Error('errors.daemonUnavailable'));
     await expect(refreshFolderStatus(A, tree, 'INBOX')).rejects.toThrow();
