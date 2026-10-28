@@ -2094,6 +2094,177 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    mod sync_observation_red {
+        use super::*;
+        use mock_imap::commands::{next_arg, parse_command};
+        use mock_imap::state::{synthetic_mailbox, Mailbox};
+        use mock_imap::{MockImap, Scenario};
+        use serde_json::{json, Value};
+        use std::sync::Arc;
+
+        struct CredentialsEnv {
+            credentials: Option<std::ffi::OsString>,
+            plaintext: Option<std::ffi::OsString>,
+        }
+
+        impl CredentialsEnv {
+            fn capture() -> Self {
+                Self {
+                    credentials: std::env::var_os("MAILVAULT_TEST_CREDENTIALS"),
+                    plaintext: std::env::var_os("MAILVAULT_IMAP_PLAINTEXT"),
+                }
+            }
+        }
+
+        impl Drop for CredentialsEnv {
+            fn drop(&mut self) {
+                match self.credentials.take() {
+                    Some(value) => std::env::set_var("MAILVAULT_TEST_CREDENTIALS", value),
+                    None => std::env::remove_var("MAILVAULT_TEST_CREDENTIALS"),
+                }
+                match self.plaintext.take() {
+                    Some(value) => std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", value),
+                    None => std::env::remove_var("MAILVAULT_IMAP_PLAINTEXT"),
+                }
+            }
+        }
+
+        fn bind_account(state: &Arc<DaemonState>, server: &MockImap) -> Value {
+            let row = json!({
+                "id": "acc1", "email": "user@example.com", "authType": "password",
+                "imapHost": server.host(), "imapPort": server.port(), "imapSecure": false,
+            });
+            std::fs::write(state.app_dir.join("accounts.json"), json!([row]).to_string()).unwrap();
+            state.account_lifecycle.seed(
+                &mailvault_core::accounts_doc::list(
+                    &mailvault_core::accounts_doc::shared(&state.app_dir),
+                ).unwrap(),
+            );
+            let stored = json!({
+                "id": "acc1", "email": "user@example.com", "authType": "password",
+                "password": "hunter2", "imapHost": server.host(),
+                "imapPort": server.port(), "imapSecure": false,
+            }).to_string();
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({"acc1": stored}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+            json!({
+                "id": "acc1", "email": "user@example.com",
+                "imapConfig": {
+                    "email": "user@example.com", "imapHost": server.host(),
+                    "imapPort": server.port(), "imapSecure": false,
+                },
+            })
+        }
+
+        fn commands_named(server: &MockImap, name: &str) -> Vec<mock_imap::commands::Command> {
+            server.commands().iter()
+                .filter_map(|line| parse_command(line))
+                .filter(|command| command.name == name)
+                .collect()
+        }
+
+        #[tokio::test]
+        async fn sync_observation_red_equal_modseq_reaches_one_real_select() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let dir = tempfile::tempdir().unwrap();
+            let _credentials_env = CredentialsEnv::capture();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+
+            // The existing ticketed sync seeds a real, complete native cache.
+            let started = handle_request(&state, req("sync.now", json!({
+                "account": account, "mailbox": "INBOX", "autoClassify": false,
+            }))).await;
+            let ticket = started.result.expect("existing sync.now must start")["ticket"]
+                .as_u64().expect("ticket number");
+            let completed = handle_request(&state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(completed.result.expect("existing sync.wait must finish")["success"], json!(true));
+
+            let metadata = crate::custody::with_conn(&state, |conn| {
+                mailvault_core::custody::cache::load_meta(conn, "acc1", "INBOX")
+            }).unwrap().expect("native metadata after sync");
+            let metadata: Value = serde_json::from_str(&metadata).unwrap();
+            assert_eq!(metadata["totalEmails"], json!(2));
+            assert_eq!(metadata["totalCached"], json!(2));
+            assert!(metadata["highestModseq"].as_u64().is_some(),
+                "CONDSTORE cache must carry a modseq before probing: {metadata:?}");
+
+            let select_before = commands_named(&server, "SELECT").len();
+            let reply = handle_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await;
+            let select_after = commands_named(&server, "SELECT").len();
+            assert!(reply.error.is_none(),
+                "sync.probe check must be routed; error={:?}, real SELECT delta={}",
+                reply.error, select_after - select_before);
+            let result = reply.result.expect("sync.probe result");
+            assert_eq!(result["unchanged"], json!(true));
+            assert_eq!(result["reason"], json!("modseq-match"));
+            assert!(result["verificationRef"].as_str().is_some_and(|value| !value.is_empty()),
+                "a successful provider check must issue a native proof: {result:?}");
+            assert_eq!(select_after - select_before, 1,
+                "one actual CONDSTORE SELECT must check the provider");
+        }
+
+        #[tokio::test]
+        async fn sync_observation_red_closed_folder_first_fifty_have_real_status_rows() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let dir = tempfile::tempdir().unwrap();
+            let _credentials_env = CredentialsEnv::capture();
+            let folders = std::iter::once(Mailbox::new("INBOX"))
+                .chain((0..=50).map(|index| {
+                    let path = format!("F{index:02}");
+                    if index == 0 { synthetic_mailbox(&path, 2) } else { Mailbox::new(path.as_str()) }
+                }))
+                .collect();
+            let server = MockImap::start(Scenario::new().mailboxes(folders));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            bind_account(&state, &server);
+
+            // 51 eligible paths: a nonselect parent is traversed but never sent.
+            let children: Vec<Value> = (0..2).map(|index|
+                json!({"path": format!("F{index:02}"), "children": []})).collect();
+            let mut nodes = vec![json!({"path": "INBOX"}),
+                json!({"path": "Parent", "noselect": true, "children": children})];
+            nodes.extend((2..=50).map(|index|
+                json!({"path": format!("F{index:02}")})));
+
+            let reply = handle_request(&state, req("folders.status", json!({
+                "op": "refresh", "accountId": "acc1", "activeMailbox": "INBOX",
+                "mailboxes": nodes,
+            }))).await;
+            let status_paths: Vec<String> = commands_named(&server, "STATUS")
+                .iter().map(|command| {
+                    let mut args = command.args.as_str();
+                    next_arg(&mut args).expect("STATUS mailbox argument")
+                }).collect();
+            assert!(reply.error.is_none(),
+                "folders.status refresh must be routed; error={:?}, real STATUS paths={status_paths:?}",
+                reply.error);
+            let result = reply.result.expect("folders.status result");
+            let rows = result["rows"].as_array().expect("rows array");
+            assert_eq!(rows.len(), 50, "native selection must cap at 50 actual rows");
+            let expected: Vec<String> = (0..50).map(|index| format!("F{index:02}")).collect();
+            assert_eq!(status_paths, expected,
+                "provider STATUS order must follow preorder, exclude active and cap at 50");
+            let first = rows.iter().find(|row| row["path"] == json!("F00"))
+                .expect("F00 returned by actual mock provider");
+            assert_eq!(first["messages"], json!(2));
+            assert_eq!(first["unseen"], json!(2));
+            assert!(first["uidNext"].as_u64().is_some());
+            assert!(first["uidValidity"].as_u64().is_some());
+            assert!(rows.iter().all(|row| row["path"] != json!("INBOX")
+                && row["path"] != json!("Parent") && row["path"] != json!("F50")));
+        }
+    }
+
     #[tokio::test]
     async fn snapshot_list_without_an_account_is_invalid_params() {
         let dir = scratch("snaplist");
