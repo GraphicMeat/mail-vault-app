@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Delete everywhere no longer reports one message twice. When the server copy was deleted but the local copy could not be matched safely, the toast said "1 removed. 1 could not be deleted from the server". It now says the message was deleted from the server but kept locally.
+- Delete everywhere now also removes the local copy when a sync changed the cache during the delete: a dropped header row, owner record or mailbox generation, a missing Outlook or JMAP row id, a flag rename, or a body saved meanwhile. Before, the server copy went and the local copy stayed, and the toast said "1 removed. 1 could not be deleted from the server". A local copy whose bytes no longer match the deleted message is still kept, and the toast now says it was deleted from the server but kept locally instead of counting it twice.
 
 - A one-time code in mail that a scheduled refresh picks up now shows in the corner bubble and in the new-mail banner. Before, only mail the live inbox watch found first got the bubble, so a code that arrived between watch wake-ups showed neither.
 
