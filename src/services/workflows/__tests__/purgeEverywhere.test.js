@@ -515,3 +515,39 @@ it('keeps a positive-ID B visible when the retained bound original explicitly ha
     nativeIdentity: { originHash: 'A' },
   });
 });
+
+// The native manager runs one operation at a time and throws "already running"
+// for a second. A delete clicked while another is still on the wire used to hit
+// that throw, restore its row and reject: slow first delete, second one back.
+it('a delete clicked while another runs waits its turn and stays gone', async () => {
+  const release = [];
+  let running = 0;
+  native.start.mockImplementation(async ({ scope }) => {
+    if (running) throw new Error('An operation is already running');
+    running++;
+    await new Promise((resolve) => release.push(resolve));
+    running--;
+    return outcome(scope);
+  });
+  const first = purgeEverywhere([1]);
+  await vi.waitFor(() => expect(native.start).toHaveBeenCalledTimes(1));
+  const second = purgeEverywhere([2]).then(
+    (value) => ({ value }),
+    (error) => ({ error })
+  );
+  // The row leaves the list at once, but the daemon is not asked yet.
+  await vi.waitFor(() =>
+    expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([])
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(native.start).toHaveBeenCalledTimes(1);
+  release[0]();
+  await first;
+  await vi.waitFor(() => expect(native.start).toHaveBeenCalledTimes(2));
+  release[1]();
+  const settled = await second;
+  expect(settled.error).toBeUndefined();
+  expect(settled.value.deleted).toBe(1);
+  expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([]);
+  expect(useMailStore.getState().deleteTombstones.size).toBe(2);
+});

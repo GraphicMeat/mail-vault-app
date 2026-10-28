@@ -68,7 +68,8 @@ vi.mock('../SearchBar', () => ({ SearchBar: () => null }));
 // Holds the props the list hands the bulk modal, so a spec can confirm a run.
 const bulkModal = vi.hoisted(() => ({ props: null }));
 vi.mock('../BulkOperationsModal', () => ({ BulkOperationsModal: (props) => { bulkModal.props = props; return null; } }));
-vi.mock('../BulkOperationProgress', () => ({ BulkOperationProgress: () => null }));
+const bulkProgress = vi.hoisted(() => ({ props: null }));
+vi.mock('../BulkOperationProgress', () => ({ BulkOperationProgress: (props) => { bulkProgress.props = props; return null; } }));
 vi.mock('../BulkSelectionBubble', () => ({ BulkSelectionBubble: () => null }));
 vi.mock('../LinkAlertIcon', () => ({ LinkAlertIcon: () => null }));
 vi.mock('../SenderAlertIcon', () => ({ SenderAlertIcon: () => null, getSenderAlertLevel: () => null }));
@@ -765,6 +766,23 @@ describe('bulk run across folders', () => {
       bulkManager.operation = null;
       useMailStore.setState({ accounts: prev.accounts, localFolders: prev.localFolders, activeAccountId: prev.activeAccountId, activeMailbox: prev.activeMailbox, loadEmails: prev.loadEmails, error: null });
     }
+  });
+});
+
+// The corner panel is the bulk selection's report. A delete from the list or
+// the reader (no bulk selection) answers with its toast alone, even though the
+// manager runs it too.
+describe('the bulk operation panel', () => {
+  it('follows only runs the manager marks as bulk, not every delete', async () => {
+    bulkManager.subscribe.mockClear();
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+    const listener = bulkManager.subscribe.mock.calls.at(-1)[0];
+    const op = { id: 'x', type: 'delete_everywhere', status: 'complete', total: 2, completed: 2 };
+    act(() => listener(op, { settled: true, panel: false }));
+    expect(bulkProgress.props.operation).toBeNull();
+    act(() => listener(op, { settled: true, panel: true }));
+    expect(bulkProgress.props.operation).toMatchObject({ id: 'x' });
   });
 });
 

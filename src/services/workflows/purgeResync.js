@@ -57,7 +57,7 @@ async function reprove(accountId, mailbox, hints) {
  * first one untouched when nothing was retried, else the two merged, with each
  * retried outcome filed under its ORIGINAL hint, which is what the caller keys on.
  */
-export async function retryAfterResync(operation, scope, onProgress) {
+export async function retryAfterResync(operation, scope, onProgress, panel) {
   const stale = (operation?.outcomes || []).filter(waitsForResync);
   if (!stale.length) return operation;
   const groups = new Map();
@@ -79,6 +79,7 @@ export async function retryAfterResync(operation, scope, onProgress) {
     type: 'delete_everywhere',
     scope: { ...scope, keys, targetHints: proved.map(({ fresh }) => fresh) },
     onProgress,
+    panel,
   });
 
   const byFresh = new Map((retry.outcomes || []).map((o) => [originalTargetId(o.hint), o.target]));

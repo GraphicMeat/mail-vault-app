@@ -441,3 +441,35 @@ it('retains an ambiguous owner when its first unstarted fence is unavailable', a
     m.send.mock.calls.filter(([command]) => command === 'bulk.start')
   ).toHaveLength(1);
 });
+
+// The list's corner panel belongs to the bulk selection. A run started with no
+// panel (a delete from the list or reader) tells subscribers so; one recovered
+// after a relaunch has no caller of its own and gets the panel.
+it('tells subscribers whether a run belongs to the corner panel', async () => {
+  const seen = [];
+  const stop = manager.subscribe((_op, lifecycle) => seen.push(lifecycle?.panel));
+  seen.length = 0;
+  m.send.mockImplementation(async (cmd, p) =>
+    cmd === 'bulk.start'
+      ? { id: p.operationId, attemptId: p.attemptId, type: p.type, status: 'complete', total: 1, completed: 1 }
+      : { active: null, pending: null }
+  );
+  await manager.start({ type: 'delete_everywhere', scope });
+  expect(seen.length).toBeGreaterThan(0);
+  expect(seen.every((panel) => panel === false)).toBe(true);
+  await manager.start({ type: 'delete', scope, panel: true });
+  expect(seen.at(-1)).toBe(true);
+
+  seen.length = 0;
+  const active = { id: 'existing', attemptId: 'A', type: 'archive', status: 'archiving' };
+  m.send.mockResolvedValue({ active, pending: null });
+  const run = manager.attach(active);
+  await tick();
+  m.events['bulk-progress']({
+    payload: { operationId: 'existing', attemptId: 'A', finished: true, operation: { ...active, status: 'complete' } },
+  });
+  await run;
+  expect(seen.length).toBeGreaterThan(0);
+  expect(seen.every((panel) => panel === true)).toBe(true);
+  stop();
+});

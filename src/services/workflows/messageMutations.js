@@ -2582,7 +2582,17 @@ export function purgeEverywhere(keys, opts = {}) {
   return _nativePurge(scope, opts);
 }
 
-async function _nativePurge(originalScope, { onProgress } = {}) {
+// The native manager runs one operation at a time and throws for a second.
+// A delete clicked while another is on the wire has already left the list; it
+// queues here instead of throwing, so its row neither comes back nor rejects.
+let _purgeTail = Promise.resolve();
+function _purgeInTurn(run) {
+  const turn = _purgeTail.then(run);
+  _purgeTail = turn.catch(() => {});
+  return turn;
+}
+
+async function _nativePurge(originalScope, { onProgress, panel } = {}) {
   const store = nativePurgeStore;
   const get = () => store.getState();
   if (!originalScope.keys.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
@@ -2644,15 +2654,15 @@ async function _nativePurge(originalScope, { onProgress } = {}) {
   let operation;
   let failure;
   try {
-    operation = await bulkOperationManager.start({ type: 'delete_everywhere', scope,
-      onProgress: op => onProgress?.({ ...op, phase: op.currentPhase }) });
+    operation = await _purgeInTurn(async () => {
+      const run = await bulkOperationManager.start({ type: 'delete_everywhere', scope, panel,
+        onProgress: op => onProgress?.({ ...op, phase: op.currentPhase }) });
+      // A row cached before native identity existed is refused as "needs resync":
+      // sync its mailbox, re-prove the row and run once more rather than drop the delete.
+      try { return await retryAfterResync(run, scope, op => onProgress?.({ ...op, phase: op.currentPhase }), panel); }
+      catch (error) { console.warn('[purgeEverywhere] retry after resync failed:', error); return run; }
+    });
   } catch (error) { failure = error; }
-  // A row cached before native identity existed is refused as "needs resync":
-  // sync its mailbox, re-prove the row and run once more rather than drop the delete.
-  if (operation && !failure) {
-    try { operation = await retryAfterResync(operation, scope, op => onProgress?.({ ...op, phase: op.currentPhase })); }
-    catch (error) { console.warn('[purgeEverywhere] retry after resync failed:', error); }
-  }
   const outcomes = new Map((operation?.outcomes || []).map(outcome => [originalTargetId(outcome.hint), outcome.target]));
   const restore = new Set();
   const replaced = new Set();

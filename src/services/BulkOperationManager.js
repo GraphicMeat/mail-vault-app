@@ -179,7 +179,7 @@ export class BulkOperationManager {
   subscribe(listener) {
     this._subscribers.add(listener);
     if (this._operation)
-      listener({ ...this._operation }, { settled: !this._owner });
+      listener({ ...this._operation }, { settled: !this._owner, panel: !!this._owner?.panel });
     return () => this._subscribers.delete(listener);
   }
   status() {
@@ -197,6 +197,9 @@ export class BulkOperationManager {
     spans = false,
     uids = [],
     onProgress,
+    // The bulk selection's run reports in the list's corner panel; a delete
+    // from the list or the reader answers with its toast alone.
+    panel = false,
   }) {
     return this._run(
       'bulk.start',
@@ -206,14 +209,18 @@ export class BulkOperationManager {
         type,
         scope: scopeValue(scope || { accountId, mailbox, spans, keys: uids }),
       },
-      onProgress
+      onProgress,
+      undefined,
+      panel
     );
   }
   resume(pending, _account, onProgress) {
     return this._run(
       'bulk.resume',
       { operationId: pending.id, attemptId: uuid(), type: pending.type },
-      onProgress
+      onProgress,
+      undefined,
+      true
     );
   }
   attach(active, onProgress) {
@@ -225,10 +232,11 @@ export class BulkOperationManager {
         type: active.type,
       },
       onProgress,
-      active
+      active,
+      true
     );
   }
-  async _run(command, params, onProgress, attached) {
+  async _run(command, params, onProgress, attached, panel = false) {
     if (this._owner) throw new Error(t('errors.operationRunning'));
     const hints = new Map();
     for (const hint of params.scope?.targetHints || []) {
@@ -245,6 +253,7 @@ export class BulkOperationManager {
       outcomes: new Map(),
       early: new Map(),
       onProgress,
+      panel,
       finishing: false,
     };
     this._owner = owner;
@@ -298,7 +307,7 @@ export class BulkOperationManager {
     if (this._owner !== owner) return;
     owner.onProgress?.({ ...this._operation });
     for (const listener of this._subscribers)
-      listener({ ...this._operation }, { settled });
+      listener({ ...this._operation }, { settled, panel: owner.panel });
   }
   _accept(owner, operation, inactive = true) {
     if (

@@ -365,7 +365,9 @@ function EmailListComponent({ stacked = false }) {
   const bulkSession = useMailStore(s => s.bulkSession);
   const endBulkSession = useMailStore(s => s.endBulkSession);
   const [bulkOpProgress, setBulkOpProgress] = useState(null);
-  useEffect(() => bulkOperationManager.subscribe(setBulkOpProgress), []);
+  // Only a bulk selection's run (or one recovered after a relaunch) reports in
+  // the corner panel; any other delete answers with its toast alone.
+  useEffect(() => bulkOperationManager.subscribe((op, lifecycle) => { if (lifecycle?.panel) setBulkOpProgress(op); }), []);
 
   // A bulk session is bound to the (account, mailbox, viewMode) it was opened
   // against. The modal never unmounts on minimize, so a session for Spam
@@ -1218,8 +1220,8 @@ function EmailListComponent({ stacked = false }) {
       // The selection's keys can name any account and folder; a bare uid
       // names the open folder's message only where the view is one folder.
       const onProgress = op => setBulkOpProgress({ ...op });
-      if (action === 'delete_everywhere') await purgeEverywhere(uids, { scope, onProgress });
-      else await bulkOperationManager.start({ type: action, scope, onProgress });
+      if (action === 'delete_everywhere') await purgeEverywhere(uids, { scope, onProgress, panel: true });
+      else await bulkOperationManager.start({ type: action, scope, onProgress, panel: true });
 
       if (bulkOperationManager.operation?.status === 'complete') {
         await useMailStore.getState().loadEmails();
