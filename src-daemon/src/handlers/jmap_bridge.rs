@@ -453,12 +453,13 @@ async fn status_delta(state: &Arc<DaemonState>, account: &ImapConfig,
     }
 }
 
+/// `observation` selects quiet yielding; `original` protects both observation and ordinary work.
 async fn probe_status_value(state: &Arc<DaemonState>, account: &ImapConfig,
     acct: &AccountJmap, account_id: &str, mailbox: &str,
-    original: Option<&crate::account_lifecycle::AccountStamp>) -> Result<Value, Fail> {
+    original: Option<&crate::account_lifecycle::AccountStamp>, observation: bool) -> Result<Value, Fail> {
     // A failed delta fails the probe so a stale count never looks current.
     status_delta(state, account, account_id, original).await?;
-    if original.is_some() {
+    if observation {
         crate::search_index::wait_foreground_quiet(&state.search_index).await;
     }
     let mb = mailbox_counts(acct, mailbox).await?;
@@ -470,18 +471,18 @@ async fn probe_status_value(state: &Arc<DaemonState>, account: &ImapConfig,
 
 async fn folder_status_rows(state: &Arc<DaemonState>, account: &ImapConfig,
     acct: &AccountJmap, account_id: &str, wanted: Vec<String>,
-    original: Option<&crate::account_lifecycle::AccountStamp>) -> Result<Vec<MailboxStatus>, Fail> {
+    original: Option<&crate::account_lifecycle::AccountStamp>, observation: bool) -> Result<Vec<MailboxStatus>, Fail> {
     // A failed delta does not hide fresh server badge counts.
     if let Err(error) = status_delta(state, account, account_id, original).await {
         warn!("[jmap] {}: delta before folder status failed: {}", account_id, error);
     }
-    if original.is_some() {
+    if observation {
         crate::search_index::wait_foreground_quiet(&state.search_index).await;
     }
     let boxes = acct.current().await?;
     let mut statuses = Vec::new();
     for path in wanted {
-        if original.is_some() {
+        if observation {
             crate::search_index::wait_foreground_quiet(&state.search_index).await;
         }
         let Some(mailbox) = boxes.ids.get(&path).and_then(|id|
@@ -506,7 +507,7 @@ pub(crate) async fn observation_probe_status(state: &Arc<DaemonState>, account: 
         let account_id = account_id.to_owned();
         let mailbox = mailbox.to_owned();
         async move {
-            probe_status_value(state, account, &acct, &account_id, &mailbox, Some(original))
+            probe_status_value(state, account, &acct, &account_id, &mailbox, Some(original), true)
                 .await.map_err(fail_text)
         }
     }).await
@@ -519,7 +520,7 @@ pub(crate) async fn observation_folder_status(state: &Arc<DaemonState>, account:
         let account_id = account_id.to_owned();
         let wanted = wanted.clone();
         async move {
-            folder_status_rows(state, account, &acct, &account_id, wanted, Some(original))
+            folder_status_rows(state, account, &acct, &account_id, wanted, Some(original), true)
                 .await.map_err(fail_text)
         }
     }).await
@@ -565,13 +566,13 @@ async fn answer(
         "imap_check_mailbox_status" => {
             let account_id = ledger_account(params)?;
             let mailbox = mailbox_param(params);
-            probe_status_value(state, account, acct, &account_id, &mailbox, original).await
+            probe_status_value(state, account, acct, &account_id, &mailbox, original, false).await
         }
 
         "imap_folder_status" => {
             let account_id = ledger_account(params)?;
             let wanted: Vec<String> = param(params, "mailboxes")?;
-            let statuses = folder_status_rows(state, account, acct, &account_id, wanted, original).await?;
+            let statuses = folder_status_rows(state, account, acct, &account_id, wanted, original, false).await?;
             serde_json::to_value(&statuses).map_err(|error| Fail::Rpc(error.to_string()))
         }
 
