@@ -1,0 +1,5892 @@
+{
+  "version": 1,
+  "caseCount": 67,
+  "caseManifest": {
+    "directCases": [
+      "C01",
+      "C02",
+      "C03",
+      "C04",
+      "C05",
+      "C06",
+      "C07",
+      "C08a",
+      "C08b",
+      "C08c",
+      "C09a",
+      "C09b",
+      "C10",
+      "C11",
+      "V01",
+      "V02",
+      "V03",
+      "V04a",
+      "V04b",
+      "V05",
+      "V06",
+      "V07a",
+      "V07b",
+      "V08",
+      "V09",
+      "V10",
+      "V11",
+      "V12b",
+      "V12",
+      "V13",
+      "V13b",
+      "V13c",
+      "V14",
+      "V15a",
+      "V15b",
+      "V15c",
+      "F01",
+      "F02",
+      "F03",
+      "F04",
+      "F05",
+      "F06",
+      "F07",
+      "F08",
+      "F09",
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "S08",
+      "S08b",
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "R01",
+      "R02",
+      "R03",
+      "R04",
+      "R05"
+    ],
+    "callerCases": [
+      "O01",
+      "O02",
+      "O03",
+      "O04"
+    ],
+    "directCount": 63,
+    "callerCount": 4,
+    "total": 67
+  },
+  "direct": {
+    "version": 1,
+    "sourceSha256": {
+      "src/stores/unreadCounts.js": "0ca4739479d5082da56ad3d1d22853797901b389faad3910844ea829200650ae",
+      "src/utils/rowVisibility.js": "f46405d3de1bf32471a42c222ab26f6d502d4be7c32d91196511e6f3c20bbf7d",
+      "src/stores/settingsStore.js": "e4dde4cd941688ec44698b80d6f98c32a4b3fa3613fe0965e36ae14bda19db99",
+      "src/stores/followUpStore.js": "9df889c587a797787a946172f229fc302a51177e0835608bca1723baddc62e5e",
+      "src/stores/snoozeStore.js": "497958919959e3e1935379a2afbd08ab52e5d793cefebef8244c7851df2c0378",
+      "src/stores/tagStore.js": "a22bef8e90bf508c74c719f9092e3f8c8b876f350bf94dbf95b05e3896af4fae",
+      "src/stores/autoTagStore.js": "d72ba3fb6cd4e0910e02c3108785006efe103c6a9b4cb45320531c927904d867",
+      "src/stores/viewHideStore.js": "b0e98ed8cd49db29ea4280ce7240751c88b5b828921584c47b49f11256594266",
+      "src/stores/slices/unifiedHelpers.js": "fcb80eace56c834974cc6825870d4a44004afdf1a8d2a4974a40be0cba28c41a",
+      "src/utils/autoTagInboxFilter.js": "5da67c0427f97cffe6463345afbbc2a7f8ad301d7898528f0c6f0fd62d39546e",
+      "src/utils/replyPolicy.js": "1a1568f274e844cdd7b14f14ade3b6a8f04f4a8794340dca57a375a6562255f5",
+      "src/utils/ownAddresses.js": "55a16223672be64d6ec789aaaa5d6bae8dd1f5d90acab7b2947c1360c2575578",
+      "src/utils/emailIdentity.js": "b3658e4eb6e08d3eee0c05ee14f4e369fbd227a3c6208e7be550ec7b737d3043"
+    },
+    "caseCount": 63,
+    "cases": [
+      {
+        "id": "C01",
+        "name": "null-cache",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": null
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": null
+              },
+              "result": {
+                "complete": false,
+                "inbox": null,
+                "wrote": false
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C02",
+        "name": "missing-emails",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "totalEmails": 2
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "totalEmails": 2
+                }
+              },
+              "result": {
+                "complete": false,
+                "inbox": null,
+                "wrote": false
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C03",
+        "name": "non-array-emails",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": {
+                  "0": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                },
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": {
+                    "0": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  },
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": false,
+                "inbox": null,
+                "wrote": false
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C04",
+        "name": "empty-complete",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [],
+                "totalEmails": 0
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [],
+                  "totalEmails": 0
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C05",
+        "name": "mixed-complete",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [
+                      "\\Seen"
+                    ],
+                    "messageId": "<m2@example.test>"
+                  },
+                  {
+                    "uid": 3,
+                    "flags": [],
+                    "messageId": "<m3@example.test>"
+                  }
+                ],
+                "totalEmails": 3
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [
+                        "\\Seen"
+                      ],
+                      "messageId": "<m2@example.test>"
+                    },
+                    {
+                      "uid": 3,
+                      "flags": [],
+                      "messageId": "<m3@example.test>"
+                    }
+                  ],
+                  "totalEmails": 3
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C06",
+        "name": "one-of-five-hundred-partial",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 500
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 500
+                }
+              },
+              "result": {
+                "complete": false,
+                "inbox": null,
+                "wrote": false
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C07",
+        "name": "missing-total",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ]
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C08a",
+        "name": "null-total",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": null
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": null
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C08b",
+        "name": "zero-total",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": 0
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": 0
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C08c",
+        "name": "lower-total",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C09a",
+        "name": "numeric-string-greater",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": "3"
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": "3"
+                }
+              },
+              "result": {
+                "complete": false,
+                "inbox": null,
+                "wrote": false
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C09b",
+        "name": "numeric-string-equal",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": "2"
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": "2"
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C10",
+        "name": "negative-total",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": -1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": -1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "C11",
+        "name": "duplicate-uid-counts-two-rows",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 2
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 2
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V01",
+        "name": "seen-and-absent-flags",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": {
+                      "$undefined": true
+                    },
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [
+                      "\\Seen"
+                    ],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": 2
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": {
+                        "$undefined": true
+                      },
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [
+                        "\\Seen"
+                      ],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": 2
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V02",
+        "name": "deleted-unarchived",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [
+                      "\\Deleted"
+                    ],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [
+                        "\\Deleted"
+                      ],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V03",
+        "name": "deleted-in-archive-set",
+        "input": {
+          "seed": {
+            "archivedKeys": [
+              "a:INBOX:1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [
+                      "\\Deleted"
+                    ],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [
+                        "\\Deleted"
+                      ],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V04a",
+        "name": "explicit-archived-false",
+        "input": {
+          "seed": {
+            "archivedKeys": [
+              "a:INBOX:1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [
+                      "\\Deleted"
+                    ],
+                    "messageId": "<m1@example.test>",
+                    "isArchived": false
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [
+                        "\\Deleted"
+                      ],
+                      "messageId": "<m1@example.test>",
+                      "isArchived": false
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V04b",
+        "name": "explicit-archived-true",
+        "input": {
+          "seed": {
+            "archivedKeys": [
+              "a:INBOX:1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [
+                      "\\Deleted"
+                    ],
+                    "messageId": "<m1@example.test>",
+                    "isArchived": true
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [
+                        "\\Deleted"
+                      ],
+                      "messageId": "<m1@example.test>",
+                      "isArchived": true
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V05",
+        "name": "enabled-hidden-tag",
+        "input": {
+          "seed": {
+            "autoTagRules": [
+              {
+                "tagId": "hidden",
+                "enabled": true,
+                "inboxAction": "hide"
+              }
+            ],
+            "tagsByRow": {
+              "a|INBOX|1": [
+                "hidden"
+              ]
+            }
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V06",
+        "name": "disabled-hidden-tag",
+        "input": {
+          "seed": {
+            "autoTagRules": [
+              {
+                "tagId": "hidden",
+                "enabled": false,
+                "inboxAction": "hide"
+              }
+            ],
+            "tagsByRow": {
+              "a|INBOX|1": [
+                "hidden"
+              ]
+            }
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V07a",
+        "name": "unknown-tag-entry",
+        "input": {
+          "seed": {
+            "autoTagRules": [
+              {
+                "tagId": "hidden",
+                "enabled": true,
+                "inboxAction": "hide"
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V07b",
+        "name": "known-empty-tag-entry",
+        "input": {
+          "seed": {
+            "autoTagRules": [
+              {
+                "tagId": "hidden",
+                "enabled": true,
+                "inboxAction": "hide"
+              }
+            ],
+            "tagsByRow": {
+              "a|INBOX|1": []
+            }
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V08",
+        "name": "same-uid-other-account-and-folder",
+        "input": {
+          "seed": {
+            "autoTagRules": [
+              {
+                "tagId": "hidden",
+                "enabled": true,
+                "inboxAction": "hide"
+              }
+            ],
+            "tagsByRow": {
+              "b|INBOX|1": [
+                "hidden"
+              ],
+              "a|Sent|1": [
+                "hidden"
+              ]
+            }
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V09",
+        "name": "exact-tombstone",
+        "input": {
+          "seed": {
+            "deleteTombstones": [
+              "a|INBOX|1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V10",
+        "name": "other-tombstone",
+        "input": {
+          "seed": {
+            "deleteTombstones": [
+              "b|INBOX|1",
+              "a|Sent|1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V11",
+        "name": "active-local-snooze",
+        "input": {
+          "seed": {
+            "snoozes": [
+              {
+                "id": "s",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "",
+                "messageId": "<m1@example.test>",
+                "state": "snoozed"
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V12b",
+        "name": "woken-local-snooze-does-not-hide",
+        "input": {
+          "seed": {
+            "snoozes": [
+              {
+                "id": "w",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "",
+                "messageId": "<m1@example.test>",
+                "state": "woken"
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V12",
+        "name": "failed-or-remote-snooze",
+        "input": {
+          "seed": {
+            "snoozes": [
+              {
+                "id": "failed",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "",
+                "messageId": "<m1@example.test>",
+                "state": "failed"
+              },
+              {
+                "id": "remote",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "Snoozed",
+                "messageId": "<m2@example.test>",
+                "state": "snoozed"
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": 2
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": 2
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V13",
+        "name": "normalized-message-id-local-snooze",
+        "input": {
+          "seed": {
+            "snoozes": [
+              {
+                "id": "s",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "",
+                "messageId": "m1@example.test",
+                "state": "snoozed"
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V13b",
+        "name": "whitespace-message-id-snooze",
+        "input": {
+          "seed": {
+            "snoozes": [
+              {
+                "id": "s",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "",
+                "messageId": " <m1@example.test> ",
+                "state": "snoozed"
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V13c",
+        "name": "missing-message-id-does-not-snooze",
+        "input": {
+          "seed": {
+            "snoozes": [
+              {
+                "id": "s",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "",
+                "messageId": "<m1@example.test>",
+                "state": "snoozed"
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": {
+                      "$undefined": true
+                    }
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": {
+                        "$undefined": true
+                      }
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V14",
+        "name": "view-hide-setting-on",
+        "input": {
+          "seed": {
+            "settings": {
+              "hideViewMail": true
+            },
+            "viewHiddenKeys": [
+              "a|INBOX|1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": 2
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": 2
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V15a",
+        "name": "view-hide-setting-off",
+        "input": {
+          "seed": {
+            "settings": {
+              "hideViewMail": false
+            },
+            "viewHiddenKeys": [
+              "a|INBOX|1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  },
+                  {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                ],
+                "totalEmails": 2
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    },
+                    {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  ],
+                  "totalEmails": 2
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V15b",
+        "name": "view-hide-unknown",
+        "input": {
+          "seed": {
+            "settings": {
+              "hideViewMail": true
+            },
+            "viewHiddenKeys": null
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "V15c",
+        "name": "source-account-fallback-differs-between-helpers",
+        "input": {
+          "seed": {
+            "archivedKeys": [
+              "b:INBOX:1"
+            ],
+            "autoTagRules": [
+              {
+                "tagId": "hidden",
+                "enabled": true,
+                "inboxAction": "hide"
+              }
+            ],
+            "tagsByRow": {
+              "b|INBOX|1": [
+                "hidden"
+              ]
+            }
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [
+                  {
+                    "uid": 1,
+                    "flags": [
+                      "\\Deleted"
+                    ],
+                    "messageId": "<m1@example.test>",
+                    "_srcAccountId": "b"
+                  }
+                ],
+                "totalEmails": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [
+                    {
+                      "uid": 1,
+                      "flags": [
+                        "\\Deleted"
+                      ],
+                      "messageId": "<m1@example.test>",
+                      "_srcAccountId": "b"
+                    }
+                  ],
+                  "totalEmails": 1
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F01",
+        "name": "due-unread-versus-seen-waiting-history",
+        "input": {
+          "seed": {
+            "followUps": [
+              {
+                "id": "u",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": 1,
+                "seen": false
+              },
+              {
+                "id": "seen",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": 1,
+                "seen": true
+              },
+              {
+                "id": "wait",
+                "accountId": "a",
+                "state": "waiting",
+                "sentMailbox": "Sent",
+                "sentUid": 1,
+                "seen": false
+              },
+              {
+                "id": "other",
+                "accountId": "b",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": 1,
+                "seen": false
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [],
+                "totalEmails": 0
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [],
+                  "totalEmails": 0
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F02",
+        "name": "empty-or-missing-sent-mailbox",
+        "input": {
+          "seed": {
+            "followUps": [
+              {
+                "id": "empty",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "",
+                "sentUid": 1,
+                "seen": false
+              },
+              {
+                "id": "missing",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": {
+                  "$undefined": true
+                },
+                "sentUid": 1,
+                "seen": false
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [],
+                "totalEmails": 0
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [],
+                  "totalEmails": 0
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F03",
+        "name": "integer-zero-string-and-missing-sent-uid",
+        "input": {
+          "seed": {
+            "followUps": [
+              {
+                "id": "zero",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": 0,
+                "seen": false
+              },
+              {
+                "id": "string",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": "1",
+                "seen": false
+              },
+              {
+                "id": "missing",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": {
+                  "$undefined": true
+                },
+                "seen": false
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [],
+                "totalEmails": 0
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [],
+                  "totalEmails": 0
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 1,
+                "wrote": true
+              },
+              "counts": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                1
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 1,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 1,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F04",
+        "name": "another-account-reminder",
+        "input": {
+          "seed": {
+            "followUps": [
+              {
+                "id": "b",
+                "accountId": "b",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": 1,
+                "seen": false
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [],
+                "totalEmails": 0
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [],
+                  "totalEmails": 0
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 0,
+                "wrote": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F05",
+        "name": "duplicate-reminder-rows",
+        "input": {
+          "seed": {
+            "followUps": [
+              {
+                "id": "dup",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": 1,
+                "seen": false
+              },
+              {
+                "id": "dup",
+                "accountId": "a",
+                "state": "due",
+                "sentMailbox": "Sent",
+                "sentUid": 1,
+                "seen": false
+              }
+            ]
+          },
+          "steps": [
+            {
+              "op": "recount",
+              "cache": {
+                "emails": [],
+                "totalEmails": 0
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "recount",
+                "cache": {
+                  "emails": [],
+                  "totalEmails": 0
+                }
+              },
+              "result": {
+                "complete": true,
+                "inbox": 2,
+                "wrote": true
+              },
+              "counts": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                2
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 2,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 2,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F06",
+        "name": "waiting-due-seen-unseen-dismiss",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "followUps",
+              "before": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "waiting",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false
+                }
+              ],
+              "after": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false
+                }
+              ]
+            },
+            {
+              "op": "followUps",
+              "before": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false
+                }
+              ],
+              "after": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": true
+                }
+              ]
+            },
+            {
+              "op": "followUps",
+              "before": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": true
+                }
+              ],
+              "after": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false
+                }
+              ]
+            },
+            {
+              "op": "followUps",
+              "before": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false
+                }
+              ],
+              "after": []
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "followUps",
+                "before": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "waiting",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false
+                  }
+                ],
+                "after": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false
+                  }
+                ]
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 8,
+                "b": 5
+              }
+            },
+            {
+              "input": {
+                "op": "followUps",
+                "before": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false
+                  }
+                ],
+                "after": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": true
+                  }
+                ]
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            },
+            {
+              "input": {
+                "op": "followUps",
+                "before": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": true
+                  }
+                ],
+                "after": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false
+                  }
+                ]
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 8,
+                "b": 5
+              }
+            },
+            {
+              "input": {
+                "op": "followUps",
+                "before": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false
+                  }
+                ],
+                "after": []
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                8
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 8,
+                "b": 5
+              }
+            },
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                7
+              ],
+              "before": {
+                "a": 8,
+                "b": 5
+              },
+              "after": {
+                "a": 7,
+                "b": 5
+              }
+            },
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                8
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 8,
+                "b": 5
+              }
+            },
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                7
+              ],
+              "before": {
+                "a": 8,
+                "b": 5
+              },
+              "after": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F07",
+        "name": "first-load-announced-versus-unannounced",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "followUps",
+              "before": [],
+              "after": [
+                {
+                  "id": "old",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false,
+                  "announced": true
+                }
+              ]
+            },
+            {
+              "op": "followUps",
+              "before": [],
+              "after": [
+                {
+                  "id": "new",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false,
+                  "announced": false
+                }
+              ]
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "followUps",
+                "before": [],
+                "after": [
+                  {
+                    "id": "old",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false,
+                    "announced": true
+                  }
+                ]
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            },
+            {
+              "input": {
+                "op": "followUps",
+                "before": [],
+                "after": [
+                  {
+                    "id": "new",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false,
+                    "announced": false
+                  }
+                ]
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 8,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                8
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 8,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 8,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F08",
+        "name": "existing-id-announced-change",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "followUps",
+              "before": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": true
+                }
+              ],
+              "after": [
+                {
+                  "id": "r",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false,
+                  "announced": true
+                }
+              ]
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "followUps",
+                "before": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": true
+                  }
+                ],
+                "after": [
+                  {
+                    "id": "r",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false,
+                    "announced": true
+                  }
+                ]
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 8,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                8
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 8,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 8,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "F09",
+        "name": "mixed-account-reminder-saturation",
+        "input": {
+          "seed": {
+            "settings": {
+              "unreadPerAccount": {
+                "a": 0,
+                "b": 1
+              }
+            }
+          },
+          "steps": [
+            {
+              "op": "followUps",
+              "before": [
+                {
+                  "id": "a",
+                  "accountId": "a",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false
+                },
+                {
+                  "id": "b",
+                  "accountId": "b",
+                  "state": "due",
+                  "sentMailbox": "Sent",
+                  "sentUid": 1,
+                  "seen": false
+                }
+              ],
+              "after": []
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "followUps",
+                "before": [
+                  {
+                    "id": "a",
+                    "accountId": "a",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false
+                  },
+                  {
+                    "id": "b",
+                    "accountId": "b",
+                    "state": "due",
+                    "sentMailbox": "Sent",
+                    "sentUid": 1,
+                    "seen": false
+                  }
+                ],
+                "after": []
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 0
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 0,
+                "b": 1
+              },
+              "after": {
+                "a": 0,
+                "b": 1
+              }
+            },
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "b",
+                0
+              ],
+              "before": {
+                "a": 0,
+                "b": 1
+              },
+              "after": {
+                "a": 0,
+                "b": 0
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 0
+          }
+        }
+      },
+      {
+        "id": "S01",
+        "name": "two-account-inbox-shift",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                },
+                {
+                  "accountId": "b",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  },
+                  {
+                    "accountId": "b",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 6,
+                "b": 4
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                6
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 6,
+                "b": 5
+              }
+            },
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "b",
+                4
+              ],
+              "before": {
+                "a": 6,
+                "b": 5
+              },
+              "after": {
+                "a": 6,
+                "b": 4
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 6,
+            "b": 4
+          }
+        }
+      },
+      {
+        "id": "S02",
+        "name": "non-inbox-and-missing-account",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "Sent",
+                  "row": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                },
+                {
+                  "accountId": "",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "Sent",
+                    "row": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  },
+                  {
+                    "accountId": "",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "S03",
+        "name": "saturation",
+        "input": {
+          "seed": {
+            "settings": {
+              "unreadPerAccount": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          },
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                0
+              ],
+              "before": {
+                "a": 0,
+                "b": 5
+              },
+              "after": {
+                "a": 0,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 0,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "S04",
+        "name": "unread-only-seen-and-unseen",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "shift",
+              "unreadOnly": true,
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [
+                      "\\Seen"
+                    ],
+                    "messageId": "<m1@example.test>"
+                  }
+                },
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "unreadOnly": true,
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [
+                        "\\Seen"
+                      ],
+                      "messageId": "<m1@example.test>"
+                    }
+                  },
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 6,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                6
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 6,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 6,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "S05",
+        "name": "changed-read-state-formerly-seen",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [
+                      "\\Seen"
+                    ],
+                    "messageId": "<m1@example.test>"
+                  }
+                }
+              ],
+              "sign": 1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [
+                        "\\Seen"
+                      ],
+                      "messageId": "<m1@example.test>"
+                    }
+                  }
+                ],
+                "sign": 1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 8,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                8
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 8,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 8,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "S06",
+        "name": "tombstone-installed-before-shift",
+        "input": {
+          "seed": {
+            "deleteTombstones": [
+              "a|INBOX|1"
+            ]
+          },
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 6,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                6
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 6,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 6,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "S07",
+        "name": "duplicate-entries",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                },
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  },
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 5,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                5
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 5,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 5,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "S08",
+        "name": "hidden-local-snoozed-and-view-held-shift",
+        "input": {
+          "seed": {
+            "settings": {
+              "hideViewMail": true
+            },
+            "autoTagRules": [
+              {
+                "tagId": "hidden",
+                "enabled": true,
+                "inboxAction": "hide"
+              }
+            ],
+            "tagsByRow": {
+              "a|INBOX|1": [
+                "hidden"
+              ]
+            },
+            "snoozes": [
+              {
+                "id": "s",
+                "accountId": "a",
+                "fromMailbox": "INBOX",
+                "snoozedMailbox": "",
+                "messageId": "<m2@example.test>",
+                "state": "snoozed"
+              }
+            ],
+            "viewHiddenKeys": [
+              "a|INBOX|3"
+            ]
+          },
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [],
+                    "messageId": "<m1@example.test>"
+                  }
+                },
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 2,
+                    "flags": [],
+                    "messageId": "<m2@example.test>"
+                  }
+                },
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 3,
+                    "flags": [],
+                    "messageId": "<m3@example.test>"
+                  }
+                },
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 4,
+                    "flags": [],
+                    "messageId": "<m4@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [],
+                      "messageId": "<m1@example.test>"
+                    }
+                  },
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 2,
+                      "flags": [],
+                      "messageId": "<m2@example.test>"
+                    }
+                  },
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 3,
+                      "flags": [],
+                      "messageId": "<m3@example.test>"
+                    }
+                  },
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 4,
+                      "flags": [],
+                      "messageId": "<m4@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 6,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                6
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 6,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 6,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "S08b",
+        "name": "deleted-flag-still-suppresses-shift",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "shift",
+              "entries": [
+                {
+                  "accountId": "a",
+                  "mailbox": "INBOX",
+                  "row": {
+                    "uid": 1,
+                    "flags": [
+                      "\\Deleted"
+                    ],
+                    "messageId": "<m1@example.test>"
+                  }
+                }
+              ],
+              "sign": -1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "shift",
+                "entries": [
+                  {
+                    "accountId": "a",
+                    "mailbox": "INBOX",
+                    "row": {
+                      "uid": 1,
+                      "flags": [
+                        "\\Deleted"
+                      ],
+                      "messageId": "<m1@example.test>"
+                    }
+                  }
+                ],
+                "sign": -1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "M01",
+        "name": "arrival-existing-and-missing",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "arrivals",
+              "accountId": "a",
+              "count": 2
+            },
+            {
+              "op": "arrivals",
+              "accountId": "new",
+              "count": 1
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "arrivals",
+                "accountId": "a",
+                "count": 2
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 9,
+                "b": 5
+              }
+            },
+            {
+              "input": {
+                "op": "arrivals",
+                "accountId": "new",
+                "count": 1
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 9,
+                "b": 5,
+                "new": 1
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "a",
+                9
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 9,
+                "b": 5
+              }
+            },
+            {
+              "method": "setUnreadForAccount",
+              "args": [
+                "new",
+                1
+              ],
+              "before": {
+                "a": 9,
+                "b": 5
+              },
+              "after": {
+                "a": 9,
+                "b": 5,
+                "new": 1
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 9,
+            "b": 5,
+            "new": 1
+          }
+        }
+      },
+      {
+        "id": "M02",
+        "name": "merge-measured-b-preserves-a",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "merge",
+              "measured": {
+                "b": 1
+              }
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "merge",
+                "measured": {
+                  "b": 1
+                }
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 7,
+                "b": 1
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadPerAccount",
+              "args": [
+                {
+                  "a": 7,
+                  "b": 1
+                }
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 7,
+                "b": 1
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 7,
+            "b": 1
+          }
+        }
+      },
+      {
+        "id": "M03",
+        "name": "merge-empty-map",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "merge",
+              "measured": {}
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "merge",
+                "measured": {}
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadPerAccount",
+              "args": [
+                {
+                  "a": 7,
+                  "b": 5
+                }
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "M04",
+        "name": "forget-a-preserves-b",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "forget",
+              "accountId": "a"
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "forget",
+                "accountId": "a"
+              },
+              "result": {
+                "$undefined": true
+              },
+              "counts": {
+                "b": 5
+              }
+            }
+          ],
+          "writes": [
+            {
+              "method": "setUnreadPerAccount",
+              "args": [
+                {
+                  "b": 5
+                }
+              ],
+              "before": {
+                "a": 7,
+                "b": 5
+              },
+              "after": {
+                "b": 5
+              }
+            }
+          ],
+          "finalCounts": {
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "R01",
+        "name": "visible-hidden-removed",
+        "input": {
+          "seed": {
+            "settings": {
+              "unreadPerAccount": {
+                "a": 7,
+                "b": 5,
+                "gone": 100
+              },
+              "hiddenAccounts": {
+                "b": true
+              }
+            }
+          },
+          "steps": [
+            {
+              "op": "rows"
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "rows"
+              },
+              "result": {
+                "rows": [
+                  {
+                    "id": "a",
+                    "label": "Alpha",
+                    "unread": 7
+                  }
+                ],
+                "total": 7
+              },
+              "counts": {
+                "a": 7,
+                "b": 5,
+                "gone": 100
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5,
+            "gone": 100
+          }
+        }
+      },
+      {
+        "id": "R02",
+        "name": "empty-account-list-keeps-stored-counts",
+        "input": {
+          "seed": {},
+          "steps": [
+            {
+              "op": "rows",
+              "accounts": []
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "rows",
+                "accounts": []
+              },
+              "result": {
+                "rows": [],
+                "total": 0
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "R03",
+        "name": "label-fallbacks",
+        "input": {
+          "seed": {
+            "settings": {
+              "displayNames": {
+                "a": "Preferred",
+                "b": ""
+              }
+            }
+          },
+          "steps": [
+            {
+              "op": "rows",
+              "accounts": [
+                {
+                  "id": "a",
+                  "name": "Alpha",
+                  "email": "a@example.test"
+                },
+                {
+                  "id": "b",
+                  "email": "b@example.test"
+                }
+              ]
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "rows",
+                "accounts": [
+                  {
+                    "id": "a",
+                    "name": "Alpha",
+                    "email": "a@example.test"
+                  },
+                  {
+                    "id": "b",
+                    "email": "b@example.test"
+                  }
+                ]
+              },
+              "result": {
+                "rows": [
+                  {
+                    "id": "a",
+                    "label": "Preferred",
+                    "unread": 7
+                  },
+                  {
+                    "id": "b",
+                    "label": "b@example.test",
+                    "unread": 5
+                  }
+                ],
+                "total": 12
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "R04",
+        "name": "real-order-unknown-and-duplicate-last-index",
+        "input": {
+          "seed": {
+            "settings": {
+              "accountOrder": [
+                "b",
+                "a",
+                "b"
+              ]
+            }
+          },
+          "steps": [
+            {
+              "op": "rows",
+              "accounts": [
+                {
+                  "id": "a",
+                  "name": "Alpha",
+                  "email": "a@example.test"
+                },
+                {
+                  "id": "b",
+                  "name": "Beta",
+                  "email": "b@example.test"
+                },
+                {
+                  "id": "c",
+                  "name": "Gamma"
+                }
+              ]
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "rows",
+                "accounts": [
+                  {
+                    "id": "a",
+                    "name": "Alpha",
+                    "email": "a@example.test"
+                  },
+                  {
+                    "id": "b",
+                    "name": "Beta",
+                    "email": "b@example.test"
+                  },
+                  {
+                    "id": "c",
+                    "name": "Gamma"
+                  }
+                ]
+              },
+              "result": {
+                "rows": [
+                  {
+                    "id": "a",
+                    "label": "Alpha",
+                    "unread": 7
+                  },
+                  {
+                    "id": "b",
+                    "label": "Beta",
+                    "unread": 5
+                  },
+                  {
+                    "id": "c",
+                    "label": "Gamma",
+                    "unread": 0
+                  }
+                ],
+                "total": 12
+              },
+              "counts": {
+                "a": 7,
+                "b": 5
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 7,
+            "b": 5
+          }
+        }
+      },
+      {
+        "id": "R05",
+        "name": "missing-count-and-hidden-map",
+        "input": {
+          "seed": {
+            "settings": {
+              "unreadPerAccount": {
+                "a": 1
+              },
+              "hiddenAccounts": {
+                "$undefined": true
+              }
+            }
+          },
+          "steps": [
+            {
+              "op": "rows"
+            }
+          ]
+        },
+        "output": {
+          "steps": [
+            {
+              "input": {
+                "op": "rows"
+              },
+              "result": {
+                "rows": [
+                  {
+                    "id": "a",
+                    "label": "Alpha",
+                    "unread": 1
+                  },
+                  {
+                    "id": "b",
+                    "label": "Beta",
+                    "unread": 0
+                  }
+                ],
+                "total": 1
+              },
+              "counts": {
+                "a": 1
+              }
+            }
+          ],
+          "writes": [],
+          "finalCounts": {
+            "a": 1
+          }
+        }
+      }
+    ]
+  },
+  "callers": {
+    "version": 1,
+    "cases": [
+      {
+        "id": "O01",
+        "name": "mutation-shift-then-complete-list-recount",
+        "input": {
+          "rows": [
+            {
+              "uid": 1,
+              "messageId": "m1@example.test",
+              "subject": "m1",
+              "flags": [],
+              "source": "server",
+              "from": {
+                "address": "sender@example.test"
+              },
+              "date": "2026-09-01T10:00:00Z"
+            },
+            {
+              "uid": 2,
+              "messageId": "m2@example.test",
+              "subject": "m2",
+              "flags": [],
+              "source": "server",
+              "from": {
+                "address": "sender@example.test"
+              },
+              "date": "2026-09-01T10:00:00Z"
+            }
+          ],
+          "total": 2,
+          "baseline": {
+            "a": 7,
+            "b": 5
+          }
+        },
+        "output": {
+          "before": {
+            "counts": {
+              "a": 7,
+              "b": 5
+            },
+            "rows": [
+              {
+                "uid": 1,
+                "flags": []
+              },
+              {
+                "uid": 2,
+                "flags": []
+              }
+            ],
+            "sorted": [
+              1,
+              2
+            ],
+            "tombstones": [],
+            "undo": false,
+            "calls": []
+          },
+          "after": {
+            "counts": {
+              "a": 1,
+              "b": 5
+            },
+            "rows": [
+              {
+                "uid": 1,
+                "flags": [
+                  "\\Seen"
+                ]
+              },
+              {
+                "uid": 2,
+                "flags": []
+              }
+            ],
+            "sorted": [
+              1,
+              2
+            ],
+            "tombstones": [],
+            "undo": true,
+            "calls": [
+              [
+                "daemon",
+                "body.verdicts",
+                {
+                  "rows": [
+                    {
+                      "id": "[\"a-INBOX-1\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                      "key": "a-INBOX-1",
+                      "from": {
+                        "name": null,
+                        "address": "sender@example.test"
+                      },
+                      "replyTo": null
+                    },
+                    {
+                      "id": "[\"a-INBOX-2\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                      "key": "a-INBOX-2",
+                      "from": {
+                        "name": null,
+                        "address": "sender@example.test"
+                      },
+                      "replyTo": null
+                    }
+                  ],
+                  "linkSafetyEnabled": true
+                }
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                6
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                1
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "id": "O02",
+        "name": "partial-inbox-delete-and-undo",
+        "input": {
+          "rows": [
+            {
+              "uid": 1,
+              "messageId": "m1@example.test",
+              "subject": "m1",
+              "flags": [],
+              "source": "server",
+              "from": {
+                "address": "sender@example.test"
+              },
+              "date": "2026-09-01T10:00:00Z"
+            },
+            {
+              "uid": 2,
+              "messageId": "m2@example.test",
+              "subject": "m2",
+              "flags": [],
+              "source": "server",
+              "from": {
+                "address": "sender@example.test"
+              },
+              "date": "2026-09-01T10:00:00Z"
+            }
+          ],
+          "total": 500,
+          "baseline": {
+            "a": 7,
+            "b": 5
+          }
+        },
+        "output": {
+          "before": {
+            "counts": {
+              "a": 7,
+              "b": 5
+            },
+            "rows": [
+              {
+                "uid": 1,
+                "flags": []
+              },
+              {
+                "uid": 2,
+                "flags": []
+              }
+            ],
+            "sorted": [
+              1,
+              2
+            ],
+            "tombstones": [],
+            "undo": false,
+            "calls": []
+          },
+          "deleted": {
+            "counts": {
+              "a": 6,
+              "b": 5
+            },
+            "rows": [
+              {
+                "uid": 2,
+                "flags": []
+              }
+            ],
+            "sorted": [
+              2
+            ],
+            "tombstones": [
+              "a|INBOX|1"
+            ],
+            "undo": true,
+            "calls": [
+              [
+                "setUnreadForAccount",
+                "a",
+                6
+              ]
+            ]
+          },
+          "undoResult": true,
+          "after": {
+            "counts": {
+              "a": 7,
+              "b": 5
+            },
+            "rows": [
+              {
+                "uid": 2,
+                "flags": []
+              },
+              {
+                "uid": 41,
+                "flags": []
+              }
+            ],
+            "sorted": [
+              2,
+              41
+            ],
+            "tombstones": [
+              "a|INBOX|1"
+            ],
+            "undo": false,
+            "calls": [
+              [
+                "setUnreadForAccount",
+                "a",
+                6
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                7
+              ],
+              [
+                "daemon",
+                "body.verdicts",
+                {
+                  "rows": [
+                    {
+                      "id": "[\"a-INBOX-41\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                      "key": "a-INBOX-41",
+                      "from": {
+                        "name": null,
+                        "address": "sender@example.test"
+                      },
+                      "replyTo": null
+                    }
+                  ],
+                  "linkSafetyEnabled": true
+                }
+              ],
+              [
+                "daemon",
+                "body.verdicts",
+                {
+                  "rows": [
+                    {
+                      "id": "[\"a-INBOX-41\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                      "key": "a-INBOX-41",
+                      "from": {
+                        "name": null,
+                        "address": "sender@example.test"
+                      },
+                      "replyTo": null
+                    }
+                  ],
+                  "linkSafetyEnabled": true
+                }
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "id": "O03",
+        "name": "actual-follow-up-load-optimistic-seen-unseen-dismiss",
+        "input": {
+          "rows": [
+            {
+              "id": "announced",
+              "accountId": "a",
+              "state": "due",
+              "sentMailbox": "Sent",
+              "sentUid": 9,
+              "seen": false,
+              "announced": true
+            },
+            {
+              "id": "new",
+              "accountId": "a",
+              "state": "due",
+              "sentMailbox": "Sent",
+              "sentUid": 9,
+              "seen": false,
+              "announced": false
+            }
+          ],
+          "baseline": {
+            "a": 7,
+            "b": 5
+          }
+        },
+        "output": {
+          "before": {
+            "counts": {
+              "a": 7,
+              "b": 5
+            },
+            "rows": [],
+            "sorted": [],
+            "tombstones": [],
+            "undo": false,
+            "calls": []
+          },
+          "loaded": {
+            "counts": {
+              "a": 8,
+              "b": 5
+            },
+            "rows": [],
+            "sorted": [],
+            "tombstones": [],
+            "undo": false,
+            "calls": [
+              [
+                "daemon",
+                "follow_up.list",
+                {}
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                8
+              ]
+            ]
+          },
+          "seen": {
+            "counts": {
+              "a": 7,
+              "b": 5
+            },
+            "rows": [],
+            "sorted": [],
+            "tombstones": [],
+            "undo": false,
+            "calls": [
+              [
+                "daemon",
+                "follow_up.list",
+                {}
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                8
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                7
+              ],
+              [
+                "daemon",
+                "follow_up.mark_seen",
+                {
+                  "id": "new",
+                  "seen": true
+                }
+              ]
+            ]
+          },
+          "unread": {
+            "counts": {
+              "a": 8,
+              "b": 5
+            },
+            "rows": [],
+            "sorted": [],
+            "tombstones": [],
+            "undo": false,
+            "calls": [
+              [
+                "daemon",
+                "follow_up.list",
+                {}
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                8
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                7
+              ],
+              [
+                "daemon",
+                "follow_up.mark_seen",
+                {
+                  "id": "new",
+                  "seen": true
+                }
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                8
+              ],
+              [
+                "daemon",
+                "follow_up.mark_seen",
+                {
+                  "id": "new",
+                  "seen": false
+                }
+              ]
+            ]
+          },
+          "after": {
+            "counts": {
+              "a": 7,
+              "b": 5
+            },
+            "rows": [],
+            "sorted": [],
+            "tombstones": [],
+            "undo": false,
+            "calls": [
+              [
+                "daemon",
+                "follow_up.list",
+                {}
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                8
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                7
+              ],
+              [
+                "daemon",
+                "follow_up.mark_seen",
+                {
+                  "id": "new",
+                  "seen": true
+                }
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                8
+              ],
+              [
+                "daemon",
+                "follow_up.mark_seen",
+                {
+                  "id": "new",
+                  "seen": false
+                }
+              ],
+              [
+                "setUnreadForAccount",
+                "a",
+                7
+              ],
+              [
+                "daemon",
+                "follow_up.dismiss",
+                {
+                  "id": "new"
+                }
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "id": "O04",
+        "name": "actual-refresh-inactive-measurement-merges-after-active-recount",
+        "input": {
+          "counts": {
+            "a": 9,
+            "b": 5
+          },
+          "activeAccountId": "a",
+          "emails": [
+            {
+              "uid": 1,
+              "flags": [],
+              "messageId": "m1@example.test",
+              "subject": "m1",
+              "from": {
+                "address": "sender@example.test"
+              }
+            }
+          ]
+        },
+        "output": {
+          "result": {
+            "newEmails": 1,
+            "totalUnread": 2,
+            "perAccountResults": []
+          },
+          "orderedCalls": [
+            [
+              "probe.invalidate",
+              "a"
+            ],
+            [
+              "localFolders",
+              "a"
+            ],
+            [
+              "probe.invalidate",
+              "b"
+            ],
+            [
+              "localFolders",
+              "b"
+            ],
+            [
+              "meta",
+              "a",
+              "INBOX"
+            ],
+            [
+              "loadEmails.enter"
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              1
+            ],
+            [
+              "loadEmails.recount",
+              true
+            ],
+            [
+              "meta",
+              "b",
+              "INBOX"
+            ],
+            [
+              "fetch",
+              "b",
+              "INBOX",
+              1
+            ],
+            [
+              "save",
+              "b",
+              "INBOX",
+              2,
+              2
+            ],
+            [
+              "setUnreadPerAccount",
+              {
+                "a": 1,
+                "b": 1
+              }
+            ]
+          ],
+          "counts": {
+            "a": 1,
+            "b": 1
+          },
+          "activeAccountId": "a",
+          "emails": [
+            {
+              "uid": 1,
+              "flags": [
+                "\\Seen"
+              ],
+              "messageId": "m1@example.test",
+              "subject": "m1",
+              "from": {
+                "address": "sender@example.test"
+              }
+            },
+            {
+              "uid": 2,
+              "flags": [],
+              "messageId": "m2@example.test",
+              "subject": "m2",
+              "from": {
+                "address": "sender@example.test"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,611 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "O01",
+      "name": "mutation-shift-then-complete-list-recount",
+      "input": {
+        "rows": [
+          {
+            "uid": 1,
+            "messageId": "m1@example.test",
+            "subject": "m1",
+            "flags": [],
+            "source": "server",
+            "from": {
+              "address": "sender@example.test"
+            },
+            "date": "2026-09-01T10:00:00Z"
+          },
+          {
+            "uid": 2,
+            "messageId": "m2@example.test",
+            "subject": "m2",
+            "flags": [],
+            "source": "server",
+            "from": {
+              "address": "sender@example.test"
+            },
+            "date": "2026-09-01T10:00:00Z"
+          }
+        ],
+        "total": 2,
+        "baseline": {
+          "a": 7,
+          "b": 5
+        }
+      },
+      "output": {
+        "before": {
+          "counts": {
+            "a": 7,
+            "b": 5
+          },
+          "rows": [
+            {
+              "uid": 1,
+              "flags": []
+            },
+            {
+              "uid": 2,
+              "flags": []
+            }
+          ],
+          "sorted": [
+            1,
+            2
+          ],
+          "tombstones": [],
+          "undo": false,
+          "calls": []
+        },
+        "after": {
+          "counts": {
+            "a": 1,
+            "b": 5
+          },
+          "rows": [
+            {
+              "uid": 1,
+              "flags": [
+                "\\Seen"
+              ]
+            },
+            {
+              "uid": 2,
+              "flags": []
+            }
+          ],
+          "sorted": [
+            1,
+            2
+          ],
+          "tombstones": [],
+          "undo": true,
+          "calls": [
+            [
+              "daemon",
+              "body.verdicts",
+              {
+                "rows": [
+                  {
+                    "id": "[\"a-INBOX-1\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                    "key": "a-INBOX-1",
+                    "from": {
+                      "name": null,
+                      "address": "sender@example.test"
+                    },
+                    "replyTo": null
+                  },
+                  {
+                    "id": "[\"a-INBOX-2\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                    "key": "a-INBOX-2",
+                    "from": {
+                      "name": null,
+                      "address": "sender@example.test"
+                    },
+                    "replyTo": null
+                  }
+                ],
+                "linkSafetyEnabled": true
+              }
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              6
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "O02",
+      "name": "partial-inbox-delete-and-undo",
+      "input": {
+        "rows": [
+          {
+            "uid": 1,
+            "messageId": "m1@example.test",
+            "subject": "m1",
+            "flags": [],
+            "source": "server",
+            "from": {
+              "address": "sender@example.test"
+            },
+            "date": "2026-09-01T10:00:00Z"
+          },
+          {
+            "uid": 2,
+            "messageId": "m2@example.test",
+            "subject": "m2",
+            "flags": [],
+            "source": "server",
+            "from": {
+              "address": "sender@example.test"
+            },
+            "date": "2026-09-01T10:00:00Z"
+          }
+        ],
+        "total": 500,
+        "baseline": {
+          "a": 7,
+          "b": 5
+        }
+      },
+      "output": {
+        "before": {
+          "counts": {
+            "a": 7,
+            "b": 5
+          },
+          "rows": [
+            {
+              "uid": 1,
+              "flags": []
+            },
+            {
+              "uid": 2,
+              "flags": []
+            }
+          ],
+          "sorted": [
+            1,
+            2
+          ],
+          "tombstones": [],
+          "undo": false,
+          "calls": []
+        },
+        "deleted": {
+          "counts": {
+            "a": 6,
+            "b": 5
+          },
+          "rows": [
+            {
+              "uid": 2,
+              "flags": []
+            }
+          ],
+          "sorted": [
+            2
+          ],
+          "tombstones": [
+            "a|INBOX|1"
+          ],
+          "undo": true,
+          "calls": [
+            [
+              "setUnreadForAccount",
+              "a",
+              6
+            ]
+          ]
+        },
+        "undoResult": true,
+        "after": {
+          "counts": {
+            "a": 7,
+            "b": 5
+          },
+          "rows": [
+            {
+              "uid": 2,
+              "flags": []
+            },
+            {
+              "uid": 41,
+              "flags": []
+            }
+          ],
+          "sorted": [
+            2,
+            41
+          ],
+          "tombstones": [
+            "a|INBOX|1"
+          ],
+          "undo": false,
+          "calls": [
+            [
+              "setUnreadForAccount",
+              "a",
+              6
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              7
+            ],
+            [
+              "daemon",
+              "body.verdicts",
+              {
+                "rows": [
+                  {
+                    "id": "[\"a-INBOX-41\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                    "key": "a-INBOX-41",
+                    "from": {
+                      "name": null,
+                      "address": "sender@example.test"
+                    },
+                    "replyTo": null
+                  }
+                ],
+                "linkSafetyEnabled": true
+              }
+            ],
+            [
+              "daemon",
+              "body.verdicts",
+              {
+                "rows": [
+                  {
+                    "id": "[\"a-INBOX-41\",{\"name\":null,\"address\":\"sender@example.test\"},null]",
+                    "key": "a-INBOX-41",
+                    "from": {
+                      "name": null,
+                      "address": "sender@example.test"
+                    },
+                    "replyTo": null
+                  }
+                ],
+                "linkSafetyEnabled": true
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "O03",
+      "name": "actual-follow-up-load-optimistic-seen-unseen-dismiss",
+      "input": {
+        "rows": [
+          {
+            "id": "announced",
+            "accountId": "a",
+            "state": "due",
+            "sentMailbox": "Sent",
+            "sentUid": 9,
+            "seen": false,
+            "announced": true
+          },
+          {
+            "id": "new",
+            "accountId": "a",
+            "state": "due",
+            "sentMailbox": "Sent",
+            "sentUid": 9,
+            "seen": false,
+            "announced": false
+          }
+        ],
+        "baseline": {
+          "a": 7,
+          "b": 5
+        }
+      },
+      "output": {
+        "before": {
+          "counts": {
+            "a": 7,
+            "b": 5
+          },
+          "rows": [],
+          "sorted": [],
+          "tombstones": [],
+          "undo": false,
+          "calls": []
+        },
+        "loaded": {
+          "counts": {
+            "a": 8,
+            "b": 5
+          },
+          "rows": [],
+          "sorted": [],
+          "tombstones": [],
+          "undo": false,
+          "calls": [
+            [
+              "daemon",
+              "follow_up.list",
+              {}
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              8
+            ]
+          ]
+        },
+        "seen": {
+          "counts": {
+            "a": 7,
+            "b": 5
+          },
+          "rows": [],
+          "sorted": [],
+          "tombstones": [],
+          "undo": false,
+          "calls": [
+            [
+              "daemon",
+              "follow_up.list",
+              {}
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              8
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              7
+            ],
+            [
+              "daemon",
+              "follow_up.mark_seen",
+              {
+                "id": "new",
+                "seen": true
+              }
+            ]
+          ]
+        },
+        "unread": {
+          "counts": {
+            "a": 8,
+            "b": 5
+          },
+          "rows": [],
+          "sorted": [],
+          "tombstones": [],
+          "undo": false,
+          "calls": [
+            [
+              "daemon",
+              "follow_up.list",
+              {}
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              8
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              7
+            ],
+            [
+              "daemon",
+              "follow_up.mark_seen",
+              {
+                "id": "new",
+                "seen": true
+              }
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              8
+            ],
+            [
+              "daemon",
+              "follow_up.mark_seen",
+              {
+                "id": "new",
+                "seen": false
+              }
+            ]
+          ]
+        },
+        "after": {
+          "counts": {
+            "a": 7,
+            "b": 5
+          },
+          "rows": [],
+          "sorted": [],
+          "tombstones": [],
+          "undo": false,
+          "calls": [
+            [
+              "daemon",
+              "follow_up.list",
+              {}
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              8
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              7
+            ],
+            [
+              "daemon",
+              "follow_up.mark_seen",
+              {
+                "id": "new",
+                "seen": true
+              }
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              8
+            ],
+            [
+              "daemon",
+              "follow_up.mark_seen",
+              {
+                "id": "new",
+                "seen": false
+              }
+            ],
+            [
+              "setUnreadForAccount",
+              "a",
+              7
+            ],
+            [
+              "daemon",
+              "follow_up.dismiss",
+              {
+                "id": "new"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "O04",
+      "name": "actual-refresh-inactive-measurement-merges-after-active-recount",
+      "input": {
+        "counts": {
+          "a": 9,
+          "b": 5
+        },
+        "activeAccountId": "a",
+        "emails": [
+          {
+            "uid": 1,
+            "flags": [],
+            "messageId": "m1@example.test",
+            "subject": "m1",
+            "from": {
+              "address": "sender@example.test"
+            }
+          }
+        ]
+      },
+      "output": {
+        "result": {
+          "newEmails": 1,
+          "totalUnread": 2,
+          "perAccountResults": []
+        },
+        "orderedCalls": [
+          [
+            "probe.invalidate",
+            "a"
+          ],
+          [
+            "localFolders",
+            "a"
+          ],
+          [
+            "probe.invalidate",
+            "b"
+          ],
+          [
+            "localFolders",
+            "b"
+          ],
+          [
+            "meta",
+            "a",
+            "INBOX"
+          ],
+          [
+            "loadEmails.enter"
+          ],
+          [
+            "setUnreadForAccount",
+            "a",
+            1
+          ],
+          [
+            "loadEmails.recount",
+            true
+          ],
+          [
+            "meta",
+            "b",
+            "INBOX"
+          ],
+          [
+            "fetch",
+            "b",
+            "INBOX",
+            1
+          ],
+          [
+            "save",
+            "b",
+            "INBOX",
+            2,
+            2
+          ],
+          [
+            "setUnreadPerAccount",
+            {
+              "a": 1,
+              "b": 1
+            }
+          ]
+        ],
+        "counts": {
+          "a": 1,
+          "b": 1
+        },
+        "activeAccountId": "a",
+        "emails": [
+          {
+            "uid": 1,
+            "flags": [
+              "\\Seen"
+            ],
+            "messageId": "m1@example.test",
+            "subject": "m1",
+            "from": {
+              "address": "sender@example.test"
+            }
+          },
+          {
+            "uid": 2,
+            "flags": [],
+            "messageId": "m2@example.test",
+            "subject": "m2",
+            "from": {
+              "address": "sender@example.test"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
