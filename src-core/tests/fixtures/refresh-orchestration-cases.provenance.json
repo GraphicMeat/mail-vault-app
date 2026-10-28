@@ -1,0 +1,207 @@
+{
+  "originalCommit": "043969de0ccfaaf822e1740ea4483c7043163bad",
+  "originalSources": {
+    "refresh": {
+      "path": "src/services/workflows/refreshAccounts.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__services__workflows__refreshAccounts.js.base64",
+      "sha256": "21c348ac76a050b874598c0cc7c54c29f6790c231ee0c22324d0360e038e7066",
+      "archiveSha256": "1538644322bd2d865790ab607482ef020bb930d883486f10e6de224f59c66961"
+    },
+    "hook": {
+      "path": "src/hooks/useEmailScheduler.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__hooks__useEmailScheduler.js.base64",
+      "sha256": "b9668a5bfe721dea5ee3a1f9fb4b03a05530c4732c6c2b2822f24f676c0f5318",
+      "archiveSha256": "ec4f2fab0500507162c75fcbc1755e09aa9a294c57dc8022bebc1cc056f8ce59"
+    },
+    "auth": {
+      "path": "src/services/authUtils.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__services__authUtils.js.base64",
+      "sha256": "28673eb0ae99b6ccfafa67ca348f68cfd5033de14f92db799abd5e25073c4786",
+      "archiveSha256": "eb54acdab215ff3d686c4774b87046ed83392055ad78ba705c5d6b1fc4782d77"
+    },
+    "graph": {
+      "path": "src/services/graphConfig.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__services__graphConfig.js.base64",
+      "sha256": "55633f6b732b86a010f3b3ff8ad86cb1c328d88a668ac2b9842104446cc90799",
+      "archiveSha256": "718ea811d5877f28d135ae2134fe249c26816518ed998e2cb2f26adf508dc044"
+    },
+    "adoption": {
+      "path": "src/services/workflows/adoptGraphFolderKeys.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__services__workflows__adoptGraphFolderKeys.js.base64",
+      "sha256": "94431416cf4b5964b07d7ea14a051ee83d8bca6f6f58e47c6ac5c7ac1d1771c6",
+      "archiveSha256": "84eecba14e11ef53951a3d5421644e7e4f8f94567c2acaaa51f90c39c88698cb"
+    },
+    "cache": {
+      "path": "src/services/cacheManager.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__services__cacheManager.js.base64",
+      "sha256": "a88665b29d2f5d1d246f48c3b2f194e3c186ada3a3131338bbb5516b62909f19",
+      "archiveSha256": "019dd2a23aec7dbcc6f0ebc46c76cea7d27ee218bd5e3bcd1df289da2b02dce5"
+    },
+    "identity": {
+      "path": "src/services/headerIdentity.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__services__headerIdentity.js.base64",
+      "sha256": "fd1a1289a47ae5f7a0def02effd4bbd1437b992698f76d03e9debc8d72d7fd1e",
+      "archiveSha256": "00088aa28cdad4c40e58c4c8daa302c26ac09e5234cc27e8d722cc89f7af6036"
+    },
+    "unified": {
+      "path": "src/stores/slices/unifiedHelpers.js",
+      "archive": "src-core/tests/fixtures/gen/refresh-orchestration-originals/src__stores__slices__unifiedHelpers.js.base64",
+      "sha256": "fcb80eace56c834974cc6825870d4a44004afdf1a8d2a4974a40be0cba28c41a",
+      "archiveSha256": "ccf898920ea82d403267eff4b09fd9e02aa101e4821422253770dae0e76d5bb2"
+    }
+  },
+  "generator": {
+    "path": "src-core/tests/fixtures/gen/refresh-orchestration-capture.cjs",
+    "sha256": "250cd7dfff45dbedff4baefa759779d9be8a01d2b69718ed18c5e6f2cd72a0a8"
+  },
+  "wrapper": {
+    "path": "src-core/tests/fixtures/gen/refresh-orchestration-cases.test.js",
+    "sha256": "f336b4798f6f3b1e6221ac842eef0c1a2b37a08cb35e84e5123569669b778c38"
+  },
+  "runner": {
+    "path": "blitz-wave4-s2-oracle-v2-runner.cjs",
+    "sha256": "57b3f32b096e0759c8ea33f61c39f5bb44f927f2640480ce1c685272d440b6c2"
+  },
+  "packageLockSha256": "e028bb112fa145998cdaaf2a94a20a66b4a56d86895d830207e7330af9871294",
+  "command": "MV_CAPTURE_REFRESH_ORCHESTRATION=1 node --experimental-vm-modules node_modules/vitest/vitest.mjs run src-core/tests/fixtures/gen/refresh-orchestration-cases.test.js",
+  "clock": {
+    "epochMs": 1700000000000,
+    "fakeTimers": "Vitest vi.useFakeTimers / vi.advanceTimersByTimeAsync"
+  },
+  "renderer": "@testing-library/react renderHook with installed React",
+  "manifest": {
+    "refresh": {
+      "count": 61,
+      "names": [
+        "empty-accounts",
+        "one-visible-imap",
+        "hidden-first",
+        "hidden-middle",
+        "hidden-all",
+        "missing-password-and-token",
+        "oauth-access-token-present",
+        "oauth-refresh-only-skipped",
+        "retry-b-while-a-active",
+        "retry-active-a",
+        "retry-hidden-a",
+        "retry-missing-id",
+        "retry-active-fetch-fails",
+        "active-ordinary-inbox",
+        "active-ordinary-sent",
+        "inactive-inbox",
+        "explicit-all-account-sent",
+        "unified-inbox",
+        "unified-sent",
+        "unified-literal-sentinel",
+        "imap-one-page",
+        "imap-two-pages",
+        "imap-empty-last-page",
+        "imap-page-two-refusal",
+        "cached-alias-mailbox-list",
+        "db-fallback-mailbox-list",
+        "graph-well-known-localized-sent",
+        "graph-well-known-inbox",
+        "graph-custom-folder",
+        "graph-target-absent",
+        "graph-one-page-next-link",
+        "graph-zero-rows",
+        "graph-folder-list-failure",
+        "graph-message-list-failure",
+        "graph-adoption-failed-report-continues",
+        "graph-adoption-rejection-continues",
+        "cache-absent",
+        "cache-meta-read-failure",
+        "cache-zero-total",
+        "cache-partial-500-of-1634",
+        "cache-complete-three-of-three",
+        "cache-uid-list-failure",
+        "cache-duplicate-count",
+        "cache-hole-count",
+        "one-higher-arrival",
+        "two-higher-arrivals",
+        "count-neutral-delete-delivery",
+        "lower-uid-hole-fill",
+        "rollover-to-lower-uid-space",
+        "wide-range-backfill",
+        "string-uid-edge",
+        "a-provider-fails-b-succeeds",
+        "active-loader-throws-b-succeeds",
+        "all-providers-fail",
+        "premium-classifies-all-visible-after-retry",
+        "nonpremium-does-not-classify",
+        "hidden-changes-before-classification",
+        "active-view-account-switch-while-held",
+        "active-view-folder-switch-while-held",
+        "active-view-unified-switch-while-held",
+        "active-view-subtree-switch-while-held"
+      ]
+    },
+    "currentView": {
+      "count": 7,
+      "names": [
+        "current-no-account",
+        "current-ordinary-inbox",
+        "current-ordinary-sent",
+        "current-unified-inbox-stays-open",
+        "current-unified-sent-stays-open",
+        "current-unified-changed-during-await",
+        "current-subtree-root-with-child-paths"
+      ]
+    },
+    "adoption": {
+      "count": 13,
+      "names": [
+        "static-imap-no-op",
+        "static-success",
+        "static-failed-report",
+        "static-rejection",
+        "static-skipped-both-exist",
+        "static-already-acknowledged",
+        "listing-empty-pairs",
+        "listing-localized-pair-success",
+        "listing-failed-report",
+        "listing-rejection",
+        "listing-skipped-both-exist",
+        "listing-already-acknowledged",
+        "listing-custom-no-pair"
+      ]
+    },
+    "scheduler": {
+      "count": 16,
+      "names": [
+        "launch-on-one-account",
+        "launch-off-one-account",
+        "launch-empty-then-account",
+        "launch-remount",
+        "launch-repeat-renders",
+        "launch-enable-after-initial-off",
+        "interval-zero",
+        "interval-negative",
+        "interval-default-five",
+        "interval-change-resets",
+        "interval-account-count-change",
+        "interval-held-first-tick",
+        "interval-held-two-more-ticks",
+        "interval-refresh-rejects",
+        "interval-per-account-failure-resolves",
+        "interval-no-accounts-then-present"
+      ]
+    },
+    "watch": {
+      "count": 10,
+      "names": [
+        "watch-imap-and-graph",
+        "watch-jmap-and-imap",
+        "watch-hidden-imap",
+        "watch-missing-credentials",
+        "watch-token-only-change",
+        "watch-same-length-account-replacement",
+        "watch-token-prefix-change-same-suffix",
+        "watch-password-presence-unchanged",
+        "watch-graph-only",
+        "watch-hidden-token-change"
+      ]
+    }
+  },
+  "fixtureSha256": "a396bbc4991c9a4f96e611f1580eff895afe590b058537caac7151f3a4089973"
+}
