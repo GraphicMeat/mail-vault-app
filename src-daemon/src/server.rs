@@ -504,11 +504,13 @@ where
 /// (`oauth_tokens::inject`), so no handler ever sends the app's copy.
 async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcResponse {
     let method = req.method.clone();
-    // These read-only contracts must reject account-bearing unknown fields
+    // These strict contracts must reject account-bearing unknown fields
     // without ever resolving credentials. route_request retains foreground accounting.
     if matches!(
         method.as_str(),
-        "compose.reply_context"
+        "sync.probe"
+            | "folders.status"
+            | "compose.reply_context"
             | "compose.check"
             | "backup.schedule.get"
             | "backup.schedule.set"

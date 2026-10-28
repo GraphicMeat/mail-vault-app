@@ -1,18 +1,82 @@
 //! Volatile source-bound freshness and closed-folder sweep state.
 
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
-use crate::handlers::common::blocking;
 use crate::imap::{ImapConfig, NativeHeaderIdentity};
 use crate::server::DaemonState;
 use mailvault_core::accounts_doc;
 use mailvault_core::sync_policy::{FOLDER_TTL_MS, PROBE_TTL_MS};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, oneshot};
+use tracing::warn;
 
 const MAX_PROOFS: usize = 256;
 const PROOF_LIFETIME: Duration = Duration::from_secs(60);
+
+// The current runtime owns each blocking pool. Calls from an observation
+// provider child therefore use this worker's background-QoS blocking pool.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tokio::task::spawn_blocking(f).await.map_err(|error| format!("Task join error: {error}"))
+}
+
+type Job = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
+
+#[derive(Default)]
+struct ObservationWorker(Mutex<Option<mpsc::UnboundedSender<Job>>>);
+
+impl ObservationWorker {
+    fn send(&self, job: Job) -> Result<(), String> {
+        let mut sender = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        if sender.as_ref().is_none_or(mpsc::UnboundedSender::is_closed) {
+            let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
+            std::thread::Builder::new()
+                .name("sync-observation-worker".into())
+                .stack_size(8 * 1024 * 1024)
+                .spawn(move || {
+                    #[cfg(target_os = "macos")]
+                    unsafe {
+                        libc::pthread_set_qos_class_self_np(
+                            libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);
+                    }
+                    let mut builder = tokio::runtime::Builder::new_current_thread();
+                    builder.enable_all()
+                        .thread_name("sync-observation-blocking")
+                        .thread_stack_size(8 * 1024 * 1024)
+                        .on_thread_start(|| {
+                            // Tokio invokes this hook for the runtime's blocking
+                            // pool threads as well as its async workers.
+                            #[cfg(target_os = "macos")]
+                            unsafe {
+                                libc::pthread_set_qos_class_self_np(
+                                    libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);
+                            }
+                        });
+                    let runtime = match builder.build() {
+                        Ok(runtime) => runtime,
+                        Err(error) => {
+                            warn!("sync observation worker could not start: {error}");
+                            return;
+                        }
+                    };
+                    runtime.block_on(async move {
+                        while let Some(job) = rx.recv().await {
+                            // The long provider future lives on the heap, never
+                            // in the receiver loop's stack frame.
+                            tokio::spawn(Box::pin(async move { job.await }));
+                        }
+                    });
+                })
+                .map_err(|error| format!("sync observation worker could not start: {error}"))?;
+            *sender = Some(tx);
+        }
+        sender.as_ref().expect("worker sender installed").send(job)
+            .map_err(|_| "sync observation worker stopped".to_owned())
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct Origin {
@@ -107,11 +171,21 @@ impl Inner {
 }
 
 #[derive(Default)]
-pub(crate) struct ObservationState(Mutex<Inner>);
+pub(crate) struct ObservationState(Mutex<Inner>, ObservationWorker);
 
 impl ObservationState {
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
         self.0.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
+    pub(crate) fn spawn_job<T: Send + 'static>(&self, job: impl Future<Output = T> + Send + 'static)
+        -> Result<oneshot::Receiver<T>, String> {
+        let (reply, result) = oneshot::channel();
+        self.1.send(Box::pin(async move {
+            let value = job.await;
+            let _ = reply.send(value);
+        }))?;
+        Ok(result)
     }
 
     pub(crate) fn marker_recent(&self, source: &SourceKey, now_ms: i64) -> bool {

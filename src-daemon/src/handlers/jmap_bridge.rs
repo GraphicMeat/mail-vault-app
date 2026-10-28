@@ -458,6 +458,9 @@ async fn probe_status_value(state: &Arc<DaemonState>, account: &ImapConfig,
     original: Option<&crate::account_lifecycle::AccountStamp>) -> Result<Value, Fail> {
     // A failed delta fails the probe so a stale count never looks current.
     status_delta(state, account, account_id, original).await?;
+    if original.is_some() {
+        crate::search_index::wait_foreground_quiet(&state.search_index).await;
+    }
     let mb = mailbox_counts(acct, mailbox).await?;
     let uid_next = uid_next(state, account_id, mailbox).await?;
     let (modseq, _) = meta_read(state, account_id, mailbox, None).await;
@@ -472,9 +475,15 @@ async fn folder_status_rows(state: &Arc<DaemonState>, account: &ImapConfig,
     if let Err(error) = status_delta(state, account, account_id, original).await {
         warn!("[jmap] {}: delta before folder status failed: {}", account_id, error);
     }
+    if original.is_some() {
+        crate::search_index::wait_foreground_quiet(&state.search_index).await;
+    }
     let boxes = acct.current().await?;
     let mut statuses = Vec::new();
     for path in wanted {
+        if original.is_some() {
+            crate::search_index::wait_foreground_quiet(&state.search_index).await;
+        }
         let Some(mailbox) = boxes.ids.get(&path).and_then(|id|
             boxes.list.iter().find(|mailbox| &mailbox.id == id)) else { continue };
         let uid_next = uid_next(state, account_id, &path).await.ok();

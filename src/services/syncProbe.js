@@ -18,11 +18,13 @@ function bounded(work) {
     .finally(() => clearTimeout(timer));
 }
 
-function queueMutation(accountId, work, failure) {
+function queueMutation(accountId, work, failure, clearsUncertainty = false) {
   const previous = tails.get(accountId);
   const operation = async () => {
     try {
-      return await bounded(work);
+      const result = await bounded(work);
+      if (clearsUncertainty) uncertain.delete(accountId);
+      return result;
     } catch {
       uncertain.add(accountId);
       return failure;
@@ -51,13 +53,14 @@ export function markVerified(accountId, mailbox, evidence) {
 }
 
 export function invalidate(accountId, mailbox) {
-  const scope = mailbox ? { mailbox } : {};
   return queueMutation(accountId, async () => {
+    // A failed mutation may have left any native marker live. Recovery must
+    // invalidate the whole account, even when this call names one mailbox.
+    const scope = uncertain.has(accountId) ? {} : mailbox ? { mailbox } : {};
     const result = await send('sync.probe', { op: 'invalidate', accountId, ...scope });
     if (result?.invalidated !== true) throw new Error('errors.daemonUnavailable');
-    uncertain.delete(accountId);
     return result;
-  }, { invalidated: false });
+  }, { invalidated: false }, true);
 }
 
 export async function mailboxIsUnchanged(_account, accountId, mailbox) {

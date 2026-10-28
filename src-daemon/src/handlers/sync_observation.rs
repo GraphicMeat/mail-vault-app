@@ -158,10 +158,12 @@ async fn check(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Val
         Ok(operation) => operation,
         Err(_) => return probe(false, "probe-failed"),
     };
-    let state = Arc::clone(state);
+    let child_state = Arc::clone(state);
     let mailbox = mailbox.to_owned();
-    let mut child = tokio::spawn(async move {
+    let mut child = match state.sync_observation.spawn_job(async move {
+        let state = child_state;
         let _operation = operation;
+        crate::search_index::wait_foreground_quiet(&state.search_index).await;
         #[cfg(test)]
         sample_worker_thread_for_test("provider-probe", &mailbox);
         let status = if config.uses_jmap() {
@@ -188,7 +190,10 @@ async fn check(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> Val
             return probe(false, "probe-failed");
         };
         json!({ "unchanged": true, "reason": decision.reason, "verificationRef": reference })
-    });
+    }) {
+        Ok(child) => child,
+        Err(_) => return probe(false, "probe-failed"),
+    };
     match tokio::time::timeout(PROBE_DEADLINE, &mut child).await {
         Ok(Ok(value)) => value,
         _ => probe(false, "probe-failed"),
@@ -245,9 +250,11 @@ async fn refresh(state: &Arc<DaemonState>, account_id: &str, active: Option<&str
         Ok(operation) => operation,
         Err(_) => return Ok(None),
     };
-    let state = Arc::clone(state);
-    let mut child = tokio::spawn(async move {
+    let child_state = Arc::clone(state);
+    let mut child = state.sync_observation.spawn_job(async move {
+        let state = child_state;
         let _operation = operation;
+        crate::search_index::wait_foreground_quiet(&state.search_index).await;
         #[cfg(test)]
         sample_worker_thread_for_test("provider-folder", paths.first().map(String::as_str).unwrap_or(""));
         let statuses = if config.uses_jmap() {
@@ -263,7 +270,7 @@ async fn refresh(state: &Arc<DaemonState>, account_id: &str, active: Option<&str
         let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&current.original))
             .map_err(|_| "errors.keychainBusy".to_owned())?;
         Ok::<Option<Value>, String>(Some(json!({"rows": statuses})))
-    });
+    }).map_err(|_| "errors.connectionFailed".to_owned())?;
     match tokio::time::timeout(FOLDER_DEADLINE, &mut child).await {
         Ok(Ok(value)) => value,
         Ok(Err(_)) | Err(_) => Err("errors.connectionFailed".to_owned()),
