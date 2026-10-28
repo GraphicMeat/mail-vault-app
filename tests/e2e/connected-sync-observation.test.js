@@ -89,10 +89,33 @@ describe('Connected native sync observation', function () {
     { timeout: 60_000, interval: 300, timeoutMsg: 'native daemon did not become healthy' });
     otherId = browser.mockAccounts[0].id;
     await runInStore('activateAccount', [otherId, 'INBOX']);
-    await browser.waitUntil(async () => {
-      const state = await snapshot(ACCOUNT_ID, otherId);
-      return state.other && Object.keys(state.other).length > 0;
-    }, { timeout: 60_000, interval: 300, timeoutMsg: 'seeded account has no real closed-folder STATUS rows' });
+    try {
+      await browser.waitUntil(async () => {
+        const state = await snapshot(ACCOUNT_ID, otherId);
+        return state.other && Object.keys(state.other).length > 0;
+      }, { timeout: 60_000, interval: 300, timeoutMsg: 'seeded account has no real closed-folder STATUS rows' });
+    } finally {
+      try {
+        const diagnostic = await browser.execute(id => {
+          const state = window.__MAIL_STORE__.getState();
+          const paths = [];
+          const visit = nodes => {
+            for (const node of nodes || []) { paths.push(node.path); visit(node.children); }
+          };
+          visit(state.mailboxes);
+          return {
+            activeAccountId: state.activeAccountId,
+            activeMailbox: state.activeMailbox,
+            accountPresent: Boolean(state.accounts?.find(account => account.id === id)),
+            mailboxPaths: paths,
+            statusPaths: Object.keys(state.folderStatus?.[id] || {}),
+          };
+        }, otherId);
+        console.log('[s1-observation] seeded STATUS state:', JSON.stringify(diagnostic));
+      } catch (failure) {
+        console.warn('[s1-observation] seeded STATUS state unavailable:', failure.message);
+      }
+    }
 
     await browser.execute(() => {
       const original = window.__TAURI__;

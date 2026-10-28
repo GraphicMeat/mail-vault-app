@@ -147,7 +147,15 @@ vi.mock('../../mailSearch.js', () => ({
   startMailSearch: vi.fn(),
   cancelMailSearch: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock('../../transport', () => ({ getDaemonHealth: () => ({ alive: false }) }));
+vi.mock('../../transport', () => ({
+  getDaemonHealth: () => ({ alive: false }),
+  send: async (method, params) => {
+    if (method === 'get_app_data_dir') return '/synthetic';
+    if (method === 'folders.status' && params?.op === 'refresh') return { rows: [] };
+    if (method === 'folders.status' && params?.op === 'invalidate') return { invalidated: true };
+    throw new Error(`unexpected native transport method: ${method}`);
+  },
+}));
 vi.mock('../../syncProbe', () => ({
   mailboxIsUnchanged: vi.fn(), markVerified: vi.fn(), invalidate: vi.fn(),
 }));

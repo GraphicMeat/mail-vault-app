@@ -1,20 +1,35 @@
 // Copy to src/services/workflows/__tests__/folderStatus.test.js after native GREEN.
 // Native tests own selection, 50-path cap and throttle policy.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const bridge = vi.hoisted(() => ({ send: vi.fn(), legacyStatus: vi.fn() }));
+const bridge = vi.hoisted(() => ({
+  send: vi.fn(async method => method === 'get_app_data_dir' ? '/synthetic' : {}),
+  legacyStatus: vi.fn(),
+}));
 vi.mock('../../transport', () => ({ send: (...args) => bridge.send(...args) }));
 vi.mock('../../api', () => ({ fetchFolderStatus: (...args) => bridge.legacyStatus(...args) }));
+vi.mock('@tauri-apps/plugin-fs', () => ({ exists: async () => true, mkdir: async () => {} }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: (account) => account?.oauth2Transport === 'graph',
+  isPersonalMicrosoftEmail: () => false,
 }));
 
 let state = { accounts: [], folderStatus: {} };
+const subscribers = new Set();
+function setStore(patch) {
+  const update = typeof patch === 'function' ? patch(state) : patch;
+  if (Object.is(update, state)) return;
+  const previous = state;
+  state = { ...state, ...update };
+  for (const subscriber of subscribers) subscriber(state, previous);
+}
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: {
     getState: () => state,
-    setState: (patch) => {
-      state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
+    setState: setStore,
+    subscribe: (subscriber) => {
+      subscribers.add(subscriber);
+      return () => subscribers.delete(subscriber);
     },
   },
 }));
@@ -32,12 +47,18 @@ const deferred = () => {
   const promise = new Promise((yes) => { resolve = yes; });
   return { promise, resolve };
 };
+const waitForSend = count => vi.waitFor(() => expect(bridge.send).toHaveBeenCalledTimes(count));
 
 beforeEach(() => {
+  subscribers.clear();
   state = { accounts: [A, B], folderStatus: {} };
   bridge.send.mockReset();
   bridge.legacyStatus.mockReset();
   bridge.legacyStatus.mockImplementation(() => { throw new Error('legacy STATUS used'); });
+});
+
+afterEach(() => {
+  expect(subscribers.size, 'each native STATUS request must release its temporary store observer').toBe(0);
 });
 
 describe('native closed-folder status adapter', () => {
@@ -104,6 +125,7 @@ describe('native closed-folder status adapter', () => {
       params.op === 'refresh' ? held.promise : { invalidated: true });
     bridge.legacyStatus.mockReturnValue(legacyHeld.promise);
     const stale = refreshFolderStatus(A, tree, 'INBOX');
+    await waitForSend(1);
     await invalidateFolderStatus(A.id);
     held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
     legacyHeld.resolve([{ path: 'Archive', unseen: 99 }]);
@@ -119,7 +141,8 @@ describe('native closed-folder status adapter', () => {
     const held = deferred();
     bridge.send.mockReturnValue(held.promise);
     const stale = refreshFolderStatus(A, tree, 'INBOX');
-    state.accounts = [B];
+    await waitForSend(1);
+    setStore({ accounts: [B] });
     held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
     await stale;
     expect(state.folderStatus[A.id]).toBeUndefined();
@@ -130,6 +153,7 @@ describe('native closed-folder status adapter', () => {
     bridge.send.mockImplementation((_method, params) => params.op === 'refresh'
       ? held.promise : Promise.reject(new Error('errors.daemonUnavailable')));
     const stale = refreshFolderStatus(A, tree, 'INBOX');
+    await waitForSend(1);
     await invalidateFolderStatus(A.id);
     held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
     await stale;
@@ -146,7 +170,9 @@ describe('native closed-folder status adapter', () => {
       return issued === 1 ? first.promise : second.promise;
     });
     const older = refreshFolderStatus(A, tree, 'INBOX');
+    await waitForSend(1);
     const newer = refreshFolderStatus(A, tree, 'INBOX');
+    await waitForSend(2);
     second.resolve({ rows: [{ path: 'Archive', unseen: 2 }] });
     await newer;
     first.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
@@ -159,6 +185,7 @@ describe('native closed-folder status adapter', () => {
     const held = deferred();
     bridge.send.mockReturnValueOnce(held.promise).mockResolvedValueOnce(null);
     const first = refreshFolderStatus(A, tree, 'INBOX');
+    await waitForSend(1);
     expect(await refreshFolderStatus(A, tree, 'INBOX')).toBeNull();
     held.resolve({ rows: [{ path: 'Archive', unseen: 3 }] });
     await first;
@@ -172,15 +199,26 @@ describe('native closed-folder status adapter', () => {
     bridge.send.mockReturnValueOnce(held.promise).mockResolvedValueOnce(null);
 
     const first = refreshFolderStatus(account, tree, 'INBOX');
-    const hydrated = { ...account, password: 'hydrated-credential' };
-    state.accounts = [hydrated, B];
-    expect(await refreshFolderStatus(hydrated, tree, 'INBOX')).toBeNull();
+    await waitForSend(1);
+    state.folderStatus = {
+      [account.id]: { Sent: { path: 'Sent', unseen: 2 } },
+      [B.id]: { INBOX: { path: 'INBOX', unseen: 7 } },
+    };
+    const hydrated = { ...account, password: 'hydrated-credential', name: 'Updated display name',
+      oauth2AccessToken: 'renewed-token', oauth2ExpiresAt: 12345 };
+    setStore({ accounts: [hydrated, B] });
+    const renamed = { ...hydrated, name: 'Later display name' };
+    setStore({ accounts: [renamed, B] });
+    expect(await refreshFolderStatus(renamed, tree, 'INBOX')).toBeNull();
     held.resolve({ rows: [{ path: 'Archive', unseen: 3 }] });
 
     expect(await first, 'same-source hydration must not discard real STATUS rows after a throttle')
       .toEqual({ Archive: { path: 'Archive', unseen: 3 } });
     expect(state.folderStatus[account.id]?.Archive?.unseen).toBe(3);
-    expect(state.folderStatus[B.id]).toBeUndefined();
+    expect(state.folderStatus[account.id].Sent.unseen).toBe(2);
+    expect(state.folderStatus[B.id].INBOX.unseen).toBe(7);
+    expect(bridge.send).toHaveBeenCalledTimes(2);
+    expect(bridge.legacyStatus).not.toHaveBeenCalled();
   });
 
   it('fences a held native row after the same account id moves to another IMAP source', async () => {
@@ -190,12 +228,104 @@ describe('native closed-folder status adapter', () => {
     bridge.send.mockReturnValue(held.promise);
 
     const stale = refreshFolderStatus(account, tree, 'INBOX');
-    state.accounts = [{ ...account, imapHost: 'new.mock.test' }, B];
+    await waitForSend(1);
+    setStore({ accounts: [{ ...account, imapHost: 'new.mock.test' }, B] });
     held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
 
     expect(await stale).toBeNull();
     expect(state.folderStatus[account.id], 'old server STATUS must not publish after source replacement')
       .toBeUndefined();
+  });
+
+  it.each([
+    ['IMAP port', { ...A, imapHost: 'mail.mock.test', imapPort: 993 }, { imapPort: 143 }],
+    ['IMAP security', { ...A, imapHost: 'mail.mock.test', imapSecurity: 'ssl' }, { imapSecurity: 'starttls' }],
+    ['JMAP session', { ...A, imapHost: 'api.mock.test', jmapSessionUrl: 'https://api.mock.test/one' },
+      { jmapSessionUrl: 'https://api.mock.test/two' }],
+    ['JMAP login', { ...A, imapHost: 'api.mock.test', jmapUsername: 'old@mock.test' },
+      { jmapUsername: 'new@mock.test' }],
+    ['OAuth transport', { ...A, authType: 'oauth2', oauth2Transport: 'imap' },
+      { oauth2Transport: 'graph' }],
+  ])('fences a held row after a %s source change', async (_label, account, patch) => {
+    state.accounts = [account, B];
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+    const stale = refreshFolderStatus(account, tree, 'INBOX');
+    await waitForSend(1);
+    setStore({ accounts: [{ ...account, ...patch }, B] });
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    expect(await stale).toBeNull();
+    expect(state.folderStatus[account.id]).toBeUndefined();
+  });
+
+  it('fences an in-place source mutation using the original context values', async () => {
+    const account = { ...A, imapHost: 'mail.mock.test', imapPort: 993 };
+    state.accounts = [account, B];
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+    const stale = refreshFolderStatus(account, tree, 'INBOX');
+    await waitForSend(1);
+    account.imapPort = 143;
+    setStore({ accounts: [account, B] });
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    expect(await stale, 'in-place server edits must not mutate the captured source context').toBeNull();
+    expect(state.folderStatus[account.id]).toBeUndefined();
+  });
+
+  it('distinguishes an absent source field from explicit null', async () => {
+    const account = { ...A, imapHost: 'mail.mock.test' };
+    state.accounts = [account, B];
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+    const stale = refreshFolderStatus(account, tree, 'INBOX');
+    await waitForSend(1);
+    setStore({ accounts: [{ ...account, oauth2ClientId: null }, B] });
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    expect(await stale).toBeNull();
+    expect(state.folderStatus[account.id]).toBeUndefined();
+  });
+
+  it('keeps a held reply fenced when its id is removed and re-added before the reply', async () => {
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+    const stale = refreshFolderStatus(A, tree, 'INBOX');
+    await waitForSend(1);
+    setStore({ accounts: [B] });
+    setStore({ accounts: [{ ...A }, B] });
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    expect(await stale, 'remove and re-add must not revive an old STATUS reply').toBeNull();
+    expect(state.folderStatus[A.id]).toBeUndefined();
+  });
+
+  it('keeps a held reply fenced when its source changes and changes back', async () => {
+    const account = { ...A, imapHost: 'old.mock.test' };
+    state.accounts = [account, B];
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+    const stale = refreshFolderStatus(account, tree, 'INBOX');
+    await waitForSend(1);
+    setStore({ accounts: [{ ...account, imapHost: 'new.mock.test' }, B] });
+    setStore({ accounts: [{ ...account }, B] });
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    expect(await stale, 'restoring the original source must not revive an old STATUS reply').toBeNull();
+    expect(state.folderStatus[account.id]).toBeUndefined();
+  });
+
+  it('does not fence account A when only account B disappears', async () => {
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+    const current = refreshFolderStatus(A, tree, 'INBOX');
+    await waitForSend(1);
+    setStore({ accounts: [A] });
+    held.resolve({ rows: [{ path: 'Archive', unseen: 3 }] });
+    expect(await current).toEqual({ Archive: { path: 'Archive', unseen: 3 } });
+    expect(state.folderStatus[A.id].Archive.unseen).toBe(3);
+  });
+
+  it('releases the temporary observer after a malformed native answer', async () => {
+    bridge.send.mockResolvedValue({ rows: 'invalid' });
+    await expect(refreshFolderStatus(A, tree, 'INBOX')).rejects.toThrow('errors.connectionFailed');
+    expect(state.folderStatus).toEqual({});
   });
 
   it('never calls old STATUS after a native transport error', async () => {
@@ -208,8 +338,13 @@ describe('native closed-folder status adapter', () => {
   it('bounds a native folder refresh that never replies', async () => {
     vi.useFakeTimers();
     try {
-      bridge.send.mockReturnValue(new Promise(() => {}));
+      const started = deferred();
+      bridge.send.mockImplementation(() => {
+        started.resolve();
+        return new Promise(() => {});
+      });
       const error = refreshFolderStatus(A, tree, 'INBOX').then(() => null, caught => caught);
+      await started.promise;
       await vi.advanceTimersByTimeAsync(126_000);
       expect((await error)?.message).toBe('errors.connectionFailed');
       expect(state.folderStatus).toEqual({});

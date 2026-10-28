@@ -51,7 +51,15 @@ vi.mock('../../../stores/settingsStore', () => ({
 vi.mock('../../../stores/connectivityStore', () => ({
   useConnectivityStore: { getState: () => ({}) },
 }));
-vi.mock('../../transport', () => ({ getDaemonHealth: () => ({ alive: false }) }));
+vi.mock('../../transport', () => ({
+  getDaemonHealth: () => ({ alive: false }),
+  send: async (method, params) => {
+    if (method === 'get_app_data_dir') return '/synthetic';
+    if (method === 'folders.status' && params?.op === 'refresh') return { rows: [] };
+    if (method === 'folders.status' && params?.op === 'invalidate') return { invalidated: true };
+    throw new Error(`unexpected native transport method: ${method}`);
+  },
+}));
 vi.mock('../../syncService', () => ({
   syncNow: vi.fn(), waitForSync: vi.fn(), toSyncAccount: (a) => a, watchAccount: vi.fn(), unwatchAccount: vi.fn(),
 }));

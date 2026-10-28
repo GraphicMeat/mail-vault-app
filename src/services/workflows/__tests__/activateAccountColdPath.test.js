@@ -103,8 +103,15 @@ vi.mock('../../../stores/settingsStore', () => ({
   },
 }));
 const mockGetDaemonHealth = vi.fn().mockReturnValue({ alive: false });
+const mockTransportSend = vi.fn(async (method, params) => {
+  if (method === 'get_app_data_dir') return '/synthetic';
+  if (method === 'folders.status' && params?.op === 'refresh') return { rows: [] };
+  if (method === 'folders.status' && params?.op === 'invalidate') return { invalidated: true };
+  throw new Error(`unexpected native transport method: ${method}`);
+});
 vi.mock('../../transport', () => ({
   getDaemonHealth: () => mockGetDaemonHealth(),
+  send: (...args) => mockTransportSend(...args),
 }));
 const mockMailboxIsUnchanged = vi.fn();
 const mockMarkVerified = vi.fn();

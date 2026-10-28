@@ -92,6 +92,12 @@ vi.mock('../../../stores/settingsStore', () => ({
 const mockGetDaemonHealth = vi.fn().mockReturnValue({ alive: false });
 vi.mock('../../transport', () => ({
   getDaemonHealth: () => mockGetDaemonHealth(),
+  send: async (method, params) => {
+    if (method === 'get_app_data_dir') return '/synthetic';
+    if (method === 'folders.status' && params?.op === 'refresh') return { rows: [] };
+    if (method === 'folders.status' && params?.op === 'invalidate') return { invalidated: true };
+    throw new Error(`unexpected native transport method: ${method}`);
+  },
 }));
 const mockMailboxIsUnchanged = vi.fn();
 // `sync.now` answers with the ticket `waitForSync` is then given.
