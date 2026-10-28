@@ -108,12 +108,68 @@ fn retrain_model(state: &Arc<DaemonState>, account_id: &str) {
     }
 }
 
+#[cfg(test)]
+mod enqueue_test_pause {
+    use super::DaemonState;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
+    use tokio::sync::oneshot;
+
+    type Gate = (oneshot::Sender<()>, oneshot::Receiver<()>);
+    static GATES: OnceLock<Mutex<HashMap<PathBuf, Gate>>> = OnceLock::new();
+    static DONE: OnceLock<Mutex<HashMap<PathBuf, oneshot::Sender<()>>>> = OnceLock::new();
+    fn gates() -> &'static Mutex<HashMap<PathBuf, Gate>> { GATES.get_or_init(Default::default) }
+    fn done() -> &'static Mutex<HashMap<PathBuf, oneshot::Sender<()>>> { DONE.get_or_init(Default::default) }
+    pub(super) fn install(state: &DaemonState)
+        -> (oneshot::Receiver<()>, oneshot::Sender<()>, oneshot::Receiver<()>) {
+        let (entered_tx, entered_rx) = oneshot::channel();
+        let (release_tx, release_rx) = oneshot::channel();
+        let (done_tx, done_rx) = oneshot::channel();
+        let old = gates().lock().unwrap_or_else(|e| e.into_inner())
+            .insert(state.app_dir.clone(), (entered_tx, release_rx));
+        assert!(old.is_none(), "one held classification enqueue per vault");
+        let old = done().lock().unwrap_or_else(|e| e.into_inner())
+            .insert(state.app_dir.clone(), done_tx);
+        assert!(old.is_none(), "one classification completion per vault");
+        (entered_rx, release_tx, done_rx)
+    }
+    pub(super) struct Finished(PathBuf);
+    impl Finished {
+        pub(super) fn new(state: &DaemonState) -> Self { Self(state.app_dir.clone()) }
+    }
+    impl Drop for Finished {
+        fn drop(&mut self) {
+            if let Some(done) = done().lock().unwrap_or_else(|e| e.into_inner()).remove(&self.0) {
+                let _ = done.send(());
+            }
+        }
+    }
+    pub(super) async fn before_enqueue(state: &DaemonState) {
+        let gate = gates().lock().unwrap_or_else(|e| e.into_inner())
+            .remove(&state.app_dir);
+        if let Some((entered, release)) = gate {
+            let _ = entered.send(());
+            let _ = release.await;
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn test_hold_before_enqueue(state: &DaemonState)
+    -> (tokio::sync::oneshot::Receiver<()>, tokio::sync::oneshot::Sender<()>,
+        tokio::sync::oneshot::Receiver<()>) {
+    enqueue_test_pause::install(state)
+}
+
 /// Load cached email headers and enqueue unclassified ones for the background worker.
 pub(crate) async fn enqueue_for_classification(
     state: Arc<DaemonState>,
     account_id: &str,
     tier: classification::QueueTier,
 ) {
+    #[cfg(test)]
+    let _finished = enqueue_test_pause::Finished::new(&state);
     // Same walk, same reason (see `reclassify_all`): never on a tokio worker.
     let emails = {
         let state = Arc::clone(&state);
@@ -130,6 +186,8 @@ pub(crate) async fn enqueue_for_classification(
         info!("[classification] No emails to enqueue for {}", account_id);
         return;
     }
+    #[cfg(test)]
+    enqueue_test_pause::before_enqueue(&state).await;
 
     let count = state
         .classification
@@ -140,6 +198,46 @@ pub(crate) async fn enqueue_for_classification(
         "[classification] Enqueued {} emails for {} (tier: {:?})",
         count, account_id, tier
     );
+}
+
+/// Original-bound refresh enqueue. Rows and their native owners are sampled
+/// together; the final source and owner gate is inside queue insertion.
+pub(crate) async fn enqueue_for_classification_with_origin(
+    state: Arc<DaemonState>, origin: crate::sync_observation::Origin,
+    tier: classification::QueueTier,
+) {
+    #[cfg(test)]
+    let _finished = enqueue_test_pause::Finished::new(&state);
+    let account_id = origin.original.id().to_owned();
+    let read = {
+        let state = Arc::clone(&state);
+        let account = account_id.clone();
+        tokio::task::spawn_blocking(move || load_emails_with_owners(&state, &account)).await
+    };
+    let Ok(Ok((emails, owners))) = read else { return };
+    if emails.is_empty() { return; }
+    #[cfg(test)]
+    enqueue_test_pause::before_enqueue(&state).await;
+    state.classification.enqueue_with_source(state.clone(), origin, owners, emails, tier).await;
+}
+
+fn load_emails_with_owners(state: &Arc<DaemonState>, account_id: &str)
+    -> Result<(Vec<classification::EmailForClassification>,
+        Vec<(String, Option<crate::imap::NativeHeaderIdentity>)>), String> {
+    crate::custody::with_conn(state, |conn| {
+        let mut emails = Vec::new();
+        let mut owners = Vec::new();
+        for (_, mailbox) in cache::mailboxes_with_headers(conn, Some(account_id))? {
+            let owner = cache::native_identity(conn, account_id, &mailbox)?;
+            for header in cache::all_headers(conn, account_id, &mailbox)? {
+                let mut email = email_from_header(&header);
+                email.mailbox = mailbox.clone();
+                emails.push(email);
+            }
+            owners.push((mailbox, owner));
+        }
+        Ok((emails, owners))
+    })
 }
 
 /// Every cached header this account has, across every mailbox, as

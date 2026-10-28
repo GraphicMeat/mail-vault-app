@@ -4056,6 +4056,7 @@
   "errors.syncOffline": "Connettiti a Internet per aggiornare questo account.",
   "errors.syncFailed": "Impossibile aggiornare questo account. Riprova.",
   "errors.syncHeadersIncomplete": "Impossibile aggiornare completamente le intestazioni della cartella.",
+  "errors.syncGraphAdoptionRequired": "Questa cartella Graph deve essere preparata nell’app prima di poter essere aggiornata.",
   "errors.bulkIdentityUncertain": "L’identità del messaggio è incerta. Aggiorna la cartella prima di riprovare.",
   "errors.bulkIdentityChanged": "L’identità della cartella o del messaggio selezionato è cambiata.",
   "errors.bulkGraphDeleteUnsupported": "L’eliminazione sul server non è disponibile per questo account Graph.",

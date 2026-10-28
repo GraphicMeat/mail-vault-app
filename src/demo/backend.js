@@ -403,6 +403,12 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
   let capsuleSeq = 0;
   let syncTicket = 0;
   const syncTickets = new Map();
+  const refreshInstanceId = 'browser-demo-refresh';
+  const refreshReceipts = new Map();
+  const refreshIntents = new Map();
+  let refreshContext = null;
+  let refreshRevision = 0;
+  let refreshLastTime = null;
   const snapshots = new Map();
   const insightsModels = new Map();
   const builtMimes = new Map();
@@ -701,6 +707,11 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
     bulkAdmissions.clear();
     syncTickets.clear();
     syncTicket = 0;
+    refreshReceipts.clear();
+    refreshIntents.clear();
+    refreshContext = null;
+    refreshRevision = 0;
+    refreshLastTime = null;
     builtMimes.clear();
     emit('demo:state', { type: 'restored' });
   };
@@ -836,6 +847,62 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           if (op === 'refresh') return null;
           if (op === 'invalidate') return { invalidated: true };
           throw new DemoUnsupportedError(`folders.status:${op}`);
+        }
+        // The browser demo has no native provider worker. Keep the protocol
+        // observable, with a settled unavailable receipt and no fake mail.
+        if (method === 'sync.context') {
+          const context = args.params || {};
+          if (!context.launchId || !Number.isSafeInteger(context.revision) || context.revision < 0
+            || !['start', 'resume'].includes(context.phase) || !('view' in context)) {
+            throw new DemoUnsupportedError('sync.context:invalid');
+          }
+          if (context.revision < refreshRevision) {
+            return { instanceId: refreshInstanceId, accepted: false, revision: refreshRevision };
+          }
+          if (context.revision === refreshRevision && refreshContext
+            && JSON.stringify(context) !== JSON.stringify(refreshContext)) {
+            throw new DemoUnsupportedError('sync.context:conflict');
+          }
+          refreshRevision = context.revision;
+          refreshContext = clone(context);
+          return { instanceId: refreshInstanceId, accepted: true, revision: refreshRevision };
+        }
+        if (method === 'sync.refresh') {
+          const intent = args.params || {};
+          if (!intent.requestId || !['manual', 'scheduled', 'launch'].includes(intent.reason)) {
+            throw new DemoUnsupportedError('sync.refresh:invalid');
+          }
+          const normalized = { requestId: intent.requestId,
+            accountId: intent.accountId ?? null, mailbox: intent.mailbox ?? null,
+            reason: intent.reason };
+          const previous = refreshReceipts.get(intent.requestId);
+          if (previous) {
+            if (JSON.stringify(refreshIntents.get(intent.requestId)) !== JSON.stringify(normalized)) {
+              throw new DemoUnsupportedError('sync.refresh:conflict');
+            }
+            return { instanceId: refreshInstanceId, receipt: clone(previous) };
+          }
+          const completedAt = now();
+          const receipt = { requestId: intent.requestId, status: 'failed', accountResults: [],
+            errorKey: 'errors.syncUnavailable', completedAt };
+          refreshReceipts.set(intent.requestId, receipt);
+          refreshIntents.set(intent.requestId, normalized);
+          while (refreshReceipts.size > 64) {
+            const oldest = refreshReceipts.keys().next().value;
+            refreshReceipts.delete(oldest);
+            refreshIntents.delete(oldest);
+          }
+          refreshLastTime = completedAt;
+          return { instanceId: refreshInstanceId, receipt: clone(receipt) };
+        }
+        if (method === 'sync.refresh_status') {
+          const requestId = args.params?.requestId;
+          const receipts = requestId
+            ? [refreshReceipts.get(requestId)].filter(Boolean)
+            : [...refreshReceipts.values()].slice(-64);
+          return { instanceId: refreshInstanceId, lastRefreshTime: refreshLastTime,
+            automaticEnabled: !!refreshContext, contextRevision: refreshRevision,
+            receipts: clone(receipts), ...(requestId ? { found: receipts.length > 0 } : {}) };
         }
         if (method === 'sync.now') {
           const syncParams = args.params || {};

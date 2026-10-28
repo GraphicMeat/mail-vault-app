@@ -400,6 +400,7 @@ struct ResponseGate {
     entered: tokio::sync::oneshot::Sender<()>,
     release: std::sync::mpsc::Receiver<()>,
     done: std::sync::mpsc::Sender<()>,
+    skip: usize,
 }
 #[cfg(test)]
 fn response_gate() -> &'static std::sync::Mutex<Option<ResponseGate>> {
@@ -413,6 +414,10 @@ pub(crate) struct GraphPause {
     release: Option<std::sync::mpsc::Sender<()>>,
     done: Option<std::sync::mpsc::Receiver<()>>,
     _lock: std::sync::MutexGuard<'static, ()>,
+}
+#[cfg(test)]
+impl GraphPause {
+    pub(crate) fn release(&mut self) { self.release.take(); }
 }
 #[cfg(test)]
 impl Drop for GraphPause {
@@ -441,7 +446,15 @@ pub(crate) fn test_graph_paused() -> GraphPause {
 }
 #[cfg(test)]
 fn test_graph_paused_with(response: String) -> GraphPause {
-    let lock = test_graph_mock_with(vec![(200, response)]);
+    test_graph_paused_responses(vec![(200, response)])
+}
+#[cfg(test)]
+pub(crate) fn test_graph_paused_responses(responses: Vec<(u16, String)>) -> GraphPause {
+    test_graph_paused_responses_after(responses, 0)
+}
+#[cfg(test)]
+pub(crate) fn test_graph_paused_responses_after(responses: Vec<(u16, String)>, skip: usize) -> GraphPause {
+    let lock = test_graph_mock_with(responses);
     let (entered, notice) = tokio::sync::oneshot::channel();
     let (release, gate) = std::sync::mpsc::channel();
     let (done, finished) = std::sync::mpsc::channel();
@@ -449,6 +462,7 @@ fn test_graph_paused_with(response: String) -> GraphPause {
         entered,
         release: gate,
         done,
+        skip,
     });
     GraphPause {
         entered: notice,
@@ -551,10 +565,15 @@ mod tests {
             .unwrap()
             .pop_front()
             .unwrap_or((500, "no response queued".into()));
-        let gate = super::response_gate()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take();
+        let body = body.replace("{{GRAPH_BASE}}",
+            &std::env::var("MAILVAULT_GRAPH_BASE").unwrap_or_default());
+        let gate = {
+            let mut slot = super::response_gate().lock().unwrap_or_else(|e| e.into_inner());
+            match slot.as_mut() {
+                Some(held) if held.skip > 0 => { held.skip -= 1; None }
+                _ => slot.take(),
+            }
+        };
         let _gate_done = gate.map(|gate| {
             let _ = gate.entered.send(());
             let _ = gate.release.recv_timeout(std::time::Duration::from_secs(5));

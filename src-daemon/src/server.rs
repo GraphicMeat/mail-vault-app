@@ -470,6 +470,27 @@ where
                 // Subscribe before answering: no event emitted after the client
                 // sees this response can be missed.
                 let rx = state.events.subscribe();
+                let sync_owner = match req.params.get("syncOwner") {
+                    None => None,
+                    Some(value) => {
+                        let Some((launch_id, revision)) = crate::handlers::refresh::sync_owner(value) else {
+                            let mut buf = serde_json::to_vec(&RpcResponse::error(req.id.unwrap_or(Value::Null),
+                                ipc::INVALID_PARAMS, "errors.accountsInvalid")).unwrap_or_default();
+                            buf.push(b'\n');
+                            writer.write_all(&buf).await?;
+                            continue;
+                        };
+                        let Some(owner) = crate::refresh_worker::RefreshState::attach_owner(
+                            &state, launch_id, revision) else {
+                            let mut buf = serde_json::to_vec(&RpcResponse::error(req.id.unwrap_or(Value::Null),
+                                ipc::INVALID_PARAMS, "errors.accountsInvalid")).unwrap_or_default();
+                            buf.push(b'\n');
+                            writer.write_all(&buf).await?;
+                            continue;
+                        };
+                        Some(owner)
+                    }
+                };
                 let _backup_owner =
                     crate::backup_worker::channel_owner(&state, req.params["backupOwner"].as_str());
                 let _backup_surface_owner = crate::backup_worker::surface_channel_owner(&state, req.params["backupSurfaceGeneration"].as_str());
@@ -482,7 +503,7 @@ where
                 writer.write_all(&buf).await?;
                 // From here the connection is a duplex notification channel:
                 // no more request/response framing, ever.
-                return crate::channel::run(Arc::clone(&state), rx, lines, writer).await;
+                return crate::channel::run(Arc::clone(&state), rx, lines, writer, sync_owner).await;
             }
             Ok(req) => handle_request(&state, req).await,
             Err(err_resp) => err_resp,
@@ -512,6 +533,7 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
         "sync.probe"
             | "sync.refresh"
             | "sync.refresh_status"
+            | "sync.context"
             | "folders.status"
             | "compose.reply_context"
             | "compose.check"
@@ -849,7 +871,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
         "sync.status" => handle_sync_status(&state.sync_engine, req.params, id).await,
         "sync.probe" | "folders.status" => crate::handlers::sync_observation::route(state, &req.method, req.params, id).await,
-        "sync.refresh" | "sync.refresh_status" => crate::handlers::refresh::route(state, &req.method, req.params, id).await,
+        "sync.refresh" | "sync.refresh_status" | "sync.context" => crate::handlers::refresh::route(state, &req.method, req.params, id).await,
 
         // ── IDLE watchers + the change feed they push into ──────────
         "sync.watch" => handle_sync_watch(Arc::clone(state), req.params, id).await,
@@ -907,7 +929,7 @@ pub(crate) async fn handle_request_for_test(state: &Arc<DaemonState>, method: &s
             state.account_lifecycle.seed(&listing);
         }
     }
-    handle_request(state, RpcRequest { method: method.into(), params, id: Some(serde_json::json!(1)) }).await
+    Box::pin(handle_request(state, RpcRequest { method: method.into(), params, id: Some(serde_json::json!(1)) })).await
 }
 
 /// The open-file cap the test process lifts its soft limit to, or the hard
@@ -3336,6 +3358,827 @@ mod tests {
             assert_eq!(credential_shaped.error.unwrap().code, ipc::INVALID_PARAMS);
         }
 
+        #[tokio::test]
+        async fn refresh_imap_complete_multiple_real_chunks_finishes_without_stack_growth() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1601)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let mut account: crate::sync_engine::SyncAccount =
+                serde_json::from_value(bind_account(&state, &server)).unwrap();
+            // The direct seed bypasses sync.now's credential resolver.
+            account.imap_config.password = Some("hunter2".into());
+            let seed = state.sync_engine.sync_account(&account, "INBOX").await;
+            assert!(seed.success, "cold seed failed: {:?}; SELECT/FETCH={:?}",
+                seed.error, refresh_provider_trace(&server, 0));
+            let before = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::count(conn, "acc1", "INBOX")).unwrap();
+            assert_eq!(before, 500, "cold page must leave two real older chunks");
+            let command_before = server.commands().len();
+            let (entered, release) = state.sync_engine.test_hold_after_complete_chunk();
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"imap-complete-1601","mailbox":"INBOX","reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "large Complete must ACK without stack overflow");
+            tokio::time::timeout(std::time::Duration::from_secs(20), entered.notified()).await
+                .expect("first real Complete chunk must finish");
+            let first_chunk = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::count(conn, "acc1", "INBOX")).unwrap();
+            assert_eq!(first_chunk, 1500, "cold page plus first 1,000-row chunk");
+            release.notify_one();
+            let settled = terminal_refresh(&state, "imap-complete-1601").await;
+            assert_eq!(settled["status"], json!("complete"),
+                "multiple real provider chunks must reach terminal success: {settled:?}");
+            assert_eq!(crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::count(conn, "acc1", "INBOX")).unwrap(), 1601);
+            let trace = refresh_provider_trace(&server, command_before);
+            let complete_fetches = trace.iter().filter(|(name, is_uid, args)|
+                name == "FETCH" && *is_uid && args.contains("HEADER.FIELDS")).count();
+            assert!(complete_fetches >= 2,
+                "two real Complete chunks must issue provider header FETCH: {trace:?}");
+        }
+
+        #[tokio::test]
+        async fn refresh_imap_complete_later_chunk_failure_retains_confirmed_fill_and_repaints() {
+            use futures::FutureExt;
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2100)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account_json = bind_account(&state, &server);
+            let mut account: crate::sync_engine::SyncAccount = serde_json::from_value(account_json.clone()).unwrap();
+            // The direct seed bypasses sync.now's credential resolver.
+            account.imap_config.password = Some("hunter2".into());
+            let seed = state.sync_engine.sync_account(&account, "INBOX").await;
+            assert!(seed.success, "cold seed failed: {:?}; SELECT/FETCH={:?}",
+                seed.error, refresh_provider_trace(&server, 0));
+            let baseline = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::count(conn, "acc1", "INBOX")).unwrap();
+            assert!(baseline < 1100, "cold page must leave two real backfill chunks: {baseline}");
+            let _ = state.auto_tag_worker.notify.notified().now_or_never();
+            let before_gen = state.sync_engine.change_gen();
+            let (entered, release) = state.sync_engine.test_hold_after_complete_chunk();
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"imap-complete-later-failure", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(20), entered.notified()).await
+                .expect("first real backfill chunk must finish");
+            let partial = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::count(conn, "acc1", "INBOX")).unwrap();
+            assert!(partial > baseline && partial < 2100,
+                "first chunk must leave confirmed partial headers: {partial}");
+            let status = tokio::time::timeout(std::time::Duration::from_secs(3),
+                boxed_request(&state, req("sync.refresh_status", json!({
+                    "requestId":"imap-complete-later-failure"}))))
+                .await.expect("receipt status stays responsive while a provider child is held");
+            assert_eq!(status.result.unwrap()["found"], json!(true));
+            let cache = tokio::time::timeout(std::time::Duration::from_secs(3),
+                boxed_request(&state, req("load_email_cache", json!({
+                    "accountId":"acc1","mailbox":"INBOX"}))))
+                .await.expect("foreground cache route stays responsive during multi-chunk fill");
+            assert!(cache.result.unwrap().is_string());
+            // The legacy foreground body route takes a flat ImapConfig with its
+            // credential; the credential-free refresh request uses stored secrets.
+            let mut body_account = account_json["imapConfig"].clone();
+            body_account["password"] = json!("hunter2");
+            let body = tokio::time::timeout(std::time::Duration::from_secs(3),
+                boxed_request(&state, req("imap_get_email", json!({
+                    "account":body_account,"mailbox":"INBOX","uid":1}))))
+                .await.expect("foreground mailbox read stays responsive during held backfill");
+            assert!(body.error.is_none(), "foreground mailbox read failed: {:?}", body.error);
+            assert_eq!(body.result.unwrap()["success"], json!(true));
+            server.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2100))
+                .fault(mock_imap::Trigger::on("FETCH"),
+                    mock_imap::Action::RefuseWith("NO".into(), "later chunk refusal".into())));
+            release.notify_one();
+            let settled = terminal_refresh(&state, "imap-complete-later-failure").await;
+            assert_eq!(settled["status"], json!("failed"),
+                "later FETCH refusal cannot claim Complete: {settled:?}");
+            assert_eq!(crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::count(conn, "acc1", "INBOX")).unwrap(), partial);
+            let (_, records) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert_eq!(records.len(), 1, "confirmed fill publishes one requested repaint: {records:?}");
+            assert!(records[0].arrival_uids.is_empty(), "historical fill has no delivery UIDs");
+            assert!(state.auto_tag_worker.notify.notified().now_or_never().is_some());
+        }
+
+        #[tokio::test]
+        async fn refresh_imap_complete_competing_owner_after_first_chunk_refuses_later_writes() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2100)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let mut account: crate::sync_engine::SyncAccount = serde_json::from_value(bind_account(&state, &server)).unwrap();
+            // The direct seed bypasses sync.now's credential resolver.
+            account.imap_config.password = Some("hunter2".into());
+            let seed = state.sync_engine.sync_account(&account, "INBOX").await;
+            assert!(seed.success, "cold seed failed: {:?}; SELECT/FETCH={:?}",
+                seed.error, refresh_provider_trace(&server, 0));
+            let before_gen = state.sync_engine.change_gen();
+            let (entered, release) = state.sync_engine.test_hold_after_complete_chunk();
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"imap-complete-owner-after-chunk", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(20), entered.notified()).await
+                .expect("first real backfill chunk must finish");
+            let saved = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            let owner = saved["nativeIdentity"].clone();
+            let mut foreign = owner.clone();
+            foreign["originHash"] = json!("foreign-imap-complete-owner");
+            crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX",
+                    &json!({"emails":[], "nativeIdentity":foreign,
+                        "nativeExpectedIdentity":owner}).to_string())).unwrap();
+            release.notify_one();
+            let settled = terminal_refresh(&state, "imap-complete-owner-after-chunk").await;
+            assert_eq!(settled["status"], json!("failed"),
+                "competing native owner cannot claim Complete: {settled:?}");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()
+                ["nativeIdentity"]["originHash"], json!("foreign-imap-complete-owner"));
+            let (_, records) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert!(records.is_empty(), "stale owner suppresses requested source publication: {records:?}");
+        }
+
+        #[tokio::test]
+        async fn refresh_imap_complete_resolved_sent_alias_keeps_its_exact_cache_and_receipt_mailbox() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mut sent = synthetic_mailbox("[Google Mail]/Sent Mail", 7);
+            sent.attrs.push("\\Sent".into());
+            sent.by_uid_mut(7).unwrap().raw =
+                b"From: sent@example.test\r\nTo: user@example.com\r\nSubject: Sent seven\r\nMessage-ID: <sent-seven@example.test>\r\n\r\nsent".to_vec();
+            let server = MockImap::start(Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 7)).mailbox(sent));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let seed = boxed_request(&state, req("sync.now", json!({
+                "account":account,"mailbox":"INBOX","autoClassify":false,
+            }))).await.result.unwrap();
+            let seeded = boxed_request(&state, req("sync.wait", json!({
+                "ticket":seed["ticket"],"timeoutMs":10_000,
+            }))).await.result.unwrap();
+            assert_eq!(seeded["success"], json!(true));
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(7));
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"imap-complete-sent-alias", "mailbox":"Sent", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "all-account Complete must ACK: {:?}", accepted.error);
+            let settled = terminal_refresh(&state, "imap-complete-sent-alias").await;
+            assert_eq!(settled["status"], json!("complete"),
+                "resolved alias must complete its actual provider coverage: {settled:?}");
+            assert_eq!(settled["accountResults"][0]["mailbox"], json!("[Google Mail]/Sent Mail"));
+            let alias_cache = refresh_cached_headers(&state, "acc1", "[Google Mail]/Sent Mail").unwrap();
+            assert_eq!(alias_cache["totalCached"], json!(7));
+            assert_eq!(alias_cache["nativeIdentity"]["mailbox"], json!("[Google Mail]/Sent Mail"));
+            assert_eq!(refresh_cached_headers(&state, "acc1", "Sent"), None,
+                "resolved headers may not leak into the requested alias path");
+            let inbox_cache = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(inbox_cache["totalCached"], json!(7));
+            let inbox_seven = inbox_cache["emails"].as_array().unwrap().iter().find(|row| row["uid"] == 7).unwrap();
+            let sent_seven = alias_cache["emails"].as_array().unwrap().iter().find(|row| row["uid"] == 7).unwrap();
+            assert_eq!(inbox_seven["subject"], json!("Message 7"));
+            assert_eq!(sent_seven["subject"], json!("Sent seven"));
+            let selects = commands_named(&server, "SELECT");
+            let select_args: Vec<_> = selects.iter().map(|command| command.args.as_str()).collect();
+            assert!(select_args.iter().any(|args| args.contains("[Google Mail]/Sent Mail")),
+                "provider SELECT must use the resolved mailbox: {select_args:?}");
+        }
+
+        #[tokio::test]
+        async fn refresh_imap_flags_and_removal_repaint_without_arrival_uids() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let mut flagged = synthetic_mailbox("INBOX", 1);
+            flagged.by_uid_mut(1).unwrap().flags = vec!["\\Seen".into()];
+            flagged.by_uid_mut(1).unwrap().modseq = 50;
+            flagged.highest_modseq = 50;
+            server.reset_scenario(Scenario::new().mailbox(flagged));
+            let flag_gen = state.sync_engine.change_gen();
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"imap-flags-only", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            assert_eq!(terminal_refresh(&state, "imap-flags-only").await["status"], json!("complete"));
+            let (_, flag_changes) = state.sync_engine.wait_changes(flag_gen, 0).await;
+            assert_eq!(flag_changes.len(), 1, "flag-only refresh must repaint: {flag_changes:?}");
+            assert!(flag_changes[0].updated_flags > 0);
+            assert!(flag_changes[0].arrival_uids.is_empty());
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["emails"][0]["flags"],
+                json!(["\\Seen"]));
+
+            server.reset_scenario(Scenario::new().mailbox(Mailbox::new("INBOX")));
+            let remove_gen = state.sync_engine.change_gen();
+            let removed = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"imap-removal-only", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(removed.error.is_none());
+            assert_eq!(terminal_refresh(&state, "imap-removal-only").await["status"], json!("complete"));
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(0));
+            let (_, remove_changes) = state.sync_engine.wait_changes(remove_gen, 0).await;
+            assert_eq!(remove_changes.len(), 1, "removal-only refresh must repaint: {remove_changes:?}");
+            assert!(remove_changes[0].arrival_uids.is_empty());
+            assert_eq!(remove_changes[0].source.as_ref().unwrap().account_id, "acc1");
+        }
+
+        #[tokio::test]
+        async fn refresh_final_publication_refuses_changed_source_after_real_header_write() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            append_refresh_imap(&server, "held before publication");
+            let before = state.sync_engine.change_gen();
+            let (entered, release) = crate::refresh_worker::test_hold_before_publication(&state);
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"imap-stale-publication", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered)
+                .await.expect("real native write must reach final publication gate")
+                .expect("publication gate must signal");
+            let written = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(written["totalCached"], json!(2),
+                "the provider header must be saved before the final source gate");
+            let held_status = boxed_request(&state, req("sync.refresh_status", json!({
+                "requestId":"imap-stale-publication",
+            }))).await.result.unwrap();
+            assert_eq!(held_status["receipts"][0]["status"], json!("running"));
+            let path = state.app_dir.join("accounts.json");
+            let mut rows: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            rows[0]["imapHost"] = json!("127.0.0.2");
+            std::fs::write(&path, rows.to_string()).unwrap();
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, "imap-stale-publication").await;
+            assert_eq!(settled["status"], json!("failed"));
+            assert_eq!(settled["accountResults"][0]["errorKey"], json!("errors.bulkIdentityChanged"));
+            let (_, changes) = state.sync_engine.wait_changes(before, 0).await;
+            assert!(changes.is_empty(), "a retired source may not publish an arrival: {changes:?}");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX"), Some(written),
+                "the final gate may not issue a second cache write");
+        }
+
+        #[tokio::test]
+        async fn refresh_concurrent_same_id_joins_one_held_authoritative_admission_snapshot() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            bind_account(&state, &server);
+            let (entered, release) = crate::refresh_worker::test_hold_after_admission_snapshot(&state);
+            let params = json!({"requestId":"shared-admission", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual"});
+            let first_state = Arc::clone(&state);
+            let first_params = params.clone();
+            let first = tokio::spawn(async move {
+                boxed_request(&first_state, req("sync.refresh", first_params)).await
+            });
+            tokio::time::timeout(std::time::Duration::from_secs(5), entered).await
+                .expect("one authoritative listing must be read")
+                .expect("admission snapshot gate must signal");
+            let second_state = Arc::clone(&state);
+            let second = tokio::spawn(async move {
+                boxed_request(&second_state, req("sync.refresh", params)).await
+            });
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while state.refresh.test_duplicate_join_count() == 0 {
+                    tokio::task::yield_now().await;
+                }
+            }).await.expect("duplicate request must join while the first source snapshot is held");
+            let held = boxed_request(&state, req("sync.refresh_status", json!({
+                "requestId":"shared-admission",
+            }))).await.result.unwrap();
+            assert_eq!(held["receipts"][0]["status"], json!("queued"));
+            assert_eq!(crate::refresh_worker::test_admission_snapshot_count(&state), 1,
+                "the concurrent duplicate cannot read a second authoritative listing");
+            assert!(server.commands().is_empty(), "held admission cannot start provider IO");
+            release.send(()).unwrap();
+            let first = first.await.unwrap();
+            let second = second.await.unwrap();
+            assert!(first.error.is_none() && second.error.is_none());
+            assert_eq!(first.result.as_ref().unwrap()["receipt"]["requestId"], json!("shared-admission"));
+            assert_eq!(second.result.as_ref().unwrap()["receipt"]["requestId"], json!("shared-admission"));
+            let terminal = terminal_refresh(&state, "shared-admission").await;
+            assert_eq!(terminal["status"], json!("complete"));
+            assert_eq!(crate::refresh_worker::test_admission_snapshot_count(&state), 1);
+            assert_eq!(state.refresh.test_duplicate_join_count(), 1);
+            assert_eq!(refresh_status_selects(&server, "INBOX"), 1,
+                "one admitted target yields one real provider status observation");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(1));
+        }
+
+        fn replace_refresh_source_same_epoch(state: &Arc<DaemonState>) {
+            let before = state.account_lifecycle.capture("acc1").unwrap().epoch();
+            let path = state.app_dir.join("accounts.json");
+            let mut rows: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            rows[0]["email"] = json!("replaced-source@example.test");
+            std::fs::write(&path, rows.to_string()).unwrap();
+            assert_eq!(state.account_lifecycle.capture("acc1").unwrap().epoch(), before,
+                "source replacement must retain the lifecycle epoch for this race");
+        }
+
+        fn jmap_refresh_meta(state: &Arc<DaemonState>) -> (u64, Option<String>) {
+            crate::custody::with_conn(state, |conn| Ok((
+                crate::jmap_sessions::JmapMeta::modseq(conn, "acc1", "INBOX"),
+                crate::jmap_sessions::JmapMeta::email_state(conn, "acc1", "acc1"),
+            ))).unwrap()
+        }
+
+        #[tokio::test]
+        async fn r2_jmap_delta_held_after_real_get_cannot_write_replaced_same_epoch_source() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(2));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+            let before_cache = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            let before_ledger = jmap_refresh_ledger(&state);
+            let before_meta = jmap_refresh_meta(&state);
+            let before_gen = state.sync_engine.change_gen();
+            let before_get = mock.count_calls("Email/get");
+            mock.mutate(|server| server.add_email("acc1", "mb-inbox",
+                crate::jmap_test_support::email("r2-delta-new", "must stay old-source",
+                    "2026-10-04T10:00:00Z")));
+            let (entered, release) = crate::sync_jmap::source_write_test_pause::install(&state, "delta-get");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r2-held-delta", "accountId":"acc1", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("real delta Email/get must reach write gate").expect("delta gate signal");
+            assert!(mock.count_calls("Email/get") > before_get, "test must use actual provider Email/get");
+            replace_refresh_source_same_epoch(&state);
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, "r2-held-delta").await;
+            let after_cache = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            let after_ledger = jmap_refresh_ledger(&state);
+            let after_meta = jmap_refresh_meta(&state);
+            let (_, changes) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert!(settled["status"] == "failed" && after_cache == before_cache
+                && after_ledger == before_ledger && after_meta == before_meta && changes.is_empty(),
+                "R2 held JMAP delta must not mutate cache, UID ledger, counter, Email state or changes after same-epoch source replacement; receipt={settled:?}; ledger={after_ledger:?}; changes={changes:?}");
+        }
+
+        #[tokio::test]
+        async fn r2_jmap_complete_held_after_real_get_cannot_mint_replaced_source_uids() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+            assert_eq!(jmap_refresh_cache_count(&state), 500);
+            let before_ledger = jmap_refresh_ledger(&state);
+            let before_meta = jmap_refresh_meta(&state);
+            let before_gen = state.sync_engine.change_gen();
+            let before_get = mock.count_calls("Email/get");
+            let (entered, release) = crate::sync_jmap::source_write_test_pause::install(&state, "complete-get");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r2-held-complete", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("real Complete Email/get must reach write gate").expect("Complete gate signal");
+            assert!(mock.count_calls("Email/get") > before_get, "test must use actual provider Email/get");
+            replace_refresh_source_same_epoch(&state);
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, "r2-held-complete").await;
+            let after_ledger = jmap_refresh_ledger(&state);
+            let (_, changes) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert!(settled["status"] == "failed" && jmap_refresh_cache_count(&state) == 500
+                && after_ledger == before_ledger && jmap_refresh_meta(&state) == before_meta
+                && changes.is_empty(),
+                "R2 held JMAP Complete must not mint UID or write header, counter, Email state or changes after same-epoch source replacement; receipt={settled:?}; ledger={after_ledger:?}; changes={changes:?}");
+        }
+
+        #[tokio::test]
+        async fn r5_jmap_partial_complete_wakes_and_repaints_after_unchanged_delta() {
+            use futures::FutureExt;
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+            assert_eq!(jmap_refresh_cache_count(&state), 500);
+            let _ = state.auto_tag_worker.notify.notified().now_or_never();
+            let before_gen = state.sync_engine.change_gen();
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r5-unchanged-delta-complete", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            let settled = terminal_refresh(&state, "r5-unchanged-delta-complete").await;
+            assert_eq!(settled["status"], json!("complete"), "Complete must fill old row: {settled:?}");
+            assert_eq!(jmap_refresh_cache_count(&state), 501);
+            let woke = state.auto_tag_worker.notify.notified().now_or_never().is_some();
+            let (_, changes) = state.sync_engine.wait_changes(before_gen, 0).await;
+            let repaint = changes.len() == 1 && changes[0].arrival_uids.is_empty()
+                && changes[0].source.as_ref().is_some_and(|source|
+                    source.account_id == "acc1" && source.mailbox == "INBOX");
+            assert!(woke && repaint,
+                "R5 unchanged JMAP delta plus partial Complete must wake Auto Tags and publish one source-qualified zero-arrival backfill repaint; woke={woke}; changes={changes:?}");
+        }
+
+        #[tokio::test]
+        async fn r4_graph_same_ids_changed_flags_publish_zero_arrival_repaint() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (_config, _origin) = graph_complete_source(&state).await;
+            let credential = json!({"id":"acc1", "email":"complete@example.test",
+                "authType":"oauth2", "oauth2Provider":"microsoft", "oauth2Transport":"graph",
+                "oauth2AccessToken":"synthetic-graph-complete", "oauth2ExpiresAt":4_000_000_000_000i64});
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({"acc1":credential.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            let mut folder = refresh_graph_folder("fld-complete", "Inbox");
+            folder["totalItemCount"] = json!(1);
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let unread = refresh_graph_message("same-graph-id", "same header");
+            let mut read = unread.clone();
+            read["isRead"] = json!(true);
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, json!({"value":[folder.clone()]}).to_string()), (200, batch.to_string()),
+                (200, json!({"value":[unread],"@odata.nextLink":null}).to_string()),
+                (200, json!({"value":[folder]}).to_string()), (200, batch.to_string()),
+                (200, json!({"value":[read],"@odata.nextLink":null}).to_string()),
+            ]);
+            let first = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r4-graph-baseline", "accountId":"acc1", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(first.error.is_none());
+            assert_eq!(terminal_refresh(&state, "r4-graph-baseline").await["status"], json!("complete"));
+            let before = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(before["graphComplete"], json!(true));
+            let before_gen = state.sync_engine.change_gen();
+            let second = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r4-graph-read", "accountId":"acc1", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(second.error.is_none());
+            assert_eq!(terminal_refresh(&state, "r4-graph-read").await["status"], json!("complete"));
+            let after = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(after["totalCached"], json!(1));
+            assert_eq!(after["nativeIdentity"], before["nativeIdentity"]);
+            let before_flags = &before["emails"][0]["flags"];
+            let after_flags = &after["emails"][0]["flags"];
+            assert_ne!(after_flags, before_flags, "actual Graph isRead update must reach native cached flags");
+            assert!(after_flags.as_array().unwrap().contains(&json!("\\Seen")));
+            let (_, changes) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert!(changes.len() == 1 && changes[0].arrival_uids.is_empty()
+                && changes[0].source.as_ref().is_some_and(|source|
+                    source.account_id == "acc1" && source.mailbox == "INBOX"),
+                "R4 Graph same-ID flags must publish one source-qualified zero-arrival repaint; changes={changes:?}");
+        }
+
+        async fn late_effect_publication_observation(mode: &str) -> (Value, usize, bool) {
+            use futures::FutureExt;
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let _ = state.auto_tag_worker.notify.notified().now_or_never();
+            append_refresh_imap(&server, "held after effect read");
+            let before_gen = state.sync_engine.change_gen();
+            let (entered, release) = crate::refresh_worker::test_hold_after_effect_read(&state);
+            let request_id = format!("r3-late-{mode}");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":request_id, "accountId":"acc1", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("actual refresh must finish effect read before test mutation")
+                .expect("post-effect gate signal");
+            let written = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(written["totalCached"], json!(2), "real provider write must precede race gate");
+            match mode {
+                "source" => replace_refresh_source_same_epoch(&state),
+                "owner" => {
+                    let owner = written["nativeIdentity"].clone();
+                    let mut foreign = owner.clone();
+                    foreign["originHash"] = json!("foreign-native-owner");
+                    crate::custody::with_conn(&state, |conn|
+                        mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX",
+                            &json!({"emails":[], "nativeIdentity":foreign,
+                                "nativeExpectedIdentity":owner}).to_string())).unwrap();
+                    assert_ne!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["nativeIdentity"],
+                        written["nativeIdentity"], "owner replacement must take effect while worker is held");
+                }
+                "ticket" => state.sync_observation.invalidate_probe("acc1", Some("INBOX")),
+                _ => panic!("unknown race mode"),
+            }
+            let woke = state.auto_tag_worker.notify.notified().now_or_never().is_some();
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, &format!("r3-late-{mode}")).await;
+            let (_, changes) = state.sync_engine.wait_changes(before_gen, 0).await;
+            (settled, changes.len(), woke)
+        }
+
+        #[tokio::test]
+        async fn r3_source_changed_after_effect_read_cannot_publish_or_succeed() {
+            let (receipt, changes, woke) = late_effect_publication_observation("source").await;
+            assert!(receipt["status"] == "failed" && changes == 0 && !woke,
+                "R3 post-effect source replacement must prevent stale publication, wake and success; receipt={receipt:?}; changes={changes}; woke={woke}");
+        }
+
+        #[tokio::test]
+        async fn r3_owner_changed_after_effect_read_cannot_publish_or_succeed() {
+            let (receipt, changes, woke) = late_effect_publication_observation("owner").await;
+            assert!(receipt["status"] == "failed" && changes == 0 && !woke,
+                "R3 post-effect owner replacement must prevent stale publication, wake and success; receipt={receipt:?}; changes={changes}; woke={woke}");
+        }
+
+        #[tokio::test]
+        async fn r3_ticket_invalidated_after_effect_read_cannot_publish_or_succeed() {
+            let (receipt, changes, woke) = late_effect_publication_observation("ticket").await;
+            assert!(receipt["status"] == "failed" && changes == 0 && !woke,
+                "R3 post-effect ticket invalidation must prevent stale publication, wake and success; receipt={receipt:?}; changes={changes}; woke={woke}");
+        }
+
+        #[tokio::test]
+        async fn c5_old_owner_drop_preserves_new_view_while_refresh_is_held() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 1))
+                .mailbox(synthetic_mailbox("Sent", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings":{"state":{"refreshOnLaunch":false,"refreshInterval":0}},
+            }), None).unwrap();
+            let pause = server.pause_command("SELECT");
+            let held = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"c5-held-owner-refresh","accountId":"acc1",
+                "mailbox":"INBOX","reason":"manual",
+            }))).await;
+            assert!(held.error.is_none(), "held original must be admitted");
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(10)));
+                pause
+            }).await.unwrap();
+            let old = crate::refresh_worker::RefreshState::attach_owner(
+                &state, "c5-owner-held".into(), 1).unwrap();
+            let context = |revision| json!({"launchId":"c5-owner-held","revision":revision,
+                "phase":"resume","view":{"accountId":"acc1","mailbox":"Sent"}});
+            assert_eq!(boxed_request(&state, req("sync.context", context(1)))
+                .await.result.unwrap()["accepted"], json!(true));
+            let newer = crate::refresh_worker::RefreshState::attach_owner(
+                &state, "c5-owner-held".into(), 2).unwrap();
+            assert_eq!(boxed_request(&state, req("sync.context", context(2)))
+                .await.result.unwrap()["accepted"], json!(true));
+            drop(old);
+            let active = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"c5-new-owner-view","reason":"scheduled",
+            }))).await.result.unwrap();
+            assert_eq!(active["receipt"]["accountResults"][0]["mailbox"], json!("Sent"),
+                "old drop must leave new owner's view priority while provider waits");
+            drop(newer);
+            let detached = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"c5-detached-owner-view","reason":"scheduled",
+            }))).await.result.unwrap();
+            assert_eq!(detached["receipt"]["accountResults"][0]["mailbox"], json!("INBOX"),
+                "last owner loss returns automatic target to INBOX");
+            pause.release();
+            assert_eq!(terminal_refresh(&state, "c5-held-owner-refresh").await["status"], json!("complete"));
+            assert_eq!(terminal_refresh(&state, "c5-new-owner-view").await["status"], json!("complete"));
+            assert_eq!(terminal_refresh(&state, "c5-detached-owner-view").await["status"], json!("complete"));
+        }
+
+        #[tokio::test]
+        async fn c5_captured_ordinary_unified_and_subtree_views_select_real_mailboxes() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 1))
+                .mailbox(synthetic_mailbox("Sent", 1))
+                .mailbox(synthetic_mailbox("Projects", 1))
+                .mailbox(synthetic_mailbox("Projects/2026", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let row = |id: &str| json!({"id":id,"email":"user@example.com","authType":"password",
+                "imapHost":server.host(),"imapPort":server.port(),"imapSecure":false});
+            std::fs::write(state.app_dir.join("accounts.json"),
+                json!([row("acc1"),row("acc2")]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let credential = |id: &str| json!({"id":id,"email":"user@example.com",
+                "authType":"password","password":"hunter2","imapHost":server.host(),
+                "imapPort":server.port(),"imapSecure":false}).to_string();
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({"acc1":credential("acc1"),
+                "acc2":credential("acc2")}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings":{"state":{"refreshOnLaunch":false,"refreshInterval":0}},
+            }), None).unwrap();
+            let context = |revision: u64, view: Value| json!({"launchId":"c5-target-view",
+                "revision":revision,"phase":"start","view":view});
+            assert_eq!(boxed_request(&state, req("sync.context", context(1,
+                json!({"accountId":"acc1","mailbox":"Sent"})))).await.result.unwrap()["accepted"], true);
+            let ordinary = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"c5-ordinary-targets","reason":"manual",
+            }))).await.result.unwrap()["receipt"].clone();
+            assert_eq!(ordinary["accountResults"][0]["mailbox"], json!("Sent"));
+            assert_eq!(ordinary["accountResults"][1]["mailbox"], json!("INBOX"));
+            let _ = terminal_refresh(&state, "c5-ordinary-targets").await;
+            assert!(refresh_status_selects(&server, "Sent") > 0
+                && refresh_status_selects(&server, "INBOX") > 0,
+                "ordinary selection must reach real per-account folders");
+            assert_eq!(boxed_request(&state, req("sync.context", context(2,
+                json!({"accountId":null,"mailbox":"UNIFIED","unifiedFolder":"Sent"})))).await.result.unwrap()["accepted"], true);
+            let unified = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"c5-unified-targets","mailbox":"UNIFIED","reason":"manual",
+            }))).await.result.unwrap()["receipt"].clone();
+            assert_eq!(unified["accountResults"].as_array().unwrap().len(), 2);
+            assert!(unified["accountResults"].as_array().unwrap().iter().all(|row| row["mailbox"] == "Sent"));
+            let _ = terminal_refresh(&state, "c5-unified-targets").await;
+            assert!(server.commands().iter().all(|line| !line.contains("SELECT UNIFIED")),
+                "UNIFIED may never reach provider SELECT");
+            assert_eq!(boxed_request(&state, req("sync.context", context(3,
+                json!({"accountId":"acc1","mailbox":"Projects",
+                    "scopePaths":["Projects","Projects/2026"]})))).await.result.unwrap()["accepted"], true);
+            let subtree = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"c5-subtree-targets","reason":"manual",
+            }))).await.result.unwrap()["receipt"].clone();
+            let paths: Vec<_> = subtree["accountResults"].as_array().unwrap().iter()
+                .map(|row| (row["accountId"].as_str().unwrap().to_owned(),
+                    row["mailbox"].as_str().unwrap().to_owned())).collect();
+            assert_eq!(paths, vec![("acc1".into(),"Projects".into()),
+                ("acc1".into(),"Projects/2026".into()),("acc2".into(),"INBOX".into())]);
+            let _ = terminal_refresh(&state, "c5-subtree-targets").await;
+            assert!(refresh_status_selects(&server, "Projects") > 0
+                && refresh_status_selects(&server, "Projects/2026") > 0);
+        }
+
+        #[tokio::test]
+        async fn r7_premium_classification_source_replaced_after_initial_check_cannot_enqueue() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings":{"state":{"billingProfile":{
+                    "hasSubscription":true,"clientAccessGranted":true}}},
+            }), None).unwrap();
+            assert_eq!(state.classification.queue_depth().await, 0);
+            let status_before = refresh_status_selects(&server, "INBOX");
+            let (entered, release, finished) =
+                crate::classification_worker::test_hold_before_enqueue(&state);
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r7-premium-late-enqueue", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("Premium candidate must load real cached headers before enqueue")
+                .expect("classification enqueue gate signal");
+            assert!(refresh_status_selects(&server, "INBOX") > status_before,
+                "classification candidate must follow an actual native provider refresh");
+            assert_eq!(state.classification.queue_depth().await, 0,
+                "queued rows must still be absent at the exact pre-insertion race gate");
+            replace_refresh_source_same_epoch(&state);
+            release.send(()).unwrap();
+            tokio::time::timeout(std::time::Duration::from_secs(10), finished).await
+                .expect("classification enqueue attempt must finish").expect("completion signal");
+            let settled = terminal_refresh(&state, "r7-premium-late-enqueue").await;
+            assert_eq!(settled["status"], json!("complete"),
+                "header refresh itself completed before classification source changed");
+            let depth = state.classification.queue_depth().await;
+            assert_eq!(depth, 0,
+                "R7 Premium classification must not enqueue old-source headers after source replacement; depth={depth}");
+        }
+
+        #[tokio::test]
+        async fn r7_premium_classification_owner_replaced_after_header_read_cannot_enqueue() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings":{"state":{"billingProfile":{
+                    "hasSubscription":true,"clientAccessGranted":true}}},
+            }), None).unwrap();
+            let (entered, release, finished) =
+                crate::classification_worker::test_hold_before_enqueue(&state);
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r7-premium-owner-late-enqueue", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("real cached headers must be read before owner replacement")
+                .expect("classification enqueue gate signal");
+            let saved = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            let owner = saved["nativeIdentity"].clone();
+            let mut foreign = owner.clone();
+            foreign["originHash"] = json!("r7-foreign-cache-owner");
+            crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX",
+                    &json!({"emails":[], "nativeIdentity":foreign,
+                        "nativeExpectedIdentity":owner}).to_string())).unwrap();
+            release.send(()).unwrap();
+            tokio::time::timeout(std::time::Duration::from_secs(10), finished).await
+                .expect("classification enqueue attempt must finish").expect("completion signal");
+            assert_eq!(terminal_refresh(&state, "r7-premium-owner-late-enqueue").await["status"],
+                json!("complete"));
+            assert_eq!(state.classification.queue_depth().await, 0,
+                "R7 cached-header owner replacement must suppress stale classification rows");
+        }
+
+        #[tokio::test]
+        async fn r3_jmap_strict_touched_sources_revalidate_at_final_publication() {
+            use futures::FutureExt;
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(2));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+            assert!(state.sync_engine.sync_account(&account, "Work").await.success);
+            let _ = state.auto_tag_worker.notify.notified().now_or_never();
+            let before_gen = state.sync_engine.change_gen();
+            let mut new = crate::jmap_test_support::email("r3-both-mailboxes", "both source rows",
+                "2026-10-04T10:00:00Z");
+            new.also_in.push("mb-work".into());
+            mock.mutate(|server| server.add_email("acc1", "mb-inbox", new));
+            let (entered, release) =
+                crate::sync_jmap::source_write_test_pause::install(&state, "strict-publish");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"r3-jmap-strict-late-source", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("real JMAP delta must reach post-source-read publication gate")
+                .expect("strict publication gate signal");
+            let (_, before_release) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert!(before_release.is_empty(), "strict path cannot publish before final gate");
+            replace_refresh_source_same_epoch(&state);
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, "r3-jmap-strict-late-source").await;
+            let (_, changes) = state.sync_engine.wait_changes(before_gen, 0).await;
+            let woke = state.auto_tag_worker.notify.notified().now_or_never().is_some();
+            assert!(settled["status"] == "failed" && changes.is_empty() && !woke,
+                "R3 strict JMAP touched-source publication must refuse source replacement after source reads and before insertion, including wake; receipt={settled:?}; changes={changes:?}; woke={woke}");
+        }
+
         fn bind_jmap_refresh(state: &Arc<DaemonState>, mock: &mock_jmap::MockJmap,
             imap_port: u16) -> crate::sync_engine::SyncAccount {
             let mut credential = crate::jmap_test_support::account_json(mock, imap_port);
@@ -3468,6 +4311,134 @@ mod tests {
             assert_eq!(jmap_refresh_ledger(&state), before_ledger,
                 "failed first page may not remint the existing JMAP IDs");
             assert!(trap.accept().is_err(), "failed JMAP Complete must not dial IMAP");
+        }
+
+        #[tokio::test]
+        async fn refresh_jmap_complete_later_page_failure_publishes_only_proved_delta_once() {
+            use futures::FutureExt;
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(801));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+            assert_eq!(jmap_refresh_cache_count(&state), 500);
+            let _ = state.auto_tag_worker.notify.notified().now_or_never();
+            mock.mutate(|server| server.add_email("acc1", "mb-inbox",
+                crate::jmap_test_support::email("later-failure-delta", "proved delivery",
+                    "2026-10-04T10:00:00Z")));
+            let before_gen = state.sync_engine.change_gen();
+            let (entered, release) = crate::sync_jmap::source_write_test_pause::install(
+                &state, "complete-midpage");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-complete-later-failure", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(20), entered).await
+                .expect("third real Complete page must be saved before later failure")
+                .expect("midpage gate signal");
+            let partial = jmap_refresh_cache_count(&state);
+            assert!(partial > 501 && partial < 802,
+                "successful older page must leave confirmed partial fill: {partial}");
+            mock.mutate(|server| server.faults.push(mock_jmap::Fault::ServerFail {
+                method: "Email/get".into(),
+            }));
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, "jmap-complete-later-failure").await;
+            assert_eq!(settled["status"], json!("failed"),
+                "a later provider failure cannot claim Complete: {settled:?}");
+            assert_eq!(jmap_refresh_cache_count(&state), partial,
+                "confirmed partial headers survive the failed later page");
+            let (_, records) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert_eq!(records.len(), 1,
+                "requested source publishes at most once after the Complete attempt: {records:?}");
+            assert_eq!(records[0].mailbox, "INBOX");
+            let delta_uid = jmap_refresh_ledger(&state).iter()
+                .find_map(|(uid, id)| (id == "later-failure-delta").then_some(*uid)).unwrap();
+            assert_eq!(records[0].arrival_uids, vec![delta_uid],
+                "historical partial-fill UIDs may not be inferred as arrivals");
+            assert!(state.auto_tag_worker.notify.notified().now_or_never().is_some(),
+                "confirmed partial fill must wake Auto Tags once");
+        }
+
+        #[tokio::test]
+        async fn refresh_jmap_complete_missing_email_get_row_preserves_old_headers() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+            assert_eq!(jmap_refresh_cache_count(&state), 500);
+            let before_ledger = jmap_refresh_ledger(&state);
+            let before_get = mock.count_calls("Email/get");
+            let (entered, release) = crate::sync_jmap::source_write_test_pause::install(
+                &state, "complete-before-get");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-complete-missing-get", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("final real Email/query page must precede Email/get")
+                .expect("before-get gate signal");
+            mock.mutate(|server| server.destroy_email("acc1", "e1"));
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, "jmap-complete-missing-get").await;
+            assert!(mock.count_calls("Email/get") > before_get,
+                "Complete must issue the actual Email/get after successful query");
+            assert_eq!(settled["status"], json!("failed"),
+                "notFound in Email/get cannot claim Complete: {settled:?}");
+            assert_eq!(jmap_refresh_cache_count(&state), 500);
+            assert_eq!(jmap_refresh_ledger(&state), before_ledger,
+                "missing get row may not mint its ledger UID");
+        }
+
+        #[tokio::test]
+        async fn refresh_jmap_complete_competing_owner_after_first_page_refuses_later_writes() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+            let before_ledger = jmap_refresh_ledger(&state);
+            let before_gen = state.sync_engine.change_gen();
+            let (entered, release) = crate::sync_jmap::source_write_test_pause::install(
+                &state, "complete-first-page");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-complete-owner-first-page", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            tokio::time::timeout(std::time::Duration::from_secs(10), entered).await
+                .expect("first real Complete page must be committed")
+                .expect("first-page gate signal");
+            let saved = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            let owner = saved["nativeIdentity"].clone();
+            let mut foreign = owner.clone();
+            foreign["originHash"] = json!("foreign-complete-owner");
+            crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX",
+                    &json!({"emails":[], "nativeIdentity":foreign,
+                        "nativeExpectedIdentity":owner}).to_string())).unwrap();
+            release.send(()).unwrap();
+            let settled = terminal_refresh(&state, "jmap-complete-owner-first-page").await;
+            assert_eq!(settled["status"], json!("failed"),
+                "competing native owner must prevent Complete: {settled:?}");
+            assert_eq!(jmap_refresh_ledger(&state), before_ledger,
+                "later page may not mint a UID under a competing owner");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()
+                ["nativeIdentity"]["originHash"], json!("foreign-complete-owner"));
+            let (_, records) = state.sync_engine.wait_changes(before_gen, 0).await;
+            assert!(records.is_empty(), "competing owner suppresses stale source records: {records:?}");
         }
 
         #[tokio::test]
@@ -3762,6 +4733,569 @@ mod tests {
                     == Some("Bearer synthetic-graph-b")
                 && call.path.contains("fld-b-inbox")));
         }
+
+        async fn graph_complete_source(state: &Arc<DaemonState>)
+            -> (crate::imap::ImapConfig, crate::sync_observation::Origin) {
+            let row = json!({"id":"acc1", "email":"complete@example.test", "authType":"oauth2",
+                "oauth2Provider":"microsoft", "oauth2Transport":"graph"});
+            std::fs::write(state.app_dir.join("accounts.json"), json!([row.clone()]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings": {"state": {
+                    "graphFolderKeysAdopted": {"acc1": true},
+                    "graphFolderKeysAdoptedFromListing": {"acc1": true},
+                }},
+            }), None).unwrap();
+            let mut credential = row;
+            credential["oauth2AccessToken"] = json!("synthetic-graph-complete");
+            let config = crate::credentials::config_from_record(&credential).unwrap();
+            let stamp = state.account_lifecycle.capture("acc1").unwrap();
+            let origin = crate::sync_observation::origin(state, stamp).await.unwrap();
+            (config, origin)
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_complete_follows_opaque_full_header_next_link() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (config, origin) = graph_complete_source(&state).await;
+            let folders = json!({"value":[refresh_graph_folder("fld-complete", "Inbox")]});
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let first = json!({"value":[refresh_graph_message("g-one", "first full header")],
+                "@odata.nextLink":"{{GRAPH_BASE}}/me/mailFolders/fld-complete/messages?$skiptoken=opaque-page-two"});
+            let second = json!({"value":[refresh_graph_message("g-two", "second full header")],
+                "@odata.nextLink":null});
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, folders.to_string()), (200, batch.to_string()),
+                (200, first.to_string()), (200, second.to_string()),
+            ]);
+            let added = crate::refresh_worker::graph_headers(&state, &origin, &config,
+                "INBOX", crate::refresh_worker::Extent::Complete).await.unwrap();
+            assert_eq!(added, 2);
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(cached["totalCached"], json!(2));
+            assert_eq!(cached["graphComplete"], json!(true));
+            assert_eq!(cached["graphCompleteTotal"], json!(2));
+            assert!(cached["emails"].as_array().unwrap().iter().any(|row|
+                row["subject"] == "second full header"));
+            assert_eq!(refresh_graph_map(&state, "acc1").await.unwrap().as_object().unwrap().len(), 2);
+            let calls = crate::handlers::graph::test_graph_requests();
+            assert_eq!(calls.len(), 4, "folder, batch and both full-header pages: {calls:?}");
+            assert!(calls[2].path.contains("top=200") && calls[2].path.contains("skip=0"));
+            assert!(calls[3].path.contains("skiptoken=opaque-page-two")
+                && !calls[3].path.contains("skip=200"), "opaque continuation must be followed: {calls:?}");
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_complete_failed_continuation_keeps_first_owned_page() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (config, origin) = graph_complete_source(&state).await;
+            let folders = json!({"value":[refresh_graph_folder("fld-complete", "Inbox")]});
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let first = json!({"value":[refresh_graph_message("g-one", "first survives")],
+                "@odata.nextLink":"{{GRAPH_BASE}}/me/mailFolders/fld-complete/messages?$skiptoken=failed-page"});
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, folders.to_string()), (200, batch.to_string()),
+                (200, first.to_string()), (503, "temporary provider refusal".into()),
+            ]);
+            let outcome = crate::refresh_worker::graph_headers(&state, &origin, &config,
+                "INBOX", crate::refresh_worker::Extent::Complete).await;
+            assert!(outcome.is_err(), "failed provider page cannot claim Complete");
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(cached["totalCached"], json!(1));
+            assert_eq!(cached["graphComplete"], json!(false));
+            assert_eq!(cached["emails"][0]["subject"], json!("first survives"));
+            assert_eq!(refresh_graph_map(&state, "acc1").await.unwrap().as_object().unwrap().len(), 1);
+            let calls = crate::handlers::graph::test_graph_requests();
+            assert_eq!(calls.len(), 4);
+            assert!(calls[3].path.contains("skiptoken=failed-page"));
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_complete_rejects_competing_cache_owner_before_second_page_allocation() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (config, origin) = graph_complete_source(&state).await;
+            let folder = json!({"value":[refresh_graph_folder("fld-complete", "Inbox")]});
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let first = json!({"value":[refresh_graph_message("first-id", "first page")],
+                "@odata.nextLink":"{{GRAPH_BASE}}/me/mailFolders/fld-complete/messages?$skiptoken=second"});
+            let second = json!({"value":[refresh_graph_message("second-id", "second page")],
+                "@odata.nextLink":null});
+            let mut pause = crate::handlers::graph::test_graph_paused_responses_after(vec![
+                (200, folder.to_string()), (200, batch.to_string()),
+                (200, first.to_string()), (200, second.to_string()),
+            ], 3);
+            let child_state = Arc::clone(&state);
+            let child = tokio::spawn(async move {
+                crate::refresh_worker::graph_headers(&child_state, &origin, &config,
+                    "INBOX", crate::refresh_worker::Extent::Complete).await
+            });
+            (&mut pause.entered).await.expect("second real Graph page must wait after first page save");
+            let saved = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(saved["totalCached"], json!(1));
+            assert_eq!(saved["graphComplete"], json!(false));
+            let first_owner = saved["nativeIdentity"].clone();
+            let mut competing_owner = first_owner.clone();
+            competing_owner["originHash"] = json!("competing-cache-owner");
+            crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn,
+                "acc1", "INBOX", &json!({"emails":[{"uid":77,"subject":"competing owner"}],
+                    "nativeIdentity":competing_owner,"nativeExpectedIdentity":first_owner,
+                    "graphComplete":false}).to_string())).unwrap();
+            pause.release();
+            assert_eq!(child.await.unwrap(), Err("errors.bulkIdentityChanged".to_owned()));
+            let after = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(after["nativeIdentity"]["originHash"], json!("competing-cache-owner"));
+            assert_eq!(after["totalCached"], json!(1));
+            assert_eq!(after["emails"][0]["uid"], json!(77));
+            assert_eq!(refresh_graph_map(&state, "acc1").await.unwrap().as_object().unwrap().len(), 1,
+                "the second provider page must not mint a UID after owner replacement");
+            let calls = crate::handlers::graph::test_graph_requests();
+            assert_eq!(calls.len(), 4);
+            assert!(calls[3].path.contains("skiptoken=second"));
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_static_ready_without_localized_listing_pairs_warms_headers() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (config, origin) = graph_complete_source(&state).await;
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings": {"state": {
+                    "graphFolderKeysAdopted": {"acc1": true},
+                    "graphFolderKeysAdoptedFromListing": {"acc1": false},
+                }},
+            }), None).unwrap();
+            let folder = json!({"value":[refresh_graph_folder("fld-complete", "Inbox")]});
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let page = json!({"value":[refresh_graph_message("no-pair-one", "first"),
+                refresh_graph_message("no-pair-two", "second")], "@odata.nextLink":null});
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, folder.to_string()), (200, batch.to_string()), (200, page.to_string()),
+            ]);
+            let added = crate::refresh_worker::graph_headers(&state, &origin, &config,
+                "INBOX", crate::refresh_worker::Extent::RefreshPage).await.unwrap();
+            assert_eq!(added, 2, "zero localized adoption pairs permit the actual header page");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(2));
+            assert_eq!(refresh_graph_map(&state, "acc1").await.unwrap().as_object().unwrap().len(), 2);
+            assert_eq!(crate::handlers::graph::test_graph_requests().len(), 3);
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_same_numeric_uid_in_sent_keeps_separate_owned_headers() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (config, origin) = graph_complete_source(&state).await;
+            for (mailbox, graph_id, subject) in [("INBOX", "inbox-id", "inbox row"),
+                ("Sent", "sent-id", "sent row")] {
+                let uids = crate::handlers::cache::graph_allocate_with_original(&state, &origin,
+                    mailbox, Value::Null, vec![(graph_id.into(), None)]).await.unwrap();
+                assert_eq!(uids, vec![1], "each real mailbox ledger starts with its own stable UID");
+                let message: mailvault_core::graph::GraphMessage = serde_json::from_value(
+                    refresh_graph_message(graph_id, subject)).unwrap();
+                let added = crate::handlers::cache::graph_save_with_original(&state, &origin,
+                    &config, mailbox, Value::Null, vec![message.to_email_header(uids[0])]).await.unwrap();
+                assert_eq!(added, vec![1]);
+            }
+            let inbox = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            let sent = refresh_cached_headers(&state, "acc1", "Sent").unwrap();
+            assert_eq!(inbox["emails"][0]["subject"], json!("inbox row"));
+            assert_eq!(sent["emails"][0]["subject"], json!("sent row"));
+            assert_eq!(inbox["emails"][0]["uid"], sent["emails"][0]["uid"]);
+            assert_eq!(inbox["nativeIdentity"]["mailbox"], json!("INBOX"));
+            assert_eq!(sent["nativeIdentity"]["mailbox"], json!("Sent"));
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_replaced_origin_during_provider_wait_cannot_mint_or_save() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (config, origin) = graph_complete_source(&state).await;
+            let folders = json!({"value":[refresh_graph_folder("fld-complete", "Inbox")]});
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let page = json!({"value":[refresh_graph_message("stale-one", "must not save")],
+                "@odata.nextLink":null});
+            let mut pause = crate::handlers::graph::test_graph_paused_responses(vec![
+                (200, folders.to_string()), (200, batch.to_string()), (200, page.to_string()),
+            ]);
+            let child_state = Arc::clone(&state);
+            let child = tokio::spawn(async move {
+                crate::refresh_worker::graph_headers(&child_state, &origin, &config,
+                    "INBOX", crate::refresh_worker::Extent::RefreshPage).await
+            });
+            (&mut pause.entered).await.expect("real Graph folder request must wait");
+            let replacement = json!([{"id":"acc1", "email":"replacement@example.test",
+                "authType":"oauth2", "oauth2Provider":"microsoft", "oauth2Transport":"graph"}]);
+            std::fs::write(state.app_dir.join("accounts.json"), replacement.to_string()).unwrap();
+            pause.release();
+            assert!(child.await.unwrap().is_err(), "replaced original must refuse publication");
+            assert_eq!(refresh_graph_map(&state, "acc1").await, None,
+                "stale Graph provider result may not mint a UID");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX"), None,
+                "stale Graph provider result may not save a header");
+            assert_eq!(crate::handlers::graph::test_graph_requests().len(), 3);
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_complete_owned_baseline_announces_only_later_stable_arrival() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (_config, _origin) = graph_complete_source(&state).await;
+            let credential = json!({"id":"acc1", "email":"complete@example.test",
+                "authType":"oauth2", "oauth2Provider":"microsoft", "oauth2Transport":"graph",
+                "oauth2AccessToken":"synthetic-graph-complete", "oauth2ExpiresAt":4_000_000_000_000i64});
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({"acc1":credential.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            let folder_two = refresh_graph_folder("fld-complete", "Inbox");
+            let mut folder_three = folder_two.clone();
+            folder_three["totalItemCount"] = json!(3);
+            let mut folder_partial = folder_two.clone();
+            folder_partial["totalItemCount"] = json!(201);
+            let mut folder_after_partial = folder_two.clone();
+            folder_after_partial["totalItemCount"] = json!(5);
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let old_one = refresh_graph_message("baseline-one", "baseline one");
+            let old_two = refresh_graph_message("baseline-two", "baseline two");
+            let delivery = refresh_graph_message("later-delivery", "later delivery");
+            let partial = refresh_graph_message("partial-historical", "partial historical");
+            let after_partial = refresh_graph_message("after-partial", "after partial");
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, json!({"value":[folder_two]}).to_string()),
+                (200, batch.to_string()),
+                (200, json!({"value":[old_one.clone(),old_two.clone()],"@odata.nextLink":null}).to_string()),
+                (200, json!({"value":[folder_three]}).to_string()),
+                (200, batch.to_string()),
+                (200, json!({"value":[delivery.clone(),old_one.clone(),old_two.clone()],
+                    "@odata.nextLink":null}).to_string()),
+                (200, json!({"value":[folder_partial]}).to_string()),
+                (200, batch.to_string()),
+                (200, json!({"value":[partial.clone(),delivery.clone(),old_one.clone()],
+                    "@odata.nextLink":"{{GRAPH_BASE}}/me/mailFolders/fld-complete/messages?$skiptoken=older"}).to_string()),
+                (200, json!({"value":[folder_after_partial]}).to_string()),
+                (200, batch.to_string()),
+                (200, json!({"value":[after_partial,partial,delivery,old_one,old_two],
+                    "@odata.nextLink":null}).to_string()),
+            ]);
+            let first_gen = state.sync_engine.change_gen();
+            let first = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"graph-cold-baseline", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(first.error.is_none(), "cold Graph baseline ACK: {:?}", first.error);
+            assert_eq!(terminal_refresh(&state, "graph-cold-baseline").await["status"], json!("complete"));
+            let cold = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(cold["totalCached"], json!(2), "two provider IDs fully covered: {cold:?}");
+            assert_eq!(cold["nativeIdentity"]["accountId"], json!("acc1"));
+            assert_eq!(cold["graphComplete"], json!(true));
+            assert_eq!(cold["graphCompleteTotal"], json!(2));
+            let before_map = refresh_graph_map(&state, "acc1").await.unwrap();
+            assert_eq!(before_map.as_object().unwrap().len(), 2);
+            let (_, cold_changes) = state.sync_engine.wait_changes(first_gen, 0).await;
+            assert!(cold_changes.iter().all(|record| record.arrival_uids.is_empty()),
+                "cold Graph page cannot announce historical mail: {cold_changes:?}");
+
+            let delivery_gen = state.sync_engine.change_gen();
+            let second = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"graph-later-delivery", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(second.error.is_none(), "later Graph delivery ACK: {:?}", second.error);
+            assert_eq!(terminal_refresh(&state, "graph-later-delivery").await["status"], json!("complete"));
+            let after_map = refresh_graph_map(&state, "acc1").await.unwrap();
+            for (old_uid, old_id) in before_map.as_object().unwrap() {
+                assert_eq!(after_map.get(old_uid).unwrap(), old_id,
+                    "reordered provider headers retain their existing ledger UID");
+            }
+            let uid = after_map.as_object().unwrap().iter().find_map(|(uid, graph_id)|
+                (graph_id == "later-delivery").then(|| uid.parse::<u32>().unwrap())).unwrap();
+            assert!(uid > before_map.as_object().unwrap().keys().map(|key| key.parse::<u32>().unwrap()).max().unwrap());
+            let later = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(later["totalCached"], json!(3));
+            assert_eq!(later["nativeIdentity"], cold["nativeIdentity"]);
+            assert_eq!(later["graphComplete"], json!(true));
+            let (_, delivery_changes) = state.sync_engine.wait_changes(delivery_gen, 0).await;
+            assert_eq!(delivery_changes.len(), 1,
+                "later provider delivery has one source-qualified publication: {delivery_changes:?}");
+            assert_eq!(delivery_changes[0].arrival_uids, vec![uid],
+                "Graph complete baseline and real new stable UID must announce exactly one arrival; changes={delivery_changes:?}");
+            assert_eq!(delivery_changes[0].source.as_ref().unwrap().cache_owner.as_ref().unwrap().origin_hash.as_str(),
+                cold["nativeIdentity"]["originHash"].as_str().unwrap());
+
+            let partial_gen = state.sync_engine.change_gen();
+            let third = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"graph-partial-page",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(third.error.is_none(), "partial Graph page ACK: {:?}", third.error);
+            assert_eq!(terminal_refresh(&state, "graph-partial-page").await["status"], json!("complete"));
+            let (_, partial_changes) = state.sync_engine.wait_changes(partial_gen, 0).await;
+            assert!(partial_changes.iter().all(|record| record.arrival_uids.is_empty()),
+                "partial Graph page cannot announce its newly minted historical UID: {partial_changes:?}");
+            let partial_cache = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(partial_cache["graphComplete"], json!(false),
+                "an incomplete page invalidates the previous complete baseline");
+
+            let after_partial_gen = state.sync_engine.change_gen();
+            let fourth = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"graph-after-partial", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(fourth.error.is_none(), "post-partial Graph ACK: {:?}", fourth.error);
+            assert_eq!(terminal_refresh(&state, "graph-after-partial").await["status"], json!("complete"));
+            let final_cache = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(final_cache["graphComplete"], json!(true));
+            assert_eq!(final_cache["totalCached"], json!(5));
+            let (_, after_partial_changes) = state.sync_engine.wait_changes(after_partial_gen, 0).await;
+            assert!(after_partial_changes.iter().all(|record| record.arrival_uids.is_empty()),
+                "a page after an invalidated baseline cannot announce historical mail: {after_partial_changes:?}");
+            let calls = crate::handlers::graph::test_graph_requests();
+            assert_eq!(calls.len(), 12, "four one-page refreshes each use folder/batch/messages: {calls:?}");
+            assert_eq!(calls.iter().filter(|call| call.path.contains("/messages?")).count(), 4);
+
+            let owner = final_cache["nativeIdentity"].clone();
+            let after_partial_uid = refresh_graph_map(&state, "acc1").await.unwrap()
+                .as_object().unwrap().iter().find_map(|(uid, graph_id)|
+                    (graph_id == "after-partial").then(|| uid.parse::<u32>().unwrap())).unwrap();
+            crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn,
+                "acc1", "INBOX", &json!({"emails":[{"uid":99,"subject":"out-of-band row"}],
+                    "removedUids":[after_partial_uid], "nativeIdentity":owner.clone(),
+                    "nativeExpectedIdentity":owner}).to_string())).unwrap();
+            let changed_count = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(changed_count["totalCached"], json!(5));
+            assert_eq!(changed_count["graphComplete"], json!(true),
+                "a generic cache writer may retain Graph's old metadata marker");
+            assert!(!crate::handlers::cache::graph_baseline(&state, "acc1", "INBOX").await.unwrap().complete,
+                "same-count UID replacement must invalidate the old marker by digest");
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_foreign_complete_owner_cannot_announce_historical_arrivals() {
+            use sha2::{Digest, Sha256};
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let (config, _origin) = graph_complete_source(&state).await;
+            let credential = json!({"id":"acc1", "email":"complete@example.test",
+                "authType":"oauth2", "oauth2Provider":"microsoft", "oauth2Transport":"graph",
+                "oauth2AccessToken":"synthetic-graph-complete", "oauth2ExpiresAt":4_000_000_000_000i64});
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({"acc1":credential.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            let mut foreign_config = config.clone();
+            foreign_config.email = "old-owner@example.test".into();
+            let foreign = mailvault_core::imap::NativeHeaderIdentity::new(&foreign_config, "acc1", "INBOX", None);
+            let digest = format!("{:x}", Sha256::digest(42u32.to_be_bytes()));
+            crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn,
+                "acc1", "INBOX", &json!({"emails":[{"uid":42,"subject":"old owner"}],
+                    "nativeIdentity":foreign,"nativeExpectedIdentity":null,"graphComplete":true,
+                    "graphCompleteTotal":1,"graphCompleteUidDigest":digest}).to_string())).unwrap();
+            let seeded = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(seeded["graphComplete"], json!(true));
+            let folder = json!({"value":[refresh_graph_folder("fld-complete", "Inbox")]});
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-complete"}}]});
+            let page = json!({"value":[refresh_graph_message("new-owner-one", "historical one"),
+                refresh_graph_message("new-owner-two", "historical two")],"@odata.nextLink":null});
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, folder.to_string()), (200, batch.to_string()), (200, page.to_string()),
+            ]);
+            let before = state.sync_engine.change_gen();
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"graph-owner-transition", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            assert_eq!(terminal_refresh(&state, "graph-owner-transition").await["status"], json!("complete"));
+            let current = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(current["nativeIdentity"]["originHash"],
+                json!(mailvault_core::bulk_worker::origin_hash(&config)));
+            assert_eq!(current["graphComplete"], json!(true));
+            assert_eq!(current["totalCached"], json!(2));
+            assert!(current["emails"].as_array().unwrap().iter().all(|row| row["uid"] != 42));
+            let (_, changes) = state.sync_engine.wait_changes(before, 0).await;
+            assert!(changes.iter().all(|record| record.arrival_uids.is_empty()),
+                "a complete cache from another owner cannot announce historical mail: {changes:?}");
+            assert_eq!(crate::handlers::graph::test_graph_requests().len(), 3);
+        }
+
+        #[tokio::test]
+        async fn c5_activation_watches_hidden_imap_jmap_skips_graph_then_reconciles_removal() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let jmap = mock_jmap::MockJmap::start(crate::jmap_test_support::scenario());
+            let (imap_trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let mut jmap_credential = crate::jmap_test_support::account_json(&jmap, imap_port);
+            jmap_credential["id"] = json!("jmap");
+            let mut jmap_row = jmap_credential.clone();
+            jmap_row.as_object_mut().unwrap().remove("password");
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let imap = |id: &str| json!({"id":id,"email":"user@example.com",
+                "authType":"password","imapHost":server.host(),"imapPort":server.port(),
+                "imapSecure":false});
+            let graph = json!({"id":"graph","email":"graph@example.test","authType":"oauth2",
+                "oauth2Provider":"microsoft","oauth2Transport":"graph"});
+            std::fs::write(state.app_dir.join("accounts.json"),
+                json!([imap("hidden"),imap("visible"),jmap_row.clone(),graph.clone()]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let stored = |id: &str| json!({"id":id,"email":"user@example.com",
+                "authType":"password","password":"hunter2","imapHost":server.host(),
+                "imapPort":server.port(),"imapSecure":false}).to_string();
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials,
+                json!({"hidden":stored("hidden"),"visible":stored("visible"),
+                    "jmap":jmap_credential.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings":{"state":{"refreshOnLaunch":false,"refreshInterval":0,
+                    "hiddenAccounts":{"hidden":true,"jmap":true}}},
+            }), None).unwrap();
+            assert!(state.idle.status().await.is_empty(),
+                "ordinary boot must not register native watchers");
+            let accepted = boxed_request(&state, req("sync.context", json!({
+                "launchId":"c5-watchers","revision":1,"phase":"start","view":null,
+            }))).await;
+            assert_eq!(accepted.result.unwrap()["accepted"], json!(true));
+            let mut watched = Vec::new();
+            for _ in 0..200 {
+                let statuses = state.idle.status().await;
+                let jmap_active = statuses.iter().any(|status|
+                    status.account_id == "jmap" && status.mode.is_some());
+                watched = statuses.into_iter().map(|status| status.account_id).collect();
+                watched.sort();
+                if watched == vec!["hidden".to_string(), "jmap".to_string(),
+                    "visible".to_string()] && jmap_active { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            assert_eq!(watched, vec!["hidden".to_string(), "jmap".to_string(),
+                "visible".to_string()],
+                "hidden IMAP/JMAP remain watched and Graph never enters IDLE");
+            assert!(state.idle.status().await.iter().any(|status|
+                status.account_id == "jmap" && status.mode.is_some()),
+                "JMAP must enter its push branch, not an IMAP watcher");
+            assert!(imap_trap.accept().is_err(), "JMAP watcher may not dial IMAP");
+            std::fs::write(state.app_dir.join("accounts.json"),
+                json!([imap("hidden"),graph]).to_string()).unwrap();
+            state.events.emit("accounts-changed", json!({}));
+            for _ in 0..200 {
+                watched = state.idle.status().await.into_iter()
+                    .map(|status| status.account_id).collect();
+                if watched == vec!["hidden".to_string()] { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            assert_eq!(watched, vec!["hidden".to_string()],
+                "removed IMAP and JMAP watchers must be withdrawn");
+            assert!(imap_trap.accept().is_err(), "JMAP removal may not dial IMAP");
+            state.idle.shutdown().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn c5_context_start_activates_once_after_dormant_boot() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        state.seed_accounts_for_test(&["acc1"]);
+        let dormant = handle_request_for_test(&state, "sync.refresh_status", json!({})).await.result.unwrap();
+        assert_eq!(dormant["automaticEnabled"], json!(false));
+        assert_eq!(dormant["receipts"], json!([]), "ordinary boot cannot start a native refresh");
+        let request = json!({"launchId":"c5-first-launch", "revision":1,
+            "phase":"start", "view":null});
+        let started = handle_request_for_test(&state, "sync.context", request.clone()).await;
+        assert!(started.result.as_ref().is_some_and(|result| result["accepted"] == true),
+            "C5 start context route must acknowledge native activation: {started:?}");
+        assert_eq!(started.result.as_ref().unwrap()["revision"], json!(1));
+        let mut receipts = Vec::new();
+        for _ in 0..200 {
+            let status = handle_request_for_test(&state, "sync.refresh_status", json!({})).await.result.unwrap();
+            receipts = status["receipts"].as_array().unwrap().clone();
+            if !receipts.is_empty() { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(receipts.len(), 1, "first start with an authoritative account consumes one launch attempt");
+        let retry = handle_request_for_test(&state, "sync.context", request).await;
+        assert_eq!(retry.result.as_ref().unwrap()["accepted"], json!(true));
+        let after = handle_request_for_test(&state, "sync.refresh_status", json!({})).await.result.unwrap();
+        assert_eq!(after["automaticEnabled"], json!(true));
+        assert_eq!(after["contextRevision"], json!(1));
+        assert_eq!(after["receipts"].as_array().unwrap().len(), 1,
+            "same live-daemon start retry cannot enqueue another launch attempt");
+    }
+
+    #[tokio::test]
+    async fn c5_context_resume_on_new_instance_never_replays_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        state.seed_accounts_for_test(&["acc1"]);
+        let resumed = handle_request_for_test(&state, "sync.context", json!({
+            "launchId":"c5-reconnect", "revision":1, "phase":"resume", "view":null,
+        })).await;
+        assert!(resumed.result.as_ref().is_some_and(|result| result["accepted"] == true),
+            "C5 resume context route must accept a new instance without launch replay: {resumed:?}");
+        let later = handle_request_for_test(&state, "sync.context", json!({
+            "launchId":"c5-reconnect", "revision":2, "phase":"start", "view":null,
+        })).await;
+        assert_eq!(later.result.as_ref().unwrap()["accepted"], json!(true));
+        let status = handle_request_for_test(&state, "sync.refresh_status", json!({})).await.result.unwrap();
+        assert_eq!(status["automaticEnabled"], json!(true));
+        assert_eq!(status["contextRevision"], json!(2));
+        assert_eq!(status["receipts"], json!([]),
+            "a launch first observed as resume may never queue a new launch refresh");
+    }
+
+    #[tokio::test]
+    async fn c5_context_revision_and_strict_view_validation() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        state.seed_accounts_for_test(&["acc1"]);
+        mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+            "mailvault-settings":{"state":{"refreshOnLaunch":false}},
+        }), None).unwrap();
+        let request = json!({"launchId":"c5-revision", "revision":4, "phase":"start",
+            "view":{"accountId":"acc1","mailbox":"INBOX"}});
+        let first = handle_request_for_test(&state, "sync.context", request.clone()).await;
+        assert!(first.result.as_ref().is_some_and(|result| result["accepted"] == true),
+            "C5 context route must accept an authoritative ordinary view: {first:?}");
+        let duplicate = handle_request_for_test(&state, "sync.context", request.clone()).await;
+        assert_eq!(duplicate.result.as_ref().unwrap()["accepted"], json!(true));
+        let lower = handle_request_for_test(&state, "sync.context", json!({
+            "launchId":"c5-revision", "revision":3, "phase":"start", "view":null,
+        })).await;
+        assert_eq!(lower.result.as_ref().unwrap()["accepted"], json!(false));
+        let mut conflict = request.clone();
+        conflict["view"]["mailbox"] = json!("Sent");
+        assert_eq!(handle_request_for_test(&state, "sync.context", conflict).await.error.unwrap().code,
+            ipc::INVALID_PARAMS, "equal revision with different view must be invalid");
+        for malformed in [
+            json!({"launchId":"c5-revision","revision":-1,"phase":"start","view":null}),
+            json!({"launchId":"c5-revision","revision":9007199254740992u64,"phase":"start","view":null}),
+            json!({"launchId":"c5-revision","revision":5,"phase":"start","view":null,"password":"synthetic"}),
+            json!({"launchId":"c5-revision","revision":5,"phase":"start",
+                "view":{"accountId":null,"mailbox":"INBOX"}}),
+        ] {
+            assert_eq!(handle_request_for_test(&state, "sync.context", malformed).await.error.unwrap().code,
+                ipc::INVALID_PARAMS, "malformed context cannot activate a provider target");
+        }
+        let status = handle_request_for_test(&state, "sync.refresh_status", json!({})).await.result.unwrap();
+        assert_eq!(status["contextRevision"], json!(4));
+        assert_eq!(status["receipts"], json!([]));
     }
 
     #[tokio::test]
@@ -4121,6 +5655,60 @@ mod tests {
         let ev = recv(&mut lines).await;
         assert_eq!(ev["params"]["name"], "daemon-ping");
         assert_eq!(ev["params"]["payload"], json!({"nonce": "n1"}));
+        served.stop();
+    }
+
+    #[tokio::test]
+    async fn c5_sync_owner_notification_ack_reuses_same_channel_generation() {
+        let served = Served::start().await;
+        let (mut lines, mut w) = open_channel(&served).await;
+        let owner = r#"{"jsonrpc":"2.0","method":"sync.owner","params":{"launchId":"c5-owner","revision":1}}"#;
+        send(&mut w, owner).await;
+        let first = tokio::time::timeout(std::time::Duration::from_secs(2), recv(&mut lines)).await;
+        assert!(first.is_ok(), "C5 same-channel sync.owner must emit a matching acknowledgement");
+        let first = first.unwrap();
+        assert_eq!(first["method"], json!("event"));
+        assert_eq!(first["params"]["name"], json!("sync-owner"));
+        let acknowledged = &first["params"]["payload"];
+        assert_eq!(acknowledged["launchId"], json!("c5-owner"));
+        assert_eq!(acknowledged["revision"], json!(1));
+        assert_eq!(acknowledged["accepted"], json!(true));
+        let generation = acknowledged["ownerGeneration"].as_u64()
+            .expect("accepted same-channel owner must expose its native generation");
+        let instance = handle_request_for_test(&served.state, "sync.refresh_status", json!({}))
+            .await.result.unwrap()["instanceId"].clone();
+        assert_eq!(acknowledged["instanceId"], instance);
+
+        send(&mut w, owner).await;
+        let duplicate = tokio::time::timeout(std::time::Duration::from_secs(2), recv(&mut lines))
+            .await.expect("identical lost-ACK retry must receive an acknowledgement");
+        assert_eq!(duplicate["params"]["name"], json!("sync-owner"));
+        assert_eq!(duplicate["params"]["payload"]["accepted"], json!(true));
+        assert_eq!(duplicate["params"]["payload"]["ownerGeneration"], json!(generation),
+            "same tuple on the same socket may not replace its guard");
+
+        send(&mut w, r#"{"jsonrpc":"2.0","method":"sync.owner","params":{"launchId":"c5-owner","revision":0}}"#).await;
+        let stale = tokio::time::timeout(std::time::Duration::from_secs(2), recv(&mut lines))
+            .await.expect("stale owner tuple must be explicitly acknowledged");
+        assert_eq!(stale["params"]["name"], json!("sync-owner"));
+        assert_eq!(stale["params"]["payload"]["accepted"], json!(false));
+        served.stop();
+    }
+
+    #[tokio::test]
+    async fn c5_channel_open_rejects_owner_older_than_accepted_context() {
+        let served = Served::start().await;
+        let accepted = handle_request_for_test(&served.state, "sync.context", json!({
+            "launchId":"c5-new-channel","revision":2,"phase":"resume","view":null,
+        })).await;
+        assert_eq!(accepted.result.unwrap()["accepted"], json!(true));
+        let (mut lines, mut writer) = served.connect().await;
+        send(&mut writer, &format!(r#"{{"token":"{}"}}"#, served.state.token)).await;
+        recv(&mut lines).await;
+        send(&mut writer, r#"{"jsonrpc":"2.0","method":"channel.open","id":11,"params":{"syncOwner":{"launchId":"c5-new-channel","revision":1}}}"#).await;
+        let stale = recv(&mut lines).await;
+        assert_eq!(stale["error"]["code"], json!(ipc::INVALID_PARAMS));
+        assert_eq!(stale["id"], json!(11));
         served.stop();
     }
 

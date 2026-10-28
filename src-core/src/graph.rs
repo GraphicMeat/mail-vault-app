@@ -713,10 +713,23 @@ impl GraphClient {
             graph_base(), folder_id, top, skip
         );
 
+        self.list_messages_at(&url).await
+    }
+
+    /// Continue a full-header listing using Graph's opaque link. The same
+    /// response parser and HTTP error handling as the first page apply.
+    pub async fn list_messages_next(&self, next: &str) -> Result<(Vec<GraphMessage>, Option<String>), String> {
+        if !is_graph_link(next) {
+            return Err("Graph list_messages refused a nextLink outside the Graph base".into());
+        }
+        self.list_messages_at(next).await
+    }
+
+    async fn list_messages_at(&self, url: &str) -> Result<(Vec<GraphMessage>, Option<String>), String> {
         let resp = self
             .client
             .send(self.client
-                .get(&url)
+                .get(url)
                 .bearer_auth(&self.access_token))
             .await
             .map_err(|e| format!("Graph list_messages request failed: {}", e))?;
@@ -1377,6 +1390,13 @@ impl GraphClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn full_header_next_link_refuses_foreign_origin_before_sending_token() {
+        let client = GraphClient::new("synthetic-token");
+        let result = client.list_messages_next("https://untrusted.example/messages?$skiptoken=x").await;
+        assert!(result.unwrap_err().contains("outside the Graph base"));
+    }
 
     // -- Domain detection ---------------------------------------------------
 

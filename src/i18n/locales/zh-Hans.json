@@ -4056,6 +4056,7 @@
   "errors.syncOffline": "请连接互联网以刷新此账户。",
   "errors.syncFailed": "无法刷新此账户，请重试。",
   "errors.syncHeadersIncomplete": "无法完整刷新文件夹中的邮件头。",
+  "errors.syncGraphAdoptionRequired": "刷新此 Graph 文件夹前，请先在应用中完成准备。",
   "errors.bulkIdentityUncertain": "邮件身份不确定。请刷新文件夹后重试。",
   "errors.bulkIdentityChanged": "所选文件夹或邮件的身份已更改。",
   "errors.bulkGraphDeleteUnsupported": "此Graph账户无法执行服务器删除。",

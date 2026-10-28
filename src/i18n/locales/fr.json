@@ -4056,6 +4056,7 @@
   "errors.syncOffline": "Connectez-vous à Internet pour actualiser ce compte.",
   "errors.syncFailed": "Ce compte n’a pas pu être actualisé. Réessayez.",
   "errors.syncHeadersIncomplete": "Les en-têtes du dossier n’ont pas pu être entièrement actualisés.",
+  "errors.syncGraphAdoptionRequired": "Ce dossier Graph doit être préparé dans l’application avant de pouvoir être actualisé.",
   "errors.bulkIdentityUncertain": "L’identité du message est incertaine. Actualisez le dossier avant de réessayer.",
   "errors.bulkIdentityChanged": "L’identité du dossier ou du message sélectionné a changé.",
   "errors.bulkGraphDeleteUnsupported": "La suppression sur le serveur est indisponible pour ce compte Graph.",

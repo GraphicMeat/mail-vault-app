@@ -4060,6 +4060,7 @@
   "errors.syncOffline": "Connect to the internet to refresh this account.",
   "errors.syncFailed": "This account could not be refreshed. Try again.",
   "errors.syncHeadersIncomplete": "The folder's headers could not be fully refreshed. Try again.",
+  "errors.syncGraphAdoptionRequired": "This Graph folder must be prepared in the app before it can refresh.",
   "errors.bulkIdentityUncertain": "Message identity is uncertain. Refresh the folder before trying again.",
   "errors.bulkIdentityChanged": "The selected folder or message identity changed.",
   "errors.bulkGraphDeleteUnsupported": "Server deletion is unavailable for this Graph account.",

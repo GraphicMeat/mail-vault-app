@@ -31,7 +31,7 @@ use crate::handlers::common::{blocking, vault_root, with_vault_write};
 use crate::imap::{EmailHeader, ImapConfig};
 use crate::jmap_sessions::{in_mailbox, jmap_ledger_path, AccountJmap, JmapMeta, Mailboxes};
 use crate::server::DaemonState;
-use crate::sync_engine::{cache_io, SyncAccount, SyncEngine, SyncResult};
+use crate::sync_engine::{cache_io, cache_io_strict, CacheCtx, SyncAccount, SyncEngine, SyncResult};
 use crate::account_lifecycle::AccountStamp;
 use mailvault_core::custody::{cache, Connection};
 use mailvault_core::graph_ledger::{self, Ledger};
@@ -44,6 +44,16 @@ use tracing::{info, warn};
 
 /// The newest emails a cold run lists per mailbox (the IMAP cold page).
 const COLD_PAGE: usize = 500;
+
+async fn cache_step<T: Send + 'static>(state: &Arc<DaemonState>, io: &CacheCtx,
+    cfg: &ImapConfig, strict: bool,
+    f: impl FnOnce(CacheCtx) -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    if strict {
+        cache_io_strict(state, io, &mailvault_core::bulk_worker::origin_hash(cfg), f).await
+    } else {
+        cache_io(io, f).await
+    }
+}
 
 /// The account-wide lock's key in the engine's `sync_locks`. Folder locks are
 /// `<account>\x01<mailbox>`; the prefix keeps the two apart.
@@ -77,7 +87,8 @@ struct Run {
 /// `announce` is not consulted: a JMAP run always publishes what it touched
 /// (module doc), so `announced` is set whenever there are arrivals and an
 /// announcing caller never publishes them a second time.
-pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str, announce: bool, stamp: &AccountStamp) -> SyncResult {
+pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str, announce: bool, stamp: &AccountStamp, strict_origin: bool,
+    evidence: Option<&crate::sync_observation::TicketEvidence>) -> SyncResult {
     let _ = announce;
     let failed = |error: String| SyncResult {
         account_id: account.id.clone(),
@@ -101,10 +112,10 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
     let _account_guard = lock.lock().await;
     // An expired or revoked session: forget it and run once more on a fresh
     // connect, as the bridge's `answer_with_retry` does.
-    let run = match run_once(&state, engine, config, &account.id, Some(mailbox), stamp).await {
+    let run = match run_once(&state, engine, config, &account.id, Some(mailbox), stamp, strict_origin).await {
         Err(e) if is_auth_failure(&e) => {
             state.jmap.forget(config);
-            run_once(&state, engine, config, &account.id, Some(mailbox), stamp).await
+            run_once(&state, engine, config, &account.id, Some(mailbox), stamp, strict_origin).await
         }
         other => other,
     };
@@ -115,10 +126,37 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
     let Some((path, total, mailbox_id)) = run.requested.clone() else {
         return failed(format!("E_JMAP_PROTOCOL: no mailbox {mailbox}"));
     };
-    publish(engine, &account.id, &run);
-    wake_workers(&state, &run);
-    if let Err(e) = write_meta(&state, engine, config, &account.id, &path, &mailbox_id, total, stamp).await {
+    if !strict_origin {
+        publish(engine, &account.id, &run);
+        wake_workers(&state, &run, None);
+    }
+    if let Err(e) = write_meta(&state, engine, config, &account.id, &path, &mailbox_id, total, stamp, strict_origin).await {
         return failed(e);
+    }
+    if strict_origin {
+        let origin = match crate::sync_observation::origin(&state, stamp.clone()).await {
+            Ok(origin) if origin.hash == mailvault_core::bulk_worker::origin_hash(config) => origin,
+            _ => return failed("errors.bulkIdentityChanged".into()),
+        };
+        let mut changes = Vec::new();
+        for (path, touch) in run.touched.iter().filter(|(path, touch)|
+            !touch.uids.is_empty() && *path != &run.requested.as_ref().unwrap().0) {
+            let (_, source) = match crate::sync_observation::source(&state, &origin, path).await {
+                Ok(source) => source,
+                Err(error) => return failed(error),
+            };
+            if source.cache_owner.as_ref().is_some_and(|owner| owner.origin_hash != origin.hash) {
+                return failed("errors.bulkIdentityChanged".into());
+            }
+            changes.push((source, touch.arrival_uids.clone(), touch.flags));
+        }
+        #[cfg(test)]
+        source_write_test_pause::before_write(&state, "strict-publish").await;
+        let Some(evidence) = evidence else { return failed("errors.bulkIdentityUncertain".into()); };
+        if let Err(error) = crate::sync_observation::publish_sources(&state, evidence, changes).await {
+            return failed(error);
+        }
+        wake_workers(&state, &run, Some(&path));
     }
     let mine = run.touched.get(&path);
     let arrival_uids = mine.map(|t| t.arrival_uids.clone()).unwrap_or_default();
@@ -148,6 +186,84 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
     result
 }
 
+/// Fill every older JMAP page under the refresh's original account epoch.
+/// The regular sync has already written the newest cold page and metadata;
+/// each page below keeps its observed owner and refuses partial provider data.
+pub(crate) async fn complete_headers_with_stamp(state: &Arc<DaemonState>, account: &SyncAccount,
+    mailbox: &str, stamp: &AccountStamp, expected_total: u32) -> Result<(), String> {
+    const PAGE: usize = 200;
+    let engine = &state.sync_engine;
+    let lock = engine.lock_for(&account_lock_key(&account.id)).await;
+    let _account_guard = lock.lock().await;
+    let cfg = &account.imap_config;
+    let acct = state.jmap.get(cfg).await.map_err(|error| error.to_string())?;
+    let mailbox_id = acct.mailbox_id(mailbox).await.map_err(|error| error.to_string())?;
+    let io = engine.cache_ctx_with_stamp(&account.id, mailbox, Ok(stamp.clone()))
+        .for_jmap_source(cfg, &mailbox_id).strict_origin(true);
+    let seed = engine.prepare_native_seed(&io, cfg).await?;
+    let io = io.expect_native_seed(&seed);
+    if !seed.matches(&mailvault_core::imap::NativeHeaderIdentity::new(cfg, &account.id, mailbox, Some(1))
+        .with_jmap_mailbox(&mailbox_id)) {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    let mut listed = HashSet::new();
+    let total = expected_total as usize;
+    for position in (0..total).step_by(PAGE) {
+        let current = crate::sync_observation::origin(state, stamp.clone()).await?;
+        if current.hash != mailvault_core::bulk_worker::origin_hash(cfg) {
+            return Err("errors.bulkIdentityChanged".into());
+        }
+        let take = PAGE.min(total - position);
+        let (ids, reported) = acct.client.query_mailbox(&mailbox_id, position, take)
+            .await.map_err(|error| error.to_string())?;
+        if reported != Some(total) || ids.len() != take {
+            return Err("errors.syncHeadersIncomplete".into());
+        }
+        #[cfg(test)]
+        if position + take == total {
+            source_write_test_pause::before_write(state, "complete-before-get").await;
+        }
+        let got = acct.client.get_emails(&ids, HEADER_PROPS).await.map_err(|error| error.to_string())?;
+        if !got.not_found.is_empty() || got.list.len() != ids.len() {
+            return Err("errors.syncHeadersIncomplete".into());
+        }
+        #[cfg(test)]
+        if position + take == total {
+            source_write_test_pause::before_write(state, "complete-get").await;
+        }
+        let owner = state.account_lifecycle.try_operation(std::slice::from_ref(stamp))
+            .map_err(|_| "errors.keychainBusy".to_owned())?;
+        let oldest: Vec<String> = ids.iter().rev().cloned().collect();
+        let uids = acct.ids_to_uids_strict(state, stamp.clone(), &account.id, mailbox, &oldest,
+            &mailvault_core::bulk_worker::origin_hash(cfg), seed.expected_owner()?,
+            seed.identity().clone(), Some(owner)).await?;
+        let by_uid: HashMap<String, u32> = oldest.into_iter().zip(uids).collect();
+        let mut by_id: HashMap<String, Value> = got.list.into_iter().map(|email|
+            (email_id(&email), email)).collect();
+        let mut headers = Vec::with_capacity(ids.len());
+        for id in &ids {
+            let email = by_id.remove(id).ok_or("errors.syncHeadersIncomplete")?;
+            if !in_mailbox(&email, &mailbox_id) { return Err("errors.syncHeadersIncomplete".into()); }
+            let uid = *by_uid.get(id).ok_or("errors.syncHeadersIncomplete")?;
+            listed.insert(uid);
+            headers.push(to_header(&email, uid));
+        }
+        let page_seed = seed.clone();
+        cache_step(state, &io, cfg, true, move |io| io.write_bound_headers(&headers, &page_seed, Some(1))).await?;
+        #[cfg(test)]
+        if position == 0 && position + take < total {
+            source_write_test_pause::before_write(state, "complete-first-page").await;
+        }
+        #[cfg(test)]
+        if position >= 400 && position + take < total {
+            source_write_test_pause::before_write(state, "complete-midpage").await;
+        }
+        tokio::task::yield_now().await;
+    }
+    if listed.len() != total { return Err("errors.syncHeadersIncomplete".into()); }
+    cache_step(state, &io, cfg, true, move |io| io.verify_native_coverage(&seed, &listed)).await
+}
+
 /// The account's delta, for the bridge's status RPCs: afterwards the ledger
 /// (`uidNext`) and the counter (`highestModseq`) of every tracked mailbox are
 /// current. It publishes what it touched and writes no mailbox's cache meta,
@@ -164,11 +280,11 @@ pub(crate) async fn delta_only_with_stamp(state: &Arc<DaemonState>, cfg: &ImapCo
     let engine = &state.sync_engine;
     let lock = engine.lock_for(&account_lock_key(account_id)).await;
     let _account_guard = lock.lock().await;
-    let run = run_once(state, engine, cfg, account_id, None, stamp).await?;
+    let run = run_once(state, engine, cfg, account_id, None, stamp, false).await?;
     let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(stamp))
         .map_err(|_| "errors.keychainBusy".to_owned())?;
     publish(engine, account_id, &run);
-    wake_workers(state, &run);
+    wake_workers(state, &run, None);
     Ok(())
 }
 
@@ -190,11 +306,12 @@ fn publish(engine: &SyncEngine, account_id: &str, run: &Run) {
 /// caller's own wakes (`handle_sync_now`, `jmap_push`) see only the
 /// requested mailbox. Arrivals wake the hoarder; header rows written wake
 /// Auto Tags (the signal `handle_sync_now` sends on `new_emails`).
-fn wake_workers(state: &DaemonState, run: &Run) {
-    if run.touched.values().any(|t| !t.arrival_uids.is_empty()) {
+fn wake_workers(state: &DaemonState, run: &Run, skip: Option<&str>) {
+    let mut touched = run.touched.iter().filter(|(path, _)| skip != Some(path.as_str()));
+    if touched.clone().any(|(_, t)| !t.arrival_uids.is_empty()) {
         state.hoarder_worker.wake();
     }
-    if run.touched.values().any(|t| t.written > 0) {
+    if touched.any(|(_, t)| t.written > 0) {
         state.auto_tag_worker.wake();
     }
 }
@@ -209,6 +326,7 @@ async fn run_once(
     account_id: &str,
     wanted: Option<&str>,
     stamp: &AccountStamp,
+    strict: bool,
 ) -> Result<Run, String> {
     let acct = state.jmap.get(cfg).await.map_err(|e| e.to_string())?;
     let boxes = acct.current().await.map_err(|e| e.to_string())?;
@@ -245,11 +363,11 @@ async fn run_once(
     let mut touched: BTreeMap<String, Touch> = BTreeMap::new();
     let new_state = match changes {
         Some(changes) => {
-            apply_delta(state, engine, &acct, cfg, account_id, &boxes, &cached, &changes, &mut touched, stamp).await?;
+            apply_delta(state, engine, &acct, cfg, account_id, &boxes, &cached, &changes, &mut touched, stamp, strict).await?;
             // A requested mailbox with no header cache yet gets its first
             // fill. The account's state stays the delta's.
             if let Some((path, _, _)) = requested.as_ref().filter(|(p, _, _)| !cached.contains(p)) {
-                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched, stamp).await?;
+                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched, stamp, strict).await?;
             }
             changes.new_state
         }
@@ -262,17 +380,69 @@ async fn run_once(
                 targets.insert(path.clone());
             }
             for path in &targets {
-                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched, stamp).await?;
+                rebuild(state, engine, &acct, cfg, account_id, &boxes, path, &mut touched, stamp, strict).await?;
             }
             before
         }
     };
     #[cfg(test)]
     delta_test_pause::before_state_write(state).await;
-    bump(state, account_id, &touched, stamp).await?;
+    let owner_targets: Vec<_> = if strict {
+        touched.keys().filter_map(|path| boxes.ids.get(path).map(|mailbox_id| {
+            (path.clone(), mailvault_core::imap::NativeHeaderIdentity::new(cfg,
+                account_id, path, Some(1)).with_jmap_mailbox(mailbox_id))
+        })).collect()
+    } else { Vec::new() };
+    let hash = strict.then(|| mailvault_core::bulk_worker::origin_hash(cfg));
+    bump(state, account_id, &touched, stamp, hash.clone(), owner_targets.clone()).await?;
     let (aid, ja) = (account_id.to_string(), jmap_account);
-    custody_write(state, stamp, move |c| JmapMeta::set_email_state(c, &aid, &ja, &new_state)).await?;
+    custody_write(state, stamp, hash, move |c| {
+        check_owner_targets(c, &aid, &owner_targets)?;
+        JmapMeta::set_email_state(c, &aid, &ja, &new_state)
+    }).await?;
     Ok(Run { touched, requested })
+}
+
+#[cfg(test)]
+pub(crate) mod source_write_test_pause {
+    use super::DaemonState;
+    use std::sync::{Arc, Mutex, OnceLock};
+    use tokio::sync::oneshot;
+
+    struct Gate {
+        state: usize,
+        phase: &'static str,
+        entered: oneshot::Sender<()>,
+        release: oneshot::Receiver<()>,
+    }
+    static GATE: OnceLock<Mutex<Option<Gate>>> = OnceLock::new();
+
+    pub(crate) fn install(state: &Arc<DaemonState>, phase: &'static str)
+        -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (entered_tx, entered_rx) = oneshot::channel();
+        let (release_tx, release_rx) = oneshot::channel();
+        let slot = GATE.get_or_init(|| Mutex::new(None));
+        let mut guard = slot.lock().unwrap_or_else(|error| error.into_inner());
+        assert!(guard.is_none(), "one held original-bound JMAP write at a time");
+        *guard = Some(Gate { state: Arc::as_ptr(state) as usize, phase,
+            entered: entered_tx, release: release_rx });
+        (entered_rx, release_tx)
+    }
+
+    pub(crate) async fn before_write(state: &Arc<DaemonState>, phase: &'static str) {
+        let slot = GATE.get_or_init(|| Mutex::new(None));
+        let gate = {
+            let mut guard = slot.lock().unwrap_or_else(|error| error.into_inner());
+            if guard.as_ref().is_some_and(|gate|
+                gate.state == Arc::as_ptr(state) as usize && gate.phase == phase) {
+                guard.take()
+            } else { None }
+        };
+        if let Some(gate) = gate {
+            let _ = gate.entered.send(());
+            let _ = gate.release.await;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -345,11 +515,14 @@ async fn custody_read<T: Send + 'static>(
 async fn custody_write<T: Send + 'static>(
     state: &Arc<DaemonState>,
     stamp: &AccountStamp,
+    strict_hash: Option<String>,
     f: impl FnOnce(&Connection) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
     let st = Arc::clone(state);
     let original = stamp.clone();
     blocking(move || {
+        let _lease = strict_hash.as_ref().map(|hash|
+            crate::sync_observation::source_lease(&st, &original, hash)).transpose()?;
         let _permit = st.account_lifecycle.try_commit(std::slice::from_ref(&original))
             .map_err(|_| "errors.keychainBusy".to_owned())?;
         with_vault_write(&st, |_| crate::custody::with_conn(&st, f))
@@ -417,6 +590,7 @@ async fn apply_delta(
     changes: &EmailChanges,
     touched: &mut BTreeMap<String, Touch>,
     stamp: &AccountStamp,
+    strict: bool,
 ) -> Result<(), String> {
     let mut seeds = HashMap::new();
     for path in cached {
@@ -430,6 +604,8 @@ async fn apply_delta(
     } else {
         acct.client.get_emails(&wanted, HEADER_PROPS).await.map_err(|e| e.to_string())?
     };
+    #[cfg(test)]
+    source_write_test_pause::before_write(state, "delta-get").await;
     let mut gone: HashSet<String> = changes.destroyed.iter().cloned().collect();
     gone.extend(got.not_found);
     let mut emails = got.list;
@@ -447,7 +623,7 @@ async fn apply_delta(
             continue;
         }
         let here = Here { path: &path, mailbox_id: &mailbox_id, role: role.as_deref(), cached: is_cached };
-        let touch = apply_to_mailbox(state, engine, acct, cfg, account_id, &here, ledger, &emails, &gone, &created, &mut announced, seeds.get(&path), stamp).await?;
+        let touch = apply_to_mailbox(state, engine, acct, cfg, account_id, &here, ledger, &emails, &gone, &created, &mut announced, seeds.get(&path), stamp, strict).await?;
         let entry = touched.entry(path.clone()).or_default();
         entry.written += touch.written;
         entry.arrival_uids.extend(touch.arrival_uids);
@@ -492,6 +668,7 @@ async fn apply_to_mailbox(
     announced: &mut HashSet<String>,
     seed: Option<&crate::sync_engine::NativeBatchSeed>,
     stamp: &AccountStamp,
+    strict: bool,
 ) -> Result<Touch, String> {
     // id -> uid as the ledger issued it before this run (the lower uid of a
     // duplicate, as `graph_ledger::allocate` resolves one).
@@ -524,7 +701,11 @@ async fn apply_to_mailbox(
     } else {
         HashMap::new()
     };
-    let io = engine.cache_ctx_with_stamp(account_id, here.path, Ok(stamp.clone())).for_jmap_source(cfg, here.mailbox_id);
+    let io = engine.cache_ctx_with_stamp(account_id, here.path, Ok(stamp.clone()))
+        .for_jmap_source(cfg, here.mailbox_id).strict_origin(strict);
+    let io = if strict {
+        match seed { Some(seed) => io.expect_native_seed(seed), None => io }
+    } else { io };
     let mut touch = Touch::default();
 
     // 1. New here.
@@ -538,7 +719,15 @@ async fn apply_to_mailbox(
         .collect();
     if !fresh.is_empty() {
         let ids: Vec<String> = fresh.iter().map(|e| email_id(e)).collect();
-        let uids = acct.ids_to_uids(state, stamp.clone(), account_id, here.path, &ids).await?;
+        let uids = if strict {
+            let target = mailvault_core::imap::NativeHeaderIdentity::new(cfg, account_id, here.path, Some(1))
+                .with_jmap_mailbox(here.mailbox_id);
+            let expected = seed.map(|seed| seed.expected_owner()).transpose()?.flatten();
+            acct.ids_to_uids_strict(state, stamp.clone(), account_id, here.path, &ids,
+                &mailvault_core::bulk_worker::origin_hash(cfg), expected, target, None).await?
+        } else {
+            acct.ids_to_uids(state, stamp.clone(), account_id, here.path, &ids).await?
+        };
         let mut headers: Vec<EmailHeader> = Vec::new();
         for (email, uid) in fresh.iter().zip(uids) {
             let id = email_id(email);
@@ -554,7 +743,7 @@ async fn apply_to_mailbox(
         touch.written = headers.len();
         if !headers.is_empty() {
             let seed = seed.ok_or("errors.bulkIdentityUncertain")?.clone();
-            cache_io(&io, move |io| io.write_bound_headers(&headers, &seed, Some(1))).await?;
+            cache_step(state, &io, cfg, strict, move |io| io.write_bound_headers(&headers, &seed, Some(1))).await?;
         }
     }
 
@@ -584,12 +773,12 @@ async fn apply_to_mailbox(
     }
     if !removed.is_empty() {
         let uids = removed.clone();
-        cache_io(&io, move |io| io.remove(&uids)).await?;
+        cache_step(state, &io, cfg, strict, move |io| io.remove(&uids)).await?;
         touch.uids.extend(removed);
     }
     if !patches.is_empty() {
         touch.uids.extend(patches.iter().map(|(uid, _)| *uid));
-        touch.flags = cache_io(&io, move |io| io.patch_flags(&patches)).await?;
+        touch.flags = cache_step(state, &io, cfg, strict, move |io| io.patch_flags(&patches)).await?;
     }
     Ok(touch)
 }
@@ -607,15 +796,24 @@ async fn rebuild(
     path: &str,
     touched: &mut BTreeMap<String, Touch>,
     stamp: &AccountStamp,
+    strict: bool,
 ) -> Result<(), String> {
     let mailbox_id = boxes.ids.get(path).cloned().ok_or_else(|| format!("E_JMAP_PROTOCOL: no mailbox {path}"))?;
-    let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone())).for_jmap_source(cfg, &mailbox_id);
+    let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone()))
+        .for_jmap_source(cfg, &mailbox_id).strict_origin(strict);
     let seed = engine.prepare_native_seed(&io, cfg).await?;
+    let io = if strict { io.expect_native_seed(&seed) } else { io };
     let (ids, _) = acct.client.query_mailbox(&mailbox_id, 0, COLD_PAGE).await.map_err(|e| e.to_string())?;
     // A page lists newest first; the ledger takes it oldest first, so the
     // uids one listing issues follow arrival.
     let oldest_first: Vec<String> = ids.iter().rev().cloned().collect();
-    let uids = acct.ids_to_uids(state, stamp.clone(), account_id, path, &oldest_first).await?;
+    let uids = if strict {
+        acct.ids_to_uids_strict(state, stamp.clone(), account_id, path, &oldest_first,
+            &mailvault_core::bulk_worker::origin_hash(cfg), seed.expected_owner()?,
+            seed.identity().clone(), None).await?
+    } else {
+        acct.ids_to_uids(state, stamp.clone(), account_id, path, &oldest_first).await?
+    };
     let uid_of: HashMap<String, u32> = oldest_first.into_iter().zip(uids).collect();
     let got = if ids.is_empty() {
         Vec::new()
@@ -644,10 +842,10 @@ async fn rebuild(
             .collect()
     };
     let written = headers.len();
-    cache_io(&io, move |io| io.write_bound_headers(&headers, &seed, Some(1))).await?;
+    cache_step(state, &io, cfg, strict, move |io| io.write_bound_headers(&headers, &seed, Some(1))).await?;
     if !stale.is_empty() {
         let uids = stale.clone();
-        cache_io(&io, move |io| io.remove(&uids)).await?;
+        cache_step(state, &io, cfg, strict, move |io| io.remove(&uids)).await?;
     }
     let touch = touched.entry(path.to_string()).or_default();
     touch.written += written;
@@ -656,8 +854,20 @@ async fn rebuild(
     Ok(())
 }
 
+fn check_owner_targets(c: &Connection, account_id: &str,
+    targets: &[(String, mailvault_core::imap::NativeHeaderIdentity)]) -> Result<(), String> {
+    for (path, target) in targets {
+        let current = cache::native_identity(c, account_id, path)?;
+        if current.as_ref().is_some_and(|owner| owner != target) {
+            return Err("errors.bulkIdentityChanged".into());
+        }
+    }
+    Ok(())
+}
+
 /// `JmapMeta::bump` for every mailbox the run changed, in one custody step.
-async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<String, Touch>, stamp: &AccountStamp) -> Result<(), String> {
+async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<String, Touch>, stamp: &AccountStamp,
+    strict_hash: Option<String>, owner_targets: Vec<(String, mailvault_core::imap::NativeHeaderIdentity)>) -> Result<(), String> {
     let work: Vec<(String, Vec<u32>)> = touched
         .iter()
         .filter(|(_, t)| !t.uids.is_empty())
@@ -667,7 +877,8 @@ async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<Str
         return Ok(());
     }
     let aid = account_id.to_string();
-    custody_write(state, stamp, move |c| {
+    custody_write(state, stamp, strict_hash, move |c| {
+        check_owner_targets(c, &aid, &owner_targets)?;
         for (path, uids) in &work {
             JmapMeta::bump(c, &aid, path, uids)?;
         }
@@ -680,14 +891,20 @@ async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<Str
 /// count, `uidValidity` 1 (ledger uids are never renumbered), the ledger's
 /// `uidNext` and the mailbox's counter, so `syncProbe.js` compares them like
 /// for like with `imap_check_mailbox_status`.
-async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, config: &ImapConfig, account_id: &str, path: &str, mailbox_id: &str, total: u32, stamp: &AccountStamp) -> Result<(), String> {
+async fn write_meta(state: &Arc<DaemonState>, engine: &SyncEngine, config: &ImapConfig, account_id: &str, path: &str, mailbox_id: &str, total: u32, stamp: &AccountStamp, strict: bool) -> Result<(), String> {
     let ledger = load_ledger(state, account_id, path).await?;
     let uid_next = ledger.keys().next_back().map_or(1, |uid| uid.saturating_add(1));
     let (aid, mb) = (account_id.to_string(), path.to_string());
     let modseq = custody_read(state, move |c| Ok(JmapMeta::modseq(c, &aid, &mb))).await?;
-    let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone())).for_jmap_source(config, mailbox_id);
+    let io = engine.cache_ctx_with_stamp(account_id, path, Ok(stamp.clone()))
+        .for_jmap_source(config, mailbox_id).strict_origin(strict);
     let identity = mailvault_core::imap::NativeHeaderIdentity::new(config, account_id, path, Some(1)).with_jmap_mailbox(mailbox_id);
-    cache_io(&io, move |io| io.write_meta_for(total, Some(1), Some(uid_next), Some(modseq), None, Some(total), Some(&identity))).await
+    let seed = engine.prepare_native_seed(&io, config).await?;
+    if strict && seed.expected_owner()?.as_ref().is_some_and(|owner| owner != &identity) {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    let io = if strict { io.expect_native_seed(&seed) } else { io };
+    cache_step(state, &io, config, strict, move |io| io.write_meta_for(total, Some(1), Some(uid_next), Some(modseq), None, Some(total), Some(&identity))).await
 }
 
 #[cfg(test)]

@@ -4056,6 +4056,7 @@
   "errors.syncOffline": "Stellen Sie eine Internetverbindung her, um dieses Konto zu aktualisieren.",
   "errors.syncFailed": "Dieses Konto konnte nicht aktualisiert werden. Versuchen Sie es erneut.",
   "errors.syncHeadersIncomplete": "Die Nachrichtenköpfe des Ordners konnten nicht vollständig aktualisiert werden.",
+  "errors.syncGraphAdoptionRequired": "Dieser Graph-Ordner muss in der App vorbereitet werden, bevor er aktualisiert werden kann.",
   "errors.bulkIdentityUncertain": "Die Nachrichtenidentität ist unklar. Aktualisieren Sie den Ordner und versuchen Sie es erneut.",
   "errors.bulkIdentityChanged": "Die Identität des gewählten Ordners oder der Nachricht hat sich geändert.",
   "errors.bulkGraphDeleteUnsupported": "Das Löschen auf dem Server ist für dieses Graph-Konto nicht verfügbar.",

@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::io::{AsyncWriteExt, BufReader, Lines, ReadHalf, WriteHalf};
 use tokio::sync::broadcast::{self, error::RecvError};
+use tokio::sync::mpsc;
 
 pub(crate) fn outgoing(msg: Result<Arc<str>, RecvError>) -> Option<String> {
     match msg {
@@ -53,12 +54,17 @@ pub(crate) async fn dispatch(state: &Arc<DaemonState>, method: &str, params: Val
 /// used to stop the read side from draining the client's outgoing buffer,
 /// which could in turn block the client's own write, wedging both ends
 /// forever once each side's ~8 KB socket buffer filled.
-async fn forward_bus_to_socket<W>(mut rx: broadcast::Receiver<Arc<str>>, mut writer: W)
+async fn forward_bus_to_socket<W>(mut rx: broadcast::Receiver<Arc<str>>,
+    mut local: mpsc::UnboundedReceiver<String>, mut writer: W)
 where
     W: tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     loop {
-        match outgoing(rx.recv().await) {
+        let line = tokio::select! {
+            event = rx.recv() => outgoing(event),
+            local_line = local.recv() => local_line,
+        };
+        match line {
             Some(line) => {
                 let mut buf = line.into_bytes();
                 buf.push(b'\n');
@@ -78,11 +84,13 @@ pub(crate) async fn run<S>(
     rx: broadcast::Receiver<Arc<str>>,
     mut lines: Lines<BufReader<ReadHalf<S>>>,
     writer: WriteHalf<S>,
+    mut sync_owner: Option<crate::refresh_worker::SyncOwnerGuard>,
 ) -> std::io::Result<()>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
 {
-    let mut forwarder = tokio::spawn(forward_bus_to_socket(rx, writer));
+    let (local_tx, local_rx) = mpsc::unbounded_channel();
+    let mut forwarder = tokio::spawn(forward_bus_to_socket(rx, local_rx, writer));
     let result = loop {
         tokio::select! {
             // Cancel-safe (Lines::next_line); re-polling the JoinHandle on
@@ -91,7 +99,33 @@ where
             line = lines.next_line() => match line {
                 Ok(Some(l)) => {
                     if let Ok(req) = ipc::parse_request(&l) {
-                        dispatch(&state, &req.method, req.params).await;
+                        if req.method == "sync.owner" {
+                            let requested = crate::handlers::refresh::sync_owner(&req.params);
+                            let (launch_id, revision, accepted, generation) = match requested {
+                                Some((launch_id, revision)) => {
+                                    if sync_owner.as_ref().is_some_and(|guard| guard.matches(&launch_id, revision)) {
+                                        let generation = sync_owner.as_ref().map(|guard| guard.generation());
+                                        (launch_id, revision, true, generation)
+                                    } else if sync_owner.is_some() {
+                                        // This socket's guard was superseded; an old retry cannot reclaim it.
+                                        (launch_id, revision, false, None)
+                                    } else if let Some(new_owner) = crate::refresh_worker::RefreshState::attach_owner(
+                                        &state, launch_id.clone(), revision) {
+                                        let generation = new_owner.generation();
+                                        let old = sync_owner.replace(new_owner);
+                                        drop(old);
+                                        (launch_id, revision, true, Some(generation))
+                                    } else { (launch_id, revision, false, None) }
+                                }
+                                None => (String::new(), 0, false, None),
+                            };
+                            let mut ack = json!({"instanceId":state.refresh.instance_id(),
+                                "launchId":launch_id,"revision":revision,"accepted":accepted});
+                            if let Some(generation) = generation { ack["ownerGeneration"] = json!(generation); }
+                            let _ = local_tx.send(event_line("sync-owner", ack));
+                        } else {
+                            dispatch(&state, &req.method, req.params).await;
+                        }
                     } else {
                         tracing::debug!("channel: ignoring non-JSON-RPC notification line");
                     }

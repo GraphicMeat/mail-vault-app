@@ -899,6 +899,18 @@ mod tests {
         wait_until(|| server.count_commands("IDLE") >= 1, 5_000, "the first IDLE").await;
         let before = server.connection_count();
 
+        let mut token_only = account.clone();
+        token_only.imap_config.access_token = Some("synthetic-token-only".into());
+        assert_eq!(fingerprint_of(&account), fingerprint_of(&token_only),
+            "a token refresh is not a new watcher source");
+        assert!(!same_credentials(&account, &token_only));
+        watchers.watch(token_only, Duration::from_secs(29 * 60)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(server.connection_count(), before,
+            "a token-only update must retain the healthy IDLE connection");
+        watchers.watch(account.clone(), Duration::from_secs(29 * 60)).await;
+        assert_eq!(server.connection_count(), before);
+
         let mut rotated = account.clone();
         rotated.imap_config.password = Some("rotated".to_string());
         watchers.watch(rotated, Duration::from_secs(29 * 60)).await;

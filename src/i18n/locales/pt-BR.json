@@ -4056,6 +4056,7 @@
   "errors.syncOffline": "Conecte-se à internet para atualizar esta conta.",
   "errors.syncFailed": "Não foi possível atualizar esta conta. Tente novamente.",
   "errors.syncHeadersIncomplete": "Não foi possível atualizar todos os cabeçalhos da pasta.",
+  "errors.syncGraphAdoptionRequired": "Esta pasta do Graph precisa ser preparada no aplicativo antes de ser atualizada.",
   "errors.bulkIdentityUncertain": "A identidade da mensagem é incerta. Atualize a pasta antes de tentar novamente.",
   "errors.bulkIdentityChanged": "A identidade da pasta ou da mensagem selecionada foi alterada.",
   "errors.bulkGraphDeleteUnsupported": "A exclusão no servidor não está disponível para esta conta Graph.",

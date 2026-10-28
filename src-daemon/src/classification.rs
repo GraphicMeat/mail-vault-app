@@ -384,7 +384,7 @@ impl ClassificationState {
         emails: Vec<EmailForClassification>,
         tier: QueueTier,
     ) -> usize {
-        self.enqueue_inner(account_id, emails, tier, false).await
+        self.enqueue_inner(account_id, emails, tier, false, |commit| { commit(); true }).await
     }
 
     /// Force-enqueue emails for reclassification, bypassing the "already classified" check.
@@ -395,16 +395,41 @@ impl ClassificationState {
         emails: Vec<EmailForClassification>,
         tier: QueueTier,
     ) -> usize {
-        self.enqueue_inner(account_id, emails, tier, true).await
+        self.enqueue_inner(account_id, emails, tier, true, |commit| { commit(); true }).await
     }
 
-    async fn enqueue_inner(
+    pub(crate) async fn enqueue_with_source(&self, state: std::sync::Arc<crate::server::DaemonState>,
+        origin: crate::sync_observation::Origin,
+        owners: Vec<(String, Option<crate::imap::NativeHeaderIdentity>)>,
+        emails: Vec<EmailForClassification>, tier: QueueTier) -> usize {
+        let account_id = origin.original.id().to_owned();
+        let gate_id = account_id.clone();
+        self.enqueue_inner(&account_id, emails, tier, false, move |commit| {
+            let Ok(_lease) = crate::sync_observation::source_lease(&state,
+                &origin.original, &origin.hash) else { return false };
+            crate::custody::with_conn(&state, |conn| {
+                for (mailbox, expected) in &owners {
+                    let current = mailvault_core::custody::cache::native_identity(conn,
+                        &gate_id, mailbox)?;
+                    if &current != expected || current.as_ref().is_some_and(|owner|
+                        owner.origin_hash != origin.hash) {
+                        return Err("errors.bulkIdentityChanged".into());
+                    }
+                }
+                commit();
+                Ok(())
+            }).is_ok()
+        }).await
+    }
+
+    async fn enqueue_inner<G>(
         &self,
         account_id: &str,
         emails: Vec<EmailForClassification>,
         tier: QueueTier,
         force: bool,
-    ) -> usize {
+        gate: G,
+    ) -> usize where G: FnOnce(&mut dyn FnMut()) -> bool + Send {
         let existing = if force {
             HashMap::new() // skip classified check
         } else {
@@ -436,7 +461,6 @@ impl ClassificationState {
             .into_iter()
             .map(|e| {
                 let mid = e.message_id.clone().unwrap_or_default();
-                ids.insert(mid.clone());
                 QueueItem {
                     account_id: account_id.to_string(),
                     message_id: mid,
@@ -446,40 +470,33 @@ impl ClassificationState {
             })
             .collect();
 
-        match tier {
-            QueueTier::New => {
-                // Insert new-tier items before the first Backfill item
-                let insert_pos = queue
-                    .iter()
-                    .position(|item| item.tier == QueueTier::Backfill)
-                    .unwrap_or(queue.len());
-
-                // Insert in order (newest first) at the found position
-                for (i, item) in new_items.into_iter().enumerate() {
-                    queue.insert(insert_pos + i, item);
+        // All async locks are acquired before the final original/owner gate.
+        let mut progress = self.progress.lock().await;
+        let mut pending_items = Some(new_items);
+        let mut commit = || {
+            let new_items = pending_items.take().expect("one enqueue mutation");
+            for item in &new_items { ids.insert(item.message_id.clone()); }
+            match tier {
+                QueueTier::New => {
+                    let insert_pos = queue.iter().position(|item| item.tier == QueueTier::Backfill)
+                        .unwrap_or(queue.len());
+                    for (i, item) in new_items.into_iter().enumerate() {
+                        queue.insert(insert_pos + i, item);
+                    }
                 }
+                QueueTier::Backfill => queue.extend(new_items),
             }
-            QueueTier::Backfill => {
-                // Append backfill items at the end (already sorted newest-first)
-                queue.extend(new_items);
-            }
-        }
-
-        // Update progress
-        {
-            let mut progress = self.progress.lock().await;
             progress.queue_depth = queue.len();
             progress.total += count;
-            if !queue.is_empty() {
-                progress.phase = match queue.front().unwrap().tier {
+            if let Some(front) = queue.front() {
+                progress.phase = match front.tier {
                     QueueTier::New => "new".to_string(),
                     QueueTier::Backfill => "backfill".to_string(),
                 };
             }
-        }
-
-        // Persist queue to disk
-        self.persist_queue_locked(&queue);
+            self.persist_queue_locked(&queue);
+        };
+        if !gate(&mut commit) { return 0; }
 
         info!(
             "[queue] Enqueued {} {:?} emails for {} (queue depth: {})",

@@ -1,6 +1,7 @@
 //! Volatile source-bound freshness and closed-folder sweep state.
 
 use crate::account_lifecycle::{AccountStamp, OperationPermit};
+use crate::account_workflows::{AccountLease, AccountWriteScope};
 use crate::imap::{ImapConfig, NativeHeaderIdentity};
 use crate::server::DaemonState;
 use mailvault_core::accounts_doc;
@@ -303,8 +304,26 @@ fn authoritative_config(app_dir: &std::path::Path, account_id: &str) -> Result<(
     let row = listing.accounts.iter().find(|row| row.get("id").and_then(Value::as_str) == Some(account_id))
         .ok_or("errors.bulkIdentityUncertain")?;
     let graph = row.get("oauth2Transport").and_then(Value::as_str) == Some("graph");
-    let config = serde_json::from_value(row.clone()).map_err(|_| "errors.bulkIdentityUncertain".to_owned())?;
+    let config = crate::credentials::config_from_record(row)
+        .map_err(|_| "errors.bulkIdentityUncertain".to_owned())?;
     Ok((config, graph))
+}
+
+/// Exclude same-ID account writes while an original-bound child commits.
+/// This runs in the child that performs the mutation, after provider IO.
+pub(crate) fn source_lease(state: &DaemonState, original: &AccountStamp,
+    expected_hash: &str) -> Result<AccountLease, String> {
+    let mut scope = AccountWriteScope::default();
+    scope.ids.insert(original.id().to_owned());
+    let lease = state.account_admission.try_reserve(scope)
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
+    let (config, _) = authoritative_config(&state.app_dir, original.id())?;
+    if mailvault_core::bulk_worker::origin_hash(&config) != expected_hash {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(original))
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
+    Ok(lease)
 }
 
 pub(crate) async fn origin(state: &Arc<DaemonState>, original: AccountStamp) -> Result<Origin, String> {
@@ -370,6 +389,42 @@ pub(crate) async fn revalidate(state: &Arc<DaemonState>, origin: &Origin, before
     let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(&origin.original))
         .map_err(|_| "errors.keychainBusy".to_owned())?;
     Ok(())
+}
+
+/// Final source and ticket gate for the records an admitted refresh publishes.
+/// The short account lease, custody owner lock and observation generation lock
+/// stay live through every insertion, including if the async waiter is lost.
+pub(crate) async fn publish_sources(state: &Arc<DaemonState>, evidence: &TicketEvidence,
+    changes: Vec<(SourceKey, Vec<u32>, usize)>) -> Result<(), String> {
+    let state = Arc::clone(state);
+    let evidence = evidence.clone();
+    blocking(move || {
+        let _lease = source_lease(&state, &evidence.original, &evidence.origin_hash)?;
+        crate::custody::with_conn(&state, |conn| {
+            for (source, _, _) in &changes {
+                if source.account_id != evidence.original.id()
+                    || source.epoch != evidence.original.epoch()
+                    || source.origin_hash != evidence.origin_hash {
+                    return Err("errors.bulkIdentityChanged".into());
+                }
+                let owner = mailvault_core::custody::cache::native_identity(conn,
+                    &source.account_id, &source.mailbox)?;
+                if owner != source.cache_owner
+                    || owner.as_ref().is_some_and(|owner| owner.origin_hash != evidence.origin_hash) {
+                    return Err("errors.bulkIdentityChanged".into());
+                }
+            }
+            let inner = state.sync_observation.lock();
+            if inner.generation(evidence.original.id(), &evidence.mailbox) != evidence.generation {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            for (source, arrivals, flags) in changes {
+                state.sync_engine.note_source_change(source, arrivals, flags);
+            }
+            drop(inner);
+            Ok(())
+        })
+    }).await?
 }
 
 pub(crate) async fn prepare_ticket(state: &Arc<DaemonState>, config: &ImapConfig,

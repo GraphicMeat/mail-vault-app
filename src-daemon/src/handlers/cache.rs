@@ -29,8 +29,145 @@ use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::{graph_ledger, header_cache};
 use mailvault_core::custody::cache as sql_cache;
+use sha2::{Digest, Sha256};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::sync::Arc;
+
+pub(crate) struct GraphBaseline {
+    pub owner: Option<mailvault_core::imap::NativeHeaderIdentity>,
+    pub uids: HashSet<u32>,
+    pub complete: bool,
+}
+
+fn graph_uid_digest(uids: &HashSet<u32>) -> String {
+    let mut ordered: Vec<_> = uids.iter().copied().collect();
+    ordered.sort_unstable();
+    let mut digest = Sha256::new();
+    for uid in ordered { digest.update(uid.to_be_bytes()); }
+    format!("{:x}", digest.finalize())
+}
+
+/// Read the owner, marker and live row set under one custody connection before
+/// any provider request. A marker only proves a baseline while its rows match.
+pub(crate) async fn graph_baseline(state: &Arc<DaemonState>, account_id: &str,
+    mailbox: &str) -> Result<GraphBaseline, String> {
+    let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_owned(), mailbox.to_owned());
+    blocking(move || daemon_custody::with_conn(&state, |conn| {
+        let owner = sql_cache::native_identity(conn, &account_id, &mailbox)?;
+        let meta = sql_cache::load_meta(conn, &account_id, &mailbox)?
+            .map(|raw| serde_json::from_str::<Value>(&raw).map_err(|_| "errors.bulkIdentityUncertain".to_owned()))
+            .transpose()?.unwrap_or(Value::Null);
+        let uids = sql_cache::uid_set(conn, &account_id, &mailbox)?;
+        let digest = graph_uid_digest(&uids);
+        let complete = owner.is_some() && meta["graphComplete"] == true
+            && meta["graphCompleteTotal"].as_u64() == Some(uids.len() as u64)
+            && meta["graphCompleteUidDigest"].as_str() == Some(digest.as_str());
+        Ok(GraphBaseline { owner, uids, complete })
+    })).await?
+}
+
+fn original_graph_permit(state: &DaemonState, original: &crate::sync_observation::Origin)
+    -> Result<crate::account_lifecycle::LocalCommitPermit, String> {
+    let listing = mailvault_core::accounts_doc::list(
+        &mailvault_core::accounts_doc::shared(&state.app_dir))
+        .map_err(|_| "errors.bulkIdentityUncertain".to_owned())?;
+    let account_id = original.original.id();
+    if !mailvault_core::accounts_doc::authoritative_ids(&listing.accounts).contains(account_id) {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    let row = listing.accounts.iter().find(|row| row.get("id").and_then(Value::as_str) == Some(account_id))
+        .ok_or("errors.bulkIdentityChanged")?;
+    let config = crate::credentials::config_from_record(row)
+        .map_err(|_| "errors.bulkIdentityUncertain".to_owned())?;
+    if !config.uses_graph() || mailvault_core::bulk_worker::origin_hash(&config) != original.hash {
+        return Err("errors.bulkIdentityChanged".into());
+    }
+    state.account_lifecycle.try_commit(std::slice::from_ref(&original.original))
+        .map_err(|_| "errors.keychainBusy".to_owned())
+}
+
+/// Internal Graph refresh allocation. A public route would capture a new
+/// account epoch after the network wait, so it cannot own this write.
+pub(crate) async fn graph_allocate_with_original(state: &Arc<DaemonState>, original: &crate::sync_observation::Origin,
+    mailbox: &str, expected: Value, entries: Vec<(String, Option<String>)>) -> Result<Vec<u32>, String> {
+    let owner = state.account_lifecycle.try_operation(std::slice::from_ref(&original.original))
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
+    let (state, original, mailbox) = (Arc::clone(state), original.clone(), mailbox.to_owned());
+    blocking(move || {
+        let _owner = owner;
+        let _permit = original_graph_permit(&state, &original)?;
+        with_vault_write(&state, |root| {
+            let account_id = original.original.id();
+            let held: Option<mailvault_core::imap::NativeHeaderIdentity> =
+                serde_json::from_value(expected).map_err(|_| "errors.bulkIdentityUncertain".to_owned())?;
+            let current = daemon_custody::with_conn(&state, |conn|
+                sql_cache::native_identity(conn, account_id, &mailbox))?;
+            if current != held { return Err("errors.bulkIdentityChanged".into()); }
+            let ledger = root.join("email_cache")
+                .join(header_cache::cache_base_name(account_id, &mailbox))
+                .join(graph_ledger::LEDGER_FILE);
+            graph_ledger::allocate_in(&ledger, root, account_id, &mailbox, &entries)
+        })
+    }).await?
+}
+
+/// Save a full-header Graph page using the owner observed before its provider
+/// read. The SQL cache checks the owner and writes rows in one transaction.
+pub(crate) async fn graph_save_with_original(state: &Arc<DaemonState>, original: &crate::sync_observation::Origin,
+    config: &crate::imap::ImapConfig, mailbox: &str, expected: Value,
+    headers: Vec<crate::imap::EmailHeader>) -> Result<Vec<u32>, String> {
+    let owner = state.account_lifecycle.try_operation(std::slice::from_ref(&original.original))
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
+    let (state, original, config, mailbox) = (Arc::clone(state), original.clone(), config.clone(), mailbox.to_owned());
+    blocking(move || {
+        let _owner = owner;
+        let permit = original_graph_permit(&state, &original)?;
+        let account_id = original.original.id();
+        let identity = mailvault_core::imap::NativeHeaderIdentity::new(&config, account_id, &mailbox, None);
+        let payload = serde_json::json!({"emails": headers, "nativeIdentity": identity,
+            "graphComplete": false,
+            "nativeExpectedIdentity": expected}).to_string();
+        let added = with_vault_write(&state, |_| daemon_custody::with_conn(&state, |conn|
+            sql_cache::save_headers_reporting_new(conn, account_id, &mailbox, &payload,
+                mailvault_core::people::model::now_ms())))?;
+        if !added.is_empty() {
+            state.contacts.observe_saved_rows_owned(&original.original, &permit, &mailbox,
+                &rows_with_uids(&payload, &added));
+        }
+        Ok(added)
+    }).await?
+}
+
+/// Publish complete coverage only after every page was saved under the
+/// original owner and the provider's count matches the exact cached UID set.
+pub(crate) async fn graph_finish_with_original(state: &Arc<DaemonState>, original: &crate::sync_observation::Origin,
+    config: &crate::imap::ImapConfig, mailbox: &str, listed_uids: HashSet<u32>,
+    provider_total: i64, provider_exhausted: bool) -> Result<bool, String> {
+    let owner = state.account_lifecycle.try_operation(std::slice::from_ref(&original.original))
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
+    let (state, original, config, mailbox) = (Arc::clone(state), original.clone(), config.clone(), mailbox.to_owned());
+    blocking(move || {
+        let _owner = owner;
+        let _permit = original_graph_permit(&state, &original)?;
+        let account_id = original.original.id();
+        let identity = mailvault_core::imap::NativeHeaderIdentity::new(&config, account_id, &mailbox, None);
+        with_vault_write(&state, |_| daemon_custody::with_conn(&state, |conn| {
+            if sql_cache::native_identity(conn, account_id, &mailbox)? != Some(identity.clone()) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            let held_uids = sql_cache::uid_set(conn, account_id, &mailbox)?;
+            let complete = provider_exhausted && usize::try_from(provider_total).ok() == Some(listed_uids.len())
+                && held_uids == listed_uids;
+            let payload = serde_json::json!({"nativeIdentity": identity,
+                "graphComplete": complete,
+                "graphCompleteTotal": if complete { provider_total } else { 0 },
+                "graphCompleteUidDigest": if complete { graph_uid_digest(&held_uids) } else { String::new() }}).to_string();
+            sql_cache::save_headers(conn, account_id, &mailbox, &payload)?;
+            Ok(complete)
+        }))
+    }).await?
+}
 
 /// The order the SQLite header cache hands rows back in, taken from the same
 /// marker the sidecar tree uses (`header_cache::uid_tracks_arrival`): uid for

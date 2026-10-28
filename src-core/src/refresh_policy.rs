@@ -15,6 +15,9 @@ pub fn visible_account_ids(rows: &[Value], authoritative: &std::collections::BTr
 }
 
 pub fn interval_ms(settings: &Value) -> Option<u64> {
+    if settings.get("refreshInterval").and_then(Value::as_i64).is_some_and(|value| value < 0) {
+        return None;
+    }
     let minutes = settings.get("refreshInterval").and_then(Value::as_u64)
         .unwrap_or(DEFAULT_INTERVAL_MINUTES);
     (minutes > 0).then(|| minutes.saturating_mul(60_000))
@@ -47,5 +50,13 @@ mod tests {
         assert_eq!(interval_ms(&json!({"refreshInterval":7})), Some(420_000));
         assert!(refresh_on_launch(&json!({})));
         assert!(!refresh_on_launch(&json!({"refreshOnLaunch":false})));
+    }
+
+    #[test]
+    fn refresh_policy_negative_interval_disables_native_ticks() {
+        assert_eq!(interval_ms(&json!({"refreshInterval":-1})), None,
+            "negative interval must disable native scheduling");
+        assert_eq!(interval_ms(&json!({"refreshInterval":-15})), None,
+            "all negative persisted intervals must disable native scheduling");
     }
 }

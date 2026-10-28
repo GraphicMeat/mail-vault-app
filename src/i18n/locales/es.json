@@ -4056,6 +4056,7 @@
   "errors.syncOffline": "Conéctate a internet para actualizar esta cuenta.",
   "errors.syncFailed": "No se pudo actualizar esta cuenta. Inténtalo de nuevo.",
   "errors.syncHeadersIncomplete": "No se pudieron actualizar todos los encabezados de la carpeta.",
+  "errors.syncGraphAdoptionRequired": "Esta carpeta de Graph debe prepararse en la aplicación antes de poder actualizarse.",
   "errors.bulkIdentityUncertain": "La identidad del mensaje es incierta. Actualiza la carpeta antes de volver a intentarlo.",
   "errors.bulkIdentityChanged": "La identidad de la carpeta o del mensaje seleccionado ha cambiado.",
   "errors.bulkGraphDeleteUnsupported": "La eliminación en el servidor no está disponible para esta cuenta de Graph.",

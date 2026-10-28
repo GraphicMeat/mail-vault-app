@@ -24,7 +24,8 @@ const NAME = 'MBOX import 2026-09-29';
 const FOLDER = { name: NAME, dir: 'MBOX_import_2026-09-29', kind: 'import', created: 1, source: 'takeout.mbox' };
 
 const m = vi.hoisted(() => ({
-  send: vi.fn(),
+  // db/keychain checks the transport during module import, before beforeEach.
+  send: vi.fn().mockResolvedValue(null),
   queueOp: vi.fn(),
   clearOps: vi.fn(),
   getLocalEmailLight: vi.fn(),

@@ -93,11 +93,12 @@ describe('the daemon owns the token', () => {
   const oauth2 = read('src-daemon/src/handlers/oauth2.rs');
   const tokens = read('src-daemon/src/oauth_tokens.rs');
 
-  it('routes only credential-free compose and backup controls before injection', () => {
+  it('routes only credential-free sync, compose and backup controls before injection', () => {
     const handle = server.slice(server.indexOf('async fn handle_request('), server.indexOf('fn jmap_refusal_log_line')).replace(/\/\/[^\n]*/g, '');
     const exempt = /if matches!\(\s*method\.as_str\(\),\s*([^)]*)\s*\) \{\s*return route_request\(state, req\)\.await;\s*\}/.exec(handle);
     expect(exempt).not.toBeNull();
     expect([...exempt[1].matchAll(/"([^"]+)"/g)].map(match => match[1])).toEqual([
+      'sync.probe', 'sync.refresh', 'sync.refresh_status', 'sync.context', 'folders.status',
       'compose.reply_context', 'compose.check',
       'backup.schedule.get', 'backup.schedule.set', 'backup.run_now',
       'backup.cancel', 'backup.stop', 'backup.schedule.status',

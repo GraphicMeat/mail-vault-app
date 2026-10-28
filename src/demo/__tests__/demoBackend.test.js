@@ -2,6 +2,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoBackend } from '../backend.js';
 
 describe('demo mailbox backend', () => {
+  it('keeps native refresh receipts observable without claiming provider work in the browser', async () => {
+    const backend = createDemoBackend({ now: () => 12345 });
+    const call = (method, params = {}) => backend.invoke('daemon_rpc', { method, params });
+    const dormant = await call('sync.refresh_status');
+    expect(dormant.automaticEnabled).toBe(false);
+    expect(dormant.receipts).toEqual([]);
+    expect(await call('sync.context', {
+      launchId: 'demo-launch', revision: 1, phase: 'resume', view: null,
+    })).toMatchObject({ accepted: true, revision: 1 });
+    const first = await call('sync.refresh', { requestId: 'demo-refresh', reason: 'manual' });
+    expect(first.receipt).toMatchObject({ requestId: 'demo-refresh', status: 'failed',
+      errorKey: 'errors.syncUnavailable', accountResults: [], completedAt: 12345 });
+    expect(await call('sync.refresh', { requestId: 'demo-refresh', reason: 'manual' }))
+      .toEqual(first);
+    expect(await call('sync.refresh_status', { requestId: 'demo-refresh' }))
+      .toMatchObject({ found: true, receipts: [first.receipt], lastRefreshTime: 12345 });
+    expect(await call('sync.refresh_status', { requestId: 'missing' }))
+      .toMatchObject({ found: false, receipts: [] });
+  });
+
   it('answers native observation tags conservatively without inventing cache proof', async () => {
     const backend = createDemoBackend();
     const call = (method, params) => backend.invoke('daemon_rpc', { method, params });

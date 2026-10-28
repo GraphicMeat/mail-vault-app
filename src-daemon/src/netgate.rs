@@ -20,7 +20,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{watch, Mutex, Notify};
 use tracing::{info, warn};
 
 /// Injection point for tests — see `NetGate::with_probe`.
@@ -50,6 +50,7 @@ pub struct NetGate {
     last_probe: Mutex<Option<(Instant, bool)>>,
     /// Raised when the gate shuts, so the watchdog starts its backoff.
     went_offline: Notify,
+    transitions: watch::Sender<bool>,
     probe: Probe,
     probe_ttl: Duration,
     recovery_min: Duration,
@@ -80,6 +81,7 @@ impl NetGate {
     }
 
     fn build(probe: Probe, probe_ttl: Duration, recovery_min: Duration, recovery_max: Duration) -> Self {
+        let (transitions, _) = watch::channel(true);
         Self {
             // Optimistic: a daemon that starts up gated would refuse to sync
             // until something failed, and nothing fails while it refuses.
@@ -87,6 +89,7 @@ impl NetGate {
             changed_at_ms: AtomicU64::new(now_ms()),
             last_probe: Mutex::new(None),
             went_offline: Notify::new(),
+            transitions,
             probe,
             probe_ttl,
             recovery_min,
@@ -160,6 +163,7 @@ impl NetGate {
             return;
         }
         self.changed_at_ms.store(now_ms(), Ordering::Relaxed);
+        self.transitions.send_replace(next);
         if next {
             info!("[net] Connectivity restored — sync resumes");
         } else {
@@ -167,6 +171,13 @@ impl NetGate {
             self.went_offline.notify_one();
         }
     }
+
+    pub(crate) fn subscribe_transitions(&self) -> watch::Receiver<bool> {
+        self.transitions.subscribe()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_set_online(&self, online: bool) { self.set_online(online); }
 
     pub fn status(&self) -> serde_json::Value {
         serde_json::json!({
@@ -264,6 +275,23 @@ mod tests {
                 })
             })
         }
+    }
+
+    #[tokio::test]
+    async fn native_transition_receiver_wakes_only_on_real_connectivity_changes() {
+        let gate = NetGate::with_probe(MockNet::new(true).probe());
+        let mut receiver = gate.subscribe_transitions();
+        assert!(*receiver.borrow());
+        gate.set_online(false);
+        receiver.changed().await.expect("offline transition");
+        assert!(!*receiver.borrow_and_update());
+        gate.set_online(false);
+        assert!(!receiver.has_changed().unwrap(), "repeated offline cannot wake native due work");
+        gate.set_online(true);
+        receiver.changed().await.expect("recovery transition");
+        assert!(*receiver.borrow_and_update());
+        gate.set_online(true);
+        assert!(!receiver.has_changed().unwrap(), "repeated online cannot replay due work");
     }
 
     #[tokio::test]

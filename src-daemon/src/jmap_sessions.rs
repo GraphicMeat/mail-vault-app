@@ -309,7 +309,7 @@ impl AccountJmap {
         mailbox: &str,
         ids: &[String],
     ) -> Result<Vec<u32>, String> {
-        self.ids_to_uids_with_owner(state, original, account_id, mailbox, ids, None).await
+        self.ids_to_uids_with_owner(state, original, account_id, mailbox, ids, None, None).await
     }
 
     pub(crate) async fn ids_to_uids_owned(
@@ -321,7 +321,18 @@ impl AccountJmap {
         ids: &[String],
         owner: crate::account_lifecycle::OperationPermit,
     ) -> Result<Vec<u32>, String> {
-        self.ids_to_uids_with_owner(state, original, account_id, mailbox, ids, Some(owner)).await
+        self.ids_to_uids_with_owner(state, original, account_id, mailbox, ids, Some(owner), None).await
+    }
+
+    pub(crate) async fn ids_to_uids_strict(
+        &self, state: &Arc<DaemonState>, original: crate::account_lifecycle::AccountStamp,
+        account_id: &str, mailbox: &str, ids: &[String], expected_hash: &str,
+        expected_owner: Option<crate::imap::NativeHeaderIdentity>,
+        target_owner: crate::imap::NativeHeaderIdentity,
+        owner: Option<crate::account_lifecycle::OperationPermit>,
+    ) -> Result<Vec<u32>, String> {
+        self.ids_to_uids_with_owner(state, original, account_id, mailbox, ids, owner,
+            Some((expected_hash.to_owned(), expected_owner, target_owner))).await
     }
 
     async fn ids_to_uids_with_owner(
@@ -332,6 +343,7 @@ impl AccountJmap {
         mailbox: &str,
         ids: &[String],
         owner: Option<crate::account_lifecycle::OperationPermit>,
+        strict: Option<(String, Option<crate::imap::NativeHeaderIdentity>, crate::imap::NativeHeaderIdentity)>,
     ) -> Result<Vec<u32>, String> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -340,10 +352,24 @@ impl AccountJmap {
         let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_string(), mailbox.to_string());
         tokio::task::spawn_blocking(move || {
             let _owner = owner;
-            let _permit = state.account_lifecycle.try_commit(&[original]).map_err(|_| "errors.keychainBusy".to_owned())?;
+            let _lease = strict.as_ref().map(|(hash, _, _)|
+                crate::sync_observation::source_lease(&state, &original, hash)).transpose()?;
+            let _permit = state.account_lifecycle.try_commit(&[original])
+                .map_err(|_| "errors.keychainBusy".to_owned())?;
             with_vault_write(&state, |root| {
                 let ledger = jmap_ledger_path(root, &account_id, &mailbox);
-                graph_ledger::allocate_in(&ledger, root, &account_id, &mailbox, &listed)
+                if let Some((_, expected, target)) = strict {
+                    // Keep the custody owner lock through file-ledger allocation.
+                    crate::custody::with_conn(&state, |conn| {
+                        let current = mailvault_core::custody::cache::native_identity(conn, &account_id, &mailbox)?;
+                        if current != expected && !(expected.is_none() && current.as_ref() == Some(&target)) {
+                            return Err("errors.bulkIdentityChanged".into());
+                        }
+                        graph_ledger::allocate_in(&ledger, root, &account_id, &mailbox, &listed)
+                    })
+                } else {
+                    graph_ledger::allocate_in(&ledger, root, &account_id, &mailbox, &listed)
+                }
             })
         })
         .await

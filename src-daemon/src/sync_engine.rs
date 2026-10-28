@@ -280,6 +280,7 @@ impl SyncEngine {
             app_dir: self.app_dir.clone(),
             source_identity: None,
             strict_origin: false,
+            expected_owner: None,
         }
     }
 
@@ -297,6 +298,30 @@ impl SyncEngine {
             }
         }
         Ok(seed)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_hold_after_complete_chunk(&self)
+        -> (Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>) {
+        let reached = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let pause = Arc::new(tests::BackfillPause {
+            point: tests::BackfillPausePoint::AfterChunk,
+            reached: tokio::sync::Notify::new(),
+            release: tokio::sync::Notify::new(),
+        });
+        // Bridge the existing one-shot test gate to a server integration test.
+        let reached_for_wait = Arc::clone(&reached);
+        let release_for_wait = Arc::clone(&release);
+        let pause_for_wait = Arc::clone(&pause);
+        tokio::spawn(async move {
+            pause_for_wait.reached.notified().await;
+            reached_for_wait.notify_one();
+            release_for_wait.notified().await;
+            pause_for_wait.release.notify_one();
+        });
+        *self.backfill_pause.lock().unwrap() = Some(pause);
+        (reached, release)
     }
 
     #[cfg(test)]
@@ -522,18 +547,20 @@ impl SyncEngine {
                 error_code: None, arrival_uids: Vec::new(), announced: false,
             },
         };
-        self.sync_account_with_stamp(account, mailbox, announce, stamp, false).await
+        self.sync_account_with_stamp(account, mailbox, announce, stamp, false, None).await
     }
 
     /// An admitted refresh keeps its original account epoch across every lock
     /// wait and cache write. Legacy entries still capture at their old entry.
     pub(crate) async fn sync_account_with_original(&self, account: &SyncAccount, mailbox: &str,
-        stamp: crate::account_lifecycle::AccountStamp) -> SyncResult {
-        self.sync_account_with_stamp(account, mailbox, false, stamp, true).await
+        stamp: crate::account_lifecycle::AccountStamp,
+        evidence: &crate::sync_observation::TicketEvidence) -> SyncResult {
+        self.sync_account_with_stamp(account, mailbox, false, stamp, true, Some(evidence)).await
     }
 
     async fn sync_account_with_stamp(&self, account: &SyncAccount, mailbox: &str,
-        announce: bool, stamp: crate::account_lifecycle::AccountStamp, strict_origin: bool) -> SyncResult {
+        announce: bool, stamp: crate::account_lifecycle::AccountStamp, strict_origin: bool,
+        evidence: Option<&crate::sync_observation::TicketEvidence>) -> SyncResult {
         let account_id = &account.id;
 
         // Every account that syncs teaches the gate its server, before the
@@ -597,7 +624,7 @@ impl SyncEngine {
 
         info!("[sync] Starting sync for {} ({})", account.email, mailbox);
 
-        let mut result = self.do_sync(account, mailbox, announce, &stamp, strict_origin).await;
+        let mut result = self.do_sync(account, mailbox, announce, &stamp, strict_origin, evidence).await;
 
         // Teach the gate what just happened. A success is proof of reach; a
         // connect-shaped failure only *asks* — `note_failure` probes and the
@@ -690,13 +717,14 @@ impl SyncEngine {
         announce: bool,
         stamp: &crate::account_lifecycle::AccountStamp,
         strict_origin: bool,
+        evidence: Option<&crate::sync_observation::TicketEvidence>,
     ) -> SyncResult {
         // A JMAP account never reaches the IMAP pool: its account-level sync
         // runs here, inside `sync_account_with`'s gate, folder lock and
         // `SyncState` bookkeeping, exactly where an IMAP sync would open its
         // session.
         if account.imap_config.uses_jmap() {
-            return crate::sync_jmap::sync_jmap(self, account, mailbox, announce, stamp).await;
+            return crate::sync_jmap::sync_jmap(self, account, mailbox, announce, stamp, strict_origin, evidence).await;
         }
         let account_id = account.id.clone();
         let outcome = retry_once_on_dead_socket(|fresh|
@@ -1563,6 +1591,11 @@ impl NativeBatchSeed {
     pub(crate) fn matches(&self, identity: &imap::NativeHeaderIdentity) -> bool {
         self.expected == serde_json::json!(identity)
     }
+    pub(crate) fn identity(&self) -> &imap::NativeHeaderIdentity { &self.identity }
+    pub(crate) fn expected_owner(&self) -> Result<Option<imap::NativeHeaderIdentity>, String> {
+        serde_json::from_value(self.expected.clone())
+            .map_err(|_| "errors.bulkIdentityUncertain".to_owned())
+    }
 }
 
 #[derive(Clone)]
@@ -1580,6 +1613,7 @@ pub(crate) struct CacheCtx {
     app_dir: PathBuf,
     source_identity: Option<imap::NativeHeaderIdentity>,
     strict_origin: bool,
+    expected_owner: Option<serde_json::Value>,
 }
 
 impl CacheCtx {
@@ -1603,8 +1637,12 @@ impl CacheCtx {
         let stamp = self.stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
         self.lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())
     }
-    fn strict_origin(mut self, strict: bool) -> Self {
+    pub(crate) fn strict_origin(mut self, strict: bool) -> Self {
         self.strict_origin = strict;
+        self
+    }
+    pub(crate) fn expect_native_seed(mut self, seed: &NativeBatchSeed) -> Self {
+        self.expected_owner = Some(seed.expected.clone());
         self
     }
     pub(crate) fn for_source(&self, config: &ImapConfig, validity: Option<u32>) -> Self {
@@ -1628,6 +1666,15 @@ impl CacheCtx {
         let guard = attached.lock().unwrap_or_else(|p| p.into_inner());
         let acquired = std::time::Instant::now();
         let Some(conn) = guard.as_ref() else { return Ok(None) };
+        if self.strict_origin {
+            if let Some(expected) = &self.expected_owner {
+                let current = mailvault_core::custody::cache::native_identity(conn, &self.account, &self.mailbox)?;
+                if serde_json::json!(current) != *expected
+                    && !(expected.is_null() && current.as_ref() == self.source_identity.as_ref()) {
+                    return Err("errors.bulkIdentityChanged".into());
+                }
+            }
+        }
         let result = f(conn).map(Some);
         drop(guard);
         crate::custody::note_lock_timing(caller, asked, acquired);
@@ -1672,6 +1719,21 @@ impl CacheCtx {
         let written: Vec<_> = headers.iter().filter(|h| added.contains(&h.uid)).cloned().collect();
         self.contacts.observe_headers_owned(self.stamp.as_ref().unwrap(), &permit, &self.mailbox, &written);
         Ok(())
+    }
+
+    pub(crate) fn verify_native_coverage(&self, seed: &NativeBatchSeed, listed: &HashSet<u32>) -> Result<(), String> {
+        let _permit = self.commit()?;
+        self.require_db(|conn| {
+            let current = mailvault_core::custody::cache::native_identity(conn, &self.account, &self.mailbox)?;
+            if current.as_ref() != Some(&seed.identity) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            let held = mailvault_core::custody::cache::uid_set(conn, &self.account, &self.mailbox)?;
+            if !listed.is_subset(&held) {
+                return Err("errors.syncHeadersIncomplete".into());
+            }
+            Ok(())
+        })
     }
 
     /// Everything a sync step needs to know about what is already cached.
@@ -1883,6 +1945,24 @@ pub(crate) async fn cache_io<T: Send + 'static>(
     }).await.map_err(|e| format!("cache task failed: {e}"))?
 }
 
+/// A strict JMAP cache step owns the account exclusion in its blocking child.
+/// An abandoned async waiter cannot release the exclusion before this write.
+pub(crate) async fn cache_io_strict<T: Send + 'static>(
+    state: &Arc<crate::server::DaemonState>, ctx: &CacheCtx,
+    expected_hash: &str,
+    f: impl FnOnce(CacheCtx) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let state = Arc::clone(state);
+    let mut ctx = ctx.clone();
+    let hash = expected_hash.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let original = ctx.stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
+        let _lease = crate::sync_observation::source_lease(&state, original, &hash)?;
+        ctx.owned = Some(ctx.commit()?);
+        f(ctx)
+    }).await.map_err(|e| format!("cache task failed: {e}"))?
+}
+
 // ── Tauri-compatible cache format ────────────────────────────────────────────
 // Matches the sidecar format used by the app's cache commands
 // (`mailvault_core::header_cache`) so the app reads daemon-written cache
@@ -2053,6 +2133,7 @@ mod tests {
             app_dir: dir.to_path_buf(),
             source_identity: None,
             strict_origin: false,
+            expected_owner: None,
         }
     }
 
@@ -3902,6 +3983,8 @@ mod tests {
         );
         let result = engine.sync_account(&account_for(&reissued), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!((result.arrivals, result.arrival_uids.as_slice()), (0, &[][..]),
+            "a reissued UID space is historical fill, not a real arrival");
 
         assert_eq!(
             cached_count(&engine, "INBOX"),

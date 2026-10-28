@@ -4056,6 +4056,7 @@
   "errors.syncOffline": "このアカウントを更新するにはインターネットに接続してください。",
   "errors.syncFailed": "このアカウントを更新できませんでした。もう一度お試しください。",
   "errors.syncHeadersIncomplete": "フォルダーのヘッダーを完全に更新できませんでした。",
+  "errors.syncGraphAdoptionRequired": "この Graph フォルダーを更新するには、先にアプリで準備を完了してください。",
   "errors.bulkIdentityUncertain": "メッセージの識別情報が不確かです。フォルダーを更新してから再試行してください。",
   "errors.bulkIdentityChanged": "選択したフォルダーまたはメッセージの識別情報が変わりました。",
   "errors.bulkGraphDeleteUnsupported": "このGraphアカウントではサーバー上の削除は利用できません。",
