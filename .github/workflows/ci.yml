@@ -94,6 +94,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Check version consistency
         run: bash scripts/check-version-consistency.sh
+      - run: node scripts/build-search-index.mjs website
       # Hermetic — no network, no credentials.
       - run: npm test
 
