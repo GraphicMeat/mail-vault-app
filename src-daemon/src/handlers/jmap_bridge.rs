@@ -1880,6 +1880,57 @@ second body";
     }
 
     #[tokio::test]
+    async fn ordinary_jmap_probe_status_does_not_wait_for_foreground_quiet() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        assert!(state.account_lifecycle.capture("acct-1").is_ok(), "registered account carries an original stamp");
+        assert_eq!(status(&state, &a, "INBOX").await["exists"], json!(2), "prewarm JMAP session and delta");
+        crate::search_index::note_foreground(&state.search_index);
+        let before = state.search_index.foreground_quiet_calls.load(SeqCst);
+        let result = ok(call(&state, "imap_check_mailbox_status", json!({"account": a, "mailbox": "INBOX"})).await);
+        assert_eq!(result["exists"], json!(2), "ordinary probe must answer the real JMAP status route");
+        assert_eq!(state.search_index.foreground_quiet_calls.load(SeqCst), before,
+            "ordinary JMAP probe status must not enter the foreground-quiet wait");
+    }
+
+    #[tokio::test]
+    async fn ordinary_jmap_folder_status_does_not_wait_for_foreground_quiet() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = jmap_account(&m);
+        assert!(state.account_lifecycle.capture("acct-1").is_ok(), "registered account carries an original stamp");
+        assert_eq!(status(&state, &a, "INBOX").await["exists"], json!(2), "prewarm JMAP session and delta");
+        crate::search_index::note_foreground(&state.search_index);
+        let before = state.search_index.foreground_quiet_calls.load(SeqCst);
+        let rows = ok(call(&state, "imap_folder_status", json!({"account": a, "mailboxes": ["INBOX", "Work/Sub"]})).await);
+        assert_eq!(rows.as_array().map(Vec::len), Some(2), "ordinary folder status must answer real JMAP rows");
+        assert_eq!(state.search_index.foreground_quiet_calls.load(SeqCst), before,
+            "ordinary JMAP folder status must not enter the foreground-quiet wait");
+    }
+
+    #[tokio::test]
+    async fn observation_jmap_status_paths_still_yield_to_foreground() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let (state, m) = test_state_with_mock(common_scenario()).await;
+        let a = config(&jmap_account(&m));
+        let stamp = state.account_lifecycle.capture("acct-1").expect("registered account");
+        let checks = &state.search_index.foreground_quiet_calls;
+        let before = checks.load(SeqCst);
+        crate::search_index::note_foreground(&state.search_index);
+        let probe = observation_probe_status(&state, &a, "acct-1", "INBOX", &stamp).await.expect("observation probe");
+        assert_eq!(probe["exists"], json!(2));
+        let after_probe = checks.load(SeqCst);
+        assert!(after_probe > before, "observation JMAP probe must enter the foreground-quiet wait");
+        crate::search_index::note_foreground(&state.search_index);
+        let rows = observation_folder_status(&state, &a, "acct-1", vec!["INBOX".into(), "Work/Sub".into()], &stamp)
+            .await.expect("observation folder status");
+        assert_eq!(rows.len(), 2);
+        assert!(checks.load(SeqCst) > after_probe,
+            "observation JMAP folder status must enter the foreground-quiet wait");
+    }
+
+    #[tokio::test]
     async fn search_all_uids_returns_every_uid_ascending() {
         let (state, m) = test_state_with_mock(common_scenario()).await;
         let r = ok(call(&state, "imap_search_all_uids", json!({"account": jmap_account(&m), "mailbox": "INBOX"})).await);

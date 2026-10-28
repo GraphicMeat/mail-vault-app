@@ -84,6 +84,8 @@ pub(crate) fn yield_to_foreground(st: &SearchIndexState) {
 /// worker): the same quiet time and per-call cap, but the pause is a tokio
 /// sleep, so the runtime it runs on keeps polling its other tasks.
 pub(crate) async fn wait_foreground_quiet(st: &SearchIndexState) {
+    #[cfg(test)]
+    st.foreground_quiet_calls.fetch_add(1, SeqCst);
     let start = Instant::now();
     while let Some(pause) = foreground_pause(since_foreground(st), start.elapsed()) {
         tokio::time::sleep(pause).await;
@@ -126,6 +128,9 @@ pub struct SearchIndexState {
     /// interfere with each other's count.
     #[cfg(test)]
     pub(crate) prescan_reads: AtomicUsize,
+    /// Test-only: records real async foreground-quiet checks by this state.
+    #[cfg(test)]
+    pub(crate) foreground_quiet_calls: AtomicUsize,
     /// Per-state log of real account SQL scopes, used to prove mailbox chunking without global fault hooks.
     #[cfg(test)]
     pub(crate) search_scopes: Mutex<Vec<Option<Vec<String>>>>,
@@ -167,6 +172,8 @@ impl SearchIndexState {
             destroy_reply: Mutex::new(Vec::new()),
             #[cfg(test)]
             prescan_reads: AtomicUsize::new(0),
+            #[cfg(test)]
+            foreground_quiet_calls: AtomicUsize::new(0),
             #[cfg(test)]
             search_scopes: Mutex::new(Vec::new()),
             #[cfg(test)]
