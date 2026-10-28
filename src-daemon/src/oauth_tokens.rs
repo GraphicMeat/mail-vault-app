@@ -862,12 +862,9 @@ impl TokenStore {
         }
     }
 
-    /// The pairs refreshed here that the stored record does not show yet, for
-    /// the app to save: `{accountId, accessToken, refreshToken, expiresAt,
-    /// chain}`, `chain` being the fingerprints of the refresh tokens this
-    /// grant has had (the app writes only over a record of the same grant).
-    /// Kept until a read of the record shows them, so a save that failed is
-    /// offered again.
+    /// Test inspection of refreshed pairs not yet present in the stored record.
+    /// Native persistence uses `persistable_ids` and `persistable` instead.
+    #[cfg(test)]
     pub(crate) fn unsaved(&self) -> Vec<Value> {
         self.entries()
             .iter()

@@ -128,14 +128,15 @@ describe('Connected Account Setup', function () {
     for (const command of ['store_credentials', 'store_password']) {
       // Empty arguments cannot write even if an old command were registered.
       const result = await browser.executeAsync((name, done) => {
-        window.__TAURI__.core.invoke(name, {}).then(value => done({ value }))
-          .catch(error => done({ error: String(error?.message || error) }));
+        window.__TAURI__.core.invoke(name, {}).then(value => done({ kind: 'returned', value }))
+          .catch(error => done({ kind: 'rejected', message: String(error?.message || error) }));
       }, command);
-      expect(result.value, `${command} unexpectedly returned`).toBeUndefined();
-      expect(result.error, `${command} must be unregistered`).toContain(command);
-      expect(result.error).toMatch(/(?:unknown|not found|unregistered)/i);
-      expect(result.error).toMatch(/command/i);
-      expect(result.error).not.toMatch(/(?:missing|required|invalid)\s+(?:arg|parameter)/i);
+      expect(result.kind).toBe('rejected');
+      expect(result.value).toBeUndefined();
+      expect(result.message).toContain(command);
+      expect(result.message).toMatch(/(?:unknown|not found|unregistered)/i);
+      expect(result.message).toMatch(/command/i);
+      expect(result.message).not.toMatch(/(?:missing|required|invalid)\s+(?:arg|parameter)/i);
     }
   });
 
