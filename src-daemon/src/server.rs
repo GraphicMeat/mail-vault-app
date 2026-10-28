@@ -3029,6 +3029,321 @@ mod tests {
             assert_eq!(commands_named(&server, "SELECT").len() - before, 2,
                 "A's held SELECT and B's independent SELECT both reached the provider");
         }
+
+        fn refresh_cached_headers(state: &Arc<DaemonState>, account: &str, mailbox: &str) -> Option<Value> {
+            let saved = crate::custody::with_conn(state, |conn| {
+                mailvault_core::custody::cache::load_headers(
+                    conn, account, mailbox, None, mailvault_core::custody::cache::HeaderOrder::Arrival,
+                )
+            }).unwrap();
+            saved.map(|text| serde_json::from_str(&text).unwrap())
+        }
+
+        async fn seed_refresh_imap(state: &Arc<DaemonState>, account: Value) {
+            let started = boxed_request(state, req("sync.now", json!({
+                "account": account, "mailbox": "INBOX", "autoClassify": false,
+            }))).await;
+            let ticket = started.result.expect("existing sync.now must seed real native headers")
+                ["ticket"].as_u64().expect("seed ticket");
+            let finished = boxed_request(state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(finished.result.expect("seed wait must finish")["success"], json!(true));
+            assert_eq!(refresh_cached_headers(state, "acc1", "INBOX").unwrap()["totalCached"], json!(1));
+        }
+
+        fn append_refresh_imap(server: &MockImap, subject: &str) {
+            let raw = format!(
+                "From: New Sender <new@example.test>\r\nTo: user@example.com\r\nSubject: {subject}\r\nDate: Thu, 01 Jan 2026 12:01:00 +0000\r\nMessage-ID: <native-refresh-2@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nActual mock provider arrival.\r\n"
+            );
+            server.mutate(|server_state| {
+                server_state.find_mut("INBOX").expect("real mock INBOX")
+                    .add(mock_imap::state::Message::new(2, raw).with_modseq(2));
+            });
+        }
+
+        async fn terminal_refresh(state: &Arc<DaemonState>, request_id: &str) -> Value {
+            for _ in 0..300 {
+                let response = boxed_request(state, req("sync.refresh_status", json!({
+                    "requestId": request_id,
+                }))).await;
+                assert!(response.error.is_none(), "refresh status must route: {:?}", response.error);
+                let status = response.result.expect("refresh status body");
+                assert_eq!(status["found"], json!(true), "accepted ID must remain observable: {status:?}");
+                let rows = status["receipts"].as_array().expect("receipt array");
+                assert_eq!(rows.len(), 1, "one receipt for one requested ID: {status:?}");
+                if rows[0]["status"] == "complete" || rows[0]["status"] == "failed" {
+                    return rows[0].clone();
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            panic!("accepted native refresh did not reach terminal status");
+        }
+
+        #[tokio::test]
+        async fn refresh_route_red_detached_imap_observer_keeps_real_header_work() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            append_refresh_imap(&server, "Native refresh after observer loss");
+            let select_before = commands_named(&server, "SELECT").len();
+            let pause = server.pause_command("SELECT");
+
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId": "imap-detached-1", "accountId": "acc1",
+                "mailbox": "INBOX", "reason": "manual",
+            }))).await;
+            assert!(accepted.error.is_none(),
+                "refresh route must ACK before held IMAP provider work: {:?}; real SELECT delta={}; new header present={}",
+                accepted.error, commands_named(&server, "SELECT").len() - select_before,
+                refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["emails"]
+                    .as_array().unwrap().iter().any(|row| row["uid"] == 2));
+            let ack = accepted.result.expect("refresh ACK");
+            assert_eq!(ack["receipt"]["requestId"], json!("imap-detached-1"));
+            assert!(ack["receipt"]["status"] == "queued" || ack["receipt"]["status"] == "running");
+            assert!(ack["instanceId"].as_str().is_some_and(|id| !id.is_empty()));
+            drop(ack);
+
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(10)),
+                    "accepted refresh must reach the real mock IMAP SELECT");
+                pause
+            }).await.unwrap();
+            let observer = boxed_request(&state, req("sync.refresh_status", json!({
+                "requestId": "imap-detached-1",
+            }))).await;
+            assert!(observer.error.is_none(), "status must answer during held provider IO: {:?}", observer.error);
+            assert_eq!(observer.result.as_ref().unwrap()["receipts"][0]["status"], json!("running"));
+            drop(observer);
+            pause.release();
+
+            let receipt = terminal_refresh(&state, "imap-detached-1").await;
+            assert_eq!(receipt["status"], json!("complete"), "detached observer cannot cancel accepted work: {receipt:?}");
+            assert_eq!(receipt["accountResults"][0]["success"], json!(true));
+            assert_eq!(receipt["accountResults"][0]["mailbox"], json!("INBOX"));
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX").expect("real native headers");
+            assert_eq!(cached["totalCached"], json!(2));
+            assert!(cached["emails"].as_array().unwrap().iter().any(|row|
+                row["uid"] == 2 && row["subject"] == "Native refresh after observer loss"),
+                "new mock provider header must be persisted in INBOX: {cached:?}");
+            assert_eq!(cached["nativeIdentity"]["accountId"], json!("acc1"));
+            assert_eq!(cached["nativeIdentity"]["mailbox"], json!("INBOX"));
+            assert_eq!(commands_named(&server, "SELECT").len() - select_before, 1,
+                "detached observer leaves one real provider observation");
+        }
+
+        #[tokio::test]
+        async fn refresh_route_red_duplicate_id_has_one_provider_and_header_effect() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            append_refresh_imap(&server, "One header for duplicate ID");
+            let select_before = commands_named(&server, "SELECT").len();
+            let pause = server.pause_command("SELECT");
+            let params = json!({
+                "requestId": "imap-duplicate-1", "accountId": "acc1",
+                "mailbox": "INBOX", "reason": "manual",
+            });
+            let first = boxed_request(&state, req("sync.refresh", params.clone())).await;
+            assert!(first.error.is_none(),
+                "duplicate refresh ID must join accepted native work: {:?}; real SELECT delta={}; new header present={}",
+                first.error, commands_named(&server, "SELECT").len() - select_before,
+                refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["emails"]
+                    .as_array().unwrap().iter().any(|row| row["uid"] == 2));
+            assert_eq!(first.result.as_ref().unwrap()["receipt"]["requestId"], json!("imap-duplicate-1"));
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(10)),
+                    "first duplicate-ID request must reach a real SELECT");
+                pause
+            }).await.unwrap();
+            let second = boxed_request(&state, req("sync.refresh", params.clone())).await;
+            assert!(second.error.is_none(), "same in-flight request ID must be accepted: {:?}", second.error);
+            assert_eq!(second.result.as_ref().unwrap()["receipt"]["requestId"], json!("imap-duplicate-1"));
+            assert_eq!(second.result.as_ref().unwrap()["receipt"]["status"], json!("running"));
+            pause.release();
+
+            let settled = terminal_refresh(&state, "imap-duplicate-1").await;
+            assert_eq!(settled["status"], json!("complete"));
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX").expect("native header after duplicate");
+            assert_eq!(cached["totalCached"], json!(2));
+            assert_eq!(cached["emails"].as_array().unwrap().iter().filter(|row|
+                row["uid"] == 2 && row["subject"] == "One header for duplicate ID").count(), 1);
+            assert_eq!(commands_named(&server, "SELECT").len() - select_before, 1,
+                "identical request ID may issue one provider SELECT only");
+            let commands = server.commands();
+            let replay = boxed_request(&state, req("sync.refresh", params)).await;
+            assert!(replay.error.is_none(), "completed identical ID must replay receipt: {:?}", replay.error);
+            assert_eq!(replay.result.as_ref().unwrap()["receipt"], settled,
+                "terminal duplicate must preserve completion timestamp and result");
+            assert_eq!(server.commands(), commands, "duplicate replay must issue zero provider commands");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX"), Some(cached),
+                "duplicate replay must leave the actual native header effect unchanged");
+        }
+
+        async fn refresh_graph_map(state: &Arc<DaemonState>, account: &str) -> Option<Value> {
+            let response = boxed_request(state, req("load_graph_id_map", json!({
+                "accountId": account, "mailbox": "INBOX",
+            }))).await;
+            let value = response.result.expect("existing Graph ledger reader must answer");
+            if value.is_null() { None } else {
+                Some(serde_json::from_str(value.as_str().expect("ledger JSON string")).unwrap())
+            }
+        }
+
+        fn refresh_graph_folder(id: &str, name: &str) -> Value {
+            json!({"id": id, "displayName": name, "totalItemCount": 2, "unreadItemCount": 2})
+        }
+
+        fn refresh_graph_message(id: &str, subject: &str) -> Value {
+            json!({
+                "id": id, "subject": subject, "from": null, "toRecipients": null,
+                "ccRecipients": null, "bccRecipients": null,
+                "receivedDateTime": "2026-01-01T00:00:00Z", "sentDateTime": null,
+                "isRead": false, "hasAttachments": false,
+                "internetMessageId": format!("<{id}@example.test>"),
+                "body": null, "internetMessageHeaders": null,
+            })
+        }
+
+        #[tokio::test]
+        async fn refresh_route_red_graph_adoption_blocks_a_while_b_keeps_stable_owned_headers() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let a = json!({"id":"acc1", "email":"a@example.test", "authType":"oauth2",
+                "oauth2Provider":"microsoft", "oauth2Transport":"graph"});
+            let b = json!({"id":"acc2", "email":"b@example.test", "authType":"oauth2",
+                "oauth2Provider":"microsoft", "oauth2Transport":"graph"});
+            std::fs::write(state.app_dir.join("accounts.json"), json!([a.clone(), b.clone()]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let mut a_credential = a.clone();
+            a_credential["oauth2AccessToken"] = json!("synthetic-graph-a");
+            a_credential["oauth2ExpiresAt"] = json!(4_000_000_000_000i64);
+            let mut b_credential = b.clone();
+            b_credential["oauth2AccessToken"] = json!("synthetic-graph-b");
+            b_credential["oauth2ExpiresAt"] = json!(4_000_000_000_000i64);
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({
+                "acc1": a_credential.to_string(), "acc2": b_credential.to_string(),
+            }).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings": {"state": {
+                    "graphFolderKeysAdopted": {"acc1": true, "acc2": true},
+                    "graphFolderKeysAdoptedFromListing": {"acc2": true},
+                }},
+            }), None).unwrap();
+
+            // A's Inbox display name is a real unacknowledged listing pair:
+            // Posteingang -> INBOX. B is already acknowledged and can write.
+            let a_list = json!({"value": [refresh_graph_folder("fld-a-inbox", "Posteingang")],
+                "@odata.nextLink": null});
+            let a_batch = json!({"responses": [{"id":"inbox", "status":200,
+                "body":{"id":"fld-a-inbox"}}]});
+            let b_list = json!({"value": [refresh_graph_folder("fld-b-inbox", "Inbox")],
+                "@odata.nextLink": null});
+            let b_batch = json!({"responses": [{"id":"inbox", "status":200,
+                "body":{"id":"fld-b-inbox"}}]});
+            let old = refresh_graph_message("graph-b-old", "Graph B old");
+            let new = refresh_graph_message("graph-b-new", "Graph B new");
+            let first_page = json!({"value": [old.clone(), new.clone()], "@odata.nextLink": null});
+            let second_page = json!({"value": [new.clone(), old.clone()], "@odata.nextLink": null});
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, a_list.to_string()), (200, a_batch.to_string()),
+                (200, b_list.to_string()), (200, b_batch.to_string()),
+                (200, first_page.to_string()),
+                (200, b_list.to_string()), (200, b_batch.to_string()),
+                (200, second_page.to_string()),
+            ]);
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId": "graph-adoption-and-b-1", "mailbox": "INBOX", "reason": "manual",
+            }))).await;
+            assert!(accepted.error.is_none(),
+                "Graph refresh must ACK adopted B before provider work: {:?}; Graph requests={}; B native header present={}",
+                accepted.error, crate::handlers::graph::test_graph_requests().len(),
+                refresh_cached_headers(&state, "acc2", "INBOX").is_some());
+            assert_eq!(accepted.result.as_ref().unwrap()["receipt"]["requestId"],
+                json!("graph-adoption-and-b-1"));
+            let settled = terminal_refresh(&state, "graph-adoption-and-b-1").await;
+            assert_eq!(settled["status"], json!("failed"),
+                "A prerequisite must fail the overall receipt while B continues: {settled:?}");
+            let results = settled["accountResults"].as_array().expect("A and B result array");
+            assert_eq!(results.len(), 2);
+            assert_eq!(results[0]["accountId"], json!("acc1"));
+            assert_eq!(results[0]["success"], json!(false));
+            assert_eq!(results[0]["errorKey"], json!("errors.syncGraphAdoptionRequired"));
+            assert_eq!(results[0]["needsShellAdoption"], json!(true));
+            assert_eq!(results[1]["accountId"], json!("acc2"));
+            assert_eq!(results[1]["success"], json!(true));
+            assert_eq!(results[1]["mailbox"], json!("INBOX"));
+            assert_eq!(refresh_graph_map(&state, "acc1").await, None,
+                "unadopted A must not allocate a Graph UID ledger");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX"), None,
+                "unadopted A must not write native headers");
+
+            let before_map = refresh_graph_map(&state, "acc2").await
+                .expect("adopted B must own a persistent UID ledger");
+            assert_eq!(before_map.as_object().unwrap().len(), 2);
+            let before_headers = refresh_cached_headers(&state, "acc2", "INBOX")
+                .expect("adopted B must own native headers");
+            assert_eq!(before_headers["totalCached"], json!(2));
+            assert_eq!(before_headers["nativeIdentity"]["accountId"], json!("acc2"));
+            assert_eq!(before_headers["nativeIdentity"]["mailbox"], json!("INBOX"));
+            assert!(before_headers["nativeIdentity"]["originHash"].as_str()
+                .is_some_and(|hash| !hash.is_empty()));
+            for (uid, graph_id) in before_map.as_object().unwrap() {
+                let uid: u64 = uid.parse().unwrap();
+                let expected = if graph_id == "graph-b-old" { "Graph B old" }
+                    else if graph_id == "graph-b-new" { "Graph B new" }
+                    else { panic!("unexpected Graph ID in persistent ledger: {graph_id}") };
+                assert!(before_headers["emails"].as_array().unwrap().iter().any(|row|
+                    row["uid"] == json!(uid) && row["subject"] == expected),
+                    "stable UID must name the actual Graph header: {before_headers:?}");
+            }
+            let next = boxed_request(&state, req("sync.refresh", json!({
+                "requestId": "graph-b-reordered-2", "accountId": "acc2",
+                "mailbox": "INBOX", "reason": "manual",
+            }))).await;
+            assert!(next.error.is_none(), "new adopted B request must ACK: {:?}", next.error);
+            let next_receipt = terminal_refresh(&state, "graph-b-reordered-2").await;
+            assert_eq!(next_receipt["status"], json!("complete"));
+            assert_eq!(next_receipt["accountResults"][0]["success"], json!(true));
+            assert_eq!(refresh_graph_map(&state, "acc2").await, Some(before_map.clone()),
+                "reordered Graph page must retain B's minted UIDs");
+            let after_headers = refresh_cached_headers(&state, "acc2", "INBOX").unwrap();
+            assert_eq!(after_headers["nativeIdentity"], before_headers["nativeIdentity"]);
+            for (uid, graph_id) in before_map.as_object().unwrap() {
+                let uid: u64 = uid.parse().unwrap();
+                let expected = if graph_id == "graph-b-old" { "Graph B old" } else { "Graph B new" };
+                assert!(after_headers["emails"].as_array().unwrap().iter().any(|row|
+                    row["uid"] == json!(uid) && row["subject"] == expected),
+                    "reordered page must not turn position into identity: {after_headers:?}");
+            }
+            let seen = crate::handlers::graph::test_graph_requests();
+            assert_eq!(seen.len(), 8, "A readiness and two B pages use actual Graph requests: {seen:?}");
+            assert!(seen[0].path.contains("/me/mailFolders?") && seen[1].path.contains("/$batch"));
+            assert_eq!(seen[0].headers.get("authorization").map(String::as_str),
+                Some("Bearer synthetic-graph-a"));
+            let message_calls: Vec<_> = seen.iter().filter(|call| call.path.contains("/messages?")).collect();
+            assert_eq!(message_calls.len(), 2, "A must make no message request before adoption");
+            assert!(message_calls.iter().all(|call|
+                call.headers.get("authorization").map(String::as_str)
+                    == Some("Bearer synthetic-graph-b")
+                && call.path.contains("fld-b-inbox")));
+        }
     }
 
     #[tokio::test]
