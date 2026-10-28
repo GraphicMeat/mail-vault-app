@@ -107,11 +107,12 @@ vi.mock('../../transport', () => ({
   getDaemonHealth: () => mockGetDaemonHealth(),
 }));
 const mockMailboxIsUnchanged = vi.fn();
+const mockMarkVerified = vi.fn();
 const mockSyncNow = vi.fn().mockResolvedValue({ started: true, ticket: 1 });
 const mockWaitForSync = vi.fn();
 vi.mock('../../syncProbe', () => ({
   mailboxIsUnchanged: (...a) => mockMailboxIsUnchanged(...a),
-  markVerified: vi.fn(),
+  markVerified: (...a) => mockMarkVerified(...a),
   invalidate: vi.fn(),
 }));
 const mockWatchAccount = vi.fn();
@@ -196,6 +197,7 @@ beforeEach(() => {
   mockGetDaemonHealth.mockReturnValue({ alive: false });
   mockSearchAllUids.mockResolvedValue([]);
   mockResolveServerAccount.mockImplementation(resolveNow);
+  mockMarkVerified.mockResolvedValue({ marked: true });
   forgetMemo(ACCOUNT.id);
 });
 
@@ -495,6 +497,31 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
     // The latency guarantee: once proven, an unchanged mailbox costs one
     // probe, never a sync.now/wait.for round trip.
     expect(mockSyncNow).not.toHaveBeenCalled();
+    expect(mockMarkVerified).not.toHaveBeenCalled();
+  });
+
+  it('awaits only the proof from its exact unchanged native probe', async () => {
+    primeActiveForBackgroundRefresh();
+    mockMailboxIsUnchanged.mockResolvedValue({
+      unchanged: true, reason: 'modseq-match', verificationRef: 'proof-42',
+    });
+    let markEntered;
+    let releaseMark;
+    const entered = new Promise(resolve => { markEntered = resolve; });
+    const held = new Promise(resolve => { releaseMark = resolve; });
+    mockMarkVerified.mockImplementation(() => { markEntered(); return held; });
+
+    const activation = useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+    let completed = false;
+    void activation.then(() => { completed = true; }, () => { completed = true; });
+    await entered;
+    expect(completed).toBe(false);
+    expect(mockSyncNow).not.toHaveBeenCalled();
+    expect(mockMarkVerified).toHaveBeenCalledExactlyOnceWith(ACCOUNT.id, 'INBOX', {
+      verificationRef: 'proof-42',
+    });
+    releaseMark({ marked: true });
+    await activation;
   });
 
   it('an unproven false falls through to a real sync instead of short-circuiting', async () => {
@@ -510,6 +537,7 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
     // that actually distinguishes this fix from a no-op.
     expect(mockSyncNow).toHaveBeenCalled();
     expect(mockWaitForSync).toHaveBeenCalled();
+    expect(mockMarkVerified).toHaveBeenCalledExactlyOnceWith(ACCOUNT.id, 'INBOX', { ticket: 1 });
     // And the fall-through did its job: the sync's own completeness proof
     // (already covered by the daemon-sync describe block above) re-establishes true.
     expect(useMailStore.getState().serverUids.complete).toBe(true);
@@ -529,6 +557,18 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
 
     expect(mockSyncNow).toHaveBeenCalled();
     expect(useMailStore.getState().serverUids.complete).toBe(true);
+  });
+
+  it('never marks a failed native sync ticket', async () => {
+    primeActiveForBackgroundRefresh();
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: false, reason: 'modseq-advanced' });
+    mockWaitForSync.mockResolvedValue({ success: false, error: 'failed' });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expect(mockSyncNow).toHaveBeenCalled();
+    expect(mockWaitForSync).toHaveBeenCalledWith(1, 30000);
+    expect(mockMarkVerified).not.toHaveBeenCalled();
   });
 });
 

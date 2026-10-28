@@ -33,6 +33,21 @@ describe('daemon-owned commands', () => {
     }
   });
 
+  it('routes sync observation methods before a heartbeat and propagates native failure', async () => {
+    for (const [method, params] of [
+      ['sync.probe', { op: 'check', accountId: 'a', mailbox: 'INBOX' }],
+      ['folders.status', { op: 'invalidate', accountId: 'a' }],
+    ]) {
+      expect(declaredDaemonOwned.has(method)).toBe(true);
+      DAEMON_OWNED.add(method);
+      daemonCall.mockResolvedValueOnce({ method });
+      await expect(send(method, params)).resolves.toEqual({ method });
+      daemonCall.mockRejectedValueOnce(new Error('native observation unavailable'));
+      await expect(send(method, params)).rejects.toThrow('native observation unavailable');
+      expect(daemonCall).toHaveBeenLastCalledWith(method, params);
+    }
+  });
+
   it('routes native account workflows directly and never decomposes an unknown completion', async () => {
     for(const method of ['accounts.add','accounts.update']) {
       expect(declaredDaemonOwned.has(method)).toBe(true);DAEMON_OWNED.add(method);

@@ -2,6 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoBackend } from '../backend.js';
 
 describe('demo mailbox backend', () => {
+  it('answers native observation tags conservatively without inventing cache proof', async () => {
+    const backend = createDemoBackend();
+    const call = (method, params) => backend.invoke('daemon_rpc', { method, params });
+    const accountId = backend.accounts[0].id;
+    expect(await call('sync.probe', { op: 'check', accountId, mailbox: 'INBOX' }))
+      .toEqual({ unchanged: false, reason: 'probe-failed' });
+    expect(await call('sync.probe', { op: 'mark', accountId, mailbox: 'INBOX', ticket: 1 }))
+      .toEqual({ marked: false });
+    expect(await call('sync.probe', { op: 'invalidate', accountId }))
+      .toEqual({ invalidated: true });
+    expect(await call('folders.status', { op: 'refresh', accountId, activeMailbox: 'INBOX', mailboxes: [] }))
+      .toBeNull();
+    expect(await call('folders.status', { op: 'invalidate', accountId }))
+      .toEqual({ invalidated: true });
+  });
+
   it('routes one complete account removal and leaves retired metadata removal unavailable', async () => {
     const backend = createDemoBackend();
     const call = (method, params = {}) => backend.invoke('daemon_rpc', { method, params });

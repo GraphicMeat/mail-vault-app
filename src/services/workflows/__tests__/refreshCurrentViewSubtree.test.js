@@ -24,7 +24,8 @@ vi.mock('../../cacheManager', () => ({
   getAccountCacheMailboxes: () => null,
   listGraphMessages: vi.fn(),
 }));
-vi.mock('../../syncProbe', () => ({ invalidate: vi.fn() }));
+const mockInvalidateProbe = vi.fn();
+vi.mock('../../syncProbe', () => ({ invalidate: (...a) => mockInvalidateProbe(...a) }));
 const mockForceMailboxRefetch = vi.fn();
 vi.mock('../helpers/mailboxRefetch', () => ({
   forceMailboxRefetch: (...a) => mockForceMailboxRefetch(...a),
@@ -43,6 +44,10 @@ vi.mock('../folderStatus', () => ({
 const { refreshCurrentView } = await import('../refreshAccounts');
 
 beforeEach(() => {
+  mockInvalidateProbe.mockReset().mockResolvedValue({ invalidated: true });
+  mockInvalidateFolderStatus.mockReset().mockResolvedValue({ invalidated: true });
+  mockForceMailboxRefetch.mockReset();
+  mockRefreshFolderStatus.mockReset().mockResolvedValue(null);
   state = {
     accounts: [{ id: 'acct-1' }],
     activeAccountId: 'acct-1',
@@ -74,6 +79,29 @@ describe('refreshCurrentView', () => {
 
     expect(state.activateAccount).toHaveBeenCalledWith('acct-1', 'Kunden');
     expect(state.loadSubtree).not.toHaveBeenCalled();
+  });
+
+  it('waits for both native invalidations before activating the open folder', async () => {
+    let enteredProbe;
+    let enteredFolder;
+    let releaseProbe;
+    let releaseFolder;
+    const probeStarted = new Promise(resolve => { enteredProbe = resolve; });
+    const folderStarted = new Promise(resolve => { enteredFolder = resolve; });
+    const probeHeld = new Promise(resolve => { releaseProbe = resolve; });
+    const folderHeld = new Promise(resolve => { releaseFolder = resolve; });
+    mockInvalidateProbe.mockImplementation(() => { enteredProbe(); return probeHeld; });
+    mockInvalidateFolderStatus.mockImplementation(() => { enteredFolder(); return folderHeld; });
+
+    const refresh = refreshCurrentView();
+    await Promise.all([probeStarted, folderStarted]);
+    expect(state.activateAccount).not.toHaveBeenCalled();
+    releaseProbe({ invalidated: true });
+    await probeHeld;
+    expect(state.activateAccount).not.toHaveBeenCalled();
+    releaseFolder({ invalidated: true });
+    await refresh;
+    expect(state.activateAccount).toHaveBeenCalledWith('acct-1', 'Kunden');
   });
 
   it('forces the folder list to be refetched for the active account', async () => {

@@ -213,6 +213,26 @@ describe('events', () => {
 describe('the reload once an upload ends', () => {
   const done = (o = {}) => ({ mode: 'server', jobId: 'j1', accountId: 'acct-a', active: false, state: 'done', uploadedCount: 3, foldersChanged: false, ...o });
 
+  it('waits for native count invalidation before refreshing the visible view', async () => {
+    let entered;
+    let release;
+    const invalidationStarted = new Promise(resolve => { entered = resolve; });
+    const invalidationHeld = new Promise(resolve => { release = resolve; });
+    invalidateFolderStatus.mockImplementation(() => {
+      entered();
+      return invalidationHeld;
+    });
+    const refreshCurrentView = vi.fn(async () => {});
+    store.state = { activeAccountId: 'acct-a', unifiedInbox: false, refreshCurrentView };
+
+    const refresh = upload.refreshAfter(done());
+    await invalidationStarted;
+    expect(refreshCurrentView).not.toHaveBeenCalled();
+    release({ invalidated: true });
+    await refresh;
+    expect(refreshCurrentView).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes the account on screen, its folder list and its counts', async () => {
     const refreshCurrentView = vi.fn(async () => {});
     store.state = { activeAccountId: 'acct-a', unifiedInbox: false, refreshCurrentView };

@@ -1,119 +1,187 @@
-// Unread counts for folders that are not open come from STATUS, once per
-// activation, never for the folder that is selected or for \Noselect nodes.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+// Copy to src/services/workflows/__tests__/folderStatus.test.js after native GREEN.
+// Native tests own selection, 50-path cap and throttle policy.
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockFetchFolderStatus = vi.fn();
-vi.mock('../../api', () => ({ fetchFolderStatus: (...a) => mockFetchFolderStatus(...a) }));
-// The real predicate, not a constant false: the skip for a Graph account is a
-// branch this file is supposed to cover, and a stubbed-off `false` makes it
-// unreachable — the spec would stay green with the guard deleted.
-vi.mock('../../graphConfig', () => ({ isGraphAccount: (a) => a?.oauth2Transport === 'graph' }));
+const bridge = vi.hoisted(() => ({ send: vi.fn(), legacyStatus: vi.fn() }));
+vi.mock('../../transport', () => ({ send: (...args) => bridge.send(...args) }));
+vi.mock('../../api', () => ({ fetchFolderStatus: (...args) => bridge.legacyStatus(...args) }));
+vi.mock('../../graphConfig', () => ({
+  isGraphAccount: (account) => account?.oauth2Transport === 'graph',
+}));
 
-let state = { folderStatus: {} };
+let state = { accounts: [], folderStatus: {} };
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: {
     getState: () => state,
-    setState: (patch) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; },
+    setState: (patch) => {
+      state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
+    },
   },
 }));
 
-const { refreshFolderStatus, invalidateFolderStatus, _flattenSelectable, _resetFolderStatusThrottle } =
-  await import('../folderStatus');
-
-const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
-const FLAT = [
-  { name: 'INBOX', path: 'INBOX', noselect: false, children: [] },
-  { name: 'Archive', path: 'Archive', noselect: false, children: [] },
-  { name: 'Parent', path: 'Parent', noselect: true, children: [] },
-  { name: 'Child', path: 'Parent/Child', noselect: false, children: [] },
+const { refreshFolderStatus, invalidateFolderStatus } = await import('../folderStatus');
+const A = { id: 'acct-a', email: 'a@mock.test' };
+const B = { id: 'acct-b', email: 'b@mock.test' };
+const tree = [
+  { path: 'INBOX', children: [] },
+  { path: 'Parent', noselect: true, children: [{ path: 'Parent/Child', children: [] }] },
+  { path: 'Archive', children: [] },
 ];
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((yes) => { resolve = yes; });
+  return { promise, resolve };
+};
 
 beforeEach(() => {
-  state = { folderStatus: {} };
-  mockFetchFolderStatus.mockReset();
-  _resetFolderStatusThrottle();
+  state = { accounts: [A, B], folderStatus: {} };
+  bridge.send.mockReset();
+  bridge.legacyStatus.mockReset();
+  bridge.legacyStatus.mockImplementation(() => { throw new Error('legacy STATUS used'); });
 });
 
-describe('refreshFolderStatus', () => {
-  it('asks STATUS for every selectable folder except the open one and stores the answer', async () => {
-    mockFetchFolderStatus.mockResolvedValue([
-      { path: 'Archive', messages: 5, unseen: 2 },
-      { path: 'Parent/Child', messages: 1, unseen: 0 },
-    ]);
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    expect(mockFetchFolderStatus).toHaveBeenCalledWith(ACCOUNT, ['Archive', 'Parent/Child']);
-    expect(state.folderStatus.acct1.Archive.unseen).toBe(2);
-    expect(state.folderStatus.acct1['Parent/Child'].messages).toBe(1);
+describe('native closed-folder status adapter', () => {
+  it('passes the full displayed tree and merges provider rows without local selection', async () => {
+    bridge.send.mockResolvedValue({ rows: [
+      { path: 'Parent/Child', messages: 2, unseen: 1, uidNext: 3, uidValidity: 9 },
+      { path: 'Archive', messages: 5, unseen: 4, uidNext: 6, uidValidity: 9 },
+    ] });
+    const result = await refreshFolderStatus(A, tree, 'INBOX');
+    expect(bridge.send).toHaveBeenCalledTimes(1);
+    expect(bridge.send).toHaveBeenCalledWith('folders.status', {
+      op: 'refresh', accountId: A.id, activeMailbox: 'INBOX', mailboxes: tree,
+    });
+    expect(result['Parent/Child'].uidNext).toBe(3);
+    expect(state.folderStatus[A.id]['Parent/Child']).toEqual({
+      path: 'Parent/Child', messages: 2, unseen: 1, uidNext: 3, uidValidity: 9,
+    });
+    expect(state.folderStatus[A.id].Archive.unseen).toBe(4);
+    expect(bridge.legacyStatus).not.toHaveBeenCalled();
   });
 
-  it('is throttled to one sweep per minute per account', async () => {
-    mockFetchFolderStatus.mockResolvedValue([]);
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    expect(mockFetchFolderStatus).toHaveBeenCalledTimes(1);
+  it('keeps prior sibling rows and other accounts when a native result is sparse or empty', async () => {
+    state.folderStatus = {
+      [A.id]: { Archive: { path: 'Archive', unseen: 4 }, Sent: { path: 'Sent', unseen: 2 } },
+      [B.id]: { INBOX: { path: 'INBOX', unseen: 7 } },
+    };
+    bridge.send.mockResolvedValueOnce({ rows: [{ path: 'Archive', unseen: 1 }] })
+      .mockResolvedValueOnce({ rows: [] });
+    expect(await refreshFolderStatus(A, tree, 'INBOX')).toEqual({ Archive: { path: 'Archive', unseen: 1 } });
+    expect(state.folderStatus[A.id].Sent.unseen).toBe(2);
+    expect(state.folderStatus[B.id].INBOX.unseen).toBe(7);
+    expect(await refreshFolderStatus(A, tree, 'INBOX')).toEqual({});
+    expect(state.folderStatus[A.id].Archive.unseen).toBe(1);
+    expect(state.folderStatus[A.id].Sent.unseen).toBe(2);
   });
 
-  it('keeps counts of other accounts when one account updates', async () => {
-    state = { folderStatus: { other: { INBOX: { path: 'INBOX', messages: 3, unseen: 3 } } } };
-    mockFetchFolderStatus.mockResolvedValue([{ path: 'Archive', messages: 1, unseen: 1 }]);
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    expect(state.folderStatus.other.INBOX.unseen).toBe(3);
-    expect(state.folderStatus.acct1.Archive.unseen).toBe(1);
+  it('skips absent and Graph accounts without store writes or native calls', async () => {
+    expect(await refreshFolderStatus(null, tree, 'INBOX')).toBeNull();
+    expect(await refreshFolderStatus({ ...A, oauth2Transport: 'graph' }, tree, 'INBOX')).toBeNull();
+    expect(bridge.send).not.toHaveBeenCalled();
+    expect(state.folderStatus).toEqual({});
   });
 
-  // One round trip per folder on one background session — an account with 59
-  // folders is on record, and the sweep holds that session for all of them.
-  it('caps the sweep at 50 folders', async () => {
-    const many = Array.from({ length: 60 }, (_, i) => (
-      { name: `F${i}`, path: `F${i}`, noselect: false, children: [] }
-    ));
-    mockFetchFolderStatus.mockResolvedValue([]);
-    await refreshFolderStatus(ACCOUNT, many, 'INBOX');
-    expect(mockFetchFolderStatus).toHaveBeenCalledWith(ACCOUNT, expect.any(Array));
-    expect(mockFetchFolderStatus.mock.calls[0][1]).toHaveLength(50);
+  it('keeps prior counts when native selection returns null', async () => {
+    state.folderStatus = { [A.id]: { Archive: { path: 'Archive', unseen: 4 } } };
+    bridge.send.mockResolvedValue(null);
+    expect(await refreshFolderStatus(A, tree, 'INBOX')).toBeNull();
+    expect(state.folderStatus[A.id].Archive.unseen).toBe(4);
   });
 
-  // Refresh must reach the server, and the throttle says "swept moments ago".
-  // Forcing a second sweep was one answer; dropping the timestamp so the sweep
-  // activateAccount already runs becomes the fresh one is the cheaper one.
-  it('runs again after invalidateFolderStatus, without a forced call', async () => {
-    mockFetchFolderStatus.mockResolvedValue([]);
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    expect(mockFetchFolderStatus).toHaveBeenCalledTimes(1);
-
-    invalidateFolderStatus(ACCOUNT.id);
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    expect(mockFetchFolderStatus).toHaveBeenCalledTimes(2);
+  it('passes an empty displayed scope to native selection when no tree is loaded', async () => {
+    bridge.send.mockResolvedValue(null);
+    expect(await refreshFolderStatus(A, null, null)).toBeNull();
+    expect(bridge.send).toHaveBeenCalledExactlyOnceWith('folders.status', {
+      op: 'refresh', accountId: A.id, activeMailbox: null, mailboxes: [],
+    });
   });
 
-  it('leaves other accounts throttled when one is invalidated', async () => {
-    const OTHER = { id: 'acct2', email: 'other@mock.test' };
-    mockFetchFolderStatus.mockResolvedValue([]);
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
-    await refreshFolderStatus(OTHER, FLAT, 'INBOX');
-    expect(mockFetchFolderStatus).toHaveBeenCalledTimes(2);
-
-    invalidateFolderStatus(ACCOUNT.id);
-    await refreshFolderStatus(OTHER, FLAT, 'INBOX');
-    expect(mockFetchFolderStatus).toHaveBeenCalledTimes(2);
+  it('fences a held row when a newer invalidation settles', async () => {
+    const held = deferred();
+    const legacyHeld = deferred();
+    state.folderStatus = { [B.id]: { INBOX: { path: 'INBOX', unseen: 7 } } };
+    bridge.send.mockImplementation(async (_method, params) =>
+      params.op === 'refresh' ? held.promise : { invalidated: true });
+    bridge.legacyStatus.mockReturnValue(legacyHeld.promise);
+    const stale = refreshFolderStatus(A, tree, 'INBOX');
+    await invalidateFolderStatus(A.id);
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    legacyHeld.resolve([{ path: 'Archive', unseen: 99 }]);
+    await stale;
+    expect(state.folderStatus[A.id], 'stale folder result published after invalidation')
+      .toBeUndefined();
+    expect(state.folderStatus[B.id].INBOX.unseen).toBe(7);
+    expect(bridge.send.mock.calls.map(([, params]) => params.op))
+      .toEqual(['refresh', 'invalidate']);
   });
 
-  // STATUS is an IMAP command. A Graph account has no session to send it on,
-  // and asking would be a thrown error per sidebar paint.
-  it('never sends STATUS for a Graph account', async () => {
-    const graph = { id: 'acct-graph', email: 'ms@mock.test', oauth2Transport: 'graph' };
-    expect(await refreshFolderStatus(graph, FLAT, 'INBOX')).toBe(null);
-    expect(mockFetchFolderStatus).not.toHaveBeenCalled();
+  it('does not repopulate an account removed during a held reply', async () => {
+    const held = deferred();
+    bridge.send.mockReturnValue(held.promise);
+    const stale = refreshFolderStatus(A, tree, 'INBOX');
+    state.accounts = [B];
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    await stale;
+    expect(state.folderStatus[A.id]).toBeUndefined();
   });
 
-  // The sidebar paints before the account list resolves on a cold start.
-  it('does nothing without an account', async () => {
-    expect(await refreshFolderStatus(null, FLAT, 'INBOX')).toBe(null);
-    expect(mockFetchFolderStatus).not.toHaveBeenCalled();
+  it('keeps the old reply fenced when native invalidation fails', async () => {
+    const held = deferred();
+    bridge.send.mockImplementation((_method, params) => params.op === 'refresh'
+      ? held.promise : Promise.reject(new Error('errors.daemonUnavailable')));
+    const stale = refreshFolderStatus(A, tree, 'INBOX');
+    await invalidateFolderStatus(A.id);
+    held.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    await stale;
+    expect(state.folderStatus[A.id]).toBeUndefined();
   });
 
-  it('_flattenSelectable skips noselect nodes and the active mailbox', () => {
-    expect(_flattenSelectable(FLAT, 'Archive')).toEqual(['INBOX', 'Parent/Child']);
+  it('publishes only the newer refresh generation', async () => {
+    const first = deferred();
+    const second = deferred();
+    let issued = 0;
+    bridge.send.mockImplementation((_method, params) => {
+      if (params.op !== 'refresh') throw new Error('unexpected operation');
+      issued += 1;
+      return issued === 1 ? first.promise : second.promise;
+    });
+    const older = refreshFolderStatus(A, tree, 'INBOX');
+    const newer = refreshFolderStatus(A, tree, 'INBOX');
+    second.resolve({ rows: [{ path: 'Archive', unseen: 2 }] });
+    await newer;
+    first.resolve({ rows: [{ path: 'Archive', unseen: 99 }] });
+    await older;
+    expect(state.folderStatus[A.id].Archive.unseen).toBe(2);
+    expect(bridge.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets an earlier real sweep publish when a later native call is throttled', async () => {
+    const held = deferred();
+    bridge.send.mockReturnValueOnce(held.promise).mockResolvedValueOnce(null);
+    const first = refreshFolderStatus(A, tree, 'INBOX');
+    expect(await refreshFolderStatus(A, tree, 'INBOX')).toBeNull();
+    held.resolve({ rows: [{ path: 'Archive', unseen: 3 }] });
+    await first;
+    expect(state.folderStatus[A.id].Archive.unseen).toBe(3);
+  });
+
+  it('never calls old STATUS after a native transport error', async () => {
+    bridge.send.mockRejectedValue(new Error('errors.daemonUnavailable'));
+    await expect(refreshFolderStatus(A, tree, 'INBOX')).rejects.toThrow();
+    expect(state.folderStatus).toEqual({});
+    expect(bridge.legacyStatus).not.toHaveBeenCalled();
+  });
+
+  it('bounds a native folder refresh that never replies', async () => {
+    vi.useFakeTimers();
+    try {
+      bridge.send.mockReturnValue(new Promise(() => {}));
+      const error = refreshFolderStatus(A, tree, 'INBOX').then(() => null, caught => caught);
+      await vi.advanceTimersByTimeAsync(126_000);
+      expect((await error)?.message).toBe('errors.connectionFailed');
+      expect(state.folderStatus).toEqual({});
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

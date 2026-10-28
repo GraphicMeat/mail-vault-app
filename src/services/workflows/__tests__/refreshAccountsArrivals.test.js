@@ -54,7 +54,8 @@ vi.mock('../../cacheManager', () => ({
   getAccountCacheMailboxes: () => null,
   listGraphMessages: vi.fn(),
 }));
-vi.mock('../../syncProbe', () => ({ invalidate: vi.fn() }));
+const mockInvalidateProbe = vi.fn();
+vi.mock('../../syncProbe', () => ({ invalidate: (...a) => mockInvalidateProbe(...a) }));
 vi.mock('../helpers/mailboxRefetch', () => ({
   forceMailboxRefetch: vi.fn(),
   takeForcedMailboxRefetch: () => false,
@@ -98,6 +99,7 @@ beforeEach(() => {
   mockGetEmailHeadersMeta.mockClear();
   mockListCachedUids.mockClear();
   mockFetchEmails.mockReset();
+  mockInvalidateProbe.mockReset().mockResolvedValue({ invalidated: true });
   state = {
     accounts: [{ id: 'acct-1', email: 'me@example.com' }],
     activeAccountId: 'acct-1',
@@ -110,6 +112,24 @@ beforeEach(() => {
 });
 
 describe('the active account (the open list)', () => {
+  it('waits for probe invalidation before loading the active mailbox', async () => {
+    let entered;
+    let release;
+    const invalidationStarted = new Promise(resolve => { entered = resolve; });
+    const invalidationHeld = new Promise(resolve => { release = resolve; });
+    mockInvalidateProbe.mockImplementation(() => {
+      entered();
+      return invalidationHeld;
+    });
+
+    const refresh = refreshAllAccounts();
+    await invalidationStarted;
+    expect(state.loadEmails).not.toHaveBeenCalled();
+    release({ invalidated: true });
+    await refresh;
+    expect(state.loadEmails).toHaveBeenCalledTimes(1);
+  });
+
   it('announces nothing while the cache is still backfilling', async () => {
     // 500 of a 1634-message INBOX cached, and the list drains to the full
     // folder during the refresh: the 1134 the user was notified about.

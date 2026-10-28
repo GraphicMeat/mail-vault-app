@@ -822,6 +822,21 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
             return q ? [...merged.values()].filter(c => c.address.startsWith(q) || c.name.toLowerCase().includes(q)).sort((a, b) => tier(a) - tier(b) || recent(a, b)).slice(0, p.limit || 8) : [];
           }
         }
+        // The demo has no native cache identity or provider STATUS session.
+        // Its observation routes answer conservatively and leave counts alone.
+        if (method === 'sync.probe') {
+          const op = args.params?.op;
+          if (op === 'check') return { unchanged: false, reason: 'probe-failed' };
+          if (op === 'mark') return { marked: false };
+          if (op === 'invalidate') return { invalidated: true };
+          throw new DemoUnsupportedError(`sync.probe:${op}`);
+        }
+        if (method === 'folders.status') {
+          const op = args.params?.op;
+          if (op === 'refresh') return null;
+          if (op === 'invalidate') return { invalidated: true };
+          throw new DemoUnsupportedError(`folders.status:${op}`);
+        }
         if (method === 'sync.now') {
           const syncParams = args.params || {};
           const syncAccountId = syncParams.account?.id || syncParams.accountId || ACCOUNT_IDS[0];

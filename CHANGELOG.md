@@ -14,6 +14,8 @@
 
 - Delete everywhere clicked while an earlier one is still running now waits its turn instead of failing. Before, the second message left the list, then came back with an "An operation is already running" error while the first was still deleting; it now stays gone and is deleted right after the first finishes.
 
+- Switching between accounts can skip a repeat sync when the background helper confirms a complete cached mailbox is unchanged. Closed-folder unread badges now use the helper's bounded status sweep. Refresh waits for invalidation, and late counts from a removed account do not reappear.
+
 - Delete everywhere now also removes the local copy when a sync changed the cache during the delete: a dropped header row, owner record or mailbox generation, a missing Outlook or JMAP row id, a flag rename, or a body saved meanwhile. Before, the server copy went and the local copy stayed, and the toast said "1 removed. 1 could not be deleted from the server". A local copy whose bytes no longer match the deleted message is still kept, and the toast now says it was deleted from the server but kept locally instead of counting it twice.
 
 - A one-time code in mail that a scheduled refresh picks up now shows in the corner bubble and in the new-mail banner. Before, only mail the live inbox watch found first got the bubble, so a code that arrived between watch wake-ups showed neither.

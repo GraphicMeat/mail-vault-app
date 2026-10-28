@@ -123,7 +123,7 @@ export async function refreshAfter(p) {
   if (p?.active !== false || !p.accountId || !(p.uploadedCount > 0 || p.foldersChanged)) return;
   forceMailboxRefetch(p.accountId);
   const { invalidateFolderStatus } = await import('./workflows/folderStatus');
-  invalidateFolderStatus(p.accountId);
+  await invalidateFolderStatus(p.accountId);
   const { useMailStore } = await import('../stores/mailStore');
   const s = useMailStore.getState();
   if (s.activeAccountId === p.accountId || s.unifiedInbox) await s.refreshCurrentView();

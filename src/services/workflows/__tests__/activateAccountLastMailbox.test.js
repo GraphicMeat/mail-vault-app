@@ -82,6 +82,10 @@ vi.mock('../../syncService', () => ({
   watchAccount: vi.fn(),
   unwatchAccount: vi.fn(),
 }));
+const mockRefreshFolderStatus = vi.fn().mockResolvedValue(null);
+vi.mock('../folderStatus', () => ({
+  refreshFolderStatus: (...args) => mockRefreshFolderStatus(...args),
+}));
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { forget: forgetMemo } = await import('../../headerMemo');
@@ -146,6 +150,17 @@ describe('activateAccount remembers the folder the user chose', () => {
     expect(setLastMailbox).toHaveBeenCalledWith(A.id, 'INBOX');
   });
 
+  it('starts one closed-folder sweep for a foreground descriptor paint', async () => {
+    primeOn(A, 'Archive');
+    mockGetRestoreDescriptor.mockImplementation((id, mailbox) =>
+      id === A.id && mailbox === 'INBOX' ? descriptorFor(A, 'INBOX') : null);
+
+    await useMailStore.getState().activateAccount(A.id, 'INBOX');
+
+    expect(mockRefreshFolderStatus).toHaveBeenCalledTimes(1);
+    expect(mockRefreshFolderStatus).toHaveBeenCalledWith(A, MAILBOXES, 'INBOX');
+  });
+
   it('looks the incoming account up by the folder it was asked for, not the outgoing one', async () => {
     primeOn(A, 'Archive');
 
@@ -162,5 +177,6 @@ describe('activateAccount remembers the folder the user chose', () => {
     await useMailStore.getState().activateAccount(A.id, 'INBOX', { _backgroundRefresh: true });
 
     expect(setLastMailbox).not.toHaveBeenCalled();
+    expect(mockRefreshFolderStatus).not.toHaveBeenCalled();
   });
 });

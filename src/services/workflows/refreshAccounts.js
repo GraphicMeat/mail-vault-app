@@ -111,14 +111,14 @@ export async function refreshCurrentView() {
     // short TTL would answer "checked moments ago" and the button would look
     // broken. The probe itself still runs — if nothing changed there is
     // genuinely nothing to show, and it costs one round trip instead of a sync.
-    _invalidateProbe(activeAccountId, activeMailbox);
+    const probeInvalidation = _invalidateProbe(activeAccountId, activeMailbox);
     // Same rule for the folder list: Refresh must show a folder created
     // elsewhere now, not when the 10-minute cache runs out.
     forceMailboxRefetch(activeAccountId);
     // …and the closed folders' unread counts: activateAccount's own sweep is
     // throttled to one a minute; dropping its timestamp lets that one sweep run
     // instead of adding a second forced one.
-    invalidateFolderStatus(activeAccountId);
+    await Promise.all([probeInvalidation, invalidateFolderStatus(activeAccountId)]);
     await get().activateAccount(activeAccountId, activeMailbox);
   }
 }
@@ -135,9 +135,10 @@ export async function refreshAllAccounts(options = {}) {
   const targetMailbox = options.mailbox || (unifiedInbox ? (unifiedFolder || 'INBOX') : 'INBOX');
   const refreshingUnifiedView = unifiedInbox || targetMailbox === 'UNIFIED';
 
+  const probeInvalidations = new Map();
   for (const account of accounts) {
     _invalidateRestore(account.id);
-    _invalidateProbe(account.id);
+    probeInvalidations.set(account.id, _invalidateProbe(account.id));
     // Also picks up a folder an import made elsewhere, and an added account.
     loadLocalFolders(account.id);
   }
@@ -166,6 +167,7 @@ export async function refreshAllAccounts(options = {}) {
       continue;
     }
     try {
+      await probeInvalidations.get(account.id);
       if (account.id === activeAccountId && !refreshingUnifiedView) {
         // Against the cache, not against the rows on screen: the open list is
         // still filling while this runs, and every row it had yet to drain

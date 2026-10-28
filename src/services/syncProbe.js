@@ -1,110 +1,79 @@
-/**
- * Cheap "did anything actually change?" probe for a mailbox.
- *
- * Switching accounts used to fire a full daemon sync every time — `sync.now`
- * plus a blocking `waitForSync(30s)` — even when the user had looked at that
- * account ten seconds earlier. This answers the same question with one SELECT
- * round-trip and no message data, so the common case (nothing changed) costs
- * ~100ms instead of a full sync.
- */
+// The daemon decides mailbox freshness; this adapter orders account mutations.
+import { send } from './transport';
 
-import * as api from './api';
-import * as db from './db';
+const ADAPTER_BUDGET_MS = 31_000;
+const tails = new Map();
+const uncertain = new Set();
+const conservative = () => ({ unchanged: false, reason: 'probe-failed' });
 
-/** Skip even the probe if we checked this mailbox this recently. */
-const PROBE_TTL_MS = 10_000;
-
-/** `accountId\x01mailbox` → ms of the last probe/sync that found it current. */
-const _lastVerified = new Map();
-
-const _key = (accountId, mailbox) => `${accountId}\x01${mailbox}`;
-
-/** Record that this mailbox is known current as of now. */
-export function markVerified(accountId, mailbox) {
-  _lastVerified.set(_key(accountId, mailbox), Date.now());
+function bounded(work) {
+  let timer;
+  const expired = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('errors.daemonUnavailable')), ADAPTER_BUDGET_MS);
+  });
+  let task;
+  try { task = Promise.resolve(work()); }
+  catch (error) { task = Promise.reject(error); }
+  return Promise.race([task, expired])
+    .finally(() => clearTimeout(timer));
 }
 
-/** Forget a mailbox — forces the next probe to hit the server. */
+function queueMutation(accountId, work, failure) {
+  const previous = tails.get(accountId);
+  const operation = async () => {
+    try {
+      return await bounded(work);
+    } catch {
+      uncertain.add(accountId);
+      return failure;
+    }
+  };
+  const next = previous ? previous.then(operation) : operation();
+  tails.set(accountId, next);
+  void next.then(() => {
+    if (tails.get(accountId) === next && !uncertain.has(accountId)) tails.delete(accountId);
+  });
+  return next;
+}
+
+export function markVerified(accountId, mailbox, evidence) {
+  const hasProof = typeof evidence?.verificationRef === 'string'
+    && evidence.verificationRef.length > 0;
+  const hasTicket = Number.isSafeInteger(evidence?.ticket) && evidence.ticket >= 0;
+  if (hasProof === hasTicket) return Promise.resolve({ marked: false });
+  const source = hasProof ? { verificationRef: evidence.verificationRef }
+    : { ticket: evidence.ticket };
+  return queueMutation(accountId, async () => {
+    const result = await send('sync.probe', { op: 'mark', accountId, mailbox, ...source });
+    if (typeof result?.marked !== 'boolean') throw new Error('errors.daemonUnavailable');
+    return result;
+  }, { marked: false });
+}
+
 export function invalidate(accountId, mailbox) {
-  if (mailbox) {
-    _lastVerified.delete(_key(accountId, mailbox));
-    return;
-  }
-  const prefix = `${accountId}\x01`;
-  for (const k of _lastVerified.keys()) {
-    if (k.startsWith(prefix)) _lastVerified.delete(k);
-  }
+  const scope = mailbox ? { mailbox } : {};
+  return queueMutation(accountId, async () => {
+    const result = await send('sync.probe', { op: 'invalidate', accountId, ...scope });
+    if (result?.invalidated !== true) throw new Error('errors.daemonUnavailable');
+    uncertain.delete(accountId);
+    return result;
+  }, { invalidated: false });
 }
 
-/**
- * Is the local cache already identical to what the server holds?
- *
- * Returns `{ unchanged, reason }`. Callers treat anything other than
- * `unchanged === true` as "run the sync" — including errors, so a probe that
- * fails can only cost an unnecessary sync, never a missed one.
- */
-export async function mailboxIsUnchanged(account, accountId, mailbox) {
-  const key = _key(accountId, mailbox);
-  const since = Date.now() - (_lastVerified.get(key) ?? 0);
-  if (since < PROBE_TTL_MS) {
-    return { unchanged: true, reason: 'probed-recently' };
-  }
-
-  let meta;
+export async function mailboxIsUnchanged(_account, accountId, mailbox) {
+  let active = true;
   try {
-    meta = await db.getEmailHeadersMeta(accountId, mailbox);
+    const result = await bounded(async () => {
+      const prior = tails.get(accountId);
+      if (prior) await prior;
+      if (!active || uncertain.has(accountId)) return conservative();
+      return send('sync.probe', { op: 'check', accountId, mailbox });
+    });
+    return typeof result?.unchanged === 'boolean' && typeof result?.reason === 'string'
+      ? result : conservative();
   } catch {
-    return { unchanged: false, reason: 'meta-read-failed' };
+    return conservative();
+  } finally {
+    active = false;
   }
-
-  // Nothing cached yet — there is no "unchanged" to speak of.
-  if (!meta?.totalEmails) return { unchanged: false, reason: 'no-cache' };
-
-  // The cache holds fewer messages than the mailbox has. The server may not
-  // have changed at all, but WE are still short — a restored or migrated
-  // mailbox sits here — so the sync (and the daemon backfill behind it) must
-  // still run.
-  if ((meta.totalCached ?? 0) < meta.totalEmails) {
-    return { unchanged: false, reason: 'partial-cache' };
-  }
-
-  let status;
-  try {
-    status = await api.checkMailboxStatus(account, mailbox);
-  } catch (e) {
-    console.warn('[syncProbe] Status check failed, falling back to full sync:', e?.message || e);
-    return { unchanged: false, reason: 'probe-failed' };
-  }
-  if (!status) return { unchanged: false, reason: 'probe-empty' };
-
-  // The server re-issued its UID space; every cached UID means something else.
-  if (status.uidValidity != null && meta.uidValidity != null
-      && status.uidValidity !== meta.uidValidity) {
-    return { unchanged: false, reason: 'uidvalidity-changed' };
-  }
-
-  // CONDSTORE: HIGHESTMODSEQ advances on ANY change — arrival, expunge, or a
-  // bare flag edit. An unchanged value is proof nothing happened, which no
-  // count comparison can give you: one arrival plus one expunge leaves the
-  // message count identical (the blind spot documented in sync_engine.rs).
-  if (status.highestModseq != null && meta.highestModseq != null) {
-    return status.highestModseq === meta.highestModseq
-      ? { unchanged: true, reason: 'modseq-match' }
-      : { unchanged: false, reason: 'modseq-advanced' };
-  }
-
-  // No CONDSTORE. UIDNEXT is monotonic, so any arrival moves it — that closes
-  // the +1/-1 hole, because an arrival paired with an expunge still bumps
-  // UIDNEXT even though the count comes back level. EXISTS then covers the
-  // expunge-without-arrival case. Both must match.
-  //
-  // Flag-only changes are invisible here. That is inherent to a server without
-  // CONDSTORE, and matches what the delta sync itself can see.
-  const uidNextSame = status.uidNext != null && meta.uidNext != null
-    && status.uidNext === meta.uidNext;
-  const existsSame = Number(status.exists) === Number(meta.totalEmails);
-
-  if (uidNextSame && existsSame) return { unchanged: true, reason: 'uidnext-exists-match' };
-  if (!uidNextSame) return { unchanged: false, reason: 'uidnext-advanced' };
-  return { unchanged: false, reason: 'exists-changed' };
 }

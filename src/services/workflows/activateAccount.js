@@ -587,6 +587,14 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       activationTrace.end('aborted-after-restore');
       return;
     }
+    // The background pass skips the post-sync badge sweep. A foreground
+    // descriptor paint still needs one, especially after Refresh invalidated
+    // the native folder timestamp to read a changed closed folder now.
+    if (get().activeAccountId === accountId && get().activeMailbox === restoredFolder) {
+      const statusAccount = get().accounts.find(a => a.id === accountId) || account;
+      refreshFolderStatus(statusAccount, get().mailboxes, restoredFolder)
+        .catch(e => console.warn('[folderStatus] STATUS sweep failed:', e));
+    }
     get().activateAccount(accountId, restored.mailbox || mailbox, { _backgroundRefresh: true }).catch(() => {});
     setTimeout(() => get().loadSentHeaders(accountId), 150);
 
@@ -914,7 +922,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           if (probe.unchanged && get().serverUids.complete) {
             console.log('[activateAccount] %s/%s unchanged (%s) — skipping sync',
               accountId, effectiveMailbox, probe.reason);
-            markVerified(accountId, effectiveMailbox);
+            if (probe.verificationRef) {
+              await markVerified(accountId, effectiveMailbox, { verificationRef: probe.verificationRef });
+            }
             if (!signal.aborted) {
               useMailStore.setState(serverVerifiedPatch());
               // "Unchanged" is about the cache, not about what we are showing.
@@ -946,7 +956,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           });
 
           if (syncResult?.success) {
-            markVerified(accountId, effectiveMailbox);
+            await markVerified(accountId, effectiveMailbox, { ticket });
             console.log('[activateAccount] Re-reading cache after daemon sync...');
             const freshCache = await db.getEmailHeadersPartial(accountId, effectiveMailbox, 500);
             console.log('[activateAccount] Cache read:', freshCache?.emails?.length, 'emails, total:', freshCache?.totalEmails);

@@ -1,68 +1,65 @@
-// ── folderStatus workflow — unread counts for folders that are not open ──
-//
-// Thunderbird polls STATUS for every folder it watches; MailVault opened a
-// folder (SELECT) to learn anything about it, so the sidebar had no counts
-// until each folder was clicked. STATUS costs one round trip per folder on a
-// background session and never changes the selected mailbox. The open
-// folder's counts come from its own list, so it is left out.
-import * as api from '../api';
+// The daemon selects closed folders; the renderer merges rows for display.
+import { send } from '../transport';
 import { isGraphAccount } from '../graphConfig';
 
-const STATUS_FRESH_MS = 60 * 1000;
-// One round trip per folder, all on one background session: a 59-folder
-// Dovecot account is on record (bson73), and a sweep that long blocks that
-// session for the rest of it. The sidebar's first screenful is what a count is
-// for. ponytail: fixed cap, sweep the folders the user actually looks at if 50
-// ever proves too few.
-const MAX_STATUS_FOLDERS = 50;
-const _lastRun = new Map(); // accountId -> timestamp of the last sweep
+const ADAPTER_BUDGET_MS = 126_000;
+const generations = new Map();
+const invalidatedAt = new Map();
+const publishedAt = new Map();
 
-/** Paths STATUS may be sent for: selectable, and not the folder that is open. */
-export function _flattenSelectable(mailboxes, activeMailbox) {
-  const out = [];
-  const visit = (nodes) => {
-    for (const m of nodes || []) {
-      if (!m.noselect && m.path !== activeMailbox) out.push(m.path);
-      if (m.children?.length) visit(m.children);
-    }
-  };
-  visit(mailboxes);
-  return out;
+function advance(accountId) {
+  const generation = (generations.get(accountId) || 0) + 1;
+  generations.set(accountId, generation);
+  return generation;
+}
+
+function bounded(work) {
+  let timer;
+  const expired = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('errors.connectionFailed')), ADAPTER_BUDGET_MS);
+  });
+  let task;
+  try { task = Promise.resolve(work()); }
+  catch (error) { task = Promise.reject(error); }
+  return Promise.race([task, expired])
+    .finally(() => clearTimeout(timer));
 }
 
 export async function refreshFolderStatus(account, mailboxes, activeMailbox) {
-  if (!account || isGraphAccount(account)) return null;
-  const last = _lastRun.get(account.id) || 0;
-  if (Date.now() - last < STATUS_FRESH_MS) return null;
-  const paths = _flattenSelectable(mailboxes, activeMailbox).slice(0, MAX_STATUS_FOLDERS);
-  if (paths.length === 0) return null;
-  _lastRun.set(account.id, Date.now());
-
-  const rows = await api.fetchFolderStatus(account, paths);
-  const byPath = Object.fromEntries((rows || []).map(r => [r.path, r]));
-
-  const { useMailStore } = await import('../../stores/mailStore');
-  useMailStore.setState(s => ({
-    folderStatus: {
-      ...(s.folderStatus || {}),
-      [account.id]: { ...((s.folderStatus || {})[account.id] || {}), ...byPath },
-    },
+  if (!account?.id || isGraphAccount(account)) return null;
+  const accountId = account.id;
+  const generation = advance(accountId);
+  const result = await bounded(() => send('folders.status', {
+    op: 'refresh', accountId, activeMailbox: activeMailbox ?? null,
+    mailboxes: Array.isArray(mailboxes) ? mailboxes : [],
   }));
-  return byPath;
+  if (result === null) return null;
+  if (!Array.isArray(result?.rows)) throw new Error('errors.connectionFailed');
+  const byPath = Object.fromEntries(result.rows
+    .filter(row => row && typeof row.path === 'string')
+    .map(row => [row.path, row]));
+  const { useMailStore } = await import('../../stores/mailStore');
+  let published = false;
+  useMailStore.setState(state => {
+    if (generation <= (invalidatedAt.get(accountId) || 0)
+      || generation < (publishedAt.get(accountId) || 0)
+      || state.accounts?.find(item => item.id === accountId) !== account) return state;
+    publishedAt.set(accountId, generation);
+    published = true;
+    return { folderStatus: {
+      ...(state.folderStatus || {}),
+      [accountId]: { ...((state.folderStatus || {})[accountId] || {}), ...byPath },
+    } };
+  });
+  return published ? byPath : null;
 }
 
-/**
- * Forget when this account was last swept, so the next ordinary call runs.
- *
- * What Refresh wants. Forcing a sweep of its own got the counts refreshed and
- * cost a second STATUS per folder — up to 50 round trips on the one background
- * session — because activateAccount runs a sweep a few lines later anyway.
- */
 export function invalidateFolderStatus(accountId) {
-  _lastRun.delete(accountId);
-}
-
-/** Tests only. */
-export function _resetFolderStatusThrottle() {
-  _lastRun.clear();
+  if (!accountId) return Promise.resolve({ invalidated: false });
+  invalidatedAt.set(accountId, advance(accountId));
+  return bounded(async () => {
+    const result = await send('folders.status', { op: 'invalidate', accountId });
+    if (result?.invalidated !== true) throw new Error('errors.connectionFailed');
+    return result;
+  }).catch(() => ({ invalidated: false }));
 }

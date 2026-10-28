@@ -331,6 +331,8 @@ export const DAEMON_OWNED = new Set([
   // Phase 1 row 6: the daemon runs the auto-cleanup rules (daily and on
   // Run All Now) through the abd engine; services/cleanupApi.js is the caller.
   'cleanup.status', 'cleanup.run_now', 'cleanup.preview', 'cleanup.rules.get',
+  // Native mailbox observation and closed-folder counts.
+  'sync.probe', 'folders.status',
 ]);
 
 async function sendToDaemon(command, args) {
