@@ -66,6 +66,11 @@ pub struct ChangeRecord {
     pub new_emails: usize,
     #[serde(rename = "updatedFlags")]
     pub updated_flags: usize,
+    #[serde(rename = "arrivalUids", skip_serializing_if = "Vec::is_empty")]
+    pub arrival_uids: Vec<u32>,
+    /// Internal ownership proof for native refresh publications.
+    #[serde(skip)]
+    pub(crate) source: Option<crate::sync_observation::SourceKey>,
     pub at: u64,
 }
 
@@ -274,6 +279,7 @@ impl SyncEngine {
             db: self.custody_db.lock().unwrap_or_else(|p| p.into_inner()).clone(),
             app_dir: self.app_dir.clone(),
             source_identity: None,
+            strict_origin: false,
         }
     }
 
@@ -333,6 +339,21 @@ impl SyncEngine {
         new_emails: usize,
         updated_flags: usize,
     ) -> u64 {
+        self.note_change_inner(account_id, mailbox, new_emails, updated_flags, Vec::new(), None)
+    }
+
+    pub(crate) fn note_source_change(&self, source: crate::sync_observation::SourceKey,
+        arrival_uids: Vec<u32>, updated_flags: usize) -> u64 {
+        let arrivals = arrival_uids.len();
+        let account_id = source.account_id.clone();
+        let mailbox = source.mailbox.clone();
+        self.note_change_inner(&account_id, &mailbox, arrivals,
+            updated_flags, arrival_uids, Some(source))
+    }
+
+    fn note_change_inner(&self, account_id: &str, mailbox: &str, new_emails: usize,
+        updated_flags: usize, arrival_uids: Vec<u32>,
+        source: Option<crate::sync_observation::SourceKey>) -> u64 {
         // The counter is bumped under `recent`'s lock: nine accounts can idle
         // at once, and two watchers reading the same gen would hand one of the
         // two changes a number a waiter has already been told it has seen.
@@ -345,6 +366,8 @@ impl SyncEngine {
                 mailbox: mailbox.to_string(),
                 new_emails,
                 updated_flags,
+                arrival_uids,
+                source,
                 at: unix_now(),
             });
             // ponytail: 64 records. A client more than 64 changes behind still
@@ -499,6 +522,19 @@ impl SyncEngine {
                 error_code: None, arrival_uids: Vec::new(), announced: false,
             },
         };
+        self.sync_account_with_stamp(account, mailbox, announce, stamp, false).await
+    }
+
+    /// An admitted refresh keeps its original account epoch across every lock
+    /// wait and cache write. Legacy entries still capture at their old entry.
+    pub(crate) async fn sync_account_with_original(&self, account: &SyncAccount, mailbox: &str,
+        stamp: crate::account_lifecycle::AccountStamp) -> SyncResult {
+        self.sync_account_with_stamp(account, mailbox, false, stamp, true).await
+    }
+
+    async fn sync_account_with_stamp(&self, account: &SyncAccount, mailbox: &str,
+        announce: bool, stamp: crate::account_lifecycle::AccountStamp, strict_origin: bool) -> SyncResult {
+        let account_id = &account.id;
 
         // Every account that syncs teaches the gate its server, before the
         // short-circuit below: the watchdog's probe dials it too, and must
@@ -561,7 +597,7 @@ impl SyncEngine {
 
         info!("[sync] Starting sync for {} ({})", account.email, mailbox);
 
-        let mut result = self.do_sync(account, mailbox, announce, &stamp).await;
+        let mut result = self.do_sync(account, mailbox, announce, &stamp, strict_origin).await;
 
         // Teach the gate what just happened. A success is proof of reach; a
         // connect-shaped failure only *asks* — `note_failure` probes and the
@@ -653,6 +689,7 @@ impl SyncEngine {
         mailbox: &str,
         announce: bool,
         stamp: &crate::account_lifecycle::AccountStamp,
+        strict_origin: bool,
     ) -> SyncResult {
         // A JMAP account never reaches the IMAP pool: its account-level sync
         // runs here, inside `sync_account_with`'s gate, folder lock and
@@ -662,7 +699,8 @@ impl SyncEngine {
             return crate::sync_jmap::sync_jmap(self, account, mailbox, announce, stamp).await;
         }
         let account_id = account.id.clone();
-        let outcome = retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh, announce, stamp)).await;
+        let outcome = retry_once_on_dead_socket(|fresh|
+            self.sync_on(account, mailbox, fresh, announce, stamp, strict_origin)).await;
         match outcome {
             Ok((delta, mailbox)) => SyncResult {
                 account_id,
@@ -699,6 +737,7 @@ impl SyncEngine {
         fresh: bool,
         announce: bool,
         stamp: &crate::account_lifecycle::AccountStamp,
+        strict_origin: bool,
     ) -> Result<(SyncDelta, String), String> {
         let account_id = &account.id;
         let config = &account.imap_config;
@@ -717,7 +756,7 @@ impl SyncEngine {
         // the folder is not there.
         let requested = mailbox;
         let mut mailbox = self.alias_for(account_id, requested).await;
-        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, announce, stamp).await;
+        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, announce, stamp, strict_origin).await;
 
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
             if mailbox != requested {
@@ -734,7 +773,7 @@ impl SyncEngine {
                 // asking the server to resolve it: `resolve_mailbox` answers
                 // None for an exact match, so this is the only path that finds
                 // a plain folder by the requested name in the same tick.
-                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, announce, stamp).await;
+                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, announce, stamp, strict_origin).await;
             }
         }
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
@@ -743,7 +782,7 @@ impl SyncEngine {
                     "[sync] {} has no '{}' — syncing '{}' instead",
                     account.email, requested, actual
                 );
-                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, announce, stamp).await;
+                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, announce, stamp, strict_origin).await;
                 mailbox = actual;
             }
         }
@@ -777,9 +816,10 @@ impl SyncEngine {
         has_condstore: bool,
         announce: bool,
         stamp: &crate::account_lifecycle::AccountStamp,
+        strict_origin: bool,
     ) -> Result<SyncDelta, String> {
         let account_id = &account.id;
-        let io = self.cache_ctx_with_stamp(account_id, mailbox, Ok(stamp.clone()));
+        let io = self.cache_ctx_with_stamp(account_id, mailbox, Ok(stamp.clone())).strict_origin(strict_origin);
         let seed = self.prepare_native_seed(&io, &account.imap_config).await?;
 
         let (total, uid_validity, server_uid_next, highest_modseq) =
@@ -1249,6 +1289,57 @@ impl SyncEngine {
         (total as usize).saturating_sub(cached)
     }
 
+    pub(crate) async fn sidecar_shortfall_with_stamp(&self, stamp: &crate::account_lifecycle::AccountStamp,
+        mailbox: &str, total: u32) -> Result<usize, String> {
+        let io = self.cache_ctx_with_stamp(stamp.id(), mailbox, Ok(stamp.clone()));
+        let cached = cache_io(&io, |io| Ok(io.sidecar_count())).await?;
+        Ok((total as usize).saturating_sub(cached))
+    }
+
+    /// Refresh Complete has a strict outcome. Existing sync.now backfill keeps
+    /// its legacy best-effort marker behavior in `backfill_mailbox`.
+    pub(crate) async fn backfill_mailbox_with_stamp(&self, account: &SyncAccount, mailbox: &str,
+        stamp: &crate::account_lifecycle::AccountStamp, total: u32) -> Result<(), String> {
+        if account.imap_config.uses_jmap() { return Err("errors.bulkIdentityUncertain".into()); }
+        if !self.net.is_online() { return Err("errors.syncOffline".into()); }
+        let key = format!("{}\u{1}{}", account.id, mailbox);
+        let io = self.cache_ctx_with_stamp(&account.id, mailbox, Ok(stamp.clone()));
+        let owner = cache_io(&io, |io| io.native_owner()).await?;
+        let completion = BackfillCompletion {
+            requested_origin: mailvault_core::bulk_worker::origin_hash(&account.imap_config),
+            cache_owner: owner,
+        };
+        let observed_marker = self.backfill_gave_up.lock().await.get(&key).cloned();
+        if observed_marker.as_ref() == Some(&completion) {
+            return Err("errors.syncHeadersIncomplete".into());
+        }
+        if !self.backfilling.lock().await.insert(key.clone()) {
+            return Err("errors.operationRunning".into());
+        }
+        let result = self.run_backfill_with_stamp(account, mailbox, Some(stamp.clone()), Some(total)).await;
+        self.backfilling.lock().await.remove(&key);
+        let short = match &result {
+            Ok(_) => self.sidecar_shortfall_with_stamp(stamp, mailbox, total).await,
+            Err(_) => Err("errors.syncHeadersIncomplete".into()),
+        };
+        let mark_completion = match (&result, &short) {
+            (Ok(_), Ok(0)) => false,
+            (Ok(_), _) => true,
+            (Err(error), _) => !error.contains("unparseable")
+                && !matches!(error.as_str(), "errors.bulkIdentityChanged" | "errors.bulkIdentityUncertain"),
+        };
+        let mut markers = self.backfill_gave_up.lock().await;
+        if markers.get(&key) == observed_marker.as_ref() {
+            if mark_completion { markers.insert(key.clone(), completion); }
+            else { markers.remove(&key); }
+        }
+        drop(markers);
+        result?;
+        let short = short?;
+        if short != 0 { return Err("errors.syncHeadersIncomplete".into()); }
+        Ok(())
+    }
+
     /// Fill the sidecar cache up to the server's full message list.
     ///
     /// Runs after the delta sync has already answered the client, so it never
@@ -1326,7 +1417,13 @@ impl SyncEngine {
     }
 
     async fn run_backfill(&self, account: &SyncAccount, mailbox: &str) -> Result<usize, String> {
-        retry_once_on_dead_socket(|fresh| self.backfill_on(account, mailbox, fresh)).await
+        self.run_backfill_with_stamp(account, mailbox, None, None).await
+    }
+
+    async fn run_backfill_with_stamp(&self, account: &SyncAccount, mailbox: &str,
+        stamp: Option<crate::account_lifecycle::AccountStamp>, expected_total: Option<u32>) -> Result<usize, String> {
+        retry_once_on_dead_socket(|fresh|
+            self.backfill_on(account, mailbox, fresh, stamp.clone(), expected_total)).await
     }
 
     async fn backfill_on(
@@ -1334,6 +1431,8 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
         fresh: bool,
+        stamp: Option<crate::account_lifecycle::AccountStamp>,
+        expected_total: Option<u32>,
     ) -> Result<usize, String> {
         let config = &account.imap_config;
         let guard = if fresh {
@@ -1344,7 +1443,7 @@ impl SyncEngine {
         let PooledSessionGuard { mut session, last_selected: _, _permit } = guard;
 
         let outcome = self
-            .backfill_with_session(&mut session, account, mailbox)
+            .backfill_with_session(&mut session, account, mailbox, stamp, expected_total)
             .await;
 
         let guard = PooledSessionGuard {
@@ -1367,16 +1466,28 @@ impl SyncEngine {
         session: &mut imap::ImapSession,
         account: &SyncAccount,
         mailbox: &str,
+        stamp: Option<crate::account_lifecycle::AccountStamp>,
+        expected_total: Option<u32>,
     ) -> Result<usize, String> {
-        let io = self.cache_ctx(account.id.as_str(), mailbox);
+        let strict = stamp.is_some();
+        let io = match stamp {
+            Some(stamp) => self.cache_ctx_with_stamp(account.id.as_str(), mailbox, Ok(stamp)).strict_origin(true),
+            None => self.cache_ctx(account.id.as_str(), mailbox),
+        };
         let seed = self.prepare_native_seed(&io, &account.imap_config).await?;
         #[cfg(test)]
         self.pause_backfill_at(tests::BackfillPausePoint::BeforeListing).await;
         let (listed_validity, listed) = imap::search_all_uid_flags_in_generation(session, mailbox).await?;
+        let io = if strict { io.for_source(&account.imap_config, listed_validity) } else { io };
         let server_uids: Vec<u32> = listed.into_iter().map(|(uid, _)| uid).collect();
+        if expected_total.is_some_and(|expected| server_uids.len() != expected as usize) {
+            return Err("errors.syncHeadersIncomplete".into());
+        }
+        let expected_uids = strict.then(|| server_uids.clone());
         let listed_identity = imap::NativeHeaderIdentity::new(&account.imap_config, &account.id, mailbox, listed_validity);
         let (coverage_seed, read_uids) = (seed.clone(), !server_uids.is_empty());
-        let have = cache_io(&io, move |io| io.listed_cache_uids(&coverage_seed, &listed_identity, read_uids)).await?;
+        let listed_identity_for_read = listed_identity.clone();
+        let have = cache_io(&io, move |io| io.listed_cache_uids(&coverage_seed, &listed_identity_for_read, read_uids)).await?;
         if server_uids.is_empty() {
             return Ok(0);
         }
@@ -1414,6 +1525,16 @@ impl SyncEngine {
             );
             #[cfg(test)]
             self.pause_backfill_at(tests::BackfillPausePoint::AfterChunk).await;
+        }
+
+        if let Some(expected_uids) = expected_uids {
+            let coverage_seed = seed.clone();
+            let listed_identity = listed_identity.clone();
+            let covered = cache_io(&io, move |io|
+                io.listed_cache_uids(&coverage_seed, &listed_identity, true)).await?;
+            if !expected_uids.iter().all(|uid| covered.contains(uid)) {
+                return Err("errors.syncHeadersIncomplete".into());
+            }
         }
 
         Ok(written)
@@ -1458,13 +1579,33 @@ pub(crate) struct CacheCtx {
     /// Where the classifications live: mail the server lost leaves Cleanup.
     app_dir: PathBuf,
     source_identity: Option<imap::NativeHeaderIdentity>,
+    strict_origin: bool,
 }
 
 impl CacheCtx {
     fn commit(&self) -> Result<crate::account_lifecycle::LocalCommitPermit, String> {
+        if let Some(expected) = self.source_identity.as_ref().filter(|_| self.strict_origin) {
+            let listing = mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&self.app_dir))
+                .map_err(|_| "errors.bulkIdentityUncertain".to_owned())?;
+            if !mailvault_core::accounts_doc::authoritative_ids(&listing.accounts).contains(&self.account) {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+            let row = listing.accounts.iter().find(|row|
+                row.get("id").and_then(serde_json::Value::as_str) == Some(self.account.as_str()));
+            let current = row.and_then(|row| crate::credentials::config_from_record(row).ok())
+                .ok_or("errors.bulkIdentityUncertain")?;
+            if mailvault_core::bulk_worker::origin_hash(&current) != expected.origin_hash {
+                return Err("errors.bulkIdentityChanged".into());
+            }
+        }
         if let Some(permit) = &self.owned { return Ok(permit.clone()); }
         let stamp = self.stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
         self.lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())
+    }
+    fn strict_origin(mut self, strict: bool) -> Self {
+        self.strict_origin = strict;
+        self
     }
     pub(crate) fn for_source(&self, config: &ImapConfig, validity: Option<u32>) -> Self {
         let mut io = self.clone();
@@ -1911,6 +2052,7 @@ mod tests {
             db: Some(Arc::new(std::sync::Mutex::new(Some(conn)))),
             app_dir: dir.to_path_buf(),
             source_identity: None,
+            strict_origin: false,
         }
     }
 

@@ -70,6 +70,7 @@ mod snapshot;
 mod snooze_worker;
 pub mod sync_engine;
 mod sync_observation;
+mod refresh_worker;
 mod sync_jmap;
 mod vault_gap;
 
@@ -596,6 +597,7 @@ async fn daemon_main() {
         oauth2: oauth2::OAuth2Manager::new(),
         sync_engine: sync_eng,
         sync_observation: Default::default(),
+        refresh: Default::default(),
         idle,
         contacts: Arc::clone(&contacts),
         net,
@@ -639,6 +641,7 @@ async fn daemon_main() {
     state.idle.set_daemon(&state);
     // The JMAP sync works through the state (sessions, ledgers, custody).
     state.sync_engine.set_daemon(&state);
+    refresh_worker::start(&state);
 
     // One owned authoritative seed. A failed read leaves the gate Unready;
     // lifecycle-aware writers may request a finite retry later.

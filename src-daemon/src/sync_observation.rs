@@ -85,7 +85,7 @@ pub(crate) struct Origin {
     pub graph: bool,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SourceKey {
     pub account_id: String,
     pub mailbox: String,
@@ -345,6 +345,15 @@ pub(crate) async fn owner(state: &Arc<DaemonState>, origin: &Origin, mailbox: &s
     })).await?
 }
 
+pub(crate) async fn cached_uids(state: &Arc<DaemonState>, account_id: &str, mailbox: &str)
+    -> Result<std::collections::HashSet<u32>, String> {
+    let state = Arc::clone(state);
+    let account_id = account_id.to_owned();
+    let mailbox = mailbox.to_owned();
+    blocking(move || crate::custody::with_conn(&state, |conn|
+        mailvault_core::custody::cache::uid_set(conn, &account_id, &mailbox))).await?
+}
+
 pub(crate) async fn source(state: &Arc<DaemonState>, origin: &Origin, mailbox: &str)
     -> Result<(Option<Value>, SourceKey), String> {
     let (meta, owner) = cache(state, origin, mailbox).await?;
@@ -375,11 +384,18 @@ pub(crate) async fn prepare_ticket(state: &Arc<DaemonState>, config: &ImapConfig
 
 pub(crate) async fn complete_ticket(state: &Arc<DaemonState>, evidence: &TicketEvidence)
     -> Option<SourceKey> {
+    complete_ticket_in_mailbox(state, evidence, &evidence.mailbox).await
+}
+
+/// Alias resolution can name a different actual folder. The issued request
+/// generation remains the proof; the completed owner names the real folder.
+pub(crate) async fn complete_ticket_in_mailbox(state: &Arc<DaemonState>,
+    evidence: &TicketEvidence, actual_mailbox: &str) -> Option<SourceKey> {
     let origin = self::origin(state, evidence.original.clone()).await.ok()?;
     if origin.hash != evidence.origin_hash || !state.sync_observation.ticket_current(evidence) {
         return None;
     }
-    let (_, source) = self::source(state, &origin, &evidence.mailbox).await.ok()?;
+    let (_, source) = self::source(state, &origin, actual_mailbox).await.ok()?;
     let owner = source.cache_owner.as_ref()?;
     if owner.origin_hash != origin.hash || owner.account_id != source.account_id
         || owner.mailbox != source.mailbox { return None; }

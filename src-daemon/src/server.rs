@@ -101,6 +101,7 @@ pub struct DaemonState {
     pub oauth2: mailvault_core::oauth2::OAuth2Manager,
     pub sync_engine: Arc<sync_engine::SyncEngine>,
     pub(crate) sync_observation: crate::sync_observation::ObservationState,
+    pub(crate) refresh: crate::refresh_worker::RefreshState,
     /// One IDLE watcher per registered account. The app registers them
     /// (`sync.watch`) — the daemon holds no account list of its own.
     pub idle: Arc<idle_watch::IdleWatchers>,
@@ -509,6 +510,8 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
     if matches!(
         method.as_str(),
         "sync.probe"
+            | "sync.refresh"
+            | "sync.refresh_status"
             | "folders.status"
             | "compose.reply_context"
             | "compose.check"
@@ -574,7 +577,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
     // reachable. Anything that touches mail must fail loudly — writing into the
     // app data dir instead would silently start a second, divergent archive.
     if !state.mail_dir_ok
-        && (req.method.starts_with("sync.")
+        && ((req.method.starts_with("sync.") && req.method != "sync.refresh_status")
             || req.method.starts_with("snapshot.")
             || req.method.starts_with("contacts_index.")
             || req.method.starts_with("people."))
@@ -846,6 +849,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
         "sync.status" => handle_sync_status(&state.sync_engine, req.params, id).await,
         "sync.probe" | "folders.status" => crate::handlers::sync_observation::route(state, &req.method, req.params, id).await,
+        "sync.refresh" | "sync.refresh_status" => crate::handlers::refresh::route(state, &req.method, req.params, id).await,
 
         // ── IDLE watchers + the change feed they push into ──────────
         "sync.watch" => handle_sync_watch(Arc::clone(state), req.params, id).await,
@@ -1052,6 +1056,7 @@ impl DaemonState {
             oauth2: mailvault_core::oauth2::OAuth2Manager::new(),
             sync_engine,
             sync_observation: Default::default(),
+            refresh: Default::default(),
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
             search_index,
@@ -1093,6 +1098,7 @@ impl DaemonState {
         });
         state.idle.set_daemon(&state);
         state.sync_engine.set_daemon(&state);
+        crate::refresh_worker::start(&state);
         state
     }
 }
@@ -2170,6 +2176,22 @@ mod tests {
                 .collect()
         }
 
+        fn refresh_provider_trace(server: &MockImap, from: usize) -> Vec<(String, bool, String)> {
+            server.commands().into_iter().skip(from)
+                .filter_map(|line| parse_command(&line))
+                .filter(|command| matches!(command.name.as_str(), "SELECT" | "FETCH"))
+                .map(|command| (command.name, command.is_uid, command.args))
+                .collect()
+        }
+
+        fn refresh_status_selects(server: &MockImap, mailbox: &str) -> usize {
+            commands_named(server, "SELECT").into_iter().filter(|command| {
+                let mut args = command.args.as_str();
+                next_arg(&mut args).as_deref() == Some(mailbox)
+                    && args.trim().eq_ignore_ascii_case("(CONDSTORE)")
+            }).count()
+        }
+
         // This dispatcher future is large in debug builds. Repeated inline
         // awaits made the later effect tests exceed a Windows test stack.
         async fn boxed_request(state: &Arc<DaemonState>, request: crate::ipc::RpcRequest)
@@ -3091,7 +3113,9 @@ mod tests {
             let account = bind_account(&state, &server);
             seed_refresh_imap(&state, account).await;
             append_refresh_imap(&server, "Native refresh after observer loss");
+            let command_before = server.commands().len();
             let select_before = commands_named(&server, "SELECT").len();
+            let status_before = refresh_status_selects(&server, "INBOX");
             let pause = server.pause_command("SELECT");
 
             let accepted = boxed_request(&state, req("sync.refresh", json!({
@@ -3133,8 +3157,9 @@ mod tests {
                 "new mock provider header must be persisted in INBOX: {cached:?}");
             assert_eq!(cached["nativeIdentity"]["accountId"], json!("acc1"));
             assert_eq!(cached["nativeIdentity"]["mailbox"], json!("INBOX"));
-            assert_eq!(commands_named(&server, "SELECT").len() - select_before, 1,
-                "detached observer leaves one real provider observation");
+            assert_eq!(refresh_status_selects(&server, "INBOX") - status_before, 1,
+                "detached observer leaves one CONDSTORE status observation; SELECT/FETCH trace={:?}",
+                refresh_provider_trace(&server, command_before));
         }
 
         #[tokio::test]
@@ -3148,7 +3173,9 @@ mod tests {
             let account = bind_account(&state, &server);
             seed_refresh_imap(&state, account).await;
             append_refresh_imap(&server, "One header for duplicate ID");
+            let command_before = server.commands().len();
             let select_before = commands_named(&server, "SELECT").len();
+            let status_before = refresh_status_selects(&server, "INBOX");
             let pause = server.pause_command("SELECT");
             let params = json!({
                 "requestId": "imap-duplicate-1", "accountId": "acc1",
@@ -3178,8 +3205,9 @@ mod tests {
             assert_eq!(cached["totalCached"], json!(2));
             assert_eq!(cached["emails"].as_array().unwrap().iter().filter(|row|
                 row["uid"] == 2 && row["subject"] == "One header for duplicate ID").count(), 1);
-            assert_eq!(commands_named(&server, "SELECT").len() - select_before, 1,
-                "identical request ID may issue one provider SELECT only");
+            assert_eq!(refresh_status_selects(&server, "INBOX") - status_before, 1,
+                "identical request ID may issue one CONDSTORE status observation only; SELECT/FETCH trace={:?}",
+                refresh_provider_trace(&server, command_before));
             let commands = server.commands();
             let replay = boxed_request(&state, req("sync.refresh", params)).await;
             assert!(replay.error.is_none(), "completed identical ID must replay receipt: {:?}", replay.error);
@@ -3188,6 +3216,124 @@ mod tests {
             assert_eq!(server.commands(), commands, "duplicate replay must issue zero provider commands");
             assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX"), Some(cached),
                 "duplicate replay must leave the actual native header effect unchanged");
+        }
+
+        #[tokio::test]
+        async fn refresh_route_trailing_ids_share_one_pending_provider_pass() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            append_refresh_imap(&server, "Trailing original-bound observation");
+            let command_before = server.commands().len();
+            let before = commands_named(&server, "SELECT").len();
+            let status_before = refresh_status_selects(&server, "INBOX");
+            let pause = server.pause_command("SELECT");
+            let request = |id: &str| json!({"requestId":id,"accountId":"acc1",
+                "mailbox":"INBOX","reason":"manual"});
+            let first = boxed_request(&state, req("sync.refresh", request("trail-first"))).await;
+            assert!(first.error.is_none(), "{:?}", first.error);
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(10)));
+                pause
+            }).await.unwrap();
+            for id in ["trail-second", "trail-third", "trail-second"] {
+                let answer = boxed_request(&state, req("sync.refresh", request(id))).await;
+                assert!(answer.error.is_none(), "{id}: {:?}", answer.error);
+                assert_eq!(answer.result.unwrap()["receipt"]["status"], json!("queued"));
+            }
+            let status = boxed_request(&state, req("sync.refresh_status",
+                json!({"requestId":"trail-first"}))).await.result.unwrap();
+            assert_eq!(status["receipts"][0]["status"], json!("running"));
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 1,
+                "held first observation must keep the trailing unit queued; SELECT/FETCH trace={:?}",
+                refresh_provider_trace(&server, command_before));
+            assert_eq!(refresh_status_selects(&server, "INBOX") - status_before, 1,
+                "only the held first pass may issue a status observation; SELECT/FETCH trace={:?}",
+                refresh_provider_trace(&server, command_before));
+            pause.release();
+            for id in ["trail-first", "trail-second", "trail-third"] {
+                let receipt = terminal_refresh(&state, id).await;
+                assert_eq!(receipt["status"], json!("complete"), "{id}: {receipt}");
+            }
+            assert_eq!(refresh_status_selects(&server, "INBOX") - status_before, 2,
+                "two new IDs behind a running unit share one trailing status observation; SELECT/FETCH trace={:?}",
+                refresh_provider_trace(&server, command_before));
+        }
+
+        #[tokio::test]
+        async fn refresh_route_queued_original_rejects_changed_account_metadata() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            append_refresh_imap(&server, "Old source must not publish");
+            let command_before = server.commands().len();
+            let before = commands_named(&server, "SELECT").len();
+            let status_before = refresh_status_selects(&server, "INBOX");
+            let pause = server.pause_command("SELECT");
+            let request = |id: &str| json!({"requestId":id,"accountId":"acc1",
+                "mailbox":"INBOX","reason":"manual"});
+            let first = boxed_request(&state, req("sync.refresh", request("old-running"))).await;
+            assert!(first.error.is_none(), "{:?}", first.error);
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(10)));
+                pause
+            }).await.unwrap();
+            let queued = boxed_request(&state, req("sync.refresh", request("old-queued"))).await;
+            assert!(queued.error.is_none(), "{:?}", queued.error);
+            assert_eq!(queued.result.unwrap()["receipt"]["status"], json!("queued"));
+            let path = state.app_dir.join("accounts.json");
+            let mut rows: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            rows[0]["imapHost"] = json!("127.0.0.2");
+            std::fs::write(&path, rows.to_string()).unwrap();
+            pause.release();
+            let running = terminal_refresh(&state, "old-running").await;
+            let queued = terminal_refresh(&state, "old-queued").await;
+            assert_eq!(running["status"], json!("failed"), "held old source cannot publish: {running}");
+            assert_eq!(queued["status"], json!("failed"), "queued old stamp cannot be recaptured: {queued}");
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 1,
+                "queued old source must issue no second provider observation; SELECT/FETCH trace={:?}",
+                refresh_provider_trace(&server, command_before));
+            assert_eq!(refresh_status_selects(&server, "INBOX") - status_before, 1,
+                "queued old source must issue no second status observation; SELECT/FETCH trace={:?}",
+                refresh_provider_trace(&server, command_before));
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(cached["totalCached"], json!(1));
+            assert!(!cached["emails"].as_array().unwrap().iter().any(|row| row["uid"] == 2),
+                "old source may not leave a new native header");
+        }
+
+        #[tokio::test]
+        async fn refresh_route_duplicate_intent_conflict_and_unknown_status_are_explicit() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            state.seed_accounts_for_test(&[]);
+            let first = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"same-intent", "reason":"manual",
+            }))).await;
+            assert!(first.error.is_none(), "{:?}", first.error);
+            let conflict = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"same-intent", "reason":"scheduled",
+            }))).await;
+            assert_eq!(conflict.error.unwrap().code, ipc::INVALID_PARAMS);
+            let missing = boxed_request(&state, req("sync.refresh_status", json!({
+                "requestId":"never-admitted",
+            }))).await.result.unwrap();
+            assert_eq!(missing["found"], json!(false));
+            assert_eq!(missing["receipts"], json!([]));
+            let credential_shaped = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"forged", "reason":"manual", "password":"nope",
+            }))).await;
+            assert_eq!(credential_shaped.error.unwrap().code, ipc::INVALID_PARAMS);
         }
 
         async fn refresh_graph_map(state: &Arc<DaemonState>, account: &str) -> Option<Value> {
