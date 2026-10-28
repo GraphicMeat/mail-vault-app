@@ -18,6 +18,7 @@ window.__TAURI__ = { core: { invoke: (...a) => mockInvoke(...a) } };
 // does — and what keeps the loop from spinning through the test.
 const calls = [];
 let eventReplies = [];
+let countAnswer = null;
 const reply = (v) => () => Promise.resolve(v);
 const fails = (code) => () => Promise.reject(Object.assign(new Error(code), { code }));
 const parked = () => new Promise(() => {});
@@ -28,6 +29,7 @@ const mockDaemonCall = vi.fn((method, params) => {
     const next = eventReplies.shift();
     return next ? next() : parked();
   }
+  if (method === 'counts.unread' && countAnswer) return countAnswer(params);
   return Promise.resolve({});
 });
 vi.mock('../../services/daemonClient.js', () => ({
@@ -138,6 +140,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     vi.useFakeTimers();
     calls.length = 0;
     eventReplies = [];
+    countAnswer = null;
     mockDaemonCall.mockClear();
     mockNotify.mockClear();
     mockLoadEmails.mockClear();
@@ -1055,6 +1058,35 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await flush();
 
       expect(settingsStore.getState().unreadPerAccount.a2).toBe(9);
+    });
+
+    // A partial cache needs the arrival fallback, but the native reduction is
+    // pending. A Promise is not a successful complete-cache recount.
+    it('holds the partial-cache arrival fallback until native recount settles', async () => {
+      mailStore.setState(unifiedOpen);
+      settingsStore.setState({ unreadPerAccount: { a1: 3, a2: 7 } });
+      mockGetAllHeaders.mockResolvedValue({ totalEmails: 500, emails: [{ uid: 1, flags: [] }] });
+      eventReplies = [change({ newEmails: 2 })];
+      let release;
+      const held = new Promise(resolve => { release = resolve; });
+      countAnswer = () => held;
+
+      renderHook(() => useEmailScheduler());
+      await flush();
+      try {
+        expect(settingsStore.getState().unreadPerAccount.a2).toBe(7);
+        const countCalls = methods('counts.unread');
+        expect(countCalls, 'W4S3_SCHEDULER_RED arrival fallback must await one native recount request').toHaveLength(1);
+        expect(JSON.stringify(countCalls[0][1])).toContain('"arrivalCount":2');
+      } finally {
+        release({ counts: { a1: 3, a2: 9 }, rows: [
+          { id: 'a1', label: IMAP_A.email, unread: 3 },
+          { id: 'a2', label: IMAP_B.email, unread: 9 },
+        ], total: 12, wrote: true });
+      }
+      await flush();
+      expect(settingsStore.getState().unreadPerAccount).toEqual({ a1: 3, a2: 9 });
+      expect(methods('counts.unread')).toHaveLength(1);
     });
 
     // The inbox does not show a message a local snooze is holding out of it,

@@ -2222,6 +2222,98 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn s3_counts_unread_route_recounts_owned_cache_with_persisted_local_snooze() {
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let accounts = json!([
+                {"id":"acc1","email":"one@example.test","authType":"password",
+                 "imapHost":server.host(),"imapPort":server.port(),"imapSecure":false},
+                {"id":"acc2","email":"two@example.test","authType":"password",
+                 "imapHost":server.host(),"imapPort":server.port(),"imapSecure":false}
+            ]);
+            std::fs::write(state.app_dir.join("accounts.json"), accounts.to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let original = state.account_lifecycle.capture("acc1").unwrap();
+            let origin = crate::sync_observation::origin(&state, original).await.unwrap();
+            let owner = json!({
+                "accountId":"acc1","mailbox":"INBOX","uidValidity":1,"originHash":origin.hash
+            });
+            crate::custody::with_conn(&state, |conn| {
+                mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX", &json!({
+                    "emails":[
+                        {"uid":1,"flags":[],"messageId":"<synthetic-1@example.com>"},
+                        {"uid":2,"flags":[],"messageId":"<synthetic-2@example.com>"},
+                        {"uid":3,"flags":["\\Seen"],"messageId":"<synthetic-3@example.com>"}
+                    ],
+                    "totalEmails":3,"syncTotalEmails":3,"syncUidNext":4,
+                    "nativeIdentity":owner.clone(),"nativeExpectedIdentity":null
+                }).to_string())
+            }).unwrap();
+            mailvault_core::app_db::with(&state.app_dir, |conn|
+                mailvault_core::app_db::snooze::insert(conn, "local-snooze", "acc1", "INBOX", "",
+                    None, "<synthetic-2@example.com>", 4_000_000_000_000)
+            ).unwrap();
+            let before_cache = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert_eq!(before_cache["totalCached"], json!(3), "seeded cache must be complete");
+            assert_eq!(before_cache["nativeIdentity"]["originHash"], owner["originHash"]);
+            let before_snoozes = mailvault_core::app_db::with(&state.app_dir, |conn|
+                mailvault_core::app_db::snooze::list(conn, Some("acc1"))).unwrap();
+            let settings_path = mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).path();
+            let before_settings = std::fs::read(&settings_path).ok();
+            let before_commands = server.commands();
+
+            let answer = boxed_request(&state, req("counts.unread", json!({
+                "op":"recountCache", "accountId":"acc1",
+                "baseline":{"acc1":9,"acc2":5},
+                "presentation":{
+                    "accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}],
+                    "hiddenAccounts":{},"displayNames":{},"accountOrder":["acc1","acc2"]
+                },
+                "projection":{
+                    "archivedKeys":[],"deleteTombstones":[],"autoTagRules":[],
+                    "tagsByRow":{},"viewHiddenKeys":[],"hideViewMail":false,"followUps":[]
+                }
+            }))).await;
+            assert!(answer.error.is_none(), "W4S3_ROUTE_RED counts.unread must dispatch: {:?}", answer.error);
+            let result = answer.result.expect("counts.unread needs a result");
+            assert_eq!(result["counts"], json!({"acc1":1,"acc2":5}));
+            assert_eq!(result["rows"], json!([
+                {"id":"acc1","label":"One","unread":1},
+                {"id":"acc2","label":"Two","unread":5}
+            ]));
+            assert_eq!(result["total"], json!(6));
+            assert_eq!(result["wrote"], json!(true));
+
+            let explicit_empty = boxed_request(&state, req("counts.unread", json!({
+                "op":"recountCache", "accountId":"acc1",
+                "baseline":{"acc1":9,"acc2":5},
+                "presentation":{
+                    "accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}],
+                    "hiddenAccounts":{},"displayNames":{},"accountOrder":["acc1","acc2"]
+                },
+                "projection":{
+                    "archivedKeys":[],"deleteTombstones":[],"autoTagRules":[],
+                    "tagsByRow":{},"viewHiddenKeys":[],"hideViewMail":false,
+                    "followUps":[],"snoozes":[]
+                }
+            }))).await;
+            assert!(explicit_empty.error.is_none(), "explicit empty snooze snapshot must dispatch: {:?}", explicit_empty.error);
+            let explicit_empty = explicit_empty.result.unwrap();
+            assert_eq!(explicit_empty["counts"], json!({"acc1":2,"acc2":5}),
+                "an explicit empty transient snapshot overrides the persisted local snooze");
+            assert_eq!(explicit_empty["total"], json!(7));
+            assert_eq!(explicit_empty["wrote"], json!(true));
+            assert_eq!(server.commands(), before_commands, "unread route may not dial IMAP");
+            assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX"), Some(before_cache));
+            assert_eq!(mailvault_core::app_db::with(&state.app_dir, |conn|
+                mailvault_core::app_db::snooze::list(conn, Some("acc1"))).unwrap(), before_snoozes);
+            assert_eq!(std::fs::read(&settings_path).ok(), before_settings,
+                "unread route may not replace settings");
+        }
+
+        #[tokio::test]
         async fn sync_observation_rejects_unknown_account_fields_before_credential_lookup() {
             use std::sync::atomic::Ordering::SeqCst;
 
