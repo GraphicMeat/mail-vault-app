@@ -1,0 +1,5506 @@
+{
+  "originalCommit": "373b9006e64ce9085287ca715169e717812608bc",
+  "clockMs": 1700000000000,
+  "probeCases": [
+    {
+      "name": "equal-modseq-and-repeat-without-mark",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "time-zero-unmarked-and-marked",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 0,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "probed-recently"
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "mark",
+            "at": 0,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "probed-recently"
+            },
+            "error": null,
+            "calls": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "marker-before-and-at-ten-seconds",
+      "steps": [
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000009999,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "probed-recently"
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000010000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "marker-mailbox-isolation",
+      "steps": [
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "Sent",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "Sent"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "Sent"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "probed-recently"
+            },
+            "error": null,
+            "calls": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "marker-account-isolation",
+      "steps": [
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-b",
+              "email": "b@example.test"
+            },
+            "accountId": "account-b",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-b",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-b",
+                  "email": "b@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "probed-recently"
+            },
+            "error": null,
+            "calls": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalidate-one-mailbox",
+      "steps": [
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "Sent"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "invalidate",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "Sent",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "probed-recently"
+            },
+            "error": null,
+            "calls": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalidate-whole-account",
+      "steps": [
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "Sent"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "invalidate",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": {
+              "$undefined": true
+            }
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "Sent",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "Sent"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "Sent"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalidate-empty-mailbox-is-whole-account",
+      "steps": [
+        {
+          "input": {
+            "op": "mark",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": "INBOX"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "invalidate",
+            "at": 1700000000000,
+            "accountId": "account-a",
+            "mailbox": ""
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "calls": []
+          }
+        },
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "metadata-error",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "metaError": "synthetic-meta-error"
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "meta-read-failed"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "missing-meta",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": null,
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "no-cache"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "zero-total",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 0,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "no-cache"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "null-total",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": null,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "no-cache"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative-total-is-truthy",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": -1,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": -1,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial-cache",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 101,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "partial-cache"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative-cached-count",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": -1,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "partial-cache"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "null-cached-count",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": null,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "partial-cache"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "status-error",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "statusError": "synthetic-status-error"
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "probe-failed"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "status-null",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": null
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "probe-empty"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "status-undefined",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "$undefined": true
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "probe-empty"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "uidvalidity-rollover",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 43,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "uidvalidity-changed"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "uidvalidity-string-versus-number",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": "42",
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "uidvalidity-changed"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "uidvalidity-null-uses-modseq",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": null,
+              "uidNext": 501,
+              "highestModseq": 900
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "modseq-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "modseq-advanced-with-level-count",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 901
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "modseq-advanced"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "modseq-string-versus-number",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": 900
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": "900"
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "modseq-advanced"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-condstore-equal",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "uidnext-exists-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-condstore-numeric-exists-string",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            },
+            "status": {
+              "exists": "100",
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": true,
+              "reason": "uidnext-exists-match"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-condstore-arrival-and-expunge",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": 502,
+              "highestModseq": null
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "uidnext-advanced"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-condstore-expunge-only",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            },
+            "status": {
+              "exists": 99,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "exists-changed"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-condstore-uidnext-string-versus-number",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": "501",
+              "highestModseq": null
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "uidnext-advanced"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-condstore-null-uidnext",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            },
+            "status": {
+              "exists": 100,
+              "uidValidity": 42,
+              "uidNext": null,
+              "highestModseq": null
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "uidnext-advanced"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-condstore-uidnext-reason-precedes-exists",
+      "steps": [
+        {
+          "input": {
+            "op": "check",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "accountId": "account-a",
+            "mailbox": "INBOX",
+            "meta": {
+              "totalEmails": 100,
+              "totalCached": 100,
+              "uidValidity": 42,
+              "uidNext": 501,
+              "highestModseq": null
+            },
+            "status": {
+              "exists": 99,
+              "uidValidity": 42,
+              "uidNext": 502,
+              "highestModseq": null
+            }
+          },
+          "observed": {
+            "result": {
+              "unchanged": false,
+              "reason": "uidnext-advanced"
+            },
+            "error": null,
+            "calls": [
+              {
+                "method": "getEmailHeadersMeta",
+                "accountId": "account-a",
+                "mailbox": "INBOX"
+              },
+              {
+                "method": "checkMailboxStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "mailbox": "INBOX"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "folderCases": [
+    {
+      "name": "preorder-and-noselect-child",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "flatten",
+            "at": 1700000000000,
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "Archive"
+          },
+          "observed": {
+            "result": [
+              "INBOX",
+              "Parent/Child",
+              "Parent/Child/Leaf"
+            ],
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "fifty-path-cap-after-active-exclusion",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "F0"
+              },
+              {
+                "path": "F1"
+              },
+              {
+                "path": "F2"
+              },
+              {
+                "path": "F3"
+              },
+              {
+                "path": "F4"
+              },
+              {
+                "path": "F5"
+              },
+              {
+                "path": "F6"
+              },
+              {
+                "path": "F7"
+              },
+              {
+                "path": "F8"
+              },
+              {
+                "path": "F9"
+              },
+              {
+                "path": "F10"
+              },
+              {
+                "path": "F11"
+              },
+              {
+                "path": "F12"
+              },
+              {
+                "path": "F13"
+              },
+              {
+                "path": "F14"
+              },
+              {
+                "path": "F15"
+              },
+              {
+                "path": "F16"
+              },
+              {
+                "path": "F17"
+              },
+              {
+                "path": "F18"
+              },
+              {
+                "path": "F19"
+              },
+              {
+                "path": "F20"
+              },
+              {
+                "path": "F21"
+              },
+              {
+                "path": "F22"
+              },
+              {
+                "path": "F23"
+              },
+              {
+                "path": "F24"
+              },
+              {
+                "path": "F25"
+              },
+              {
+                "path": "F26"
+              },
+              {
+                "path": "F27"
+              },
+              {
+                "path": "F28"
+              },
+              {
+                "path": "F29"
+              },
+              {
+                "path": "F30"
+              },
+              {
+                "path": "F31"
+              },
+              {
+                "path": "F32"
+              },
+              {
+                "path": "F33"
+              },
+              {
+                "path": "F34"
+              },
+              {
+                "path": "F35"
+              },
+              {
+                "path": "F36"
+              },
+              {
+                "path": "F37"
+              },
+              {
+                "path": "F38"
+              },
+              {
+                "path": "F39"
+              },
+              {
+                "path": "F40"
+              },
+              {
+                "path": "F41"
+              },
+              {
+                "path": "F42"
+              },
+              {
+                "path": "F43"
+              },
+              {
+                "path": "F44"
+              },
+              {
+                "path": "F45"
+              },
+              {
+                "path": "F46"
+              },
+              {
+                "path": "F47"
+              },
+              {
+                "path": "F48"
+              },
+              {
+                "path": "F49"
+              },
+              {
+                "path": "F50"
+              },
+              {
+                "path": "F51"
+              }
+            ],
+            "activeMailbox": "F0",
+            "rows": []
+          },
+          "observed": {
+            "result": {},
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "F1",
+                  "F2",
+                  "F3",
+                  "F4",
+                  "F5",
+                  "F6",
+                  "F7",
+                  "F8",
+                  "F9",
+                  "F10",
+                  "F11",
+                  "F12",
+                  "F13",
+                  "F14",
+                  "F15",
+                  "F16",
+                  "F17",
+                  "F18",
+                  "F19",
+                  "F20",
+                  "F21",
+                  "F22",
+                  "F23",
+                  "F24",
+                  "F25",
+                  "F26",
+                  "F27",
+                  "F28",
+                  "F29",
+                  "F30",
+                  "F31",
+                  "F32",
+                  "F33",
+                  "F34",
+                  "F35",
+                  "F36",
+                  "F37",
+                  "F38",
+                  "F39",
+                  "F40",
+                  "F41",
+                  "F42",
+                  "F43",
+                  "F44",
+                  "F45",
+                  "F46",
+                  "F47",
+                  "F48",
+                  "F49",
+                  "F50"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {}
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {}
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "merge-keeps-prior-paths-and-other-account",
+      "initialStore": {
+        "folderStatus": {
+          "account-a": {
+            "Old": {
+              "path": "Old",
+              "messages": 9,
+              "unseen": 9
+            }
+          },
+          "account-b": {
+            "INBOX": {
+              "path": "INBOX",
+              "messages": 4,
+              "unseen": 4
+            }
+          }
+        }
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {
+                "account-a": {
+                  "Old": {
+                    "path": "Old",
+                    "messages": 9,
+                    "unseen": 9
+                  }
+                },
+                "account-b": {
+                  "INBOX": {
+                    "path": "INBOX",
+                    "messages": 4,
+                    "unseen": 4
+                  }
+                }
+              }
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Old": {
+                    "path": "Old",
+                    "messages": 9,
+                    "unseen": 9
+                  },
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "INBOX": {
+                    "path": "INBOX",
+                    "messages": 4,
+                    "unseen": 4
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Old": {
+                        "path": "Old",
+                        "messages": 9,
+                        "unseen": 9
+                      }
+                    },
+                    "account-b": {
+                      "INBOX": {
+                        "path": "INBOX",
+                        "messages": 4,
+                        "unseen": 4
+                      }
+                    }
+                  }
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Old": {
+                        "path": "Old",
+                        "messages": 9,
+                        "unseen": 9
+                      },
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    },
+                    "account-b": {
+                      "INBOX": {
+                        "path": "INBOX",
+                        "messages": 4,
+                        "unseen": 4
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "provider-omits-refused-folder",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 0,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 0,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 0,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 0,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "empty-success-is-object",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": []
+          },
+          "observed": {
+            "result": {},
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {}
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {}
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "null-provider-rows-is-empty-object",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": null
+          },
+          "observed": {
+            "result": {},
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {}
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {}
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative-and-zero-status-values-pass-through",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Archive",
+                "messages": -1,
+                "unseen": 0,
+                "uidNext": 0,
+                "uidValidity": null
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Archive": {
+                "path": "Archive",
+                "messages": -1,
+                "unseen": 0,
+                "uidNext": 0,
+                "uidValidity": null
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": -1,
+                    "unseen": 0,
+                    "uidNext": 0,
+                    "uidValidity": null
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": -1,
+                        "unseen": 0,
+                        "uidNext": 0,
+                        "uidValidity": null
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "null-account-skips-without-throttle",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": null,
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": null,
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "graph-skips-without-throttle",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test",
+              "oauth2Transport": "graph"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": null,
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "empty-selection-skips-without-throttle",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX"
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": []
+          },
+          "observed": {
+            "result": null,
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "repeated-before-and-at-sixty-seconds",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000059999,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": null,
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000060000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "time-zero-first-call",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 0,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": null,
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 60000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "failed-sweep-consumes-throttle",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ],
+            "providerError": "synthetic-folder-status-error"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": {
+              "name": "Error",
+              "message": "synthetic-folder-status-error"
+            },
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": null,
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "invalidate",
+            "at": 1700000000000,
+            "accountId": "account-a"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {}
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000002,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalidation-is-per-account",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-b",
+              "email": "b@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-b",
+                  "email": "b@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    },
+                    "account-b": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "op": "invalidate",
+            "at": 1700000000000,
+            "accountId": "account-a"
+          },
+          "observed": {
+            "result": {
+              "$undefined": true
+            },
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-b",
+              "email": "b@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": null,
+            "error": null,
+            "providerCalls": [],
+            "storeBefore": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": []
+          }
+        },
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000001,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": "INBOX",
+            "rows": [
+              {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            ]
+          },
+          "observed": {
+            "result": {
+              "Parent/Child": {
+                "path": "Parent/Child",
+                "messages": 5,
+                "unseen": 2,
+                "uidNext": 7,
+                "uidValidity": 42
+              },
+              "Archive": {
+                "path": "Archive",
+                "messages": 3,
+                "unseen": 1,
+                "uidNext": 4,
+                "uidValidity": 42
+              }
+            },
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                },
+                "account-b": {
+                  "Parent/Child": {
+                    "path": "Parent/Child",
+                    "messages": 5,
+                    "unseen": 2,
+                    "uidNext": 7,
+                    "uidValidity": 42
+                  },
+                  "Archive": {
+                    "path": "Archive",
+                    "messages": 3,
+                    "unseen": 1,
+                    "uidNext": 4,
+                    "uidValidity": 42
+                  }
+                }
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    },
+                    "account-b": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    },
+                    "account-b": {
+                      "Parent/Child": {
+                        "path": "Parent/Child",
+                        "messages": 5,
+                        "unseen": 2,
+                        "uidNext": 7,
+                        "uidValidity": 42
+                      },
+                      "Archive": {
+                        "path": "Archive",
+                        "messages": 3,
+                        "unseen": 1,
+                        "uidNext": 4,
+                        "uidValidity": 42
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "null-active-path-excludes-nothing",
+      "initialStore": {
+        "folderStatus": {}
+      },
+      "steps": [
+        {
+          "input": {
+            "op": "refresh",
+            "at": 1700000000000,
+            "account": {
+              "id": "account-a",
+              "email": "a@example.test"
+            },
+            "mailboxes": [
+              {
+                "path": "INBOX",
+                "noselect": false,
+                "children": []
+              },
+              {
+                "path": "Parent",
+                "noselect": true,
+                "children": [
+                  {
+                    "path": "Parent/Child",
+                    "noselect": false,
+                    "children": [
+                      {
+                        "path": "Parent/Child/Leaf",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "path": "Archive",
+                "noselect": false,
+                "children": []
+              }
+            ],
+            "activeMailbox": null,
+            "rows": []
+          },
+          "observed": {
+            "result": {},
+            "error": null,
+            "providerCalls": [
+              {
+                "method": "fetchFolderStatus",
+                "account": {
+                  "id": "account-a",
+                  "email": "a@example.test"
+                },
+                "paths": [
+                  "INBOX",
+                  "Parent/Child",
+                  "Parent/Child/Leaf",
+                  "Archive"
+                ]
+              }
+            ],
+            "storeBefore": {
+              "folderStatus": {}
+            },
+            "storeAfter": {
+              "folderStatus": {
+                "account-a": {}
+              }
+            },
+            "storeWrites": [
+              {
+                "before": {
+                  "folderStatus": {}
+                },
+                "after": {
+                  "folderStatus": {
+                    "account-a": {}
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

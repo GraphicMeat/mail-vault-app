@@ -1,0 +1,86 @@
+{
+  "originalCommit": "373b9006e64ce9085287ca715169e717812608bc",
+  "originalSources": {
+    "probe": {
+      "path": "src/services/syncProbe.js",
+      "archive": "src-core/tests/fixtures/gen/sync-observation-originals/syncProbe.js.base64",
+      "sha256": "ded013d61241e8ed63b040581cc26dade40402aea547b8c092aff629a0636110"
+    },
+    "folder": {
+      "path": "src/services/workflows/folderStatus.js",
+      "archive": "src-core/tests/fixtures/gen/sync-observation-originals/folderStatus.js.base64",
+      "sha256": "65b0fbf1db73e8a0cf9d5c8f643322ae53feaa9093e1d0aa79dbb387d12f170d"
+    },
+    "graph": {
+      "path": "src/services/graphConfig.js",
+      "archive": "src-core/tests/fixtures/gen/sync-observation-originals/graphConfig.js.base64",
+      "sha256": "55633f6b732b86a010f3b3ff8ad86cb1c328d88a668ac2b9842104446cc90799"
+    }
+  },
+  "harness": {
+    "path": "src-core/tests/fixtures/gen/sync-observation-capture.cjs",
+    "sha256": "575997eace5316336ec6925b9629ce2f050caca6b0915d10a399468a7bce1ff8"
+  },
+  "wrapper": {
+    "path": "src-core/tests/fixtures/gen/sync-observation-cases.test.js",
+    "sha256": "df1f96b55beb21c6399a6a97e0169b5c2364cdcc2829e4895478a60f7e1217c6"
+  },
+  "runner": {
+    "path": "blitz-wave4-s1-oracle-runner.cjs",
+    "sha256": "68eb1311104ec113deae4a71ee696a7060d83eb7be2f13a108054dccad6032a7"
+  },
+  "packageLockSha256": "e028bb112fa145998cdaaf2a94a20a66b4a56d86895d830207e7330af9871294",
+  "command": "MV_CAPTURE_SYNC_OBSERVATION=1 npx vitest run src-core/tests/fixtures/gen/sync-observation-cases.test.js",
+  "clockMs": 1700000000000,
+  "probeCaseNames": [
+    "equal-modseq-and-repeat-without-mark",
+    "time-zero-unmarked-and-marked",
+    "marker-before-and-at-ten-seconds",
+    "marker-mailbox-isolation",
+    "marker-account-isolation",
+    "invalidate-one-mailbox",
+    "invalidate-whole-account",
+    "invalidate-empty-mailbox-is-whole-account",
+    "metadata-error",
+    "missing-meta",
+    "zero-total",
+    "null-total",
+    "negative-total-is-truthy",
+    "partial-cache",
+    "negative-cached-count",
+    "null-cached-count",
+    "status-error",
+    "status-null",
+    "status-undefined",
+    "uidvalidity-rollover",
+    "uidvalidity-string-versus-number",
+    "uidvalidity-null-uses-modseq",
+    "modseq-advanced-with-level-count",
+    "modseq-string-versus-number",
+    "non-condstore-equal",
+    "non-condstore-numeric-exists-string",
+    "non-condstore-arrival-and-expunge",
+    "non-condstore-expunge-only",
+    "non-condstore-uidnext-string-versus-number",
+    "non-condstore-null-uidnext",
+    "non-condstore-uidnext-reason-precedes-exists"
+  ],
+  "folderCaseNames": [
+    "preorder-and-noselect-child",
+    "fifty-path-cap-after-active-exclusion",
+    "merge-keeps-prior-paths-and-other-account",
+    "provider-omits-refused-folder",
+    "empty-success-is-object",
+    "null-provider-rows-is-empty-object",
+    "negative-and-zero-status-values-pass-through",
+    "null-account-skips-without-throttle",
+    "graph-skips-without-throttle",
+    "empty-selection-skips-without-throttle",
+    "repeated-before-and-at-sixty-seconds",
+    "time-zero-first-call",
+    "failed-sweep-consumes-throttle",
+    "invalidation-is-per-account",
+    "null-active-path-excludes-nothing"
+  ],
+  "fixtureSha256": "9717794f04ef9f81383dedf8ea33ac9f8a913ce0f2cb9fba0ee8f6aac752a5b6"
+}
