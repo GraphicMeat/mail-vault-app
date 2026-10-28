@@ -3336,6 +3336,216 @@ mod tests {
             assert_eq!(credential_shaped.error.unwrap().code, ipc::INVALID_PARAMS);
         }
 
+        fn bind_jmap_refresh(state: &Arc<DaemonState>, mock: &mock_jmap::MockJmap,
+            imap_port: u16) -> crate::sync_engine::SyncAccount {
+            let mut credential = crate::jmap_test_support::account_json(mock, imap_port);
+            credential["id"] = json!("acc1");
+            let mut listing = credential.clone();
+            listing.as_object_mut().unwrap().remove("password");
+            std::fs::write(state.app_dir.join("accounts.json"),
+                json!([listing]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({"acc1": credential.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            crate::sync_engine::SyncAccount {
+                id: "acc1".into(), email: "alice@example.test".into(),
+                imap_config: serde_json::from_value(credential).unwrap(),
+            }
+        }
+
+        fn jmap_refresh_scenario(count: usize) -> mock_jmap::Scenario {
+            let mut scenario = crate::jmap_test_support::scenario();
+            assert!(count >= 2);
+            for n in 3..=count {
+                scenario.accounts[0].mailboxes[0].emails.push(crate::jmap_test_support::email(
+                    &format!("jmap-bulk-{n:03}"), &format!("bulk {n}"),
+                    "2026-10-03T10:00:00Z"));
+            }
+            scenario
+        }
+
+        fn jmap_refresh_query_positions(mock: &mock_jmap::MockJmap) -> Vec<usize> {
+            let mut positions = Vec::new();
+            for request in mock.requests().into_iter().filter(|request| request.is_api()) {
+                let body: Value = serde_json::from_str(&request.body).unwrap();
+                for call in body["methodCalls"].as_array().unwrap() {
+                    if call[0] == "Email/query" {
+                        positions.push(call[1]["position"].as_u64().unwrap() as usize);
+                    }
+                }
+            }
+            positions
+        }
+
+        fn jmap_refresh_cache_count(state: &Arc<DaemonState>) -> usize {
+            crate::custody::with_conn(state, |conn|
+                mailvault_core::custody::cache::count(conn, "acc1", "INBOX")).unwrap()
+        }
+
+        fn jmap_refresh_ledger(state: &Arc<DaemonState>) -> mailvault_core::graph_ledger::Ledger {
+            let path = crate::jmap_sessions::jmap_ledger_path(
+                state.sync_engine.data_dir(), "acc1", "INBOX");
+            mailvault_core::graph_ledger::load(&path).unwrap()
+        }
+
+        #[tokio::test]
+        async fn refresh_jmap_complete_pages_all_headers_with_stable_uid_and_no_imap_dial() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let _account = bind_jmap_refresh(&state, &mock, imap_port);
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-complete-501-first", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "JMAP Complete must ACK: {:?}", accepted.error);
+            let first = terminal_refresh(&state, "jmap-complete-501-first").await;
+            assert_eq!(first["status"], json!("complete"),
+                "Complete must cover all 501 real mock JMAP headers: {first:?}");
+            assert_eq!(first["accountResults"][0]["success"], json!(true));
+            assert_eq!(jmap_refresh_cache_count(&state), 501,
+                "Complete must write every actual JMAP header, including the old page");
+            let identity = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::native_identity(conn, "acc1", "INBOX")
+            ).unwrap().expect("JMAP Complete native owner");
+            assert_eq!(identity.jmap_mailbox_id.as_deref(), Some("mb-inbox"));
+            let ledger = jmap_refresh_ledger(&state);
+            assert_eq!(ledger.len(), 501);
+            assert!(ledger.values().any(|id| id == "e1"));
+            assert!(ledger.values().any(|id| id == "jmap-bulk-501"));
+            let positions = jmap_refresh_query_positions(&mock);
+            assert!(positions.contains(&200) && positions.contains(&400),
+                "Complete must request actual older 200-row pages: {positions:?}");
+            let next = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-complete-501-repeat", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(next.error.is_none(), "repeat Complete must ACK: {:?}", next.error);
+            let repeated = terminal_refresh(&state, "jmap-complete-501-repeat").await;
+            assert_eq!(repeated["status"], json!("complete"));
+            assert_eq!(jmap_refresh_ledger(&state), ledger,
+                "repeat JMAP listing may not remint native UIDs");
+            assert!(trap.accept().is_err(), "JMAP Complete must never dial the IMAP trap");
+        }
+
+        #[tokio::test]
+        async fn refresh_jmap_complete_failed_provider_page_keeps_partial_cache_incomplete() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            let seeded = state.sync_engine.sync_account(&account, "INBOX").await;
+            assert!(seeded.success, "existing JMAP cold sync must seed 500: {:?}", seeded.error);
+            assert_eq!(jmap_refresh_cache_count(&state), 500);
+            let before_ledger = jmap_refresh_ledger(&state);
+            let before_query = mock.count_calls("Email/query");
+            let before_get = mock.count_calls("Email/get");
+            mock.mutate(|server| server.faults.push(mock_jmap::Fault::ServerFail {
+                method: "Email/get".into(),
+            }));
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-complete-failed-page", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "failed-page Complete must ACK: {:?}", accepted.error);
+            let settled = terminal_refresh(&state, "jmap-complete-failed-page").await;
+            assert!(mock.count_calls("Email/query") > before_query
+                && mock.count_calls("Email/get") > before_get,
+                "Complete must reach a real JMAP page before its provider failure; queries={:?}",
+                jmap_refresh_query_positions(&mock));
+            assert_eq!(settled["status"], json!("failed"),
+                "failed provider page cannot claim complete: {settled:?}");
+            assert_eq!(settled["accountResults"][0]["success"], json!(false));
+            assert_eq!(jmap_refresh_cache_count(&state), 500,
+                "failed page may not erase the previously cached 500 headers");
+            assert_eq!(jmap_refresh_ledger(&state), before_ledger,
+                "failed first page may not remint the existing JMAP IDs");
+            assert!(trap.accept().is_err(), "failed JMAP Complete must not dial IMAP");
+        }
+
+        #[tokio::test]
+        async fn refresh_jmap_complete_short_provider_page_does_not_report_complete() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(501));
+            let (trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            let seeded = state.sync_engine.sync_account(&account, "INBOX").await;
+            assert!(seeded.success, "existing JMAP cold sync must seed 500: {:?}", seeded.error);
+            assert_eq!(jmap_refresh_cache_count(&state), 500);
+            let before_ledger = jmap_refresh_ledger(&state);
+            let before_query = mock.count_calls("Email/query");
+            mock.mutate(|server| server.limits.max_query_limit = 0);
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-complete-short-page", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "short-page Complete must ACK: {:?}", accepted.error);
+            let settled = terminal_refresh(&state, "jmap-complete-short-page").await;
+            assert!(mock.count_calls("Email/query") > before_query,
+                "Complete must ask the real provider for the missing page: {:?}",
+                jmap_refresh_query_positions(&mock));
+            assert_eq!(settled["status"], json!("failed"),
+                "an empty provider page with total 501 cannot claim complete: {settled:?}");
+            assert_eq!(settled["accountResults"][0]["success"], json!(false));
+            assert_eq!(jmap_refresh_cache_count(&state), 500,
+                "a short page must preserve the earlier native header rows");
+            assert_eq!(jmap_refresh_ledger(&state), before_ledger);
+            assert!(trap.accept().is_err(), "short JMAP Complete must not dial IMAP");
+        }
+
+        #[tokio::test]
+        async fn refresh_jmap_account_delta_publishes_each_touched_source_once() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let mock = mock_jmap::MockJmap::start(jmap_refresh_scenario(2));
+            let (trap, imap_port) = crate::jmap_test_support::imap_trap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_jmap_refresh(&state, &mock, imap_port);
+            for mailbox in ["INBOX", "Work"] {
+                let seeded = state.sync_engine.sync_account(&account, mailbox).await;
+                assert!(seeded.success, "initial {mailbox} cache: {:?}", seeded.error);
+            }
+            let gen0 = state.sync_engine.change_gen();
+            let mut new = crate::jmap_test_support::email("e9", "account-wide delivery",
+                "2026-10-04T10:00:00Z");
+            new.also_in.push("mb-work".into());
+            mock.mutate(|server| server.add_email("acc1", "mb-inbox", new));
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"jmap-touched-source", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "JMAP account delta must ACK: {:?}", accepted.error);
+            let settled = terminal_refresh(&state, "jmap-touched-source").await;
+            assert_eq!(settled["status"], json!("complete"), "JMAP delta must settle: {settled:?}");
+            let (_, records) = state.sync_engine.wait_changes(gen0, 0).await;
+            assert_eq!(records.len(), 2,
+                "account delta must publish each touched mailbox once, without a second requested-folder event: {records:?}");
+            let inbox = records.iter().find(|record| record.mailbox == "INBOX").unwrap();
+            let work = records.iter().find(|record| record.mailbox == "Work").unwrap();
+            assert_eq!(inbox.arrival_uids.len(), 1, "only the real INBOX delivery is an arrival");
+            assert!(work.arrival_uids.is_empty(), "the second label is a repaint, not another arrival");
+            for record in &records {
+                let source = record.source.as_ref().expect("each touched JMAP event needs native source proof");
+                assert_eq!(source.account_id, "acc1");
+                assert_eq!(source.mailbox, record.mailbox);
+                assert!(source.cache_owner.as_ref().is_some_and(|owner|
+                    owner.jmap_mailbox_id.is_some()), "touched mailbox needs its real owner: {record:?}");
+            }
+            assert!(trap.accept().is_err(), "JMAP account delta must not dial IMAP");
+        }
+
         async fn refresh_graph_map(state: &Arc<DaemonState>, account: &str) -> Option<Value> {
             let response = boxed_request(state, req("load_graph_id_map", json!({
                 "accountId": account, "mailbox": "INBOX",
@@ -3359,6 +3569,67 @@ mod tests {
                 "internetMessageId": format!("<{id}@example.test>"),
                 "body": null, "internetMessageHeaders": null,
             })
+        }
+
+        #[tokio::test]
+        async fn refresh_graph_adopted_page_reaches_provider_and_writes_stable_native_headers() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let row = json!({"id":"acc1", "email":"ready@example.test", "authType":"oauth2",
+                "oauth2Provider":"microsoft", "oauth2Transport":"graph"});
+            std::fs::write(state.app_dir.join("accounts.json"), json!([row.clone()]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let mut credential = row;
+            credential["oauth2AccessToken"] = json!("synthetic-graph-ready");
+            credential["oauth2ExpiresAt"] = json!(4_000_000_000_000i64);
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials,
+                json!({"acc1": credential.to_string()}).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings": {"state": {
+                    "graphFolderKeysAdopted": {"acc1": true},
+                    "graphFolderKeysAdoptedFromListing": {"acc1": true},
+                }},
+            }), None).unwrap();
+            let folders = json!({"value":[refresh_graph_folder("fld-ready-inbox", "Inbox")],
+                "@odata.nextLink": null});
+            let batch = json!({"responses":[{"id":"inbox", "status":200,
+                "body":{"id":"fld-ready-inbox"}}]});
+            let page = json!({"value":[
+                refresh_graph_message("ready-old", "Ready old"),
+                refresh_graph_message("ready-new", "Ready new"),
+            ], "@odata.nextLink": null});
+            let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                (200, folders.to_string()), (200, batch.to_string()), (200, page.to_string()),
+            ]);
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"graph-adopted-page", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "adopted Graph page must ACK: {:?}", accepted.error);
+            let settled = terminal_refresh(&state, "graph-adopted-page").await;
+            assert_eq!(settled["status"], json!("complete"),
+                "adopted Graph RefreshPage must reach actual provider and write native headers: {settled:?}; requests={:?}",
+                crate::handlers::graph::test_graph_requests().len());
+            let ledger = refresh_graph_map(&state, "acc1").await.expect("stable Graph ledger");
+            assert_eq!(ledger.as_object().unwrap().len(), 2);
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX")
+                .expect("native Graph header cache");
+            assert_eq!(cached["totalCached"], json!(2));
+            assert_eq!(cached["nativeIdentity"]["accountId"], json!("acc1"));
+            assert_eq!(cached["nativeIdentity"]["mailbox"], json!("INBOX"));
+            let calls = crate::handlers::graph::test_graph_requests();
+            assert_eq!(calls.len(), 3, "one folder/listing pass plus one Graph message page");
+            assert!(calls[2].path.contains("fld-ready-inbox")
+                && calls[2].path.contains("/messages?")
+                && calls[2].path.contains("top=200")
+                && calls[2].path.contains("skip=0"),
+                "RefreshPage must use the actual first provider page: {:?}", calls[2].path);
         }
 
         #[tokio::test]
@@ -3430,7 +3701,8 @@ mod tests {
             assert_eq!(results.len(), 2);
             assert_eq!(results[0]["accountId"], json!("acc1"));
             assert_eq!(results[0]["success"], json!(false));
-            assert_eq!(results[0]["errorKey"], json!("errors.syncGraphAdoptionRequired"));
+            assert_eq!(results[0]["errorKey"], json!("errors.syncGraphAdoptionRequired"),
+                "unacknowledged Graph listing pair must report the typed shell prerequisite");
             assert_eq!(results[0]["needsShellAdoption"], json!(true));
             assert_eq!(results[1]["accountId"], json!("acc2"));
             assert_eq!(results[1]["success"], json!(true));
