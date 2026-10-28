@@ -2397,6 +2397,8 @@
   "settings.billing.trialIssuesYes": "Ja",
   "settings.billing.trialIssuesNo": "Nein",
   "settings.billing.trialIssuesPromise": "Wir möchten, dass Sie rundum zufrieden sind, und beantworten Fehlermeldungen und Funktionswünsche deshalb extrem schnell. Sagen Sie uns, was nicht stimmt, wir kümmern uns darum.",
+  "settings.billing.trialIssuesResolve": "Wir nehmen Fehlermeldungen ernst und beheben sie in der Regel innerhalb von 6 bis 12 Stunden, oft schneller. Kein Problem ist zu klein, um es zu melden.",
+  "settings.billing.trialIssuesLegacy": "E-Mail ist eine alte Technik, und Anbieter wie Gmail bringen eigene Eigenheiten und Sonderfunktionen mit, daher brauchen manche Probleme etwas mehr Aufwand. Gmail begrenzt außerdem Downloads auf 2500 MB pro Tag, ein großes Postfach kann deshalb mehrere Tage zum Herunterladen brauchen.",
   "settings.billing.trialIssuesThread": "So schnell antworten wir",
   "settings.billing.trialIssuesContinue": "Weiter zu Abo verwalten",
   "settings.billing.monthly": "Monatlich",

@@ -2397,6 +2397,8 @@
   "settings.billing.trialIssuesYes": "Oui",
   "settings.billing.trialIssuesNo": "Non",
   "settings.billing.trialIssuesPromise": "Nous voulons que vous soyez pleinement satisfait : nous répondons très vite aux signalements de bugs et aux demandes de fonctionnalités. Dites-nous ce qui ne va pas, nous nous en occupons.",
+  "settings.billing.trialIssuesResolve": "Nous prenons les signalements de bugs au sérieux et les corrigeons généralement en 6 à 12 heures, souvent plus vite. Aucun problème n'est trop petit pour être signalé.",
+  "settings.billing.trialIssuesLegacy": "Le courrier électronique est une technologie ancienne, et des fournisseurs comme Gmail ajoutent leurs propres particularités et fonctions spéciales, si bien que certains problèmes demandent plus de soin. Gmail limite aussi les téléchargements à 2500 Mo par jour, une grande boîte peut donc prendre plusieurs jours à télécharger.",
   "settings.billing.trialIssuesThread": "Voyez à quelle vitesse nous répondons",
   "settings.billing.trialIssuesContinue": "Continuer vers Gérer l'abonnement",
   "settings.billing.monthly": "Mensuel",

@@ -40,6 +40,12 @@ export function BillingIssuesDialog({ onClose, onContinue, onReportBug }) {
           <p className="text-sm text-mail-text-muted leading-relaxed" data-testid="billing-issues-promise">
             {t('settings.billing.trialIssuesPromise')}
           </p>
+          <p className="text-sm text-mail-text-muted leading-relaxed" data-testid="billing-issues-resolve">
+            {t('settings.billing.trialIssuesResolve')}
+          </p>
+          <p className="text-sm text-mail-text-muted leading-relaxed" data-testid="billing-issues-legacy">
+            {t('settings.billing.trialIssuesLegacy')}
+          </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary" size="md" data-testid="billing-issues-report"
               onClick={() => { onClose(); onReportBug?.(); }}>

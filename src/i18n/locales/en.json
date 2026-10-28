@@ -2400,6 +2400,8 @@
   "settings.billing.trialIssuesYes": "Yes",
   "settings.billing.trialIssuesNo": "No",
   "settings.billing.trialIssuesPromise": "We want you completely satisfied, so we answer bug reports and feature requests super quickly. Tell us what is wrong and we will get on it.",
+  "settings.billing.trialIssuesResolve": "We take bug reports seriously and tend to resolve them within 6 to 12 hours, often sooner. No issue is too small to report.",
+  "settings.billing.trialIssuesLegacy": "Email is old technology, and providers like Gmail add their own quirks and special features, so some problems take extra care to track down. Gmail also limits downloads to 2500 MB a day, so a large mailbox can take several days to download.",
   "settings.billing.trialIssuesThread": "See how fast we reply",
   "settings.billing.trialIssuesContinue": "Continue to Manage Subscription",
   "settings.billing.monthly": "Monthly",

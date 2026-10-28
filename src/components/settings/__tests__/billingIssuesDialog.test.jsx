@@ -49,6 +49,21 @@ describe('BillingIssuesDialog', () => {
     expect(onContinue).not.toHaveBeenCalled();
   });
 
+  it('on Yes says reports are fixed in 6 to 12 hours, none too small, and why Gmail is slow', () => {
+    open();
+    expect(screen.queryByTestId('billing-issues-resolve')).toBeNull();
+    fireEvent.click(screen.getByTestId('billing-issues-yes'));
+
+    const resolve = screen.getByTestId('billing-issues-resolve').textContent;
+    expect(resolve).toMatch(/6 to 12 hours/);
+    expect(resolve).toMatch(/too small/i);
+
+    const legacy = screen.getByTestId('billing-issues-legacy').textContent;
+    expect(legacy).toMatch(/old technology/i);
+    expect(legacy).toMatch(/Gmail/);
+    expect(legacy).toMatch(/2500 MB a day/);
+  });
+
   it('on Yes still lets them go on to Manage Subscription', () => {
     const { onContinue } = open();
     fireEvent.click(screen.getByTestId('billing-issues-yes'));

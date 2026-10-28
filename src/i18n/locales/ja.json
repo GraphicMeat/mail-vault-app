@@ -2397,6 +2397,8 @@
   "settings.billing.trialIssuesYes": "はい",
   "settings.billing.trialIssuesNo": "いいえ",
   "settings.billing.trialIssuesPromise": "ご満足いただくことが私たちの目標です。不具合の報告や機能のご要望には、非常に素早くお答えします。何が問題かお知らせください。すぐに対応します。",
+  "settings.billing.trialIssuesResolve": "バグ報告は真剣に受け止め、通常は6〜12時間以内、多くはそれより早く対応します。小さすぎて報告できない問題はありません。",
+  "settings.billing.trialIssuesLegacy": "メールは古い技術で、Gmailのようなプロバイダーには独自の癖や特別な機能があるため、原因の特定に手間がかかる問題もあります。また、Gmailはダウンロードを1日2500 MBに制限しているため、大きなメールボックスのダウンロードには数日かかることがあります。",
   "settings.billing.trialIssuesThread": "返信の早さを見る",
   "settings.billing.trialIssuesContinue": "サブスクリプションの管理に進む",
   "settings.billing.monthly": "月額",

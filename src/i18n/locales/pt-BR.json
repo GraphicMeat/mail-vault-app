@@ -2397,6 +2397,8 @@
   "settings.billing.trialIssuesYes": "Sim",
   "settings.billing.trialIssuesNo": "Não",
   "settings.billing.trialIssuesPromise": "Queremos você totalmente satisfeito, por isso respondemos bem rápido a relatos de bugs e pedidos de recursos. Conte o que está errado e vamos resolver.",
+  "settings.billing.trialIssuesResolve": "Levamos relatos de bugs a sério e costumamos resolvê-los em 6 a 12 horas, muitas vezes antes. Nenhum problema é pequeno demais para ser relatado.",
+  "settings.billing.trialIssuesLegacy": "O e-mail é uma tecnologia antiga, e provedores como o Gmail trazem suas próprias particularidades e recursos especiais, então alguns problemas exigem mais cuidado. O Gmail também limita os downloads a 2500 MB por dia, por isso uma caixa grande pode levar vários dias para ser baixada.",
   "settings.billing.trialIssuesThread": "Veja como respondemos rápido",
   "settings.billing.trialIssuesContinue": "Continuar para Gerenciar assinatura",
   "settings.billing.monthly": "Mensal",

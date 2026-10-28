@@ -2397,6 +2397,8 @@
   "settings.billing.trialIssuesYes": "예",
   "settings.billing.trialIssuesNo": "아니요",
   "settings.billing.trialIssuesPromise": "완전히 만족하실 수 있도록 버그 신고와 기능 요청에 아주 빠르게 답변합니다. 무엇이 문제인지 알려 주시면 바로 처리하겠습니다.",
+  "settings.billing.trialIssuesResolve": "버그 신고를 진지하게 받아들이며 보통 6~12시간 이내, 대개 더 빨리 해결합니다. 신고하기에 너무 작은 문제는 없습니다.",
+  "settings.billing.trialIssuesLegacy": "이메일은 오래된 기술이고 Gmail 같은 제공업체는 고유한 특성과 특별한 기능이 있어 일부 문제는 원인을 찾는 데 더 많은 노력이 필요합니다. 또한 Gmail은 다운로드를 하루 2500 MB로 제한하므로 큰 메일함은 다운로드에 며칠이 걸릴 수 있습니다.",
   "settings.billing.trialIssuesThread": "답변이 얼마나 빠른지 보기",
   "settings.billing.trialIssuesContinue": "구독 관리로 계속",
   "settings.billing.monthly": "월간",

@@ -2397,6 +2397,8 @@
   "settings.billing.trialIssuesYes": "是",
   "settings.billing.trialIssuesNo": "否",
   "settings.billing.trialIssuesPromise": "我们希望你完全满意,因此会非常迅速地回复错误报告和功能建议。告诉我们哪里出了问题,我们马上处理。",
+  "settings.billing.trialIssuesResolve": "我们认真对待错误报告,通常会在 6 到 12 小时内解决,往往更快。再小的问题也值得报告。",
+  "settings.billing.trialIssuesLegacy": "电子邮件是一项古老的技术,Gmail 等服务商还有各自的特性和特殊功能,因此有些问题需要更多时间排查。此外,Gmail 将每天的下载量限制为 2500 MB,较大的邮箱可能需要几天才能下载完。",
   "settings.billing.trialIssuesThread": "看看我们回复有多快",
   "settings.billing.trialIssuesContinue": "继续前往管理订阅",
   "settings.billing.monthly": "按月",
