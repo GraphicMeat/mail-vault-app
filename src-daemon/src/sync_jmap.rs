@@ -154,10 +154,19 @@ pub async fn sync_jmap(engine: &SyncEngine, account: &SyncAccount, mailbox: &str
 /// so the app's probe still sees the counter move past its meta and syncs.
 pub async fn delta_only(state: &Arc<DaemonState>, cfg: &ImapConfig, account_id: &str) -> Result<(), String> {
     let stamp = state.account_lifecycle.capture(account_id).map_err(|_| "errors.keychainBusy".to_owned())?;
+    delta_only_with_stamp(state, cfg, account_id, &stamp).await
+}
+
+/// A status observation carries its original account epoch through the
+/// account-wide delta and its finite cache children.
+pub(crate) async fn delta_only_with_stamp(state: &Arc<DaemonState>, cfg: &ImapConfig,
+    account_id: &str, stamp: &AccountStamp) -> Result<(), String> {
     let engine = &state.sync_engine;
     let lock = engine.lock_for(&account_lock_key(account_id)).await;
     let _account_guard = lock.lock().await;
-    let run = run_once(state, engine, cfg, account_id, None, &stamp).await?;
+    let run = run_once(state, engine, cfg, account_id, None, stamp).await?;
+    let _permit = state.account_lifecycle.try_commit(std::slice::from_ref(stamp))
+        .map_err(|_| "errors.keychainBusy".to_owned())?;
     publish(engine, account_id, &run);
     wake_workers(state, &run);
     Ok(())
@@ -258,10 +267,52 @@ async fn run_once(
             before
         }
     };
-    bump(state, account_id, &touched).await?;
+    #[cfg(test)]
+    delta_test_pause::before_state_write(state).await;
+    bump(state, account_id, &touched, stamp).await?;
     let (aid, ja) = (account_id.to_string(), jmap_account);
-    custody_write(state, move |c| JmapMeta::set_email_state(c, &aid, &ja, &new_state)).await?;
+    custody_write(state, stamp, move |c| JmapMeta::set_email_state(c, &aid, &ja, &new_state)).await?;
     Ok(Run { touched, requested })
+}
+
+#[cfg(test)]
+mod delta_test_pause {
+    use super::DaemonState;
+    use std::sync::{Arc, Mutex, OnceLock};
+    use tokio::sync::oneshot;
+
+    struct Gate {
+        state: usize,
+        entered: oneshot::Sender<()>,
+        release: oneshot::Receiver<()>,
+    }
+
+    static GATE: OnceLock<Mutex<Option<Gate>>> = OnceLock::new();
+
+    pub(super) fn install(state: &Arc<DaemonState>) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        let (entered_tx, entered_rx) = oneshot::channel();
+        let (release_tx, release_rx) = oneshot::channel();
+        let slot = GATE.get_or_init(|| Mutex::new(None));
+        let mut guard = slot.lock().unwrap_or_else(|error| error.into_inner());
+        assert!(guard.is_none(), "one held JMAP delta at a time");
+        *guard = Some(Gate { state: Arc::as_ptr(state) as usize,
+            entered: entered_tx, release: release_rx });
+        (entered_rx, release_tx)
+    }
+
+    pub(super) async fn before_state_write(state: &Arc<DaemonState>) {
+        let slot = GATE.get_or_init(|| Mutex::new(None));
+        let pause = {
+            let mut guard = slot.lock().unwrap_or_else(|error| error.into_inner());
+            if guard.as_ref().is_some_and(|gate| gate.state == Arc::as_ptr(state) as usize) {
+                guard.take()
+            } else { None }
+        };
+        if let Some(gate) = pause {
+            let _ = gate.entered.send(());
+            let _ = gate.release.await;
+        }
+    }
 }
 
 /// `wanted`'s path in this account and its server count: the path itself,
@@ -289,14 +340,20 @@ async fn custody_read<T: Send + 'static>(
     blocking(move || crate::custody::with_conn(&st, f)).await?
 }
 
-/// `custody_read` for a write: under the vault gate (`with_vault_write`), so a
-/// vault close drains it like every other vault write.
+/// `custody_read` for an original-stamp write: under the vault gate, so a
+/// vault close drains it and a retired account cannot publish after a wait.
 async fn custody_write<T: Send + 'static>(
     state: &Arc<DaemonState>,
+    stamp: &AccountStamp,
     f: impl FnOnce(&Connection) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
     let st = Arc::clone(state);
-    blocking(move || with_vault_write(&st, |_| crate::custody::with_conn(&st, f))).await?
+    let original = stamp.clone();
+    blocking(move || {
+        let _permit = st.account_lifecycle.try_commit(std::slice::from_ref(&original))
+            .map_err(|_| "errors.keychainBusy".to_owned())?;
+        with_vault_write(&st, |_| crate::custody::with_conn(&st, f))
+    }).await?
 }
 
 /// Every mailbox of the account with a header cache: a meta row (a synced
@@ -600,7 +657,7 @@ async fn rebuild(
 }
 
 /// `JmapMeta::bump` for every mailbox the run changed, in one custody step.
-async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<String, Touch>) -> Result<(), String> {
+async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<String, Touch>, stamp: &AccountStamp) -> Result<(), String> {
     let work: Vec<(String, Vec<u32>)> = touched
         .iter()
         .filter(|(_, t)| !t.uids.is_empty())
@@ -610,7 +667,7 @@ async fn bump(state: &Arc<DaemonState>, account_id: &str, touched: &BTreeMap<Str
         return Ok(());
     }
     let aid = account_id.to_string();
-    custody_write(state, move |c| {
+    custody_write(state, stamp, move |c| {
         for (path, uids) in &work {
             JmapMeta::bump(c, &aid, path, uids)?;
         }
@@ -981,6 +1038,147 @@ mod tests {
         m.mutate(|s| s.add_email("acc1", "mb-inbox", email("e9", "nine", "2026-10-04T10:00:00Z")));
         let third = status(&state, &m).await;
         assert_eq!(third["exists"], json!(3), "a count that moved is fetched");
+    }
+
+    #[tokio::test]
+    async fn observed_delta_cannot_write_counter_or_state_after_original_account_retirement() {
+        let (_dir, state, m, account) = setup().await;
+        sync(&state, &account, "INBOX").await;
+        let original = state.account_lifecycle.capture("acct-1").unwrap();
+        let before = crate::custody::with_conn(&state, |conn| Ok((
+            JmapMeta::modseq(conn, "acct-1", "INBOX"),
+            JmapMeta::email_state(conn, "acct-1", "acc1"),
+        ))).unwrap();
+        m.mutate(|server| server.add_email("acc1", "mb-inbox",
+            email("e9", "nine", "2026-10-04T10:00:00Z")));
+
+        // This gate is after the real provider delta and its cache children,
+        // immediately before the account-wide counter and state custody writes.
+        let (entered, release) = super::delta_test_pause::install(&state);
+        let held_state = Arc::clone(&state);
+        let config = account.imap_config.clone();
+        let held = tokio::spawn(async move {
+            super::delta_only_with_stamp(&held_state, &config, "acct-1", &original).await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), entered)
+            .await.expect("real JMAP delta must reach the state-write boundary")
+            .expect("state-write gate must signal");
+        state.account_lifecycle.apply_committed_membership(None,
+            &mailvault_core::accounts_doc::MembershipDelta {
+                removed: ["acct-1".to_owned()].into(), ..Default::default()
+            });
+        release.send(()).expect("release the held delta");
+        assert!(held.await.unwrap().is_err(), "retired original stamp cannot publish a status");
+        let after = crate::custody::with_conn(&state, |conn| Ok((
+            JmapMeta::modseq(conn, "acct-1", "INBOX"),
+            JmapMeta::email_state(conn, "acct-1", "acc1"),
+        ))).unwrap();
+        assert_eq!(after, before,
+            "retired original stamp must fence both actual JMAP custody publications");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn started_jmap_cache_child_keeps_original_permit_after_waiter_abort() {
+        let (_dir, state, _mock, account) = setup().await;
+        sync(&state, &account, "INBOX").await;
+        let original = state.account_lifecycle.capture("acct-1").unwrap();
+        let io = state.sync_engine
+            .cache_ctx_with_stamp("acct-1", "INBOX", Ok(original))
+            .for_jmap_source(&account.imap_config, "mb-inbox");
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel::<()>();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let waiter = tokio::spawn(async move {
+            super::cache_io(&io, move |owned| {
+                let _actual_child_owner = owned;
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                done_tx.send(()).unwrap();
+                Ok(())
+            }).await
+        });
+        tokio::task::spawn_blocking(move ||
+            entered_rx.recv_timeout(std::time::Duration::from_secs(5))
+        ).await.unwrap().expect("real JMAP cache child must start");
+        waiter.abort();
+        assert!(waiter.await.is_err(), "only the waiter is cancelled");
+
+        let lease = crate::account_workflows::AccountLease::detached_for_test(
+            crate::account_workflows::AccountWriteScope {
+                ids: ["acct-1".to_owned()].into(), ..Default::default()
+            });
+        let mut claim = state.account_lifecycle.try_close(lease, "acct-1")
+            .expect("Closing claim may start while a local child is held");
+        let mut drain = Box::pin(claim.wait_local_until(tokio::time::Instant::now()
+            + std::time::Duration::from_secs(5)));
+        assert!(futures::poll!(drain.as_mut()).is_pending(),
+            "original local permit must keep the actual Closing drain pending");
+        release_tx.send(()).unwrap();
+        tokio::task::spawn_blocking(move ||
+            done_rx.recv_timeout(std::time::Duration::from_secs(5))
+        ).await.unwrap().expect("blocking child must finish");
+        let drained = tokio::time::timeout(std::time::Duration::from_secs(5), drain)
+            .await.expect("Closing must drain after child completion").unwrap();
+        claim.mark_effects_started(drained).unwrap();
+        claim.finish_retired().unwrap();
+        assert!(state.account_lifecycle.capture("acct-1").is_err());
+    }
+
+    #[tokio::test]
+    async fn native_observation_routes_use_jmap_without_an_imap_dial() {
+        struct RestoreEnv {
+            credentials: Option<std::ffi::OsString>,
+            plaintext: Option<std::ffi::OsString>,
+        }
+        impl Drop for RestoreEnv {
+            fn drop(&mut self) {
+                match self.credentials.take() {
+                    Some(value) => std::env::set_var("MAILVAULT_TEST_CREDENTIALS", value),
+                    None => std::env::remove_var("MAILVAULT_TEST_CREDENTIALS"),
+                }
+                match self.plaintext.take() {
+                    Some(value) => std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", value),
+                    None => std::env::remove_var("MAILVAULT_IMAP_PLAINTEXT"),
+                }
+            }
+        }
+        let _env_lock = crate::credentials::test_env_lock().lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _env = RestoreEnv {
+            credentials: std::env::var_os("MAILVAULT_TEST_CREDENTIALS"),
+            plaintext: std::env::var_os("MAILVAULT_IMAP_PLAINTEXT"),
+        };
+        let (_dir, state, mock, _) = setup().await;
+        let (trap, port) = imap_trap();
+        let mut stored = account_json(&mock);
+        stored["imapPort"] = json!(port);
+        let account = sync_account(stored.clone());
+        let mut document_row = stored.clone();
+        document_row.as_object_mut().unwrap().remove("password");
+        std::fs::write(state.app_dir.join("accounts.json"),
+            json!([document_row]).to_string()).unwrap();
+        let credentials = state.app_dir.join("credentials.json");
+        std::fs::write(&credentials,
+            json!({"acct-1": stored.to_string()}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        sync(&state, &account, "INBOX").await;
+
+        let probe = crate::handlers::sync_observation::route(&state, "sync.probe",
+            json!({"op": "check", "accountId": "acct-1", "mailbox": "INBOX"}), json!(1)).await;
+        let decision = probe.result.expect("JMAP observation probe must answer");
+        assert_eq!(decision["reason"], json!("modseq-match"));
+        assert!(decision["verificationRef"].as_str().is_some());
+        let folders = crate::handlers::sync_observation::route(&state, "folders.status",
+            json!({"op": "refresh", "accountId": "acct-1", "activeMailbox": "INBOX",
+                "mailboxes": [{"path": "INBOX"}, {"path": "Work"}]}), json!(2)).await;
+        let rows = folders.result.expect("JMAP folder observation must answer")["rows"]
+            .as_array().unwrap().clone();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["path"], json!("Work"));
+        assert!(mock.count_calls("Email/changes") > 0,
+            "the observation must use the JMAP account delta");
+        assert!(trap.accept().is_err(), "no IMAP connection for either JMAP observation");
     }
 
     /// An arrival in a cached mailbox other than the requested one wakes the

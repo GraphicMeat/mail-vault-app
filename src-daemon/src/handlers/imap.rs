@@ -31,7 +31,7 @@
 //! commands (`commands.rs`), so they keep doing so here, unchanged.
 use crate::account_lifecycle::AccountStamp;
 use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_stamped_mailbox_write, with_vault_write};
-use crate::imap::{self, pool::ImapPool, ImapConfig};
+use crate::imap::{self, pool::ImapPool, ImapConfig, MailboxStatus};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::fetch_mode::{FetchMode, FetchPolicy};
@@ -91,6 +91,33 @@ where
         }
         Err(e) => Err(e), // _permit dropped here — semaphore released
     }
+}
+
+/// The existing background SELECT observation, shared with sync.probe.
+pub(crate) async fn observation_probe_status(state: &Arc<DaemonState>, account: &ImapConfig,
+    mailbox: &str) -> Result<Value, String> {
+    let mailbox = mailbox.to_owned();
+    let acct = account;
+    // Capability knowledge is populated by checkout. Read it inside the
+    // closure, after the session is acquired.
+    let (exists, uid_validity, uid_next, highest_modseq) =
+        with_background(&state.imap_pool, account, |mut session| async move {
+            let has_condstore = state.imap_pool.has_capability(acct, "CONDSTORE").await;
+            let result = imap::check_mailbox_status(&mut session, &mailbox, has_condstore).await?;
+            Ok((result, session, Some(mailbox)))
+        }).await?;
+    Ok(json!({"exists": exists, "uidValidity": uid_validity,
+        "uidNext": uid_next, "highestModseq": highest_modseq}))
+}
+
+/// The existing background STATUS sweep, shared with folders.status.
+pub(crate) async fn observation_folder_status(state: &Arc<DaemonState>, account: &ImapConfig,
+    mailboxes: &[String]) -> Result<Vec<MailboxStatus>, String> {
+    let mailboxes = mailboxes.to_vec();
+    with_background(&state.imap_pool, account, |mut session| async move {
+        let statuses = imap::mailbox_statuses(&mut session, &mailboxes).await?;
+        Ok((statuses, session, None))
+    }).await
 }
 
 /// Store a fetched message in the vault as a cache copy: `<uid>:2,.eml`, no
@@ -444,21 +471,8 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
         "imap_check_mailbox_status" => {
             let account = req!(account_arg(&id, params));
             let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
-            let acct = &account;
-            // Capabilities are cached at session creation, so this must read
-            // AFTER checkout (inside the closure) — before it, the first call
-            // of a process always reads false. Same ordering as commands.rs.
-            let result = with_background(&state.imap_pool, &account, |mut session| async move {
-                let has_condstore = state.imap_pool.has_capability(acct, "CONDSTORE").await;
-                let result = imap::check_mailbox_status(&mut session, &mailbox, has_condstore).await?;
-                Ok((result, session, Some(mailbox)))
-            })
-            .await;
-            match result {
-                Ok((exists, uid_validity, uid_next, highest_modseq)) => RpcResponse::success(
-                    id,
-                    json!({"exists": exists, "uidValidity": uid_validity, "uidNext": uid_next, "highestModseq": highest_modseq}),
-                ),
+            match observation_probe_status(state, &account, &mailbox).await {
+                Ok(status) => RpcResponse::success(id, status),
                 Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
             }
         }
@@ -466,12 +480,7 @@ async fn route_imap(state: &Arc<DaemonState>, method: &str, params: &Value, id: 
         "imap_folder_status" => {
             let account = req!(account_arg(&id, params));
             let mailboxes = req!(vec_arg::<String>(&id, params, "mailboxes"));
-            let result = with_background(&state.imap_pool, &account, |mut session| async move {
-                let out = imap::mailbox_statuses(&mut session, &mailboxes).await?;
-                Ok((out, session, None))
-            })
-            .await;
-            match result {
+            match observation_folder_status(state, &account, &mailboxes).await {
                 Ok(statuses) => match serde_json::to_value(&statuses) {
                     Ok(v) => RpcResponse::success(id, v),
                     Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e.to_string()),

@@ -64,6 +64,7 @@ pub(crate) mod portable;
 pub(crate) mod release_notes;
 pub(crate) mod restore;
 pub(crate) mod scheduled;
+pub(crate) mod sync_observation;
 pub(crate) mod settings;
 pub(crate) mod search_index;
 pub(crate) mod snooze;
@@ -146,16 +147,25 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
     let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
     let auto_classify = params.get("autoClassify").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    // Take the ticket BEFORE spawning: a `sync.wait` that beats the task to
-    // the engine still has a channel to subscribe to.
-    let ticket = state.sync_engine.begin(&account.id, mailbox);
+    // Bind optional source evidence before issuing the ticket and spawning.
+    // Existing callers without a strict account origin still keep sync.now's
+    // established ticket behavior, but cannot mark from that ticket.
+    let prepared = crate::sync_observation::prepare_ticket(&state, &account.imap_config,
+        &account.id, mailbox).await;
+    let (evidence, operation) = match prepared {
+        Some((evidence, operation)) => (Some(evidence), Some(operation)),
+        None => (None, None),
+    };
+    let ticket = state.sync_engine.begin_with_evidence(&account.id, mailbox, evidence);
 
     // Spawn sync as background task so RPC returns immediately
     let account_id = account.id.clone();
     let response_account_id = account_id.clone();
     let mailbox_clone = mailbox.to_string();
     tokio::spawn(async move {
+        let observation_operation = operation;
         let result = state.sync_engine.run_ticket(ticket, &account, &mailbox_clone).await;
+        drop(observation_operation);
 
         // Hoarder: real arrivals only. `new_emails` also counts backfill
         // pages, and every wake costs a STATUS sweep plus a listing of each

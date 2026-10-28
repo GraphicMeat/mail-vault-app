@@ -104,6 +104,11 @@ struct BackfillCompletion {
     cache_owner: Option<imap::NativeHeaderIdentity>,
 }
 
+struct TicketEntry {
+    sender: tokio::sync::watch::Sender<Option<SyncResult>>,
+    observation: Option<crate::sync_observation::TicketEvidence>,
+}
+
 /// The sync engine manages background email sync for all accounts.
 pub struct SyncEngine {
     lifecycle: crate::account_lifecycle::AccountLifecycle,
@@ -119,7 +124,7 @@ pub struct SyncEngine {
     /// each other's waits. `std::sync::Mutex` so `begin` is callable from the
     /// RPC handler before it spawns, which is what closes the
     /// wait-arrives-before-the-task-starts race.
-    tickets: std::sync::Mutex<HashMap<u64, tokio::sync::watch::Sender<Option<SyncResult>>>>,
+    tickets: std::sync::Mutex<HashMap<u64, TicketEntry>>,
     next_ticket: std::sync::atomic::AtomicU64,
     contacts: Arc<ContactsState>,
     /// `account_id\x01mailbox` keys with a backfill IN FLIGHT right now.
@@ -395,12 +400,19 @@ impl SyncEngine {
     /// spawns the task, so a `sync.wait` that arrives first still has
     /// something to subscribe to.
     pub fn begin(&self, account_id: &str, mailbox: &str) -> u64 {
+        self.begin_with_evidence(account_id, mailbox, None)
+    }
+
+    /// Attach source evidence only at issue, before the sync child is spawned.
+    pub(crate) fn begin_with_evidence(&self, account_id: &str, mailbox: &str,
+        observation: Option<crate::sync_observation::TicketEvidence>) -> u64 {
         let ticket = self.next_ticket.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let (tx, _rx) = tokio::sync::watch::channel(None);
+        let (sender, _rx) = tokio::sync::watch::channel(None);
         let mut tickets = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        tickets.insert(ticket, tx);
+        tickets.insert(ticket, TicketEntry { sender, observation });
         // ponytail: 64 finished tickets kept for late waiters; a ring buffer if
-        // the linear scan ever shows up in a profile.
+        // the linear scan ever shows up in a profile. The observation proof
+        // shares this existing retention boundary.
         while tickets.len() > MAX_LIVE_TICKETS {
             let oldest = *tickets.keys().min().expect("non-empty");
             tickets.remove(&oldest);
@@ -409,21 +421,39 @@ impl SyncEngine {
         ticket
     }
 
-    /// Run a sync and resolve its ticket with the result.
+    /// Run a sync, bind its result to the issued source, then wake waiters.
     pub async fn run_ticket(&self, ticket: u64, account: &SyncAccount, mailbox: &str) -> SyncResult {
         let result = self.sync_account(account, mailbox).await;
-        if let Some(tx) = self.tickets.lock().unwrap_or_else(|e| e.into_inner()).get(&ticket) {
-            // `send` drops the value when nobody is subscribed yet — which is
-            // the normal case, since the waiter usually arrives afterwards.
-            tx.send_replace(Some(result.clone()));
+        let issued = self.tickets.lock().unwrap_or_else(|error| error.into_inner())
+            .get(&ticket).and_then(|entry| entry.observation.clone());
+        let completed = if result.success {
+            match (issued.as_ref(), self.daemon.get().and_then(|weak| weak.upgrade())) {
+                (Some(evidence), Some(state)) => crate::sync_observation::complete_ticket(&state, evidence).await,
+                _ => None,
+            }
+        } else { None };
+        if let Some(entry) = self.tickets.lock().unwrap_or_else(|error| error.into_inner()).get_mut(&ticket) {
+            if let Some(evidence) = entry.observation.as_mut() { evidence.completed = completed; }
+            // `send_replace` keeps the value when nobody subscribed yet.
+            entry.sender.send_replace(Some(result.clone()));
         }
         result
+    }
+
+    /// Only a successful, completed ticket can offer mark evidence.
+    pub(crate) fn ticket_evidence(&self, ticket: u64) -> Option<crate::sync_observation::TicketEvidence> {
+        let tickets = self.tickets.lock().unwrap_or_else(|error| error.into_inner());
+        let entry = tickets.get(&ticket)?;
+        if !entry.sender.borrow().as_ref().is_some_and(|result| result.success) {
+            return None;
+        }
+        entry.observation.as_ref().filter(|evidence| evidence.completed.is_some()).cloned()
     }
 
     /// Wait for the sync a ticket was issued for, with timeout.
     pub async fn wait_for_ticket(&self, ticket: u64, timeout_ms: u64) -> Result<SyncResult, String> {
         let mut rx = match self.tickets.lock().unwrap_or_else(|e| e.into_inner()).get(&ticket) {
-            Some(tx) => tx.subscribe(),
+            Some(entry) => entry.sender.subscribe(),
             None => return Err(format!("Unknown sync ticket {}", ticket)),
         };
         // Already finished — a sync can complete between sync.now and sync.wait.

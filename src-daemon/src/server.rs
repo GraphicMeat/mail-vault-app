@@ -100,6 +100,7 @@ pub struct DaemonState {
     /// `Arc<Mutex<_>>`-backed and `DaemonState` itself is always behind one.
     pub oauth2: mailvault_core::oauth2::OAuth2Manager,
     pub sync_engine: Arc<sync_engine::SyncEngine>,
+    pub(crate) sync_observation: crate::sync_observation::ObservationState,
     /// One IDLE watcher per registered account. The app registers them
     /// (`sync.watch`) — the daemon holds no account list of its own.
     pub idle: Arc<idle_watch::IdleWatchers>,
@@ -842,6 +843,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         "sync.now" => handle_sync_now(Arc::clone(state), req.params, id).await,
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
         "sync.status" => handle_sync_status(&state.sync_engine, req.params, id).await,
+        "sync.probe" | "folders.status" => crate::handlers::sync_observation::route(state, &req.method, req.params, id).await,
 
         // ── IDLE watchers + the change feed they push into ──────────
         "sync.watch" => handle_sync_watch(Arc::clone(state), req.params, id).await,
@@ -1047,6 +1049,7 @@ impl DaemonState {
             imap_pool,
             oauth2: mailvault_core::oauth2::OAuth2Manager::new(),
             sync_engine,
+            sync_observation: Default::default(),
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
             search_index,
@@ -2165,6 +2168,13 @@ mod tests {
                 .collect()
         }
 
+        // This dispatcher future is large in debug builds. Repeated inline
+        // awaits made the later effect tests exceed a Windows test stack.
+        async fn boxed_request(state: &Arc<DaemonState>, request: crate::ipc::RpcRequest)
+            -> crate::ipc::RpcResponse {
+            Box::pin(handle_request(state, request)).await
+        }
+
         #[tokio::test]
         async fn sync_observation_red_equal_modseq_reaches_one_real_select() {
             let _env_lock = crate::credentials::test_env_lock().lock()
@@ -2262,6 +2272,623 @@ mod tests {
             assert!(first["uidValidity"].as_u64().is_some());
             assert!(rows.iter().all(|row| row["path"] != json!("INBOX")
                 && row["path"] != json!("Parent") && row["path"] != json!("F50")));
+        }
+        #[tokio::test]
+        async fn sync_observation_checks_do_not_mark_until_a_proof_is_consumed() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let start = boxed_request(&state, req("sync.now", json!({"account": account, "mailbox": "INBOX"}))).await;
+            let ticket = start.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({"ticket": ticket, "timeoutMs": 10_000}))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+
+            let before = commands_named(&server, "SELECT").len();
+            let first = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            let second = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(first["reason"], json!("modseq-match"));
+            assert_eq!(second["reason"], json!("modseq-match"));
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 2,
+                "two unmarked checks each reach the provider");
+            let first_ref = first["verificationRef"].as_str().unwrap();
+            let second_ref = second["verificationRef"].as_str().unwrap();
+            assert_ne!(first_ref, second_ref);
+            let marked = boxed_request(&state, req("sync.probe", json!({
+                "op": "mark", "accountId": "acc1", "mailbox": "INBOX",
+                "verificationRef": first_ref,
+            }))).await.result.unwrap();
+            assert_eq!(marked["marked"], json!(true));
+            let recent = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(recent["reason"], json!("probed-recently"));
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 2);
+
+            let invalidated = boxed_request(&state, req("sync.probe", json!({
+                "op": "invalidate", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(invalidated["invalidated"], json!(true));
+            let stale = boxed_request(&state, req("sync.probe", json!({
+                "op": "mark", "accountId": "acc1", "mailbox": "INBOX",
+                "verificationRef": second_ref,
+            }))).await.result.unwrap();
+            assert_eq!(stale["marked"], json!(false));
+            let fresh = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(fresh["reason"], json!("modseq-match"));
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 3);
+        }
+
+        #[tokio::test]
+        async fn sync_observation_completed_ticket_marks_only_its_issued_generation() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let start = boxed_request(&state, req("sync.now", json!({"account": account, "mailbox": "INBOX"}))).await;
+            let ticket = start.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({"ticket": ticket, "timeoutMs": 10_000}))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+
+            let wrong = boxed_request(&state, req("sync.probe", json!({
+                "op": "mark", "accountId": "acc1", "mailbox": "Sent", "ticket": ticket,
+            }))).await.result.unwrap();
+            assert_eq!(wrong["marked"], json!(false));
+            let marked = boxed_request(&state, req("sync.probe", json!({
+                "op": "mark", "accountId": "acc1", "mailbox": "INBOX", "ticket": ticket,
+            }))).await.result.unwrap();
+            assert_eq!(marked["marked"], json!(true));
+            let before = commands_named(&server, "SELECT").len();
+            let recent = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(recent["reason"], json!("probed-recently"));
+            assert_eq!(commands_named(&server, "SELECT").len(), before);
+            boxed_request(&state, req("sync.probe", json!({
+                "op": "invalidate", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await;
+            let stale = boxed_request(&state, req("sync.probe", json!({
+                "op": "mark", "accountId": "acc1", "mailbox": "INBOX", "ticket": ticket,
+            }))).await.result.unwrap();
+            assert_eq!(stale["marked"], json!(false));
+        }
+
+        #[tokio::test]
+        async fn sync_observation_empty_and_partial_cache_never_contact_provider() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            bind_account(&state, &server);
+            let empty = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(empty["reason"], json!("no-cache"));
+            assert!(commands_named(&server, "SELECT").is_empty());
+            crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX",
+                    &json!({"totalEmails": 2, "uidValidity": 1, "highestModseq": 3}).to_string())
+            ).unwrap();
+            let partial = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(partial["reason"], json!("partial-cache"));
+            assert!(commands_named(&server, "SELECT").is_empty());
+
+            crate::custody::with_conn(&state, |conn| {
+                conn.execute("UPDATE header_cache_meta SET meta_json='{broken' WHERE account_id='acc1' AND mailbox_path='INBOX'", [])
+                    .map(|_| ()).map_err(|error| error.to_string())
+            }).unwrap();
+            let unreadable = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(unreadable["reason"], json!("meta-read-failed"));
+            assert!(commands_named(&server, "SELECT").is_empty());
+        }
+
+        #[tokio::test]
+        async fn sync_observation_failed_folder_sweep_consumes_throttle() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new()
+                .mailboxes(vec![Mailbox::new("INBOX"), synthetic_mailbox("F00", 2)])
+                .fault(mock_imap::Trigger::nth("STATUS", 1), mock_imap::Action::DropConnection));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            bind_account(&state, &server);
+            let request = || json!({"op": "refresh", "accountId": "acc1", "activeMailbox": "INBOX",
+                "mailboxes": [{"path": "INBOX"}, {"path": "F00"}]});
+            let failed = boxed_request(&state, req("folders.status", request())).await;
+            assert!(failed.error.is_some(), "the dropped provider sweep must fail");
+            assert_eq!(commands_named(&server, "STATUS").len(), 1);
+            let throttled = boxed_request(&state, req("folders.status", request())).await;
+            assert!(throttled.error.is_none());
+            assert_eq!(throttled.result, Some(Value::Null));
+            assert_eq!(commands_named(&server, "STATUS").len(), 1);
+            let invalidated = boxed_request(&state, req("folders.status", json!({
+                "op": "invalidate", "accountId": "acc1",
+            }))).await.result.unwrap();
+            assert_eq!(invalidated["invalidated"], json!(true));
+            let retried = boxed_request(&state, req("folders.status", request())).await;
+            let rows = retried.result.expect("sweep after invalidation")["rows"].as_array().unwrap().clone();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0]["path"], json!("F00"));
+            assert_eq!(commands_named(&server, "STATUS").len(), 2);
+        }
+
+        #[tokio::test]
+        async fn sync_observation_provider_error_never_reports_unchanged() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let start = boxed_request(&state, req("sync.now", json!({
+                "account": account, "mailbox": "INBOX", "autoClassify": false,
+            }))).await;
+            let ticket = start.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+            server.reset_scenario(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2))
+                .fault(mock_imap::Trigger::nth("SELECT", 1), mock_imap::Action::DropConnection));
+            let result = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(result["reason"], json!("probe-failed"));
+            assert_eq!(result["unchanged"], json!(false));
+            assert!(result.get("verificationRef").is_none());
+            assert_eq!(commands_named(&server, "SELECT").len(), 1);
+        }
+
+        #[tokio::test]
+        async fn sync_observation_native_probe_deadline_is_conservative() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let start = boxed_request(&state, req("sync.now", json!({
+                "account": account, "mailbox": "INBOX", "autoClassify": false,
+            }))).await;
+            let ticket = start.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+
+            let before = commands_named(&server, "SELECT").len();
+            let pause = server.pause_command("SELECT");
+            let held_state = Arc::clone(&state);
+            let held = tokio::spawn(async move {
+                boxed_request(&held_state, req("sync.probe", json!({
+                    "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+                }))).await
+            });
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(5)),
+                    "real provider SELECT must be held through the native deadline");
+                pause
+            }).await.unwrap();
+            let reply = tokio::time::timeout(std::time::Duration::from_secs(29), held)
+                .await.expect("native probe deadline must finish before the outer bound")
+                .unwrap();
+            let result = reply.result.unwrap();
+            assert_eq!(result["reason"], json!("probe-failed"));
+            assert_eq!(result["unchanged"], json!(false));
+            assert!(result.get("verificationRef").is_none());
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 1);
+            pause.release();
+        }
+
+        #[tokio::test]
+        async fn sync_observation_probe_deadline_includes_guarded_credential_resolution() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let started = boxed_request(&state, req("sync.now", json!({
+                "account": account, "mailbox": "INBOX", "autoClassify": false,
+            }))).await;
+            let ticket = started.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+            let before = commands_named(&server, "SELECT").len();
+
+            // This gate is inside the actual credential spawn_blocking child, so the
+            // route's async resolver yields and its deadline remains pollable.
+            let backend = crate::credentials::TestKeychainGuard::install(
+                state.app_dir.join("credentials.json"));
+            let (read_release, read_gate) = std::sync::mpsc::channel::<()>();
+            let (read_entered, read_notice) = std::sync::mpsc::channel::<()>();
+            let (read_finished, read_done) = std::sync::mpsc::channel::<()>();
+            *backend.0.shared.gate.lock().unwrap() = Some(read_gate);
+            *backend.0.shared.captured.lock().unwrap() = Some(read_entered);
+            *backend.0.shared.finished.lock().unwrap() = Some(read_finished);
+
+            let provider_gate = server.pause_command("SELECT");
+            let held_state = Arc::clone(&state);
+            let mut held = tokio::spawn(async move {
+                boxed_request(&held_state, req("sync.probe", json!({
+                    "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+                }))).await
+            });
+            tokio::task::spawn_blocking(move ||
+                read_notice.recv_timeout(std::time::Duration::from_secs(5))
+            ).await.unwrap().expect("actual credential child must capture the stored record");
+            tokio::time::pause();
+            tokio::time::advance(std::time::Duration::from_secs(15)).await;
+            tokio::time::resume();
+            read_release.send(()).unwrap();
+            tokio::task::spawn_blocking(move ||
+                read_done.recv_timeout(std::time::Duration::from_secs(5))
+            ).await.unwrap().expect("credential child must finish after release");
+            let mut provider_gate = tokio::task::spawn_blocking(move || {
+                assert!(provider_gate.entered(std::time::Duration::from_secs(5)),
+                    "real provider SELECT must follow credential resolution");
+                provider_gate
+            }).await.unwrap();
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 1);
+
+            tokio::time::pause();
+            tokio::time::advance(std::time::Duration::from_secs(11)).await;
+            let outcome = tokio::time::timeout(std::time::Duration::from_millis(1), &mut held).await;
+            tokio::time::resume();
+            provider_gate.release();
+            if outcome.is_err() {
+                held.abort();
+                let _ = held.await;
+            }
+            let reply = outcome.expect("the entire native probe must finish within 25 seconds")
+                .expect("probe route task must not panic");
+            let result = reply.result.expect("probe timeout must answer conservatively");
+            assert_eq!(result["unchanged"], json!(false));
+            assert_eq!(result["reason"], json!("probe-failed"));
+            assert!(result.get("verificationRef").is_none());
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 1);
+        }
+
+        #[tokio::test]
+        async fn sync_observation_held_probe_yields_foreground_and_invalidation_fences_result() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let start = boxed_request(&state, req("sync.now", json!({"account": account, "mailbox": "INBOX"}))).await;
+            let ticket = start.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({"ticket": ticket, "timeoutMs": 10_000}))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+
+            let pause = server.pause_command("SELECT");
+            let held_state = Arc::clone(&state);
+            let held = tokio::spawn(async move {
+                boxed_request(&held_state, req("sync.probe", json!({
+                    "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+                }))).await
+            });
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(5)), "provider SELECT must be reached");
+                pause
+            }).await.unwrap();
+            let foreground = tokio::time::timeout(std::time::Duration::from_secs(3),
+                boxed_request(&state, req("sync.status", json!({"accountId": "acc1"}))))
+                .await.expect("foreground read must not wait on provider");
+            assert!(foreground.error.is_none());
+            let invalidated = boxed_request(&state, req("sync.probe", json!({
+                "op": "invalidate", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await;
+            assert!(invalidated.error.is_none());
+            pause.release();
+            let late = held.await.unwrap().result.unwrap();
+            assert_eq!(late["unchanged"], json!(false));
+            assert!(late.get("verificationRef").is_none(), "late check cannot issue a proof");
+        }
+
+        #[tokio::test]
+        async fn sync_observation_complete_cache_requires_a_matching_native_owner() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let config: crate::imap::ImapConfig =
+                serde_json::from_value(account["imapConfig"].clone()).unwrap();
+            let started = boxed_request(&state, req("sync.now", json!({
+                "account": account, "mailbox": "INBOX", "autoClassify": false,
+            }))).await;
+            let ticket = started.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+
+            let original = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::native_identity(conn, "acc1", "INBOX")
+            ).unwrap().expect("complete synced cache has a native owner");
+            assert_eq!(original.origin_hash,
+                mailvault_core::bulk_worker::origin_hash(&config));
+            let wrong_hash = if original.origin_hash == "f".repeat(64) {
+                "e".repeat(64)
+            } else { "f".repeat(64) };
+            crate::custody::with_conn(&state, |conn| {
+                let changed = conn.execute(
+                    "UPDATE header_cache_meta SET meta_json=json_set(meta_json, '$.nativeIdentity.originHash', ?1) WHERE account_id=?2 AND mailbox_path=?3",
+                    rusqlite::params![wrong_hash.as_str(), "acc1", "INBOX"],
+                ).map_err(|error| error.to_string())?;
+                if changed == 1 { Ok(()) } else { Err("expected one native metadata row".into()) }
+            }).unwrap();
+            let mutated = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::native_identity(conn, "acc1", "INBOX")
+            ).unwrap().expect("wrong owner remains syntactically valid");
+            assert_eq!(mutated.origin_hash, wrong_hash);
+
+            let before = commands_named(&server, "SELECT").len();
+            let wrong = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.expect("wrong-owner check answers conservatively");
+            crate::custody::with_conn(&state, |conn| {
+                let changed = conn.execute(
+                    "UPDATE header_cache_meta SET meta_json=json_set(meta_json, '$.nativeIdentity', json('null')) WHERE account_id='acc1' AND mailbox_path='INBOX'",
+                    [],
+                ).map_err(|error| error.to_string())?;
+                if changed == 1 { Ok(()) } else { Err("expected one native metadata row".into()) }
+            }).unwrap();
+            let missing_owner = crate::custody::with_conn(&state, |conn|
+                mailvault_core::custody::cache::native_identity(conn, "acc1", "INBOX")
+            ).unwrap();
+            assert!(missing_owner.is_none(), "legacy complete cache has no owner");
+            let missing = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.expect("missing-owner check answers conservatively");
+            let select_delta = commands_named(&server, "SELECT").len() - before;
+
+            assert_eq!((wrong["unchanged"].clone(), wrong.get("verificationRef").is_none(),
+                missing["unchanged"].clone(), missing.get("verificationRef").is_none(),
+                select_delta), (json!(false), true, json!(false), true, 0),
+                "unbound native cache must not issue a proof or contact the provider");
+        }
+        #[tokio::test]
+        async fn sync_observation_marker_follows_origin_and_ignores_secret_rotation() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            let started = boxed_request(&state, req("sync.now", json!({
+                "account": account, "mailbox": "INBOX", "autoClassify": false,
+            }))).await;
+            let ticket = started.result.unwrap()["ticket"].as_u64().unwrap();
+            let waited = boxed_request(&state, req("sync.wait", json!({
+                "ticket": ticket, "timeoutMs": 10_000,
+            }))).await;
+            assert_eq!(waited.result.unwrap()["success"], json!(true));
+            let marked = boxed_request(&state, req("sync.probe", json!({
+                "op": "mark", "accountId": "acc1", "mailbox": "INBOX", "ticket": ticket,
+            }))).await.result.unwrap();
+            assert_eq!(marked["marked"], json!(true));
+            let before = commands_named(&server, "SELECT").len();
+
+            let credentials_path = state.app_dir.join("credentials.json");
+            let mut credentials: Value = serde_json::from_slice(&std::fs::read(&credentials_path).unwrap()).unwrap();
+            let mut record: Value = serde_json::from_str(credentials["acc1"].as_str().unwrap()).unwrap();
+            record["password"] = json!("rotated-secret");
+            credentials["acc1"] = json!(record.to_string());
+            std::fs::write(&credentials_path, credentials.to_string()).unwrap();
+            let token_only = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(token_only["reason"], json!("probed-recently"),
+                "secret rotation must preserve a source-bound marker");
+            assert_eq!(commands_named(&server, "SELECT").len(), before);
+
+            let document = state.app_dir.join("accounts.json");
+            let mut rows: Value = serde_json::from_slice(&std::fs::read(&document).unwrap()).unwrap();
+            rows[0]["imapHost"] = json!("127.0.0.2");
+            std::fs::write(&document, rows.to_string()).unwrap();
+            let changed = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(changed["unchanged"], json!(false),
+                "changed authoritative origin cannot reuse the old marker");
+            assert_ne!(changed["reason"], json!("probed-recently"));
+            assert_eq!(commands_named(&server, "SELECT").len(), before);
+            let stale_ticket = boxed_request(&state, req("sync.probe", json!({
+                "op": "mark", "accountId": "acc1", "mailbox": "INBOX", "ticket": ticket,
+            }))).await.result.unwrap();
+            assert_eq!(stale_ticket["marked"], json!(false));
+
+            state.account_lifecycle.apply_committed_membership(None,
+                &mailvault_core::accounts_doc::MembershipDelta {
+                    removed: ["acc1".to_owned()].into(), ..Default::default()
+                });
+            let retired = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(retired["unchanged"], json!(false));
+            assert_eq!(commands_named(&server, "SELECT").len(), before);
+        }
+
+        #[tokio::test]
+        async fn sync_observation_invalidation_fences_a_held_folder_sweep() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailboxes(vec![
+                Mailbox::new("INBOX"), synthetic_mailbox("F00", 2),
+            ]));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            bind_account(&state, &server);
+            let request = json!({
+                "op": "refresh", "accountId": "acc1", "activeMailbox": "INBOX",
+                "mailboxes": [{"path": "INBOX"}, {"path": "F00"}],
+            });
+            let pause = server.pause_command("STATUS");
+            let held_state = Arc::clone(&state);
+            let held_request = request.clone();
+            let held = tokio::spawn(async move {
+                boxed_request(&held_state, req("folders.status", held_request)).await
+            });
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(5)),
+                    "real folder STATUS must be reached");
+                pause
+            }).await.unwrap();
+            assert_eq!(commands_named(&server, "STATUS").len(), 1);
+            let invalidated = boxed_request(&state, req("folders.status", json!({
+                "op": "invalidate", "accountId": "acc1",
+            }))).await.result.unwrap();
+            assert_eq!(invalidated["invalidated"], json!(true));
+            pause.release();
+            let stale = held.await.unwrap();
+            assert!(stale.error.is_none());
+            assert_eq!(stale.result, Some(Value::Null),
+                "held result cannot publish after invalidation");
+            let fresh = boxed_request(&state, req("folders.status", request)).await;
+            let rows = fresh.result.expect("new sweep after invalidation")["rows"].as_array().unwrap().clone();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0]["path"], json!("F00"));
+            assert_eq!(rows[0]["messages"], json!(2));
+            assert_eq!(commands_named(&server, "STATUS").len(), 2);
+        }
+
+        #[tokio::test]
+        async fn sync_observation_empty_and_graph_folder_scopes_do_not_throttle() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailboxes(vec![
+                Mailbox::new("INBOX"), synthetic_mailbox("F00", 2),
+            ]));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            bind_account(&state, &server);
+            let empty = boxed_request(&state, req("folders.status", json!({
+                "op": "refresh", "accountId": "acc1", "activeMailbox": "INBOX",
+                "mailboxes": [{"path": "INBOX"}],
+            }))).await;
+            assert_eq!(empty.result, Some(Value::Null));
+            let document = state.app_dir.join("accounts.json");
+            let mut rows: Value = serde_json::from_slice(&std::fs::read(&document).unwrap()).unwrap();
+            rows[0]["oauth2Transport"] = json!("graph");
+            std::fs::write(&document, rows.to_string()).unwrap();
+            let wanted = || json!({
+                "op": "refresh", "accountId": "acc1", "activeMailbox": "INBOX",
+                "mailboxes": [{"path": "INBOX"}, {"path": "F00"}],
+            });
+            let graph = boxed_request(&state, req("folders.status", wanted())).await;
+            assert_eq!(graph.result, Some(Value::Null));
+            assert!(commands_named(&server, "STATUS").is_empty());
+            rows[0].as_object_mut().unwrap().remove("oauth2Transport");
+            std::fs::write(&document, rows.to_string()).unwrap();
+            let eligible = boxed_request(&state, req("folders.status", wanted())).await;
+            assert_eq!(eligible.result.unwrap()["rows"].as_array().unwrap().len(), 1);
+            assert_eq!(commands_named(&server, "STATUS").len(), 1,
+                "skipped scopes did not consume throttle");
+        }
+
+        #[tokio::test]
+        async fn sync_observation_retirement_fences_held_probe_and_leaves_other_account_live() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let row = |id: &str, email: &str| json!({
+                "id": id, "email": email, "authType": "password",
+                "imapHost": server.host(), "imapPort": server.port(), "imapSecure": false,
+            });
+            let a = row("acc1", "one@example.test");
+            let b = row("acc2", "two@example.test");
+            std::fs::write(state.app_dir.join("accounts.json"), json!([a, b]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let credential = |id: &str, email: &str| json!({
+                "id": id, "email": email, "authType": "password", "password": "hunter2",
+                "imapHost": server.host(), "imapPort": server.port(), "imapSecure": false,
+            }).to_string();
+            let credentials = state.app_dir.join("credentials.json");
+            std::fs::write(&credentials, json!({
+                "acc1": credential("acc1", "one@example.test"),
+                "acc2": credential("acc2", "two@example.test"),
+            }).to_string()).unwrap();
+            std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+            std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+            for (id, email) in [("acc1", "one@example.test"), ("acc2", "two@example.test")] {
+                let start = boxed_request(&state, req("sync.now", json!({
+                    "account": {"id": id, "email": email, "imapConfig": row(id, email)},
+                    "mailbox": "INBOX", "autoClassify": false,
+                }))).await;
+                let ticket = start.result.unwrap()["ticket"].as_u64().unwrap();
+                let waited = boxed_request(&state, req("sync.wait", json!({
+                    "ticket": ticket, "timeoutMs": 10_000,
+                }))).await;
+                assert_eq!(waited.result.unwrap()["success"], json!(true));
+            }
+
+            let before = commands_named(&server, "SELECT").len();
+            let pause = server.pause_command("SELECT");
+            let held_state = Arc::clone(&state);
+            let held = tokio::spawn(async move {
+                boxed_request(&held_state, req("sync.probe", json!({
+                    "op": "check", "accountId": "acc1", "mailbox": "INBOX",
+                }))).await
+            });
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(5)),
+                    "A's real SELECT must enter before retirement");
+                pause
+            }).await.unwrap();
+            // A real Closing claim waits for the route's finite operation;
+            // this test revokes the original epoch at the held provider gate.
+            state.account_lifecycle.apply_committed_membership(None,
+                &mailvault_core::accounts_doc::MembershipDelta {
+                    removed: ["acc1".to_owned()].into(), ..Default::default()
+                });
+            pause.release();
+            let late = held.await.unwrap().result.unwrap();
+            assert_eq!(late["unchanged"], json!(false));
+            assert!(late.get("verificationRef").is_none());
+            let b_check = boxed_request(&state, req("sync.probe", json!({
+                "op": "check", "accountId": "acc2", "mailbox": "INBOX",
+            }))).await.result.unwrap();
+            assert_eq!(b_check["reason"], json!("modseq-match"));
+            assert!(b_check["verificationRef"].as_str().is_some());
+            assert_eq!(commands_named(&server, "SELECT").len() - before, 2,
+                "A's held SELECT and B's independent SELECT both reached the provider");
         }
     }
 

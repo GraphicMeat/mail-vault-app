@@ -38,21 +38,20 @@ const snapshot = value => {
 const originalBytes = key => Buffer.from(
   fs.readFileSync(path.join(__dirname, ORIGINALS[key].archive), 'ascii').trim(), 'base64');
 
+const capturing = process.env.MV_CAPTURE_SYNC_OBSERVATION === '1';
 for (const [key, entry] of Object.entries(ORIGINALS)) {
   const archived = originalBytes(key);
   if (sha(archived) !== entry.sha256) throw Error(`Changed archived ${key} source`);
-  const base = cp.execFileSync('git', ['show', `${BASE}:${entry.source}`], { cwd: ROOT });
-  if (!archived.equals(base)) throw Error(`Archived ${key} source differs from ${BASE}`);
-}
-if (process.env.MV_CAPTURE_SYNC_OBSERVATION === '1') {
-  for (const [key, entry] of Object.entries(ORIGINALS)) {
-    if (!originalBytes(key).equals(fs.readFileSync(path.join(ROOT, entry.source)))) {
+  if (capturing) {
+    const base = cp.execFileSync('git', ['show', `${BASE}:${entry.source}`], { cwd: ROOT });
+    if (!archived.equals(base)) throw Error(`Archived ${key} source differs from ${BASE}`);
+    if (!archived.equals(fs.readFileSync(path.join(ROOT, entry.source)))) {
       throw Error(`Live ${key} source changed before first oracle capture`);
     }
   }
-  if (!/^[a-f0-9]{64}$/.test(process.env.MV_SYNC_OBSERVATION_RUNNER_SHA256 || '')) {
-    throw Error('Capture requires the evidence runner SHA-256');
-  }
+}
+if (capturing && !/^[a-f0-9]{64}$/.test(process.env.MV_SYNC_OBSERVATION_RUNNER_SHA256 || '')) {
+  throw Error('Capture requires the evidence runner SHA-256');
 }
 
 const ACCOUNT_A = { id: 'account-a', email: 'a@example.test' };

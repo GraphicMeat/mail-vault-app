@@ -69,6 +69,7 @@ mod server;
 mod snapshot;
 mod snooze_worker;
 pub mod sync_engine;
+mod sync_observation;
 mod sync_jmap;
 mod vault_gap;
 
@@ -594,6 +595,7 @@ async fn daemon_main() {
         imap_pool,
         oauth2: oauth2::OAuth2Manager::new(),
         sync_engine: sync_eng,
+        sync_observation: Default::default(),
         idle,
         contacts: Arc::clone(&contacts),
         net,

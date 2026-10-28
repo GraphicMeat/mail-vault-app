@@ -55,6 +55,7 @@ pub mod oauth2;
 pub mod dns;
 pub mod dkim;
 pub mod sender_check;
+pub mod sync_policy;
 pub mod verification_code;
 pub mod body_scan;
 pub mod unsubscribe;

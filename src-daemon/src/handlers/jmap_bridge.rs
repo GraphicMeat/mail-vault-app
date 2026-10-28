@@ -445,6 +445,77 @@ fn day_start(day: Option<&str>) -> Option<String> {
     Some(format!("{}T00:00:00Z", day.format("%Y-%m-%d")))
 }
 
+async fn status_delta(state: &Arc<DaemonState>, account: &ImapConfig,
+    account_id: &str, original: Option<&crate::account_lifecycle::AccountStamp>) -> Result<(), String> {
+    match original {
+        Some(stamp) => crate::sync_jmap::delta_only_with_stamp(state, account, account_id, stamp).await,
+        None => crate::sync_jmap::delta_only(state, account, account_id).await,
+    }
+}
+
+async fn probe_status_value(state: &Arc<DaemonState>, account: &ImapConfig,
+    acct: &AccountJmap, account_id: &str, mailbox: &str,
+    original: Option<&crate::account_lifecycle::AccountStamp>) -> Result<Value, Fail> {
+    // A failed delta fails the probe so a stale count never looks current.
+    status_delta(state, account, account_id, original).await?;
+    let mb = mailbox_counts(acct, mailbox).await?;
+    let uid_next = uid_next(state, account_id, mailbox).await?;
+    let (modseq, _) = meta_read(state, account_id, mailbox, None).await;
+    Ok(json!({"exists": mb.total_emails, "uidValidity": 1,
+        "uidNext": uid_next, "highestModseq": modseq}))
+}
+
+async fn folder_status_rows(state: &Arc<DaemonState>, account: &ImapConfig,
+    acct: &AccountJmap, account_id: &str, wanted: Vec<String>,
+    original: Option<&crate::account_lifecycle::AccountStamp>) -> Result<Vec<MailboxStatus>, Fail> {
+    // A failed delta does not hide fresh server badge counts.
+    if let Err(error) = status_delta(state, account, account_id, original).await {
+        warn!("[jmap] {}: delta before folder status failed: {}", account_id, error);
+    }
+    let boxes = acct.current().await?;
+    let mut statuses = Vec::new();
+    for path in wanted {
+        let Some(mailbox) = boxes.ids.get(&path).and_then(|id|
+            boxes.list.iter().find(|mailbox| &mailbox.id == id)) else { continue };
+        let uid_next = uid_next(state, account_id, &path).await.ok();
+        statuses.push(MailboxStatus {
+            path, messages: mailbox.total_emails, unseen: Some(mailbox.unread_emails),
+            uid_next, uid_validity: Some(1),
+        });
+    }
+    Ok(statuses)
+}
+
+fn fail_text(error: Fail) -> String {
+    match error { Fail::Params(text) | Fail::Rpc(text) => text }
+}
+
+pub(crate) async fn observation_probe_status(state: &Arc<DaemonState>, account: &ImapConfig,
+    account_id: &str, mailbox: &str,
+    original: &crate::account_lifecycle::AccountStamp) -> Result<Value, String> {
+    with_session_retry(state, account, |acct| {
+        let account_id = account_id.to_owned();
+        let mailbox = mailbox.to_owned();
+        async move {
+            probe_status_value(state, account, &acct, &account_id, &mailbox, Some(original))
+                .await.map_err(fail_text)
+        }
+    }).await
+}
+
+pub(crate) async fn observation_folder_status(state: &Arc<DaemonState>, account: &ImapConfig,
+    account_id: &str, wanted: Vec<String>,
+    original: &crate::account_lifecycle::AccountStamp) -> Result<Vec<MailboxStatus>, String> {
+    with_session_retry(state, account, |acct| {
+        let account_id = account_id.to_owned();
+        let wanted = wanted.clone();
+        async move {
+            folder_status_rows(state, account, &acct, &account_id, wanted, Some(original))
+                .await.map_err(fail_text)
+        }
+    }).await
+}
+
 /// One bridged RPC. Returns the success payload; `E_UID_GONE:` and every
 /// other failure are `Fail`s. The write side's functions follow `answer`.
 async fn answer(
@@ -485,39 +556,14 @@ async fn answer(
         "imap_check_mailbox_status" => {
             let account_id = ledger_account(params)?;
             let mailbox = mailbox_param(params);
-            // The account's delta first, so the ledger and the counter below
-            // are current. A delta that fails fails the probe: the app then
-            // syncs (`syncProbe.js` "probe-failed"), never trusts stale counts.
-            crate::sync_jmap::delta_only(state, account, &account_id).await?;
-            let mb = mailbox_counts(acct, &mailbox).await?;
-            let uid_next = uid_next(state, &account_id, &mailbox).await?;
-            let (modseq, _) = meta_read(state, &account_id, &mailbox, None).await;
-            Ok(json!({"exists": mb.total_emails, "uidValidity": 1, "uidNext": uid_next, "highestModseq": modseq}))
+            probe_status_value(state, account, acct, &account_id, &mailbox, original).await
         }
 
         "imap_folder_status" => {
             let account_id = ledger_account(params)?;
             let wanted: Vec<String> = param(params, "mailboxes")?;
-            // The account's delta first. Badges still answer when it fails:
-            // the counts below come from the server either way.
-            if let Err(e) = crate::sync_jmap::delta_only(state, account, &account_id).await {
-                warn!("[jmap] {}: delta before folder status failed: {}", account_id, e);
-            }
-            let boxes = acct.current().await?;
-            let mut statuses = Vec::new();
-            for path in wanted {
-                let Some(m) = boxes.ids.get(&path).and_then(|id| boxes.list.iter().find(|m| &m.id == id)) else { continue };
-                // A badge needs no vault: without one, no uidNext.
-                let uid_next = uid_next(state, &account_id, &path).await.ok();
-                statuses.push(MailboxStatus {
-                    path,
-                    messages: m.total_emails,
-                    unseen: Some(m.unread_emails),
-                    uid_next,
-                    uid_validity: Some(1),
-                });
-            }
-            serde_json::to_value(&statuses).map_err(|e| Fail::Rpc(e.to_string()))
+            let statuses = folder_status_rows(state, account, acct, &account_id, wanted, original).await?;
+            serde_json::to_value(&statuses).map_err(|error| Fail::Rpc(error.to_string()))
         }
 
         "imap_search_all_uids" => {
