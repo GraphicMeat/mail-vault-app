@@ -314,9 +314,15 @@ async fn purge_server_failure_and_local_conflict_never_reach_mirror() {
         run(&mut w,&mut f).await.unwrap();
         assert_eq!(f.trace.len(),1);
         assert_eq!(f.trace[0]["effect"],"server-delete");
-        assert_eq!(w.purge_result.as_ref().unwrap().failed,1);
-        assert_eq!(w.purge_result.as_ref().unwrap().deleted,usize::from(conflict));
+        // One message lands in exactly one count: a server delete that went
+        // through but left the local copy is neither removed nor a server failure.
+        let counts=w.purge_result.as_ref().unwrap();
+        assert_eq!((counts.deleted,counts.failed,counts.kept_local),(0,usize::from(!conflict),usize::from(conflict)),"conflict={conflict}");
     }
+}
+#[test]
+fn purge_counts_kept_local_is_omitted_from_the_result_when_zero() {
+    assert_eq!(json!(purge_work().purge_result),json!({"deleted":0,"failed":0,"queuedBackup":0,"needsResync":0}));
 }
 #[tokio::test]
 async fn purge_post_server_checkpoint_failure_and_resume_preserve_uncertainty() {

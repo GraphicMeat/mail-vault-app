@@ -2590,8 +2590,11 @@ mod tests {
             let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":"graph-purge","type":"delete_everywhere","scope":scope,"mirrorRoot":drive.path()})).await;
             assert!(reply.error.is_none(),"{mode}: {:?}",reply.error);
             let pending=wait_drained(&state).await;
-            assert_eq!(pending["result"]["deleted"],usize::from(matches!(mode,"success"|"missing-owner"|"missing-id")),"{mode}: {pending}");
-            assert_eq!(pending["result"]["failed"],usize::from(mode!="success"),"{mode}: {pending}");
+            // Server delete done, local bytes unproved: kept locally, not a server failure.
+            let kept=matches!(mode,"missing-owner"|"missing-id");
+            assert_eq!(pending["result"]["deleted"],usize::from(mode=="success"),"{mode}: {pending}");
+            assert_eq!(pending["result"]["failed"],usize::from(matches!(mode,"collision"|"refused")),"{mode}: {pending}");
+            assert_eq!(pending["result"]["keptLocal"].as_u64().unwrap_or(0),u64::from(kept),"{mode}: {pending}");
             assert_eq!(mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().is_none(),mode=="success");
             assert_eq!(cur.join("7.eml").exists(),mode!="success");
             let requests=crate::handlers::graph::test_graph_requests();

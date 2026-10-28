@@ -90,6 +90,7 @@ export async function retryAfterResync(operation, scope, onProgress) {
   const second = retry.result || {};
   // The first run counted each retried target as failed and its mailbox once as needing resync.
   const mailboxes = new Set(proved.map(({ original }) => `${original.accountId}|${original.mailbox}`)).size;
+  const keptLocal = (first.keptLocal || 0) + (second.keptLocal || 0);
   return {
     ...operation,
     outcomes,
@@ -98,6 +99,8 @@ export async function retryAfterResync(operation, scope, onProgress) {
       failed: Math.max(0, (first.failed || 0) - proved.length) + (second.failed || 0),
       queuedBackup: (first.queuedBackup || 0) + (second.queuedBackup || 0),
       needsResync: Math.max(0, (first.needsResync || 0) - mailboxes) + (second.needsResync || 0),
+      // Omitted at zero, as the daemon serializes it.
+      ...(keptLocal ? { keptLocal } : {}),
     },
   };
 }

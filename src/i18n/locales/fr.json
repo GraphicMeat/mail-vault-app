@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "Échec de la suppression : {{err}}",
   "list.deleteFailedOnServer_one": "{{count}} n'a pas pu être supprimé du serveur et a été laissé intact en local.",
   "list.deleteFailedOnServer_other": "{{count}} n'ont pas pu être supprimés du serveur et ont été laissés intacts en local.",
+  "list.deleteKeptLocal_one": "{{count}} a été supprimé du serveur mais conservé en local.",
+  "list.deleteKeptLocal_other": "{{count}} ont été supprimés du serveur mais conservés en local.",
   "list.emails": "{{shown}} sur {{total}} e-mails",
   "list.emails2": "{{total}} e-mails",
   "list.filledMeansBackupDriveToo": "Plein signifie que votre disque de sauvegarde l'a aussi. Creux signifie que le disque n'est pas connecté, donc aucune réponse possible.",

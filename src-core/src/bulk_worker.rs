@@ -215,9 +215,13 @@ pub const ALREADY_GONE: &str = "errors.bulkAlreadyGone";
 pub struct PurgeCounts {
     pub deleted: usize,
     pub failed: usize,
+    /// Gone from the server, local copy kept: its bytes could not be proved.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub kept_local: usize,
     pub queued_backup: usize,
     pub needs_resync: usize,
 }
+fn is_zero(n: &usize) -> bool { *n == 0 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PurgeEffect {
@@ -510,8 +514,11 @@ fn purge_counts(w: &mut Workflow) {
     let mut result = PurgeCounts::default();
     let mut resync = HashSet::new();
     for t in &w.purge_targets {
-        if (t.approved() && !(t.local_only() && t.local==PurgeEffect::Conflict)) || t.already_gone { result.deleted += 1; }
-        if t.refused || matches!(t.server,PurgeEffect::Failed|PurgeEffect::Attempted) || t.local == PurgeEffect::Conflict { result.failed += 1; }
+        // Each target lands in one count: a server delete that left the local
+        // copy is neither removed nor a server failure.
+        if t.approved() && !t.local_only() && t.local == PurgeEffect::Conflict { result.kept_local += 1; }
+        else if (t.approved() && t.local != PurgeEffect::Conflict) || t.already_gone { result.deleted += 1; }
+        else if t.refused || matches!(t.server,PurgeEffect::Failed|PurgeEffect::Attempted) || t.local == PurgeEffect::Conflict { result.failed += 1; }
         if t.mirror == PurgeEffect::Queued { result.queued_backup += 1; }
         if t.needs_resync { resync.insert((&t.account_id,&t.mailbox)); }
     }

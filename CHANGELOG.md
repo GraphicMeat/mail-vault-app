@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Delete everywhere no longer reports one message twice. When the server copy was deleted but the local copy could not be matched safely, the toast said "1 removed. 1 could not be deleted from the server". It now says the message was deleted from the server but kept locally.
+
 - A one-time code in mail that a scheduled refresh picks up now shows in the corner bubble and in the new-mail banner. Before, only mail the live inbox watch found first got the bubble, so a code that arrived between watch wake-ups showed neither.
 
 - Retire the app's OAuth token saver and legacy credential write commands after native account cutover. The daemon saves refreshed tokens without an open window, while the app reads completed credentials only to refresh visible account state. Native removal now decides which IMAP sessions to close, including shared connections.

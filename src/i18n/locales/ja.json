@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "削除に失敗しました: {{err}}",
   "list.deleteFailedOnServer_one": "{{count}} 件をサーバーから削除できず、ローカルはそのままにしました。",
   "list.deleteFailedOnServer_other": "{{count}} 件をサーバーから削除できず、ローカルはそのままにしました。",
+  "list.deleteKeptLocal_one": "{{count}} 件をサーバーから削除しましたが、ローカルには残しました。",
+  "list.deleteKeptLocal_other": "{{count}} 件をサーバーから削除しましたが、ローカルには残しました。",
   "list.emails": "{{total}} 件中 {{shown}} 件",
   "list.emails2": "{{total}} 件",
   "list.filledMeansBackupDriveToo": "塗りつぶしはバックアップドライブにもあることを示します。中抜きはドライブが未接続で判断できないことを示します。",

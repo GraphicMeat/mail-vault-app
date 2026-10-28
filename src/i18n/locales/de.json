@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "Löschen fehlgeschlagen: {{err}}",
   "list.deleteFailedOnServer_one": "{{count}} konnte nicht vom Server gelöscht werden und blieb lokal unangetastet.",
   "list.deleteFailedOnServer_other": "{{count}} konnten nicht vom Server gelöscht werden und blieben lokal unangetastet.",
+  "list.deleteKeptLocal_one": "{{count}} wurde vom Server gelöscht, aber lokal behalten.",
+  "list.deleteKeptLocal_other": "{{count}} wurden vom Server gelöscht, aber lokal behalten.",
   "list.emails": "{{shown}} von {{total}} E-Mails",
   "list.emails2": "{{total}} E-Mails",
   "list.filledMeansBackupDriveToo": "Ausgefüllt heißt, dein Sicherungslaufwerk hat es auch. Hohl heißt, das Laufwerk ist nicht verbunden: Es gibt also keine Antwort.",

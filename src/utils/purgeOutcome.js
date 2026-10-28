@@ -8,12 +8,17 @@ import { t } from '../i18n/index.js';
 // null: there's nothing to warn about, the list already reflects the delete.
 export function formatPurgeEverywhereOutcome(result) {
   if (!result) return null;
-  const { deleted = 0, failed = 0, queuedBackup = 0, needsResync = 0 } = result;
-  if (!failed && !queuedBackup && !needsResync) return null;
+  const { deleted = 0, failed = 0, keptLocal = 0, queuedBackup = 0, needsResync = 0 } = result;
+  if (!failed && !keptLocal && !queuedBackup && !needsResync) return null;
 
   const clauses = [`${deleted} removed.`];
   if (failed > 0) {
     clauses.push(t('list.deleteFailedOnServer', { count: failed }));
+  }
+  if (keptLocal > 0) {
+    // The server copy is gone; the local copy stayed because its bytes could
+    // not be proved to be that message (a provider row without its id).
+    clauses.push(t('list.deleteKeptLocal', { count: keptLocal }));
   }
   if (queuedBackup > 0) {
     clauses.push(t('list.backupWillBeRemoved', { count: queuedBackup }));

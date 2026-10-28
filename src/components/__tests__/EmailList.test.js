@@ -874,6 +874,16 @@ describe('formatPurgeEverywhereOutcome', () => {
     expect(msg).toContain('4 were skipped because this mailbox needs to resync');
   });
 
+  it('says a message deleted on the server but kept locally was not a server failure', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    const one = formatPurgeEverywhereOutcome({ deleted: 0, failed: 0, keptLocal: 1, queuedBackup: 0, needsResync: 0 });
+    expect(one).toContain('0 removed');
+    expect(one).toContain('1 was deleted from the server but kept locally');
+    expect(one).not.toMatch(/could not be deleted/);
+    const many = formatPurgeEverywhereOutcome({ deleted: 1, failed: 0, keptLocal: 2, queuedBackup: 0, needsResync: 0 });
+    expect(many).toContain('2 were deleted from the server but kept locally');
+  });
+
   it('uses singular wording for a count of exactly one', async () => {
     const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
     const msg = formatPurgeEverywhereOutcome({ deleted: 0, failed: 1, queuedBackup: 1, needsResync: 1 });

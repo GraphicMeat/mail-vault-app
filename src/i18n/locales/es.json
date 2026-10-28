@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "Error al eliminar: {{err}}",
   "list.deleteFailedOnServer_one": "No se pudo eliminar {{count}} del servidor y se dejó intacto en local.",
   "list.deleteFailedOnServer_other": "No se pudieron eliminar {{count}} del servidor y se dejaron intactos en local.",
+  "list.deleteKeptLocal_one": "Se eliminó {{count}} del servidor, pero se conservó en local.",
+  "list.deleteKeptLocal_other": "Se eliminaron {{count}} del servidor, pero se conservaron en local.",
   "list.emails": "{{shown}} de {{total}} correos",
   "list.emails2": "{{total}} correos",
   "list.filledMeansBackupDriveToo": "Relleno significa que tu unidad de copia también lo tiene. Hueco significa que la unidad no está conectada, así que no hay respuesta.",

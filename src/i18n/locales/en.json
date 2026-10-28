@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "Delete failed: {{err}}",
   "list.deleteFailedOnServer_one": "{{count}} could not be deleted from the server and was left untouched locally.",
   "list.deleteFailedOnServer_other": "{{count}} could not be deleted from the server and were left untouched locally.",
+  "list.deleteKeptLocal_one": "{{count}} was deleted from the server but kept locally.",
+  "list.deleteKeptLocal_other": "{{count}} were deleted from the server but kept locally.",
   "list.emails": "{{shown}} of {{total}} emails",
   "list.emails2": "{{total}} emails",
   "list.filledMeansBackupDriveToo": "Filled means your backup drive has it too. Hollow means the drive is not connected, so there is no answer either way.",

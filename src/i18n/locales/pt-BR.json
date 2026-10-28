@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "Falha ao excluir: {{err}}",
   "list.deleteFailedOnServer_one": "{{count}} não pôde ser excluído do servidor e ficou intacto localmente.",
   "list.deleteFailedOnServer_other": "{{count}} não puderam ser excluídos do servidor e ficaram intactos localmente.",
+  "list.deleteKeptLocal_one": "{{count}} foi excluído do servidor, mas mantido localmente.",
+  "list.deleteKeptLocal_other": "{{count}} foram excluídos do servidor, mas mantidos localmente.",
   "list.emails": "{{shown}} de {{total}} e-mails",
   "list.emails2": "{{total}} e-mails",
   "list.filledMeansBackupDriveToo": "Preenchido significa que seu disco de backup também tem. Vazado significa que o disco não está conectado, então não há resposta.",

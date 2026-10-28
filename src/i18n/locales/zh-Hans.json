@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "删除失败：{{err}}",
   "list.deleteFailedOnServer_one": "有 {{count}} 封无法从服务器删除，本地保持原样。",
   "list.deleteFailedOnServer_other": "有 {{count}} 封无法从服务器删除，本地保持原样。",
+  "list.deleteKeptLocal_one": "有 {{count}} 封已从服务器删除，但本地仍保留。",
+  "list.deleteKeptLocal_other": "有 {{count}} 封已从服务器删除，但本地仍保留。",
   "list.emails": "{{total}} 封中的 {{shown}} 封",
   "list.emails2": "{{total}} 封邮件",
   "list.filledMeansBackupDriveToo": "实心表示备份盘中也有。空心表示备份盘未连接，因此无法判断。",

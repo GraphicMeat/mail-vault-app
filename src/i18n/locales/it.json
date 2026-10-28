@@ -1207,6 +1207,8 @@
   "list.deleteFailed": "Eliminazione non riuscita: {{err}}",
   "list.deleteFailedOnServer_one": "{{count}} non è stato eliminato dal server ed è rimasto intatto in locale.",
   "list.deleteFailedOnServer_other": "{{count}} non sono stati eliminati dal server e sono rimasti intatti in locale.",
+  "list.deleteKeptLocal_one": "{{count}} è stato eliminato dal server ma conservato in locale.",
+  "list.deleteKeptLocal_other": "{{count}} sono stati eliminati dal server ma conservati in locale.",
   "list.emails": "{{shown}} di {{total}} email",
   "list.emails2": "{{total}} email",
   "list.filledMeansBackupDriveToo": "Pieno significa che anche il disco di backup lo ha. Vuoto significa che il disco non è collegato, quindi non c'è risposta.",
