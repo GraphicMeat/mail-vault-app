@@ -19,10 +19,12 @@ use crate::sender_check::js_space;
 /// Words that say the mail carries a code, in the app's languages and
 /// Lithuanian ("kodas", "patvirtinimo"). Stems, so "verification", "verify"
 /// and "verified" all count. "kodėl" (why) is not "kod" + a case ending.
+/// "Security" alone is not one: it names companies ("TAC Security, HQ 1390
+/// Market St"), and a security code still says "code".
 static KEYWORDS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r"(?i)(?-u:\b)(?:codes?|otp|passcode|pin|2fa|mfa|one[- ]?time|verif[0-9A-Za-z_]*|authenticat[0-9A-Za-z_]*|security|token|confirm[0-9A-Za-z_]*|sign[- ]?in|log[- ]?in)(?-u:\b)",
-        r"|c[oó]digo|verificaci[oó]n|codice|verifica|best[äa]tigung|sicherheits|verifizier|einmal|v[ée]rification|s[ée]curit[ée]",
+        r"(?i)(?-u:\b)(?:codes?|otp|passcode|pin|2fa|mfa|one[- ]?time|verif[0-9A-Za-z_]*|authenticat[0-9A-Za-z_]*|token|confirm[0-9A-Za-z_]*|sign[- ]?in|log[- ]?in)(?-u:\b)",
+        r"|c[oó]digo|verificaci[oó]n|codice|verifica|best[äa]tigung|sicherheits|verifizier|einmal|v[ée]rification",
         r"|kodas(?-u:\b)|kod[ąų]|kod(?:o|u|us|ai|e)(?-u:\b)|patvirtin|prisijung",
         r"|認証|確認コード|検証|ワンタイム|인증|확인 코드|验证码|驗證碼|校验码",
     ))
@@ -233,11 +235,20 @@ mod tests {
         }
     }
 
+    /// Cases answered differently since the port, on purpose: bare "security"
+    /// stopped being a code word.
+    const CHANGED_SINCE_JS: &[(&str, bool)] = &[("long_s", false)];
+
     /// Every case the JS answered, answered the same.
     #[test]
     fn matches_every_case_the_js_answered() {
-        let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
+        let mut fixture: Value = serde_json::from_str(FIXTURE).unwrap();
         let mut wrong = Vec::new();
+        for case in fixture["looks"].as_array_mut().unwrap() {
+            if let Some(&(_, now)) = CHANGED_SINCE_JS.iter().find(|(name, _)| case["name"] == *name) {
+                case["expected"] = Value::from(now);
+            }
+        }
         let codes = fixture["codes"].as_array().unwrap();
         assert!(codes.len() > 90);
         for case in codes {
@@ -307,6 +318,19 @@ mod tests {
     #[test]
     fn a_lithuanian_why_is_not_a_code_word() {
         assert!(!looks_like_code_mail("Kodėl taip nutiko", "Kodėl 1234 žmonės atėjo"));
+    }
+
+    /// A vendor named "TAC Security" signs with its street address, which sat
+    /// closer to the name than the code sat to "one time".
+    const ESOF_FOOTER: &str = "Best regards,\r\nTAC Security, ESOF AppSec ADA CASA Team\r\n\r\nTAC Security, HQ 1390 Market, St #200,San Francisco, California 94102,USA\r\n\r\nwww.tacsecurity.com Copyright © TAC Security, All rights reserved.";
+
+    #[test]
+    fn a_company_named_security_does_not_announce_its_address() {
+        let otp = format!("Dear Jane Doe, \r\n\r\nWe have received a request to access your ESOF AppSec ADA CASA Account through jane@example.com. Your one time password is: 128321\r\n\r\nThis is a system-generated email. Please do not reply. For any inquiries, contact  help@example.com.\r\n\r\n{ESOF_FOOTER}");
+        assert_eq!(find_verification_code("Login OTP", &otp).as_deref(), Some("128321"));
+
+        let welcome = format!("Dear Jane Doe,\r\nWelcome to ESOF AppSec ADA CASA by TAC Security \r\nYour account has been created successfully.\r\n\r\nPlease upload evidence for all 48 required security checks to enable the CASA team to begin the assessment review.\r\n\r\n{ESOF_FOOTER}");
+        assert_eq!(find_verification_code("Welcome to ESOF AppSec ADA CASA by TAC Security", &welcome), None);
     }
 
     #[test]
