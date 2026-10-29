@@ -21,7 +21,7 @@
 .hm-proof { margin:14px 0 0; font-size:.86rem; font-variant-numeric:tabular-nums; }
 .hm-proof a { color:inherit; opacity:.78; text-decoration:none; }
 .hm-proof a:hover { opacity:1; text-decoration:underline; }
-.hm-proof svg { vertical-align:-2px; margin-right:6px; }
+.hm-proof svg { display:inline-block; vertical-align:-2px; margin-right:6px; }
 /* The price line reads as body text, not a caption, with the amounts in bold. */
 .hm-price { font-size:1rem; line-height:1.55; font-variant-numeric:normal; }
 .hm-price a { opacity:1; color:var(--mv-ink); }
