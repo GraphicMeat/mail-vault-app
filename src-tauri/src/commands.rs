@@ -167,6 +167,7 @@ pub async fn backup_save_external_location(
         return Err("Cloud Backups requires a one-time in-app purchase. Open Settings → Backups to unlock.".to_string());
     }
     let data_dir = mailvault_core::paths::app_data_dir().map_err(|e| e.to_string())?;
+    mailvault_core::folder_overlap::check_backup_folder(&data_dir, std::path::Path::new(&path))?;
     crate::external_location::save_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP, &path)
 }
 

@@ -184,7 +184,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     workDir = mkdtempSync(join(tmpdir(), 'mv-import-export-e2e-'));
 
     await installRawCapture(['export-progress', 'import-progress', 'mbox-export-progress', 'mbox-import-progress']);
-    await openTab('Backup & Restore');
+    await openTab('Backup & Restore', 'Import & Export');
   });
 
   after(async function () {

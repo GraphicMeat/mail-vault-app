@@ -191,7 +191,7 @@ const dismissChip = (id) => browser.execute((jobId) => {
  */
 async function uploadThroughDialog(sourcePath) {
   await switchToFolder(LUKE, 'INBOX');
-  await openTab('Backup & Restore');
+  await openTab('Backup & Restore', 'Import & Export');
   // Read back what was installed, not `true`: a stub assignment on a locked
   // webview property fails silently on tauri-wd, and a real native alert
   // would then sit over every later spec.

@@ -334,7 +334,8 @@ export const settingSearchGroups = [
     ['settings.logs.clearLog2', 'clear delete diagnostic logs'],
   ] },
   // Backup's own sub-tabs: section names the one that holds the setting.
-  { id: 'backup', section: 'restore', settings: [
+  { id: 'backup', section: 'restore', sectionKey: 'settings.backup.importExport.tab', settings: [
+    ['settings.backup.importExport.zipHeading', 'import export one time zip archive vault snapshot copy once'],
     ['settings.backup.restore.exportBackup', 'export backup zip vault download'],
     ['settings.backup.restore.importBackup', 'import backup zip vault restore'],
     ['settings.backup.restore.exportMbox', 'export mbox file standard format'],
@@ -342,7 +343,8 @@ export const settingSearchGroups = [
   ] },
   { id: 'backup', section: 'config', sectionKey: 'settings.backup.backupSettings', settings: [
     ['settings.mailLocation.whereMailStored', 'storage location where mail stored folder move backup'],
-    ['settings.backup.config.whatBackUp', 'backup scope what back up archived all emails'],
+    ['settings.backup.config.scopeLabel', 'backup scope what back up archived all emails'],
+    ['settings.backup.config.storageLabel', 'backup storage where folder drive second copy external'],
   ] },
   { id: 'backup', section: 'schedule', sectionKey: 'settings.backup.backupSchedule', settings: [
     ['settings.backup.schedule.automaticBackup', 'automatic backup schedule enable'],

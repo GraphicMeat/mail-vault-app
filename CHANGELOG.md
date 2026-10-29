@@ -8,6 +8,8 @@
 
 - Mark as read now shows the closed envelope and mark as unread the open one, in the radial menu, row and selection actions, reader toolbar, swipe backdrop and onboarding preview. They were the other way round.
 
+- Settings > Backup & Restore: the Backup & Restore sub-tab is now Import & Export and sits last, and Backup Settings opens first. Import & Export says up front that ZIP and MBOX import and export are one-time copies, not a live backup. Backup Settings explains the working copy, the backup scope and the backup storage in plain words. A backup folder can no longer be the folder your mail is stored in, or inside or around it, and your mail cannot be moved onto your backup folder: both are refused before anything is saved or copied.
+
 - Deleting a Notes to Self card now takes it off the board at once, like deleting from the list, instead of leaving it there until the server answers. If the server refuses, the card comes back in its place and the delete-failed toast shows.
 
 - Deleting a Notes to Self card on an Outlook account no longer fails with "Cannot delete: no Graph message ID found for this email" when its folder was not open. The delete now reads the message id from the saved Outlook ledger, which also reaches messages older than the newest 200 that a relist can see, instead of only the folder open on screen.

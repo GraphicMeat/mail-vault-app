@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ExternalLink, Loader } from 'lucide-react';
 import * as api from '../../services/api';
 import { t as tr, useT } from '../../i18n/index.js';
+import { errorMessage } from '../../services/storageFormat';
 
 /**
  * The external backup folder: the path, Choose / Change / Reset, and whether
@@ -83,7 +84,7 @@ export default function BackupLocationPicker() {
       }
     } catch (e) {
       console.error('Directory picker failed:', e);
-      setChooseError(typeof e === 'string' ? e : e?.message || String(e));
+      setChooseError(errorMessage(e));
     }
   };
 

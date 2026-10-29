@@ -360,11 +360,13 @@ export default function BackupRestore() {
 
   return (
     <div className="space-y-6">
+      <p className="text-sm text-mail-text-muted">{t('settings.backup.importExport.intro')}</p>
+
       {/* Backup & Restore (ZIP) */}
       <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
-          {t('settings.tab.backup')}
+          {t('settings.backup.importExport.zipHeading')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">

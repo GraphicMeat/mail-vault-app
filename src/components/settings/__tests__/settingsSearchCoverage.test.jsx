@@ -44,7 +44,7 @@ const ALLOWLIST = new Set([
   'settings.timeCapsule.howTimeCapsuleWorks', 'settings.timeCapsule.timeCapsuleRequiresPremium',
   'settings.tracking.beforeAfter', 'settings.tracking.mail', 'settings.tracking.trackerBlockingPremiumFeature',
   'settings.tracking.whatOnePixelTellsSender', 'settings.tracking.whatTrackingPixelLooksLike',
-  'settings.backup.config.cloudBackupsOneTimePurchase', 'settings.backup.config.secondCopyExternalColdStorage',
+  'settings.backup.config.cloudBackupsOneTimePurchase',
   'settings.billing.earlyBirdFamilyPricing', 'settings.billing.plansCouldNotLoaded', 'settings.billing.whatSIncluded',
   // the plan picker's accessible name, not a setting
   'onboarding.ctaPlans',

@@ -83,6 +83,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let dir = PathBuf::from(&path);
+                    mailvault_core::folder_overlap::check_vault_folder(&state.app_dir, &dir)?;
                     let expected_id = vault_layout::read_marker(&state.app_dir).map(|m| m.vault_id);
                     let inspection = vault_ops::classify_folder(&dir, expected_id.as_deref())?;
                     if !inspection.writable {
@@ -147,6 +148,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             "Mail is already stored in that folder".to_string()
                         });
                     }
+                    // Before the copy: a backup in the same place is no second copy.
+                    mailvault_core::folder_overlap::check_vault_folder(&state.app_dir, &dst_root)?;
                     if !to_default {
                         if dst_root.starts_with(&src_root) {
                             return Err("Choose a folder outside the current mail storage folder".to_string());
@@ -583,6 +586,68 @@ mod tests {
         assert!(adopted.result.is_some(), "{:?}", adopted.error.map(|e| e.message));
         assert_eq!(message_store::vault_format(&target), Format::Jmap);
         for dir in [app, target] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// The backup folder, as the app saves it, in the app.db of `app`.
+    fn backup_folder_at(app: &Path, backup: &Path) {
+        mailvault_core::app_db::with(app, |c| {
+            mailvault_core::app_db::locations::save_meta(c, "external-backup", &backup.to_string_lossy(), "native", 1, false)
+        })
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn vault_move_to_is_refused_before_the_copy_when_the_target_is_around_or_inside_the_backup_folder() {
+        let (app, src, drive) = (scratch("bk-app"), scratch("bk-src"), scratch("bk-drive"));
+        one_message(&src);
+        let backup = drive.join("backup");
+        std::fs::create_dir_all(&backup).unwrap();
+        backup_folder_at(&app, &backup);
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        for bad in [backup.clone(), backup.join("mail"), drive.clone()] {
+            let refused = move_to(&state, &bad).await.error.expect("refused").message;
+            assert!(refused.starts_with("E_VAULT_OVERLAPS_BACKUP: "), "{refused}");
+            assert!(!bad.join("Maildir").exists(), "nothing copied into {}", bad.display());
+            assert!(state.pending_move.lock().unwrap().is_none());
+        }
+        let beside = drive.join("mail");
+        std::fs::create_dir_all(&beside).unwrap();
+        let moved = move_to(&state, &beside).await;
+        assert!(moved.result.is_some(), "beside the backup is fine: {:?}", moved.error.map(|e| e.message));
+        for dir in [app, src, drive] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_move_to_default_is_refused_when_the_backup_folder_sits_in_the_app_data_dir() {
+        let (app, src) = (scratch("bkd-app"), scratch("bkd-src"));
+        one_message(&src);
+        backup_folder_at(&app, &app.join("backup"));
+        let state = DaemonState::for_test(src.clone(), app.clone(), true);
+        let refused = route(&state, "vault_move_to_default", &json!({}), json!(1)).await.unwrap().error.expect("refused").message;
+        assert!(refused.starts_with("E_VAULT_OVERLAPS_BACKUP: "), "{refused}");
+        assert!(state.pending_move.lock().unwrap().is_none());
+        for dir in [app, src] {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    #[tokio::test]
+    async fn vault_adopt_is_refused_when_the_folder_is_around_or_inside_the_backup_folder() {
+        let (app, drive) = (scratch("bka-app"), scratch("bka-drive"));
+        let backup = drive.join("backup");
+        std::fs::create_dir_all(backup.join("Maildir")).unwrap();
+        backup_folder_at(&app, &backup);
+        let state = DaemonState::for_test(app.clone(), app.clone(), true);
+        for bad in [backup.clone(), drive.clone()] {
+            let refused = route(&state, "vault_adopt", &json!({"path": bad.to_string_lossy()}), json!(1)).await.unwrap();
+            let message = refused.error.expect("refused").message;
+            assert!(message.starts_with("E_VAULT_OVERLAPS_BACKUP: "), "{message}");
+        }
+        for dir in [app, drive] {
             let _ = std::fs::remove_dir_all(&dir);
         }
     }

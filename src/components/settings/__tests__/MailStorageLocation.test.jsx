@@ -69,4 +69,23 @@ describe('MailStorageLocation', () => {
     fireEvent.click(moveButton());
     await waitFor(() => expect(screen.getByText('Choose a folder outside the current mail storage folder')).toBeTruthy());
   });
+
+  it('a folder that is, holds or sits inside the backup folder reads as its catalog sentence', async () => {
+    api.vaultMoveTo.mockRejectedValue('E_VAULT_OVERLAPS_BACKUP: /Volumes/Backup');
+    render(<MailStorageLocation />);
+    fireEvent.click(moveButton());
+    await waitFor(() => expect(screen.getByText(en['errors.vaultOverlapsBackup'])).toBeTruthy());
+    expect(screen.queryByText(/E_VAULT_OVERLAPS_BACKUP/)).toBeNull();
+  });
+
+  it('so does choosing it as the existing mail folder', async () => {
+    api.vaultAdopt.mockRejectedValue('E_VAULT_OVERLAPS_BACKUP: /Volumes/Backup');
+    render(<MailStorageLocation />);
+    fireEvent.click(screen.getByRole('button', { name: en['settings.mailLocation.useExistingFolder'] }));
+    await waitFor(() => expect(screen.getByText(en['errors.vaultOverlapsBackup'])).toBeTruthy());
+  });
+
+  it('the sentence names the rule: a different folder, not inside or around the backup', () => {
+    expect(en['errors.vaultOverlapsBackup']).toBe('That is your backup folder (or it is inside or around it). Pick a different folder for your mail.');
+  });
 });

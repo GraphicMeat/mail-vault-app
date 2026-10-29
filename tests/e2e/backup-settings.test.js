@@ -12,9 +12,8 @@ import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './hel
 const BACKUP_TAB = 'Backup & Restore';
 
 /**
- * Click a backup sub-tab. "Backup & Restore" names both the sidebar tab and the
- * first sub-tab, and the sub-tab bar renders after the sidebar — so the last
- * match is the sub-tab, the first would be the sidebar entry.
+ * Click a backup sub-tab. A label can match the sidebar entry too, and the
+ * sub-tab bar renders after the sidebar — so the last match is the sub-tab.
  */
 async function clickBackupSubTab(label) {
   const clicked = await browser.execute((wanted) => {
@@ -63,7 +62,7 @@ describe('Backup Settings', function () {
   });
 
   it('should navigate all backup sub-tabs without errors', async function () {
-    for (const sub of ['Backup & Restore', 'Backup Settings', 'Backup Schedule']) {
+    for (const sub of ['Import & Export', 'Backup Settings', 'Backup Schedule']) {
       expect(await clickBackupSubTab(sub)).toBe(true);
 
       const hasError = await browser.execute(() => {

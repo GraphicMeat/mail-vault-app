@@ -7,15 +7,16 @@ import { SettingsTabs } from '../ui/SettingsTabs';
 import { t, useT } from '../../i18n/index.js';
 
 const backupSubTabs = () => ([
-  { id: 'restore', label: t('settings.tab.backup') },
   { id: 'config', label: t('settings.backup.backupSettings') },
   { id: 'schedule', label: t('settings.backup.backupSchedule') },
   { id: 'abd', label: t('settings.backup.abd.tab') },
+  // The id stays `restore`: search results and links already name it.
+  { id: 'restore', label: t('settings.backup.importExport.tab') },
 ]);
 
 export default function BackupSettings({ initialAccountId = null, initialSubTab = null, onSubTabChange, onUpgrade }) {
   const t = useT();
-  const [activeSubTab, setActiveSubTab] = useState(initialSubTab || (initialAccountId ? 'schedule' : 'restore'));
+  const [activeSubTab, setActiveSubTab] = useState(initialSubTab || (initialAccountId ? 'schedule' : 'config'));
 
   // A settings search result names its sub-tab; otherwise an initialAccountId
   // that arrives later opens that account's schedule.

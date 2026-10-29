@@ -281,7 +281,7 @@ describe('footage: Product Hunt tier 2e', function () {
     const alerts = () => browser.execute((k) => JSON.parse(sessionStorage.getItem(k) || '[]'), ALERTS_KEY);
     await shoot(this, 'c33-mbox-takeout-import', async (take) => {
       await take.hold(1000);
-      await toSettingsPage(take, L('settings.tab.backup'), null,
+      await toSettingsPage(take, L('settings.tab.backup'), L('settings.backup.importExport.tab'),
         (t) => [...document.querySelectorAll('[data-testid="settings-page"] button')].some((b) => b.offsetHeight > 0 && (b.textContent || '').trim() === t),
         'Import MBOX button', L('settings.backup.restore.importMbox'));
       if (!(await tagFirst('[data-testid="settings-page"] button', L('settings.backup.restore.importMbox'), 'import-mbox'))) throw new Error('no Import MBOX button');

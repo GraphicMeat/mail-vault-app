@@ -145,6 +145,8 @@ export default function BackupConfig() {
           {t('settings.backup.config.scopeStorageHeading')}
         </h4>
 
+        <p className="text-sm text-mail-text-muted">{t('settings.backup.config.scopeIntro')}</p>
+
         {/* Explanation */}
         <div className="bg-mail-bg rounded-lg p-3">
           <p className="text-xs text-mail-text-muted">
@@ -159,8 +161,8 @@ export default function BackupConfig() {
 
         {/* Scope selector */}
         <div>
-          <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.whatBackUp')}</label>
-          <select aria-label={t('settings.backup.config.whatBackUp')}
+          <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.scopeLabel')}</label>
+          <select aria-label={t('settings.backup.config.scopeLabel')}
             value={backupScope}
             onChange={(e) => setBackupScope(e.target.value)}
             className={selectClass}
@@ -172,11 +174,12 @@ export default function BackupConfig() {
 
         {/* External backup location */}
         <div>
-          <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.secondCopyExternalColdStorage')}</label>
+          <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.storageLabel')}</label>
           <p className="text-xs text-mail-text-muted mb-2">
             <T k="settings.backup.config.workingCopyPlusExternalCopy"
                parts={[(s) => <strong>{s}</strong>]} />
           </p>
+          <p className="text-xs text-mail-text-muted mb-2">{t('settings.backup.config.storageHint')}</p>
           <BackupLocationPicker />
 
           {externalBackupLocation?.status === 'ready' ? (

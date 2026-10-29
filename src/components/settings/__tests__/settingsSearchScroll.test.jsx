@@ -95,7 +95,7 @@ const SAMPLE = [
   ['settings.searchIndex.bodies'],
   ['settings.searchIndex.concurrency'],
   ['settings.backup.restore.exportBackup'],
-  ['settings.backup.config.whatBackUp'],
+  ['settings.backup.config.scopeLabel'],
   ['settings.mailLocation.whereMailStored'],
   ['settings.backup.schedule.backupFrequency'],
   ['settings.backup.schedule.mailboxConcurrency'],
@@ -144,8 +144,8 @@ describe('settings search lands on the setting', () => {
     render(<SettingsPage onClose={() => {}} />);
     for (const [labelKey, tab] of [
       ['settings.backup.schedule.backupFrequency', 'Backup Schedule'],
-      ['settings.backup.restore.exportBackup', 'Backup & Restore'],
-      ['settings.backup.config.whatBackUp', 'Backup Settings'],
+      ['settings.backup.restore.exportBackup', 'Import & Export'],
+      ['settings.backup.config.scopeLabel', 'Backup Settings'],
       ['settings.backup.schedule.mailboxConcurrency', 'Backup Schedule'],
     ]) {
       const label = openFromSearch(labelKey);
@@ -160,7 +160,7 @@ describe('settings search lands on the setting', () => {
     render(<SettingsPage onClose={() => {}} />);
     openFromSearch('settings.backup.schedule.backupFrequency');
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Backup Schedule' }).getAttribute('aria-selected')).toBe('true'));
-    fireEvent.click(screen.getByRole('tab', { name: 'Backup & Restore', exact: true }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Import & Export', exact: true }));
     openFromSearch('settings.backup.schedule.backupFrequency');
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Backup Schedule' }).getAttribute('aria-selected')).toBe('true'));
   });

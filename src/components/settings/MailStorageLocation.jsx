@@ -105,7 +105,7 @@ export default function MailStorageLocation({ readOnly = false, title, descripti
       setVaultStatus(await api.vaultAdopt(selected));
       setNotice(t('settings.mailLocation.nowReadingMailFolder'));
     } catch (e) {
-      setError(typeof e === 'string' ? e : e.message || 'Could not use that folder');
+      setError(errorMessage(e) || 'Could not use that folder');
     } finally {
       setBusy(null);
     }
