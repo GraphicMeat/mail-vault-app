@@ -65,14 +65,30 @@ const MENU_IDS = [
   'check_updates', 'open_settings', 'report_bug', 'export_logs', 'logs_submenu',
   'open_website', 'open_blog', 'open_more_apps', 'open_shortcuts', 'quit_app', 'file_submenu',
   'tray_compose', 'show', 'tray_view_logs', 'quit',
+  // Not menu items: the shell's native update dialogs read these (`native_text`).
+  'dlg_updates_title', 'dlg_update_error_title', 'dlg_no_updates_title', 'dlg_portable',
+  'dlg_snap', 'dlg_unsupported_install', 'dlg_dev_mode', 'dlg_check_failed_site',
+  'dlg_check_failed_retry', 'dlg_latest',
 ];
+
+// Native window titles, keyed by the id the shell reads (`native_text`), over the
+// catalog key that already holds the same words.
+const WINDOW_TITLE_KEYS = {
+  win_new_message: 'compose.newMessage',
+  win_settings: 'sidebar.settings',
+  win_export_message: 'export.dialog.exportMessageTitle',
+  win_original_message: 'compose.originalMessage',
+};
 
 async function _pushMenuLabels() {
   if (typeof window === 'undefined' || !window.__TAURI__) return;
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     await invoke('apply_menu_labels', {
-      labels: Object.fromEntries(MENU_IDS.map(id => [id, t(`menu.${id}`)])),
+      labels: {
+        ...Object.fromEntries(MENU_IDS.map(id => [id, t(`menu.${id}`)])),
+        ...Object.fromEntries(Object.entries(WINDOW_TITLE_KEYS).map(([id, key]) => [id, t(key)])),
+      },
     });
   } catch {
     // A menu that stays English is not worth failing a language switch over.

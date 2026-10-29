@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The update dialogs (portable copy, Snap, up to date, check failed) and the Settings, Export, Original Message and New Message window titles now follow the app language. Before, they stayed English in every locale. A new test fails on any native dialog or window title written as a literal.
+
 - The "Operation Complete" panel in the corner now appears only for a run started from a bulk selection (and one picked up again after a restart). Deleting messages from the list or the reader, one or several, shows just the deleted toast.
 
 - Delete everywhere clicked while an earlier one is still running now waits its turn instead of failing. Before, the second message left the list, then came back with an "An operation is already running" error while the first was still deleting; it now stays gone and is deleted right after the first finishes.

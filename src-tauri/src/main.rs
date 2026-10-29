@@ -84,6 +84,18 @@ fn set_tray_accounts(app: tauri::AppHandle, accounts: Vec<TrayAccount>) -> Resul
 #[cfg(target_os = "linux")]
 struct LinuxMenuBar(tauri::menu::Menu<tauri::Wry>);
 
+/// What the frontend last pushed through `apply_menu_labels`, for native text
+/// no menu item holds: the update dialogs and the window titles.
+#[derive(Default)]
+struct NativeText(std::sync::Mutex<std::collections::HashMap<String, String>>);
+
+/// The pushed text for `id`; `english` until the frontend has pushed any.
+fn native_text(app: &tauri::AppHandle, id: &str, english: &str) -> String {
+    app.try_state::<NativeText>()
+        .and_then(|state| state.0.lock().ok().and_then(|labels| labels.get(id).cloned()))
+        .unwrap_or_else(|| english.to_string())
+}
+
 #[tauri::command]
 fn apply_menu_labels(
     app: tauri::AppHandle,
@@ -114,6 +126,11 @@ fn apply_menu_labels(
         }
     }
 
+    if let Some(state) = app.try_state::<NativeText>() {
+        if let Ok(mut held) = state.0.lock() {
+            held.extend(labels.clone());
+        }
+    }
     if let Some(menu) = app.menu() {
         if let Ok(items) = menu.items() {
             relabel(items, &labels);
@@ -1442,7 +1459,7 @@ async fn open_compose_window(
         h = h.min(avail_h);
     }
     WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
-        .title("New Message")
+        .title(native_text(&app, "win_new_message", "New Message"))
         .inner_size(w, h)
         .min_inner_size(MIN_SIZE, MIN_SIZE)
         .resizable(true)
@@ -1468,9 +1485,9 @@ async fn open_auxiliary_window(app: tauri::AppHandle, kind: String, token: Strin
     // The export window is a workbench: a preview beside its options.
     let workbench = kind == "export";
     let (title, w, h) = match kind.as_str() {
-        "settings" => ("Settings", 1080.0, 760.0),
-        "export" => ("Export Message", 1200.0, 820.0),
-        _ => ("Original Message", 700.0, 680.0),
+        "settings" => (native_text(&app, "win_settings", "Settings"), 1080.0, 760.0),
+        "export" => (native_text(&app, "win_export_message", "Export message"), 1200.0, 820.0),
+        _ => (native_text(&app, "win_original_message", "Original Message"), 700.0, 680.0),
     };
     WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
         .title(title)
@@ -1951,8 +1968,8 @@ fn portable_skips_updates(handle: &tauri::AppHandle, show_no_update: bool) -> bo
     if show_no_update {
         use tauri_plugin_dialog::DialogExt;
         handle.dialog()
-            .message("This is a portable copy of MailVault, so it does not update itself. To update it, quit MailVault and replace the app on the drive with a newer version. The MailVault Data folder beside it keeps your mail and settings.")
-            .title("Updates")
+            .message(native_text(&handle, "dlg_portable", "This is a portable copy of MailVault, so it does not update itself. To update it, quit MailVault and replace the app on the drive with a newer version. The MailVault Data folder beside it keeps your mail and settings."))
+            .title(native_text(&handle, "dlg_updates_title", "Updates"))
             .show(|_| {});
     }
     true
@@ -1989,8 +2006,8 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
         info!("Running as snap — updates managed by Snap Store");
         if show_no_update {
             handle.dialog()
-                .message("This app was installed from the Snap Store.\nUpdates are delivered automatically through the Snap Store.")
-                .title("Updates")
+                .message(native_text(&handle, "dlg_snap", "This app was installed from the Snap Store.\nUpdates are delivered automatically through the Snap Store."))
+                .title(native_text(&handle, "dlg_updates_title", "Updates"))
                 .show(|_| {});
         }
         return;
@@ -2046,8 +2063,8 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             error!("Failed to create updater: {}", e);
             if show_no_update {
                 handle.dialog()
-                    .message("Auto-update is not available for this installation type.\nVisit https://mailvaultapp.com to check for new versions.")
-                    .title("Updates")
+                    .message(native_text(&handle, "dlg_unsupported_install", "Auto-update is not available for this installation type.\nVisit https://mailvaultapp.com to check for new versions."))
+                    .title(native_text(&handle, "dlg_updates_title", "Updates"))
                     .show(|_| {});
             }
             return;
@@ -2095,8 +2112,8 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             info!("No updates available");
             if show_no_update {
                 handle.dialog()
-                    .message(format!("You're running the latest version (v{}).", env!("CARGO_PKG_VERSION")))
-                    .title("No Updates Available")
+                    .message(native_text(&handle, "dlg_latest", "You're running the latest version (v{{version}}).").replace("{{version}}", env!("CARGO_PKG_VERSION")))
+                    .title(native_text(&handle, "dlg_no_updates_title", "No Updates Available"))
                     .show(|_| {});
             }
         }
@@ -2104,8 +2121,8 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             error!("Update check failed: {}", e);
             if show_no_update {
                 handle.dialog()
-                    .message("Could not check for updates.\nVisit https://mailvaultapp.com to check for new versions.")
-                    .title("Update Error")
+                    .message(native_text(&handle, "dlg_check_failed_site", "Could not check for updates.\nVisit https://mailvaultapp.com to check for new versions."))
+                    .title(native_text(&handle, "dlg_update_error_title", "Update Error"))
                     .show(|_| {});
             }
         }
@@ -2150,8 +2167,8 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             warn!("Sparkle updater not available (dev mode?)");
             if show_no_update {
                 handle.dialog()
-                    .message("Auto-update is not available in development mode.")
-                    .title("Updates")
+                    .message(native_text(&handle, "dlg_dev_mode", "Auto-update is not available in development mode."))
+                    .title(native_text(&handle, "dlg_updates_title", "Updates"))
                     .show(|_| {});
             }
             return;
@@ -2165,8 +2182,8 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
         error!("Failed to initiate Sparkle update check: {}", e);
         if show_no_update {
             handle.dialog()
-                .message("Could not check for updates. Please try again later.")
-                .title("Update Error")
+                .message(native_text(&handle, "dlg_check_failed_retry", "Could not check for updates. Please try again later."))
+                .title(native_text(&handle, "dlg_update_error_title", "Update Error"))
                 .show(|_| {});
         }
         return;
@@ -2193,8 +2210,8 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             info!("No updates available");
             if show_no_update {
                 handle.dialog()
-                    .message(format!("You're running the latest version (v{}).", env!("CARGO_PKG_VERSION")))
-                    .title("No Updates Available")
+                    .message(native_text(&handle, "dlg_latest", "You're running the latest version (v{{version}}).").replace("{{version}}", env!("CARGO_PKG_VERSION")))
+                    .title(native_text(&handle, "dlg_no_updates_title", "No Updates Available"))
                     .show(|_| {});
             }
         }
@@ -3796,6 +3813,7 @@ fn main() {
     // `backup.rs`'s process-global `pool()` and `archive.rs`'s shim, the last
     // app-side IMAP callers.
     let builder = builder
+        .manage(NativeText::default())
         .manage(backup::HeldBackupPaths::default())
         .manage(backup::NativeBackupAccess::default())
         .manage(abd::HeldAbdPaths::default())

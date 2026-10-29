@@ -90,6 +90,7 @@
   "hook.useKeyboardShortcuts.shift",
   "lifecycle.from",
   "list.hideViewMailOk",
+  "menu.dlg_updates_title",
   "menu.file_submenu",
   "menu.open_blog",
   "netActivity.account",
