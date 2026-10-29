@@ -30,7 +30,8 @@ export async function refreshVaultSets(accountId, mailbox) {
     });
     if (archived.size > 0) {
       db.getArchivedEmails(accountId, mailbox, archived, (batch) => {
-        if (useMailStore.getState().activeAccountId !== accountId) return;
+        // Batches arrive after the read yielded: only the folder they were read for takes them.
+        if (!onThisFolder(useMailStore.getState(), accountId, mailbox)) return;
         useMailStore.setState({ localEmails: batch });
         useMailStore.getState().updateSortedEmails();
       }).catch(() => {});

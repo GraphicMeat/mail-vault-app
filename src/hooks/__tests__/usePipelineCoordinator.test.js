@@ -16,7 +16,11 @@ const daemonCall = vi.fn(async (method, params) => {
 vi.mock('../../services/daemonClient.js', () => ({ daemonCall: (...args) => daemonCall(...args) }));
 
 const listeners = new Map();
-vi.mock('@tauri-apps/api/event', () => ({ listen: async (name, cb) => { listeners.set(name, cb); return () => listeners.delete(name); } }));
+const failingListens = new Set();
+vi.mock('@tauri-apps/api/event', () => ({ listen: async (name, cb) => {
+  if (failingListens.has(name)) throw new Error(`listen ${name} refused`);
+  listeners.set(name, cb); return () => listeners.delete(name);
+} }));
 
 const refreshVaultSets = vi.fn(async () => true);
 vi.mock('../../services/workflows/refreshVaultSets', () => ({ refreshVaultSets: (...args) => refreshVaultSets(...args) }));
@@ -42,7 +46,7 @@ const settle = async () => { await act(async () => { await vi.advanceTimersByTim
 
 beforeEach(() => {
   vi.useFakeTimers();
-  calls.length = 0; listeners.clear(); daemonRevision = 0; resetForTests();
+  calls.length = 0; listeners.clear(); failingListens.clear(); daemonRevision = 0; resetForTests();
   daemonCall.mockClear(); refreshVaultSets.mockClear();
   mail.setState({ activeAccountId: 'a', activeMailbox: 'INBOX', mailboxScope: null, emails: [],
     accounts: [{ id: 'a' }, { id: 'b' }], loading: false });
@@ -51,6 +55,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('usePipelineCoordinator', () => {
+  it('one refused subscription does not strand the others: they keep working and are all released on unmount', async () => {
+    failingListens.add('daemon-events-lagged');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { unmount } = renderHook(() => usePipelineCoordinator());
+    await settle(); await settle();
+    expect(listeners.has('pipeline-progress'), 'the surviving subscriptions stay live').toBe(true);
+    expect(listeners.has('daemon-reconnected')).toBe(true);
+    unmount();
+    expect([...listeners.keys()], 'nothing may stay subscribed after unmount').toEqual([]);
+    warn.mockRestore();
+  });
+
   it('reports the loaded list 200ms after it settles, as raw view facts and never earlier', async () => {
     renderHook(() => usePipelineCoordinator());
     await advance(500);

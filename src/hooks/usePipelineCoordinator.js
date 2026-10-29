@@ -92,12 +92,18 @@ export function usePipelineCoordinator() {
       } catch (error) { warn('progress not applied', error); }
     };
     import('@tauri-apps/api/event')
-      .then(({ listen }) => Promise.all([
+      .then(({ listen }) => Promise.allSettled([
         listen('pipeline-progress', progress),
         listen('daemon-reconnected', () => recover()),
         listen('daemon-events-lagged', () => recover()),
       ]))
-      .then(handles => { if (disposed) handles.forEach(off => off?.()); else offs.push(...handles); })
+      .then(results => {
+        // One refused subscription must not strand the others: keep each that was granted
+        // and release it on unmount (or at once, if the window is already gone).
+        const handles = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+        results.filter(result => result.status === 'rejected').forEach(result => warn('event subscription unavailable', result.reason));
+        if (disposed) handles.forEach(off => off?.()); else offs.push(...handles);
+      })
       .catch(error => warn('events unavailable', error));
     return () => {
       disposed = true;

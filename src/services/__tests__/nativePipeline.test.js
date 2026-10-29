@@ -42,6 +42,35 @@ describe('nativePipeline', () => {
     expect(calls.filter(c => c.method === 'pipeline.status')).toHaveLength(1);
   });
 
+  it('a refused revision is retried with the view that is latest now, not the one this call began with', async () => {
+    const view = mailbox => ({ accountId: 'a', mailbox, scope: 'folder', rows: [] });
+    await native.focusNative(view('INBOX'));
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    daemonCall.mockImplementationOnce(async (method, params) => { calls.push({ method, params }); await gate; return { revision: 50, accepted: false }; });
+    const first = native.focusNative(view('INBOX'));
+    await native.focusNative(view('Archive'));
+    release();
+    await first;
+    const sent = calls.filter(c => c.method === 'pipeline.focus');
+    expect(sent.at(-1).params.focus.mailbox, 'the screen shows Archive now').toBe('Archive');
+    expect(sent.at(-1).params.revision).toBeGreaterThan(50);
+  });
+
+  it('a refused revision is not retried once the window retired its observation', async () => {
+    const view = { accountId: 'a', mailbox: 'INBOX', scope: 'folder', rows: [] };
+    await native.focusNative(view);
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    daemonCall.mockImplementationOnce(async (method, params) => { calls.push({ method, params }); await gate; return { revision: 50, accepted: false }; });
+    const first = native.focusNative(view);
+    const before = calls.filter(c => c.method === 'pipeline.focus').length;
+    native.retireObservation();
+    release();
+    await first;
+    expect(calls.filter(c => c.method === 'pipeline.focus')).toHaveLength(before);
+  });
+
   it('retiring the observation sends nothing, but an explicit stop clears the daemon\'s focus', async () => {
     await native.focusNative({ accountId: 'a', mailbox: 'INBOX', scope: 'folder', rows: [] });
     calls.length = 0;

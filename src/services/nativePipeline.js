@@ -67,7 +67,10 @@ export async function focusNative(facts, isOnline = online) {
   let answer = await send(facts, isOnline);
   if (answer?.accepted === false && Number.isSafeInteger(answer.revision)) {
     revision = Math.max(revision, answer.revision);
-    answer = await send(facts, isOnline);
+    // The wait may have outlived this view: retry what is on screen now. A window that
+    // retired its observation meanwhile sends nothing; only an explicit stop (no facts) repeats itself.
+    const next = latest ?? (facts ? null : { facts: null, online: isOnline });
+    if (next) answer = await send(next.facts, next.online);
   }
   return answer;
 }
