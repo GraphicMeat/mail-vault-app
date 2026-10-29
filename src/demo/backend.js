@@ -408,6 +408,9 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
   const refreshIntents = new Map();
   let refreshContext = null;
   let refreshRevision = 0;
+  // Wave 4 S5: the native download-ahead focus has no provider worker in the browser demo.
+  const pipelineInstanceId = 'browser-demo-pipeline';
+  let pipelineRevision = 0;
   let refreshLastTime = null;
   const snapshots = new Map();
   const insightsModels = new Map();
@@ -970,6 +973,17 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           return { instanceId: refreshInstanceId, lastRefreshTime: refreshLastTime,
             automaticEnabled: !!refreshContext, contextRevision: refreshRevision,
             receipts: clone(receipts), ...(requestId ? { found: receipts.length > 0 } : {}) };
+        }
+        if (method === 'pipeline.focus') {
+          const input = args.params || {};
+          if (!Number.isSafeInteger(input.revision) || input.revision < 0 || typeof input.online !== 'boolean'
+            || !('focus' in input)) throw new DemoUnsupportedError('pipeline.focus:invalid');
+          if (input.revision < pipelineRevision) return { revision: pipelineRevision, accepted: false };
+          pipelineRevision = input.revision;
+          return { revision: pipelineRevision, accepted: true };
+        }
+        if (method === 'pipeline.status') {
+          return { instanceId: pipelineInstanceId, revision: pipelineRevision, accounts: {} };
         }
         if (method === 'sync.now') {
           const syncParams = args.params || {};

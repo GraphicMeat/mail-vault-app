@@ -535,6 +535,8 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
             | "sync.refresh"
             | "sync.refresh_status"
             | "sync.context"
+            | "pipeline.focus"
+            | "pipeline.status"
             | "folders.status"
             | "compose.reply_context"
             | "compose.check"
@@ -874,6 +876,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         "sync.probe" | "folders.status" => crate::handlers::sync_observation::route(state, &req.method, req.params, id).await,
         "counts.unread" => crate::handlers::counts::route(state, req.params, id).await,
         "sync.refresh" | "sync.refresh_status" | "sync.context" => crate::handlers::refresh::route(state, &req.method, req.params, id).await,
+        "pipeline.focus" | "pipeline.status" => crate::handlers::pipeline::route(state, &req.method, req.params, id).await,
 
         // ── IDLE watchers + the change feed they push into ──────────
         "sync.watch" => handle_sync_watch(Arc::clone(state), req.params, id).await,
@@ -6578,6 +6581,112 @@ mod tests {
                 "removed IMAP and JMAP watchers must be withdrawn");
             assert!(imap_trap.accept().is_err(), "JMAP removal may not dial IMAP");
             state.idle.shutdown().await;
+        }
+
+        mod s5_pipeline {
+            use super::*;
+            use mock_imap::{MockImap, Scenario};
+            use mock_imap::state::synthetic_mailbox;
+
+            type Rig = (std::sync::MutexGuard<'static, ()>, CredentialsEnv, tempfile::TempDir, Arc<DaemonState>, MockImap);
+
+            fn rig(scenario: Scenario) -> Rig {
+                let lock = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+                let env = CredentialsEnv::capture();
+                let dir = tempfile::tempdir().unwrap();
+                std::fs::write(dir.path().join("frontend-settings.json"),
+                    json!({"mailvault-settings": {"state": {"fetchMode": "hoarder"}}}).to_string()).unwrap();
+                let server = MockImap::start(scenario);
+                let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+                bind_account(&state, &server);
+                (lock, env, dir, state, server)
+            }
+
+            fn focus_params(revision: u64, online: bool, mailbox: &str) -> Value {
+                json!({"revision": revision, "online": online, "focus": {
+                    "accountId": "acc1", "mailbox": mailbox, "scope": "folder", "rows": []}})
+            }
+
+            fn vault_files(dir: &std::path::Path) -> usize {
+                let cur = mailvault_core::vault_files::cur_path(dir, "acc1", "INBOX");
+                std::fs::read_dir(cur).map_or(0, |entries| entries.count())
+            }
+
+            #[tokio::test]
+            async fn s5_focus_returns_before_provider_work_and_the_header_warm_lands_in_the_cache() {
+                let (_lock, _env, dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+                let pause = server.pause_command("SELECT");
+                let started = std::time::Instant::now();
+                let answer = boxed_request(&state, req("pipeline.focus", focus_params(1, true, "INBOX"))).await;
+                assert!(started.elapsed() < std::time::Duration::from_secs(1),
+                    "the answer must not wait for the provider: {:?}", started.elapsed());
+                assert_eq!(answer.result, Some(json!({"revision": 1, "accepted": true})), "{answer:?}");
+                let mut pause = tokio::task::spawn_blocking(move || {
+                    assert!(pause.entered(std::time::Duration::from_secs(10)), "the header warm must reach the provider");
+                    pause
+                }).await.unwrap();
+                let status = boxed_request(&state, req("pipeline.status", json!({}))).await.result.unwrap();
+                assert_eq!(status["accounts"]["acc1"]["phase"], json!("headers"), "{status}");
+                let foreground = tokio::time::timeout(std::time::Duration::from_secs(2),
+                    boxed_request(&state, req("accounts.list", json!({})))).await;
+                assert!(foreground.is_ok_and(|reply| reply.error.is_none()), "a foreground read stays live while the provider is held");
+                pause.release();
+                state.hoarder_worker.pipeline.quiet().await;
+                assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(3));
+                assert_eq!(vault_files(dir.path()), 0, "the body runner is disabled: nothing was downloaded");
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 1);
+            }
+
+            #[tokio::test]
+            async fn s5_a_repeated_focus_does_not_warm_twice_but_an_emptied_cache_does() {
+                let (_lock, _env, _dir, state, _server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                for revision in [1, 2] {
+                    let answer = boxed_request(&state, req("pipeline.focus", focus_params(revision, true, "INBOX"))).await;
+                    assert!(answer.error.is_none(), "{answer:?}");
+                    state.hoarder_worker.pipeline.quiet().await;
+                }
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 1, "the second identical focus adds no work");
+                assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(2));
+                crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::clear_headers(conn, Some("acc1"), Some("INBOX"))).unwrap();
+                let answer = boxed_request(&state, req("pipeline.focus", focus_params(3, true, "INBOX"))).await;
+                assert!(answer.error.is_none(), "{answer:?}");
+                state.hoarder_worker.pipeline.quiet().await;
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 2, "an emptied cache resets the warm");
+                assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(2));
+            }
+
+            #[tokio::test]
+            async fn s5_offline_admits_no_provider_work_until_the_next_online_focus() {
+                let (_lock, _env, _dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                let answer = boxed_request(&state, req("pipeline.focus", focus_params(1, false, "INBOX"))).await;
+                assert!(answer.error.is_none(), "{answer:?}");
+                state.hoarder_worker.pipeline.quiet().await;
+                let status = boxed_request(&state, req("pipeline.status", json!({}))).await.result.unwrap();
+                assert_eq!(status["accounts"]["acc1"]["pausedReason"], json!("offline"), "{status}");
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 0);
+                assert_eq!(commands_named(&server, "SELECT").len(), 0, "an offline focus touches no provider");
+                let back = boxed_request(&state, req("pipeline.focus", focus_params(2, true, "INBOX"))).await;
+                assert!(back.error.is_none(), "{back:?}");
+                state.hoarder_worker.pipeline.quiet().await;
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 1);
+                assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(2));
+            }
+
+            #[tokio::test]
+            async fn s5_the_accounts_own_sent_folder_is_warmed_alongside_the_focused_folder() {
+                let (_lock, _env, _dir, state, _server) = rig(Scenario::new()
+                    .mailbox(synthetic_mailbox("INBOX", 2)).mailbox(synthetic_mailbox("Sent Items", 4)));
+                let listing = json!({"mailboxes": [{"path": "INBOX", "name": "INBOX"},
+                    {"path": "Sent Items", "name": "Sent Items"}]}).to_string();
+                crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_mailboxes(conn, "acc1", &listing)).unwrap();
+                let answer = boxed_request(&state, req("pipeline.focus", focus_params(1, true, "INBOX"))).await;
+                assert!(answer.error.is_none(), "{answer:?}");
+                state.hoarder_worker.pipeline.quiet().await;
+                assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(2));
+                assert_eq!(refresh_cached_headers(&state, "acc1", "Sent Items").unwrap()["totalCached"], json!(4),
+                    "Sent is found by name in the cached folder list and warmed under its own key");
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 2);
+            }
         }
     }
 

@@ -218,11 +218,15 @@ pub struct HoarderWorkerState {
     /// (account, folder) -> `Complete`. A memo of the level, not a queue:
     /// losing it (a restart) only costs one full listing per folder.
     complete: Arc<Mutex<HashMap<(String, String), Complete>>>,
+    /// The ordinary download-ahead focus (S5): kept beside, and independent of,
+    /// everything above, which belongs to the Premium full-folder sweep.
+    pub(crate) pipeline: Arc<crate::pipeline_focus::PipelineFocus>,
 }
 
 impl Default for HoarderWorkerState {
     fn default() -> Self {
-        Self { notify: Arc::new(tokio::sync::Notify::new()), budgets: Arc::default(), complete: Arc::default() }
+        Self { notify: Arc::new(tokio::sync::Notify::new()), budgets: Arc::default(), complete: Arc::default(),
+            pipeline: Arc::default() }
     }
 }
 

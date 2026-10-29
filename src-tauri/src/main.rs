@@ -3059,6 +3059,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
     match method {
         "sync.probe" | "counts.unread" => Some(Duration::from_secs(30)),
         "sync.refresh" | "sync.refresh_status" | "sync.context" => Some(Duration::from_secs(30)),
+        "pipeline.focus" | "pipeline.status" => Some(Duration::from_secs(30)),
         "folders.status" => Some(Duration::from_secs(125)),
         // Full draft MIME/attachment preparation may outlast a short UI read.
         // Expiry is unknown completion, never cancellation of native work.
@@ -4642,6 +4643,9 @@ mod tests {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)));
         }
         assert_eq!(crate::reply_timeout("folders.status"), Some(std::time::Duration::from_secs(125)));
+        for method in ["pipeline.focus", "pipeline.status"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)));
+        }
     }
 
     #[cfg(feature = "blitz-render")]

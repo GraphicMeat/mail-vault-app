@@ -703,7 +703,7 @@ async fn graph_warm(state: &Arc<DaemonState>, origin: &Origin, config: &crate::i
     Ok(GraphWarm { added: added_total, arrival_uids, repaint })
 }
 
-async fn authoritative_snapshot(state: &Arc<DaemonState>) -> Result<(accounts_doc::Listing, Value), String> {
+pub(crate) async fn authoritative_snapshot(state: &Arc<DaemonState>) -> Result<(accounts_doc::Listing, Value), String> {
     let app_dir = state.app_dir.clone();
     tokio::task::spawn_blocking(move || {
         let listing = accounts_doc::list(&accounts_doc::shared(&app_dir))

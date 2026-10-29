@@ -67,6 +67,7 @@ pub(crate) mod restore;
 pub(crate) mod scheduled;
 pub(crate) mod sync_observation;
 pub(crate) mod refresh;
+pub(crate) mod pipeline;
 pub(crate) mod settings;
 pub(crate) mod search_index;
 pub(crate) mod snooze;

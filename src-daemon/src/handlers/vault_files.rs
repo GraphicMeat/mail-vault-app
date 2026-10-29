@@ -650,7 +650,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 /// only then `read`, outside every lock, may verify. `None` for each failure:
 /// the routes answer `null`, never an error the caller could read as empty.
 /// The folder's old-import pass starts beside the read, never before it.
-fn registry_read<T>(state: &Arc<DaemonState>, stamp: Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>, account_id: &str, mailbox: &str, read: impl FnOnce(&std::path::Path) -> Option<T>) -> Option<T> {
+pub(crate) fn registry_read<T>(state: &Arc<DaemonState>, stamp: Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>, account_id: &str, mailbox: &str, read: impl FnOnce(&std::path::Path) -> Option<T>) -> Option<T> {
     let stamp = stamp.ok()?;
     let root = vault_root(state).ok()?;
     if let Err(e) = crate::handlers::custody::repair_generation_for(state, &stamp, mailbox) {

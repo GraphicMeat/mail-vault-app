@@ -1,0 +1,2051 @@
+{
+ "candidates": [
+  {
+   "name": "hoarder-keeps-all",
+   "input": {
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [
+     3
+    ],
+    "indexed": null
+   },
+   "output": {
+    "kept": [
+     3
+    ],
+    "uids": [
+     1,
+     2,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14
+    ]
+   }
+  },
+  {
+   "name": "keep-recent-window",
+   "input": {
+    "policy": {
+     "mode": "keepRecent",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [],
+    "indexed": null
+   },
+   "output": {
+    "kept": [],
+    "uids": [
+     1,
+     4,
+     5,
+     6,
+     7,
+     9,
+     10,
+     12,
+     13
+    ]
+   }
+  },
+  {
+   "name": "keep-recent-saved-excluded",
+   "input": {
+    "policy": {
+     "mode": "keepRecent",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [
+     1,
+     4,
+     10
+    ],
+    "indexed": null
+   },
+   "output": {
+    "kept": [
+     1,
+     4,
+     10
+    ],
+    "uids": [
+     5,
+     6,
+     7,
+     9,
+     12,
+     13
+    ]
+   }
+  },
+  {
+   "name": "index-only-indexed-counts-as-kept",
+   "input": {
+    "policy": {
+     "mode": "indexOnly",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [
+     1
+    ],
+    "indexed": [
+     4,
+     10,
+     13
+    ]
+   },
+   "output": {
+    "kept": [
+     1,
+     4,
+     10,
+     13
+    ],
+    "uids": [
+     5,
+     6,
+     7,
+     9,
+     12
+    ]
+   }
+  },
+  {
+   "name": "index-only-index-unknown-vault-alone",
+   "input": {
+    "policy": {
+     "mode": "indexOnly",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [
+     1
+    ],
+    "indexed": "unknown"
+   },
+   "output": {
+    "kept": [
+     1
+    ],
+    "uids": [
+     4,
+     5,
+     6,
+     7,
+     9,
+     10,
+     12,
+     13
+    ]
+   }
+  },
+  {
+   "name": "index-only-empty-index",
+   "input": {
+    "policy": {
+     "mode": "indexOnly",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [
+     1
+    ],
+    "indexed": []
+   },
+   "output": {
+    "kept": [
+     1
+    ],
+    "uids": [
+     4,
+     5,
+     6,
+     7,
+     9,
+     10,
+     12,
+     13
+    ]
+   }
+  },
+  {
+   "name": "keep-recent-ignores-index",
+   "input": {
+    "policy": {
+     "mode": "keepRecent",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [
+     1
+    ],
+    "indexed": [
+     4,
+     10
+    ]
+   },
+   "output": {
+    "kept": [
+     1
+    ],
+    "uids": [
+     4,
+     5,
+     6,
+     7,
+     9,
+     10,
+     12,
+     13
+    ]
+   }
+  },
+  {
+   "name": "on-demand-fetches-nothing",
+   "input": {
+    "policy": {
+     "mode": "onDemand",
+     "windowMonths": 0,
+     "keep": "none",
+     "keepSinceMs": null
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [],
+    "indexed": null
+   },
+   "output": {
+    "kept": [],
+    "uids": []
+   }
+  },
+  {
+   "name": "hidden-or-unavailable-policy",
+   "input": {
+    "policy": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [],
+    "indexed": null
+   },
+   "output": {
+    "kept": [],
+    "uids": []
+   }
+  },
+  {
+   "name": "window-zero-index-only-keeps-all",
+   "input": {
+    "policy": {
+     "mode": "indexOnly",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z"
+     },
+     {
+      "uid": 2,
+      "date": "2026-05-10T12:00:00Z"
+     },
+     {
+      "uid": 3,
+      "date": "Mon, 05 Jan 2026 10:00:00 +0000"
+     },
+     {
+      "uid": 4,
+      "date": "Tue, 11 Aug 2026 10:00:00 +0000 (UTC)"
+     },
+     {
+      "uid": 5,
+      "date": "not a date"
+     },
+     {
+      "uid": 6
+     },
+     {
+      "uid": 7,
+      "date": "",
+      "internalDate": "2026-08-01T00:00:00Z"
+     },
+     {
+      "uid": 8,
+      "date": "",
+      "internalDate": "2026-01-01T00:00:00Z"
+     },
+     {
+      "uid": 9,
+      "date": null,
+      "internalDate": "garbage"
+     },
+     {
+      "uid": 10,
+      "date": "2026-07-01T00:00:00.000Z"
+     },
+     {
+      "uid": 11,
+      "date": "2026-06-30T23:59:59.999Z"
+     },
+     {
+      "uid": 12,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": "2020-01-01T00:00:00Z"
+     },
+     {
+      "uid": 13,
+      "date": 1788000000000
+     },
+     {
+      "uid": 14,
+      "date": 1700000000000
+     }
+    ],
+    "saved": [],
+    "indexed": null
+   },
+   "output": {
+    "kept": [],
+    "uids": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14
+    ]
+   }
+  }
+ ],
+ "scope": [
+  {
+   "name": "ordinary-folder",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 2,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 3,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [
+     "luke:INBOX:2"
+    ],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": [
+       1,
+       3
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "ordinary-non-inbox",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "Archive",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 5,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 6,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "Archive",
+      "uids": [
+       5,
+       6
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "unified-own-rows-only-same-uid-in-two-accounts",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "UNIFIED",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 7,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "luke",
+      "mailbox": "INBOX"
+     },
+     {
+      "uid": 7,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "yoda",
+      "mailbox": "INBOX"
+     },
+     {
+      "uid": 910,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "yoda",
+      "mailbox": "INBOX"
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": [
+       7
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "unified-yoda-active-same-uid",
+   "input": {
+    "accountId": "yoda",
+    "activeMailbox": "UNIFIED",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 7,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "luke",
+      "mailbox": "INBOX"
+     },
+     {
+      "uid": 7,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "yoda",
+      "mailbox": "Archive"
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "Archive",
+      "uids": [
+       7
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "unified-no-own-rows-falls-back-to-inbox",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "UNIFIED",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "yoda",
+      "mailbox": "Archive"
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": []
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "unified-saved-set-is-keyed-by-the-resolved-mailbox",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "UNIFIED",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 7,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "luke",
+      "mailbox": "INBOX"
+     },
+     {
+      "uid": 8,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": "luke",
+      "mailbox": "INBOX"
+     }
+    ],
+    "saved": [
+     "luke:Sent:7",
+     "luke:INBOX:8"
+    ],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": [
+       7
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "subtree-root-rows-only",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "Projects",
+    "mailboxScope": {
+     "root": "Projects",
+     "paths": [
+      "Projects",
+      "Projects/Child"
+     ]
+    },
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 2,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": "Projects"
+     },
+     {
+      "uid": 3,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": "Projects/Child"
+     },
+     {
+      "uid": 4,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": "Projects/Child"
+     }
+    ],
+    "saved": [
+     "luke:Projects:2"
+    ],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "Projects",
+      "uids": [
+       1
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "keep-recent-window-in-the-active-folder",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 2,
+      "date": "2026-01-01T00:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 3,
+      "date": "garbage",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "keepRecent",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": [
+       1,
+       3
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "index-only-active-uses-the-index",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 2,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     },
+     {
+      "uid": 3,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [
+     "luke:INBOX:1"
+    ],
+    "policy": {
+     "mode": "indexOnly",
+     "windowMonths": 3,
+     "keep": "since",
+     "keepSinceMs": 1782864000000
+    },
+    "indexed": [
+     2
+    ],
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": [
+       3
+      ]
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "on-demand-fetches-nothing-ahead",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "onDemand",
+     "windowMonths": 0,
+     "keep": "none",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": []
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "policy-unavailable-fetches-nothing",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [],
+    "policy": "unavailable",
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": []
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "hidden-account-starts-nothing",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": true,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [],
+    "concurrency": []
+   }
+  },
+  {
+   "name": "no-credentials-starts-nothing",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": true
+   },
+   "output": {
+    "started": [],
+    "concurrency": []
+   }
+  },
+  {
+   "name": "unknown-account-starts-nothing",
+   "input": {
+    "accountId": "ghost",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [
+     {
+      "uid": 1,
+      "date": "2026-08-10T12:00:00Z",
+      "internalDate": null,
+      "accountId": null,
+      "mailbox": null
+     }
+    ],
+    "saved": [],
+    "policy": null,
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [],
+    "concurrency": []
+   }
+  },
+  {
+   "name": "empty-list-still-completes-with-no-uids",
+   "input": {
+    "accountId": "luke",
+    "activeMailbox": "INBOX",
+    "mailboxScope": null,
+    "rows": [],
+    "saved": [],
+    "policy": {
+     "mode": "hoarder",
+     "windowMonths": 0,
+     "keep": "all",
+     "keepSinceMs": null
+    },
+    "indexed": null,
+    "hidden": false,
+    "noCredentials": false
+   },
+   "output": {
+    "started": [
+     {
+      "mailbox": "INBOX",
+      "uids": []
+     }
+    ],
+    "concurrency": [
+     3
+    ]
+   }
+  }
+ ],
+ "sent": [
+  {
+   "name": "special-use-wins",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "INBOX",
+      "name": "INBOX"
+     },
+     {
+      "path": "Gesendet",
+      "name": "Gesendet",
+      "specialUse": "\\Sent"
+     }
+    ],
+    "override": null
+   },
+   "output": "Gesendet"
+  },
+  {
+   "name": "override-existing-wins",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "INBOX",
+      "name": "INBOX"
+     },
+     {
+      "path": "Sent",
+      "name": "Sent",
+      "specialUse": "\\Sent"
+     },
+     {
+      "path": "Mine",
+      "name": "Mine"
+     }
+    ],
+    "override": "Mine"
+   },
+   "output": "Mine"
+  },
+  {
+   "name": "override-missing-falls-back",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "Sent Items",
+      "name": "Sent Items"
+     }
+    ],
+    "override": "Gone"
+   },
+   "output": "Sent Items"
+  },
+  {
+   "name": "name-pattern",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "INBOX",
+      "name": "INBOX"
+     },
+     {
+      "path": "Sent Items",
+      "name": "Sent Items"
+     }
+    ],
+    "override": null
+   },
+   "output": "Sent Items"
+  },
+  {
+   "name": "localized-name",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "INBOX",
+      "name": "INBOX"
+     },
+     {
+      "path": "Enviados",
+      "name": "Enviados"
+     }
+    ],
+    "override": null
+   },
+   "output": "Enviados"
+  },
+  {
+   "name": "nested-special-use",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "INBOX",
+      "name": "INBOX"
+     },
+     {
+      "path": "[Gmail]",
+      "name": "[Gmail]",
+      "children": [
+       {
+        "path": "[Gmail]/Sent Mail",
+        "name": "Sent Mail",
+        "specialUse": "\\Sent"
+       }
+      ]
+     }
+    ],
+    "override": null
+   },
+   "output": "[Gmail]/Sent Mail"
+  },
+  {
+   "name": "nested-name",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "INBOX",
+      "name": "INBOX"
+     },
+     {
+      "path": "Mail",
+      "name": "Mail",
+      "children": [
+       {
+        "path": "Mail/Sent",
+        "name": "Sent"
+       }
+      ]
+     }
+    ],
+    "override": null
+   },
+   "output": "Mail/Sent"
+  },
+  {
+   "name": "outbox-counts",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "Outbox",
+      "name": "Outbox"
+     }
+    ],
+    "override": null
+   },
+   "output": "Outbox"
+  },
+  {
+   "name": "none",
+   "input": {
+    "mailboxes": [
+     {
+      "path": "INBOX",
+      "name": "INBOX"
+     },
+     {
+      "path": "Archive",
+      "name": "Archive"
+     }
+    ],
+    "override": null
+   },
+   "output": null
+  },
+  {
+   "name": "empty-list",
+   "input": {
+    "mailboxes": [],
+    "override": null
+   },
+   "output": null
+  },
+  {
+   "name": "no-list",
+   "input": {
+    "mailboxes": null,
+    "override": null
+   },
+   "output": null
+  }
+ ],
+ "headerChunks": {
+  "accounts": [
+   "a0",
+   "a1",
+   "a2",
+   "a3",
+   "a4",
+   "a5",
+   "hid",
+   "bad"
+  ],
+  "excluded": [
+   "a0 (active)",
+   "hid (hidden)",
+   "bad (no credentials)"
+  ],
+  "steps": [
+   {
+    "label": "before-any-inbox-finishes",
+    "started": [
+     "a1:INBOX",
+     "a2:INBOX",
+     "a3:INBOX"
+    ]
+   },
+   {
+    "label": "two-of-the-first-three-finished",
+    "started": [
+     "a1:INBOX",
+     "a2:INBOX",
+     "a3:INBOX",
+     "a1:Sent",
+     "a2:Sent Items"
+    ]
+   },
+   {
+    "label": "first-chunk-finished",
+    "started": [
+     "a1:INBOX",
+     "a2:INBOX",
+     "a3:INBOX",
+     "a1:Sent",
+     "a2:Sent Items",
+     "a3:Mine",
+     "a4:INBOX",
+     "a5:INBOX"
+    ]
+   },
+   {
+    "label": "all-finished",
+    "started": [
+     "a1:INBOX",
+     "a2:INBOX",
+     "a3:INBOX",
+     "a1:Sent",
+     "a2:Sent Items",
+     "a3:Mine",
+     "a4:INBOX",
+     "a5:INBOX"
+    ]
+   }
+  ],
+  "concurrency": [
+   "a1:1",
+   "a2:1",
+   "a3:1",
+   "a4:1",
+   "a5:1"
+  ],
+  "finalOrder": [
+   "a1:INBOX",
+   "a2:INBOX",
+   "a3:INBOX",
+   "a1:Sent",
+   "a2:Sent Items",
+   "a3:Mine",
+   "a4:INBOX",
+   "a5:INBOX"
+  ]
+ },
+ "contentCascade": {
+  "midFlightStarted": [
+   "c1"
+  ],
+  "cascadeDone": [
+   "c1",
+   "c2",
+   "c4"
+  ],
+  "secondWalkStarted": [],
+  "firstWalkStarts": [
+   {
+    "account": "c1",
+    "mailbox": "INBOX",
+    "uids": [
+     2
+    ]
+   },
+   {
+    "account": "c2",
+    "mailbox": "INBOX",
+    "uids": [
+     1,
+     2,
+     3
+    ]
+   },
+   {
+    "account": "c4",
+    "mailbox": "INBOX",
+    "uids": []
+   }
+  ],
+  "legacySentRowsFeedInboxContent": [
+   {
+    "mailbox": "INBOX",
+    "uids": [
+     7,
+     8
+    ]
+   }
+  ],
+  "note": "c3 has an unknown vault and is skipped unmarked; c4 (on demand) is walked with no uids"
+ },
+ "coordinator": {
+  "startDelayMs": 200,
+  "startsWithNoEmails": 0,
+  "startsAt199ms": 0,
+  "startsAt200ms": 1,
+  "startsAfterSameAccountEmailsChange": 1,
+  "startsAfterCacheEmptyReset": 2,
+  "startsWhileSyncing": 2,
+  "startsWhenSyncEnds": 2,
+  "afterSwitchPlus300ms": [
+   "onAccountSwitch:b",
+   "startActiveAccountPipeline:b"
+  ],
+  "afterSwitchThenListReload": [
+   "onAccountSwitch:b",
+   "startActiveAccountPipeline:b",
+   "startActiveAccountPipeline:b"
+  ],
+  "otherCalls": [
+   "syncAccounts:a,b",
+   "syncAccounts:b",
+   "pauseAll",
+   "resumeAll",
+   "destroyAll"
+  ]
+ },
+ "constants": {
+  "activeWorkers": 3,
+  "backgroundHeaderWorkers": 1,
+  "backgroundHeaderChunk": 3,
+  "backgroundContentWorkers": 1,
+  "activationDelayMs": 200
+ },
+ "fetchesAhead": [
+  {
+   "policy": {
+    "mode": "hoarder",
+    "windowMonths": 0,
+    "keep": "all",
+    "keepSinceMs": null
+   },
+   "dateMs": "NaN",
+   "output": true
+  },
+  {
+   "policy": {
+    "mode": "hoarder",
+    "windowMonths": 0,
+    "keep": "all",
+    "keepSinceMs": null
+   },
+   "dateMs": 1782863999999,
+   "output": true
+  },
+  {
+   "policy": {
+    "mode": "hoarder",
+    "windowMonths": 0,
+    "keep": "all",
+    "keepSinceMs": null
+   },
+   "dateMs": 1782864000000,
+   "output": true
+  },
+  {
+   "policy": {
+    "mode": "hoarder",
+    "windowMonths": 0,
+    "keep": "all",
+    "keepSinceMs": null
+   },
+   "dateMs": 1782864000001,
+   "output": true
+  },
+  {
+   "policy": {
+    "mode": "onDemand",
+    "windowMonths": 0,
+    "keep": "none",
+    "keepSinceMs": null
+   },
+   "dateMs": "NaN",
+   "output": false
+  },
+  {
+   "policy": {
+    "mode": "onDemand",
+    "windowMonths": 0,
+    "keep": "none",
+    "keepSinceMs": null
+   },
+   "dateMs": 1782863999999,
+   "output": false
+  },
+  {
+   "policy": {
+    "mode": "onDemand",
+    "windowMonths": 0,
+    "keep": "none",
+    "keepSinceMs": null
+   },
+   "dateMs": 1782864000000,
+   "output": false
+  },
+  {
+   "policy": {
+    "mode": "onDemand",
+    "windowMonths": 0,
+    "keep": "none",
+    "keepSinceMs": null
+   },
+   "dateMs": 1782864000001,
+   "output": false
+  },
+  {
+   "policy": {
+    "mode": "keepRecent",
+    "windowMonths": 3,
+    "keep": "since",
+    "keepSinceMs": 1782864000000
+   },
+   "dateMs": "NaN",
+   "output": true
+  },
+  {
+   "policy": {
+    "mode": "keepRecent",
+    "windowMonths": 3,
+    "keep": "since",
+    "keepSinceMs": 1782864000000
+   },
+   "dateMs": 1782863999999,
+   "output": false
+  },
+  {
+   "policy": {
+    "mode": "keepRecent",
+    "windowMonths": 3,
+    "keep": "since",
+    "keepSinceMs": 1782864000000
+   },
+   "dateMs": 1782864000000,
+   "output": true
+  },
+  {
+   "policy": {
+    "mode": "keepRecent",
+    "windowMonths": 3,
+    "keep": "since",
+    "keepSinceMs": 1782864000000
+   },
+   "dateMs": 1782864000001,
+   "output": true
+  },
+  {
+   "policy": null,
+   "dateMs": "NaN",
+   "output": false
+  },
+  {
+   "policy": null,
+   "dateMs": 1782863999999,
+   "output": false
+  },
+  {
+   "policy": null,
+   "dateMs": 1782864000000,
+   "output": false
+  },
+  {
+   "policy": null,
+   "dateMs": 1782864000001,
+   "output": false
+  }
+ ],
+ "activation": {
+  "reusedIdle": true,
+  "rebuiltBusy": true,
+  "newerActivationWins": [
+   "yoda"
+  ]
+ }
+}

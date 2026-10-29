@@ -334,6 +334,8 @@ export const DAEMON_OWNED = new Set([
   // Native mailbox observation and closed-folder counts.
   'sync.probe', 'folders.status',
   'sync.refresh', 'sync.refresh_status', 'sync.context', 'counts.unread',
+  // Wave 4 S5: native download-ahead focus. Inert until the S7 cutover calls it.
+  'pipeline.focus', 'pipeline.status',
 ]);
 
 async function sendToDaemon(command, args) {
