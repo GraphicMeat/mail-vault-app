@@ -10,7 +10,7 @@ export const FilledStar = props => <Star {...props} fill="currentColor" />;
 // One glyph per action type, on every surface and in Settings.
 export const QUICK_ACTION_ICONS = {
   archive: Archive, unarchive: ArchiveRestore, delete: Trash2, deleteServer: Trash2,
-  deleteEverywhere: ShieldX, toggleRead: MailOpen, markRead: MailOpen, markUnread: Mail,
+  deleteEverywhere: ShieldX, toggleRead: Mail, markRead: Mail, markUnread: MailOpen,
   star: Star, unstar: FilledStar, tag: Tag, move: FolderInput, spam: ShieldAlert,
   reply: Reply, replyAll: ReplyAll, forward: Forward, replyTemplate: FileText,
   export: ImageDown, newMessage: MailPlus, open: ExternalLink, source: Code, theme: Moon,
@@ -22,7 +22,7 @@ export const QUICK_ACTION_ICONS = {
 // once archived); read and theme show the direction they take, like their
 // labels.
 export function quickActionIcon(action, { flagged = false, read = false, archived = false, dark = false } = {}) {
-  if (action === 'toggleRead') return read ? Mail : MailOpen;
+  if (action === 'toggleRead') return read ? MailOpen : Mail;
   if (action === 'star' && flagged) return FilledStar;
   if (action === 'archive' && archived) return ArchiveRestore;
   if (action === 'theme') return dark ? Sun : Moon;

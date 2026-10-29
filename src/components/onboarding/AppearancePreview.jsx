@@ -1,5 +1,5 @@
 import React from 'react';
-import { Archive, ChevronDown, Cloud, FolderInput, Forward, HardDrive, Inbox, Mail, MoreHorizontal, PenSquare, Reply, ReplyAll, Send, Star, Sun, Moon, Trash2, ImageDown } from 'lucide-react';
+import { Archive, ChevronDown, Cloud, FolderInput, Forward, HardDrive, Inbox, Mail, MailOpen, MoreHorizontal, PenSquare, Reply, ReplyAll, Send, Star, Sun, Moon, Trash2, ImageDown } from 'lucide-react';
 import { PREVIEW_ACCOUNTS, previewConversation, previewRows } from '../../data/previewMail';
 import { useT } from '../../i18n';
 import { getEmailColors } from '../../utils/mailChrome';
@@ -29,7 +29,7 @@ function SampleRow({ row, selected, highlight, singleLine, nested, count, expand
 
 function SampleToolbar({ display, dark }) {
   const t = useT();
-  const actions = [[Reply, 'emailActionBar.reply'], [ReplyAll, 'emailActionBar.replyAll'], [Forward, 'emailActionBar.forward'], [Archive, 'common.archive'], [Trash2, 'common.delete'], [FolderInput, 'emailActionBar.move'], [Mail, 'emailActionBar.markUnread'], [Star, 'emailActionBar.star'], [ImageDown, 'common.export']];
+  const actions = [[Reply, 'emailActionBar.reply'], [ReplyAll, 'emailActionBar.replyAll'], [Forward, 'emailActionBar.forward'], [Archive, 'common.archive'], [Trash2, 'common.delete'], [FolderInput, 'emailActionBar.move'], [MailOpen, 'emailActionBar.markUnread'], [Star, 'emailActionBar.star'], [ImageDown, 'common.export']];
   const draw = ([Icon, key], index) => <span key={key} role="img" aria-label={t(key)} className={`email-action-button ${index === 0 ? 'email-action-primary' : ''}`}>
     {display !== 'text-only' && <Icon size={12} aria-hidden="true" />}{display !== 'icon-only' && <span>{t(key)}</span>}
   </span>;

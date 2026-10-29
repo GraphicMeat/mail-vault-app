@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlarmClock, Archive, FolderInput, MailOpen, Star, Trash2 } from 'lucide-react';
+import { AlarmClock, Archive, FolderInput, Mail, Star, Trash2 } from 'lucide-react';
 import { useT } from '../i18n/index.js';
 
 /** The label of each swipe option (settingsStore's SWIPE_ACTIONS). */
@@ -12,7 +12,7 @@ export const SWIPE_ACTION_LABELS = {
   move: 'rowMenu.moveFolder',
   none: 'settings.behavior.swipe.none',
 };
-const ICONS = { archive: Archive, delete: Trash2, toggleRead: MailOpen, star: Star, snooze: AlarmClock, move: FolderInput };
+const ICONS = { archive: Archive, delete: Trash2, toggleRead: Mail, star: Star, snooze: AlarmClock, move: FolderInput };
 
 /**
  * What a swiped row uncovers: the side's action, on its colour, on the side

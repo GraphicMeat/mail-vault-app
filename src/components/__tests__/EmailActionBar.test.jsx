@@ -140,16 +140,16 @@ describe('EmailActionBar — labels name the next action', () => {
     let button = action('Mark unread');
     expect(button.getAttribute('title')).toBe('Mark unread');
     expect(button.getAttribute('aria-label')).toBe('Mark unread');
-    expect(button.querySelector('svg').innerHTML).toBe(glyph(Mail));
+    expect(button.querySelector('svg').innerHTML).toBe(glyph(MailOpen));
 
     view.rerender(bar(false));
     button = action('Mark read');
     expect(button.getAttribute('title')).toBe('Mark read');
     expect(button.getAttribute('aria-label')).toBe('Mark read');
-    expect(button.querySelector('svg').innerHTML).toBe(glyph(MailOpen));
+    expect(button.querySelector('svg').innerHTML).toBe(glyph(Mail));
 
     view.rerender(bar(true));
-    expect(action('Mark unread').querySelector('svg').innerHTML).toBe(glyph(Mail));
+    expect(action('Mark unread').querySelector('svg').innerHTML).toBe(glyph(MailOpen));
   });
 
   it('asks for the direction the toggle shows, not one re-read off the email copy', () => {

@@ -24,9 +24,15 @@ describe('quick action icons', () => {
     expect(quickActionIcon('unarchive')).toBe(ArchiveRestore);
   });
 
+  it('keeps the closed envelope for mark read and the open one for mark unread', () => {
+    expect(QUICK_ACTION_ICONS.markRead).toBe(Mail);
+    expect(QUICK_ACTION_ICONS.toggleRead).toBe(Mail);
+    expect(QUICK_ACTION_ICONS.markUnread).toBe(MailOpen);
+  });
+
   it('shows the direction read and theme will take, like their labels', () => {
-    expect(quickActionIcon('toggleRead', { read: false })).toBe(MailOpen);
-    expect(quickActionIcon('toggleRead', { read: true })).toBe(Mail);
+    expect(quickActionIcon('toggleRead', { read: false })).toBe(Mail);
+    expect(quickActionIcon('toggleRead', { read: true })).toBe(MailOpen);
     expect(quickActionIcon('theme', { dark: true })).toBe(Sun);
     expect(quickActionIcon('theme', { dark: false })).toBe(Moon);
   });

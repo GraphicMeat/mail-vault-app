@@ -6,6 +6,8 @@
 
 - Reply and Forward now open with From set to the alias the message was sent to, matched on To, then Cc, instead of always using the account's default address. A message sent to the login or the default address, or to none of the account's addresses, keeps the default. A restored draft keeps the From it was saved with.
 
+- Mark as read now shows the closed envelope and mark as unread the open one, in the radial menu, row and selection actions, reader toolbar, swipe backdrop and onboarding preview. They were the other way round.
+
 - Deleting a Notes to Self card now takes it off the board at once, like deleting from the list, instead of leaving it there until the server answers. If the server refuses, the card comes back in its place and the delete-failed toast shows.
 
 - Deleting a Notes to Self card on an Outlook account no longer fails with "Cannot delete: no Graph message ID found for this email" when its folder was not open. The delete now reads the message id from the saved Outlook ledger, which also reaches messages older than the newest 200 that a relist can see, instead of only the folder open on screen.

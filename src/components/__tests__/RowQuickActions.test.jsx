@@ -538,11 +538,11 @@ describe('RowQuickActions — toggle read', () => {
     setActions(action('toggleRead'));
     renderActions({ emails: [email()] });
     expect(screen.getByTestId('quick-action-toggleRead').textContent).toBe('rowMenu.markRead');
-    expect(icon('quick-action-toggleRead')).toBe('MailOpen');
+    expect(icon('quick-action-toggleRead')).toBe('Mail');
     cleanup();
     renderActions({ emails: [email({ flags: ['\\Seen'] })] });
     expect(screen.getByTestId('quick-action-toggleRead').textContent).toBe('rowMenu.markUnread');
-    expect(icon('quick-action-toggleRead')).toBe('Mail');
+    expect(icon('quick-action-toggleRead')).toBe('MailOpen');
   });
 
   it('offers both directions on a thread, whatever its members read state', async () => {
@@ -550,8 +550,8 @@ describe('RowQuickActions — toggle read', () => {
     const thread = [email({ uid: 1, flags: ['\\Seen'] }), email({ uid: 2, flags: ['\\Seen'] })];
     renderActions({ emails: thread });
     expect(screen.queryByTestId('quick-action-toggleRead')).toBeNull();
-    expect(icon('quick-action-toggleRead:markRead')).toBe('MailOpen');
-    expect(icon('quick-action-toggleRead:markUnread')).toBe('Mail');
+    expect(icon('quick-action-toggleRead:markRead')).toBe('Mail');
+    expect(icon('quick-action-toggleRead:markUnread')).toBe('MailOpen');
     fireEvent.click(screen.getByTestId('quick-action-toggleRead:markUnread'));
     await waitFor(() => expect(useMailStoreMock.getState().markSelectedAsUnread).toHaveBeenCalledTimes(1));
     expect(useMailStoreMock.getState().markSelectedAsRead).not.toHaveBeenCalled();

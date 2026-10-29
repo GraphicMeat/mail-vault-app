@@ -22,9 +22,9 @@ const describeOn = (surface, action, overrides, params) => describeQuickAction(s
 
 describe('describeQuickAction', () => {
   it('a read toggle presents the direction it will take, on every surface', () => {
-    expect(describeOn('row', 'toggleRead')).toMatchObject({ label: 'rowMenu.markRead', Icon: MailOpen });
-    expect(describeOn('selection', 'toggleRead', { has: { ...facts().has, markRead: false } })).toMatchObject({ label: 'selection.markUnread', Icon: Mail });
-    expect(describeOn('reader', 'toggleRead')).toMatchObject({ label: 'emailActionBar.markRead', Icon: MailOpen });
+    expect(describeOn('row', 'toggleRead')).toMatchObject({ label: 'rowMenu.markRead', Icon: Mail });
+    expect(describeOn('selection', 'toggleRead', { has: { ...facts().has, markRead: false } })).toMatchObject({ label: 'selection.markUnread', Icon: MailOpen });
+    expect(describeOn('reader', 'toggleRead')).toMatchObject({ label: 'emailActionBar.markRead', Icon: Mail });
   });
 
   it('the reader toggles a lone star and archive; rows keep them one-sided', () => {
