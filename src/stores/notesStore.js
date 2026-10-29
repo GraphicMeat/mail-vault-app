@@ -229,42 +229,50 @@ export const useNotesStore = create((set, get) => ({
   /// refusal leaves the card holding the copies not yet deleted and is
   /// rethrown for the confirm dialog's error toast.
   ///
+  /// The board answers at once, as a list delete does: the copies the server
+  /// is about to be asked for leave the card now (the card with them when
+  /// that is all of them), and a refusal puts back what did not go, where it
+  /// was.
+  ///
   /// One copy at a time (`skipRefresh`), and one undo for all of them: a slot
   /// per copy put back only the last. The undo brings the card back too; the
   /// restored copies carry new uids, which only a fresh list knows.
   deleteCard: card => guarded(card, async () => {
     const copies = serverCopies(card, get().accounts);
     if (!copies.length) return { deleted: 0, kept: (card.copies || []).length };
-    const { deleteEmailFromServer, setDeleteUndo } = await import('../services/workflows/messageMutations');
+    // Started first, awaited after the paint: a cold module load is not the
+    // click's to wait for.
+    const loading = import('../services/workflows/messageMutations');
     const gone = new Set();
     const outcomes = [];
-    const keep = () => {
-      const left = (card.copies || []).filter(copy => !gone.has(copy));
-      if (!left.length) offBoard.add(card.key);
-      set({ cards: left.length
-        ? get().cards.map(other => (other.key === card.key ? { ...other, copies: left } : other))
-        : get().cards.filter(other => other.key !== card.key) });
+    const index = get().cards.findIndex(other => other.key === card.key);
+    const paint = left => {
+      if (left.length) offBoard.delete(card.key);
+      else offBoard.add(card.key);
+      const shown = get().cards.find(other => other.key === card.key) || card;
+      const rest = get().cards.filter(other => other.key !== card.key);
+      if (left.length) rest.splice(index < 0 ? rest.length : Math.min(index, rest.length), 0, { ...shown, copies: left });
+      set({ cards: rest });
       return left.length;
     };
-    const offerUndo = tagged => setDeleteUndo(outcomes.filter(Boolean), {
+    const offerUndo = async tagged => (await loading).setDeleteUndo(outcomes.filter(Boolean), {
       afterRestore: async () => {
         if (tagged) await daemonCall('notes.set_done', { copies: card.copies, done: false });
         if (get().isOpen) await get().load();
       },
     });
+    const kept = paint((card.copies || []).filter(copy => !copies.includes(copy)));
+    const { deleteEmailFromServer } = await loading;
     try {
       for (const copy of copies) {
         outcomes.push(await deleteEmailFromServer(copy.uid, { accountId: copy.accountId, mailboxOverride: copy.mailbox, skipRefresh: true }));
         gone.add(copy);
       }
     } catch (error) {
-      if (gone.size) {
-        keep();
-        await offerUndo(false);
-      }
+      paint((card.copies || []).filter(copy => !gone.has(copy)));
+      if (gone.size) await offerUndo(false);
       throw error;
     }
-    const kept = keep();
     // The board lists the vault's copies, and a server delete leaves those:
     // tag the note Done so it does not come back with the next list.
     const tagged = !kept && await daemonCall('notes.set_done', { copies: card.copies, done: true }).then(() => true, () => false);

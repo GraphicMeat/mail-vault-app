@@ -136,7 +136,13 @@ export function getGraphMessageId(accountId, mailbox, uid) {
 export async function resolveGraphMessageId(accountId, mailbox, uid, { row, account } = {}) {
   if (row?._graphId) return row._graphId;
 
-  const known = getGraphMessageId(accountId, mailbox, uid);
+  // A folder this session never opened (a Notes to Self card names its copies
+  // without opening them) has no map in memory yet; the ledger on disk does,
+  // and it is the one record that reaches past the newest-200 relist window.
+  // The wire may hand the uid over as a string; the map is keyed by number.
+  const key = Number(uid);
+  await restoreGraphIdMap(accountId, mailbox);
+  const known = getGraphMessageId(accountId, mailbox, key);
   if (known) return known;
   if (!account) return null;
 
@@ -165,7 +171,7 @@ export async function resolveGraphMessageId(accountId, mailbox, uid, { row, acco
     if (!folder) return null;
 
     await listGraphMessages(accountId, mailbox, account, folder.id);
-    return getGraphMessageId(accountId, mailbox, uid);
+    return getGraphMessageId(accountId, mailbox, key);
   } catch (e) {
     console.warn('[graphIdMap] Rebuild failed for %s:%s', accountId, mailbox, e);
     return null;

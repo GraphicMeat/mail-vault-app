@@ -609,6 +609,43 @@ describe('useNotesStore', () => {
     expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['del']);
   });
 
+  it('takes the card off the board before the server answers, like a list delete', async () => {
+    const note = card('instant');
+    harness.daemonCall.mockResolvedValue({ cards: [card('before'), note, card('after')] });
+    await useNotesStore.getState().open();
+    let finish;
+    harness.deleteEmailFromServer.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const pending = useNotesStore.getState().deleteCard(note);
+    await vi.waitFor(() => expect(harness.deleteEmailFromServer).toHaveBeenCalledTimes(1));
+    expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['before', 'after']);
+    finish();
+    await pending;
+    expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['before', 'after']);
+  });
+
+  it('puts the card back where it was when the server refuses', async () => {
+    const note = card('back');
+    harness.daemonCall.mockResolvedValue({ cards: [card('before'), note, card('after')] });
+    await useNotesStore.getState().open();
+    harness.deleteEmailFromServer.mockRejectedValue(new Error('refused'));
+    await expect(useNotesStore.getState().deleteCard(note)).rejects.toThrow('refused');
+    expect(useNotesStore.getState().cards.map(c => c.key)).toEqual(['before', 'back', 'after']);
+  });
+
+  it('shows only the copies it cannot address while the server works', async () => {
+    const skipped = { accountId: 'a', mailbox: 'Local-Only', uid: 4 };
+    const note = card('part', { copies: [{ accountId: 'a', mailbox: 'INBOX', uid: 3 }, skipped] });
+    harness.daemonCall.mockResolvedValue({ cards: [note] });
+    await useNotesStore.getState().open();
+    let finish;
+    harness.deleteEmailFromServer.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const pending = useNotesStore.getState().deleteCard(note);
+    await vi.waitFor(() => expect(harness.deleteEmailFromServer).toHaveBeenCalledTimes(1));
+    expect(useNotesStore.getState().cards[0].copies).toEqual([skipped]);
+    finish();
+    await pending;
+  });
+
   it('never addresses a copy whose folder the account list did not name', () => {
     const accounts = [{ accountId: 'a', knownMailboxes: ['INBOX'] }, { accountId: 'b', knownMailboxes: [] }];
     const note = card('x', { copies: [

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Deleting a Notes to Self card now takes it off the board at once, like deleting from the list, instead of leaving it there until the server answers. If the server refuses, the card comes back in its place and the delete-failed toast shows.
+
+- Deleting a Notes to Self card on an Outlook account no longer fails with "Cannot delete: no Graph message ID found for this email" when its folder was not open. The delete now reads the message id from the saved Outlook ledger, which also reaches messages older than the newest 200 that a relist can see, instead of only the folder open on screen.
+
 - The one-time code bubble no longer offers a number from a sender's street address when the company has "Security" in its name. A login mail from "TAC Security" showed 1390 (from "HQ 1390 Market St") instead of the code 128321, and its welcome mail, which carries no code, got a bubble with 1390 too. "Security" on its own no longer counts as talk of a code; "security code" still does.
 
 - The update dialogs (portable copy, Snap, up to date, check failed) and the Settings, Export, Original Message and New Message window titles now follow the app language. Before, they stayed English in every locale. A new test fails on any native dialog or window title written as a literal.
