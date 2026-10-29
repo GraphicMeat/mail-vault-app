@@ -44,11 +44,15 @@ export function buildMockServer() {
 /**
  * Start a mock server on random loopback ports — one for IMAP, one for SMTP.
  * @param {object} scenario - `{ state: { mailboxes, capabilities }, faults, smtp }`
- * @returns {Promise<{host: string, port: number, smtpPort: number, stop: () => void}>}
+ * @param {{ logCommands?: boolean }} [options] - `logCommands` records every IMAP command line the
+ *   server receives into the returned `commands` array (live: it grows as the server is used).
+ * @returns {Promise<{host: string, port: number, smtpPort: number, commands: string[], stop: () => void}>}
  */
-export function startMockImap(scenario) {
+export function startMockImap(scenario, { logCommands = false } = {}) {
   return new Promise((res, rej) => {
-    const proc = spawn(SERVER_BIN, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const commands = [];
+    const proc = spawn(SERVER_BIN, { stdio: ['pipe', 'pipe', 'pipe'],
+      env: logCommands ? { ...process.env, MOCK_IMAP_LOG_COMMANDS: '1' } : process.env });
     let stdout = '';
     let settled = false;
 
@@ -70,6 +74,7 @@ export function startMockImap(scenario) {
         host: '127.0.0.1',
         port,
         smtpPort,
+        commands,
         stop() {
           proc.kill('SIGTERM');
           setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* gone */ } }, 1000);
@@ -77,7 +82,16 @@ export function startMockImap(scenario) {
       });
     });
 
-    proc.stderr.on('data', (d) => console.log('[mock-imap]', d.toString().trim()));
+    let pending = '';
+    proc.stderr.on('data', (d) => {
+      pending += d.toString();
+      const lines = pending.split('\n');
+      pending = lines.pop();
+      for (const line of lines) {
+        if (logCommands && line.startsWith('[cmd] ')) commands.push(line.slice(6));
+        else if (line.trim()) console.log('[mock-imap]', line.trim());
+      }
+    });
     proc.on('error', (e) => { if (!settled) { settled = true; clearTimeout(timer); rej(e); } });
     proc.on('exit', (code) => {
       if (!settled) { settled = true; clearTimeout(timer); rej(new Error(`mock-imap-server exited: ${code}`)); }
