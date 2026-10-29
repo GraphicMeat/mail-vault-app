@@ -23,7 +23,7 @@
 use crate::account_lifecycle::AccountStamp;
 use crate::server::DaemonState;
 use mailvault_core::fetch_mode::FetchMode;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -38,6 +38,10 @@ const LIMIT_MARGIN_MS: i64 = 5_000;
 const TICK: Duration = Duration::from_millis(250);
 /// A background account whose queue could not be derived yet is looked at again later.
 const DERIVE_RETRY: Duration = Duration::from_secs(5);
+/// Tries one message gets in a pass before it is given up on until the next pass.
+const MAX_ATTEMPTS: u32 = 5;
+/// Rounds a pass may fail to even start (credentials) before it steps down.
+const MAX_START_FAILURES: u32 = 5;
 
 /// Where a message stands after one body unit.
 #[derive(Debug, PartialEq, Eq)]
@@ -139,6 +143,14 @@ pub(crate) struct Pass {
     attachments_done: bool,
     /// Body units in flight right now, for status and for pause checks.
     in_flight: usize,
+    /// Failed tries per message in this pass.
+    attempts: HashMap<u32, u32>,
+    /// Messages given up on after `MAX_ATTEMPTS`; reported as failed.
+    abandoned: usize,
+    /// Rounds that failed before any slot started.
+    start_failures: u32,
+    /// A `run_pass` task is alive for this pass: nothing else may launch or wake it.
+    live: bool,
 }
 
 /// What a pass does after its slots stopped.
@@ -155,7 +167,8 @@ impl Pass {
         let queue: VecDeque<u32> = spec.uids.iter().copied().collect();
         let total = queue.len();
         Self { spec, role, generation, status: Status::Pending, queue, retry: Vec::new(), delay: RETRY_FIRST,
-            total, completed: 0, attachments_done: false, in_flight: 0 }
+            total, completed: 0, attachments_done: false, in_flight: 0, attempts: HashMap::new(), abandoned: 0,
+            start_failures: 0, live: false }
     }
 
     fn take(&mut self) -> Option<u32> {
@@ -171,8 +184,25 @@ impl Pass {
         self.completed += 1;
     }
 
+    /// A failed try. The fifth in a pass abandons the message: a body that never
+    /// downloads must not keep the pass, and the accounts behind it, cycling.
     fn failed(&mut self, uid: u32) {
+        let tries = self.attempts.entry(uid).or_default();
+        *tries += 1;
+        if *tries >= MAX_ATTEMPTS { self.abandoned += 1; } else { self.retry.push(uid); }
+    }
+
+    /// Someone else holds the message right now: it goes round again without costing a try.
+    fn deferred(&mut self, uid: u32) {
         self.retry.push(uid);
+    }
+
+    /// The round could not start. The wait is the current delay; only `requeue_retries`
+    /// doubles it. `true` once the pass has failed to start too often to keep waiting.
+    fn start_failed(&mut self, now: tokio::time::Instant) -> bool {
+        self.start_failures += 1;
+        self.status = Status::RetryWait { at: now + self.delay };
+        self.start_failures >= MAX_START_FAILURES
     }
 
     /// A spent daily limit: the same UID goes back to the front and the whole
@@ -223,7 +253,7 @@ impl Pass {
             Status::Done => ("done", None),
         };
         crate::pipeline_focus::Progress { phase, queued: self.queue.len() + self.retry.len(), completed: self.completed,
-            total: self.total, failed: self.retry.len(), paused, active: self.in_flight }
+            total: self.total, failed: self.retry.len() + self.abandoned, paused, active: self.in_flight }
     }
 }
 
@@ -581,7 +611,7 @@ async fn slot(state: Arc<DaemonState>, account_id: String, generation: u64, conf
             }
         };
         let Some(_claim) = state.hoarder_worker.claims.claim(&account_id, &spec.mailbox, uid, spec.stamp.epoch()) else {
-            runner.with_pass(&account_id, generation, |pass| pass.failed(uid));
+            runner.with_pass(&account_id, generation, |pass| pass.deferred(uid));
             continue;
         };
         runner.with_pass(&account_id, generation, |pass| pass.in_flight += 1);
@@ -621,6 +651,15 @@ async fn slot(state: Arc<DaemonState>, account_id: String, generation: u64, conf
 }
 
 async fn run_pass(state: Arc<DaemonState>, account_id: String, generation: u64) {
+    pass_round(&state, &account_id, generation).await;
+    let runner = &state.hoarder_worker.ordinary;
+    runner.with_pass(&account_id, generation, |pass| pass.live = false);
+    runner.wake();
+}
+
+async fn pass_round(state: &Arc<DaemonState>, account_id: &str, generation: u64) {
+    let state = Arc::clone(state);
+    let account_id = account_id.to_owned();
     let runner = Arc::clone(&state.hoarder_worker.ordinary);
     // The daemon's own token resolution, per round, so a retry after a refused
     // token already carries a renewed one. The renderer never sends one.
@@ -628,10 +667,13 @@ async fn run_pass(state: Arc<DaemonState>, account_id: String, generation: u64) 
         Ok(config) => Arc::new(config),
         Err(error) => {
             warn!("[ordinary] {account_id}: credentials unavailable: {error}");
-            runner.with_pass(&account_id, generation, |pass| {
-                pass.status = Status::RetryWait { at: tokio::time::Instant::now() + pass.delay };
-                pass.delay = next_retry_delay(pass.delay);
-            });
+            let now = tokio::time::Instant::now();
+            let given_up = runner.with_pass(&account_id, generation, |pass| (pass.start_failed(now), pass.spec.clone()));
+            if let Some((true, spec)) = given_up {
+                // Stepping down leaves room for the next account; the cascade looks again after the backoff.
+                runner.lock().skip_until.insert(account_id.clone(), now + RETRY_MAX);
+                retire_pass(&state, &spec, generation, "credentials");
+            }
             return;
         }
     };
@@ -667,7 +709,6 @@ async fn run_pass(state: Arc<DaemonState>, account_id: String, generation: u64) 
     if let Some(progress) = runner.with_pass(&account_id, generation, |pass| pass.progress()) {
         report(&state, &spec, progress);
     }
-    runner.wake();
 }
 
 async fn prefetch_attachments_once(state: &Arc<DaemonState>, spec: &Spec) {
@@ -735,8 +776,9 @@ async fn tick(state: &Arc<DaemonState>, runner: &Arc<OrdinaryRunner>) {
     let (sleeping, dirty) = {
         let mut inner = runner.lock();
         let dirty = std::mem::take(&mut inner.settings_dirty);
+        // A pass whose slots are still finishing is not woken: its next launch would run beside them.
         let sleeping: Vec<(String, String)> = inner.passes.iter().filter_map(|(id, pass)| match &pass.status {
-            Status::Sleeping { host, .. } => Some((id.clone(), host.clone())), _ => None }).collect();
+            Status::Sleeping { host, .. } if !pass.live => Some((id.clone(), host.clone())), _ => None }).collect();
         (sleeping, dirty)
     };
     for (id, host) in sleeping {
@@ -749,14 +791,14 @@ async fn tick(state: &Arc<DaemonState>, runner: &Arc<OrdinaryRunner>) {
         let at = now_ms(state);
         let mut inner = runner.lock();
         if let Some(pass) = inner.passes.get_mut(&id) {
-            if pass.should_wake(at, limit_now) { pass.status = Status::Pending; }
+            if !pass.live && pass.should_wake(at, limit_now) { pass.status = Status::Pending; }
         }
     }
     // Retry waits that elapsed.
     {
         let mut inner = runner.lock();
         for pass in inner.passes.values_mut() {
-            if matches!(pass.status, Status::RetryWait { at } if at <= now) { pass.requeue_retries(); }
+            if !pass.live && matches!(pass.status, Status::RetryWait { at } if at <= now) { pass.requeue_retries(); }
         }
     }
     // Launch: the focused account first; the cascade one account at a time after it.
@@ -768,17 +810,21 @@ async fn tick(state: &Arc<DaemonState>, runner: &Arc<OrdinaryRunner>) {
         let active_blocks = inner.passes.values().any(|p| p.role == Role::Active
             && matches!(p.status, Status::Pending | Status::Running | Status::RetryWait { .. }));
         for pass in inner.passes.values_mut() {
-            if pass.role == Role::Active && pass.status == Status::Pending {
+            if pass.role == Role::Active && pass.status == Status::Pending && !pass.live {
                 pass.status = Status::Running;
+                pass.live = true;
                 launch.push((pass.spec.account_id.clone(), pass.generation));
             }
         }
         if !active_blocks {
+            // Only a running pass holds the lane: one that waits for its backoff (or its
+            // limit reset) steps aside, so a stuck account never starves the ones behind it.
             let background_busy = inner.passes.values().any(|p| p.role == Role::Background
-                && matches!(p.status, Status::Running | Status::RetryWait { .. }));
+                && (p.status == Status::Running || p.live));
             if !background_busy {
                 if let Some(pass) = inner.passes.values_mut().find(|p| p.role == Role::Background && p.status == Status::Pending) {
                     pass.status = Status::Running;
+                    pass.live = true;
                     launch.push((pass.spec.account_id.clone(), pass.generation));
                 } else {
                     derive = inner.cascade.iter().find(|origin| {
@@ -897,6 +943,81 @@ mod tests {
         assert_eq!(compare_identity(&some("a"), some("a")), IdentityCheck::Same);
         assert_eq!(compare_identity(&some("a"), some("b")), IdentityCheck::Changed, "another lifetime is never adopted");
         assert_eq!(compare_identity(&some("a"), None), IdentityCheck::Changed, "an identity that vanished is a replaced cache");
+    }
+
+    #[test]
+    fn s6_an_uid_that_always_fails_is_abandoned_after_five_attempts_and_the_pass_finishes() {
+        let mut pass = Pass::new(spec(&[1, 2]), Role::Background, 1);
+        pass.status = Status::Running;
+        let now = tokio::time::Instant::now();
+        let mut rounds = 0;
+        loop {
+            rounds += 1;
+            assert!(rounds < 12, "a message that never downloads cycles for ever and starves the accounts behind it");
+            while let Some(uid) = pass.take() {
+                if uid == 1 { pass.failed(uid); } else { pass.succeeded(); }
+            }
+            match pass.settle(now) {
+                Settled::Finished => break,
+                Settled::RetryLater => pass.requeue_retries(),
+                other => panic!("unexpected {other:?}"),
+            }
+            pass.status = Status::Running;
+        }
+        assert_eq!(rounds, 5, "five attempts in all");
+        assert_eq!(pass.progress().failed, 1, "the abandoned message is reported as failed, not hidden");
+        assert_eq!(pass.completed, 1);
+    }
+
+    async fn idle_state() -> (tempfile::TempDir, Arc<DaemonState>) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        (dir, state)
+    }
+
+    fn background(id: &str, uids: &[u32], generation: u64) -> Pass {
+        let mut spec = spec(uids);
+        spec.account_id = id.to_owned();
+        Pass::new(spec, Role::Background, generation)
+    }
+
+    #[tokio::test]
+    async fn s6_a_background_pass_waiting_to_retry_lets_the_next_account_proceed() {
+        let (_dir, state) = idle_state().await;
+        let runner = Arc::clone(&state.hoarder_worker.ordinary);
+        {
+            let mut inner = runner.lock();
+            inner.generation = 1;
+            let mut stuck = background("stuck", &[1], 1);
+            stuck.status = Status::RetryWait { at: tokio::time::Instant::now() + Duration::from_secs(600) };
+            inner.passes.insert("stuck".into(), stuck);
+            inner.passes.insert("next".into(), background("next", &[2], 1));
+        }
+        tick(&state, &runner).await;
+        assert_eq!(runner.lock().passes["next"].status, Status::Running,
+            "an account that is only waiting for its backoff must not hold the lane");
+    }
+
+    #[tokio::test]
+    async fn s6_a_sleeping_pass_is_not_woken_while_its_siblings_are_still_in_flight() {
+        let (_dir, state) = idle_state().await;
+        let runner = Arc::clone(&state.hoarder_worker.ordinary);
+        {
+            let mut inner = runner.lock();
+            inner.generation = 1;
+            let mut pass = background("a", &[1], 1);
+            pass.role = Role::Active;
+            pass.status = Status::Sleeping { resume_at_ms: 0, limit: None, host: "h".into() };
+            pass.live = true;
+            inner.passes.insert("a".into(), pass);
+        }
+        tick(&state, &runner).await;
+        assert!(matches!(runner.lock().passes["a"].status, Status::Sleeping { .. }),
+            "waking now would start a second set of slots beside the one still finishing");
+        runner.lock().passes.get_mut("a").unwrap().live = false;
+        tick(&state, &runner).await;
+        assert!(matches!(runner.lock().passes["a"].status, Status::Running | Status::Pending),
+            "once its slots are done the reset wakes it");
     }
 
     #[test]

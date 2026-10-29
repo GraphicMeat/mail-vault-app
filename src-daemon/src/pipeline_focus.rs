@@ -497,11 +497,16 @@ async fn warm_folder(state: &Arc<DaemonState>, generation: u64, account_id: &str
         let mut inner = this.lock();
         if inner.generation != generation || inner.offline { return None; }
         if emptied { inner.warmed.remove(&key); }
-        if !inner.warmed.insert(key) { return None; }
+        if !inner.warmed.insert(key.clone()) { return None; }
         inner.in_flight += 1;
     }
     let ok = warm_once(state, account_id, mailbox).await;
-    this.lock().in_flight -= 1;
+    {
+        let mut inner = this.lock();
+        inner.in_flight -= 1;
+        // A warm that failed is not a warm: the next focus tries the folder again.
+        if !ok { inner.warmed.remove(&key); }
+    }
     Some(ok)
 }
 
@@ -638,16 +643,18 @@ async fn plan(state: Arc<DaemonState>, generation: u64, focus: Focus) {
                 scoped.account_id.clone(), scoped.mailbox.clone(), origin_hash.clone());
             tokio::spawn(async move { warm_account(state, generation, accounts, id, mailbox, epoch, hash).await })
         };
+        // The background chunks run on their own: the focused folder's follow-up waits for
+        // its own warm only, never for the other accounts' headers.
         let runner = {
             let (state, accounts) = (Arc::clone(&state), Arc::clone(&accounts));
             let watcher = Arc::clone(&state);
-            run_chunks(chunks, move || watcher.hoarder_worker.pipeline.current(generation), move |id| {
+            tokio::spawn(run_chunks(chunks, move || watcher.hoarder_worker.pipeline.current(generation), move |id| {
                 let (e, h) = origins.get(&id).cloned().unwrap_or_default();
                 let (state, accounts) = (Arc::clone(&state), Arc::clone(&accounts));
                 warm_account(state, generation, accounts, id, "INBOX".to_owned(), e, h)
-            })
+            }))
         };
-        let _ = tokio::join!(runner, active);
+        let _ = active.await;
         // A focused folder that had no cached rows is derived again now that headers landed.
         let rederive = this.lock().entries.get(&scoped.account_id).is_some_and(|entry| entry.phase == "headers");
         if rederive && this.current(generation) {
@@ -659,6 +666,7 @@ async fn plan(state: Arc<DaemonState>, generation: u64, focus: Focus) {
             this.emit(&state, &scoped.account_id);
             if let Some(spec) = spec { state.hoarder_worker.ordinary.submit_active(&state, generation, spec); }
         }
+        let _ = runner.await;
     }
     finish(&state);
 }

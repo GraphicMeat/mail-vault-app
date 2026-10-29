@@ -6673,6 +6673,67 @@ mod tests {
             }
 
             #[tokio::test]
+            async fn s5_a_failed_warm_is_tried_again_by_the_next_focus() {
+                let (_lock, _env, _dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                // A non-empty cache: the empty-cache reset must not be what saves this.
+                let seed = json!({"emails": [{"uid": 1, "subject": "m1", "date": "2026-08-10T12:00:00Z"}], "totalEmails": 1}).to_string();
+                crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX", &seed)).unwrap();
+                server.mutate(|st| st.expect_login = Some(("user@example.com".into(), "another-password".into())));
+                let first = boxed_request(&state, req("pipeline.focus", focus_params(1, true, "INBOX"))).await;
+                assert!(first.error.is_none(), "{first:?}");
+                state.hoarder_worker.pipeline.quiet().await;
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 1, "the warm was tried and failed to sign in");
+                server.mutate(|st| st.expect_login = None);
+                let second = boxed_request(&state, req("pipeline.focus", focus_params(2, true, "INBOX"))).await;
+                assert!(second.error.is_none(), "{second:?}");
+                state.hoarder_worker.pipeline.quiet().await;
+                assert_eq!(state.hoarder_worker.pipeline.admissions(), 2, "a warm that failed is not remembered as done");
+                assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(2));
+            }
+
+            #[tokio::test]
+            async fn s5_the_focused_folder_is_queued_without_waiting_for_background_header_warms() {
+                let _lock = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+                let _env = CredentialsEnv::capture();
+                let dir = tempfile::tempdir().unwrap();
+                std::fs::write(dir.path().join("frontend-settings.json"),
+                    json!({"mailvault-settings": {"state": {"fetchMode": "hoarder"}}}).to_string()).unwrap();
+                let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                let other = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+                let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+                let row = |id: &str, email: &str, host: &MockImap| json!({"id": id, "email": email, "authType": "password",
+                    "imapHost": host.host(), "imapPort": host.port(), "imapSecure": false});
+                let rows = json!([row("acc1", "user@example.com", &server), row("acc2", "second@example.com", &other)]);
+                std::fs::write(state.app_dir.join("accounts.json"), rows.to_string()).unwrap();
+                state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+                let stored = |id: &str, email: &str, host: &MockImap| json!({"id": id, "email": email, "authType": "password",
+                    "password": "hunter2", "imapHost": host.host(), "imapPort": host.port(), "imapSecure": false}).to_string();
+                let credentials = state.app_dir.join("credentials.json");
+                std::fs::write(&credentials, json!({"acc1": stored("acc1", "user@example.com", &server),
+                    "acc2": stored("acc2", "second@example.com", &other)}).to_string()).unwrap();
+                std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+                std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+                let pause = other.pause_command("SELECT");
+                let answer = boxed_request(&state, req("pipeline.focus", focus_params(1, true, "INBOX"))).await;
+                assert!(answer.error.is_none(), "{answer:?}");
+                let mut pause = tokio::task::spawn_blocking(move || {
+                    assert!(pause.entered(std::time::Duration::from_secs(15)), "the background account's warm must reach its provider");
+                    pause
+                }).await.unwrap();
+                // The focused folder had no cached rows; once ITS headers land it is derived again,
+                // while the background account is still held at the provider.
+                let mut derived = false;
+                for _ in 0..100 {
+                    let status = boxed_request(&state, req("pipeline.status", json!({}))).await.result.unwrap();
+                    if status["accounts"]["acc1"]["phase"] != json!("headers") { derived = true; break; }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+                assert!(derived, "the focused folder waited for another account's header warm");
+                pause.release();
+                state.hoarder_worker.pipeline.quiet().await;
+            }
+
+            #[tokio::test]
             async fn s5_the_accounts_own_sent_folder_is_warmed_alongside_the_focused_folder() {
                 let (_lock, _env, _dir, state, _server) = rig(Scenario::new()
                     .mailbox(synthetic_mailbox("INBOX", 2)).mailbox(synthetic_mailbox("Sent Items", 4)));
