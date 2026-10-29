@@ -137,6 +137,8 @@ pub(crate) struct Pass {
     total: usize,
     completed: usize,
     attachments_done: bool,
+    /// Body units in flight right now, for status and for pause checks.
+    in_flight: usize,
 }
 
 /// What a pass does after its slots stopped.
@@ -153,7 +155,7 @@ impl Pass {
         let queue: VecDeque<u32> = spec.uids.iter().copied().collect();
         let total = queue.len();
         Self { spec, role, generation, status: Status::Pending, queue, retry: Vec::new(), delay: RETRY_FIRST,
-            total, completed: 0, attachments_done: false }
+            total, completed: 0, attachments_done: false, in_flight: 0 }
     }
 
     fn take(&mut self) -> Option<u32> {
@@ -221,7 +223,7 @@ impl Pass {
             Status::Done => ("done", None),
         };
         crate::pipeline_focus::Progress { phase, queued: self.queue.len() + self.retry.len(), completed: self.completed,
-            total: self.total, failed: self.retry.len(), paused }
+            total: self.total, failed: self.retry.len(), paused, active: self.in_flight }
     }
 }
 
@@ -483,8 +485,10 @@ async fn slot(state: Arc<DaemonState>, account_id: String, generation: u64, conf
             runner.with_pass(&account_id, generation, |pass| pass.failed(uid));
             continue;
         };
+        runner.with_pass(&account_id, generation, |pass| pass.in_flight += 1);
         let outcome = run_body_unit(&state, &spec.stamp, &config, &account_id, &spec.mailbox, uid).await;
         drop(_claim);
+        runner.with_pass(&account_id, generation, |pass| pass.in_flight = pass.in_flight.saturating_sub(1));
         let mut sleeping = false;
         match outcome {
             BodyUnitOutcome::Stored | BodyUnitOutcome::PolicySkipped => { runner.with_pass(&account_id, generation, Pass::succeeded); }

@@ -18,11 +18,14 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: async (name, cb) => {
 const loadEmails = vi.fn(async () => {});
 const loadUnifiedInbox = vi.fn(async () => {});
 const loadSubtree = vi.fn(async () => {});
+const loadSentHeaders = vi.fn(async () => {});
+let sentPath = 'Sent';
 const A = { id: 'a', email: 'a@test', imapHost: 'imap.test' };
 const B = { id: 'b', email: 'b@test', imapHost: 'imap.test' };
 const mail = create(() => ({ accounts: [A, B], activeAccountId: 'a', activeMailbox: 'INBOX',
   unifiedInbox: false, unifiedFolder: 'INBOX', mailboxScope: null, emails: [], totalEmails: 0,
-  loadEmails, loadUnifiedInbox, loadSubtree, refreshAllAccounts: vi.fn(async () => ({})) }));
+  loadEmails, loadUnifiedInbox, loadSubtree, loadSentHeaders, getSentMailboxPath: () => sentPath,
+  refreshAllAccounts: vi.fn(async () => ({})) }));
 const facade = Object.assign(selector => mail(selector), {
   getState: () => mail.getState(), setState: value => mail.setState(value),
   subscribe: listener => mail.subscribe(listener),
@@ -104,6 +107,7 @@ beforeEach(() => {
   settings.setState({ badgeEnabled: false, badgeMode: 'unread', unreadPerAccount: {},
     hiddenAccounts: {}, displayNames: {}, accountOrder: [] });
   loadEmails.mockClear(); loadUnifiedInbox.mockClear(); loadSubtree.mockClear();
+  loadSentHeaders.mockClear(); sentPath = 'Sent';
   connect.mockClear(); observe.mockClear(); recount.mockClear(); deliver.mockClear(); offer.mockClear();
   invalidateUnread.mockClear(); invalidateRestore.mockClear();
   viewCounts.mockClear(); notesReload.mockClear(); noteFlags.mockClear();
@@ -234,6 +238,22 @@ describe('S4 native change feed consumer', () => {
     mail.setState({ accounts: [A, B] });
     await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(waitForSyncChanges).toHaveBeenCalledWith(null, 25000));
+  });
+
+  it('publishes a native Sent refresh to the chat view like the old pipeline did', async () => {
+    renderHook(() => useEmailScheduler());
+    await ready();
+    await answer({ gen: 1, changes: [{ ...source('a'), mailbox: 'Sent', newEmails: 0 }], notifications: [] });
+    await vi.waitFor(() => expect(loadSentHeaders).toHaveBeenCalledWith('a'));
+    expect(loadSentHeaders).toHaveBeenCalledTimes(1);
+    // Another account's Sent is not the active account's chat view, and All inboxes is off.
+    await answer({ gen: 2, changes: [{ ...source('b'), mailbox: 'Sent', newEmails: 0 }], notifications: [] });
+    await tick();
+    expect(loadSentHeaders).toHaveBeenCalledTimes(1);
+    // An ordinary folder is not Sent.
+    await answer({ gen: 3, changes: [{ ...source('a'), mailbox: 'Archive', newEmails: 0 }], notifications: [] });
+    await tick();
+    expect(loadSentHeaders).toHaveBeenCalledTimes(1);
   });
 
   it('recovers status and current state on lag without synthesizing old notices', async () => {

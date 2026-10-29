@@ -964,15 +964,8 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                     setAccountHidden(selectedAccountId, hidden);
 
                     if (!currentlyHidden) {
-                      // Hiding: destroy pipeline and switch active account if needed
-                      import('../../services/EmailPipelineManager').then(({ pipelineManager }) => {
-                        const pipeline = pipelineManager.pipelines.get(selectedAccountId);
-                        if (pipeline) {
-                          pipeline.destroy();
-                          pipelineManager.pipelines.delete(selectedAccountId);
-                        }
-                      });
-
+                      // Hiding: the daemon retires the account's download-ahead when the
+                      // coordinator next reports the view; switch active account if needed
                       const { activeAccountId } = useMailStore.getState();
                       if (selectedAccountId === activeAccountId) {
                         // Read fresh hidden state from store (not stale closure)
@@ -998,14 +991,12 @@ export function AccountSettings({ accounts, onUpgrade, onAddAccount, onExportAcc
                         }
                       }
                     } else {
-                      // Unhiding: trigger immediate sync
-                      import('../../services/EmailPipelineManager').then(({ pipelineManager }) => {
-                        const { activeAccountId } = useMailStore.getState();
-                        if (!activeAccountId) {
-                          useMailStore.getState().activateAccount(selectedAccountId, 'INBOX');
-                        }
-                        pipelineManager.restartBackgroundPipelines();
-                      });
+                      // Unhiding: the coordinator reports the view again and the daemon
+                      // queues the account's download-ahead.
+                      const { activeAccountId } = useMailStore.getState();
+                      if (!activeAccountId) {
+                        useMailStore.getState().activateAccount(selectedAccountId, 'INBOX');
+                      }
                     }
                   }}>
                     {t(hidden ? 'settings.accounts.accountHidden' : 'settings.accounts.accountVisible')}

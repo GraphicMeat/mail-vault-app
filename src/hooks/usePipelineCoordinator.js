@@ -2,98 +2,108 @@ import { useEffect, useRef } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSyncStore } from '../stores/syncStore';
-import { pipelineManager } from '../services/EmailPipelineManager';
+import { useMailStore } from '../stores/mailStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { focusNative, noteProgress, readNativeStatus, resendNative, retireObservation, setNativeOnline, viewFacts }
+  from '../services/nativePipeline';
+import { refreshVaultSets } from '../services/workflows/refreshVaultSets';
+
+/** The wait after a list paints, so the pass starts once the screen has settled. */
+const FOCUS_DELAY_MS = 200;
+/** Coalesces a burst of progress events into one read of the vault's saved set. */
+const VAULT_REFRESH_MS = 300;
+
+const warn = (what, error) => console.warn(`[pipeline] ${what}:`, error?.message || error);
 
 /**
- * React bridge for the EmailPipelineManager.
- * Watches store state and drives pipeline lifecycle:
- *   - Starts active account pipeline after emails load
- *   - Handles account switching
- *   - Pauses/resumes on offline/online
- *   - Cleans up on unmount
+ * Presentation of the native download-ahead pipeline. The daemon owns the
+ * queues, policy, retries and daily limits; this hook reports the view on screen
+ * (debounced, with an online flag and an ever-growing revision), recovers after a
+ * reconnect or an event lag by reading status and resending the latest view once,
+ * and shows the saved set when a folder's body pass settles. Unmounting retires
+ * this window's observation only: the daemon's work and in-flight children go on.
  */
 export function usePipelineCoordinator() {
   const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const accounts = useAccountStore(s => s.accounts);
   const emails = useMessageListStore(s => s.emails);
   const loading = useSyncStore(s => s.loading);
-  const accounts = useAccountStore(s => s.accounts);
-  const startedForRef = useRef(null); // tracks which account we started the pipeline for
-  const prevAccountIdRef = useRef(null);
-  const prevEmailCountRef = useRef(0);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const scoped = useMailStore(s => !!s.mailboxScope);
+  const hidden = useSettingsStore(s => s.hiddenAccounts);
 
-  // Reset pipeline tracking when emails drop to 0 (e.g., cache clear)
+  const hasRows = emails.length > 0;
+  // A new list page or a native repaint changes this; the debounce bounds the cost.
+  const rowsKey = `${emails.length}:${emails[0]?.uid ?? ''}:${emails[emails.length - 1]?.uid ?? ''}`;
+  const accountsKey = (accounts || []).map(a => a.id).join(',');
+  const hiddenKey = Object.keys(hidden || {}).filter(id => hidden[id]).sort().join(',');
+  const recovering = useRef(false);
+
+  // Report the view after the list loads, 200ms after it last changed. A view
+  // switch, a reload, an account added, hidden or removed all land here.
   useEffect(() => {
-    if (prevEmailCountRef.current > 0 && emails.length === 0) {
-      startedForRef.current = null;
-    }
-    prevEmailCountRef.current = emails.length;
-  }, [emails.length]);
-
-  // Start active account pipeline after emails load
-  useEffect(() => {
-    if (!activeAccountId || emails.length === 0 || loading) return;
-
-    // Don't restart if we already started for this account
-    if (startedForRef.current === activeAccountId) return;
-
+    if (!activeAccountId || !hasRows || loading) return undefined;
     const timer = setTimeout(() => {
-      console.log(`[PipelineCoordinator] Starting pipeline for account ${activeAccountId}`);
-      startedForRef.current = activeAccountId;
-      pipelineManager.startActiveAccountPipeline(activeAccountId);
-    }, 200); // 200ms delay — enough for UI to stabilize after account switch
-
+      const facts = viewFacts(useMailStore.getState());
+      if (facts) focusNative(facts).catch(error => warn('focus not delivered', error));
+    }, FOCUS_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [activeAccountId, emails.length, loading]);
+  }, [activeAccountId, activeMailbox, scoped, hasRows, rowsKey, loading, accountsKey, hiddenKey]);
 
-  // Handle account switching
+  // Online and offline are facts about the window; the daemon decides what they pause.
   useEffect(() => {
-    if (!activeAccountId || activeAccountId === prevAccountIdRef.current) return;
-
-    if (prevAccountIdRef.current !== null) {
-      // This is an actual switch, not the initial load
-      console.log(`[PipelineCoordinator] Account switched to ${activeAccountId}`);
-      pipelineManager.onAccountSwitch(activeAccountId);
-      startedForRef.current = null; // allow pipeline to start for new account
-    }
-    prevAccountIdRef.current = activeAccountId;
-  }, [activeAccountId]);
-
-  // Sync pipelines when accounts list changes (handle removals)
-  useEffect(() => {
-    pipelineManager.syncAccounts(accounts);
-  }, [accounts]);
-
-  // Online/offline handling
-  useEffect(() => {
-    const handleOnline = () => {
-      console.log('[PipelineCoordinator] Online — resuming pipelines');
-      pipelineManager.resumeAll();
-    };
-
-    const handleOffline = () => {
-      console.log('[PipelineCoordinator] Offline — pausing pipelines');
-      pipelineManager.pauseAll();
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
+    const change = isOnline => () => setNativeOnline(isOnline).catch(error => warn('online state not delivered', error));
+    const up = change(true);
+    const down = change(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
     };
   }, []);
 
-  // A cap switched off or a changed download limit wakes a pass that sleeps at the limit.
-  useEffect(() => pipelineManager.watchTransferLimits(), []);
-
-  // Auto-cleanup rules run in the daemon (src-daemon/src/cleanup_worker.rs):
-  // once a day on its own, and on Run All Now in Storage settings.
-
-  // Cleanup on unmount
+  // Progress events, a reconnect and an event lag. Every subscription handles a
+  // rejection, a synchronous throw and disposal.
   useEffect(() => {
+    let disposed = false;
+    let vaultTimer = null;
+    const offs = [];
+    const recover = () => {
+      if (recovering.current) return;
+      recovering.current = true;
+      // Status first (the daemon may have restarted or kept working), then the
+      // latest view once under a newer revision: never a blind restart.
+      readNativeStatus()
+        .catch(error => warn('status unavailable', error))
+        .then(() => resendNative())
+        .catch(error => warn('focus not resent', error))
+        .finally(() => { recovering.current = false; });
+    };
+    const progress = event => {
+      try {
+        const payload = event?.payload;
+        noteProgress(payload);
+        const view = useMailStore.getState();
+        if (payload?.phase === 'done' && payload.accountId === view.activeAccountId && payload.mailbox === view.activeMailbox) {
+          clearTimeout(vaultTimer);
+          vaultTimer = setTimeout(() => { refreshVaultSets(payload.accountId, payload.mailbox); }, VAULT_REFRESH_MS);
+        }
+      } catch (error) { warn('progress not applied', error); }
+    };
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => Promise.all([
+        listen('pipeline-progress', progress),
+        listen('daemon-reconnected', () => recover()),
+        listen('daemon-events-lagged', () => recover()),
+      ]))
+      .then(handles => { if (disposed) handles.forEach(off => off?.()); else offs.push(...handles); })
+      .catch(error => warn('events unavailable', error));
     return () => {
-      pipelineManager.destroyAll();
+      disposed = true;
+      clearTimeout(vaultTimer);
+      offs.splice(0).forEach(off => off?.());
+      retireObservation();
     };
   }, []);
 }

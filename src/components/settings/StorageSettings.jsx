@@ -359,9 +359,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       const invoke = window.__TAURI__?.core?.invoke;
                       if (!invoke) return;
 
-                      // Stop all pipelines
-                      const { pipelineManager } = await import('../../services/EmailPipelineManager');
-                      pipelineManager.destroyAll();
+                      // Stop the daemon's download-ahead before its files are cleared; the
+                      // coordinator reports the view again when the list reloads.
+                      const { stopNative } = await import('../../services/nativePipeline');
+                      await stopNative().catch(error => console.warn('[storage] download-ahead not stopped:', error));
 
                       // Clear .eml files (preserving archived)
                       const result = await send('maildir_clear_cache');

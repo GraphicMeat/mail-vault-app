@@ -115,16 +115,16 @@ if (import.meta.env.VITE_E2E === '1') {
   // body phase runs, and a memory reading cannot say whose bytes those are:
   // the store's list, the pipeline's copy and the parse that produced both look
   // identical from outside the process. The held count IS the attribution.
-  import('./services/EmailPipelineManager').then(({ pipelineManager }) => {
-    window.__PIPELINES__ = () => [...pipelineManager.pipelines.entries()].map(([id, p]) => ({
-      id, phase: p._phase, queued: p._queue?.length ?? 0, held: p._lastLoadedEmails?.length ?? 0,
-      activeSlots: p._activeSlots ?? 0,
-    }));
+  import('./services/nativePipeline').then(({ snapshot, setNativeOnline, readNativeStatus }) => {
+    window.__PIPELINES__ = () => snapshot();
     // A spec that asserts "this screen sent no body fetch" watches every native
     // call, and background body caching sends exactly that call. Pausing it (the
-    // same pauseAll the app runs when it goes offline) is how such a window is
-    // attributed; `activeSlots` above says when the in-flight ones have landed.
-    window.__PIPELINE_CONTROL__ = { pauseAll: () => pipelineManager.pauseAll(), resumeAll: () => pipelineManager.resumeAll() };
+    // same offline report the app makes) is how such a window is attributed;
+    // `activeSlots` above says when the in-flight ones have landed.
+    window.__PIPELINE_CONTROL__ = {
+      pauseAll: () => setNativeOnline(false).then(() => readNativeStatus()).catch(() => null),
+      resumeAll: () => setNativeOnline(true).then(() => readNativeStatus()).catch(() => null),
+    };
   });
   Promise.all([import('./services/transport.js'), import('./services/db')])
     .then(([transport, db]) => {

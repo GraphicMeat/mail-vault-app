@@ -12,6 +12,7 @@ import { waitForSyncChanges } from '../services/syncService';
 import { accountExpectedContext } from '../services/db/accounts';
 import { connectNativeSync, observeNativeView, currentNativeView, nativeInstanceId } from '../services/nativeSyncContext.js';
 import { deliverPreparedNotice, offerPreparedCode } from '../services/nativeArrival.js';
+import { mergesSentIntoThreads } from '../utils/sentFolder';
 
 const invoke = window.__TAURI__?.core?.invoke;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -221,6 +222,14 @@ export function useEmailScheduler() {
       if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
       if (source !== accountContext(useMailStore.getState(), accountId)) return { repaint: false, flagsMoved: false };
       const now = useMailStore.getState();
+      // A Sent folder the daemon's header warm refreshed feeds the chat view, as
+      // the old download-ahead engine published it: the active account's always,
+      // another account's while All inboxes threads Sent into INBOX (cache only).
+      const sentPath = now.getSentMailboxPath?.(accountId);
+      if (sentPath && mailbox === sentPath) {
+        if (accountId === now.activeAccountId) now.loadSentHeaders?.(accountId);
+        else if (now.activeMailbox === 'UNIFIED' && mergesSentIntoThreads(now)) now.loadSentHeaders?.(accountId, { cacheOnly: true });
+      }
       const onScreen = (now.activeAccountId === accountId &&
         (now.activeMailbox === mailbox || now.mailboxScope?.paths?.includes(mailbox)))
         || ((now.unifiedInbox || now.activeMailbox === 'UNIFIED')

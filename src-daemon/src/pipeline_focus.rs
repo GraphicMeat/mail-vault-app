@@ -41,6 +41,7 @@ struct Entry {
     total: usize,
     failed: usize,
     paused: Option<&'static str>,
+    active: usize,
     /// The account lifetime and configuration this entry was derived under; an
     /// entry whose account was removed or reconfigured is retired, never reused.
     epoch: u64,
@@ -54,7 +55,7 @@ struct Entry {
 impl Entry {
     fn json(&self) -> Value {
         let mut value = json!({"phase": self.phase, "queued": self.queued, "completed": self.completed,
-            "total": self.total, "failed": self.failed, "mailbox": self.mailbox});
+            "total": self.total, "failed": self.failed, "mailbox": self.mailbox, "activeSlots": self.active});
         if let Some(reason) = self.paused { value["pausedReason"] = json!(reason); }
         value
     }
@@ -68,6 +69,8 @@ pub(crate) struct Progress {
     pub total: usize,
     pub failed: usize,
     pub paused: Option<&'static str>,
+    /// Body units in flight right now.
+    pub active: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -192,6 +195,7 @@ impl PipelineFocus {
             entry.total = progress.total;
             entry.failed = progress.failed;
             entry.paused = progress.paused;
+            entry.active = progress.active;
         }
         self.emit(state, account_id);
     }
@@ -360,7 +364,7 @@ async fn derive(state: &Arc<DaemonState>, settings: &Value, scoped: &Scoped, epo
     let index_only = policy.as_ref().is_some_and(|policy| policy.mode == FetchMode::IndexOnly);
     let read = read_focused(state, scoped, index_only, all_cached).await;
     let mut entry = Entry { role: Role::Active, mailbox: scoped.mailbox.clone(), phase: "idle", queued: 0,
-        completed: 0, total: 0, failed: 0, paused: None, epoch, origin_hash: origin_hash.to_owned(), runnable: Vec::new(),
+        completed: 0, total: 0, failed: 0, paused: None, active: 0, epoch, origin_hash: origin_hash.to_owned(), runnable: Vec::new(),
         identity: read.identity.clone() };
     if read.local_only {
         // A folder only this computer holds is never provider work.
@@ -528,7 +532,7 @@ pub(crate) async fn derive_cascade(state: &Arc<DaemonState>, origin: &Origin) ->
     let entry = derive(state, &settings, &scoped, stamp.epoch(), &hash, false, true).await;
     let spec = submission(&scoped, &origin.stamp, &hash, &entry)?;
     this.report(state, &origin.account_id, stamp.epoch(), &hash, Progress { phase: "content", queued: spec.uids.len(),
-        completed: 0, total: spec.uids.len(), failed: 0, paused: None });
+        completed: 0, total: spec.uids.len(), failed: 0, paused: None, active: 0 });
     Some(spec)
 }
 
@@ -576,7 +580,7 @@ async fn plan(state: Arc<DaemonState>, generation: u64, focus: Focus) {
                 let mut inner = this.lock();
                 if inner.generation != generation { return; }
                 inner.entries.insert(id.clone(), Entry { role: Role::Background, mailbox: "INBOX".into(),
-                    phase: "headers", queued: 0, completed: 0, total: 0, failed: 0, paused: None, epoch,
+                    phase: "headers", queued: 0, completed: 0, total: 0, failed: 0, paused: None, active: 0, epoch,
                     origin_hash: hash.clone(), runnable: Vec::new(), identity: None });
             }
             this.emit(&state, id);

@@ -36,14 +36,20 @@ describe('native pipeline focus', () => {
     expect(read('src-core/src/lib.rs')).toContain('pub mod pipeline;');
   });
 
-  it('keeps the production frontend on the JS pipelines until the S7 cutover', () => {
+  it('has one production reporter: the thin client the coordinator hook uses', () => {
     for (const path of walk('src')) {
-      if (path === 'src/services/transport.js' || path === 'src/demo/backend.js') continue;
+      if (path === 'src/services/transport.js' || path === 'src/demo/backend.js' || path === 'src/services/nativePipeline.js') continue;
       const source = executable(read(path));
       expect(source, path).not.toMatch(/['"]pipeline\.(focus|status)['"]/);
     }
-    const app = executable(read('src/App.jsx'));
-    expect(app).toContain('usePipelineCoordinator();');
+    const hook = executable(read('src/hooks/usePipelineCoordinator.js'));
+    expect(hook).toContain("from '../services/nativePipeline'");
+    expect(hook).not.toMatch(/EmailPipelineManager|AccountPipeline|pipelineManager/);
+    expect(executable(read('src/App.jsx'))).toContain('usePipelineCoordinator();');
+    // The settings screens and the debug hooks no longer drive the old manager either.
+    for (const path of ['src/components/settings/AccountSettings.jsx', 'src/components/settings/StorageSettings.jsx', 'src/main.jsx']) {
+      expect(executable(read(path)), path).not.toMatch(/EmailPipelineManager|pipelineManager/);
+    }
   });
 
   it('keeps body work out of the focus module and the Hoarder sweep budget untouched', () => {
