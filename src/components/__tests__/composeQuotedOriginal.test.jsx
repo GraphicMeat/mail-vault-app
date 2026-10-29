@@ -473,6 +473,37 @@ describe('the quoted original in a reply', () => {
     expect(screen.queryByTestId('original-thread')).toBeNull();
   });
 
+  // The daemon builds the original's HTML from the body alone, so a picture
+  // the body shows by cid: reached the frame with no bytes: a bordered empty
+  // box carrying its alt text. The reading pane resolves it; so does this.
+  describe('an original with an inline picture', () => {
+    const withCid = (attachment) => ({
+      ...original,
+      html: '<p>See</p><img src="cid:shot@example.test" alt="shot.png">',
+      attachments: [{ filename: 'shot.png', contentType: 'image/png', size: 4, contentId: '<shot@example.test>', ...attachment }],
+    });
+    const shownImg = async () => new DOMParser().parseFromString(
+      (await expandQuote()).querySelector('iframe').getAttribute('srcdoc'), 'text/html',
+    ).querySelector('img');
+
+    it('draws the picture from its attachment bytes', async () => {
+      openDetachedReply(withCid({ content: 'AAAA' }));
+      expect((await shownImg()).getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    });
+
+    it('reads the bytes from where the message lives when the reader never fetched them', async () => {
+      // hydrateInlineImages only runs inside the desktop shell; the modal then asks it for its own window.
+      window.__TAURI__ = { core: { invoke: vi.fn() } };
+      window.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } } };
+      readAttachments.mockResolvedValue(['BBBB']);
+      openDetachedReply(withCid({}));
+      await waitFor(() => expect(readAttachments).toHaveBeenCalledWith({ accountId: 'acct-1', mailbox: 'INBOX', uid: 10, attachmentIndices: [0] }));
+      await waitFor(async () => expect((await shownImg()).getAttribute('src')).toBe('data:image/png;base64,BBBB'));
+      readAttachments.mockReset();
+    });
+    afterEach(() => { delete window.__TAURI__; delete window.__TAURI_INTERNALS__; });
+  });
+
   it('shows a dark original with Dark Reader, and only nonced scripts may run', async () => {
     settings.emailViewerTheme = 'dark';
     openDetachedReply(original);

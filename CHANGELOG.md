@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The original message beside a reply, forward or detached compose window now shows its inline pictures. Screenshots pasted into the body of a mail showed as empty boxes carrying only the file name, in the side pane and in the pop-out original window. The pictures are now read from the message's attachments, or from the cached copy of the mail when the list never loaded them, the same way the reading pane does.
+
 - Deleting a Notes to Self card now takes it off the board at once, like deleting from the list, instead of leaving it there until the server answers. If the server refuses, the card comes back in its place and the delete-failed toast shows.
 
 - Deleting a Notes to Self card on an Outlook account no longer fails with "Cannot delete: no Graph message ID found for this email" when its folder was not open. The delete now reads the message id from the saved Outlook ledger, which also reaches messages older than the newest 200 that a relist can see, instead of only the folder open on screen.

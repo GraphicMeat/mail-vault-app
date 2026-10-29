@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useId, useMemo, lazy, Suspense, memo } from 'react';
 import { useDialogA11y, hasOpenPopover } from '../hooks/useDialogA11y';
+import { useOriginalPictures } from '../hooks/useOriginalPictures';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
@@ -210,6 +211,11 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
   // A restored window keeps what it was: its snapshot says so.
   const isForward = mode === 'forward' || !!initialData?._forward;
   const [contextHtml, setContextHtml] = useSendState('', invalidate);
+  const originalMessages = useMemo(
+    () => (actionReplyTo?._threadContext?.length ? actionReplyTo._threadContext : [actionReplyTo]),
+    [actionReplyTo],
+  );
+  const shownContextHtml = useOriginalPictures(contextHtml, originalMessages);
   const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
   // Context width as a ratio of the layout; null = 400px. A draft's own wins.
   const [contextSplit, setContextSplit] = useState(() => initialData?._contextSplit || composeContextSplit);
@@ -292,7 +298,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     try {
       unlisten = await listen('original-message-ready', async event => {
         if (event.payload?.token !== token) return;
-        await emitTo(event.payload.label, 'original-message-payload', { token, html: contextHtml, dark: originalDark });
+        await emitTo(event.payload.label, 'original-message-payload', { token, html: shownContextHtml, dark: originalDark });
         unlisten?.();
       });
       const label = await invoke('open_auxiliary_window', { kind: 'original', token });
@@ -2144,7 +2150,7 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
                 ) : (
                   <div data-testid="compose-context-panel" className="flex-1 min-h-0 overflow-y-auto px-4 pb-3">
                     <div data-testid="compose-quoted" className="pt-2">
-                      <OriginalFrame html={contextHtml} dark={originalDark} title={t('compose.originalMessage')} message={actionReplyTo} />
+                      <OriginalFrame html={shownContextHtml} dark={originalDark} title={t('compose.originalMessage')} message={actionReplyTo} />
                     </div>
                   </div>
                 )
