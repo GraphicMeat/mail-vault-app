@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { writeFileSync as captureWriteFileSync } from 'node:fs';
 
 // safeStorage is the persist backend for every store this file pulls in.
 // `mem` is hoisted so a case can seed a persisted session before rehydrating.
@@ -25,6 +26,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 const { sendNotification, notifyDecision } = await import('../../services/api');
+const { usePrivacyStore } = await import('../privacyStore');
 const {
   useFocusStore, useFocusClock, notify, remainingMs, formatRemaining,
   getNotificationDecisions, clearNotificationDecisions, FOCUS_SCENES,
@@ -358,4 +360,200 @@ describe('scene', () => {
     const { SCENE_LOADERS } = await import('../../components/focus/scenes/index.js');
     expect(Object.keys(SCENE_LOADERS).sort()).toEqual([...FOCUS_SCENES].sort());
   });
+});
+
+// Conditional S4 oracle capture through the real old Focus chokepoint. The
+// policy answers below are external inputs, not copied notification decisions.
+it.skipIf(!process.env.W4S4_ORACLE_FD_OUT)('captures F01-F05 and D01-D03 old Focus and policy effects', async () => {
+  const target = process.env.W4S4_ORACLE_FD_OUT;
+  if (!target) throw new Error('W4S4_ORACLE_FD_OUT is required');
+  const encode = value => value === undefined ? { $undefined: true }
+    : Array.isArray(value) ? value.map(encode)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+      : value;
+  const ctx = { accountId: 'a1', folder: 'INBOX', from: 'sender@outside.test', viewIds: [] };
+  const reset = () => {
+    useFocusStore.getState().abandon();
+    useFocusStore.setState({ held: [] });
+    clearNotificationDecisions();
+    vi.clearAllMocks();
+    notifyDecision.mockImplementation(async ({ focusHeld }) => focusHeld
+      ? { deliver: false, reason: 'focus-hold' } : DELIVERED);
+  };
+  const effects = () => encode({ osCalls: sendNotification.mock.calls,
+    policyCalls: notifyDecision.mock.calls, decisions: getNotificationDecisions(),
+    held: useFocusStore.getState().held });
+  const cases = [];
+  reset();
+  await notify('Sender', 'Subject', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 }, ctx);
+  cases.push({ id: 'F01', input: { focus: false }, output: effects() });
+  reset();
+  useFocusStore.getState().start(25);
+  await notify('Sender', 'Subject', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 }, ctx);
+  cases.push({ id: 'F02', input: { focus: true }, output: effects() });
+  const f03 = [];
+  reset();
+  let resolveBegin;
+  notifyDecision.mockReturnValueOnce(new Promise(done => { resolveBegin = done; }));
+  const began = notify('Sender', 'Subject', undefined, undefined, ctx);
+  useFocusStore.getState().start(25);
+  resolveBegin(DELIVERED);
+  await began;
+  f03.push({ input: { transition: 'begin-while-awaiting' }, output: effects() });
+  reset();
+  useFocusStore.getState().start(25);
+  let resolveEnd;
+  notifyDecision.mockReturnValueOnce(new Promise(done => { resolveEnd = done; }));
+  const ended = notify('Sender', 'Subject', undefined, undefined, ctx);
+  useFocusStore.getState().abandon();
+  resolveEnd({ deliver: false, reason: 'focus-hold' });
+  await ended;
+  f03.push({ input: { transition: 'end-while-awaiting' }, output: effects() });
+  cases.push({ id: 'F03', samples: f03 });
+  const f04 = [];
+  for (const count of [1, 3]) {
+    reset();
+    useFocusStore.getState().start(25);
+    for (let n = 1; n <= count; n++) await notify(`Sender ${n}`, `Subject ${n}`, undefined,
+      { accountId: 'a1', mailbox: 'INBOX', uid: n }, ctx);
+    useFocusStore.getState().abandon();
+    await vi.advanceTimersByTimeAsync(0);
+    f04.push({ input: { heldCount: count }, output: effects() });
+  }
+  cases.push({ id: 'F04', samples: f04 });
+  reset();
+  useFocusStore.getState().start(25);
+  for (let n = 1; n <= 4; n++) await notify(`Sender ${n}`, `Subject ${n}`, undefined,
+    { accountId: 'a1', mailbox: 'INBOX', uid: n }, ctx);
+  useFocusStore.getState().abandon();
+  await vi.advanceTimersByTimeAsync(0);
+  cases.push({ id: 'F05', input: { heldCount: 4 }, output: effects() });
+  const d01 = [];
+  for (const decision of [DELIVERED, { deliver: false, reason: 'account-muted' }]) {
+    reset();
+    notifyDecision.mockResolvedValueOnce(decision);
+    await notify('Sender', 'Subject', undefined, undefined, ctx);
+    d01.push({ input: { decision }, output: effects() });
+  }
+  cases.push({ id: 'D01', samples: d01 });
+  const d02 = [];
+  for (const failure of ['reject', 'malformed']) {
+    reset();
+    if (failure === 'reject') notifyDecision.mockRejectedValueOnce(new Error('policy-offline'));
+    else notifyDecision.mockResolvedValueOnce(null);
+    await notify('Sender', 'Subject', undefined, undefined, ctx);
+    d02.push({ input: { failure }, output: effects() });
+  }
+  cases.push({ id: 'D02', samples: d02 });
+  reset();
+  for (let n = 0; n < 205; n++) await notify(`Sender ${n}`, 'Subject', undefined, undefined, ctx);
+  cases.push({ id: 'D03', input: { count: 205 }, output: {
+    decisionLog: encode(getNotificationDecisions()), logLength: getNotificationDecisions().length,
+    osCount: sendNotification.mock.calls.length, policyCount: notifyDecision.mock.calls.length } });
+  captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-focus-policy', cases }, null, 2) + '\n');
+});
+
+it.skipIf(!process.env.W4S4_ORACLE_PRIVACY_OUT)('captures F07-F09 old privacy timing and OS-target effects', async () => {
+  const target = process.env.W4S4_ORACLE_PRIVACY_OUT;
+  if (!target) throw new Error('W4S4_ORACLE_PRIVACY_OUT is required');
+  const encode = value => value === undefined ? { $undefined: true }
+    : Array.isArray(value) ? value.map(encode)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+      : value;
+  const ctx = { accountId: 'a1', folder: 'INBOX', from: 'sender@outside.test', viewIds: [] };
+  const msgTarget = { accountId: 'a1', mailbox: 'INBOX', uid: 7, code: '123456' };
+  const reset = () => {
+    useFocusStore.getState().abandon();
+    useFocusStore.setState({ held: [] });
+    usePrivacyStore.setState({ enabled: false });
+    clearNotificationDecisions();
+    vi.clearAllMocks();
+    notifyDecision.mockReset().mockResolvedValue(DELIVERED);
+  };
+  const effects = () => encode({ osCalls: sendNotification.mock.calls,
+    policyCalls: notifyDecision.mock.calls, decisions: getNotificationDecisions(),
+    held: useFocusStore.getState().held,
+    privacyEnabled: usePrivacyStore.getState().enabled,
+    privacyHydrated: usePrivacyStore.persist.hasHydrated() });
+  const cases = [];
+  try {
+    reset();
+    useFocusStore.getState().start(25);
+    await notify('Sender', '123456\nSubject', undefined, msgTarget, ctx);
+    const heldBeforeToggle = effects();
+    usePrivacyStore.setState({ enabled: true });
+    useFocusStore.getState().abandon();
+    await vi.advanceTimersByTimeAsync(0);
+    cases.push({ id: 'F07', input: { transition: 'privacy-on-while-held' },
+      output: { heldBeforeToggle, afterRelease: effects() } });
+    const f08 = [];
+    for (const [before, after] of [[false, true], [true, false]]) {
+      reset();
+      usePrivacyStore.setState({ enabled: before });
+      let release;
+      notifyDecision.mockReturnValueOnce(new Promise(done => { release = done; }));
+      const pending = notify('Sender', '123456\nSubject', undefined, msgTarget, ctx);
+      usePrivacyStore.setState({ enabled: after });
+      release(DELIVERED);
+      await pending;
+      f08.push({ input: { privacyBefore: before, privacyAfter: after }, output: effects() });
+    }
+    cases.push({ id: 'F08', samples: f08 });
+    reset();
+    usePrivacyStore.setState({ enabled: true });
+    await notify('Sender', '123456\nSubject', undefined, msgTarget, ctx);
+    const mail = effects();
+    await notify('Backup for Sender 123456', 'Saved Sender 123456');
+    cases.push({ id: 'F09', input: { privacy: true, mailTarget: msgTarget },
+      output: { mail, mailThenGeneric: effects() } });
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-privacy-timing', cases }, null, 2) + '\n');
+  } finally {
+    useFocusStore.getState().abandon();
+    usePrivacyStore.setState({ enabled: false });
+  }
+});
+
+it.skipIf(!process.env.W4S4_ORACLE_F06_OUT)('captures F06 old privacy enabled, disabled, and unhydrated mail effects', async () => {
+  const target = process.env.W4S4_ORACLE_F06_OUT;
+  if (!target) throw new Error('W4S4_ORACLE_F06_OUT is required');
+  const encode = value => value === undefined ? { $undefined: true }
+    : Array.isArray(value) ? value.map(encode)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+      : value;
+  const ctx = { accountId: 'a1', folder: 'INBOX', from: 'sender@outside.test', viewIds: [] };
+  const targetMessage = { accountId: 'a1', mailbox: 'INBOX', uid: 7, code: '123456' };
+  const cases = [];
+  const samples = [];
+  try {
+    for (const [mode, enabled, hydrated] of [
+      ['off', false, true], ['on', true, true], ['unhydrated', false, false],
+    ]) {
+      useFocusStore.getState().abandon();
+      useFocusStore.setState({ held: [] });
+      usePrivacyStore.setState({ enabled });
+      clearNotificationDecisions();
+      vi.clearAllMocks();
+      notifyDecision.mockReset().mockResolvedValue(DELIVERED);
+      const hydration = vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(hydrated);
+      try {
+        await notify('Sender 123456', '123456\nSubject', 'Ping', targetMessage, ctx);
+        samples.push({ input: { mode, enabled, hydrated }, output: encode({
+          osCalls: sendNotification.mock.calls,
+          policyCalls: notifyDecision.mock.calls,
+          decisions: getNotificationDecisions(),
+          held: useFocusStore.getState().held,
+          privacyEnabled: usePrivacyStore.getState().enabled,
+          privacyHydrated: usePrivacyStore.persist.hasHydrated(),
+        }) });
+      } finally { hydration.mockRestore(); }
+    }
+    cases.push({ id: 'F06', samples });
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-privacy-hydration', cases }, null, 2) + '\n');
+  } finally {
+    useFocusStore.getState().abandon();
+    usePrivacyStore.setState({ enabled: false });
+  }
 });

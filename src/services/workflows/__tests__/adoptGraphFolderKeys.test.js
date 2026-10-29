@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { writeFileSync as captureWriteFileSync } from 'node:fs';
 
 const api = { vaultAdoptMailboxDirs: vi.fn() };
 vi.mock('../../api', () => api);
@@ -299,4 +300,73 @@ describe('adoptGraphFolderKeysFromListing', () => {
     await adoptGraphFolderKeysFromListing(GRAPH, GERMAN_LISTING);
     expect(api.vaultAdoptMailboxDirs).not.toHaveBeenCalled();
   });
+});
+
+// Conditional S4 oracle of the old helper results. Adoption readback and
+// original-source prerequisites are the separate accepted-new G correction.
+it.skipIf(!process.env.W4S4_ORACLE_G_OUT)('captures G01-G04 old Graph adoption helper effects', async () => {
+  const target = process.env.W4S4_ORACLE_G_OUT;
+  if (!target) throw new Error('W4S4_ORACLE_G_OUT is required');
+  const encode = value => value === undefined ? { $undefined: true }
+    : Array.isArray(value) ? value.map(encode)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+      : value;
+  const reset = () => {
+    api.vaultAdoptMailboxDirs.mockReset().mockResolvedValue({ adopted: [], skipped_both_exist: [], failed: [] });
+    settingsPersist = undefined;
+    settingsState = {
+      graphFolderKeysAdopted: {}, graphFolderKeysAdoptedFromListing: {}, lastMailboxPerAccount: {},
+      getLastMailbox: id => settingsState.lastMailboxPerAccount[id] || 'INBOX',
+      setLastMailbox: vi.fn((id, mailbox) => { settingsState.lastMailboxPerAccount[id] = mailbox; }),
+      markGraphFolderKeysAdopted: vi.fn(id => { settingsState.graphFolderKeysAdopted[id] = true; }),
+      markGraphFolderKeysAdoptedFromListing: vi.fn(id => { settingsState.graphFolderKeysAdoptedFromListing[id] = true; }),
+    };
+  };
+  const output = (returned, warnings) => encode({ returned,
+    adoptionCalls: api.vaultAdoptMailboxDirs.mock.calls,
+    legacyFlags: settingsState.graphFolderKeysAdopted,
+    listingFlags: settingsState.graphFolderKeysAdoptedFromListing,
+    lastMailboxWrites: settingsState.setLastMailbox.mock.calls,
+    warnings: warnings.mock.calls });
+  const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const cases = [];
+  try {
+    reset();
+    const success = [await adoptGraphFolderKeys([GRAPH]),
+      await adoptGraphFolderKeysFromListing(GRAPH, GERMAN_LISTING)];
+    cases.push({ id: 'G01', input: { helperResults: 'success', listing: GERMAN_LISTING },
+      output: output(success, warnings) });
+    const failures = [];
+    for (const failure of ['report-failed', 'rejected']) {
+      reset(); warnings.mockClear();
+      if (failure === 'report-failed') api.vaultAdoptMailboxDirs.mockResolvedValue({
+        adopted: [], skipped_both_exist: [], failed: ['disk'],
+      });
+      else api.vaultAdoptMailboxDirs.mockRejectedValue(new Error('disk'));
+      const returned = [await adoptGraphFolderKeys([GRAPH]),
+        await adoptGraphFolderKeysFromListing(GRAPH, GERMAN_LISTING)];
+      failures.push({ input: { failure }, output: output(returned, warnings) });
+    }
+    cases.push({ id: 'G02', samples: failures });
+    reset(); warnings.mockClear();
+    api.vaultAdoptMailboxDirs.mockResolvedValue({ adopted: [],
+      skipped_both_exist: ['Gesendet -> Sent (exists)'], failed: [] });
+    const skippedLegacy = await adoptGraphFolderKeys([GRAPH]);
+    const skippedListing = await adoptGraphFolderKeysFromListing(GRAPH, [
+      { id: 'f1', displayName: 'Drafts', wellKnownName: 'drafts', storageKey: 'Drafts' },
+    ]);
+    cases.push({ id: 'G03', input: { helperResults: 'skipped-both-exist and no listing rename' },
+      output: output([skippedLegacy, skippedListing], warnings) });
+    reset(); warnings.mockClear();
+    settingsPersist = { hasHydrated: () => false,
+      onFinishHydration: cb => {
+        setTimeout(() => { settingsState.graphFolderKeysAdopted = { g1: true }; cb(); }, 0);
+        return () => {};
+      } };
+    const delayed = await adoptGraphFolderKeys([GRAPH]);
+    cases.push({ id: 'G04', input: { delayedHydrationFlag: true },
+      output: output(delayed, warnings) });
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-graph-adoption', cases }, null, 2) + '\n');
+  } finally { warnings.mockRestore(); }
 });

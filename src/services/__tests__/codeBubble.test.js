@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { writeFileSync as captureWriteFileSync } from 'node:fs';
 
 // The default body read, behind the store and the API: an IMAP message comes
 // through the daemon's light fetch, an Outlook message signed in with
@@ -156,4 +157,50 @@ describe('fetchArrivalBody', () => {
     await expect(fetchArrivalBody('zz', 42, 'INBOX')).resolves.toBeNull();
     expect(mockLight).not.toHaveBeenCalled();
   });
+});
+
+// Conditional S4 capture of the old JS code-offer orchestration. The scripted
+// message.code answers are external inputs; the real core detector fixture is
+// captured separately. No old JS return or bubble answer is transcribed here.
+it.skipIf(!process.env.W4S4_ORACLE_C_OUT)('captures C01-C09 old direct code-offer and body-read effects', async () => {
+  const target = process.env.W4S4_ORACLE_C_OUT;
+  if (!target) throw new Error('W4S4_ORACLE_C_OUT is required');
+  const samples = [
+    { id: 'C01', row: header('Your code is 364758'), replies: [{ code: '364758', needsBody: false }] },
+    { id: 'C02', row: header('Sign in', { snippet: 'Code 364758' }), replies: [{ code: '364758', needsBody: false }] },
+    { id: 'C03', row: header('Sign in'), replies: [{ code: null, needsBody: true }, { code: '775421', needsBody: false }], body: { text: 'Your code is 775421' } },
+    { id: 'C04', row: header('Sign in'), replies: [{ code: null, needsBody: true }, { code: '775421', needsBody: false }], body: { html: '<script>ignore</script><p>Your code is <b>775421</b> &amp; go</p>' } },
+    { id: 'C05', row: header('Newsletter'), replies: [{ code: null, needsBody: false }] },
+    { id: 'C06', row: null, replies: [] },
+    { id: 'C07', row: header('Your code is 364758'), mailbox: 'Archive', replies: [] },
+    { id: 'C08', row: header('Sign in'), replies: [{ code: null, needsBody: true }], bodyError: 'offline' },
+  ];
+  const cases = [];
+  for (const sample of samples) {
+    useCodeBubbleStore.getState().clear();
+    mockCode.mockReset();
+    const replies = [...sample.replies];
+    mockCode.mockImplementation(async () => replies.shift() || { code: null, needsBody: false });
+    const fetchBody = sample.bodyError
+      ? vi.fn().mockRejectedValue(new Error(sample.bodyError))
+      : vi.fn().mockResolvedValue(sample.body || { text: 'No code' });
+    const output = await offerCodeFromArrival('a1', sample.mailbox || 'INBOX', sample.row, { fetchBody });
+    cases.push({ id: sample.id, input: { row: sample.row, mailbox: sample.mailbox || 'INBOX', replies: sample.replies, body: sample.body || null, bodyError: sample.bodyError || null },
+      output: { returned: output, codeCalls: mockCode.mock.calls, bodyCalls: fetchBody.mock.calls, bubbles: bubbles() } });
+  }
+  accounts.length = 0;
+  mockLight.mockReset();
+  mockGraphGet.mockReset();
+  const graph = { id: 'g1', email: 'g@ms.com', oauth2Transport: 'graph', oauth2AccessToken: 'token' };
+  accounts.push(graph);
+  const missingMap = await fetchArrivalBody('g1', 7, 'INBOX');
+  const missingMapCalls = { light: mockLight.mock.calls, graph: mockGraphGet.mock.calls };
+  accounts.length = 0;
+  mockLight.mockClear();
+  mockGraphGet.mockClear();
+  const removedAccount = await fetchArrivalBody('g1', 42, 'INBOX');
+  cases.push({ id: 'C09', input: { missingGraphMapUid: 7, removedAccountUid: 42 },
+    output: { missingMap, missingMapCalls, removedAccount,
+      removedAccountCalls: { light: mockLight.mock.calls, graph: mockGraphGet.mock.calls } } });
+  captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-direct-code-offers', cases }, null, 2) + '\n');
 });

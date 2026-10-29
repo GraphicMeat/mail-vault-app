@@ -5,6 +5,7 @@
 // new-mail banner would ever say it is back. The app raises it off the
 // daemon's `snooze` event instead, for THAT message, not the folder's newest.
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { writeFileSync as captureWriteFileSync } from 'node:fs';
 import { create } from 'zustand';
 
 // The scheduler reads `window.__TAURI__.core.invoke` at module load; without
@@ -126,5 +127,45 @@ describe('the wake of a local snooze', () => {
     expect(mockGetEmailHeaders).not.toHaveBeenCalled();
     // The event did land: the row is gone.
     expect(useSnoozeStore.getState().rows.map(r => r.id)).toEqual(['local']);
+  });
+  // Conditional S4 capture of old local wake behavior through the real
+  // snooze event callback. The expected-new no-generic-bounce rule is separate.
+  it.skipIf(!process.env.W4S4_ORACLE_W_OUT)('captures W01-W04 old local wake event effects', async () => {
+    const target = process.env.W4S4_ORACLE_W_OUT;
+    if (!target) throw new Error('W4S4_ORACLE_W_OUT is required');
+    const encode = value => value === undefined ? { $undefined: true }
+      : Array.isArray(value) ? value.map(encode)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+        : value;
+    const defaultCache = { totalEmails: 2, emails: [
+      { uid: 9, messageId: '<newest@x>', from: { name: 'Newest', address: 'n@x.co' }, subject: 'Not this one' },
+      { uid: 5, messageId: 'held@x', from: { name: 'Ada', address: 'ada@one.co' }, subject: 'Back again' },
+    ] };
+    const scenarios = [
+      { id: 'W01', payload: { id: 'local', state: 'woken', woke: true }, cache: defaultCache },
+      { id: 'W02', payload: { id: 'local', state: 'woken', woke: true }, cache: {
+        totalEmails: 1, emails: [defaultCache.emails[0]],
+      } },
+      { id: 'W03', payload: { id: 'local', state: 'woken', woke: false }, cache: defaultCache },
+      { id: 'W04', payload: { id: 'local', state: 'woken', woke: true }, cache: {
+        totalEmails: 2, emails: [defaultCache.emails[0],
+          { ...defaultCache.emails[1], uid: 7, messageId: '  <held@x>  ' }],
+      } },
+    ];
+    const cases = [];
+    for (const sample of scenarios) {
+      useSnoozeStore.setState({ rows: [LOCAL, SERVER] });
+      mockNotify.mockClear();
+      mockReload.mockClear();
+      mockGetEmailHeaders.mockReset().mockResolvedValue(sample.cache);
+      await fire(sample.payload);
+      cases.push({ id: sample.id, input: encode({ payload: sample.payload,
+        cache: sample.cache, storedUidHint: LOCAL.uidInSnoozed }), output: encode({
+        notifyCalls: mockNotify.mock.calls, cacheCalls: mockGetEmailHeaders.mock.calls,
+        reloadCalls: mockReload.mock.calls, remainingRows: useSnoozeStore.getState().rows,
+      }) });
+    }
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-local-wakes', cases }, null, 2) + '\n');
   });
 });

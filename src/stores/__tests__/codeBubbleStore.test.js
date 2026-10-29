@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { writeFileSync as captureWriteFileSync } from 'node:fs';
 import { useCodeBubbleStore, CODE_BUBBLE_TTL_MS } from '../codeBubbleStore';
 
 // The corner bubbles holding one-time codes that arrived by mail. A code is
@@ -50,5 +51,28 @@ describe('codeBubbleStore', () => {
     expect(useCodeBubbleStore.getState().bubbles).toHaveLength(1);
     vi.advanceTimersByTime(1);
     expect(useCodeBubbleStore.getState().bubbles).toHaveLength(0);
+  });
+  it.skipIf(!process.env.W4S4_ORACLE_D04_OUT)('captures D04 old repeated-offer TTL and three-bubble cap', () => {
+    const target = process.env.W4S4_ORACLE_D04_OUT;
+    if (!target) throw new Error('W4S4_ORACLE_D04_OUT is required');
+    const snapshots = [];
+    const capture = (step, input) => snapshots.push({ step, input,
+      now: Date.now(), bubbles: useCodeBubbleStore.getState().bubbles.map(b => ({ ...b })) });
+    vi.setSystemTime(1_000_000);
+    useCodeBubbleStore.getState().offer(arrival(1));
+    capture('first-offer', arrival(1));
+    vi.advanceTimersByTime(100);
+    useCodeBubbleStore.getState().offer(arrival(1));
+    capture('repeat-same-message', arrival(1));
+    for (const uid of [2, 3, 4]) {
+      useCodeBubbleStore.getState().offer(arrival(uid));
+      capture('next-message', arrival(uid));
+    }
+    vi.advanceTimersByTime(CODE_BUBBLE_TTL_MS - 100);
+    capture('first-expiry-boundary', null);
+    vi.advanceTimersByTime(100);
+    capture('repeat-expiry-boundary', null);
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-bubble-ttl',
+      ttlInputMs: CODE_BUBBLE_TTL_MS, cases: [{ id: 'D04', snapshots }] }, null, 2) + '\n');
   });
 });

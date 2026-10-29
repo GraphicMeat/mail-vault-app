@@ -5,6 +5,7 @@
 // folder that is on screen and telling the user about the rest.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup, act } from '@testing-library/react';
+import { writeFileSync as captureWriteFileSync } from 'node:fs';
 import { create } from 'zustand';
 
 // The scheduler reads `window.__TAURI__.core.invoke` at module load — set it
@@ -164,7 +165,8 @@ vi.mock('../../stores/settingsStore', () => ({
 }));
 
 const { ownAddresses } = await import('../../utils/ownAddresses.js');
-const { useEmailScheduler } = await import('../useEmailScheduler');
+const { useEmailScheduler, notifyArrival } = await import('../useEmailScheduler');
+const notificationSounds = await import('../../utils/notificationSounds');
 const { useSnoozeStore } = await import('../../stores/snoozeStore');
 const { useViewHideStore } = await import('../../stores/viewHideStore');
 const { shiftInbox, selectTotalUnread, setListStore } = await import('../../stores/unreadCounts');
@@ -1331,5 +1333,297 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockGetAllHeaders).not.toHaveBeenCalled();
     });
+  });
+  // Conditional S4 capture. The result is emitted by the actual legacy export;
+  // this test adds no expected banner strings or notification decisions.
+  it.skipIf(!process.env.W4S4_ORACLE_N_OUT)('captures N01-N06 old direct arrival banner decisions', () => {
+    const target = process.env.W4S4_ORACLE_N_OUT;
+    if (!target) throw new Error('W4S4_ORACLE_N_OUT is required');
+    const encode = value => value === undefined ? { $undefined: true }
+      : Array.isArray(value) ? value.map(encode)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+        : value;
+    mailStore.setState({ accounts: [IMAP_A] });
+    const sender = { name: 'Sender', address: 'sender@outside.test' };
+    const baseHeader = { uid: 42, from: sender, subject: 'A subject' };
+    const cases = [
+      { id: 'N01', samples: [{ preview: true, count: 1, header: baseHeader }] },
+      { id: 'N02', samples: [{ preview: false, count: 1, header: baseHeader }] },
+      { id: 'N03', samples: [{ preview: true, count: 2, header: baseHeader }] },
+      { id: 'N04', samples: [{ preview: false, count: 2, header: baseHeader }] },
+      { id: 'N05', samples: [
+        { preview: true, count: 1, header: { ...baseHeader, uid: undefined } },
+        { preview: true, count: 1, header: { ...baseHeader, uid: 'unsafe' } },
+        { preview: true, count: 1, header: { ...baseHeader, uid: '42' } },
+      ] },
+      { id: 'N06', samples: [
+        { preview: true, count: 1, header: baseHeader, code: '123456' },
+        { preview: false, count: 1, header: baseHeader, code: '123456' },
+        { preview: true, count: 2, header: baseHeader, code: '123456' },
+      ] },
+    ].map(item => ({ id: item.id, samples: item.samples.map(input => {
+      settingsStore.setState({ notificationSettings: { enabled: true,
+        showPreview: input.preview, sound: 'none', accounts: {} } });
+      mockNotify.mockClear();
+      notifyArrival('a1', 'INBOX', input.count, input.header, input.code || null,
+        { uids: [42] });
+      return { input: encode(input), output: encode(mockNotify.mock.calls) };
+    }) }));
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-direct-banners', cases }, null, 2) + '\n');
+  });
+  it.skipIf(!process.env.W4S4_ORACLE_N_MORE_OUT)('captures N07-N14 old sender, sound, own and Sent decisions', () => {
+    const target = process.env.W4S4_ORACLE_N_MORE_OUT;
+    if (!target) throw new Error('W4S4_ORACLE_N_MORE_OUT is required');
+    const encode = value => value === undefined ? { $undefined: true }
+      : Array.isArray(value) ? value.map(encode)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+        : value;
+    const baseAccount = { id: 'a1', email: 'a@one.co' };
+    const ordinary = { uid: 42, from: { name: 'Sender', address: 'sender@outside.test' }, subject: 'A subject' };
+    const { NOTIFICATION_SOUNDS } = notificationSounds;
+    const scenarios = [
+      { id: 'N07', samples: [
+        { header: ordinary }, { header: { ...ordinary, from: { address: 'sender@outside.test' } } },
+      ] },
+      { id: 'N08', samples: [
+        { header: { ...ordinary, from: 'sender@outside.test' } },
+        { header: { ...ordinary, from: 'Sender Person' } },
+      ] },
+      { id: 'N09', samples: [
+        { header: { uid: 42, subject: '' } }, { header: { uid: 42 } },
+      ] },
+      { id: 'N10', samples: [...NOTIFICATION_SOUNDS, 'none', 'Unknown'].map(sound => ({
+        header: ordinary, sound,
+      })) },
+      { id: 'N11', samples: [
+        { header: { ...ordinary, from: { address: 'a@one.co' } } },
+        { header: { ...ordinary, from: { address: 'send@one.co' } }, sendAs: 'send@one.co' },
+        { header: { ...ordinary, from: { address: 'alias@one.co' } }, aliases: [{ address: 'alias@one.co' }] },
+        { header: { ...ordinary, from: { address: 'jdoe@gmail.com' } },
+          account: { id: 'a1', email: 'j.doe+mail@gmail.com' } },
+      ] },
+      { id: 'N12', samples: [{ header: { ...ordinary, from: { address: 'a@one.co' } }, count: 2 }] },
+      { id: 'N13', samples: [
+        { mailbox: '[Gmail]/Sent Mail', header: ordinary },
+        { mailbox: 'INBOX.Sent', header: ordinary },
+      ] },
+      { id: 'N14', samples: [
+        { mailbox: 'Custom/Out', header: ordinary, account: { ...baseAccount, sentFolderOverride: 'Custom/Out' } },
+        { mailbox: 'Archive/Outbound', header: ordinary,
+          mailboxes: [{ path: 'Archive/Outbound', name: 'Outbound', specialUse: '\\Sent' }] },
+        { mailbox: 'Archive/Envoyés', header: ordinary },
+        { mailbox: 'Sentinel', header: ordinary },
+      ] },
+    ].map(item => ({ id: item.id, samples: item.samples.map(input => {
+      const account = input.account || baseAccount;
+      mailStore.setState({ ...mailState(), accounts: [account], activeAccountId: 'a1',
+        mailboxes: input.mailboxes || [] }, true);
+      settingsStore.setState({ ...settingsState(),
+        sendAsAddresses: input.sendAs ? { a1: input.sendAs } : {},
+        aliases: input.aliases ? { a1: input.aliases } : {},
+        notificationSettings: { enabled: true, showPreview: true, sound: input.sound || 'none', accounts: {} },
+      }, true);
+      mockNotify.mockClear();
+      notifyArrival('a1', input.mailbox || 'INBOX', input.count || 1, input.header, null, { uids: [42] });
+      return { input: encode({ accountId: account.id, accountEmail: account.email,
+        mailbox: input.mailbox || 'INBOX', count: input.count || 1, header: input.header,
+        sound: input.sound || 'none', sendAs: input.sendAs, aliases: input.aliases,
+        mailboxes: input.mailboxes, sentFolderOverride: account.sentFolderOverride }),
+        output: encode(mockNotify.mock.calls) };
+    }) }));
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-direct-sender-sent', cases: scenarios }, null, 2) + '\n');
+  });
+  it.skipIf(!process.env.W4S4_ORACLE_E_OUT)('captures E01-E05 old change-feed grouping and repaint effects', async () => {
+    const target = process.env.W4S4_ORACLE_E_OUT;
+    if (!target) throw new Error('W4S4_ORACLE_E_OUT is required');
+    const encode = value => value === undefined ? { $undefined: true }
+      : Array.isArray(value) ? value.map(encode)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+        : value;
+    const header = { uid: 7, from: { name: 'Sender', address: 'sender@outside.test' }, subject: 'A subject' };
+    const changed = (gen, accountId, mailbox, newEmails, updatedFlags = 0) =>
+      ({ gen, accountId, mailbox, newEmails, updatedFlags, at: gen });
+    const scenarios = [
+      { id: 'E01', replies: [{ gen: 1, changes: [] }] },
+      { id: 'E02', replies: [{ gen: 900, changes: [] }, { gen: 3, changes: [] }] },
+      { id: 'E03', replies: [{ gen: 2, changes: [
+        changed(1, 'a1', 'INBOX', 1), changed(2, 'a1', 'INBOX', 1),
+      ] }] },
+      { id: 'E04', replies: [{ gen: 2, changes: [
+        changed(1, 'a1', 'INBOX', 1), changed(2, 'a2', 'Archive', 1),
+      ] }] },
+      { id: 'E05', replies: [{ gen: 2, changes: [
+        changed(1, 'a1', 'INBOX', 0, 1), changed(2, 'a2', 'Archive', 0, 0),
+      ] }] },
+    ];
+    const cases = [];
+    for (const sample of scenarios) {
+      cleanup();
+      calls.length = 0;
+      eventReplies = sample.replies.map(reply);
+      countAnswer = nativeCountAnswer;
+      mockDaemonCall.mockClear();
+      mockNotify.mockClear();
+      mockLoadEmails.mockClear();
+      mockLoadUnifiedInbox.mockClear();
+      mockScheduleViewCounts.mockClear();
+      mockRereadCopyFlags.mockClear();
+      mockScheduleNotesReload.mockClear();
+      mockOfferCode.mockReset().mockResolvedValue(null);
+      mockGetHeaders.mockReset().mockResolvedValue({ totalEmails: 1, emails: [header] });
+      mockGetAllHeaders.mockReset().mockResolvedValue(null);
+      mailStore.setState({ ...mailState(), accounts: [IMAP_A, IMAP_B],
+        activeAccountId: 'a1', activeMailbox: 'INBOX' }, true);
+      settingsStore.setState(settingsState(), true);
+      renderHook(() => useEmailScheduler());
+      await flush();
+      await flush();
+      cases.push({ id: sample.id, input: encode(sample.replies), output: encode({
+        polls: methods('sync.events').map(call => call[1]),
+        watches: methods('sync.watch').map(call => call[1]?.account?.id),
+        listLoads: mockLoadEmails.mock.calls,
+        unifiedLoads: mockLoadUnifiedInbox.mock.calls,
+        notifications: mockNotify.mock.calls,
+        headerReads: mockGetHeaders.mock.calls,
+        codeOffers: mockOfferCode.mock.calls,
+        viewRefreshes: mockScheduleViewCounts.mock.calls,
+        noteFlagReads: mockRereadCopyFlags.mock.calls,
+        noteReloads: mockScheduleNotesReload.mock.calls,
+        unread: settingsStore.getState().unreadPerAccount,
+      }) });
+    }
+    cleanup();
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-feed-repaints', cases }, null, 2) + '\n');
+  });
+  it.skipIf(!process.env.W4S4_ORACLE_CODE_TIMING_OUT)('captures C10-C11 old lone-code deadline ordering through the hook', async () => {
+    const target = process.env.W4S4_ORACLE_CODE_TIMING_OUT;
+    if (!target) throw new Error('W4S4_ORACLE_CODE_TIMING_OUT is required');
+    const encode = value => value === undefined ? { $undefined: true }
+      : Array.isArray(value) ? value.map(encode)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+        : value;
+    const header = { uid: 7, from: { name: 'Sender', address: 'sender@outside.test' },
+      subject: 'A subject' };
+    const cases = [];
+    for (const sample of [{ id: 'C10', advanceMs: 2998 }, { id: 'C11', advanceMs: 2999 }]) {
+      cleanup();
+      vi.setSystemTime(1_000_000);
+      calls.length = 0;
+      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1',
+        mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+      mailStore.setState({ ...mailState(), accounts: [IMAP_A], activeAccountId: 'a1',
+        activeMailbox: 'INBOX' }, true);
+      settingsStore.setState(settingsState(), true);
+      mockNotify.mockClear();
+      mockGetHeaders.mockReset().mockResolvedValue({ totalEmails: 1, emails: [header] });
+      mockGetAllHeaders.mockReset().mockResolvedValue(null);
+      let releaseCode;
+      mockOfferCode.mockReset().mockReturnValueOnce(new Promise(done => { releaseCode = done; }));
+      renderHook(() => useEmailScheduler());
+      await flush(); // the code wait is active, one millisecond after registration
+      const before = encode({ now: Date.now(), notifications: mockNotify.mock.calls });
+      await act(async () => { await vi.advanceTimersByTimeAsync(sample.advanceMs); });
+      const atRelease = encode({ now: Date.now(), notifications: mockNotify.mock.calls });
+      await act(async () => { releaseCode('26313'); await Promise.resolve(); });
+      const after = encode({ now: Date.now(), notifications: mockNotify.mock.calls,
+        codeCalls: mockOfferCode.mock.calls, polls: methods('sync.events').map(call => call[1]) });
+      cases.push({ id: sample.id, input: { codeReleaseAdvanceMs: sample.advanceMs,
+        header, codeReply: '26313' }, output: { before, atRelease, after } });
+    }
+    cleanup();
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-code-deadline', cases }, null, 2) + '\n');
+  });
+  it.skipIf(!process.env.W4S4_ORACLE_E_MORE_OUT)('captures E06-E09 old view, recovery and held-code feed effects', async () => {
+    const target = process.env.W4S4_ORACLE_E_MORE_OUT;
+    if (!target) throw new Error('W4S4_ORACLE_E_MORE_OUT is required');
+    const encode = value => value === undefined ? { $undefined: true }
+      : Array.isArray(value) ? value.map(encode)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
+        : value;
+    const header = { uid: 7, from: { name: 'Sender', address: 'sender@outside.test' }, subject: 'A subject' };
+    const change = (accountId, mailbox, newEmails = 1, updatedFlags = 0) =>
+      ({ gen: 1, accountId, mailbox, newEmails, updatedFlags, at: 1 });
+    const reset = (view, replies) => {
+      cleanup();
+      vi.setSystemTime(1_000_000);
+      calls.length = 0;
+      eventReplies = replies;
+      countAnswer = nativeCountAnswer;
+      mockNotify.mockClear();
+      mockLoadEmails.mockClear();
+      mockLoadUnifiedInbox.mockClear();
+      mockScheduleViewCounts.mockClear();
+      mockScheduleNotesReload.mockClear();
+      mockOfferCode.mockReset().mockResolvedValue(null);
+      mockGetHeaders.mockReset().mockResolvedValue({ totalEmails: 1, emails: [header] });
+      mockGetAllHeaders.mockReset().mockResolvedValue(null);
+      mailStore.setState({ ...mailState(), accounts: [IMAP_A, IMAP_B],
+        activeAccountId: 'a1', activeMailbox: 'INBOX', ...view }, true);
+      settingsStore.setState(settingsState(), true);
+    };
+    const effects = () => encode({ polls: methods('sync.events').map(call => call[1]),
+      loadEmails: mockLoadEmails.mock.calls, loadUnified: mockLoadUnifiedInbox.mock.calls,
+      notifications: mockNotify.mock.calls, codeOffers: mockOfferCode.mock.calls,
+      viewRefreshes: mockScheduleViewCounts.mock.calls, noteReloads: mockScheduleNotesReload.mock.calls });
+    const cases = [];
+    const e06 = [];
+    for (const sample of [
+      { view: { activeAccountId: 'a1', activeMailbox: 'INBOX' }, changed: change('a1', 'INBOX') },
+      { view: { activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' }, changed: change('a2', 'INBOX') },
+      { view: { activeMailbox: 'Projects', mailboxScope: { root: 'Projects', paths: ['Projects', 'Projects/Alpha'] } },
+        changed: change('a1', 'Projects/Alpha', 0, 3) },
+    ]) {
+      reset(sample.view, [reply({ gen: 1, changes: [sample.changed] })]);
+      renderHook(() => useEmailScheduler());
+      await flush();
+      e06.push({ input: encode(sample), output: effects() });
+    }
+    cases.push({ id: 'E06', samples: e06 });
+    reset({}, [reply({ gen: 1, changes: [change('a1', 'INBOX')] })]);
+    let releaseHeader;
+    mockGetHeaders.mockImplementation(() => new Promise(done => { releaseHeader = done; }));
+    renderHook(() => useEmailScheduler());
+    await flush();
+    const beforeSwitch = effects();
+    mailStore.setState({ activeAccountId: 'a2', activeMailbox: 'Archive' });
+    releaseHeader({ totalEmails: 1, emails: [header] });
+    await flush();
+    cases.push({ id: 'E07', input: { switchTo: { accountId: 'a2', mailbox: 'Archive' } },
+      output: { beforeSwitch, afterSwitch: effects() } });
+    const e08 = [];
+    for (const sample of [
+      { code: 'DAEMON_OFFLINE', advanceMs: 30000 },
+      { code: 'NO_TAURI', advanceMs: 30000 },
+      { code: 'TRANSIENT', advanceMs: 5000 },
+    ]) {
+      reset({}, [fails(sample.code), reply({ gen: 1, changes: [] })]);
+      renderHook(() => useEmailScheduler());
+      await flush();
+      const before = effects();
+      await act(async () => { await vi.advanceTimersByTimeAsync(sample.advanceMs); });
+      e08.push({ input: sample, output: { before, after: effects() } });
+    }
+    cases.push({ id: 'E08', samples: e08 });
+    const e09 = [];
+    reset({}, [reply({ gen: 1, changes: [change('a1', 'INBOX')] })]);
+    let releaseCode;
+    mockOfferCode.mockReset().mockReturnValueOnce(new Promise(done => { releaseCode = done; }));
+    renderHook(() => useEmailScheduler());
+    await flush();
+    const beforeCode = effects();
+    await act(async () => { releaseCode('26313'); await Promise.resolve(); });
+    e09.push({ input: { heldCode: true }, output: { beforeCode, afterCode: effects() } });
+    reset({}, [reply({ gen: 2, changes: [change('a1', 'INBOX'), change('a1', 'INBOX')] })]);
+    renderHook(() => useEmailScheduler());
+    await flush();
+    e09.push({ input: { groupedSameFolderChanges: 2 }, output: effects() });
+    cases.push({ id: 'E09', samples: e09 });
+    cleanup();
+    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-feed-view-recovery', cases }, null, 2) + '\n');
   });
 });
