@@ -6833,6 +6833,33 @@ mod tests {
                 }
 
                 #[tokio::test]
+                async fn s6_account_removal_is_not_refused_while_a_body_fetch_is_held() {
+                    let (_lock, _env, _dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+                    let recent = chrono::Utc::now().to_rfc2822();
+                    add_messages(&server, &[(2, Some(recent.clone()))]);
+                    seed_cache(&state, &[(1, &recent), (2, &recent)]);
+                    // Warm first (cache non-empty, rows empty): the next FETCH is the body.
+                    row_focus(&state, 1, &[]).await;
+                    state.hoarder_worker.pipeline.quiet().await;
+                    pass_done(&state).await;
+                    let mut pause = server.pause_command("FETCH");
+                    row_focus(&state, 2, &[1, 2]).await;
+                    let mut pause = tokio::task::spawn_blocking(move || {
+                        assert!(pause.entered(std::time::Duration::from_secs(15)), "the body fetch must reach the provider");
+                        pause
+                    }).await.unwrap();
+                    // The real close path, not a membership shortcut: a fetch in flight is not a lifetime owner.
+                    let lease = crate::account_workflows::AccountLease::detached_for_test(
+                        crate::account_workflows::AccountWriteScope { ids: ["acc1".to_owned()].into(), ..Default::default() });
+                    let claim = state.account_lifecycle.try_close(lease, "acc1");
+                    assert!(claim.is_ok(), "removal was refused for the length of a body fetch: {:?}", claim.err());
+                    let mut claim = claim.unwrap();
+                    let drained = claim.wait_local_until(tokio::time::Instant::now() + std::time::Duration::from_secs(2)).await;
+                    assert!(drained.is_ok(), "the held fetch kept the account from draining: {:?}", drained.err());
+                    pause.release();
+                }
+
+                #[tokio::test]
                 async fn s6_a_failed_write_is_retried_and_never_counted_as_done() {
                     let (_lock, _env, dir, state, _server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
                     let hash = account_origin(&state).await;
