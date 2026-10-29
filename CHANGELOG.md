@@ -20,6 +20,8 @@
 
 - Native refresh receipts, header warming, scheduling and watcher reconciliation activate after an explicit sync context.
 
+- Delete everywhere from the open message in All Inboxes now takes the message off the list. Before, the server and local copies were deleted but the row stayed on screen until the next folder switch, because the open message did not carry the proof the list row was matched by.
+
 - The "Operation Complete" panel in the corner now appears only for a run started from a bulk selection (and one picked up again after a restart). Deleting messages from the list or the reader, one or several, shows just the deleted toast.
 
 - Delete everywhere clicked while an earlier one is still running now waits its turn instead of failing. Before, the second message left the list, then came back with an "An operation is already running" error while the first was still deleting; it now stays gone and is deleted right after the first finishes.

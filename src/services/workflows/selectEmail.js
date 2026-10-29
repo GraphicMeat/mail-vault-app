@@ -537,6 +537,13 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       _replyToMismatch: e._replyToMismatch ?? row?._replyToMismatch,
       _linkAlert: e._linkAlert ?? row?._linkAlert,
       _trackerInfo: e._trackerInfo ?? row?._trackerInfo,
+      // Native provenance of the row that was clicked, never a later one under
+      // the same key: delete everywhere from the reader proves the message by
+      // it. Without it the proof named no identity, the purge took the list
+      // row for a replacement and left it on screen while the daemon deleted it.
+      _nativeIdentity: e._nativeIdentity ?? clickedHeader?._nativeIdentity,
+      _graphId: e._graphId ?? clickedHeader?._graphId,
+      _jmapId: e._jmapId ?? clickedHeader?._jmapId,
     };
   };
 

@@ -224,3 +224,48 @@ describe('selectEmail keeps a clicked search hit\'s header fields on the opened 
     expect(opened._trackerInfo).toEqual({ count: 1, vendors: ['Mailchimp'] });
   });
 });
+
+// Delete everywhere from the reader captures its proof from `selectedEmail`.
+// A body read carries no native provenance, so the proof said "no identity"
+// while the list row had one: the purge read that as a replacement, never hid
+// the row, and the daemon deleted the message anyway. In All Inboxes nothing
+// reloads, so the row stayed on screen with the message gone.
+describe('selectEmail keeps the row\'s native provenance on the opened message', () => {
+  const NATIVE = { accountId: A.id, mailbox: 'INBOX', uidValidity: 7, originHash: 'h1' };
+  const PROVENANCE = { ...MSG, _nativeIdentity: NATIVE, _graphId: 'g42', _jmapId: 'j42' };
+
+  it('server fetch', async () => {
+    mockFetchEmailLight.mockResolvedValue({ ...MSG, html: '<p>body</p>' });
+    primeStore({ emails: [PROVENANCE] });
+
+    await useMailStore.getState().selectEmail(42, 'server');
+
+    const opened = useMailStore.getState().selectedEmail;
+    expect(opened._nativeIdentity).toEqual(NATIVE);
+    expect(opened._graphId).toBe('g42');
+    expect(opened._jmapId).toBe('j42');
+  });
+
+  it('vault copy', async () => {
+    mockGetLocalEmailLight.mockResolvedValue({ ...MSG, html: '<p>body</p>' });
+    primeStore({ emails: [PROVENANCE] });
+
+    await useMailStore.getState().selectEmail(42, 'server');
+
+    expect(useMailStore.getState().selectedEmail._nativeIdentity).toEqual(NATIVE);
+  });
+
+  // Where it was reported: All Inboxes, opened by the full key.
+  it('in All Inboxes, the clicked account\'s row', async () => {
+    const other = { ...PROVENANCE, _accountId: B.id, _mailbox: 'INBOX',
+      _nativeIdentity: { ...NATIVE, accountId: B.id, originHash: 'other' }, _graphId: 'gB' };
+    mockFetchEmailLight.mockResolvedValue({ ...MSG, html: '<p>body</p>' });
+    primeStore({ unified: true, emails: [other, { ...PROVENANCE, _accountId: A.id, _mailbox: 'INBOX' }] });
+
+    await useMailStore.getState().selectEmail(`${A.id}:INBOX:42`, 'server');
+
+    const opened = useMailStore.getState().selectedEmail;
+    expect(opened._nativeIdentity).toEqual(NATIVE);
+    expect(opened._graphId).toBe('g42');
+  });
+});
