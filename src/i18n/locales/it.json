@@ -4093,6 +4093,7 @@
   "svc.backupScheduler.uncertain": "Stato del backup incerto; in attesa del processo nativo.",
   "errors.accountsConflict": "L'elenco degli account è cambiato in un'altra finestra. Riprova.",
   "errors.accountsInvalid": "Questa modifica dell'account non è stata salvata perché non è valida.",
+  "errors.pipelineInvalid": "Quella richiesta di caricamento della posta non era valida.",
   "errors.accountsWriteFailed": "Non è stato possibile completare la modifica del tuo account.",
   "errors.accountRemovalBusy": "Questo account è occupato. Attendi che l’operazione in corso finisca, poi riprova.",
   "errors.accountRemovalIncomplete": "La rimozione dell’account non è stata completata. Riprova quando l’operazione in corso sarà terminata.",

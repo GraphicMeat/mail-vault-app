@@ -4093,6 +4093,7 @@
   "svc.backupScheduler.uncertain": "Sicherungsstatus unklar; der native Worker wird abgewartet.",
   "errors.accountsConflict": "Deine Kontoliste wurde in einem anderen Fenster geändert. Versuche es erneut.",
   "errors.accountsInvalid": "Diese Kontoänderung ist ungültig und wurde nicht gespeichert.",
+  "errors.pipelineInvalid": "Diese Anfrage zum Laden Ihrer E-Mails war ungültig.",
   "errors.accountsWriteFailed": "Deine Kontoänderung konnte nicht abgeschlossen werden.",
   "errors.accountRemovalBusy": "Dieses Konto ist beschäftigt. Warte, bis der aktuelle Vorgang abgeschlossen ist, und versuche es dann erneut.",
   "errors.accountRemovalIncomplete": "Das Entfernen des Kontos wurde nicht abgeschlossen. Versuche es erneut, sobald der aktuelle Vorgang beendet ist.",

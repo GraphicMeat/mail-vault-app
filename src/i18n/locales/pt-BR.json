@@ -4093,6 +4093,7 @@
   "svc.backupScheduler.uncertain": "Estado do backup incerto; aguardando o processo nativo.",
   "errors.accountsConflict": "Sua lista de contas mudou em outra janela. Tente novamente.",
   "errors.accountsInvalid": "Essa alteração de conta não pôde ser salva porque não é válida.",
+  "errors.pipelineInvalid": "Essa solicitação para carregar seus e-mails não era válida.",
   "errors.accountsWriteFailed": "Não foi possível concluir a alteração da sua conta.",
   "errors.accountRemovalBusy": "Esta conta está ocupada. Aguarde a operação atual terminar e tente novamente.",
   "errors.accountRemovalIncomplete": "A remoção da conta não foi concluída. Tente novamente depois que a operação atual terminar.",

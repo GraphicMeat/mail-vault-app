@@ -147,7 +147,7 @@ impl PipelineFocus {
         }
         let fingerprint = digest(&input);
         if input.revision == inner.revision && inner.accepted.is_some() {
-            if inner.accepted != Some(fingerprint) { return Err("errors.accountsInvalid"); }
+            if inner.accepted != Some(fingerprint) { return Err("errors.pipelineInvalid"); }
             return Ok(json!({"revision": inner.revision, "accepted": true}));
         }
         inner.revision = input.revision;

@@ -16,6 +16,13 @@ const walk = (dir, out = []) => {
 };
 
 describe('native pipeline focus', () => {
+  it.each(['de', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'pt-BR', 'zh-Hans'])('%s words a refused focus as a loading request, not an account change', locale => {
+    const catalog = JSON.parse(read(`src/i18n/locales/${locale}.json`));
+    expect(catalog['errors.pipelineInvalid']).toBeTypeOf('string');
+    expect(catalog['errors.pipelineInvalid']).not.toBe(catalog['errors.accountsInvalid']);
+    const sources = [read('src-daemon/src/handlers/pipeline.rs'), read('src-daemon/src/pipeline_focus.rs')].map(executable).join('\n');
+    expect(sources).not.toContain('errors.accountsInvalid');
+  });
   it('registers strict daemon RPCs, the shell reply budget and the demo protocol', () => {
     const transport = read('src/services/transport.js');
     const owned = transport.slice(transport.indexOf('export const DAEMON_OWNED'),

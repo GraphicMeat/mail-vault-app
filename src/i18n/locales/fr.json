@@ -4093,6 +4093,7 @@
   "svc.backupScheduler.uncertain": "État incertain ; en attente du processus natif.",
   "errors.accountsConflict": "Votre liste de comptes a changé dans une autre fenêtre. Réessayez.",
   "errors.accountsInvalid": "Cette modification de compte n'a pas pu être enregistrée car elle n'est pas valide.",
+  "errors.pipelineInvalid": "Cette demande de chargement de votre courrier n'était pas valide.",
   "errors.accountsWriteFailed": "La modification de votre compte n’a pas pu être effectuée.",
   "errors.accountRemovalBusy": "Ce compte est occupé. Attendez la fin de l’opération en cours, puis réessayez.",
   "errors.accountRemovalIncomplete": "La suppression du compte ne s’est pas terminée. Réessayez une fois l’opération en cours achevée.",

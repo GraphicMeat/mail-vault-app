@@ -4093,6 +4093,7 @@
   "svc.backupScheduler.uncertain": "백업 상태가 불확실합니다. 기본 작업 프로세스를 기다리는 중입니다.",
   "errors.accountsConflict": "다른 창에서 계정 목록이 변경되었습니다. 다시 시도하세요.",
   "errors.accountsInvalid": "이 계정 변경은 유효하지 않아 저장하지 못했습니다.",
+  "errors.pipelineInvalid": "메일을 불러오라는 요청이 유효하지 않았습니다.",
   "errors.accountsWriteFailed": "계정 변경을 완료하지 못했습니다.",
   "errors.accountRemovalBusy": "이 계정은 사용 중입니다. 현재 작업이 끝난 후 다시 시도하세요.",
   "errors.accountRemovalIncomplete": "계정 제거가 완료되지 않았습니다. 현재 작업이 마무리된 후 다시 시도하세요.",

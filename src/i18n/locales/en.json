@@ -4097,6 +4097,7 @@
   "svc.backupScheduler.uncertain": "Backup status is uncertain; waiting for the native worker.",
   "errors.accountsConflict": "Your account list changed in another window. Try again.",
   "errors.accountsInvalid": "That account change could not be saved because it is not valid.",
+  "errors.pipelineInvalid": "That request to load your mail was not valid.",
   "errors.accountsWriteFailed": "Your account change could not be completed.",
   "errors.accountRemovalBusy": "This account is busy. Wait for the current operation to finish, then try again.",
   "errors.accountRemovalIncomplete": "Account removal did not finish. Retry after the current operation settles.",

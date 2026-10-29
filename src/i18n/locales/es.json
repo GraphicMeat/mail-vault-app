@@ -4093,6 +4093,7 @@
   "svc.backupScheduler.uncertain": "Estado de copia incierto; esperando al proceso nativo.",
   "errors.accountsConflict": "Tu lista de cuentas cambió en otra ventana. Inténtalo de nuevo.",
   "errors.accountsInvalid": "Ese cambio de cuenta no se pudo guardar porque no es válido.",
+  "errors.pipelineInvalid": "Esa solicitud para cargar tu correo no era válida.",
   "errors.accountsWriteFailed": "No se pudo completar el cambio de tu cuenta.",
   "errors.accountRemovalBusy": "Esta cuenta está ocupada. Espera a que termine la operación actual y vuelve a intentarlo.",
   "errors.accountRemovalIncomplete": "No se completó la eliminación de la cuenta. Vuelve a intentarlo cuando termine la operación actual.",

@@ -77,7 +77,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: Value,
     match method {
         "pipeline.focus" => {
             let Some(input) = focus_input(&params) else {
-                return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+                return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.pipelineInvalid");
             };
             match PipelineFocus::accept(state, input) {
                 Ok(answer) => RpcResponse::success(id, answer),
@@ -86,7 +86,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: Value,
         }
         "pipeline.status" => {
             if fields(&params, &[]).is_none() && !params.is_null() {
-                return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+                return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.pipelineInvalid");
             }
             RpcResponse::success(id, PipelineFocus::status(state).await)
         }
@@ -291,6 +291,8 @@ mod tests {
         assert_eq!(state.hoarder_worker.pipeline.runnable().len(), 1, "a stale clear changes nothing");
         let conflict = focus(&state, 5, false, json!({"accountId": "acc1", "mailbox": "Archive", "scope": "folder", "rows": []})).await;
         assert!(conflict.error.is_some(), "the same revision with another view is refused");
+        assert!(format!("{:?}", conflict.error).contains("errors.pipelineInvalid"),
+            "the refusal names the mail loading request, not an account change: {conflict:?}");
         let status = status(&state).await;
         assert_eq!(status["revision"], json!(5));
         assert!(status["instanceId"].is_string());
@@ -319,8 +321,10 @@ mod tests {
         for params in bad {
             let answer = handle_request_for_test(&state, "pipeline.focus", params.clone()).await;
             assert!(answer.result.is_none() && answer.error.is_some(), "{params} -> {answer:?}");
+            assert!(format!("{:?}", answer.error).contains("errors.pipelineInvalid"), "{params} -> {answer:?}");
         }
         let extra = handle_request_for_test(&state, "pipeline.status", json!({"accountId": "acc1"})).await;
         assert!(extra.error.is_some(), "status takes no parameters");
+        assert!(format!("{:?}", extra.error).contains("errors.pipelineInvalid"), "{extra:?}");
     }
 }
