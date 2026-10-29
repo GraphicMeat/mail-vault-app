@@ -169,6 +169,8 @@ export function ComposeModal({ mode = 'new', replyTo: replyToProp = null, initia
     accounts,
     activeAccountId,
     selectedAccountId: readingAccountId,
+    sendAsAddresses,
+    aliasesByAccount,
   });
   const [selectedAccountId, setSelectedAccountId] = useSendState(initialIdentity.accountId, invalidate);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];

@@ -8,6 +8,8 @@
 // the lists. The SMTP server stays the
 // authority on what it will accept (that is what Verify there is for).
 
+import { normalizeEmailIdentity } from './emailIdentity.js';
+
 /**
  * Every address compose may send from, one entry per (account, address):
  * the account's default first (its default From, else the login), then the
@@ -91,9 +93,11 @@ export function aliasSignature(aliases, address) {
  *
  * A reply or forward never reaches the last-sent identity: it leaves from the
  * mailbox the message being answered is in, and the account being read is the
- * fallback when that message carries no provenance of its own.
+ * fallback when that message carries no provenance of its own. Within that
+ * account it leaves from the address that received the message (To, then Cc)
+ * when that is one of the account's own; otherwise the account's default.
  */
-export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdentity, accounts, activeAccountId, selectedAccountId }) {
+export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdentity, accounts, activeAccountId, selectedAccountId, sendAsAddresses, aliasesByAccount }) {
   const exists = (id) => (accounts || []).some(a => a.id === id);
   if (initialData) {
     if (initialData._accountId && exists(initialData._accountId)) {
@@ -111,7 +115,8 @@ export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdenti
     // mailbox being read is the honest answer. The identity that last SENT is
     // not: it belongs to whatever mailbox the user was in before this one.
     const source = replyTo._accountId || replyTo._srcAccountId;
-    return { accountId: exists(source) ? source : activeAccountId, address: '' };
+    const accountId = exists(source) ? source : activeAccountId;
+    return { accountId, address: receivingAddress(replyTo, accounts, accountId, sendAsAddresses, aliasesByAccount) };
   }
   // A fresh compose sends from the mailbox the user is reading — the selected
   // account, or in the unified inbox the account of the last message opened
@@ -122,4 +127,23 @@ export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdenti
   // when the account being read is the one that sent as it.
   const address = lastIdentity?.accountId === accountId ? (lastIdentity.address || '') : '';
   return { accountId, address };
+}
+
+/**
+ * The account address a message was sent to, as stored (alias spelling), or ''
+ * when it is the account's default From or none of its addresses. Compared by
+ * mailbox identity, so a plus-tagged or dotted Gmail header still finds the login.
+ */
+function receivingAddress(message, accounts, accountId, sendAsAddresses, aliasesByAccount) {
+  const identities = composeIdentities(accounts, sendAsAddresses, aliasesByAccount).filter(i => i.accountId === accountId);
+  if (!identities.length) return '';
+  const byId = new Map(identities.map(i => [normalizeEmailIdentity(i.address), i.address]));
+  // composeIdentities lists the account's default From first.
+  const defaultId = normalizeEmailIdentity(identities[0].address);
+  for (const recipient of [...(message.to || []), ...(message.cc || [])]) {
+    const id = normalizeEmailIdentity(recipient?.address);
+    if (!byId.has(id)) continue;
+    return id === defaultId ? '' : byId.get(id);
+  }
+  return '';
 }

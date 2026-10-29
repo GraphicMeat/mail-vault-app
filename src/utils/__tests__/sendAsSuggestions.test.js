@@ -207,3 +207,100 @@ describe('resolveInitialComposeIdentity', () => {
     expect(out).toEqual({ accountId: 'a2', address: '' });
   });
 });
+
+// Reported 2026-10-29 (Fastmail): a reply to mail sent to an alias opened with
+// the default From, so every reply needed the From picker changed by hand.
+describe('resolveInitialComposeIdentity: reply From follows the address that received the message', () => {
+  const accounts = [{ id: 'a1', email: 'login@fastmail.com' }, { id: 'a2', email: 'two@y.com' }];
+  const aliasesByAccount = {
+    a1: [{ address: 'myalias1@mydomain.com' }, { address: 'Sales@MyDomain.com' }],
+    a2: [{ address: 'other@y.com' }],
+  };
+  const base = {
+    initialData: null, lastIdentity: null, accounts, activeAccountId: 'a1',
+    sendAsAddresses: { a1: 'default@mydomain.com' }, aliasesByAccount,
+  };
+  const msg = (to, cc = []) => ({
+    _accountId: 'a1',
+    to: to.map(address => ({ address })),
+    cc: cc.map(address => ({ address })),
+  });
+
+  it('replies from the alias the message was sent to', () => {
+    const out = resolveInitialComposeIdentity({ ...base, replyTo: msg(['myalias1@mydomain.com']) });
+    expect(out).toEqual({ accountId: 'a1', address: 'myalias1@mydomain.com' });
+  });
+
+  it('matches case-insensitively and sends the alias as stored', () => {
+    const out = resolveInitialComposeIdentity({ ...base, replyTo: msg(['SALES@mydomain.COM']) });
+    expect(out.address).toBe('Sales@MyDomain.com');
+  });
+
+  it('finds the alias among several recipients and in Cc', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      replyTo: msg(['friend@example.com'], ['colleague@example.com', 'myalias1@mydomain.com']),
+    });
+    expect(out.address).toBe('myalias1@mydomain.com');
+  });
+
+  it('prefers a To match over a Cc match', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      replyTo: msg(['sales@mydomain.com'], ['myalias1@mydomain.com']),
+    });
+    expect(out.address).toBe('Sales@MyDomain.com');
+  });
+
+  it('replies from the login when the message went to the login, not the default', () => {
+    const out = resolveInitialComposeIdentity({ ...base, replyTo: msg(['login@fastmail.com']) });
+    expect(out).toEqual({ accountId: 'a1', address: 'login@fastmail.com' });
+  });
+
+  it('keeps the account default when the message went to the default', () => {
+    const out = resolveInitialComposeIdentity({ ...base, replyTo: msg(['default@mydomain.com']) });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+
+  it('keeps the account default when the message names none of its addresses', () => {
+    const out = resolveInitialComposeIdentity({ ...base, replyTo: msg(['list@example.com'], ['bcc-ed@example.com']) });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+
+  it('ignores another account\'s alias', () => {
+    const out = resolveInitialComposeIdentity({ ...base, replyTo: msg(['other@y.com']) });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+
+  it('follows the alias of the account the message belongs to', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      replyTo: { ...msg(['other@y.com']), _accountId: 'a2' },
+    });
+    expect(out).toEqual({ accountId: 'a2', address: 'other@y.com' });
+  });
+
+  it('reads a plus-tagged Gmail address as the login', () => {
+    const out = resolveInitialComposeIdentity({
+      replyTo: { _accountId: 'g', to: [{ address: 'jdoe+news@gmail.com' }] },
+      initialData: null, lastIdentity: null, activeAccountId: 'g',
+      accounts: [{ id: 'g', email: 'j.doe@gmail.com' }],
+      sendAsAddresses: {}, aliasesByAccount: {},
+    });
+    expect(out).toEqual({ accountId: 'g', address: '' });
+  });
+
+  it('does not override the identity a restored draft saved', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      replyTo: msg(['myalias1@mydomain.com']),
+      initialData: { _accountId: 'a1', _fromAddress: 'Sales@MyDomain.com' },
+    });
+    expect(out).toEqual({ accountId: 'a1', address: 'Sales@MyDomain.com' });
+  });
+
+  it('copes with a message that has no recipient lists', () => {
+    const out = resolveInitialComposeIdentity({ ...base, replyTo: { _accountId: 'a1' } });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+});
