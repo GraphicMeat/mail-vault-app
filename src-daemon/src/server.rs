@@ -6633,7 +6633,7 @@ mod tests {
                 pause.release();
                 state.hoarder_worker.pipeline.quiet().await;
                 assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["totalCached"], json!(3));
-                assert_eq!(vault_files(dir.path()), 0, "the body runner is disabled: nothing was downloaded");
+                assert_eq!(vault_files(dir.path()), 0, "no candidate rows were sent: nothing was downloaded");
                 assert_eq!(state.hoarder_worker.pipeline.admissions(), 1);
             }
 
@@ -6686,6 +6686,122 @@ mod tests {
                 assert_eq!(refresh_cached_headers(&state, "acc1", "Sent Items").unwrap()["totalCached"], json!(4),
                     "Sent is found by name in the cached folder list and warmed under its own key");
                 assert_eq!(state.hoarder_worker.pipeline.admissions(), 2);
+            }
+
+            mod s6_bodies {
+                use super::*;
+
+                fn raw(uid: u32, date: Option<&str>) -> String {
+                    format!("From: s@example.test\r\nTo: user@example.com\r\nSubject: m{uid}\r\n{}Message-ID: <s6-{uid}@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nbody {uid}\r\n",
+                        date.map(|d| format!("Date: {d}\r\n")).unwrap_or_default())
+                }
+
+                fn add_messages(server: &MockImap, rows: &[(u32, Option<String>)]) {
+                    server.mutate(|st| {
+                        let mailbox = st.find_mut("INBOX").expect("mock INBOX");
+                        for (uid, date) in rows {
+                            mailbox.add(mock_imap::state::Message::new(*uid, raw(*uid, date.as_deref())).with_modseq(u64::from(*uid)));
+                        }
+                    });
+                }
+
+                fn seed_cache(state: &Arc<DaemonState>, rows: &[(u32, &str)]) {
+                    let emails: Vec<Value> = rows.iter().map(|(uid, date)| json!({"uid": uid, "date": date, "internalDate": date,
+                        "subject": format!("m{uid}"), "flags": []})).collect();
+                    let body = json!({"emails": emails, "totalEmails": emails.len()}).to_string();
+                    crate::custody::with_conn(state, |conn| mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX", &body)).unwrap();
+                }
+
+                fn settings(dir: &std::path::Path, state: Value) {
+                    std::fs::write(dir.join("frontend-settings.json"), json!({"mailvault-settings": {"state": state}}).to_string()).unwrap();
+                }
+
+                fn stored_uids(dir: &std::path::Path) -> Vec<u32> {
+                    let cur = mailvault_core::vault_files::cur_path(dir, "acc1", "INBOX");
+                    let mut uids: Vec<u32> = std::fs::read_dir(cur).into_iter().flatten().flatten()
+                        .filter_map(|entry| entry.file_name().to_string_lossy().split(|c: char| !c.is_ascii_digit()).next()?.parse().ok())
+                        .collect();
+                    uids.sort_unstable();
+                    uids
+                }
+
+                fn body_fetches(server: &MockImap) -> Vec<u32> {
+                    let mut uids: Vec<u32> = commands_named(server, "FETCH").into_iter()
+                        .filter(|command| command.args.contains("BODY.PEEK[]"))
+                        .filter_map(|command| command.args.split_whitespace().next()?.parse().ok()).collect();
+                    uids.sort_unstable();
+                    uids
+                }
+
+                async fn row_focus(state: &Arc<DaemonState>, revision: u64, uids: &[u32]) {
+                    let rows: Vec<Value> = uids.iter().map(|uid| json!({"accountId": "acc1", "mailbox": "INBOX", "uid": uid})).collect();
+                    let answer = boxed_request(state, req("pipeline.focus", json!({"revision": revision, "online": true,
+                        "focus": {"accountId": "acc1", "mailbox": "INBOX", "scope": "folder", "rows": rows}}))).await;
+                    assert!(answer.error.is_none(), "{answer:?}");
+                }
+
+                async fn pass_done(state: &Arc<DaemonState>) {
+                    for _ in 0..600 {
+                        let status = boxed_request(state, req("pipeline.status", json!({}))).await.result.unwrap();
+                        if status["accounts"]["acc1"]["phase"] == json!("done") && status["accounts"]["acc1"]["queued"] == json!(0) { return; }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                    panic!("the ordinary pass never finished");
+                }
+
+                #[tokio::test]
+                async fn s6_keep_recent_stores_recent_and_unknown_dated_bodies_and_skips_old_and_saved_ones() {
+                    let (_lock, _env, dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+                    settings(dir.path(), json!({"fetchMode": "keepRecent", "localCacheDurationMonths": 3}));
+                    let recent = chrono::Utc::now().to_rfc2822();
+                    add_messages(&server, &[(2, Some(recent.clone())), (3, Some("Wed, 01 Jan 2020 12:00:00 +0000".into())), (4, None)]);
+                    seed_cache(&state, &[(1, &recent), (2, &recent), (3, "2020-01-01T12:00:00Z"), (4, "garbage")]);
+                    let encoded = { use base64::Engine; base64::engine::general_purpose::STANDARD.encode(raw(1, Some(&recent))) };
+                    let stored = boxed_request(&state, req("maildir_store", json!({"accountId": "acc1", "mailbox": "INBOX", "uid": 1,
+                        "rawSourceBase64": encoded, "flags": []}))).await;
+                    assert!(stored.error.is_none(), "{stored:?}");
+                    row_focus(&state, 1, &[1, 2, 3, 4]).await;
+                    pass_done(&state).await;
+                    assert_eq!(stored_uids(dir.path()), vec![1, 2, 4], "recent and unknown-dated unsaved bodies are kept; the old one and the saved one are not fetched");
+                    assert_eq!(body_fetches(&server), vec![2, 4], "exactly the wanted bodies crossed the wire");
+                }
+
+                #[tokio::test]
+                async fn s6_on_demand_issues_zero_background_body_fetches() {
+                    let (_lock, _env, dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+                    settings(dir.path(), json!({"fetchMode": "onDemand"}));
+                    let now = chrono::Utc::now().to_rfc3339();
+                    seed_cache(&state, &[(1, &now), (2, &now), (3, &now)]);
+                    row_focus(&state, 1, &[1, 2, 3]).await;
+                    pass_done(&state).await;
+                    assert!(body_fetches(&server).is_empty(), "On Demand fetches nothing ahead");
+                    assert!(stored_uids(dir.path()).is_empty());
+                }
+
+                #[tokio::test]
+                async fn s6_a_retired_account_never_publishes_a_body_it_was_holding() {
+                    let (_lock, _env, dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+                    let recent = chrono::Utc::now().to_rfc2822();
+                    add_messages(&server, &[(2, Some(recent.clone()))]);
+                    seed_cache(&state, &[(1, &recent), (2, &recent)]);
+                    // Warm first (cache non-empty, rows empty): the next FETCH is the body.
+                    row_focus(&state, 1, &[]).await;
+                    state.hoarder_worker.pipeline.quiet().await;
+                    pass_done(&state).await;
+                    let before = body_fetches(&server).len();
+                    let mut pause = server.pause_command("FETCH");
+                    row_focus(&state, 2, &[1, 2]).await;
+                    let mut pause = tokio::task::spawn_blocking(move || {
+                        assert!(pause.entered(std::time::Duration::from_secs(15)), "the body fetch must reach the provider");
+                        pause
+                    }).await.unwrap();
+                    state.account_lifecycle.apply_committed_membership(None, &mailvault_core::accounts_doc::MembershipDelta {
+                        removed: ["acc1".to_owned()].into(), ..Default::default() });
+                    pause.release();
+                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                    assert!(stored_uids(dir.path()).is_empty(), "the old lifetime wrote nothing after its removal");
+                    assert!(body_fetches(&server).len() <= before + 1, "and the retired pass fetched no further body");
+                }
             }
         }
     }

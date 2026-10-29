@@ -46,12 +46,17 @@ describe('native pipeline focus', () => {
     expect(app).toContain('usePipelineCoordinator();');
   });
 
-  it('leaves the ordinary body runner disabled and the Hoarder sweep budget untouched', () => {
+  it('keeps body work out of the focus module and the Hoarder sweep budget untouched', () => {
     const focus = executable(read('src-daemon/src/pipeline_focus.rs'));
     for (const forbidden of ['auto_cache', 'cache_arrivals', 'fetch_email_by_uid', 'hoard_account', 'DAILY_BYTES']) {
       expect(focus, forbidden).not.toContain(forbidden);
     }
+    const runner = executable(read('src-daemon/src/ordinary_runner.rs'));
+    for (const forbidden of ['DAILY_BYTES', 'MIN_GAP', 'PASS_EVERY', 'hoard_account', 'allowance_left']) {
+      expect(runner, forbidden).not.toContain(forbidden);
+    }
     expect(read('src-daemon/src/hoarder_worker.rs')).toContain('const DAILY_BYTES: u64 = 1000 * 1024 * 1024;');
     expect(read('src-daemon/src/hoarder_worker.rs')).toContain('pub(crate) pipeline: Arc<crate::pipeline_focus::PipelineFocus>');
+    expect(read('src-daemon/src/hoarder_worker.rs')).toContain('pub(crate) claims: Arc<crate::ordinary_runner::Claims>');
   });
 });

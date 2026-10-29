@@ -26,6 +26,8 @@ pub mod custody;
 mod eviction_worker;
 mod hoarder_worker;
 mod pipeline_focus;
+mod ordinary_runner;
+mod graph_body;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::graph;
 pub use mailvault_core::imap;

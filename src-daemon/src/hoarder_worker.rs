@@ -221,12 +221,16 @@ pub struct HoarderWorkerState {
     /// The ordinary download-ahead focus (S5): kept beside, and independent of,
     /// everything above, which belongs to the Premium full-folder sweep.
     pub(crate) pipeline: Arc<crate::pipeline_focus::PipelineFocus>,
+    /// The ordinary body runner (S6) and the in-memory claim it shares with the
+    /// sweep: one exact message is never fetched by both at once.
+    pub(crate) ordinary: Arc<crate::ordinary_runner::OrdinaryRunner>,
+    pub(crate) claims: Arc<crate::ordinary_runner::Claims>,
 }
 
 impl Default for HoarderWorkerState {
     fn default() -> Self {
         Self { notify: Arc::new(tokio::sync::Notify::new()), budgets: Arc::default(), complete: Arc::default(),
-            pipeline: Arc::default() }
+            pipeline: Arc::default(), ordinary: Arc::default(), claims: Arc::default() }
     }
 }
 
@@ -655,6 +659,8 @@ async fn hoard_mailbox(
             if left == 0 {
                 return Err(spent_reason(by_limit).into());
             }
+            // The ordinary runner holds this exact message: it will keep it.
+            let Some(_claim) = state.hoarder_worker.claims.claim(account_id, mailbox, uid, stamp.epoch()) else { continue };
             let fetch = state.imap_pool.run_read(config, false, |mut session| {
                 let mb = mailbox.to_string();
                 async move {
@@ -853,6 +859,8 @@ async fn hoard_mailbox_jmap(
                 failures_in_a_row = 0;
                 continue;
             };
+            // The ordinary runner holds this exact message: it will keep it.
+            let Some(_claim) = state.hoarder_worker.claims.claim(account_id, mailbox, *uid, stamp.epoch()) else { continue };
             let stored = match email["blobId"].as_str() {
                 None => {
                     warn!("[hoard] {account_id} {mailbox}: uid {uid} not fetched: Email/get without blobId");

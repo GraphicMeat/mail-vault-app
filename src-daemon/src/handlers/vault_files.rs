@@ -622,27 +622,33 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account_id = req!(str_arg(&id, params, "accountId"));
             let stamp = state.account_lifecycle.capture(&account_id);
             let mailbox = req!(str_arg(&id, params, "mailbox"));
-            let state = Arc::clone(state);
-            done(
-                id,
-                blocking(move || -> Result<Value, String> {
-                    let _one_sweep_at_a_time = state.prefetch_lock.lock().unwrap_or_else(|p| p.into_inner());
-                    let root = vault_root(&state)?;
-                    let gate_state = Arc::clone(&state);
-                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| {
-                        #[cfg(test)] p2_pause(&gate_state.app_dir, "prefetch_attachments");
-                        let stamp = stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
-                        let _permit = gate_state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
-                        with_vault_write(&gate_state, |_| work())
-                    };
-                    vault_files::prefetch_attachments(&root, &account_id, &mailbox, &state.prefetch_high_water, &gate).map(|n| Value::from(n as u64))
-                })
-                .await
-                .and_then(|r| r),
-            )
+            done(id, prefetch_attachments_for(state, stamp, &account_id, &mailbox).await.map(|n| Value::from(n as u64)))
         }
         _ => return None,
     })
+}
+
+/// The attachment sweep of one folder, under the stamp the caller names: the
+/// route captures it per request, the ordinary body runner passes the ORIGINAL
+/// one of its pass. A sweep is never given a fresh stamp for old work.
+pub(crate) async fn prefetch_attachments_for(state: &Arc<DaemonState>,
+    stamp: Result<crate::account_lifecycle::AccountStamp, crate::account_lifecycle::LifecycleError>,
+    account_id: &str, mailbox: &str) -> Result<usize, String> {
+    let (state, account_id, mailbox) = (Arc::clone(state), account_id.to_owned(), mailbox.to_owned());
+    blocking(move || -> Result<usize, String> {
+        let _one_sweep_at_a_time = state.prefetch_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let root = vault_root(&state)?;
+        let gate_state = Arc::clone(&state);
+        let gate = move |work: &mut dyn FnMut() -> Result<(), String>| {
+            #[cfg(test)] p2_pause(&gate_state.app_dir, "prefetch_attachments");
+            let stamp = stamp.as_ref().map_err(|_| "errors.keychainBusy".to_owned())?;
+            let _permit = gate_state.account_lifecycle.try_commit(std::slice::from_ref(stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
+            with_vault_write(&gate_state, |_| work())
+        };
+        vault_files::prefetch_attachments(&root, &account_id, &mailbox, &state.prefetch_high_water, &gate)
+    })
+    .await
+    .and_then(|r| r)
 }
 
 /// The two registry read routes' shared shape: the vault must be reachable,
