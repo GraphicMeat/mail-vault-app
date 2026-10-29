@@ -165,6 +165,10 @@ describe('fetchArrivalBody', () => {
 it.skipIf(!process.env.W4S4_ORACLE_C_OUT)('captures C01-C09 old direct code-offer and body-read effects', async () => {
   const target = process.env.W4S4_ORACLE_C_OUT;
   if (!target) throw new Error('W4S4_ORACLE_C_OUT is required');
+  // Preserve the actual ten-minute bubble expiry under a replayable clock.
+  vi.useFakeTimers();
+  vi.setSystemTime(1_700_000_000_000);
+  try {
   const samples = [
     { id: 'C01', row: header('Your code is 364758'), replies: [{ code: '364758', needsBody: false }] },
     { id: 'C02', row: header('Sign in', { snippet: 'Code 364758' }), replies: [{ code: '364758', needsBody: false }] },
@@ -203,4 +207,8 @@ it.skipIf(!process.env.W4S4_ORACLE_C_OUT)('captures C01-C09 old direct code-offe
     output: { missingMap, missingMapCalls, removedAccount,
       removedAccountCalls: { light: mockLight.mock.calls, graph: mockGraphGet.mock.calls } } });
   captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-direct-code-offers', cases }, null, 2) + '\n');
+  } finally {
+    useCodeBubbleStore.getState().clear();
+    vi.useRealTimers();
+  }
 });
