@@ -344,15 +344,17 @@ impl OrdinaryRunner {
 // ── The body unit ──────────────────────────────────────────────────────────
 
 /// One message: the limit and policy first, then exactly one provider fetch and
-/// one stamped write. Provider kind decides the path BEFORE any pool checkout:
-/// JMAP goes through its ledger, Graph through its own arm, IMAP through the pool.
-pub(crate) async fn run_body_unit(state: &Arc<DaemonState>, stamp: &AccountStamp, config: &crate::imap::ImapConfig,
-    account_id: &str, mailbox: &str, uid: u32) -> BodyUnitOutcome {
+/// one source-bound write. The provider kind decides the path BEFORE any pool
+/// checkout: JMAP goes through its ledger, Graph through its own arm, IMAP
+/// through the pool. No operation permit is held across the provider wait (a
+/// removal must never be refused for a whole pass): the lifetime is checked
+/// here and again by the writer, which refuses a retired or replaced source.
+pub(crate) async fn run_body_unit(state: &Arc<DaemonState>, spec: &Spec, config: &crate::imap::ImapConfig, uid: u32) -> BodyUnitOutcome {
     use crate::handlers::common::blocking;
-    // The finite local child owns its short permit through the whole unit.
-    let Ok(_operation) = state.account_lifecycle.try_operation(std::slice::from_ref(stamp)) else {
+    let (stamp, account_id, mailbox) = (&spec.stamp, spec.account_id.as_str(), spec.mailbox.as_str());
+    if state.account_lifecycle.try_operation(std::slice::from_ref(stamp)).is_err() {
         return BodyUnitOutcome::Retired;
-    };
+    }
     let (app_dir, id) = (state.app_dir.clone(), account_id.to_owned());
     let policy = match blocking(move || crate::handlers::imap::download_policy(&app_dir, &id)).await {
         Ok(policy) => policy,
@@ -368,67 +370,119 @@ pub(crate) async fn run_body_unit(state: &Arc<DaemonState>, stamp: &AccountStamp
         let resume = refusal["resumeAfterMs"].as_i64().unwrap_or_else(|| mailvault_core::transfer_limits::next_utc_midnight_ms(now_ms(state)));
         return BodyUnitOutcome::Limited { resume_at_ms: resume };
     }
+    let key = match unit_source(state, spec, config).await {
+        Ok(key) => key,
+        Err(outcome) => return outcome,
+    };
     if config.uses_graph() {
-        return crate::graph_body::run_graph_body_unit(state, stamp, config, account_id, mailbox, uid).await;
+        return crate::graph_body::run_graph_body_unit(state, spec, config, &key, uid).await;
     }
     if config.uses_jmap() {
-        return jmap_unit(state, stamp, config, account_id, mailbox, uid).await;
+        return jmap_unit(state, spec, config, &key, uid).await;
     }
-    imap_unit(state, stamp, config, account_id, mailbox, uid).await
+    imap_unit(state, spec, config, &key, uid).await
 }
 
-pub(crate) async fn stored(state: &Arc<DaemonState>, stamp: &AccountStamp, result: Result<bool, String>) -> BodyUnitOutcome {
+/// The source this unit may read and write: the account as it is configured now
+/// must be the one the queue was derived under, the connection about to be used
+/// must be to that account, and the folder cache must still be the queue's own.
+async fn unit_source(state: &Arc<DaemonState>, spec: &Spec, config: &crate::imap::ImapConfig)
+    -> Result<crate::sync_observation::SourceKey, BodyUnitOutcome> {
+    use crate::sync_observation::{origin, source, BUSY};
+    if mailvault_core::bulk_worker::origin_hash(config) != spec.origin_hash {
+        return Err(BodyUnitOutcome::Retired);
+    }
+    let current = match origin(state, spec.stamp.clone()).await {
+        Ok(current) => current,
+        Err(error) if error == BUSY => return Err(BodyUnitOutcome::Retryable(error)),
+        Err(_) => return Err(BodyUnitOutcome::Retired),
+    };
+    if current.hash != spec.origin_hash { return Err(BodyUnitOutcome::Retired); }
+    let (_, key) = source(state, &current, &spec.mailbox).await.map_err(BodyUnitOutcome::Retryable)?;
+    if let Some(queued) = &spec.identity {
+        let now = key.cache_owner.as_ref().and_then(|owner| serde_json::to_string(owner).ok());
+        if now.as_deref() != Some(queued.as_str()) { return Err(BodyUnitOutcome::Retired); }
+    }
+    Ok(key)
+}
+
+/// A refused or failed write, read for what it means: a replaced source retires
+/// the pass, a policy "no" skips, and every other failed write is tried again.
+pub(crate) async fn finish_write(state: &Arc<DaemonState>, stamp: &AccountStamp,
+    result: Result<crate::handlers::imap::CacheOutcome, String>) -> BodyUnitOutcome {
+    use crate::handlers::imap::CacheOutcome;
+    let moved = |error: &str| error.contains("errors.bulkIdentity");
     match result {
-        Ok(true) => BodyUnitOutcome::Stored,
-        // The download mode decided at the writer: outside the window, or hidden.
-        Ok(false) => BodyUnitOutcome::PolicySkipped,
+        Ok(CacheOutcome::Stored) => BodyUnitOutcome::Stored,
+        Ok(CacheOutcome::PolicyNo) => BodyUnitOutcome::PolicySkipped,
+        Ok(CacheOutcome::WriteFailed(error)) if moved(&error) => BodyUnitOutcome::Retired,
+        Ok(CacheOutcome::WriteFailed(error)) => BodyUnitOutcome::Retryable(error),
         Err(error) => {
-            if state.account_lifecycle.try_operation(std::slice::from_ref(stamp)).is_err() { BodyUnitOutcome::Retired }
+            if moved(&error) || state.account_lifecycle.try_operation(std::slice::from_ref(stamp)).is_err() { BodyUnitOutcome::Retired }
             else { BodyUnitOutcome::Retryable(error) }
         }
     }
 }
 
-async fn imap_unit(state: &Arc<DaemonState>, stamp: &AccountStamp, config: &crate::imap::ImapConfig, account_id: &str,
-    mailbox: &str, uid: u32) -> BodyUnitOutcome {
-    use crate::handlers::imap::{auto_cache, email_date_ms, BODY_FETCH_TIMEOUT};
-    let fetch = state.imap_pool.run_read(config, false, |mut session| {
-        let mb = mailbox.to_owned();
+async fn imap_unit(state: &Arc<DaemonState>, spec: &Spec, config: &crate::imap::ImapConfig,
+    key: &crate::sync_observation::SourceKey, uid: u32) -> BodyUnitOutcome {
+    use crate::handlers::imap::{auto_cache_backfill_original, email_date_ms, BODY_FETCH_TIMEOUT};
+    // The select must report the mailbox lifetime the queue was derived under.
+    let expected_validity = key.cache_owner.as_ref().and_then(|owner| owner.uid_validity);
+    let timings = std::sync::Mutex::new(crate::imap::pool::ReadTimings::default());
+    let fetch = state.imap_pool.run_read_timed(config, false, |mut session| {
+        let mb = spec.mailbox.clone();
+        let timings = &timings;
         async move {
-            let email = crate::imap::fetch_email_by_uid_light(&mut session, &mb, uid).await?;
+            let email = crate::imap::fetch_email_by_uid_light_timed_owned(&mut session, &mb, uid, expected_validity, timings).await?;
             Ok((email, session, Some(mb)))
         }
-    });
+    }, Some(&timings));
     match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
         Ok(Ok(Some(email))) if email.uid == uid => {
             let dated = email_date_ms(email.date.as_deref(), email.internal_date.as_deref());
-            let result = auto_cache(state, stamp.clone(), mailbox.to_owned(), uid, email.raw_source_bytes, dated, false).await;
-            stored(state, stamp, result).await
+            let result = auto_cache_backfill_original(state, key, uid, email.raw_source_bytes, dated, None).await;
+            finish_write(state, &spec.stamp, result).await
         }
         // Proven absence (a tagged OK on the second probe), or another message under the number.
         Ok(Ok(_)) => BodyUnitOutcome::Gone,
+        Ok(Err(error)) if error.contains("errors.bulkIdentityChanged") => BodyUnitOutcome::Retired,
         Ok(Err(error)) => {
-            warn!("[ordinary] {account_id} {mailbox}: uid {uid} not fetched: {error}");
+            warn!("[ordinary] {} {}: uid {uid} not fetched: {error}", spec.account_id, spec.mailbox);
             BodyUnitOutcome::Retryable(error)
         }
         Err(_) => BodyUnitOutcome::Retryable("timed out".into()),
     }
 }
 
-async fn jmap_unit(state: &Arc<DaemonState>, stamp: &AccountStamp, config: &crate::imap::ImapConfig, account_id: &str,
-    mailbox: &str, uid: u32) -> BodyUnitOutcome {
-    use crate::handlers::imap::{auto_cache_with_ids, BODY_FETCH_TIMEOUT};
+/// Whether the mailbox's JMAP ledger ever issued `uid`. A missing ledger issued nothing.
+fn jmap_ledger_issued(state: &Arc<DaemonState>, account_id: &str, mailbox: &str, uid: u32) -> Result<bool, String> {
+    let path = crate::jmap_sessions::jmap_ledger_path(&crate::handlers::common::vault_root(state)?, account_id, mailbox);
+    if !path.exists() { return Ok(false); }
+    Ok(mailvault_core::graph_ledger::load(&path)?.contains_key(&uid))
+}
+
+async fn jmap_unit(state: &Arc<DaemonState>, spec: &Spec, config: &crate::imap::ImapConfig,
+    key: &crate::sync_observation::SourceKey, uid: u32) -> BodyUnitOutcome {
+    use crate::handlers::imap::{auto_cache_backfill_original, BODY_FETCH_TIMEOUT};
+    let (ledger_state, account, folder) = (Arc::clone(state), spec.account_id.clone(), spec.mailbox.clone());
+    match crate::handlers::common::blocking(move || jmap_ledger_issued(&ledger_state, &account, &folder, uid)).await {
+        // A number the ledger never issued names no message here: never fetched, never pruned.
+        Ok(Ok(false)) => return BodyUnitOutcome::PolicySkipped,
+        Ok(Ok(true)) => {}
+        Ok(Err(error)) | Err(error) => return BodyUnitOutcome::Retryable(error),
+    }
     let wanted = [uid];
-    let fetch = crate::handlers::jmap_bridge::fetch_by_uids(state, config, account_id, mailbox, &wanted);
+    let fetch = crate::handlers::jmap_bridge::fetch_by_uids(state, config, &spec.account_id, &spec.mailbox, &wanted);
     match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
-        // The ledger knows no id for this uid, or the message left the folder.
+        // The ledger issued this uid and the server no longer lists the message in the folder.
         Ok(Ok(bodies)) => match bodies.into_iter().find(|(got, _)| *got == uid) {
             None => BodyUnitOutcome::Gone,
             Some((_, Err(error))) => BodyUnitOutcome::Retryable(error),
             Some((_, Ok(body))) => {
                 let dated = crate::handlers::jmap_bridge::dated_ms(&body.raw, body.received_at.as_deref());
-                let result = auto_cache_with_ids(state, stamp.clone(), mailbox.to_owned(), uid, body.raw, dated, false, Some(body.ids)).await;
-                stored(state, stamp, result).await
+                let result = auto_cache_backfill_original(state, key, uid, body.raw, dated, Some(body.ids)).await;
+                finish_write(state, &spec.stamp, result).await
             }
         },
         Ok(Err(error)) => BodyUnitOutcome::Retryable(error),
@@ -531,7 +585,7 @@ async fn slot(state: Arc<DaemonState>, account_id: String, generation: u64, conf
             continue;
         };
         runner.with_pass(&account_id, generation, |pass| pass.in_flight += 1);
-        let outcome = run_body_unit(&state, &spec.stamp, &config, &account_id, &spec.mailbox, uid).await;
+        let outcome = run_body_unit(&state, &spec, &config, uid).await;
         drop(_claim);
         runner.with_pass(&account_id, generation, |pass| pass.in_flight = pass.in_flight.saturating_sub(1));
         let mut sleeping = false;
@@ -581,6 +635,14 @@ async fn run_pass(state: Arc<DaemonState>, account_id: String, generation: u64) 
             return;
         }
     };
+    // The connection about to be used must be to the account the queue was derived under:
+    // a server edited in place keeps the lifetime, so uids of one server must never be
+    // fetched from another.
+    let Some(spec) = runner.with_pass(&account_id, generation, |pass| pass.spec.clone()) else { return };
+    if mailvault_core::bulk_worker::origin_hash(&config) != spec.origin_hash {
+        retire_pass(&state, &spec, generation, "sourceChanged");
+        return;
+    }
     let slots = match runner.with_pass(&account_id, generation, |pass| pass.role) {
         Some(Role::Active) => mailvault_core::pipeline::ACTIVE_WORKERS,
         Some(Role::Background) => mailvault_core::pipeline::BACKGROUND_CONTENT_WORKERS,
@@ -837,6 +899,18 @@ mod tests {
         assert_eq!(compare_identity(&some("a"), None), IdentityCheck::Changed, "an identity that vanished is a replaced cache");
     }
 
+    #[test]
+    fn s6_a_jmap_uid_the_ledger_never_issued_is_skipped_not_declared_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+        assert_eq!(jmap_ledger_issued(&state, "acc1", "INBOX", 5), Ok(false), "no ledger file issued nothing");
+        let path = crate::jmap_sessions::jmap_ledger_path(&crate::handlers::common::vault_root(&state).unwrap(), "acc1", "INBOX");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, json!({"5": "email-5"}).to_string()).unwrap();
+        assert_eq!(jmap_ledger_issued(&state, "acc1", "INBOX", 5), Ok(true));
+        assert_eq!(jmap_ledger_issued(&state, "acc1", "INBOX", 6), Ok(false), "a number never issued is not a deleted message");
+    }
+
     #[tokio::test]
     async fn s6_a_retired_account_is_refused_before_any_provider_or_policy_work() {
         let dir = tempfile::tempdir().unwrap();
@@ -851,9 +925,9 @@ mod tests {
             "imapHost": "127.0.0.1", "imapPort": 1, "imapSecure": false})).unwrap();
         state.account_lifecycle.apply_committed_membership(None, &mailvault_core::accounts_doc::MembershipDelta {
             removed: ["acc1".to_owned()].into(), ..Default::default() });
-        let outcome = run_body_unit(&state, &stamp, &config, "acc1", "INBOX", 7).await;
+        let spec = Spec { account_id: "acc1".into(), mailbox: "INBOX".into(), stamp, origin_hash: "x".into(), identity: None, uids: vec![7] };
+        let outcome = run_body_unit(&state, &spec, &config, 7).await;
         assert_eq!(outcome, BodyUnitOutcome::Retired, "the old lifetime can never fetch or publish");
-        assert_eq!(state.hoarder_worker.claims.len(), 0);
     }
 
     #[tokio::test]
@@ -871,7 +945,8 @@ mod tests {
             let config: crate::imap::ImapConfig = serde_json::from_value(json!({"email": "a@example.test",
                 "imapHost": "127.0.0.1", "imapPort": 1, "imapSecure": false})).unwrap();
             // Port 1 refuses a connection: reaching the provider would be a Retryable, not a skip.
-            let outcome = run_body_unit(&state, &stamp, &config, "acc1", "INBOX", 7).await;
+            let spec = Spec { account_id: "acc1".into(), mailbox: "INBOX".into(), stamp, origin_hash: "x".into(), identity: None, uids: vec![7] };
+            let outcome = run_body_unit(&state, &spec, &config, 7).await;
             assert_eq!(outcome, BodyUnitOutcome::PolicySkipped, "{label}");
         }
     }

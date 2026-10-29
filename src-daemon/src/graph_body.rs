@@ -5,8 +5,8 @@
 //! stamped writer as every other ordinary body. Scope is the focused folder and
 //! the background accounts' INBOX; there is no Graph full-mailbox sweep.
 
-use crate::account_lifecycle::AccountStamp;
-use crate::ordinary_runner::BodyUnitOutcome;
+use crate::ordinary_runner::{BodyUnitOutcome, Spec};
+use crate::sync_observation::SourceKey;
 use crate::server::DaemonState;
 use std::sync::Arc;
 
@@ -26,17 +26,17 @@ fn header_date_ms(raw: &[u8]) -> Option<i64> {
     crate::handlers::imap::email_date_ms(date.as_deref(), None)
 }
 
-pub(crate) async fn run_graph_body_unit(state: &Arc<DaemonState>, stamp: &AccountStamp, config: &crate::imap::ImapConfig,
-    account_id: &str, mailbox: &str, uid: u32) -> BodyUnitOutcome {
-    use crate::handlers::imap::{auto_cache, BODY_FETCH_TIMEOUT};
+pub(crate) async fn run_graph_body_unit(state: &Arc<DaemonState>, spec: &Spec, config: &crate::imap::ImapConfig,
+    key: &SourceKey, uid: u32) -> BodyUnitOutcome {
+    use crate::handlers::imap::{auto_cache_backfill_original, BODY_FETCH_TIMEOUT};
     let Some(token) = config.access_token.as_deref().filter(|token| !token.is_empty()) else {
         // No usable token: the daemon renews its own before the next round.
         return BodyUnitOutcome::Retryable("errors.syncCredentialsMissing".into());
     };
-    let (ledger_state, account, folder) = (Arc::clone(state), account_id.to_owned(), mailbox.to_owned());
+    let (ledger_state, account, folder) = (Arc::clone(state), spec.account_id.clone(), spec.mailbox.clone());
     let graph_id = match crate::handlers::common::blocking(move || ledger_id(&ledger_state, &account, &folder, uid)).await {
         Ok(Ok(Some(id))) => id,
-        // This number names no Graph message here: nothing is fetched under it.
+        // This number names no Graph message here: nothing is fetched under it, nothing pruned.
         Ok(Ok(None)) => return BodyUnitOutcome::PolicySkipped,
         Ok(Err(error)) | Err(error) => return BodyUnitOutcome::Retryable(error),
     };
@@ -49,6 +49,6 @@ pub(crate) async fn run_graph_body_unit(state: &Arc<DaemonState>, stamp: &Accoun
         Err(_) => return BodyUnitOutcome::Retryable("timed out".into()),
     };
     let dated = header_date_ms(&raw);
-    let result = auto_cache(state, stamp.clone(), mailbox.to_owned(), uid, raw, dated, false).await;
-    crate::ordinary_runner::stored(state, stamp, result).await
+    let result = auto_cache_backfill_original(state, key, uid, raw, dated, None).await;
+    crate::ordinary_runner::finish_write(state, &spec.stamp, result).await
 }

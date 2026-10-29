@@ -6782,6 +6782,95 @@ mod tests {
                     assert!(stored_uids(dir.path()).is_empty());
                 }
 
+                /// Queue a pass by hand, the way `plan` would have derived it earlier, so a test
+                /// can change the world between the derivation and the first fetch.
+                async fn submit_pass(state: &Arc<DaemonState>, uids: &[u32], identity: Option<String>, origin_hash: String) {
+                    let stamp = state.account_lifecycle.capture("acc1").unwrap();
+                    let runner = &state.hoarder_worker.ordinary;
+                    runner.retarget(1, Vec::new());
+                    runner.submit_active(state, 1, crate::ordinary_runner::Spec { account_id: "acc1".into(), mailbox: "INBOX".into(),
+                        stamp, origin_hash, identity, uids: uids.to_vec() });
+                }
+
+                async fn pass_over(state: &Arc<DaemonState>) {
+                    for _ in 0..400 {
+                        match state.hoarder_worker.ordinary.pass_snapshot("acc1") {
+                            None | Some((crate::ordinary_runner::Status::Done, ..)) => return,
+                            _ => tokio::time::sleep(std::time::Duration::from_millis(50)).await,
+                        }
+                    }
+                    panic!("the pass neither finished nor was dropped");
+                }
+
+                async fn account_origin(state: &Arc<DaemonState>) -> String {
+                    let stamp = state.account_lifecycle.capture("acc1").unwrap();
+                    crate::sync_observation::origin(state, stamp).await.unwrap().hash
+                }
+
+                fn repoint(state: &Arc<DaemonState>, server: &MockImap) {
+                    let row = json!({"id": "acc1", "email": "user@example.com", "authType": "password",
+                        "imapHost": server.host(), "imapPort": server.port(), "imapSecure": false});
+                    std::fs::write(state.app_dir.join("accounts.json"), json!([row]).to_string()).unwrap();
+                    let stored = json!({"id": "acc1", "email": "user@example.com", "authType": "password", "password": "hunter2",
+                        "imapHost": server.host(), "imapPort": server.port(), "imapSecure": false}).to_string();
+                    std::fs::write(state.app_dir.join("credentials.json"), json!({"acc1": stored}).to_string()).unwrap();
+                }
+
+                #[tokio::test]
+                async fn s6_a_server_edit_after_the_queue_was_derived_fetches_and_writes_nothing() {
+                    let (_lock, _env, dir, state, server_a) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                    let server_b = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                    let now = chrono::Utc::now().to_rfc3339();
+                    seed_cache(&state, &[(1, &now), (2, &now)]);
+                    let derived_under_a = account_origin(&state).await;
+                    // The user edits the account in place: same lifetime, another server.
+                    repoint(&state, &server_b);
+                    submit_pass(&state, &[1, 2], None, derived_under_a).await;
+                    pass_over(&state).await;
+                    assert!(stored_uids(dir.path()).is_empty(), "uids of server A were not written from server B");
+                    assert!(body_fetches(&server_b).is_empty(), "server B was never asked for a body of A's queue");
+                    assert!(body_fetches(&server_a).is_empty());
+                }
+
+                #[tokio::test]
+                async fn s6_a_failed_write_is_retried_and_never_counted_as_done() {
+                    let (_lock, _env, dir, state, _server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                    let hash = account_origin(&state).await;
+                    // The vault is being moved: the write fails, which is not a download-mode decision.
+                    state.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+                    submit_pass(&state, &[1], None, hash).await;
+                    let mut seen = None;
+                    for _ in 0..200 {
+                        seen = state.hoarder_worker.ordinary.pass_snapshot("acc1");
+                        if matches!(seen, Some((crate::ordinary_runner::Status::RetryWait { .. }, ..))) { break; }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                    let (status, queued, completed, _) = seen.expect("the pass is still there");
+                    assert!(matches!(status, crate::ordinary_runner::Status::RetryWait { .. }), "{status:?}");
+                    assert_eq!((queued, completed), (1, 0), "the message is waiting for another try, not finished");
+                    state.vault_closed.store(false, std::sync::atomic::Ordering::SeqCst);
+                    assert!(stored_uids(dir.path()).is_empty());
+                }
+
+                #[tokio::test]
+                async fn s6_a_uidvalidity_reset_before_the_fetch_stores_nothing() {
+                    let (_lock, _env, dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+                    let hash = account_origin(&state).await;
+                    let seed = json!({"emails": [{"uid": 1, "subject": "m1", "date": chrono::Utc::now().to_rfc3339()}], "totalEmails": 1,
+                        "nativeIdentity": {"accountId": "acc1", "mailbox": "INBOX", "uidValidity": 1, "originHash": hash},
+                        "nativeExpectedIdentity": null}).to_string();
+                    crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX", &seed)).unwrap();
+                    let identity = crate::custody::with_conn(&state, |conn|
+                        mailvault_core::custody::cache::native_identity(conn, "acc1", "INBOX")).unwrap()
+                        .map(|identity| serde_json::to_string(&identity).unwrap());
+                    assert!(identity.is_some(), "the cache carries the identity the queue is derived under");
+                    // The server's mailbox was reset: UID 1 now names another message.
+                    server.mutate(|st| st.find_mut("INBOX").expect("INBOX").uid_validity = 2);
+                    submit_pass(&state, &[1], identity, hash).await;
+                    pass_over(&state).await;
+                    assert!(stored_uids(dir.path()).is_empty(), "a body of the new mailbox lifetime was not stored under the old uid");
+                }
+
                 #[tokio::test]
                 async fn s6_a_retired_account_never_publishes_a_body_it_was_holding() {
                     let (_lock, _env, dir, state, server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));

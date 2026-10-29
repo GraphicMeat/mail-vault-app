@@ -166,6 +166,29 @@ pub(crate) async fn auto_cache_original(
         raw, date_ms, true, ids, Some(source.clone())).await
 }
 
+/// What a cache attempt came to, for a caller that must tell a policy "no" from a
+/// failed write: the best-effort callers read only `Stored`.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CacheOutcome {
+    Stored,
+    /// The download mode (or a hidden account) keeps no copy of this message.
+    PolicyNo,
+    /// The write itself failed (vault locked or moved, disk full, a replaced source).
+    WriteFailed(String),
+}
+
+/// The ordinary download-ahead's write: a download-ahead body (`opened: false`, so
+/// the window decides) bound to the source the unit was admitted under. A replaced
+/// mailbox or account refuses it, and a failed write is not mistaken for a policy.
+pub(crate) async fn auto_cache_backfill_original(
+    state: &Arc<DaemonState>, source: &crate::sync_observation::SourceKey,
+    uid: u32, raw: Vec<u8>, date_ms: Option<i64>,
+    ids: Option<mailvault_core::jmap_store::record::ServerIds>,
+) -> Result<CacheOutcome, String> {
+    auto_cache_outcome(state, source.original.clone(), source.mailbox.clone(), uid,
+        raw, date_ms, false, ids, Some(source.clone())).await
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn auto_cache_guarded(
     state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: String,
@@ -173,12 +196,23 @@ async fn auto_cache_guarded(
     ids: Option<mailvault_core::jmap_store::record::ServerIds>,
     original: Option<crate::sync_observation::SourceKey>,
 ) -> Result<bool, String> {
+    Ok(auto_cache_outcome(state, stamp, mailbox, uid, raw, date_ms, opened, ids, original).await?
+        == CacheOutcome::Stored)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn auto_cache_outcome(
+    state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: String,
+    uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool,
+    ids: Option<mailvault_core::jmap_store::record::ServerIds>,
+    original: Option<crate::sync_observation::SourceKey>,
+) -> Result<CacheOutcome, String> {
     let app_dir = state.app_dir.clone();
     let policy_account = stamp.id().to_owned();
     let policy = blocking(move || download_policy(&app_dir, &policy_account)).await.ok().flatten();
     if !policy.is_some_and(|p| p.caches_fetched(opened, date_ms, now_ms())) {
         state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
-        return Ok(false);
+        return Ok(CacheOutcome::PolicyNo);
     }
     let state2 = Arc::clone(state);
     let commit_stamp = stamp.clone();
@@ -198,11 +232,15 @@ async fn auto_cache_guarded(
             .transpose()?;
         with_stamped_mailbox_write(&state2, &commit_stamp, &mailbox, |root| {
             if let Some(source) = original.as_ref() {
-                let owner = source.cache_owner.as_ref().ok_or("errors.bulkIdentityUncertain")?;
+                // An owner that was recorded when the source was admitted must still be the
+                // cache's. A cache that carried none (legacy rows) proves nothing either way:
+                // its first identity is adopted, so a warm landing meanwhile is not a replacement.
                 return crate::custody::with_conn(&state2, |conn| {
-                    if mailvault_core::custody::cache::native_identity(conn,
-                        &source.account_id, &source.mailbox)?.as_ref() != Some(owner) {
-                        return Err("errors.bulkIdentityChanged".to_owned());
+                    if let Some(owner) = source.cache_owner.as_ref() {
+                        if mailvault_core::custody::cache::native_identity(conn,
+                            &source.account_id, &source.mailbox)?.as_ref() != Some(owner) {
+                            return Err("errors.bulkIdentityChanged".to_owned());
+                        }
                     }
                     vault_files::store_prepared(&state2.vault_registry, root,
                         commit_stamp.id(), &mailbox, &prepared, &[], false)
@@ -216,18 +254,18 @@ async fn auto_cache_guarded(
     match cache_result {
         // A write nudges the index through the registry's change hook;
         // `false` = already cached, no nudge, matching maildir_store_raw.
-        Ok(Ok(_)) => Ok(true),
+        Ok(Ok(_)) => Ok(CacheOutcome::Stored),
         Ok(Err(err)) => {
             if err == "errors.keychainBusy" || state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).is_err() {
                 return Err("errors.keychainBusy".to_owned());
             }
             warn!("Failed to auto-cache .eml for UID {}: {}", uid, err);
-            Ok(false)
+            Ok(CacheOutcome::WriteFailed(err))
         }
         Err(join_err) => {
             state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)).map_err(|_| "errors.keychainBusy".to_owned())?;
             warn!("Failed to auto-cache .eml for UID {}: task join error: {}", uid, join_err);
-            Ok(false)
+            Ok(CacheOutcome::WriteFailed(join_err))
         }
     }
 }
