@@ -6723,7 +6723,7 @@ mod tests {
                 // The focused folder had no cached rows; once ITS headers land it is derived again,
                 // while the background account is still held at the provider.
                 let mut derived = false;
-                for _ in 0..100 {
+                for _ in 0..200 {
                     let status = boxed_request(&state, req("pipeline.status", json!({}))).await.result.unwrap();
                     if status["accounts"]["acc1"]["phase"] != json!("headers") { derived = true; break; }
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -6854,7 +6854,7 @@ mod tests {
                 }
 
                 async fn pass_over(state: &Arc<DaemonState>) {
-                    for _ in 0..400 {
+                    for _ in 0..200 {
                         match state.hoarder_worker.ordinary.pass_snapshot("acc1") {
                             None | Some((crate::ordinary_runner::Status::Done, ..)) => return,
                             _ => tokio::time::sleep(std::time::Duration::from_millis(50)).await,
@@ -6994,6 +6994,8 @@ mod tests {
                         assert!(pause.entered(std::time::Duration::from_secs(15)), "the body fetch must reach the provider");
                         pause
                     }).await.unwrap();
+                    assert_eq!(body_fetches(&server).len(), before + 1,
+                        "the held FETCH is the body fetch, not a header read that happened to come first");
                     state.account_lifecycle.apply_committed_membership(None, &mailvault_core::accounts_doc::MembershipDelta {
                         removed: ["acc1".to_owned()].into(), ..Default::default() });
                     pause.release();

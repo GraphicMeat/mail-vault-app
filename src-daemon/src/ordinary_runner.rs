@@ -84,11 +84,6 @@ impl Claims {
         let mut set = self.0.lock().unwrap_or_else(|e| e.into_inner());
         set.insert(key.clone()).then(|| ClaimGuard { claims: Arc::clone(self), key })
     }
-
-    #[cfg(test)]
-    pub(crate) fn len(&self) -> usize {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).len()
-    }
 }
 
 impl Drop for ClaimGuard {

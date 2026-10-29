@@ -459,7 +459,8 @@ async fn cache_is_empty(state: &Arc<DaemonState>, id: &str, mailbox: &str) -> bo
 /// One header warm through the S2 refresh worker: admitted as a scheduled
 /// refresh of exactly this account and folder, then waited out. The refresh
 /// worker owns the provider call, the cache write and the lifecycle checks.
-async fn warm_once(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) -> bool {
+async fn warm_once(state: &Arc<DaemonState>, account_id: &str, mailbox: &str,
+    admitted: Option<tokio::sync::oneshot::Sender<()>>) -> bool {
     let this = &state.hoarder_worker.pipeline;
     let request_id = {
         let mut inner = this.lock();
@@ -470,10 +471,10 @@ async fn warm_once(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) ->
     this.admissions.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let intent = Intent { request_id: request_id.clone(), account_id: Some(account_id.to_owned()),
         mailbox: Some(mailbox.to_owned()), reason: Reason::Scheduled };
-    match tokio::time::timeout(Duration::from_secs(30), RefreshState::admit(state, intent)).await {
-        Ok(Ok(_)) => {}
-        _ => return false,
-    }
+    let admission = tokio::time::timeout(Duration::from_secs(30), RefreshState::admit(state, intent)).await;
+    // Queued (or refused): whoever waited to go behind this warm may go now.
+    drop(admitted);
+    if !matches!(admission, Ok(Ok(_))) { return false; }
     for _ in 0..1_200 {
         tokio::time::sleep(Duration::from_millis(100)).await;
         let answer = state.refresh.status(Some(&request_id));
@@ -488,7 +489,7 @@ async fn warm_once(state: &Arc<DaemonState>, account_id: &str, mailbox: &str) ->
 
 /// Warm `mailbox` once per account lifetime, again only when its cache was emptied.
 async fn warm_folder(state: &Arc<DaemonState>, generation: u64, account_id: &str, mailbox: &str,
-    epoch: u64, origin_hash: &str) -> Option<bool> {
+    epoch: u64, origin_hash: &str, admitted: Option<tokio::sync::oneshot::Sender<()>>) -> Option<bool> {
     let this = &state.hoarder_worker.pipeline;
     let key = WarmKey { account_id: account_id.to_owned(), mailbox: mailbox.to_owned(), epoch,
         origin_hash: origin_hash.to_owned() };
@@ -500,7 +501,7 @@ async fn warm_folder(state: &Arc<DaemonState>, generation: u64, account_id: &str
         if !inner.warmed.insert(key.clone()) { return None; }
         inner.in_flight += 1;
     }
-    let ok = warm_once(state, account_id, mailbox).await;
+    let ok = warm_once(state, account_id, mailbox, admitted).await;
     {
         let mut inner = this.lock();
         inner.in_flight -= 1;
@@ -512,7 +513,7 @@ async fn warm_folder(state: &Arc<DaemonState>, generation: u64, account_id: &str
 
 /// One account's header warms: its folder, then its own Sent folder.
 async fn warm_account(state: Arc<DaemonState>, generation: u64, accounts: Arc<Vec<Value>>, id: String,
-    first: String, epoch: u64, origin_hash: String) {
+    first: String, epoch: u64, origin_hash: String, mut admitted: Option<tokio::sync::oneshot::Sender<()>>) {
     let this = &state.hoarder_worker.pipeline;
     let mut failed = 0;
     let mut warmed_any = false;
@@ -520,7 +521,7 @@ async fn warm_account(state: Arc<DaemonState>, generation: u64, accounts: Arc<Ve
         let mailbox = if step == 0 { Some(first.clone()) } else { sent_path(&state, &accounts, &id).await };
         let Some(mailbox) = mailbox else { continue };
         if step == 1 && mailbox == first { continue; }
-        match warm_folder(&state, generation, &id, &mailbox, epoch, &origin_hash).await {
+        match warm_folder(&state, generation, &id, &mailbox, epoch, &origin_hash, admitted.take()).await {
             Some(true) => warmed_any = true,
             Some(false) => { failed += 1; warmed_any = true; }
             None => {}
@@ -638,21 +639,27 @@ async fn plan(state: Arc<DaemonState>, generation: u64, focus: Focus) {
         state.hoarder_worker.ordinary.set_cascade(generation, background.iter().map(|(id, stamp, hash)|
             Origin { account_id: id.clone(), stamp: stamp.clone(), origin_hash: hash.clone() }).collect());
         let origins: HashMap<String, (u64, String)> = background.into_iter().map(|(id, s, h)| (id, (s.epoch(), h))).collect();
+        // The focused folder's warm is queued with the refresh worker before any background one:
+        // the worker takes units in order, so a slow background provider must never sit ahead of it.
+        let (queued, behind) = tokio::sync::oneshot::channel::<()>();
         let active = {
             let (state, accounts, id, mailbox, hash) = (Arc::clone(&state), Arc::clone(&accounts),
                 scoped.account_id.clone(), scoped.mailbox.clone(), origin_hash.clone());
-            tokio::spawn(async move { warm_account(state, generation, accounts, id, mailbox, epoch, hash).await })
+            tokio::spawn(async move { warm_account(state, generation, accounts, id, mailbox, epoch, hash, Some(queued)).await })
         };
         // The background chunks run on their own: the focused folder's follow-up waits for
         // its own warm only, never for the other accounts' headers.
         let runner = {
             let (state, accounts) = (Arc::clone(&state), Arc::clone(&accounts));
             let watcher = Arc::clone(&state);
-            tokio::spawn(run_chunks(chunks, move || watcher.hoarder_worker.pipeline.current(generation), move |id| {
-                let (e, h) = origins.get(&id).cloned().unwrap_or_default();
-                let (state, accounts) = (Arc::clone(&state), Arc::clone(&accounts));
-                warm_account(state, generation, accounts, id, "INBOX".to_owned(), e, h)
-            }))
+            tokio::spawn(async move {
+                let _ = behind.await;
+                run_chunks(chunks, move || watcher.hoarder_worker.pipeline.current(generation), move |id| {
+                    let (e, h) = origins.get(&id).cloned().unwrap_or_default();
+                    let (state, accounts) = (Arc::clone(&state), Arc::clone(&accounts));
+                    warm_account(state, generation, accounts, id, "INBOX".to_owned(), e, h, None)
+                }).await
+            })
         };
         let _ = active.await;
         // A focused folder that had no cached rows is derived again now that headers landed.
