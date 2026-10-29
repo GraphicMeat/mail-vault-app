@@ -375,7 +375,7 @@ pub(crate) async fn run_body_unit(state: &Arc<DaemonState>, stamp: &AccountStamp
     imap_unit(state, stamp, config, account_id, mailbox, uid).await
 }
 
-async fn stored(state: &Arc<DaemonState>, stamp: &AccountStamp, result: Result<bool, String>) -> BodyUnitOutcome {
+pub(crate) async fn stored(state: &Arc<DaemonState>, stamp: &AccountStamp, result: Result<bool, String>) -> BodyUnitOutcome {
     match result {
         Ok(true) => BodyUnitOutcome::Stored,
         // The download mode decided at the writer: outside the window, or hidden.

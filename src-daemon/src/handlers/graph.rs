@@ -1022,4 +1022,93 @@ mod tests {
         let s = st();
         assert!(route(&s, "imap_get_mailboxes", &json!({}), json!(1)).await.is_none());
     }
+
+    // ── S7: the ordinary Graph body unit ──
+
+    fn graph_config() -> crate::imap::ImapConfig {
+        serde_json::from_value(json!({"email": "a@example.test", "imapHost": "outlook.office365.com",
+            "oauth2AccessToken": "tok", "oauth2Transport": "graph"})).unwrap()
+    }
+
+    fn seed_ledger(s: &Arc<DaemonState>, entries: Value) {
+        let dir = s.data_dir.join("email_cache").join(mailvault_core::header_cache::cache_base_name("acct1", "INBOX"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(mailvault_core::graph_ledger::LEDGER_FILE), entries.to_string()).unwrap();
+    }
+
+    fn vault_uids(s: &Arc<DaemonState>) -> Vec<u32> {
+        let cur = mailvault_core::vault_files::cur_path(&s.data_dir, "acct1", "INBOX");
+        let mut uids: Vec<u32> = std::fs::read_dir(cur).into_iter().flatten().flatten()
+            .filter_map(|e| e.file_name().to_string_lossy().split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()).collect();
+        uids.sort_unstable();
+        uids
+    }
+
+    fn queued_responses() -> usize { QUEUE.lock().unwrap().len() }
+
+    const MIME: &str = "From: a@b.com\r\nSubject: s\r\nDate: Thu, 01 Jan 2026 12:00:00 +0000\r\nMessage-ID: <g@x>\r\n\r\nbody";
+
+    #[tokio::test]
+    async fn s7_a_graph_unit_stores_the_message_its_ledger_names_and_no_other() {
+        let _g = mock_graph(vec![(200, MIME.into())]);
+        let s = st();
+        seed_account(&s);
+        let stamp = s.account_lifecycle.capture("acct1").unwrap();
+        seed_ledger(&s, json!({"7": "gid-7", "8": "gid-8"}));
+        let outcome = crate::graph_body::run_graph_body_unit(&s, &stamp, &graph_config(), "acct1", "INBOX", 7).await;
+        assert_eq!(outcome, crate::ordinary_runner::BodyUnitOutcome::Stored);
+        assert_eq!(vault_uids(&s), vec![7], "uid 8 of the same ledger and the same number elsewhere stay untouched");
+        assert_eq!(queued_responses(), 0, "exactly one MIME request was made");
+    }
+
+    #[tokio::test]
+    async fn s7_a_missing_ledger_mapping_fetches_no_arbitrary_message() {
+        let _g = mock_graph(vec![(200, MIME.into())]);
+        let s = st();
+        seed_account(&s);
+        let stamp = s.account_lifecycle.capture("acct1").unwrap();
+        seed_ledger(&s, json!({"7": "gid-7"}));
+        let outcome = crate::graph_body::run_graph_body_unit(&s, &stamp, &graph_config(), "acct1", "INBOX", 99).await;
+        assert_eq!(outcome, crate::ordinary_runner::BodyUnitOutcome::PolicySkipped);
+        assert_eq!(queued_responses(), 1, "no Graph request was made for an unmapped uid");
+        assert!(vault_uids(&s).is_empty());
+    }
+
+    #[tokio::test]
+    async fn s7_graph_not_found_is_gone_and_a_server_error_is_retried() {
+        let s = st();
+        seed_account(&s);
+        let stamp = s.account_lifecycle.capture("acct1").unwrap();
+        seed_ledger(&s, json!({"7": "gid-7"}));
+        {
+            let _g = mock_graph(vec![(404, "{}".into())]);
+            let gone = crate::graph_body::run_graph_body_unit(&s, &stamp, &graph_config(), "acct1", "INBOX", 7).await;
+            assert_eq!(gone, crate::ordinary_runner::BodyUnitOutcome::Gone);
+        }
+        {
+            let _g = mock_graph(vec![(500, "{}".into())]);
+            let failed = crate::graph_body::run_graph_body_unit(&s, &stamp, &graph_config(), "acct1", "INBOX", 7).await;
+            assert!(matches!(failed, crate::ordinary_runner::BodyUnitOutcome::Retryable(_)), "{failed:?}");
+        }
+        assert!(vault_uids(&s).is_empty());
+    }
+
+    #[tokio::test]
+    async fn s7_an_absent_token_is_retried_without_any_provider_call_and_a_retired_source_publishes_nothing() {
+        let _g = mock_graph(vec![(200, MIME.into())]);
+        let s = st();
+        seed_account(&s);
+        let stamp = s.account_lifecycle.capture("acct1").unwrap();
+        seed_ledger(&s, json!({"7": "gid-7"}));
+        let mut tokenless = graph_config();
+        tokenless.access_token = None;
+        let outcome = crate::graph_body::run_graph_body_unit(&s, &stamp, &tokenless, "acct1", "INBOX", 7).await;
+        assert_eq!(outcome, crate::ordinary_runner::BodyUnitOutcome::Retryable("errors.syncCredentialsMissing".into()));
+        assert_eq!(queued_responses(), 1);
+        retire_acct1(&s).await;
+        let retired = crate::ordinary_runner::run_body_unit(&s, &stamp, &graph_config(), "acct1", "INBOX", 7).await;
+        assert_eq!(retired, crate::ordinary_runner::BodyUnitOutcome::Retired);
+        assert_eq!(queued_responses(), 1, "a retired lifetime made no request");
+        assert!(vault_uids(&s).is_empty());
+    }
 }
