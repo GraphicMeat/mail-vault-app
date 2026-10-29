@@ -1,0 +1,2712 @@
+{
+  "version": 1,
+  "acceptedS3Commit": "5ba0397d26b908ef284596fffd925a14b6bca5bc",
+  "sourceHead": "28b7749796d44c1449d43121fdf9e1eb2b18c739",
+  "captureAncestorChain": [
+    "ac62be5963b42d12d66e0ac004875145a0fd3126",
+    "1da200943b8f999162427b9c61a387e2367e7ee3",
+    "5ba0397d26b908ef284596fffd925a14b6bca5bc"
+  ],
+  "captureChangedPaths": [
+    "src/hooks/__tests__/useEmailScheduler.idle.test.js",
+    "src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+    "src/services/__tests__/codeBubble.test.js",
+    "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js",
+    "src/stores/__tests__/codeBubbleStore.test.js",
+    "src/stores/__tests__/focusStore.test.js",
+    "src/stores/__tests__/snoozeLocalWake.test.js",
+    "src/stores/slices/accountSlice.s4oracle.test.js"
+  ],
+  "sourceTree": "ea17662bd731e5fbb1692d347ea87c8cd1e05d6b",
+  "snapshotHead": "36a5477db7a7f64cab3352da1568899de9639ddc",
+  "snapshotTree": "0dd2052b2681f4c5cf1218f44b463c1c47144038",
+  "capturedAt": "2026-10-29T02:07:39.351Z",
+  "caseOrder": [
+    "N01",
+    "N02",
+    "N03",
+    "N04",
+    "N05",
+    "N06",
+    "N07",
+    "N08",
+    "N09",
+    "N10",
+    "N11",
+    "N12",
+    "N13",
+    "N14",
+    "N15",
+    "N16",
+    "N17",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06",
+    "C07",
+    "C08",
+    "C09",
+    "C10",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C15",
+    "C16",
+    "F01",
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F07",
+    "F08",
+    "F09",
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E05",
+    "E06",
+    "E07",
+    "E08",
+    "E09",
+    "W01",
+    "W02",
+    "W03",
+    "W04",
+    "G01",
+    "G02",
+    "G03",
+    "G04",
+    "T01",
+    "T02",
+    "T03"
+  ],
+  "stage": {
+    "path": "carrier/arrival-oracle-stage.json",
+    "bytes": 14648,
+    "fsMode": 438,
+    "sha256": "66e4beb1f3672ea92609c8791a00fabcb2c0cca30dfe9b9e4ae852aa26ccd186"
+  },
+  "runner": {
+    "path": "carrier/arrival-oracle-runner.cjs",
+    "bytes": 21574,
+    "fsMode": 438,
+    "sha256": "3d42e8075d5ec8133d865cd1aaf8126c7ab9ae00b9899165696f880b0b87ab3c"
+  },
+  "inputPins": {
+    "sourcePins": {
+      "src/hooks/useEmailScheduler.js": "8a09f951f296cc7a48310685649cb6a1ac59ce705939087e50a0a82590087d4f",
+      "src/services/workflows/refreshAccounts.js": "36ae327d90ab756118f392a649f1fd894465f0f76e76c86eb6ab458754f30db4",
+      "src/services/codeBubble.js": "d842a54e15b13498a81253668cc4ba6bc71861693998ac8c6de90697e56ebe9a",
+      "src/stores/focusStore.js": "d758c1675a1c2981b41c7215b0d42cd74c5371c080207b1bbf00e6ad06a1adca",
+      "src/stores/snoozeStore.js": "497958919959e3e1935379a2afbd08ab52e5d793cefebef8244c7851df2c0378",
+      "src/stores/codeBubbleStore.js": "5d97d65314963aaa6d8735f7e238238aeb50c4a1d442949fde3ae319604458ec",
+      "src/stores/slices/accountSlice.js": "4a182ba375c4570936cf48489eb99b469fe5429b0e150b0cb985803f6082164c",
+      "src/services/syncService.js": "de39039dda9dffa6b77971538e19903d622596fafbb6a5febaec72606645500a",
+      "src/stores/settingsStore.js": "e4dde4cd941688ec44698b80d6f98c32a4b3fa3613fe0965e36ae14bda19db99",
+      "src/utils/notificationSounds.js": "cedb1263ef501c10a698e91765d8a29c462196703a0041a893b2ea9b98466f2e",
+      "src/utils/ownAddresses.js": "55a16223672be64d6ec789aaaa5d6bae8dd1f5d90acab7b2947c1360c2575578",
+      "src/utils/sentFolder.js": "d92e7e358c0630b8575263bdf6f3faf1730585ac2f72bc1f48b93780be3b22fe",
+      "src-daemon/src/handlers/refresh.rs": "15f899818a5330cd8bc4e2b5de035dfe6f69d558b3f3fbbb9caf18970c4eb236",
+      "src-daemon/src/refresh_worker.rs": "2662e28ed87e51636e0d971bb27b3e038dafd4a607e1d786bd6df4a17c62aa75",
+      "src-daemon/src/sync_engine.rs": "069b8ec4ea990b30e9872ab5ca30063da62a08abae868e1b4f09d21cfa297e40",
+      "src-daemon/src/handlers/mod.rs": "713b4e321e45974e3977c35dbd0d4d3ade40d8172120d2861f703dcb9d458bf1",
+      "src-daemon/src/handlers/counts.rs": "3c667b238fd1e4886826b00d1deaf46d5b71290a0d16611cff6f4b732e5f5890",
+      "src-daemon/src/channel.rs": "ce2f32cf196f087c0e69578aaa7d70e3977a7fcf528f4e5898e3bc0ac95e4a55",
+      "src-daemon/src/server.rs": "0ba1522d9baf96d32074290894547f5aba6ba61d92b0e470867b193ad7bb94a6",
+      "src-tauri/src/daemon_channel.rs": "7b774800474a06d156a19bdb19683bad2b3054675f0629fca3c3edd347528446",
+      "src-tauri/src/main.rs": "110ba37f8570e05c228732dd9520756edd20ca80ca4396e2e2913388146b26aa",
+      "src/services/unreadCountsClient.js": "74d92050bc7a540a7f68f45f7a547ecb0cf431deeacbbf2fe6d900930e7b8820",
+      "src/stores/unreadCounts.js": "4a0b5036e5f738a8a4fa98719aa3f730974973fd60540523745eb8553684be0c",
+      "src/services/workflows/activateAccount.js": "693c605c3ebb76b7a1b7e7511584d49d656f0dd132fd1fa613a66753ca6dfd5e",
+      "src/services/transport.js": "94dfa30835286cb8708787f19f42a802dc0c806a45ad93aaf6e89b3b4716f82d",
+      "vitest.config.js": "d1e9cea7df8df6b7d95f164e6e035948b3f479057339f00f94994b8c665fb246"
+    },
+    "stageTests": {
+      "src/hooks/__tests__/useEmailScheduler.idle.test.js": {
+        "path": "src/hooks/__tests__/useEmailScheduler.idle.test.js",
+        "bytes": 78724,
+        "fsMode": 438,
+        "sha256": "5415b3b0cfc71990148aaea181fe8a30b73017de44a7a76e14c97b82448a1a8f"
+      },
+      "src/services/__tests__/codeBubble.test.js": {
+        "path": "src/services/__tests__/codeBubble.test.js",
+        "bytes": 11157,
+        "fsMode": 438,
+        "sha256": "a815c4c2c134ff8f81555c09f6d65184f6ba33c11831b65449819b009d5f0ccf"
+      },
+      "src/stores/__tests__/focusStore.test.js": {
+        "path": "src/stores/__tests__/focusStore.test.js",
+        "bytes": 24256,
+        "fsMode": 438,
+        "sha256": "441736f65b1a17d4be9795979734dbcba2656005d553e8c9a74dc0dbc2366ee4"
+      },
+      "src/stores/__tests__/snoozeLocalWake.test.js": {
+        "path": "src/stores/__tests__/snoozeLocalWake.test.js",
+        "bytes": 8587,
+        "fsMode": 438,
+        "sha256": "702884a0d11bd03860952048e4a08aa9ea16db80fe1dd921f2224010196c493d"
+      },
+      "src/stores/__tests__/codeBubbleStore.test.js": {
+        "path": "src/stores/__tests__/codeBubbleStore.test.js",
+        "bytes": 3382,
+        "fsMode": 438,
+        "sha256": "8e5457214aa5d98d445f9a6b89f224cbb70cb396ee2f9cd55056b0e3f06adf51"
+      },
+      "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js": {
+        "path": "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js",
+        "bytes": 18590,
+        "fsMode": 438,
+        "sha256": "557cabd177be5f44c3662ed6d0ef7780d26193f10c13666cff6734a4cea3f144"
+      },
+      "src/stores/slices/accountSlice.s4oracle.test.js": {
+        "path": "src/stores/slices/accountSlice.s4oracle.test.js",
+        "bytes": 5581,
+        "fsMode": 438,
+        "sha256": "177bf1f1618fbcf8394db4d59e124826df28c9826434f52218e096c991a126f0"
+      },
+      "src/hooks/__tests__/useEmailScheduler.s4combined.test.js": {
+        "path": "src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+        "bytes": 14749,
+        "fsMode": 438,
+        "sha256": "1949da40f05fcfb9d7fd280dc4f740cbf6bba2b5896593617b816679c83b3e81"
+      }
+    },
+    "packageLock": {
+      "path": "package-lock.json",
+      "bytes": 423523,
+      "fsMode": 438,
+      "sha256": "e028bb112fa145998cdaaf2a94a20a66b4a56d86895d830207e7330af9871294"
+    },
+    "baseVitest": {
+      "path": "vitest.config.js",
+      "bytes": 865,
+      "fsMode": 438,
+      "sha256": "d1e9cea7df8df6b7d95f164e6e035948b3f479057339f00f94994b8c665fb246"
+    },
+    "aliases": [
+      "W4S4_ORACLE_N_OUT",
+      "W4S4_ORACLE_N_MORE_OUT",
+      "W4S4_ORACLE_E_OUT",
+      "W4S4_ORACLE_CODE_TIMING_OUT",
+      "W4S4_ORACLE_E_MORE_OUT",
+      "W4S4_ORACLE_C_OUT",
+      "W4S4_ORACLE_FD_OUT",
+      "W4S4_ORACLE_PRIVACY_OUT",
+      "W4S4_ORACLE_F06_OUT",
+      "W4S4_ORACLE_W_OUT",
+      "W4S4_ORACLE_D04_OUT",
+      "W4S4_ORACLE_G_OUT",
+      "W4S4_ORACLE_T_OUT",
+      "W4S4_ORACLE_COMBINED_OUT"
+    ]
+  },
+  "schemas": [
+    {
+      "path": "src-tauri/gen/schemas/acl-manifests.json",
+      "bytes": 172572,
+      "fsMode": 438,
+      "sha256": "0602d28d422db94692f678a75a315e9ce103a578afad52de1b37660bf72ed478"
+    },
+    {
+      "path": "src-tauri/gen/schemas/desktop-schema.json",
+      "bytes": 458889,
+      "fsMode": 438,
+      "sha256": "9c256ed3da15b8d4ba2da5b6beb1348b8c725b3b0885ae65a3c3625bb499f717"
+    },
+    {
+      "path": "src-tauri/gen/schemas/macOS-schema.json",
+      "bytes": 458889,
+      "fsMode": 438,
+      "sha256": "9c256ed3da15b8d4ba2da5b6beb1348b8c725b3b0885ae65a3c3625bb499f717"
+    },
+    null,
+    {
+      "path": "src-tauri/gen/schemas/capabilities.json",
+      "bytes": 1963,
+      "fsMode": 438,
+      "sha256": "5633312fa376be22708482db5cbdd1999963b4f1feb6511dc2ba615f144dba5c"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "node_modules/vitest/package.json",
+      "bytes": 5933,
+      "fsMode": 438,
+      "sha256": "e5a6d55e103f04929442595df0f641f128b02fd706ff01474c094863b44511d0"
+    },
+    {
+      "path": "node_modules/react/package.json",
+      "bytes": 999,
+      "fsMode": 438,
+      "sha256": "d4e68a5c96babb20cad1daafea8b78822eae45b341552cf5418d06a5304fa64c"
+    },
+    {
+      "path": "node_modules/react-dom/package.json",
+      "bytes": 1353,
+      "fsMode": 438,
+      "sha256": "d2f29e31bd48b833e48cd7bbf41f192e8ee4ff8da249fdbe10d4ac4114b8b12e"
+    },
+    {
+      "path": "node_modules/@testing-library/react/package.json",
+      "bytes": 3387,
+      "fsMode": 438,
+      "sha256": "67974b165512b3f03785a70ce8228c1df0ab84408f02d2185aafac171621ed6e"
+    },
+    {
+      "path": "node_modules/jsdom/package.json",
+      "bytes": 4207,
+      "fsMode": 438,
+      "sha256": "3dd6779455ce3aa9e4de7b33601b8ff4b622cdfd16d95888435d91019f33f546"
+    },
+    {
+      "path": "node_modules/zustand/package.json",
+      "bytes": 5499,
+      "fsMode": 438,
+      "sha256": "3be250433bb3c42b82b9a8a67654fca222d3e370f703204c69b4dfa4f6c74de6"
+    }
+  ],
+  "outputPins": {
+    "canonical": {
+      "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\arrival-66-canonical.json",
+      "bytes": 203610,
+      "fsMode": 438,
+      "sha256": "100bc71a1a28bb85c46ea183d47870a5c7c6d23ae5bc14927de031ddb1c18b0e"
+    },
+    "closureLog": {
+      "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\vite-resolved-project-closure.jsonl",
+      "bytes": 8465,
+      "fsMode": 438,
+      "sha256": "9cc4c22dc0f853bf0357ca92963381e2279fc2f6157f145b132b7ecbaba274e5"
+    },
+    "archiveBundle": {
+      "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\source-archive.json",
+      "bytes": 1363402,
+      "fsMode": 438,
+      "sha256": "086b0ece9d3c498d846c46e0c2d589b125e7cbcb4bcb0691754192c3db883a05"
+    },
+    "archiveManifest": {
+      "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\source-archive-manifest.json",
+      "bytes": 10590,
+      "fsMode": 438,
+      "sha256": "faebb5c27b999b08d97b4b68d33c18bbc6cc56b858507a50083e286cea484164"
+    },
+    "raw": {
+      "W4S4_ORACLE_N_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_N_OUT.json",
+        "bytes": 9446,
+        "fsMode": 438,
+        "sha256": "9ccc6195e5107264af8c0288e66f136f7c7af83d8f99bee18eaa6f45dcc503cc"
+      },
+      "W4S4_ORACLE_N_MORE_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_N_MORE_OUT.json",
+        "bytes": 26055,
+        "fsMode": 438,
+        "sha256": "6fb26d24926951244d17590d73024c639f8df05299dd24fe5fd5135896de05ec"
+      },
+      "W4S4_ORACLE_E_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_E_OUT.json",
+        "bytes": 7670,
+        "fsMode": 438,
+        "sha256": "ef5e65866b66c6aca7f2de953f2034da33dd518f338d71e251a1d3efc33c7746"
+      },
+      "W4S4_ORACLE_CODE_TIMING_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_CODE_TIMING_OUT.json",
+        "bytes": 3805,
+        "fsMode": 438,
+        "sha256": "834c3bc28bce5963fd73cf54d3f59459e240e0343a63663177c4867e9cb5c349"
+      },
+      "W4S4_ORACLE_E_MORE_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_E_MORE_OUT.json",
+        "bytes": 14670,
+        "fsMode": 438,
+        "sha256": "92ff50931c4409e4b48b4060e8bdaf138e827e16ffc591403268c20b981c9eb1"
+      },
+      "W4S4_ORACLE_C_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_C_OUT.json",
+        "bytes": 6971,
+        "fsMode": 438,
+        "sha256": "4d7ec1ba1bd0320b63c991c9fcd3660a152d265f14234867bdfd0bfb8fe590dc"
+      },
+      "W4S4_ORACLE_FD_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_FD_OUT.json",
+        "bytes": 54916,
+        "fsMode": 438,
+        "sha256": "7326c10e96bf1a1443e2e5a8241a5c2c0aeb6c10d2933dcfcb866f6f279aae09"
+      },
+      "W4S4_ORACLE_PRIVACY_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_PRIVACY_OUT.json",
+        "bytes": 6935,
+        "fsMode": 438,
+        "sha256": "6791d3dd9749d5e60fbd83efc85d40257ce1c9caeead04e3c1b3d491098817a0"
+      },
+      "W4S4_ORACLE_F06_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_F06_OUT.json",
+        "bytes": 3603,
+        "fsMode": 438,
+        "sha256": "5ff78b8fabf2005a4d64c4b110d87d00bddcffdcdc8bfe97d12a2aa40a7b0611"
+      },
+      "W4S4_ORACLE_W_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_W_OUT.json",
+        "bytes": 6317,
+        "fsMode": 438,
+        "sha256": "e36e6f31d6be0d710e9bcb61538a0d4825828d25ad5a67fc36d982510a4e8b53"
+      },
+      "W4S4_ORACLE_D04_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_D04_OUT.json",
+        "bytes": 5861,
+        "fsMode": 438,
+        "sha256": "2c805f05551a78f64fa706f580dbaeea31ffdb0e6a30a84f636eb84ad5e30521"
+      },
+      "W4S4_ORACLE_G_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_G_OUT.json",
+        "bytes": 23989,
+        "fsMode": 438,
+        "sha256": "c76c3b9d66742d477e42e6e0a7eda4717de1cd24bd48dbc5b08270d18afb5dff"
+      },
+      "W4S4_ORACLE_T_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_T_OUT.json",
+        "bytes": 3612,
+        "fsMode": 438,
+        "sha256": "9d5425a5fc54f80ab38e12b4ad629c990f3698b5575c078eef1529e3856635f8"
+      },
+      "W4S4_ORACLE_COMBINED_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_COMBINED_OUT.json",
+        "bytes": 30442,
+        "fsMode": 438,
+        "sha256": "4a5aaa261442140452707765f9e49156809649c05868a16fb157d18544bfef45"
+      }
+    },
+    "replay": {
+      "W4S4_ORACLE_N_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_N_OUT.json",
+        "bytes": 9446,
+        "fsMode": 438,
+        "sha256": "9ccc6195e5107264af8c0288e66f136f7c7af83d8f99bee18eaa6f45dcc503cc"
+      },
+      "W4S4_ORACLE_N_MORE_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_N_MORE_OUT.json",
+        "bytes": 26055,
+        "fsMode": 438,
+        "sha256": "6fb26d24926951244d17590d73024c639f8df05299dd24fe5fd5135896de05ec"
+      },
+      "W4S4_ORACLE_E_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_E_OUT.json",
+        "bytes": 7670,
+        "fsMode": 438,
+        "sha256": "ef5e65866b66c6aca7f2de953f2034da33dd518f338d71e251a1d3efc33c7746"
+      },
+      "W4S4_ORACLE_CODE_TIMING_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_CODE_TIMING_OUT.json",
+        "bytes": 3805,
+        "fsMode": 438,
+        "sha256": "834c3bc28bce5963fd73cf54d3f59459e240e0343a63663177c4867e9cb5c349"
+      },
+      "W4S4_ORACLE_E_MORE_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_E_MORE_OUT.json",
+        "bytes": 14670,
+        "fsMode": 438,
+        "sha256": "92ff50931c4409e4b48b4060e8bdaf138e827e16ffc591403268c20b981c9eb1"
+      },
+      "W4S4_ORACLE_C_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_C_OUT.json",
+        "bytes": 6971,
+        "fsMode": 438,
+        "sha256": "4d7ec1ba1bd0320b63c991c9fcd3660a152d265f14234867bdfd0bfb8fe590dc"
+      },
+      "W4S4_ORACLE_FD_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_FD_OUT.json",
+        "bytes": 54916,
+        "fsMode": 438,
+        "sha256": "7326c10e96bf1a1443e2e5a8241a5c2c0aeb6c10d2933dcfcb866f6f279aae09"
+      },
+      "W4S4_ORACLE_PRIVACY_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_PRIVACY_OUT.json",
+        "bytes": 6935,
+        "fsMode": 438,
+        "sha256": "6791d3dd9749d5e60fbd83efc85d40257ce1c9caeead04e3c1b3d491098817a0"
+      },
+      "W4S4_ORACLE_F06_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_F06_OUT.json",
+        "bytes": 3603,
+        "fsMode": 438,
+        "sha256": "5ff78b8fabf2005a4d64c4b110d87d00bddcffdcdc8bfe97d12a2aa40a7b0611"
+      },
+      "W4S4_ORACLE_W_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_W_OUT.json",
+        "bytes": 6317,
+        "fsMode": 438,
+        "sha256": "e36e6f31d6be0d710e9bcb61538a0d4825828d25ad5a67fc36d982510a4e8b53"
+      },
+      "W4S4_ORACLE_D04_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_D04_OUT.json",
+        "bytes": 5861,
+        "fsMode": 438,
+        "sha256": "2c805f05551a78f64fa706f580dbaeea31ffdb0e6a30a84f636eb84ad5e30521"
+      },
+      "W4S4_ORACLE_G_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_G_OUT.json",
+        "bytes": 23989,
+        "fsMode": 438,
+        "sha256": "c76c3b9d66742d477e42e6e0a7eda4717de1cd24bd48dbc5b08270d18afb5dff"
+      },
+      "W4S4_ORACLE_T_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_T_OUT.json",
+        "bytes": 3612,
+        "fsMode": 438,
+        "sha256": "9d5425a5fc54f80ab38e12b4ad629c990f3698b5575c078eef1529e3856635f8"
+      },
+      "W4S4_ORACLE_COMBINED_OUT": {
+        "path": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_COMBINED_OUT.json",
+        "bytes": 30442,
+        "fsMode": 438,
+        "sha256": "4a5aaa261442140452707765f9e49156809649c05868a16fb157d18544bfef45"
+      }
+    }
+  },
+  "archiveManifest": {
+    "status": "captured-for-replay",
+    "acceptedS3Commit": "5ba0397d26b908ef284596fffd925a14b6bca5bc",
+    "captureAncestorChain": [
+      "ac62be5963b42d12d66e0ac004875145a0fd3126",
+      "1da200943b8f999162427b9c61a387e2367e7ee3",
+      "5ba0397d26b908ef284596fffd925a14b6bca5bc"
+    ],
+    "sourceHead": "28b7749796d44c1449d43121fdf9e1eb2b18c739",
+    "sourceTree": "ea17662bd731e5fbb1692d347ea87c8cd1e05d6b",
+    "snapshotHead": "36a5477db7a7f64cab3352da1568899de9639ddc",
+    "snapshotTree": "0dd2052b2681f4c5cf1218f44b463c1c47144038",
+    "harnessConfigSha256": "d1e9cea7df8df6b7d95f164e6e035948b3f479057339f00f94994b8c665fb246",
+    "files": {
+      "vitest.setup.js": "39444b816895fe65119b6a236ea213e4143983d826990cb534df963c1b29933c",
+      "src/hooks/__tests__/useEmailScheduler.idle.test.js": "5415b3b0cfc71990148aaea181fe8a30b73017de44a7a76e14c97b82448a1a8f",
+      "src/utils/ownAddresses.js": "55a16223672be64d6ec789aaaa5d6bae8dd1f5d90acab7b2947c1360c2575578",
+      "src/utils/emailIdentity.js": "b3658e4eb6e08d3eee0c05ee14f4e369fbd227a3c6208e7be550ec7b737d3043",
+      "src/hooks/useEmailScheduler.js": "8a09f951f296cc7a48310685649cb6a1ac59ce705939087e50a0a82590087d4f",
+      "src/stores/snoozeStore.js": "497958919959e3e1935379a2afbd08ab52e5d793cefebef8244c7851df2c0378",
+      "src/utils/emailParser.js": "d6badfb7310213817cf045c6e77a613990f36ca2fec7ba409e235934705cee22",
+      "src/utils/replyPolicy.js": "1a1568f274e844cdd7b14f14ade3b6a8f04f4a8794340dca57a375a6562255f5",
+      "src/utils/dateFormat.js": "a78fa8385a28f803ba0fde4680be956aadc55cfbf0172c3b37e641c2c863de6a",
+      "src/i18n/index.js": "7b714ee7388de44cad0855f9d18c68a2f8d7eac29b0f0f76243f3fe4a3d4728e",
+      "src/i18n/locales/en.json": "6c3ccf9d793d1ccf42d69a3e371bdcfa045b4c1c08306dc9ca8abeaa20073fd5",
+      "src/utils/jmapErrors.js": "eed77a282945da8bbeb3a6577b5b95ca024ca436d8f6ab98cc849dafb3cdcc5f",
+      "src/stores/viewHideStore.js": "b0e98ed8cd49db29ea4280ce7240751c88b5b828921584c47b49f11256594266",
+      "src/stores/unreadCounts.js": "4a0b5036e5f738a8a4fa98719aa3f730974973fd60540523745eb8553684be0c",
+      "src/stores/followUpStore.js": "9df889c587a797787a946172f229fc302a51177e0835608bca1723baddc62e5e",
+      "src/utils/notificationSounds.js": "cedb1263ef501c10a698e91765d8a29c462196703a0041a893b2ea9b98466f2e",
+      "src/stores/tagStore.js": "a22bef8e90bf508c74c719f9092e3f8c8b876f350bf94dbf95b05e3896af4fae",
+      "src/stores/autoTagStore.js": "d72ba3fb6cd4e0910e02c3108785006efe103c6a9b4cb45320531c927904d867",
+      "src/services/db/accounts.js": "d8f204dc93f92e47badb56b39d3f89a35994e139d8396816b80f333193df085c",
+      "src/services/transport.js": "94dfa30835286cb8708787f19f42a802dc0c806a45ad93aaf6e89b3b4716f82d",
+      "src/services/graphConfig.js": "55633f6b732b86a010f3b3ff8ad86cb1c328d88a668ac2b9842104446cc90799",
+      "src/services/db/keychain.js": "fd4ab6125b77bc371f6a14fabf092ea3209117baac76040bc050a315e4ac3de4",
+      "src/services/keychainUtils.js": "9d416243007ec3fd0ce67edbc2182f424bbbc409fe76e9854850ecd7bf6471ea",
+      "src/services/keychainSession.js": "95adc34dfd9c9f6624ac444965f33fd38ba64aff7679cb0da556b3453be41b39",
+      "src/services/unreadCountsClient.js": "74d92050bc7a540a7f68f45f7a547ecb0cf431deeacbbf2fe6d900930e7b8820",
+      "src/services/cacheManager.js": "a88665b29d2f5d1d246f48c3b2f194e3c186ada3a3131338bbb5516b62909f19",
+      "src/services/headerIdentity.js": "fd1a1289a47ae5f7a0def02effd4bbd1437b992698f76d03e9debc8d72d7fd1e",
+      "src/stores/messageRows.js": "5a2d0ff2a7a37f5c8bea9464e941059ccc7a5c351f1c32c632fe413725f14f83",
+      "src/stores/slices/unifiedHelpers.js": "fcb80eace56c834974cc6825870d4a44004afdf1a8d2a4974a40be0cba28c41a",
+      "src/services/workflows/mailboxTree.js": "95e7a058eaa873e359e1fb4a8d0ea2902e232efd4dcff1e703163e83273d4744",
+      "src/utils/collation.js": "62e1e8ee23b1c33d84bc32f6b627bccfdc21314aab661afac3545dd1dceacb04",
+      "src/services/syncService.js": "de39039dda9dffa6b77971538e19903d622596fafbb6a5febaec72606645500a",
+      "src/services/authUtils.js": "28673eb0ae99b6ccfafa67ca348f68cfd5033de14f92db799abd5e25073c4786",
+      "src/utils/sentFolder.js": "d92e7e358c0630b8575263bdf6f3faf1730585ac2f72bc1f48b93780be3b22fe",
+      "src/stores/__tests__/focusStore.test.js": "441736f65b1a17d4be9795979734dbcba2656005d553e8c9a74dc0dbc2366ee4",
+      "src/stores/privacyStore.js": "55489e38c5de790eddb1a8e05857ea02b0ec36eca1a7d6ee2f9f568b53566675",
+      "src/stores/settingsStore.js": "e4dde4cd941688ec44698b80d6f98c32a4b3fa3613fe0965e36ae14bda19db99",
+      "src/services/daemonClient.js": "7960fd5dc6c410495ea3c0df5234f7a3065eb50262dd092625016e8515334b19",
+      "src/utils/insights/preferences.js": "6d75087918d539510e35fbc4a2240a1009061ca22ddfe977d16d3c3b6e83d0e5",
+      "src/utils/appFont.js": "72a404f5d6c62566a180dfc8aa0b455b0030785572431c92437c17ebf3005d53",
+      "src/utils/googleFonts.js": "85a0f425cf5ecd24b62424c362652af92d75957c4e97aef3b2c973aa8f426821",
+      "src/data/googleFonts.json": "f9d40bc968bd7ba499f159eaa4f210b565eaefdda503ccc73b653dac859b0603",
+      "src/services/fontService.js": "55bce773bba7a109d7daaf1d87d914657ed0cefc7a28b7bc4e2d92641e6d8627",
+      "src/utils/mailFonts.js": "c3e9ec9e7cdc384fa784f0fbb27cbfef4bf8589fed83cdc0915f0a04da4c759e",
+      "src/utils/quickActions.js": "100062ac28f1cdaf1cf03b26616571e7b8c3bd7723591baeabaef6968770558c",
+      "src/utils/quickActionPresets.js": "ad2f19c2e880ba31f6d3e08e9f4c79845459db8234a4e660823916b9f23dea68",
+      "src/utils/composeSize.js": "a336709ac24ad4386e116e5bb5b2155eeb94b63a9404c5200344672dde9233ac",
+      "src/utils/folderIconColor.js": "33d2a4b86c30a8fa9b1fb9a61cee8ddd00d244be5805dd849dc8624365b2dd08",
+      "src/services/export/social/socialLayout.js": "11b172fb862033e0e10eb9196780c60f9150ea7e34c04cfe0487e30ec6b85209",
+      "src/utils/privacy/isChildWindow.js": "ecf8d65fdd1cf4b84ba05bc8d58be64db71c65773adf85aba5c0f748a6139ee4",
+      "src/stores/focusStore.js": "d758c1675a1c2981b41c7215b0d42cd74c5371c080207b1bbf00e6ad06a1adca",
+      "src/utils/privacy/privacyDictionary.js": "7b22d1882264c5fa172b12ddea661a24bb477994e7dd5f886023dedb48c57615",
+      "src/utils/privacy/piiDetector.js": "99c4e266df54cc9eecbf1ea1543845ccf7775426decacc54d776623d22bc3b11",
+      "src/utils/privacy/wordKey.js": "7ce74ad6cc53c20712459edf30ec03de831c9409250a53881737b83c06c246ad",
+      "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js": "557cabd177be5f44c3662ed6d0ef7780d26193f10c13666cff6734a4cea3f144",
+      "src/services/workflows/adoptGraphFolderKeys.js": "94431416cf4b5964b07d7ea14a051ee83d8bca6f6f58e47c6ac5c7ac1d1771c6",
+      "src/hooks/__tests__/useEmailScheduler.s4combined.test.js": "1949da40f05fcfb9d7fd280dc4f740cbf6bba2b5896593617b816679c83b3e81",
+      "src/services/codeBubble.js": "d842a54e15b13498a81253668cc4ba6bc71861693998ac8c6de90697e56ebe9a",
+      "src/stores/codeBubbleStore.js": "5d97d65314963aaa6d8735f7e238238aeb50c4a1d442949fde3ae319604458ec",
+      "src/services/__tests__/codeBubble.test.js": "a815c4c2c134ff8f81555c09f6d65184f6ba33c11831b65449819b009d5f0ccf",
+      "src/stores/safeStorage.js": "588b1fb5199013d3cdfff5fc130f1816e416513e06cd9550743367bcf9254744",
+      "src/stores/__tests__/snoozeLocalWake.test.js": "702884a0d11bd03860952048e4a08aa9ea16db80fe1dd921f2224010196c493d",
+      "src/stores/slices/accountSlice.s4oracle.test.js": "177bf1f1618fbcf8394db4d59e124826df28c9826434f52218e096c991a126f0",
+      "src/stores/slices/accountSlice.js": "4a182ba375c4570936cf48489eb99b469fe5429b0e150b0cb985803f6082164c",
+      "src/stores/__tests__/codeBubbleStore.test.js": "8e5457214aa5d98d445f9a6b89f224cbb70cb396ee2f9cd55056b0e3f06adf51"
+    },
+    "tests": {
+      "src/hooks/__tests__/useEmailScheduler.idle.test.js": "5415b3b0cfc71990148aaea181fe8a30b73017de44a7a76e14c97b82448a1a8f",
+      "src/services/__tests__/codeBubble.test.js": "a815c4c2c134ff8f81555c09f6d65184f6ba33c11831b65449819b009d5f0ccf",
+      "src/stores/__tests__/focusStore.test.js": "441736f65b1a17d4be9795979734dbcba2656005d553e8c9a74dc0dbc2366ee4",
+      "src/stores/__tests__/snoozeLocalWake.test.js": "702884a0d11bd03860952048e4a08aa9ea16db80fe1dd921f2224010196c493d",
+      "src/stores/__tests__/codeBubbleStore.test.js": "8e5457214aa5d98d445f9a6b89f224cbb70cb396ee2f9cd55056b0e3f06adf51",
+      "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js": "557cabd177be5f44c3662ed6d0ef7780d26193f10c13666cff6734a4cea3f144",
+      "src/stores/slices/accountSlice.s4oracle.test.js": "177bf1f1618fbcf8394db4d59e124826df28c9826434f52218e096c991a126f0",
+      "src/hooks/__tests__/useEmailScheduler.s4combined.test.js": "1949da40f05fcfb9d7fd280dc4f740cbf6bba2b5896593617b816679c83b3e81"
+    },
+    "cases": [
+      {
+        "id": "N01"
+      },
+      {
+        "id": "N02"
+      },
+      {
+        "id": "N03"
+      },
+      {
+        "id": "N04"
+      },
+      {
+        "id": "N05"
+      },
+      {
+        "id": "N06"
+      },
+      {
+        "id": "N07"
+      },
+      {
+        "id": "N08"
+      },
+      {
+        "id": "N09"
+      },
+      {
+        "id": "N10"
+      },
+      {
+        "id": "N11"
+      },
+      {
+        "id": "N12"
+      },
+      {
+        "id": "N13"
+      },
+      {
+        "id": "N14"
+      },
+      {
+        "id": "N15"
+      },
+      {
+        "id": "N16"
+      },
+      {
+        "id": "N17"
+      },
+      {
+        "id": "C01"
+      },
+      {
+        "id": "C02"
+      },
+      {
+        "id": "C03"
+      },
+      {
+        "id": "C04"
+      },
+      {
+        "id": "C05"
+      },
+      {
+        "id": "C06"
+      },
+      {
+        "id": "C07"
+      },
+      {
+        "id": "C08"
+      },
+      {
+        "id": "C09"
+      },
+      {
+        "id": "C10"
+      },
+      {
+        "id": "C11"
+      },
+      {
+        "id": "C12"
+      },
+      {
+        "id": "C13"
+      },
+      {
+        "id": "C14"
+      },
+      {
+        "id": "C15"
+      },
+      {
+        "id": "C16"
+      },
+      {
+        "id": "F01"
+      },
+      {
+        "id": "F02"
+      },
+      {
+        "id": "F03"
+      },
+      {
+        "id": "F04"
+      },
+      {
+        "id": "F05"
+      },
+      {
+        "id": "F06"
+      },
+      {
+        "id": "F07"
+      },
+      {
+        "id": "F08"
+      },
+      {
+        "id": "F09"
+      },
+      {
+        "id": "D01"
+      },
+      {
+        "id": "D02"
+      },
+      {
+        "id": "D03"
+      },
+      {
+        "id": "D04"
+      },
+      {
+        "id": "E01"
+      },
+      {
+        "id": "E02"
+      },
+      {
+        "id": "E03"
+      },
+      {
+        "id": "E04"
+      },
+      {
+        "id": "E05"
+      },
+      {
+        "id": "E06"
+      },
+      {
+        "id": "E07"
+      },
+      {
+        "id": "E08"
+      },
+      {
+        "id": "E09"
+      },
+      {
+        "id": "W01"
+      },
+      {
+        "id": "W02"
+      },
+      {
+        "id": "W03"
+      },
+      {
+        "id": "W04"
+      },
+      {
+        "id": "G01"
+      },
+      {
+        "id": "G02"
+      },
+      {
+        "id": "G03"
+      },
+      {
+        "id": "G04"
+      },
+      {
+        "id": "T01"
+      },
+      {
+        "id": "T02"
+      },
+      {
+        "id": "T03"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "name": "direct-capture",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines\\node_modules\\vitest\\vitest.mjs",
+        "run",
+        "src/hooks/__tests__/useEmailScheduler.idle.test.js",
+        "src/services/__tests__/codeBubble.test.js",
+        "src/stores/__tests__/focusStore.test.js",
+        "src/stores/__tests__/snoozeLocalWake.test.js",
+        "src/stores/__tests__/codeBubbleStore.test.js",
+        "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js",
+        "src/stores/slices/accountSlice.s4oracle.test.js",
+        "src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+        "--config",
+        "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines\\carrier\\arrival-capture.config.mjs",
+        "--testNamePattern",
+        "captures N01-N06 old direct arrival banner decisions|captures N07-N14 old sender, sound, own and Sent decisions|captures E01-E05 old change-feed grouping and repaint effects|captures C10-C11 old lone-code deadline ordering through the hook|captures E06-E09 old view, recovery and held-code feed effects|captures C01-C09 old direct code-offer and body-read effects|captures F01-F05 and D01-D03 old Focus and policy effects|captures F07-F09 old privacy timing and OS-target effects|captures F06 old privacy enabled, disabled, and unhydrated mail effects|captures W01-W04 old local wake event effects|captures D04 old repeated-offer TTL and three-bubble cap|captures G01-G04 old Graph adoption helper effects|T01 rapid current-view clicks while idle|T02 in-flight clicks lose queued refresh at cooldown timer|T03 spinner timing and latest view at trailing execution|captures N15-N17 and C12-C16 through real old scheduler, Focus and code stores",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\direct-capture.json"
+      ],
+      "env": {
+        "MV_ARRIVAL_ROOT": "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines",
+        "MV_ARRIVAL_STAGE_MANIFEST": "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines\\carrier\\arrival-oracle-stage.json",
+        "MV_ARRIVAL_TEST_FILES": "src/hooks/__tests__/useEmailScheduler.idle.test.js;src/services/__tests__/codeBubble.test.js;src/stores/__tests__/focusStore.test.js;src/stores/__tests__/snoozeLocalWake.test.js;src/stores/__tests__/codeBubbleStore.test.js;src/services/workflows/__tests__/adoptGraphFolderKeys.test.js;src/stores/slices/accountSlice.s4oracle.test.js;src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+        "MV_ARRIVAL_CAPTURE_DIR": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\source-closure",
+        "MV_ARRIVAL_CAPTURE_LOG": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\vite-resolved-project-closure.jsonl",
+        "TZ": "UTC",
+        "W4S4_ORACLE_N_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_N_OUT.json",
+        "W4S4_ORACLE_N_MORE_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_N_MORE_OUT.json",
+        "W4S4_ORACLE_E_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_E_OUT.json",
+        "W4S4_ORACLE_CODE_TIMING_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_CODE_TIMING_OUT.json",
+        "W4S4_ORACLE_E_MORE_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_E_MORE_OUT.json",
+        "W4S4_ORACLE_C_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_C_OUT.json",
+        "W4S4_ORACLE_FD_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_FD_OUT.json",
+        "W4S4_ORACLE_PRIVACY_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_PRIVACY_OUT.json",
+        "W4S4_ORACLE_F06_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_F06_OUT.json",
+        "W4S4_ORACLE_W_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_W_OUT.json",
+        "W4S4_ORACLE_D04_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_D04_OUT.json",
+        "W4S4_ORACLE_G_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_G_OUT.json",
+        "W4S4_ORACLE_T_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_T_OUT.json",
+        "W4S4_ORACLE_COMBINED_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\raw\\W4S4_ORACLE_COMBINED_OUT.json"
+      },
+      "exit": 0,
+      "report": {
+        "success": true,
+        "total": 172,
+        "passed": 16,
+        "failed": 0,
+        "pending": 156,
+        "failedSuites": 0,
+        "files": [
+          {
+            "path": "src/hooks/__tests__/useEmailScheduler.idle.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "watches every IMAP account that has credentials, and nothing else",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed watches every IMAP account that has credentials, and nothing else",
+                "status": "skipped"
+              },
+              {
+                "title": "long-polls without a cursor, then from the generation it was handed",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed long-polls without a cursor, then from the generation it was handed",
+                "status": "skipped"
+              },
+              {
+                "title": "adopts a generation lower than the cursor it sent",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed adopts a generation lower than the cursor it sent",
+                "status": "skipped"
+              },
+              {
+                "title": "hands the watchers back to a daemon whose generation went backwards",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed hands the watchers back to a daemon whose generation went backwards",
+                "status": "skipped"
+              },
+              {
+                "title": "hands the watchers back when the daemon channel reconnects",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed hands the watchers back when the daemon channel reconnects",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints the open folder and tells the user about the new mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints the open folder and tells the user about the new mail",
+                "status": "skipped"
+              },
+              {
+                "title": "hands the arrival to the code bubble",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail hands the arrival to the code bubble",
+                "status": "skipped"
+              },
+              {
+                "title": "puts the code in the banner of a lone arrival",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail puts the code in the banner of a lone arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the code out of a banner that shows no preview",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail keeps the code out of a banner that shows no preview",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the code out of a banner for several arrivals",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail keeps the code out of a banner for several arrivals",
+                "status": "skipped"
+              },
+              {
+                "title": "still notifies when the code read fails",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail still notifies when the code read fails",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing for a change without new mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail offers nothing for a change without new mail",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for your own reply that lands in the inbox thread",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent stays silent for your own reply that lands in the inbox thread",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for one of your aliases",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent stays silent for one of your aliases",
+                "status": "skipped"
+              },
+              {
+                "title": "still notifies for someone else",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent still notifies for someone else",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for Sent",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for Sent",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for INBOX.Sent",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for INBOX.Sent",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for [Gmail]/Sent Mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for [Gmail]/Sent Mail",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for Gesendete Elemente",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for Gesendete Elemente",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for several at once",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for several at once",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for the account's chosen Sent folder",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for the account's chosen Sent folder",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for a Sent folder only SPECIAL-USE names",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for a Sent folder only SPECIAL-USE names",
+                "status": "skipped"
+              },
+              {
+                "title": "still notifies for the inbox and other folders",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder still notifies for the inbox and other folders",
+                "status": "skipped"
+              },
+              {
+                "title": "notifies for an account that is not on screen without repainting the list",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed notifies for an account that is not on screen without repainting the list",
+                "status": "skipped"
+              },
+              {
+                "title": "names the messages a scheduled refresh announces in the notification context",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed names the messages a scheduled refresh announces in the notification context",
+                "status": "skipped"
+              },
+              {
+                "title": "offers the code in a mail a scheduled refresh finds",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed offers the code in a mail a scheduled refresh finds",
+                "status": "skipped"
+              },
+              {
+                "title": "announces several changes to one folder as one banner",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed announces several changes to one folder as one banner",
+                "status": "skipped"
+              },
+              {
+                "title": "attaches the selected sound to incoming mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed attaches the selected sound to incoming mail",
+                "status": "skipped"
+              },
+              {
+                "title": "opens only the folder when the banner shows no preview",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed opens only the folder when the banner shows no preview",
+                "status": "skipped"
+              },
+              {
+                "title": "says nothing when a change carries no new mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed says nothing when a change carries no new mail",
+                "status": "skipped"
+              },
+              {
+                "title": "has the open folder reread its cached flags",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes has the open folder reread its cached flags",
+                "status": "skipped"
+              },
+              {
+                "title": "still rereads when the same reply also carries an arrival for that folder",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes still rereads when the same reply also carries an arrival for that folder",
+                "status": "skipped"
+              },
+              {
+                "title": "counts the saved views again, once for the whole reply",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes counts the saved views again, once for the whole reply",
+                "status": "skipped"
+              },
+              {
+                "title": "asks nothing of the views while the feed is quiet",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes asks nothing of the views while the feed is quiet",
+                "status": "skipped"
+              },
+              {
+                "title": "has the notes board reread the flags of the folder that changed, on screen or not",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes has the notes board reread the flags of the folder that changed, on screen or not",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the notes board alone for an arrival",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes leaves the notes board alone for an arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "has the notes board list again once per reply that changed anything",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes has the notes board list again once per reply that changed anything",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves an arrival-only reload alone",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes leaves an arrival-only reload alone",
+                "status": "skipped"
+              },
+              {
+                "title": "drops the account's restore windows before repainting All Inboxes",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes drops the account's restore windows before repainting All Inboxes",
+                "status": "skipped"
+              },
+              {
+                "title": "drops them for a folder that is not on screen too",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes drops them for a folder that is not on screen too",
+                "status": "skipped"
+              },
+              {
+                "title": "drops the restore window before repainting All Inboxes",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a message deleted at the mailbox drops the restore window before repainting All Inboxes",
+                "status": "skipped"
+              },
+              {
+                "title": "drops it when the same reply also carries an arrival",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a message deleted at the mailbox drops it when the same reply also carries an arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "drops it for a folder that is not on screen too",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a message deleted at the mailbox drops it for a folder that is not on screen too",
+                "status": "skipped"
+              },
+              {
+                "title": "pauses 30s when the daemon is offline, then polls again",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed pauses 30s when the daemon is offline, then polls again",
+                "status": "skipped"
+              },
+              {
+                "title": "stops for good when there is no Tauri to reach a daemon through",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed stops for good when there is no Tauri to reach a daemon through",
+                "status": "skipped"
+              },
+              {
+                "title": "stops on unmount, even when the parked poll answers afterwards",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed stops on unmount, even when the parked poll answers afterwards",
+                "status": "skipped"
+              },
+              {
+                "title": "releases a reconnect listener whose registration succeeds after unmount",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed releases a reconnect listener whose registration succeeds after unmount",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the scheduler alive when reconnect listener registration throws synchronously",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed keeps the scheduler alive when reconnect listener registration throws synchronously",
+                "status": "skipped"
+              },
+              {
+                "title": "contains a rejected reconnect registration and keeps polling",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed contains a rejected reconnect registration and keeps polling",
+                "status": "skipped"
+              },
+              {
+                "title": "re-registers the watchers on a manual refresh",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed re-registers the watchers on a manual refresh",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints a subtree view for a change under the scope root",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints a subtree view for a change under the scope root",
+                "status": "skipped"
+              },
+              {
+                "title": "does not repaint a subtree view for a folder outside the scope",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed does not repaint a subtree view for a folder outside the scope",
+                "status": "skipped"
+              },
+              {
+                "title": "stops between changes in the same reply on unmount",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed stops between changes in the same reply on unmount",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints All Inboxes through loadUnifiedInbox, never loadEmails",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints All Inboxes through loadUnifiedInbox, never loadEmails",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints All Inboxes for an arrival on an account that is not the active one",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints All Inboxes for an arrival on an account that is not the active one",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints the unified folder that is actually open",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints the unified folder that is actually open",
+                "status": "skipped"
+              },
+              {
+                "title": "reloads once for a reply that names two on-screen folders",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed reloads once for a reply that names two on-screen folders",
+                "status": "skipped"
+              },
+              {
+                "title": "reloads once per distinct on-screen folder even when a reply names it twice",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed reloads once per distinct on-screen folder even when a reply names it twice",
+                "status": "skipped"
+              },
+              {
+                "title": "follows a message marked read, without a refresh",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge follows a message marked read, without a refresh",
+                "status": "skipped"
+              },
+              {
+                "title": "drops an account the user hides",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge drops an account the user hides",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves out a count whose account is gone",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge leaves out a count whose account is gone",
+                "status": "skipped"
+              },
+              {
+                "title": "waits for the accounts: counts with none loaded would paint a 0",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge waits for the accounts: counts with none loaded would paint a 0",
+                "status": "skipped"
+              },
+              {
+                "title": "drops a held old rows reply after hidden, label and order settings change",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge drops a held old rows reply after hidden, label and order settings change",
+                "status": "skipped"
+              },
+              {
+                "title": "makes no OS call from a native rows reply settled after unmount",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge makes no OS call from a native rows reply settled after unmount",
+                "status": "skipped"
+              },
+              {
+                "title": "pushes the sidebar rows, and again only when one changes",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed tray menu pushes the sidebar rows, and again only when one changes",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts the arrival account from its INBOX cache",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts the arrival account from its INBOX cache",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts on a flags-only change too (read on another device)",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts on a flags-only change too (read on another device)",
+                "status": "skipped"
+              },
+              {
+                "title": "only adds the arrivals when the cache is partial",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge only adds the arrivals when the cache is partial",
+                "status": "skipped"
+              },
+              {
+                "title": "holds the partial-cache arrival fallback until native recount settles",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge holds the partial-cache arrival fallback until native recount settles",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves out a message a local snooze is holding out of the inbox",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves out a message a local snooze is holding out of the inbox",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts an inbox a local snooze takes a message out of, or puts back into",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts an inbox a local snooze takes a message out of, or puts back into",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the inbox on screen to its list",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves the inbox on screen to its list",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts an inbox a saved view takes a message out of, or gives back",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts an inbox a saved view takes a message out of, or gives back",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a held inbox on screen to its list",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves a held inbox on screen to its list",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves other folders alone",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves other folders alone",
+                "status": "skipped"
+              },
+              {
+                "title": "captures N01-N06 old direct arrival banner decisions",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures N01-N06 old direct arrival banner decisions",
+                "status": "passed"
+              },
+              {
+                "title": "captures N07-N14 old sender, sound, own and Sent decisions",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures N07-N14 old sender, sound, own and Sent decisions",
+                "status": "passed"
+              },
+              {
+                "title": "captures E01-E05 old change-feed grouping and repaint effects",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures E01-E05 old change-feed grouping and repaint effects",
+                "status": "passed"
+              },
+              {
+                "title": "captures C10-C11 old lone-code deadline ordering through the hook",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures C10-C11 old lone-code deadline ordering through the hook",
+                "status": "passed"
+              },
+              {
+                "title": "captures E06-E09 old view, recovery and held-code feed effects",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures E06-E09 old view, recovery and held-code feed effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "captures N15-N17 and C12-C16 through real old scheduler, Focus and code stores",
+                "fullName": "captures N15-N17 and C12-C16 through real old scheduler, Focus and code stores",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/slices/accountSlice.s4oracle.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "T01 rapid current-view clicks while idle",
+                "fullName": "conditional S4 old manual refresh input oracle T01 rapid current-view clicks while idle",
+                "status": "passed"
+              },
+              {
+                "title": "T02 in-flight clicks lose queued refresh at cooldown timer",
+                "fullName": "conditional S4 old manual refresh input oracle T02 in-flight clicks lose queued refresh at cooldown timer",
+                "status": "passed"
+              },
+              {
+                "title": "T03 spinner timing and latest view at trailing execution",
+                "fullName": "conditional S4 old manual refresh input oracle T03 spinner timing and latest view at trailing execution",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/__tests__/codeBubbleStore.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "offers a bubble keyed on the message, stamped with when it expires",
+                "fullName": "codeBubbleStore offers a bubble keyed on the message, stamped with when it expires",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps one bubble per message",
+                "fullName": "codeBubbleStore keeps one bubble per message",
+                "status": "skipped"
+              },
+              {
+                "title": "shows the newest first and keeps at most three",
+                "fullName": "codeBubbleStore shows the newest first and keeps at most three",
+                "status": "skipped"
+              },
+              {
+                "title": "dismisses one bubble and leaves the others",
+                "fullName": "codeBubbleStore dismisses one bubble and leaves the others",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves on its own once the code has gone stale",
+                "fullName": "codeBubbleStore leaves on its own once the code has gone stale",
+                "status": "skipped"
+              },
+              {
+                "title": "captures D04 old repeated-offer TTL and three-bubble cap",
+                "fullName": "codeBubbleStore captures D04 old repeated-offer TTL and three-bubble cap",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/__tests__/focusStore.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "sets the end stamp and the remembered preset",
+                "fullName": "start sets the end stamp and the remembered preset",
+                "status": "skipped"
+              },
+              {
+                "title": "takes any number of minutes, not just a preset",
+                "fullName": "start takes any number of minutes, not just a preset",
+                "status": "skipped"
+              },
+              {
+                "title": "rounds seconds up so the last second reads 00:01, never 00:00",
+                "fullName": "formatRemaining rounds seconds up so the last second reads 00:01, never 00:00",
+                "status": "skipped"
+              },
+              {
+                "title": "is zero with no session and never negative",
+                "fullName": "remainingMs is zero with no session and never negative",
+                "status": "skipped"
+              },
+              {
+                "title": "sends straight through with no session running",
+                "fullName": "notify sends straight through with no session running",
+                "status": "skipped"
+              },
+              {
+                "title": "holds instead of sending while a session runs",
+                "fullName": "notify holds instead of sending while a session runs",
+                "status": "skipped"
+              },
+              {
+                "title": "resolves even when the native call rejects",
+                "fullName": "notify resolves even when the native call rejects",
+                "status": "skipped"
+              },
+              {
+                "title": "advances now, then finishes and flushes what it held",
+                "fullName": "the ticker advances now, then finishes and flushes what it held",
+                "status": "skipped"
+              },
+              {
+                "title": "sends the end notification itself rather than holding it",
+                "fullName": "the ticker sends the end notification itself rather than holding it",
+                "status": "skipped"
+              },
+              {
+                "title": "summarises rather than firing a burst when more than three were held",
+                "fullName": "the ticker summarises rather than firing a burst when more than three were held",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the email it opens",
+                "fullName": "a held new-mail banner keeps the email it opens",
+                "status": "skipped"
+              },
+              {
+                "title": "is not rewritten by the ticker",
+                "fullName": "the persisted file is not rewritten by the ticker",
+                "status": "skipped"
+              },
+              {
+                "title": "clears the session and flushes held work without congratulating anyone",
+                "fullName": "abandon clears the session and flushes held work without congratulating anyone",
+                "status": "skipped"
+              },
+              {
+                "title": "resumes a session that outlived the app",
+                "fullName": "rehydration resumes a session that outlived the app",
+                "status": "skipped"
+              },
+              {
+                "title": "clears a session that expired while the app was shut, silently",
+                "fullName": "rehydration clears a session that expired while the app was shut, silently",
+                "status": "skipped"
+              },
+              {
+                "title": "delivers as before when no policy context is given",
+                "fullName": "notify() with a mail-arrival context delivers as before when no policy context is given",
+                "status": "skipped"
+              },
+              {
+                "title": "suppresses a notification the policy rejects, and never calls sendNotification for it",
+                "fullName": "notify() with a mail-arrival context suppresses a notification the policy rejects, and never calls sendNotification for it",
+                "status": "skipped"
+              },
+              {
+                "title": "records a delivered decision too, and still calls sendNotification",
+                "fullName": "notify() with a mail-arrival context records a delivered decision too, and still calls sendNotification",
+                "status": "skipped"
+              },
+              {
+                "title": "a running Focus session still holds a policy-governed notification for later",
+                "fullName": "notify() with a mail-arrival context a running Focus session still holds a policy-governed notification for later",
+                "status": "skipped"
+              },
+              {
+                "title": "a banner held by a session that ended while the daemon answered is shown now",
+                "fullName": "notify() with a mail-arrival context a banner held by a session that ended while the daemon answered is shown now",
+                "status": "skipped"
+              },
+              {
+                "title": "a daemon that cannot answer lets the banner out, logged as such",
+                "fullName": "notify() with a mail-arrival context a daemon that cannot answer lets the banner out, logged as such",
+                "status": "skipped"
+              },
+              {
+                "title": "only mail banners ask the daemon",
+                "fullName": "notify() with a mail-arrival context only mail banners ask the daemon",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps only the last 200 decisions",
+                "fullName": "notify() with a mail-arrival context keeps only the last 200 decisions",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the last scene when a session starts without one",
+                "fullName": "scene keeps the last scene when a session starts without one",
+                "status": "skipped"
+              },
+              {
+                "title": "remembers the scene a session starts on, the plain lock included",
+                "fullName": "scene remembers the scene a session starts on, the plain lock included",
+                "status": "skipped"
+              },
+              {
+                "title": "ignores a scene it does not know",
+                "fullName": "scene ignores a scene it does not know",
+                "status": "skipped"
+              },
+              {
+                "title": "writes the scene to the persisted file and reads it back after a relaunch",
+                "fullName": "scene writes the scene to the persisted file and reads it back after a relaunch",
+                "status": "skipped"
+              },
+              {
+                "title": "reads a scene saved by a newer build as the default rather than a blank lock",
+                "fullName": "scene reads a scene saved by a newer build as the default rather than a blank lock",
+                "status": "skipped"
+              },
+              {
+                "title": "has a loader for every scene it offers, and offers every scene there is",
+                "fullName": "scene has a loader for every scene it offers, and offers every scene there is",
+                "status": "skipped"
+              },
+              {
+                "title": "captures F01-F05 and D01-D03 old Focus and policy effects",
+                "fullName": "captures F01-F05 and D01-D03 old Focus and policy effects",
+                "status": "passed"
+              },
+              {
+                "title": "captures F07-F09 old privacy timing and OS-target effects",
+                "fullName": "captures F07-F09 old privacy timing and OS-target effects",
+                "status": "passed"
+              },
+              {
+                "title": "captures F06 old privacy enabled, disabled, and unhydrated mail effects",
+                "fullName": "captures F06 old privacy enabled, disabled, and unhydrated mail effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/__tests__/snoozeLocalWake.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "announces the message that came back, by its own header",
+                "fullName": "the wake of a local snooze announces the message that came back, by its own header",
+                "status": "skipped"
+              },
+              {
+                "title": "names the account and the message, and asks to be shown though the arrival was announced",
+                "fullName": "the wake of a local snooze names the account and the message, and asks to be shown though the arrival was announced",
+                "status": "skipped"
+              },
+              {
+                "title": "still announces a message the cache no longer holds, naming none",
+                "fullName": "the wake of a local snooze still announces a message the cache no longer holds, naming none",
+                "status": "skipped"
+              },
+              {
+                "title": "says nothing for an undo, which is no wake",
+                "fullName": "the wake of a local snooze says nothing for an undo, which is no wake",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a server snooze to the sync that reports its arrival",
+                "fullName": "the wake of a local snooze leaves a server snooze to the sync that reports its arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "captures W01-W04 old local wake event effects",
+                "fullName": "the wake of a local snooze captures W01-W04 old local wake event effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/services/__tests__/codeBubble.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "asks the daemon about the subject and snippet, then about the body",
+                "fullName": "offerCodeFromArrival asks the daemon about the subject and snippet, then about the body",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing when the daemon cannot be asked",
+                "fullName": "offerCodeFromArrival offers nothing when the daemon cannot be asked",
+                "status": "skipped"
+              },
+              {
+                "title": "offers the code from the subject without reading the body",
+                "fullName": "offerCodeFromArrival offers the code from the subject without reading the body",
+                "status": "skipped"
+              },
+              {
+                "title": "returns the code it offered, and null when it offered none",
+                "fullName": "offerCodeFromArrival returns the code it offered, and null when it offered none",
+                "status": "skipped"
+              },
+              {
+                "title": "reads the body when the subject only announces a code",
+                "fullName": "offerCodeFromArrival reads the body when the subject only announces a code",
+                "status": "skipped"
+              },
+              {
+                "title": "reads an HTML-only body",
+                "fullName": "offerCodeFromArrival reads an HTML-only body",
+                "status": "skipped"
+              },
+              {
+                "title": "names the sender by address when there is no name",
+                "fullName": "offerCodeFromArrival names the sender by address when there is no name",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves ordinary mail alone, body unread",
+                "fullName": "offerCodeFromArrival leaves ordinary mail alone, body unread",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing for a folder other than the inbox",
+                "fullName": "offerCodeFromArrival offers nothing for a folder other than the inbox",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing without a header",
+                "fullName": "offerCodeFromArrival offers nothing without a header",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing when the body holds no code",
+                "fullName": "offerCodeFromArrival offers nothing when the body holds no code",
+                "status": "skipped"
+              },
+              {
+                "title": "reads the body through the default fetch when none is handed in",
+                "fullName": "offerCodeFromArrival reads the body through the default fetch when none is handed in",
+                "status": "skipped"
+              },
+              {
+                "title": "swallows a failed body fetch",
+                "fullName": "offerCodeFromArrival swallows a failed body fetch",
+                "status": "skipped"
+              },
+              {
+                "title": "reads an IMAP message through the light fetch, in the background",
+                "fullName": "fetchArrivalBody reads an IMAP message through the light fetch, in the background",
+                "status": "skipped"
+              },
+              {
+                "title": "reads an Outlook message signed in with Microsoft through Graph, naming the account",
+                "fullName": "fetchArrivalBody reads an Outlook message signed in with Microsoft through Graph, naming the account",
+                "status": "skipped"
+              },
+              {
+                "title": "returns nothing for a Graph message it holds no id for",
+                "fullName": "fetchArrivalBody returns nothing for a Graph message it holds no id for",
+                "status": "skipped"
+              },
+              {
+                "title": "returns nothing for an account that is gone",
+                "fullName": "fetchArrivalBody returns nothing for an account that is gone",
+                "status": "skipped"
+              },
+              {
+                "title": "captures C01-C09 old direct code-offer and body-read effects",
+                "fullName": "captures C01-C09 old direct code-offer and body-read effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "is the frozen table of what v2.11.0 through v2.13.1 wrote: 38 distinct words onto five keys",
+                "fullName": "LEGACY_LOCALIZED_KEYS is the frozen table of what v2.11.0 through v2.13.1 wrote: 38 distinct words onto five keys",
+                "status": "skipped"
+              },
+              {
+                "title": "ignores accounts that are not Graph",
+                "fullName": "adoptGraphFolderKeys ignores accounts that are not Graph",
+                "status": "skipped"
+              },
+              {
+                "title": "sends every legacy pair for a Graph account and remembers the adoption",
+                "fullName": "adoptGraphFolderKeys sends every legacy pair for a Graph account and remembers the adoption",
+                "status": "skipped"
+              },
+              {
+                "title": "runs once: a flagged account makes no IPC",
+                "fullName": "adoptGraphFolderKeys runs once: a flagged account makes no IPC",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the flag unset when the command fails, so the next launch retries, and does not throw",
+                "fullName": "adoptGraphFolderKeys leaves the flag unset when the command fails, so the next launch retries, and does not throw",
+                "status": "skipped"
+              },
+              {
+                "title": "rewrites a remembered last mailbox that was a localized key",
+                "fullName": "adoptGraphFolderKeys rewrites a remembered last mailbox that was a localized key",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a remembered last mailbox alone when it is not a legacy word",
+                "fullName": "adoptGraphFolderKeys leaves a remembered last mailbox alone when it is not a legacy word",
+                "status": "skipped"
+              },
+              {
+                "title": "handles several accounts, Graph and not, in one call",
+                "fullName": "adoptGraphFolderKeys handles several accounts, Graph and not, in one call",
+                "status": "skipped"
+              },
+              {
+                "title": "waits for the persisted settings before reading the flag",
+                "fullName": "adoptGraphFolderKeys waits for the persisted settings before reading the flag",
+                "status": "skipped"
+              },
+              {
+                "title": "gives up on a hydration that never finishes and proceeds",
+                "fullName": "adoptGraphFolderKeys gives up on a hydration that never finishes and proceeds",
+                "status": "skipped"
+              },
+              {
+                "title": "does not wait when the store has already hydrated",
+                "fullName": "adoptGraphFolderKeys does not wait when the store has already hydrated",
+                "status": "skipped"
+              },
+              {
+                "title": "does not wait on the settings store when no account is Graph",
+                "fullName": "adoptGraphFolderKeys does not wait on the settings store when no account is Graph",
+                "status": "skipped"
+              },
+              {
+                "title": "warns when an adoption was blocked, because a legacy directory is still on disk",
+                "fullName": "adoptGraphFolderKeys warns when an adoption was blocked, because a legacy directory is still on disk",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the flag unset and logs when the report carries a failure",
+                "fullName": "adoptGraphFolderKeys leaves the flag unset and logs when the report carries a failure",
+                "status": "skipped"
+              },
+              {
+                "title": "adopts every well-known folder the server named in its own language",
+                "fullName": "adoptGraphFolderKeysFromListing adopts every well-known folder the server named in its own language",
+                "status": "skipped"
+              },
+              {
+                "title": "skips a custom folder, which was never keyed by anything else",
+                "fullName": "adoptGraphFolderKeysFromListing skips a custom folder, which was never keyed by anything else",
+                "status": "skipped"
+              },
+              {
+                "title": "sends only the English names that differ from their key by more than case, and still flags",
+                "fullName": "adoptGraphFolderKeysFromListing sends only the English names that differ from their key by more than case, and still flags",
+                "status": "skipped"
+              },
+              {
+                "title": "ignores an account that is not Graph",
+                "fullName": "adoptGraphFolderKeysFromListing ignores an account that is not Graph",
+                "status": "skipped"
+              },
+              {
+                "title": "runs once: a flagged account makes no IPC on the next listing",
+                "fullName": "adoptGraphFolderKeysFromListing runs once: a flagged account makes no IPC on the next listing",
+                "status": "skipped"
+              },
+              {
+                "title": "flags an all-English listing with nothing to move without any IPC",
+                "fullName": "adoptGraphFolderKeysFromListing flags an all-English listing with nothing to move without any IPC",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the flag unset when the report carries a failure, so the next listing retries",
+                "fullName": "adoptGraphFolderKeysFromListing leaves the flag unset when the report carries a failure, so the next listing retries",
+                "status": "skipped"
+              },
+              {
+                "title": "does not throw when the command rejects, and leaves the flag unset",
+                "fullName": "adoptGraphFolderKeysFromListing does not throw when the command rejects, and leaves the flag unset",
+                "status": "skipped"
+              },
+              {
+                "title": "rewrites a remembered last mailbox that was the server word",
+                "fullName": "adoptGraphFolderKeysFromListing rewrites a remembered last mailbox that was the server word",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a remembered last mailbox alone when the listing does not move it",
+                "fullName": "adoptGraphFolderKeysFromListing leaves a remembered last mailbox alone when the listing does not move it",
+                "status": "skipped"
+              },
+              {
+                "title": "waits for the persisted settings before reading its flag",
+                "fullName": "adoptGraphFolderKeysFromListing waits for the persisted settings before reading its flag",
+                "status": "skipped"
+              },
+              {
+                "title": "captures G01-G04 old Graph adoption helper effects",
+                "fullName": "captures G01-G04 old Graph adoption helper effects",
+                "status": "passed"
+              }
+            ]
+          }
+        ]
+      },
+      "qualified": true
+    },
+    {
+      "name": "archived-replay",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines\\node_modules\\vitest\\vitest.mjs",
+        "run",
+        "src/hooks/__tests__/useEmailScheduler.idle.test.js",
+        "src/services/__tests__/codeBubble.test.js",
+        "src/stores/__tests__/focusStore.test.js",
+        "src/stores/__tests__/snoozeLocalWake.test.js",
+        "src/stores/__tests__/codeBubbleStore.test.js",
+        "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js",
+        "src/stores/slices/accountSlice.s4oracle.test.js",
+        "src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+        "--config",
+        "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines\\carrier\\arrival-archived-overlay.config.mjs",
+        "--testNamePattern",
+        "captures N01-N06 old direct arrival banner decisions|captures N07-N14 old sender, sound, own and Sent decisions|captures E01-E05 old change-feed grouping and repaint effects|captures C10-C11 old lone-code deadline ordering through the hook|captures E06-E09 old view, recovery and held-code feed effects|captures C01-C09 old direct code-offer and body-read effects|captures F01-F05 and D01-D03 old Focus and policy effects|captures F07-F09 old privacy timing and OS-target effects|captures F06 old privacy enabled, disabled, and unhydrated mail effects|captures W01-W04 old local wake event effects|captures D04 old repeated-offer TTL and three-bubble cap|captures G01-G04 old Graph adoption helper effects|T01 rapid current-view clicks while idle|T02 in-flight clicks lose queued refresh at cooldown timer|T03 spinner timing and latest view at trailing execution|captures N15-N17 and C12-C16 through real old scheduler, Focus and code stores",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\archived-replay.json"
+      ],
+      "env": {
+        "MV_ARRIVAL_ROOT": "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines",
+        "MV_ARRIVAL_ARCHIVE_MANIFEST": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\source-archive-manifest.json",
+        "MV_ARRIVAL_ARCHIVE_DIR": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\source-base64",
+        "MV_ARRIVAL_TEST_FILES": "src/hooks/__tests__/useEmailScheduler.idle.test.js;src/services/__tests__/codeBubble.test.js;src/stores/__tests__/focusStore.test.js;src/stores/__tests__/snoozeLocalWake.test.js;src/stores/__tests__/codeBubbleStore.test.js;src/services/workflows/__tests__/adoptGraphFolderKeys.test.js;src/stores/slices/accountSlice.s4oracle.test.js;src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+        "TZ": "UTC",
+        "W4S4_ORACLE_N_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_N_OUT.json",
+        "W4S4_ORACLE_N_MORE_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_N_MORE_OUT.json",
+        "W4S4_ORACLE_E_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_E_OUT.json",
+        "W4S4_ORACLE_CODE_TIMING_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_CODE_TIMING_OUT.json",
+        "W4S4_ORACLE_E_MORE_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_E_MORE_OUT.json",
+        "W4S4_ORACLE_C_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_C_OUT.json",
+        "W4S4_ORACLE_FD_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_FD_OUT.json",
+        "W4S4_ORACLE_PRIVACY_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_PRIVACY_OUT.json",
+        "W4S4_ORACLE_F06_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_F06_OUT.json",
+        "W4S4_ORACLE_W_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_W_OUT.json",
+        "W4S4_ORACLE_D04_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_D04_OUT.json",
+        "W4S4_ORACLE_G_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_G_OUT.json",
+        "W4S4_ORACLE_T_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_T_OUT.json",
+        "W4S4_ORACLE_COMBINED_OUT": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_COMBINED_OUT.json"
+      },
+      "exit": 0,
+      "report": {
+        "success": true,
+        "total": 172,
+        "passed": 16,
+        "failed": 0,
+        "pending": 156,
+        "failedSuites": 0,
+        "files": [
+          {
+            "path": "src/hooks/__tests__/useEmailScheduler.idle.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "watches every IMAP account that has credentials, and nothing else",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed watches every IMAP account that has credentials, and nothing else",
+                "status": "skipped"
+              },
+              {
+                "title": "long-polls without a cursor, then from the generation it was handed",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed long-polls without a cursor, then from the generation it was handed",
+                "status": "skipped"
+              },
+              {
+                "title": "adopts a generation lower than the cursor it sent",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed adopts a generation lower than the cursor it sent",
+                "status": "skipped"
+              },
+              {
+                "title": "hands the watchers back to a daemon whose generation went backwards",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed hands the watchers back to a daemon whose generation went backwards",
+                "status": "skipped"
+              },
+              {
+                "title": "hands the watchers back when the daemon channel reconnects",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed hands the watchers back when the daemon channel reconnects",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints the open folder and tells the user about the new mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints the open folder and tells the user about the new mail",
+                "status": "skipped"
+              },
+              {
+                "title": "hands the arrival to the code bubble",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail hands the arrival to the code bubble",
+                "status": "skipped"
+              },
+              {
+                "title": "puts the code in the banner of a lone arrival",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail puts the code in the banner of a lone arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the code out of a banner that shows no preview",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail keeps the code out of a banner that shows no preview",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the code out of a banner for several arrivals",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail keeps the code out of a banner for several arrivals",
+                "status": "skipped"
+              },
+              {
+                "title": "still notifies when the code read fails",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail still notifies when the code read fails",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing for a change without new mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a one-time code in the mail offers nothing for a change without new mail",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for your own reply that lands in the inbox thread",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent stays silent for your own reply that lands in the inbox thread",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for one of your aliases",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent stays silent for one of your aliases",
+                "status": "skipped"
+              },
+              {
+                "title": "still notifies for someone else",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent still notifies for someone else",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for Sent",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for Sent",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for INBOX.Sent",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for INBOX.Sent",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for [Gmail]/Sent Mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for [Gmail]/Sent Mail",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for Gesendete Elemente",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for Gesendete Elemente",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for several at once",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for several at once",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for the account's chosen Sent folder",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for the account's chosen Sent folder",
+                "status": "skipped"
+              },
+              {
+                "title": "stays silent for a Sent folder only SPECIAL-USE names",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder stays silent for a Sent folder only SPECIAL-USE names",
+                "status": "skipped"
+              },
+              {
+                "title": "still notifies for the inbox and other folders",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed mail the user sent landing in the Sent folder still notifies for the inbox and other folders",
+                "status": "skipped"
+              },
+              {
+                "title": "notifies for an account that is not on screen without repainting the list",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed notifies for an account that is not on screen without repainting the list",
+                "status": "skipped"
+              },
+              {
+                "title": "names the messages a scheduled refresh announces in the notification context",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed names the messages a scheduled refresh announces in the notification context",
+                "status": "skipped"
+              },
+              {
+                "title": "offers the code in a mail a scheduled refresh finds",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed offers the code in a mail a scheduled refresh finds",
+                "status": "skipped"
+              },
+              {
+                "title": "announces several changes to one folder as one banner",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed announces several changes to one folder as one banner",
+                "status": "skipped"
+              },
+              {
+                "title": "attaches the selected sound to incoming mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed attaches the selected sound to incoming mail",
+                "status": "skipped"
+              },
+              {
+                "title": "opens only the folder when the banner shows no preview",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed opens only the folder when the banner shows no preview",
+                "status": "skipped"
+              },
+              {
+                "title": "says nothing when a change carries no new mail",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed says nothing when a change carries no new mail",
+                "status": "skipped"
+              },
+              {
+                "title": "has the open folder reread its cached flags",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes has the open folder reread its cached flags",
+                "status": "skipped"
+              },
+              {
+                "title": "still rereads when the same reply also carries an arrival for that folder",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes still rereads when the same reply also carries an arrival for that folder",
+                "status": "skipped"
+              },
+              {
+                "title": "counts the saved views again, once for the whole reply",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes counts the saved views again, once for the whole reply",
+                "status": "skipped"
+              },
+              {
+                "title": "asks nothing of the views while the feed is quiet",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes asks nothing of the views while the feed is quiet",
+                "status": "skipped"
+              },
+              {
+                "title": "has the notes board reread the flags of the folder that changed, on screen or not",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes has the notes board reread the flags of the folder that changed, on screen or not",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the notes board alone for an arrival",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes leaves the notes board alone for an arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "has the notes board list again once per reply that changed anything",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes has the notes board list again once per reply that changed anything",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves an arrival-only reload alone",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes leaves an arrival-only reload alone",
+                "status": "skipped"
+              },
+              {
+                "title": "drops the account's restore windows before repainting All Inboxes",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes drops the account's restore windows before repainting All Inboxes",
+                "status": "skipped"
+              },
+              {
+                "title": "drops them for a folder that is not on screen too",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed flag changes drops them for a folder that is not on screen too",
+                "status": "skipped"
+              },
+              {
+                "title": "drops the restore window before repainting All Inboxes",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a message deleted at the mailbox drops the restore window before repainting All Inboxes",
+                "status": "skipped"
+              },
+              {
+                "title": "drops it when the same reply also carries an arrival",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a message deleted at the mailbox drops it when the same reply also carries an arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "drops it for a folder that is not on screen too",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed a message deleted at the mailbox drops it for a folder that is not on screen too",
+                "status": "skipped"
+              },
+              {
+                "title": "pauses 30s when the daemon is offline, then polls again",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed pauses 30s when the daemon is offline, then polls again",
+                "status": "skipped"
+              },
+              {
+                "title": "stops for good when there is no Tauri to reach a daemon through",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed stops for good when there is no Tauri to reach a daemon through",
+                "status": "skipped"
+              },
+              {
+                "title": "stops on unmount, even when the parked poll answers afterwards",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed stops on unmount, even when the parked poll answers afterwards",
+                "status": "skipped"
+              },
+              {
+                "title": "releases a reconnect listener whose registration succeeds after unmount",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed releases a reconnect listener whose registration succeeds after unmount",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the scheduler alive when reconnect listener registration throws synchronously",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed keeps the scheduler alive when reconnect listener registration throws synchronously",
+                "status": "skipped"
+              },
+              {
+                "title": "contains a rejected reconnect registration and keeps polling",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed contains a rejected reconnect registration and keeps polling",
+                "status": "skipped"
+              },
+              {
+                "title": "re-registers the watchers on a manual refresh",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed re-registers the watchers on a manual refresh",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints a subtree view for a change under the scope root",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints a subtree view for a change under the scope root",
+                "status": "skipped"
+              },
+              {
+                "title": "does not repaint a subtree view for a folder outside the scope",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed does not repaint a subtree view for a folder outside the scope",
+                "status": "skipped"
+              },
+              {
+                "title": "stops between changes in the same reply on unmount",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed stops between changes in the same reply on unmount",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints All Inboxes through loadUnifiedInbox, never loadEmails",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints All Inboxes through loadUnifiedInbox, never loadEmails",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints All Inboxes for an arrival on an account that is not the active one",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints All Inboxes for an arrival on an account that is not the active one",
+                "status": "skipped"
+              },
+              {
+                "title": "repaints the unified folder that is actually open",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed repaints the unified folder that is actually open",
+                "status": "skipped"
+              },
+              {
+                "title": "reloads once for a reply that names two on-screen folders",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed reloads once for a reply that names two on-screen folders",
+                "status": "skipped"
+              },
+              {
+                "title": "reloads once per distinct on-screen folder even when a reply names it twice",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed reloads once per distinct on-screen folder even when a reply names it twice",
+                "status": "skipped"
+              },
+              {
+                "title": "follows a message marked read, without a refresh",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge follows a message marked read, without a refresh",
+                "status": "skipped"
+              },
+              {
+                "title": "drops an account the user hides",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge drops an account the user hides",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves out a count whose account is gone",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge leaves out a count whose account is gone",
+                "status": "skipped"
+              },
+              {
+                "title": "waits for the accounts: counts with none loaded would paint a 0",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge waits for the accounts: counts with none loaded would paint a 0",
+                "status": "skipped"
+              },
+              {
+                "title": "drops a held old rows reply after hidden, label and order settings change",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge drops a held old rows reply after hidden, label and order settings change",
+                "status": "skipped"
+              },
+              {
+                "title": "makes no OS call from a native rows reply settled after unmount",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed dock badge makes no OS call from a native rows reply settled after unmount",
+                "status": "skipped"
+              },
+              {
+                "title": "pushes the sidebar rows, and again only when one changes",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed tray menu pushes the sidebar rows, and again only when one changes",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts the arrival account from its INBOX cache",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts the arrival account from its INBOX cache",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts on a flags-only change too (read on another device)",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts on a flags-only change too (read on another device)",
+                "status": "skipped"
+              },
+              {
+                "title": "only adds the arrivals when the cache is partial",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge only adds the arrivals when the cache is partial",
+                "status": "skipped"
+              },
+              {
+                "title": "holds the partial-cache arrival fallback until native recount settles",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge holds the partial-cache arrival fallback until native recount settles",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves out a message a local snooze is holding out of the inbox",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves out a message a local snooze is holding out of the inbox",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts an inbox a local snooze takes a message out of, or puts back into",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts an inbox a local snooze takes a message out of, or puts back into",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the inbox on screen to its list",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves the inbox on screen to its list",
+                "status": "skipped"
+              },
+              {
+                "title": "recounts an inbox a saved view takes a message out of, or gives back",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge recounts an inbox a saved view takes a message out of, or gives back",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a held inbox on screen to its list",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves a held inbox on screen to its list",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves other folders alone",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed badge leaves other folders alone",
+                "status": "skipped"
+              },
+              {
+                "title": "captures N01-N06 old direct arrival banner decisions",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures N01-N06 old direct arrival banner decisions",
+                "status": "passed"
+              },
+              {
+                "title": "captures N07-N14 old sender, sound, own and Sent decisions",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures N07-N14 old sender, sound, own and Sent decisions",
+                "status": "passed"
+              },
+              {
+                "title": "captures E01-E05 old change-feed grouping and repaint effects",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures E01-E05 old change-feed grouping and repaint effects",
+                "status": "passed"
+              },
+              {
+                "title": "captures C10-C11 old lone-code deadline ordering through the hook",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures C10-C11 old lone-code deadline ordering through the hook",
+                "status": "passed"
+              },
+              {
+                "title": "captures E06-E09 old view, recovery and held-code feed effects",
+                "fullName": "useEmailScheduler — IDLE watchers and the change feed captures E06-E09 old view, recovery and held-code feed effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/hooks/__tests__/useEmailScheduler.s4combined.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "captures N15-N17 and C12-C16 through real old scheduler, Focus and code stores",
+                "fullName": "captures N15-N17 and C12-C16 through real old scheduler, Focus and code stores",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/slices/accountSlice.s4oracle.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "T01 rapid current-view clicks while idle",
+                "fullName": "conditional S4 old manual refresh input oracle T01 rapid current-view clicks while idle",
+                "status": "passed"
+              },
+              {
+                "title": "T02 in-flight clicks lose queued refresh at cooldown timer",
+                "fullName": "conditional S4 old manual refresh input oracle T02 in-flight clicks lose queued refresh at cooldown timer",
+                "status": "passed"
+              },
+              {
+                "title": "T03 spinner timing and latest view at trailing execution",
+                "fullName": "conditional S4 old manual refresh input oracle T03 spinner timing and latest view at trailing execution",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/__tests__/codeBubbleStore.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "offers a bubble keyed on the message, stamped with when it expires",
+                "fullName": "codeBubbleStore offers a bubble keyed on the message, stamped with when it expires",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps one bubble per message",
+                "fullName": "codeBubbleStore keeps one bubble per message",
+                "status": "skipped"
+              },
+              {
+                "title": "shows the newest first and keeps at most three",
+                "fullName": "codeBubbleStore shows the newest first and keeps at most three",
+                "status": "skipped"
+              },
+              {
+                "title": "dismisses one bubble and leaves the others",
+                "fullName": "codeBubbleStore dismisses one bubble and leaves the others",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves on its own once the code has gone stale",
+                "fullName": "codeBubbleStore leaves on its own once the code has gone stale",
+                "status": "skipped"
+              },
+              {
+                "title": "captures D04 old repeated-offer TTL and three-bubble cap",
+                "fullName": "codeBubbleStore captures D04 old repeated-offer TTL and three-bubble cap",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/__tests__/focusStore.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "sets the end stamp and the remembered preset",
+                "fullName": "start sets the end stamp and the remembered preset",
+                "status": "skipped"
+              },
+              {
+                "title": "takes any number of minutes, not just a preset",
+                "fullName": "start takes any number of minutes, not just a preset",
+                "status": "skipped"
+              },
+              {
+                "title": "rounds seconds up so the last second reads 00:01, never 00:00",
+                "fullName": "formatRemaining rounds seconds up so the last second reads 00:01, never 00:00",
+                "status": "skipped"
+              },
+              {
+                "title": "is zero with no session and never negative",
+                "fullName": "remainingMs is zero with no session and never negative",
+                "status": "skipped"
+              },
+              {
+                "title": "sends straight through with no session running",
+                "fullName": "notify sends straight through with no session running",
+                "status": "skipped"
+              },
+              {
+                "title": "holds instead of sending while a session runs",
+                "fullName": "notify holds instead of sending while a session runs",
+                "status": "skipped"
+              },
+              {
+                "title": "resolves even when the native call rejects",
+                "fullName": "notify resolves even when the native call rejects",
+                "status": "skipped"
+              },
+              {
+                "title": "advances now, then finishes and flushes what it held",
+                "fullName": "the ticker advances now, then finishes and flushes what it held",
+                "status": "skipped"
+              },
+              {
+                "title": "sends the end notification itself rather than holding it",
+                "fullName": "the ticker sends the end notification itself rather than holding it",
+                "status": "skipped"
+              },
+              {
+                "title": "summarises rather than firing a burst when more than three were held",
+                "fullName": "the ticker summarises rather than firing a burst when more than three were held",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the email it opens",
+                "fullName": "a held new-mail banner keeps the email it opens",
+                "status": "skipped"
+              },
+              {
+                "title": "is not rewritten by the ticker",
+                "fullName": "the persisted file is not rewritten by the ticker",
+                "status": "skipped"
+              },
+              {
+                "title": "clears the session and flushes held work without congratulating anyone",
+                "fullName": "abandon clears the session and flushes held work without congratulating anyone",
+                "status": "skipped"
+              },
+              {
+                "title": "resumes a session that outlived the app",
+                "fullName": "rehydration resumes a session that outlived the app",
+                "status": "skipped"
+              },
+              {
+                "title": "clears a session that expired while the app was shut, silently",
+                "fullName": "rehydration clears a session that expired while the app was shut, silently",
+                "status": "skipped"
+              },
+              {
+                "title": "delivers as before when no policy context is given",
+                "fullName": "notify() with a mail-arrival context delivers as before when no policy context is given",
+                "status": "skipped"
+              },
+              {
+                "title": "suppresses a notification the policy rejects, and never calls sendNotification for it",
+                "fullName": "notify() with a mail-arrival context suppresses a notification the policy rejects, and never calls sendNotification for it",
+                "status": "skipped"
+              },
+              {
+                "title": "records a delivered decision too, and still calls sendNotification",
+                "fullName": "notify() with a mail-arrival context records a delivered decision too, and still calls sendNotification",
+                "status": "skipped"
+              },
+              {
+                "title": "a running Focus session still holds a policy-governed notification for later",
+                "fullName": "notify() with a mail-arrival context a running Focus session still holds a policy-governed notification for later",
+                "status": "skipped"
+              },
+              {
+                "title": "a banner held by a session that ended while the daemon answered is shown now",
+                "fullName": "notify() with a mail-arrival context a banner held by a session that ended while the daemon answered is shown now",
+                "status": "skipped"
+              },
+              {
+                "title": "a daemon that cannot answer lets the banner out, logged as such",
+                "fullName": "notify() with a mail-arrival context a daemon that cannot answer lets the banner out, logged as such",
+                "status": "skipped"
+              },
+              {
+                "title": "only mail banners ask the daemon",
+                "fullName": "notify() with a mail-arrival context only mail banners ask the daemon",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps only the last 200 decisions",
+                "fullName": "notify() with a mail-arrival context keeps only the last 200 decisions",
+                "status": "skipped"
+              },
+              {
+                "title": "keeps the last scene when a session starts without one",
+                "fullName": "scene keeps the last scene when a session starts without one",
+                "status": "skipped"
+              },
+              {
+                "title": "remembers the scene a session starts on, the plain lock included",
+                "fullName": "scene remembers the scene a session starts on, the plain lock included",
+                "status": "skipped"
+              },
+              {
+                "title": "ignores a scene it does not know",
+                "fullName": "scene ignores a scene it does not know",
+                "status": "skipped"
+              },
+              {
+                "title": "writes the scene to the persisted file and reads it back after a relaunch",
+                "fullName": "scene writes the scene to the persisted file and reads it back after a relaunch",
+                "status": "skipped"
+              },
+              {
+                "title": "reads a scene saved by a newer build as the default rather than a blank lock",
+                "fullName": "scene reads a scene saved by a newer build as the default rather than a blank lock",
+                "status": "skipped"
+              },
+              {
+                "title": "has a loader for every scene it offers, and offers every scene there is",
+                "fullName": "scene has a loader for every scene it offers, and offers every scene there is",
+                "status": "skipped"
+              },
+              {
+                "title": "captures F01-F05 and D01-D03 old Focus and policy effects",
+                "fullName": "captures F01-F05 and D01-D03 old Focus and policy effects",
+                "status": "passed"
+              },
+              {
+                "title": "captures F07-F09 old privacy timing and OS-target effects",
+                "fullName": "captures F07-F09 old privacy timing and OS-target effects",
+                "status": "passed"
+              },
+              {
+                "title": "captures F06 old privacy enabled, disabled, and unhydrated mail effects",
+                "fullName": "captures F06 old privacy enabled, disabled, and unhydrated mail effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/stores/__tests__/snoozeLocalWake.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "announces the message that came back, by its own header",
+                "fullName": "the wake of a local snooze announces the message that came back, by its own header",
+                "status": "skipped"
+              },
+              {
+                "title": "names the account and the message, and asks to be shown though the arrival was announced",
+                "fullName": "the wake of a local snooze names the account and the message, and asks to be shown though the arrival was announced",
+                "status": "skipped"
+              },
+              {
+                "title": "still announces a message the cache no longer holds, naming none",
+                "fullName": "the wake of a local snooze still announces a message the cache no longer holds, naming none",
+                "status": "skipped"
+              },
+              {
+                "title": "says nothing for an undo, which is no wake",
+                "fullName": "the wake of a local snooze says nothing for an undo, which is no wake",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a server snooze to the sync that reports its arrival",
+                "fullName": "the wake of a local snooze leaves a server snooze to the sync that reports its arrival",
+                "status": "skipped"
+              },
+              {
+                "title": "captures W01-W04 old local wake event effects",
+                "fullName": "the wake of a local snooze captures W01-W04 old local wake event effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/services/__tests__/codeBubble.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "asks the daemon about the subject and snippet, then about the body",
+                "fullName": "offerCodeFromArrival asks the daemon about the subject and snippet, then about the body",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing when the daemon cannot be asked",
+                "fullName": "offerCodeFromArrival offers nothing when the daemon cannot be asked",
+                "status": "skipped"
+              },
+              {
+                "title": "offers the code from the subject without reading the body",
+                "fullName": "offerCodeFromArrival offers the code from the subject without reading the body",
+                "status": "skipped"
+              },
+              {
+                "title": "returns the code it offered, and null when it offered none",
+                "fullName": "offerCodeFromArrival returns the code it offered, and null when it offered none",
+                "status": "skipped"
+              },
+              {
+                "title": "reads the body when the subject only announces a code",
+                "fullName": "offerCodeFromArrival reads the body when the subject only announces a code",
+                "status": "skipped"
+              },
+              {
+                "title": "reads an HTML-only body",
+                "fullName": "offerCodeFromArrival reads an HTML-only body",
+                "status": "skipped"
+              },
+              {
+                "title": "names the sender by address when there is no name",
+                "fullName": "offerCodeFromArrival names the sender by address when there is no name",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves ordinary mail alone, body unread",
+                "fullName": "offerCodeFromArrival leaves ordinary mail alone, body unread",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing for a folder other than the inbox",
+                "fullName": "offerCodeFromArrival offers nothing for a folder other than the inbox",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing without a header",
+                "fullName": "offerCodeFromArrival offers nothing without a header",
+                "status": "skipped"
+              },
+              {
+                "title": "offers nothing when the body holds no code",
+                "fullName": "offerCodeFromArrival offers nothing when the body holds no code",
+                "status": "skipped"
+              },
+              {
+                "title": "reads the body through the default fetch when none is handed in",
+                "fullName": "offerCodeFromArrival reads the body through the default fetch when none is handed in",
+                "status": "skipped"
+              },
+              {
+                "title": "swallows a failed body fetch",
+                "fullName": "offerCodeFromArrival swallows a failed body fetch",
+                "status": "skipped"
+              },
+              {
+                "title": "reads an IMAP message through the light fetch, in the background",
+                "fullName": "fetchArrivalBody reads an IMAP message through the light fetch, in the background",
+                "status": "skipped"
+              },
+              {
+                "title": "reads an Outlook message signed in with Microsoft through Graph, naming the account",
+                "fullName": "fetchArrivalBody reads an Outlook message signed in with Microsoft through Graph, naming the account",
+                "status": "skipped"
+              },
+              {
+                "title": "returns nothing for a Graph message it holds no id for",
+                "fullName": "fetchArrivalBody returns nothing for a Graph message it holds no id for",
+                "status": "skipped"
+              },
+              {
+                "title": "returns nothing for an account that is gone",
+                "fullName": "fetchArrivalBody returns nothing for an account that is gone",
+                "status": "skipped"
+              },
+              {
+                "title": "captures C01-C09 old direct code-offer and body-read effects",
+                "fullName": "captures C01-C09 old direct code-offer and body-read effects",
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "path": "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js",
+            "status": "passed",
+            "assertions": [
+              {
+                "title": "is the frozen table of what v2.11.0 through v2.13.1 wrote: 38 distinct words onto five keys",
+                "fullName": "LEGACY_LOCALIZED_KEYS is the frozen table of what v2.11.0 through v2.13.1 wrote: 38 distinct words onto five keys",
+                "status": "skipped"
+              },
+              {
+                "title": "ignores accounts that are not Graph",
+                "fullName": "adoptGraphFolderKeys ignores accounts that are not Graph",
+                "status": "skipped"
+              },
+              {
+                "title": "sends every legacy pair for a Graph account and remembers the adoption",
+                "fullName": "adoptGraphFolderKeys sends every legacy pair for a Graph account and remembers the adoption",
+                "status": "skipped"
+              },
+              {
+                "title": "runs once: a flagged account makes no IPC",
+                "fullName": "adoptGraphFolderKeys runs once: a flagged account makes no IPC",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the flag unset when the command fails, so the next launch retries, and does not throw",
+                "fullName": "adoptGraphFolderKeys leaves the flag unset when the command fails, so the next launch retries, and does not throw",
+                "status": "skipped"
+              },
+              {
+                "title": "rewrites a remembered last mailbox that was a localized key",
+                "fullName": "adoptGraphFolderKeys rewrites a remembered last mailbox that was a localized key",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a remembered last mailbox alone when it is not a legacy word",
+                "fullName": "adoptGraphFolderKeys leaves a remembered last mailbox alone when it is not a legacy word",
+                "status": "skipped"
+              },
+              {
+                "title": "handles several accounts, Graph and not, in one call",
+                "fullName": "adoptGraphFolderKeys handles several accounts, Graph and not, in one call",
+                "status": "skipped"
+              },
+              {
+                "title": "waits for the persisted settings before reading the flag",
+                "fullName": "adoptGraphFolderKeys waits for the persisted settings before reading the flag",
+                "status": "skipped"
+              },
+              {
+                "title": "gives up on a hydration that never finishes and proceeds",
+                "fullName": "adoptGraphFolderKeys gives up on a hydration that never finishes and proceeds",
+                "status": "skipped"
+              },
+              {
+                "title": "does not wait when the store has already hydrated",
+                "fullName": "adoptGraphFolderKeys does not wait when the store has already hydrated",
+                "status": "skipped"
+              },
+              {
+                "title": "does not wait on the settings store when no account is Graph",
+                "fullName": "adoptGraphFolderKeys does not wait on the settings store when no account is Graph",
+                "status": "skipped"
+              },
+              {
+                "title": "warns when an adoption was blocked, because a legacy directory is still on disk",
+                "fullName": "adoptGraphFolderKeys warns when an adoption was blocked, because a legacy directory is still on disk",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the flag unset and logs when the report carries a failure",
+                "fullName": "adoptGraphFolderKeys leaves the flag unset and logs when the report carries a failure",
+                "status": "skipped"
+              },
+              {
+                "title": "adopts every well-known folder the server named in its own language",
+                "fullName": "adoptGraphFolderKeysFromListing adopts every well-known folder the server named in its own language",
+                "status": "skipped"
+              },
+              {
+                "title": "skips a custom folder, which was never keyed by anything else",
+                "fullName": "adoptGraphFolderKeysFromListing skips a custom folder, which was never keyed by anything else",
+                "status": "skipped"
+              },
+              {
+                "title": "sends only the English names that differ from their key by more than case, and still flags",
+                "fullName": "adoptGraphFolderKeysFromListing sends only the English names that differ from their key by more than case, and still flags",
+                "status": "skipped"
+              },
+              {
+                "title": "ignores an account that is not Graph",
+                "fullName": "adoptGraphFolderKeysFromListing ignores an account that is not Graph",
+                "status": "skipped"
+              },
+              {
+                "title": "runs once: a flagged account makes no IPC on the next listing",
+                "fullName": "adoptGraphFolderKeysFromListing runs once: a flagged account makes no IPC on the next listing",
+                "status": "skipped"
+              },
+              {
+                "title": "flags an all-English listing with nothing to move without any IPC",
+                "fullName": "adoptGraphFolderKeysFromListing flags an all-English listing with nothing to move without any IPC",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves the flag unset when the report carries a failure, so the next listing retries",
+                "fullName": "adoptGraphFolderKeysFromListing leaves the flag unset when the report carries a failure, so the next listing retries",
+                "status": "skipped"
+              },
+              {
+                "title": "does not throw when the command rejects, and leaves the flag unset",
+                "fullName": "adoptGraphFolderKeysFromListing does not throw when the command rejects, and leaves the flag unset",
+                "status": "skipped"
+              },
+              {
+                "title": "rewrites a remembered last mailbox that was the server word",
+                "fullName": "adoptGraphFolderKeysFromListing rewrites a remembered last mailbox that was the server word",
+                "status": "skipped"
+              },
+              {
+                "title": "leaves a remembered last mailbox alone when the listing does not move it",
+                "fullName": "adoptGraphFolderKeysFromListing leaves a remembered last mailbox alone when the listing does not move it",
+                "status": "skipped"
+              },
+              {
+                "title": "waits for the persisted settings before reading its flag",
+                "fullName": "adoptGraphFolderKeysFromListing waits for the persisted settings before reading its flag",
+                "status": "skipped"
+              },
+              {
+                "title": "captures G01-G04 old Graph adoption helper effects",
+                "fullName": "captures G01-G04 old Graph adoption helper effects",
+                "status": "passed"
+              }
+            ]
+          }
+        ]
+      },
+      "qualified": true
+    },
+    {
+      "name": "archived-compare",
+      "argv": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\jobs\\mail-vault-app\\codex-daemon-sync-pipelines\\carrier\\arrival-archived-replay-compare.cjs"
+      ],
+      "env": {
+        "MV_ARRIVAL_ARCHIVE_MANIFEST": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\source-archive-manifest.json",
+        "MV_ARRIVAL_CANONICAL": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\arrival-66-canonical.json",
+        "MV_ARRIVAL_REPLAY_OUTPUTS": "C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_N_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_N_MORE_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_E_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_CODE_TIMING_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_E_MORE_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_C_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_FD_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_PRIVACY_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_F06_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_W_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_D04_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_G_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_T_OUT.json;C:\\Users\\Unicorn\\AppData\\Local\\Temp\\w4s4-arrival-oracle-Vz0RQ0\\replay\\W4S4_ORACLE_COMBINED_OUT.json"
+      },
+      "exit": 0,
+      "report": null,
+      "qualified": true
+    }
+  ]
+}

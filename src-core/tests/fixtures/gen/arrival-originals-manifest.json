@@ -1,0 +1,291 @@
+{
+  "status": "captured-for-replay",
+  "acceptedS3Commit": "5ba0397d26b908ef284596fffd925a14b6bca5bc",
+  "captureAncestorChain": [
+    "ac62be5963b42d12d66e0ac004875145a0fd3126",
+    "1da200943b8f999162427b9c61a387e2367e7ee3",
+    "5ba0397d26b908ef284596fffd925a14b6bca5bc"
+  ],
+  "sourceHead": "28b7749796d44c1449d43121fdf9e1eb2b18c739",
+  "sourceTree": "ea17662bd731e5fbb1692d347ea87c8cd1e05d6b",
+  "snapshotHead": "36a5477db7a7f64cab3352da1568899de9639ddc",
+  "snapshotTree": "0dd2052b2681f4c5cf1218f44b463c1c47144038",
+  "harnessConfigSha256": "d1e9cea7df8df6b7d95f164e6e035948b3f479057339f00f94994b8c665fb246",
+  "files": {
+    "vitest.setup.js": "39444b816895fe65119b6a236ea213e4143983d826990cb534df963c1b29933c",
+    "src/hooks/__tests__/useEmailScheduler.idle.test.js": "5415b3b0cfc71990148aaea181fe8a30b73017de44a7a76e14c97b82448a1a8f",
+    "src/utils/ownAddresses.js": "55a16223672be64d6ec789aaaa5d6bae8dd1f5d90acab7b2947c1360c2575578",
+    "src/utils/emailIdentity.js": "b3658e4eb6e08d3eee0c05ee14f4e369fbd227a3c6208e7be550ec7b737d3043",
+    "src/hooks/useEmailScheduler.js": "8a09f951f296cc7a48310685649cb6a1ac59ce705939087e50a0a82590087d4f",
+    "src/stores/snoozeStore.js": "497958919959e3e1935379a2afbd08ab52e5d793cefebef8244c7851df2c0378",
+    "src/utils/emailParser.js": "d6badfb7310213817cf045c6e77a613990f36ca2fec7ba409e235934705cee22",
+    "src/utils/replyPolicy.js": "1a1568f274e844cdd7b14f14ade3b6a8f04f4a8794340dca57a375a6562255f5",
+    "src/utils/dateFormat.js": "a78fa8385a28f803ba0fde4680be956aadc55cfbf0172c3b37e641c2c863de6a",
+    "src/i18n/index.js": "7b714ee7388de44cad0855f9d18c68a2f8d7eac29b0f0f76243f3fe4a3d4728e",
+    "src/i18n/locales/en.json": "6c3ccf9d793d1ccf42d69a3e371bdcfa045b4c1c08306dc9ca8abeaa20073fd5",
+    "src/utils/jmapErrors.js": "eed77a282945da8bbeb3a6577b5b95ca024ca436d8f6ab98cc849dafb3cdcc5f",
+    "src/stores/viewHideStore.js": "b0e98ed8cd49db29ea4280ce7240751c88b5b828921584c47b49f11256594266",
+    "src/stores/unreadCounts.js": "4a0b5036e5f738a8a4fa98719aa3f730974973fd60540523745eb8553684be0c",
+    "src/stores/followUpStore.js": "9df889c587a797787a946172f229fc302a51177e0835608bca1723baddc62e5e",
+    "src/utils/notificationSounds.js": "cedb1263ef501c10a698e91765d8a29c462196703a0041a893b2ea9b98466f2e",
+    "src/stores/tagStore.js": "a22bef8e90bf508c74c719f9092e3f8c8b876f350bf94dbf95b05e3896af4fae",
+    "src/stores/autoTagStore.js": "d72ba3fb6cd4e0910e02c3108785006efe103c6a9b4cb45320531c927904d867",
+    "src/services/db/accounts.js": "d8f204dc93f92e47badb56b39d3f89a35994e139d8396816b80f333193df085c",
+    "src/services/transport.js": "94dfa30835286cb8708787f19f42a802dc0c806a45ad93aaf6e89b3b4716f82d",
+    "src/services/graphConfig.js": "55633f6b732b86a010f3b3ff8ad86cb1c328d88a668ac2b9842104446cc90799",
+    "src/services/db/keychain.js": "fd4ab6125b77bc371f6a14fabf092ea3209117baac76040bc050a315e4ac3de4",
+    "src/services/keychainUtils.js": "9d416243007ec3fd0ce67edbc2182f424bbbc409fe76e9854850ecd7bf6471ea",
+    "src/services/keychainSession.js": "95adc34dfd9c9f6624ac444965f33fd38ba64aff7679cb0da556b3453be41b39",
+    "src/services/unreadCountsClient.js": "74d92050bc7a540a7f68f45f7a547ecb0cf431deeacbbf2fe6d900930e7b8820",
+    "src/services/cacheManager.js": "a88665b29d2f5d1d246f48c3b2f194e3c186ada3a3131338bbb5516b62909f19",
+    "src/services/headerIdentity.js": "fd1a1289a47ae5f7a0def02effd4bbd1437b992698f76d03e9debc8d72d7fd1e",
+    "src/stores/messageRows.js": "5a2d0ff2a7a37f5c8bea9464e941059ccc7a5c351f1c32c632fe413725f14f83",
+    "src/stores/slices/unifiedHelpers.js": "fcb80eace56c834974cc6825870d4a44004afdf1a8d2a4974a40be0cba28c41a",
+    "src/services/workflows/mailboxTree.js": "95e7a058eaa873e359e1fb4a8d0ea2902e232efd4dcff1e703163e83273d4744",
+    "src/utils/collation.js": "62e1e8ee23b1c33d84bc32f6b627bccfdc21314aab661afac3545dd1dceacb04",
+    "src/services/syncService.js": "de39039dda9dffa6b77971538e19903d622596fafbb6a5febaec72606645500a",
+    "src/services/authUtils.js": "28673eb0ae99b6ccfafa67ca348f68cfd5033de14f92db799abd5e25073c4786",
+    "src/utils/sentFolder.js": "d92e7e358c0630b8575263bdf6f3faf1730585ac2f72bc1f48b93780be3b22fe",
+    "src/stores/__tests__/focusStore.test.js": "441736f65b1a17d4be9795979734dbcba2656005d553e8c9a74dc0dbc2366ee4",
+    "src/stores/privacyStore.js": "55489e38c5de790eddb1a8e05857ea02b0ec36eca1a7d6ee2f9f568b53566675",
+    "src/stores/settingsStore.js": "e4dde4cd941688ec44698b80d6f98c32a4b3fa3613fe0965e36ae14bda19db99",
+    "src/services/daemonClient.js": "7960fd5dc6c410495ea3c0df5234f7a3065eb50262dd092625016e8515334b19",
+    "src/utils/insights/preferences.js": "6d75087918d539510e35fbc4a2240a1009061ca22ddfe977d16d3c3b6e83d0e5",
+    "src/utils/appFont.js": "72a404f5d6c62566a180dfc8aa0b455b0030785572431c92437c17ebf3005d53",
+    "src/utils/googleFonts.js": "85a0f425cf5ecd24b62424c362652af92d75957c4e97aef3b2c973aa8f426821",
+    "src/data/googleFonts.json": "f9d40bc968bd7ba499f159eaa4f210b565eaefdda503ccc73b653dac859b0603",
+    "src/services/fontService.js": "55bce773bba7a109d7daaf1d87d914657ed0cefc7a28b7bc4e2d92641e6d8627",
+    "src/utils/mailFonts.js": "c3e9ec9e7cdc384fa784f0fbb27cbfef4bf8589fed83cdc0915f0a04da4c759e",
+    "src/utils/quickActions.js": "100062ac28f1cdaf1cf03b26616571e7b8c3bd7723591baeabaef6968770558c",
+    "src/utils/quickActionPresets.js": "ad2f19c2e880ba31f6d3e08e9f4c79845459db8234a4e660823916b9f23dea68",
+    "src/utils/composeSize.js": "a336709ac24ad4386e116e5bb5b2155eeb94b63a9404c5200344672dde9233ac",
+    "src/utils/folderIconColor.js": "33d2a4b86c30a8fa9b1fb9a61cee8ddd00d244be5805dd849dc8624365b2dd08",
+    "src/services/export/social/socialLayout.js": "11b172fb862033e0e10eb9196780c60f9150ea7e34c04cfe0487e30ec6b85209",
+    "src/utils/privacy/isChildWindow.js": "ecf8d65fdd1cf4b84ba05bc8d58be64db71c65773adf85aba5c0f748a6139ee4",
+    "src/stores/focusStore.js": "d758c1675a1c2981b41c7215b0d42cd74c5371c080207b1bbf00e6ad06a1adca",
+    "src/utils/privacy/privacyDictionary.js": "7b22d1882264c5fa172b12ddea661a24bb477994e7dd5f886023dedb48c57615",
+    "src/utils/privacy/piiDetector.js": "99c4e266df54cc9eecbf1ea1543845ccf7775426decacc54d776623d22bc3b11",
+    "src/utils/privacy/wordKey.js": "7ce74ad6cc53c20712459edf30ec03de831c9409250a53881737b83c06c246ad",
+    "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js": "557cabd177be5f44c3662ed6d0ef7780d26193f10c13666cff6734a4cea3f144",
+    "src/services/workflows/adoptGraphFolderKeys.js": "94431416cf4b5964b07d7ea14a051ee83d8bca6f6f58e47c6ac5c7ac1d1771c6",
+    "src/hooks/__tests__/useEmailScheduler.s4combined.test.js": "1949da40f05fcfb9d7fd280dc4f740cbf6bba2b5896593617b816679c83b3e81",
+    "src/services/codeBubble.js": "d842a54e15b13498a81253668cc4ba6bc71861693998ac8c6de90697e56ebe9a",
+    "src/stores/codeBubbleStore.js": "5d97d65314963aaa6d8735f7e238238aeb50c4a1d442949fde3ae319604458ec",
+    "src/services/__tests__/codeBubble.test.js": "a815c4c2c134ff8f81555c09f6d65184f6ba33c11831b65449819b009d5f0ccf",
+    "src/stores/safeStorage.js": "588b1fb5199013d3cdfff5fc130f1816e416513e06cd9550743367bcf9254744",
+    "src/stores/__tests__/snoozeLocalWake.test.js": "702884a0d11bd03860952048e4a08aa9ea16db80fe1dd921f2224010196c493d",
+    "src/stores/slices/accountSlice.s4oracle.test.js": "177bf1f1618fbcf8394db4d59e124826df28c9826434f52218e096c991a126f0",
+    "src/stores/slices/accountSlice.js": "4a182ba375c4570936cf48489eb99b469fe5429b0e150b0cb985803f6082164c",
+    "src/stores/__tests__/codeBubbleStore.test.js": "8e5457214aa5d98d445f9a6b89f224cbb70cb396ee2f9cd55056b0e3f06adf51"
+  },
+  "tests": {
+    "src/hooks/__tests__/useEmailScheduler.idle.test.js": "5415b3b0cfc71990148aaea181fe8a30b73017de44a7a76e14c97b82448a1a8f",
+    "src/services/__tests__/codeBubble.test.js": "a815c4c2c134ff8f81555c09f6d65184f6ba33c11831b65449819b009d5f0ccf",
+    "src/stores/__tests__/focusStore.test.js": "441736f65b1a17d4be9795979734dbcba2656005d553e8c9a74dc0dbc2366ee4",
+    "src/stores/__tests__/snoozeLocalWake.test.js": "702884a0d11bd03860952048e4a08aa9ea16db80fe1dd921f2224010196c493d",
+    "src/stores/__tests__/codeBubbleStore.test.js": "8e5457214aa5d98d445f9a6b89f224cbb70cb396ee2f9cd55056b0e3f06adf51",
+    "src/services/workflows/__tests__/adoptGraphFolderKeys.test.js": "557cabd177be5f44c3662ed6d0ef7780d26193f10c13666cff6734a4cea3f144",
+    "src/stores/slices/accountSlice.s4oracle.test.js": "177bf1f1618fbcf8394db4d59e124826df28c9826434f52218e096c991a126f0",
+    "src/hooks/__tests__/useEmailScheduler.s4combined.test.js": "1949da40f05fcfb9d7fd280dc4f740cbf6bba2b5896593617b816679c83b3e81"
+  },
+  "cases": [
+    {
+      "id": "N01"
+    },
+    {
+      "id": "N02"
+    },
+    {
+      "id": "N03"
+    },
+    {
+      "id": "N04"
+    },
+    {
+      "id": "N05"
+    },
+    {
+      "id": "N06"
+    },
+    {
+      "id": "N07"
+    },
+    {
+      "id": "N08"
+    },
+    {
+      "id": "N09"
+    },
+    {
+      "id": "N10"
+    },
+    {
+      "id": "N11"
+    },
+    {
+      "id": "N12"
+    },
+    {
+      "id": "N13"
+    },
+    {
+      "id": "N14"
+    },
+    {
+      "id": "N15"
+    },
+    {
+      "id": "N16"
+    },
+    {
+      "id": "N17"
+    },
+    {
+      "id": "C01"
+    },
+    {
+      "id": "C02"
+    },
+    {
+      "id": "C03"
+    },
+    {
+      "id": "C04"
+    },
+    {
+      "id": "C05"
+    },
+    {
+      "id": "C06"
+    },
+    {
+      "id": "C07"
+    },
+    {
+      "id": "C08"
+    },
+    {
+      "id": "C09"
+    },
+    {
+      "id": "C10"
+    },
+    {
+      "id": "C11"
+    },
+    {
+      "id": "C12"
+    },
+    {
+      "id": "C13"
+    },
+    {
+      "id": "C14"
+    },
+    {
+      "id": "C15"
+    },
+    {
+      "id": "C16"
+    },
+    {
+      "id": "F01"
+    },
+    {
+      "id": "F02"
+    },
+    {
+      "id": "F03"
+    },
+    {
+      "id": "F04"
+    },
+    {
+      "id": "F05"
+    },
+    {
+      "id": "F06"
+    },
+    {
+      "id": "F07"
+    },
+    {
+      "id": "F08"
+    },
+    {
+      "id": "F09"
+    },
+    {
+      "id": "D01"
+    },
+    {
+      "id": "D02"
+    },
+    {
+      "id": "D03"
+    },
+    {
+      "id": "D04"
+    },
+    {
+      "id": "E01"
+    },
+    {
+      "id": "E02"
+    },
+    {
+      "id": "E03"
+    },
+    {
+      "id": "E04"
+    },
+    {
+      "id": "E05"
+    },
+    {
+      "id": "E06"
+    },
+    {
+      "id": "E07"
+    },
+    {
+      "id": "E08"
+    },
+    {
+      "id": "E09"
+    },
+    {
+      "id": "W01"
+    },
+    {
+      "id": "W02"
+    },
+    {
+      "id": "W03"
+    },
+    {
+      "id": "W04"
+    },
+    {
+      "id": "G01"
+    },
+    {
+      "id": "G02"
+    },
+    {
+      "id": "G03"
+    },
+    {
+      "id": "G04"
+    },
+    {
+      "id": "T01"
+    },
+    {
+      "id": "T02"
+    },
+    {
+      "id": "T03"
+    }
+  ]
+}
