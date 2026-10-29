@@ -453,20 +453,56 @@ async fn prune_gone(state: &Arc<DaemonState>, spec: &Spec, uid: u32) -> bool {
     pruned
 }
 
-/// Whether the folder cache is still the one this queue was derived under.
-async fn identity_current(state: &Arc<DaemonState>, spec: &Spec) -> bool {
+/// What the folder cache's native identity says about the queue's own.
+#[derive(Debug, PartialEq, Eq)]
+enum IdentityCheck {
+    Same,
+    /// The queue was derived from rows that carried no identity yet (a legacy cache);
+    /// the first sight of one is adopted, once.
+    Adopt(String),
+    /// Another mailbox lifetime or owner is in the cache now: the queue is never reinterpreted.
+    Changed,
+}
+
+fn compare_identity(queued: &Option<String>, current: Option<String>) -> IdentityCheck {
+    match (queued, current) {
+        (Some(was), Some(now)) if *was == now => IdentityCheck::Same,
+        (None, Some(now)) => IdentityCheck::Adopt(now),
+        (None, None) => IdentityCheck::Same,
+        _ => IdentityCheck::Changed,
+    }
+}
+
+async fn check_identity(state: &Arc<DaemonState>, spec: &Spec) -> IdentityCheck {
     let state2 = Arc::clone(state);
-    let (account, mailbox, identity) = (spec.account_id.clone(), spec.mailbox.clone(), spec.identity.clone());
+    let (account, mailbox, queued) = (spec.account_id.clone(), spec.mailbox.clone(), spec.identity.clone());
     crate::handlers::common::blocking(move || {
         crate::custody::with_conn(&state2, |conn| {
             let now = mailvault_core::custody::cache::native_identity(conn, &account, &mailbox)?
                 .and_then(|identity| serde_json::to_string(&identity).ok());
-            Ok(now == identity)
-        }).unwrap_or(false)
-    }).await.unwrap_or(false)
+            Ok(compare_identity(&queued, now))
+        }).unwrap_or(IdentityCheck::Changed)
+    }).await.unwrap_or(IdentityCheck::Changed)
 }
 
 // ── Passes ─────────────────────────────────────────────────────────────────
+
+/// Drop this pass, and only this generation's: a newer focus may already own the
+/// account. The status says why it stopped instead of staying at "content".
+fn retire_pass(state: &Arc<DaemonState>, spec: &Spec, generation: u64, reason: &'static str) {
+    let runner = &state.hoarder_worker.ordinary;
+    let removed = {
+        let mut inner = runner.lock();
+        match inner.passes.get(&spec.account_id) {
+            Some(pass) if pass.generation == generation => inner.passes.remove(&spec.account_id).map(|pass| (pass.completed, pass.total)),
+            _ => None,
+        }
+    };
+    if let Some((completed, total)) = removed {
+        report(state, spec, crate::pipeline_focus::Progress { phase: "idle", queued: 0, completed, total, failed: 0,
+            paused: Some(reason), active: 0 });
+    }
+}
 
 fn report(state: &Arc<DaemonState>, spec: &Spec, progress: crate::pipeline_focus::Progress) {
     state.hoarder_worker.pipeline.report(state, &spec.account_id, spec.stamp.epoch(), &spec.origin_hash, progress);
@@ -476,11 +512,20 @@ async fn slot(state: Arc<DaemonState>, account_id: String, generation: u64, conf
     let runner = Arc::clone(&state.hoarder_worker.ordinary);
     tokio::time::sleep(STAGGER * index as u32).await;
     while let Some((uid, spec)) = runner.next_unit(&account_id, generation) {
-        if !identity_current(&state, &spec).await {
-            // The folder was replaced under this queue: it is never reinterpreted.
-            runner.lock().passes.remove(&account_id);
-            return;
-        }
+        let spec = match check_identity(&state, &spec).await {
+            IdentityCheck::Same => spec,
+            IdentityCheck::Adopt(identity) => {
+                runner.with_pass(&account_id, generation, |pass| {
+                    if pass.spec.identity.is_none() { pass.spec.identity = Some(identity.clone()); }
+                });
+                Spec { identity: Some(identity), ..spec }
+            }
+            IdentityCheck::Changed => {
+                // The folder was replaced under this queue: it is never reinterpreted.
+                retire_pass(&state, &spec, generation, "sourceChanged");
+                return;
+            }
+        };
         let Some(_claim) = state.hoarder_worker.claims.claim(&account_id, &spec.mailbox, uid, spec.stamp.epoch()) else {
             runner.with_pass(&account_id, generation, |pass| pass.failed(uid));
             continue;
@@ -509,7 +554,7 @@ async fn slot(state: Arc<DaemonState>, account_id: String, generation: u64, conf
                 runner.with_pass(&account_id, generation, |pass| pass.failed(uid));
             }
             BodyUnitOutcome::Retired => {
-                runner.lock().passes.remove(&account_id);
+                retire_pass(&state, &spec, generation, "sourceChanged");
                 return;
             }
         }
@@ -780,6 +825,16 @@ mod tests {
         assert!(claims.claim("acc1", "INBOX", 7, 2).is_some(), "and under another account lifetime");
         drop(first);
         assert!(claims.claim("acc1", "INBOX", 7, 1).is_some(), "released on drop");
+    }
+
+    #[test]
+    fn s6_a_legacy_queue_adopts_the_first_identity_it_sees_but_never_a_different_one() {
+        let some = |s: &str| Some(s.to_owned());
+        assert_eq!(compare_identity(&None, some("a")), IdentityCheck::Adopt("a".into()), "rows with no identity adopt the first one");
+        assert_eq!(compare_identity(&None, None), IdentityCheck::Same);
+        assert_eq!(compare_identity(&some("a"), some("a")), IdentityCheck::Same);
+        assert_eq!(compare_identity(&some("a"), some("b")), IdentityCheck::Changed, "another lifetime is never adopted");
+        assert_eq!(compare_identity(&some("a"), None), IdentityCheck::Changed, "an identity that vanished is a replaced cache");
     }
 
     #[tokio::test]
