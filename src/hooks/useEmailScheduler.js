@@ -3,9 +3,10 @@ import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore, selectOwnAddresses } from '../stores/settingsStore';
-import { localSnoozeKeys, useSnoozeStore } from '../stores/snoozeStore';
+import { useSnoozeStore } from '../stores/snoozeStore';
 import { useViewHideStore } from '../stores/viewHideStore';
-import { recountInbox, addArrivals, isCompleteCache, selectTotalUnread, unreadRows } from '../stores/unreadCounts';
+import { recountNativeInbox, unreadPresentation } from '../stores/unreadCounts';
+import { invalidateUnreadConnection } from '../services/unreadCountsClient';
 import { notify } from '../stores/focusStore';
 import * as db from '../services/db';
 import { invalidateRestoreDescriptors } from '../services/cacheManager';
@@ -17,6 +18,7 @@ import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { isOwnAddress } from '../utils/ownAddresses';
 import { isOutgoingMailboxName, sentMailboxPathFor } from '../utils/sentFolder';
 import { offerCodeFromArrival } from '../services/codeBubble';
+import { accountExpectedContext } from '../services/db/accounts';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
@@ -208,6 +210,8 @@ export function useEmailScheduler() {
   const lastBadgeCount = useRef(-1);
   const lastTrayRows = useRef('');
   const hadAccounts = useRef(false);
+  const badgeConsumerGeneration = useRef(0);
+  useEffect(() => () => { badgeConsumerGeneration.current += 1; }, []);
 
   // ── IDLE: register watchers, then follow the daemon's change feed ──
   //
@@ -247,13 +251,17 @@ export function useEmailScheduler() {
   // from that cache on any INBOX change, flags-only ones included (a read on
   // another device). Only a complete cache is counted: a partial one reads as
   // fewer unread, so it only adds the arrivals (unreadCounts owns the rule).
-  // ponytail: reads the whole INBOX cache per change; a daemon-side unread
-  // count if large inboxes make that slow.
-  const recountInboxUnread = async (accountId, newEmails) => {
-    let cache = null;
-    try { cache = await db.getEmailHeaders(accountId, 'INBOX'); } catch { /* keep the count */ }
-    if (!recountInbox(accountId, cache) && newEmails > 0) addArrivals(accountId, newEmails);
+  // The daemon reads only the INBOX cache's count predicate fields.
+  const loadedInbox = accountId => {
+    const s = useMailStore.getState();
+    return s.activeAccountId === accountId && !s.unifiedInbox && !s.mailboxScope
+      && s.activeMailbox === 'INBOX' ? { emails: s.emails, totalEmails: s.totalEmails } : undefined;
   };
+  const recountInboxUnread = (accountId, newEmails, change) =>
+    recountNativeInbox(accountId, {
+      ...(newEmails > 0 ? { arrivalCount: newEmails } : {}),
+      ...(change ? { change, preferredRows: loadedInbox(accountId) } : {}),
+    });
 
   // A local snooze, its wake and its undo take a message out of an inbox or
   // put it back with no sync to report it. The list on screen recounts its own
@@ -262,15 +270,14 @@ export function useEmailScheduler() {
   // holds a window of, is recounted here from the daemon's cache.
   useEffect(() => useSnoozeStore.subscribe((state, prev) => {
     if (state.rows === prev.rows) return;
-    const before = localSnoozeKeys(prev.rows), after = localSnoozeKeys(state.rows);
-    const s = useMailStore.getState();
-    const listed = !s.unifiedInbox && !s.mailboxScope && s.activeMailbox === 'INBOX' && isCompleteCache(s) ? s.activeAccountId : null;
-    const changed = new Set();
-    for (const key of [...before, ...after]) {
-      const [accountId, mailbox] = key.split('\x01');
-      if (before.has(key) !== after.has(key) && mailbox === 'INBOX' && accountId !== listed) changed.add(accountId);
-    }
-    for (const accountId of changed) recountInboxUnread(accountId, 0);
+    const before = prev.rows, after = state.rows;
+    const candidates = new Set([...before, ...after].map(row => row.accountId).filter(Boolean));
+    for (const accountId of candidates) void recountInboxUnread(accountId, 0,
+      { kind: 'snoozes', before: before.map(row => ({ accountId:row.accountId,
+        fromMailbox:row.fromMailbox, snoozedMailbox:row.snoozedMailbox,
+        messageId:row.messageId, state:row.state })), after: after.map(row => ({
+        accountId:row.accountId, fromMailbox:row.fromMailbox, snoozedMailbox:row.snoozedMailbox,
+        messageId:row.messageId, state:row.state })) });
   }), []);
 
   // "Hide mail views hold": a new answer about which messages the saved views
@@ -280,24 +287,23 @@ export function useEmailScheduler() {
   // recounts its own (updateSortedEmails). `null` is an empty set here.
   useEffect(() => useViewHideStore.subscribe((state, prev) => {
     if (state.keys === prev.keys) return;
-    const before = prev.keys || new Set(), after = state.keys || new Set();
-    const s = useMailStore.getState();
-    const listed = !s.unifiedInbox && !s.mailboxScope && s.activeMailbox === 'INBOX' && isCompleteCache(s) ? s.activeAccountId : null;
-    const changed = new Set();
-    const note = (key, other) => {
-      if (other.has(key)) return;
-      const box = key.slice(0, key.lastIndexOf('|'));
-      if (!box.endsWith('|INBOX')) return;
-      const accountId = box.slice(0, -'|INBOX'.length);
-      if (accountId !== listed) changed.add(accountId);
-    };
-    for (const key of before) note(key, after);
-    for (const key of after) note(key, before);
-    for (const accountId of changed) recountInboxUnread(accountId, 0);
+    const before = prev.keys == null ? null : [...prev.keys];
+    const after = state.keys == null ? null : [...state.keys];
+    for (const account of useMailStore.getState().accounts) void recountInboxUnread(account.id, 0,
+      { kind: 'viewHiddenKeys', before, after });
   }), []);
 
   const onSyncChange = async ({ accountId, mailbox, newEmails, updatedFlags }) => {
     const s = useMailStore.getState();
+    const original = s.accounts.find(account => account.id === accountId);
+    const expected = original && JSON.stringify(accountExpectedContext(original, 'all'));
+    let invalid = !expected;
+    const checkSource = state => {
+      const current = state.accounts.find(account => account.id === accountId);
+      if (!current || JSON.stringify(accountExpectedContext(current, 'all')) !== expected) invalid = true;
+    };
+    const unwatchSource = useMailStore.subscribe?.(checkSource) || (() => {});
+    try {
     // All Inboxes lists every account, so a change on ANY of them is on
     // screen there, whichever account happens to be "active" underneath.
     const unifiedOpen = s.unifiedInbox || s.activeMailbox === 'UNIFIED';
@@ -327,8 +333,12 @@ export function useEmailScheduler() {
     // flags, whichever list is on screen.
     invalidateRestoreDescriptors(accountId);
     if (updatedFlags > 0) rereadNoteFlags(accountId, mailbox);
-    if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
+    checkSource(useMailStore.getState());
+    if (mailbox === 'INBOX' && !invalid) await recountInboxUnread(accountId, newEmails);
     return onScreen;
+    } finally {
+      unwatchSource();
+    }
   };
 
   // Each daemonCall is its own socket connection — the Tauri forwarder connects,
@@ -343,8 +353,18 @@ export function useEmailScheduler() {
     // A restarted daemon holds no watchers: the app is its only account list,
     // and until the next scheduled refresh re-sent it, no account was idled.
     let unlisten = null;
-    onDaemonReconnected(() => { if (!stopped) registerWatchers(); })
-      .then((u) => { if (stopped) u?.(); else unlisten = u; });
+    try {
+      Promise.resolve(onDaemonReconnected(() => {
+        if (stopped) return;
+        invalidateUnreadConnection();
+        badgeConsumerGeneration.current += 1;
+        registerWatchers();
+      }))
+        .then((u) => { if (stopped) u?.(); else unlisten = u; })
+        .catch(error => console.warn('[scheduler] Could not watch daemon reconnect:', error));
+    } catch (error) {
+      console.warn('[scheduler] Could not watch daemon reconnect:', error);
+    }
     (async () => {
       while (!stopped) {
         let reply;
@@ -419,14 +439,22 @@ export function useEmailScheduler() {
   }, []);
 
   // The badge's total, over the accounts the sidebar shows.
-  const totalUnreadNow = () => selectTotalUnread(useSettingsStore.getState(), useMailStore.getState().accounts);
+  const totalUnreadNow = async () => (await unreadPresentation())?.total ?? null;
 
   // The tray menu's account rows; Rust only hears about a change.
+  const invokeCountSurface = (command, args) => {
+    const answer = invoke(command, args);
+    if (import.meta.env.VITE_E2E === '1' && typeof window.__UNREAD_NATIVE_OBSERVER__ === 'function') {
+      try { window.__UNREAD_NATIVE_OBSERVER__(command, args, answer); }
+      catch { /* Diagnostics cannot alter the shell call. */ }
+    }
+    return answer;
+  };
   const updateTray = async (rows) => {
     const signature = JSON.stringify(rows);
     if (signature === lastTrayRows.current) return;
     try {
-      await invoke('set_tray_accounts', { accounts: rows });
+      await invokeCountSurface('set_tray_accounts', { accounts: rows });
       lastTrayRows.current = signature;
     } catch (error) {
       console.error('[scheduler] Failed to update the tray menu:', error);
@@ -437,10 +465,10 @@ export function useEmailScheduler() {
   const updateBadge = async (count) => {
     if (!invoke) return;
 
-    if (!badgeEnabled) {
+    if (!useSettingsStore.getState().badgeEnabled) {
       // Clear badge if disabled
       try {
-        await invoke('set_badge_count', { count: 0 });
+        await invokeCountSurface('set_badge_count', { count: 0 });
         lastBadgeCount.current = 0;
       } catch (error) {
         console.error('[scheduler] Failed to clear badge:', error);
@@ -450,7 +478,7 @@ export function useEmailScheduler() {
 
     if (count === lastBadgeCount.current) return;
     try {
-      await invoke('set_badge_count', { count });
+      await invokeCountSurface('set_badge_count', { count });
       lastBadgeCount.current = count;
     } catch (error) {
       console.error('[scheduler] Failed to update badge:', error);
@@ -459,6 +487,7 @@ export function useEmailScheduler() {
 
   // Refresh function that also updates last refresh time
   const doRefresh = async () => {
+    const consumer = badgeConsumerGeneration.current;
     console.log('[scheduler] Starting scheduled refresh...');
     // A token refreshed in the last tick reaches the daemon's watcher here.
     registerWatchers();
@@ -476,10 +505,12 @@ export function useEmailScheduler() {
 
       // Update badge to reflect total unread across ALL accounts
       if (result) {
-        if (badgeMode === 'unread') {
-          updateBadge(totalUnreadNow());
+        if (consumer !== badgeConsumerGeneration.current) return;
+        if (useSettingsStore.getState().badgeMode === 'unread') {
+          const total = await totalUnreadNow();
+          if (consumer === badgeConsumerGeneration.current && total !== null) await updateBadge(total);
         } else {
-          updateBadge(useMailStore.getState().emails.length);
+          await updateBadge(useMailStore.getState().emails.length);
         }
       }
     } catch (error) {
@@ -555,29 +586,31 @@ export function useEmailScheduler() {
   const badgeTimerRef = useRef(null);
   useEffect(() => {
     if (!invoke) return;
+    let disposed = false;
 
-    if (!badgeEnabled) updateBadge(0);
+    if (!badgeEnabled) void updateBadge(0);
 
     // Debounce: wait 2s after last change before updating badge.
     // During IMAP sync, emails.length changes every ~1s per page — we want the final stable value.
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
-    badgeTimerRef.current = setTimeout(() => {
+    badgeTimerRef.current = setTimeout(async () => {
       const accountsNow = useMailStore.getState().accounts;
       // Accounts not loaded yet: their counts would read as a 0 on the dock.
       if (!accountsNow.length && !hadAccounts.current) return;
       hadAccounts.current = true;
-      const rows = unreadRows(useSettingsStore.getState(), accountsNow);
-      updateTray(rows);
+      const answer = await unreadPresentation();
+      if (disposed || !answer) return;
+      await updateTray(answer.rows);
+      if (disposed) return;
       if (!badgeEnabled) return;
       if (badgeMode === 'unread') {
-        // Unread across every account the sidebar shows (not just current view)
-        updateBadge(rows.reduce((sum, row) => sum + row.unread, 0));
+        await updateBadge(answer.total);
       } else {
-        updateBadge(useMailStore.getState().emails.length);
+        await updateBadge(useMailStore.getState().emails.length);
       }
     }, 2000);
 
-    return () => { if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current); };
+    return () => { disposed = true; if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current); };
   }, [badgeEnabled, badgeMode, emails.length, accounts, unreadPerAccount, hiddenAccounts, displayNames, accountOrder]);
 
   return { doRefresh };

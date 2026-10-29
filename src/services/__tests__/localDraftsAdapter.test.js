@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-const send = vi.hoisted(() => vi.fn());
+// db/keychain checks transport on import; its reply must still be a Promise.
+const send = vi.hoisted(() => vi.fn().mockResolvedValue('/tmp/mailvault-test'));
 vi.mock('../transport', () => ({ send }));
 vi.mock('../transport.js', () => ({ send }));
 const store = vi.hoisted(() => ({ state: {} }));
@@ -15,7 +16,7 @@ const identity = (uid, accountId = 'a') => ({ accountId, mailbox: 'Drafts', uid,
 const reply = (revision = 1, uid = 2) => ({ draftId: 'd', revision, disposition: 'saved', current: { identity: identity(uid), entry: { uid, subject: 'current', source: 'local_draft' } }, pending: null, cleanupIdentities: [], discarded: false, cleanup: 'complete', accountId: 'a', mailbox: 'Drafts', uid, entry: { uid, source: 'local_draft' } });
 beforeEach(async () => {
   globalThis.window = { __TAURI__: { core: { invoke: vi.fn() } }, addEventListener() {}, removeEventListener() {} };
-  send.mockReset();
+  send.mockReset().mockResolvedValue('/tmp/mailvault-test');
   const projection = await import('../draftProjection'); projection.resetDraftProjectionForTest();
   drafts.setComposeOpener(null);
   store.state = { activeAccountId: 'a', activeMailbox: 'Drafts', localEmails: [], emails: [], savedEmailIds: new Set(), archivedEmailIds: new Set(), updateSortedEmails: vi.fn() };

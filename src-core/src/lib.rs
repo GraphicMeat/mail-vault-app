@@ -96,5 +96,6 @@ pub mod mirror_mutation;
 pub mod drafts;
 
 pub mod compose_prep;
+pub mod unread_counts;
 
 pub mod backup_schedule;

@@ -26,7 +26,24 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('../../services/daemonClient', async (importOriginal) => ({
   ...(await importOriginal()),
-  daemonCall: vi.fn().mockResolvedValue([]),
+  daemonCall: vi.fn().mockImplementation(async (method, params) => {
+    if (method !== 'counts.unread') return [];
+    const counts = { ...params.baseline };
+    const cache = params.cache;
+    let wrote = params.op === 'recountRows' && Array.isArray(cache?.emails)
+      && !(cache.totalEmails > cache.emails.length);
+    if (wrote) counts[params.accountId] = cache.emails.filter(row => !row.flags?.includes('\\Seen')
+      && !params.projection?.snoozes?.some(s => s.accountId === params.accountId
+        && s.snoozedMailbox === '' && s.state === 'snoozed' && s.messageId === row.messageId)).length;
+    if (params.op === 'shift') {
+      for (const entry of params.entries || []) {
+        if (entry.mailbox !== 'INBOX' || params.mode === 'unreadOnly' && entry.row?.flags?.includes('\\Seen')) continue;
+        counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + params.sign);
+        wrote = true;
+      }
+    }
+    return { counts, rows: [], total: 0, wrote };
+  }),
 }));
 
 const mockGetEmailHeadersMeta = vi.fn();
@@ -110,6 +127,7 @@ vi.mock('../settingsStore', () => ({
       linkSafetyEnabled: false,
       markAsReadMode: 'manual',
       markAsReadDelay: 3,
+      setUnreadPerAccount: counts => mockSetUnread('a1', counts.a1),
       setUnreadForAccount: (...a) => mockSetUnread(...a),
       addSearchToHistory: () => {},
     }),
@@ -207,7 +225,7 @@ describe('a woken local snooze comes back unread', () => {
       expect(shown('a1', 5)).toBe(true);
       expect(flagsOf('a1', 5)).not.toContain('\\Seen');
       expect(flagsOf('a1', 4)).toContain('\\Seen');
-      expect(lastUnread('a1')).toBe(1);
+      await vi.waitFor(() => expect(lastUnread('a1')).toBe(1));
     });
 
     // A local undo never touched the server's \Seen (handlers/snooze.rs).
@@ -244,7 +262,7 @@ describe('a woken local snooze comes back unread', () => {
       expect(shown('a1', 5)).toBe(true);
       expect(flagsOf('a1', 5)).not.toContain('\\Seen');
       expect(flagsOf('a2', 5)).toContain('\\Seen');
-      expect(lastUnread('a1')).toBe(1);
+      await vi.waitFor(() => expect(lastUnread('a1')).toBe(1));
 
       // The change feed's repaint of All Inboxes (useEmailScheduler) reads
       // each account's cache, which the daemon's sync already patched.

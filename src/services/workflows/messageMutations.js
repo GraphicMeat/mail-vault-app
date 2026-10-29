@@ -18,7 +18,7 @@ import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, getArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
 } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
-import { shiftInbox, unreadEntries } from '../../stores/unreadCounts';
+import { shiftInbox } from '../../stores/unreadCounts';
 import { dismissFollowUpsAt } from '../../stores/followUpStore';
 import { withoutUids } from '../../stores/slices/serverUids';
 import { patchEverywhere, resolvePool, indexRows } from '../../stores/messageRows';
@@ -742,7 +742,7 @@ const _viewId = (s) => [s.activeAccountId, s.activeMailbox, s.mailboxScope?.root
 // window of each account's cache, not its inbox. An INBOX list that IS the
 // whole inbox recounts in updateSortedEmails right after, which wins.
 function _shiftUnread(entries, sign) {
-  shiftInbox(unreadEntries(entries), sign);
+  void shiftInbox(entries, sign, 'unreadOnly');
 }
 
 // Switching unified folders repaints from this cache for five minutes; a row
@@ -1881,7 +1881,7 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
   // The badge moves by one, from the state the row had (unreadCounts); a list
   // that is the whole INBOX recounts over it in the refresh below.
   const prior = resolvePool(s).find(matches);
-  if (prior && !!prior.flags?.includes('\\Seen') !== read) shiftInbox([{ accountId, mailbox, row: prior }], read ? -1 : 1);
+  if (prior && !!prior.flags?.includes('\\Seen') !== read) void shiftInbox([{ accountId, mailbox, row: prior }], read ? -1 : 1, 'changedReadState');
   _refreshAfterFlagChange(useMailStore);
   _persistVaultSeen(useMailStore, accountId, mailbox, [uid], read);
 }
@@ -2025,7 +2025,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true, d
     const moved = changed
       .map(t => ({ accountId: t.accountId, mailbox: t.mailbox, row: priorRows.get(`${t.accountId}-${t.mailbox}-${t.uid}`) }))
       .filter(e => e.row);
-    shiftInbox(moved, on ? -1 : 1);
+    void shiftInbox(moved, on ? -1 : 1, 'changedReadState');
   }
   _refreshAfterFlagChange(useMailStore);
 

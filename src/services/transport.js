@@ -333,7 +333,7 @@ export const DAEMON_OWNED = new Set([
   'cleanup.status', 'cleanup.run_now', 'cleanup.preview', 'cleanup.rules.get',
   // Native mailbox observation and closed-folder counts.
   'sync.probe', 'folders.status',
-  'sync.refresh', 'sync.refresh_status', 'sync.context',
+  'sync.refresh', 'sync.refresh_status', 'sync.context', 'counts.unread',
 ]);
 
 async function sendToDaemon(command, args) {

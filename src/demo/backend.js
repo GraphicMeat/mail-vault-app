@@ -734,6 +734,63 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         if (method?.startsWith('accounts.') || method?.startsWith('credentials.')) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
+        if (method === 'counts.unread') {
+          const p = args.params || {};
+          const counts = { ...(p.baseline || {}) };
+          let wrote = false;
+          let recountSource = null;
+          const countRows = (accountId, cache, projection = p.projection || {}) => {
+            if (!Array.isArray(cache?.emails) || cache.totalEmails > cache.emails.length) return null;
+            const due = (projection.followUps || []).filter(r => r.accountId === accountId && r.state === 'due'
+              && r.sentMailbox && Number.isInteger(r.sentUid) && !r.seen).length;
+            return cache.emails.filter(row => !row.flags?.includes('\\Seen') && !row.flags?.includes('\\Deleted')).length + due;
+          };
+          if (p.op === 'recountRows' || p.op === 'recountCache') {
+            const cache = p.op === 'recountRows' ? p.cache : p.preferredRows || {
+              emails: messages.filter(row => row.accountId === p.accountId && row.mailbox === 'INBOX'
+                && (row.serverPresent || row.vaultPresent)),
+            };
+            const count = countRows(p.accountId, cache);
+            if (p.op === 'recountCache') recountSource = count !== null ? 'complete'
+              : p.arrivalCount > 0 ? 'arrivalFallback' : 'none';
+            if (count !== null) { counts[p.accountId] = count; wrote = true; }
+            else if (p.arrivalCount > 0) { counts[p.accountId] = (counts[p.accountId] || 0) + p.arrivalCount; wrote = true; }
+          } else if (p.op === 'shift') {
+            for (const entry of p.entries || []) {
+              if (entry.mailbox !== 'INBOX' || !entry.accountId || p.mode === 'unreadOnly' && entry.row?.flags?.includes('\\Seen')) continue;
+              counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
+              wrote = true;
+            }
+          } else if (p.op === 'followUps') {
+            const due = rows => (rows || []).filter(r => r.state === 'due' && r.sentMailbox && Number.isInteger(r.sentUid) && !r.seen);
+            const known = new Set((p.before || []).map(r => r.id));
+            const before = due([...(p.before || []), ...(p.after || []).filter(r => !known.has(r.id) && r.announced)]);
+            const after = due(p.after);
+            for (const id of new Set([...before, ...after].map(r => r.accountId))) {
+              const delta = after.filter(r => r.accountId === id).length - before.filter(r => r.accountId === id).length;
+              if (delta) { counts[id] = Math.max(0, (counts[id] || 0) + delta); wrote = true; }
+            }
+          } else if (p.op === 'merge') {
+            if (p.kind === 'arrivals') { counts[p.accountId] = (counts[p.accountId] || 0) + p.count; wrote = true; }
+            if (p.kind === 'forget') { delete counts[p.accountId]; wrote = true; }
+            if (p.kind === 'recounts') {
+              wrote = true;
+              for (const observation of p.observations || []) {
+                const count = countRows(observation.accountId, observation.cache, observation.projection);
+                if (count !== null) counts[observation.accountId] = count;
+              }
+            }
+          }
+          const view = p.presentation || {};
+          const order = new Map((view.accountOrder || []).map((id, index) => [id, index]));
+          const rows = (view.accounts || []).map((account, index) => ({ account, index }))
+            .sort((a, b) => (order.get(a.account.id) ?? Infinity) - (order.get(b.account.id) ?? Infinity) || a.index - b.index)
+            .filter(({ account }) => !view.hiddenAccounts?.[account.id])
+            .map(({ account }) => ({ id: account.id, label: view.displayNames?.[account.id] || account.name || account.email || '',
+              unread: counts[account.id] || 0 }));
+          return { counts, rows, total: rows.reduce((sum, row) => sum + row.unread, 0), wrote,
+            ...(recountSource ? { recountSource } : {}) };
+        }
         // Insights: the daemon's insights.build / aggregate / messages
         // (handlers/insights_aggregate.rs), as a small stand-in over the
         // demo rows: one event per row, no cross-copy grouping.

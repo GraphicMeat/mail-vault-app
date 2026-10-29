@@ -3,7 +3,8 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { inboxCount, applyRecounts, selectTotalUnread } from '../../stores/unreadCounts';
+import { mergeRecounts, rawUnreadProjection, unreadPresentation } from '../../stores/unreadCounts';
+import { accountExpectedContext } from '../db/accounts';
 import { hasValidCredentials } from '../authUtils';
 import { isGraphAccount, storageKeyOf } from '../graphConfig';
 import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
@@ -135,6 +136,18 @@ export async function refreshAllAccounts(options = {}) {
   const targetMailbox = options.mailbox || (unifiedInbox ? (unifiedFolder || 'INBOX') : 'INBOX');
   const refreshingUnifiedView = unifiedInbox || targetMailbox === 'UNIFIED';
 
+  const expectedSource = new Map(accounts.map(account =>
+    [account.id, JSON.stringify(accountExpectedContext(account, 'all'))]));
+  const invalidSource = new Set();
+  const checkSources = state => {
+    for (const [id, original] of expectedSource) {
+      const current = state.accounts.find(account => account.id === id);
+      if (!current || JSON.stringify(accountExpectedContext(current, 'all')) !== original) invalidSource.add(id);
+    }
+  };
+  const unsubscribeSources = useMailStore.subscribe?.(checkSources) || (() => {});
+  try {
+
   const probeInvalidations = new Map();
   for (const account of accounts) {
     _invalidateRestore(account.id);
@@ -149,7 +162,7 @@ export async function refreshAllAccounts(options = {}) {
   // Seeding it from the store instead would carry a value read BEFORE
   // loadEmails() ran below, and writing that back at the end would undo the
   // recount loadEmails just made for the account on screen.
-  const countedUnread = {};
+  const countedUnread = [];
   let previousEmailCount = get().emails.length;
   const perAccountResults = [];
   // `accountId`: Retry on one account's connection notice refreshes it alone.
@@ -222,8 +235,9 @@ export async function refreshAllAccounts(options = {}) {
               console.log(`[mailStore] Graph: cached ${headers.length} ${normalizedMailbox} headers for ${account.email}`);
             }
             if (normalizedMailbox === 'INBOX') {
-              const n = inboxCount(account.id, { emails: headers, totalEmails: targetFolder.totalItemCount });
-              if (n !== null) countedUnread[account.id] = n;
+              countedUnread.push({ accountId: account.id,
+                cache: { emails: headers, totalEmails: targetFolder.totalItemCount },
+                projection: rawUnreadProjection() });
             }
 
             const newHeaders = arrivals(baseline, headers);
@@ -276,8 +290,9 @@ export async function refreshAllAccounts(options = {}) {
 
           // Only a complete listing is a count (unreadCounts).
           if (resolvedMailbox === 'INBOX') {
-            const n = inboxCount(account.id, { emails: allEmails, totalEmails: total });
-            if (n !== null) countedUnread[account.id] = n;
+            countedUnread.push({ accountId: account.id,
+              cache: { emails: allEmails, totalEmails: total },
+              projection: rawUnreadProjection() });
           }
 
           const newHeaders = arrivals(baseline, allEmails);
@@ -325,8 +340,9 @@ export async function refreshAllAccounts(options = {}) {
   // loadEmails() above, and that is the fresher number for it. The dock badge's
   // total is derived from the counts (unreadCounts), so the accounts this run
   // skipped (already fresh, no credentials, the active one) still count.
-  applyRecounts(countedUnread);
-  const totalUnread = selectTotalUnread(useSettingsStore.getState(), get().accounts);
+  checkSources(get());
+  await mergeRecounts(countedUnread.filter(item => !invalidSource.has(item.accountId)));
+  const totalUnread = (await unreadPresentation())?.total ?? 0;
 
   const newEmailCount = get().emails.length;
   const newEmails = Math.max(0, newEmailCount - previousEmailCount);
@@ -351,4 +367,7 @@ export async function refreshAllAccounts(options = {}) {
   }
 
   return { newEmails, totalUnread, perAccountResults };
+  } finally {
+    unsubscribeSources();
+  }
 }

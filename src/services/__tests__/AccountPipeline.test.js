@@ -29,7 +29,7 @@ vi.mock('../syncService', () => ({
   // shape itself is pinned in syncService.test.js, not here.
   toSyncAccount: (account, id = account?.id) => ({ id, email: account?.email, imapConfig: {} }),
 }));
-vi.mock('../transport', () => ({ getDaemonHealth: () => ({ alive: true }) }));
+vi.mock('../transport', () => ({ getDaemonHealth: () => ({ alive: true }), send: vi.fn().mockResolvedValue(null) }));
 const graph = vi.hoisted(() => ({
   order: [],
   listFolders: null,

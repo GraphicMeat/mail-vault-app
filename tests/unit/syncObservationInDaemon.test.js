@@ -52,7 +52,7 @@ describe('sync observation policy is native', () => {
 
   it('gives the new RPCs bounded shell replies', () => {
     const shell = code(read('src-tauri/src/main.rs'));
-    expect(shell).toMatch(/"sync\.probe"\s*=>\s*Some\(Duration::from_secs\(30\)\)/);
+    expect(shell).toMatch(/"sync\.probe"\s*\|\s*"counts\.unread"\s*=>\s*Some\(Duration::from_secs\(30\)\)/);
     expect(shell).toMatch(/"folders\.status"\s*=>\s*Some\(Duration::from_secs\(125\)\)/);
   });
 

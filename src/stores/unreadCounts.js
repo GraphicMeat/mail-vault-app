@@ -1,173 +1,120 @@
-// The one owner of the sidebar's per-account unread counts (`unreadPerAccount`,
-// persisted in settingsStore) and of the total the dock badge shows and the
-// tray menu's rows, which are derived from them and stored nowhere.
-//
-// It used to be written from five places with five rules: a recount of the
-// rows the list held (a window onto a folder, or the rows of ANOTHER folder in
-// All Inboxes Sent and in a branch listing), a +-1 shift, a recount from the
-// daemon's cache, a bulk merge by the refresh, and a separately stored total
-// that only two of them updated.
-//
-// The rule, for every writer: INBOX only. A count is recounted only from a
-// COMPLETE cache (`emails` holding every message the folder has): a partial one
-// reads as fewer unread. Anything else moves the count by one per message that
-// changed state, and a message nothing loaded tells us about does not move it.
-// The count of a folder is never read off rows that belong to another, and a
-// recount counts only what the list itself would show (rowVisibility): a
-// message it holds back is no unread message the user can find.
-//
-// No heavy work lives here: a recount is over rows the caller already holds,
-// and a cache read is the caller's (the scheduler, off the click path).
+// Raw count observations cross one ordered native lane. Settings remains the
+// only durable writer of the resulting per-account projection.
 import { useSettingsStore } from './settingsStore';
-import { localSnoozeKeys, useSnoozeStore } from './snoozeStore';
-import { dueFollowUps, useFollowUpStore } from './followUpStore';
+import { useSnoozeStore } from './snoozeStore';
+import { useFollowUpStore } from './followUpStore';
 import { useTagStore } from './tagStore';
 import { useAutoTagStore } from './autoTagStore';
 import { useViewHideStore } from './viewHideStore';
-import { rowVisibility } from '../utils/rowVisibility';
+import { accountExpectedContext } from '../services/db/accounts';
+import { submitUnread } from '../services/unreadCountsClient';
 
-const settings = () => useSettingsStore.getState();
-
-// The store holding what the list keeps back (a delete's tombstone, the vault
-// marks). It imports this module, so it hands itself over (mailStore.js).
 let listStore = null;
-export function setListStore(store) {
-  listStore = store;
+export function setListStore(store) { listStore = store; }
+const list = () => listStore?.getState() || {};
+
+const pick = (source, fields) => Object.fromEntries(fields
+  .filter(field => source && Object.hasOwn(source, field))
+  .map(field => [field, source[field]]));
+const minimalRow = row => pick(row, ['uid','flags','messageId','_accountId','_srcAccountId','_mailbox','isArchived']);
+const minimalCache = cache => cache == null ? null : {
+  ...pick(cache, ['totalEmails']),
+  ...(Object.hasOwn(cache, 'emails') ? { emails: Array.isArray(cache.emails)
+    ? cache.emails.map(minimalRow) : cache.emails } : {}),
+};
+const reminders = rows => (rows || []).map(row => pick(row,
+  ['id','accountId','state','sentMailbox','sentUid','seen','announced']));
+const snoozes = rows => (rows || []).map(row => pick(row,
+  ['id','accountId','fromMailbox','snoozedMailbox','messageId','state']));
+const rules = rows => (rows || []).map(row => pick(row,['tagId','enabled','inboxAction']));
+const setArray = value => value == null ? null : Array.from(value);
+
+export function rawUnreadProjection() {
+  const mail = list();
+  const settings = useSettingsStore.getState();
+  return {
+    archivedKeys: setArray(mail.archivedEmailIds),
+    deleteTombstones: setArray(mail.deleteTombstones),
+    snoozes: snoozes(useSnoozeStore.getState().rows),
+    autoTagRules: rules(useAutoTagStore.getState().rules),
+    tagsByRow: Object.fromEntries(Object.entries(useTagStore.getState().byRow || {})
+      .map(([key, ids]) => [key, [...ids]])),
+    viewHiddenKeys: setArray(useViewHideStore.getState().keys),
+    hideViewMail: !!settings.hideViewMail,
+    followUps: reminders(useFollowUpStore.getState().rows),
+  };
 }
-
-/// Would `accountId`'s INBOX list show a row of its cache? The list's own rule
-/// set: a delete still owed to the server, \Deleted not yet expunged, an
-/// auto-tag hide, a local snooze and a saved view holding it (while
-/// `hideViewMail` is on) keep a message off it. Whatever is on screen: the
-/// badge is the account's INBOX, so an open view or search changes nothing.
-/// The view hide set is one store for every account, so a badge of an account
-/// not on screen reads the same answer. A refused delete
-/// left its row tombstoned while every sync brought it back unread from the
-/// server's copy: "1" on the badge, "No unread messages" in the list.
-/// `tombstones: false` is for a shift: a delete lays its tombstone before it
-/// shifts and an undo lifts it before, so the message the shift is about
-/// always has one.
-function shownInInbox(accountId, { tombstones = true } = {}) {
-  const s = listStore?.getState() ?? {};
-  const hiddenTagIds = useAutoTagStore.getState().hiddenTagIds();
-  return rowVisibility({
-    activeAccountId: accountId,
-    activeMailbox: 'INBOX',
-    archivedEmailIds: s.archivedEmailIds,
-    deleteTombstones: tombstones ? s.deleteTombstones : null,
-    hiddenTagIds,
-    tagsByRow: hiddenTagIds.size ? useTagStore.getState().byRow : null,
-    localSnoozes: localSnoozeKeys(useSnoozeStore.getState().rows),
-    viewHidden: settings().hideViewMail ? useViewHideStore.getState().keys : null,
-  });
+function presentation() {
+  const settings = useSettingsStore.getState();
+  return {
+    accounts: (list().accounts || []).map(a => pick(a,['id','name','email'])),
+    hiddenAccounts: { ...(settings.hiddenAccounts || {}) },
+    displayNames: { ...(settings.displayNames || {}) },
+    accountOrder: [...(settings.accountOrder || [])],
+  };
 }
-
-/// Does `cache` hold the whole folder? Its row count reaches the folder's own.
-export const isCompleteCache = (cache) =>
-  Array.isArray(cache?.emails) && !(cache.totalEmails > cache.emails.length);
-
-/// The sidebar's account rows as the tray menu lists them: `accounts` in the
-/// sidebar's order, hidden ones left out, labelled and counted as it does.
-/// A count whose account is not in `accounts` (one removed, or not loaded yet)
-/// is no row. It stays in the store: a list still loading is not a removal.
-export function unreadRows(state, accounts) {
-  const hidden = state?.hiddenAccounts || {};
-  const counts = state?.unreadPerAccount || {};
-  const names = state?.displayNames || {};
-  const ordered = state?.getOrderedAccounts ? state.getOrderedAccounts(accounts || []) : (accounts || []);
-  return ordered
-    .filter(a => !hidden[a.id])
-    .map(a => ({ id: a.id, label: names[a.id] || a.name || a.email, unread: counts[a.id] || 0 }));
-}
-
-/// What the dock badge shows: the sum of the sidebar's rows, no more.
-export const selectTotalUnread = (state, accounts) =>
-  unreadRows(state, accounts).reduce((sum, row) => sum + row.unread, 0);
-
-/// The unread count of `accountId`'s INBOX as `cache` (`{ emails, totalEmails }`)
-/// tells it, or null when the cache is not complete. Only the rows the list
-/// shows (shownInInbox), and the follow-up reminders it shows unread at its top.
-export function inboxCount(accountId, cache) {
-  if (!isCompleteCache(cache)) return null;
-  const shown = shownInInbox(accountId);
-  return cache.emails.filter(e => !e.flags?.includes('\\Seen') && shown(e)).length
-    + (unreadFollowUps(useFollowUpStore.getState().rows).get(accountId) || 0);
-}
-
-/// Unread due reminders per account: each is an unread row in that inbox.
-function unreadFollowUps(rows) {
-  const byAccount = new Map();
-  for (const r of dueFollowUps(rows)) {
-    if (!r.seen) byAccount.set(r.accountId, (byAccount.get(r.accountId) || 0) + 1);
+function originalBound(accountIds) {
+  if (!listStore || !accountIds.length) return {};
+  const expected = new Map();
+  for (const id of accountIds) {
+    const account = (list().accounts || []).find(a => a.id === id);
+    if (!account) return { invalid: () => true };
+    expected.set(id, JSON.stringify(accountExpectedContext(account,'all')));
   }
-  return byAccount;
+  let stale = false;
+  const check = () => {
+    for (const [id, context] of expected) {
+      const current = (list().accounts || []).find(a => a.id === id);
+      if (!current || JSON.stringify(accountExpectedContext(current,'all')) !== context) stale = true;
+    }
+  };
+  const unsubscribe = listStore.subscribe(check);
+  return { invalid: () => { check(); return stale; }, cleanup: unsubscribe };
+}
+function send(request, accounts = [], coalesceKey = null, freshRequest = null) {
+  return submitUnread(request, { presentation, ...originalBound(accounts), coalesceKey,
+    accounts, freshRequest });
 }
 
-/// The reminder rows changed from `prev` to `next` (one went due, was opened,
-/// marked unread or dismissed): each account moves by the change in its
-/// unread reminders. A recount from a complete cache lands after this and
-/// settles on the same number.
-///
-/// The counts are persisted, so a row read for the first time (the launch's
-/// load) that was already announced was counted by the session that
-/// announced it: it is taken as counted before too. One not announced went
-/// due while the app was closed, and moves the count.
-export function shiftFollowUps(prev, next) {
-  const known = new Set((prev || []).map(r => r.id));
-  const counted = (next || []).filter(r => !known.has(r.id) && r.announced);
-  const before = unreadFollowUps([...(prev || []), ...counted]);
-  const after = unreadFollowUps(next);
-  const s = settings();
-  for (const id of new Set([...before.keys(), ...after.keys()])) {
-    const n = (after.get(id) || 0) - (before.get(id) || 0);
-    if (n) s.setUnreadForAccount(id, Math.max(0, (s.unreadPerAccount?.[id] || 0) + n));
-  }
-}
-
-/// Recount `accountId`'s INBOX from `cache`, when it is complete. Returns
-/// whether it wrote.
 export function recountInbox(accountId, cache) {
-  const n = inboxCount(accountId, cache);
-  if (n === null) return false;
-  settings().setUnreadForAccount(accountId, n);
-  return true;
+  return send({ op:'recountRows', accountId, cache:minimalCache(cache), projection:rawUnreadProjection() },
+    [accountId], `rows:${accountId}`)
+    .then(answer => !!answer?.wrote);
 }
-
-/// `entries` are `{ accountId, mailbox, row }`, one per message that stopped or
-/// started counting: the caller has decided which way, `sign` is -1 or +1.
-/// INBOX messages only, and not one the list holds back (shownInInbox): it was
-/// never counted, so moving it moves nothing.
-export function shiftInbox(entries, sign) {
-  const byAccount = new Map();
-  const shown = new Map();
-  for (const { accountId, mailbox, row } of entries) {
-    if (mailbox !== 'INBOX' || !accountId) continue;
-    if (!shown.has(accountId)) shown.set(accountId, shownInInbox(accountId, { tombstones: false }));
-    if (!shown.get(accountId)({ ...row, flags: (row?.flags || []).filter(f => f !== '\\Seen') })) continue;
-    byAccount.set(accountId, (byAccount.get(accountId) || 0) + sign);
-  }
-  const s = settings();
-  for (const [id, n] of byAccount) {
-    s.setUnreadForAccount(id, Math.max(0, (s.unreadPerAccount?.[id] || 0) + n));
-  }
+export function recountNativeInbox(accountId, { preferredRows, arrivalCount, change } = {}) {
+  const request = { op:'recountCache', accountId, projection:rawUnreadProjection(),
+    ...(preferredRows !== undefined ? { preferredRows:minimalCache(preferredRows) } : {}),
+    ...(arrivalCount !== undefined ? { arrivalCount } : {}),
+    ...(change !== undefined ? { change } : {}) };
+  return send(request,[accountId], arrivalCount || change ? null : `cache:${accountId}`,
+    () => ({ op:'recountCache', accountId, projection:rawUnreadProjection() }))
+    .then(answer => !!answer?.wrote);
 }
-
-/// The entries of `rows` (`{ accountId, mailbox, row }`) that were unread.
-export const unreadEntries = (entries) => entries.filter(({ row }) => !row?.flags?.includes('\\Seen'));
-
-/// A cache too partial to recount still tells how many arrived.
+export function shiftInbox(entries, sign, mode = 'changedReadState') {
+  const raw = (entries || []).map(entry => ({ accountId:entry.accountId,
+    mailbox:entry.mailbox, row:minimalRow(entry.row) }));
+  return send({ op:'shift', entries:raw, sign, mode, projection:rawUnreadProjection() },
+    [...new Set(raw.map(row => row.accountId).filter(Boolean))]).then(answer => !!answer?.wrote);
+}
+export function shiftFollowUps(before, after) {
+  const rawBefore=reminders(before), rawAfter=reminders(after);
+  return send({ op:'followUps', before:rawBefore, after:rawAfter },
+    [...new Set([...rawBefore,...rawAfter].map(row => row.accountId).filter(Boolean))])
+    .then(answer => !!answer?.wrote);
+}
 export function addArrivals(accountId, count) {
-  const s = settings();
-  s.setUnreadForAccount(accountId, (s.unreadPerAccount?.[accountId] || 0) + count);
+  return send({ op:'merge', kind:'arrivals', accountId, count },[accountId])
+    .then(answer => !!answer?.wrote);
 }
-
-/// Counts a refresh measured from complete folders, over the ones it did not.
-export function applyRecounts(measured) {
-  const s = settings();
-  s.setUnreadPerAccount({ ...s.unreadPerAccount, ...measured });
+export function mergeRecounts(observations) {
+  const raw = (observations || []).map(item => ({ accountId:item.accountId,
+    cache:minimalCache(item.cache), projection:item.projection || rawUnreadProjection() }));
+  return send({ op:'merge', kind:'recounts', observations:raw },
+    [...new Set(raw.map(row => row.accountId))]);
 }
-
 export function forgetAccount(accountId) {
-  const { [accountId]: _removed, ...rest } = settings().unreadPerAccount || {};
-  settings().setUnreadPerAccount(rest);
+  return send({ op:'merge', kind:'forget', accountId });
 }
+export function unreadPresentation() { return send({ op:'rows' }); }
+export async function unreadRows() { return (await unreadPresentation())?.rows || []; }
+export async function selectTotalUnread() { return (await unreadPresentation())?.total ?? null; }

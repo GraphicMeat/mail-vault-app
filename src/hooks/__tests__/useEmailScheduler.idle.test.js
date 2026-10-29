@@ -40,6 +40,41 @@ vi.mock('../../services/daemonClient.js', () => ({
 const mockGetHeaders = vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 });
 // The whole INBOX cache, which the badge is recounted from.
 const mockGetAllHeaders = vi.fn().mockResolvedValue(null);
+async function nativeCountAnswer(p) {
+  const counts = { ...p.baseline };
+  let wrote = false;
+  const inboxKeys = rows => (rows || []).filter(key => key.startsWith(`${p.accountId}|INBOX|`)).sort();
+  const unchangedView = p.change?.kind === 'viewHiddenKeys'
+    && JSON.stringify(inboxKeys(p.change.before)) === JSON.stringify(inboxKeys(p.change.after));
+  if (p.op === 'recountCache' && !unchangedView) {
+    const cache = p.preferredRows && Array.isArray(p.preferredRows.emails)
+      && !(p.preferredRows.totalEmails > p.preferredRows.emails.length)
+      ? p.preferredRows : await mockGetAllHeaders(p.accountId, 'INBOX');
+    if (Array.isArray(cache?.emails) && !(cache.totalEmails > cache.emails.length)) {
+      counts[p.accountId] = cache.emails.filter(row => !row.flags?.includes('\\Seen')
+        && !row.flags?.includes('\\Deleted')
+        && !p.projection?.snoozes?.some(s => s.accountId === p.accountId && s.state === 'snoozed'
+          && s.snoozedMailbox === '' && s.messageId === row.messageId)
+        && !(p.projection?.hideViewMail && p.projection?.viewHiddenKeys?.includes(`${p.accountId}|INBOX|${row.uid}`))).length;
+      wrote = true;
+    } else if (p.arrivalCount > 0) {
+      counts[p.accountId] = (counts[p.accountId] || 0) + p.arrivalCount;
+      wrote = true;
+    }
+  }
+  if (p.op === 'shift') {
+    for (const entry of p.entries) {
+      if (entry.mailbox !== 'INBOX' || p.mode === 'unreadOnly' && entry.row.flags?.includes('\\Seen')) continue;
+      counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
+      wrote = true;
+    }
+  }
+  const view = p.presentation || {};
+  const rows = (view.accounts || []).filter(account => !view.hiddenAccounts?.[account.id])
+    .map(account => ({ id: account.id, label: view.displayNames?.[account.id] || account.name || account.email || '',
+      unread: counts[account.id] || 0 }));
+  return { counts, rows, total: rows.reduce((sum, row) => sum + row.unread, 0), wrote };
+}
 vi.mock('../../services/db', () => ({
   getEmailHeadersPartial: (...a) => mockGetHeaders(...a),
   getEmailHeaders: (...a) => mockGetAllHeaders(...a),
@@ -50,8 +85,12 @@ vi.mock('../../stores/focusStore', () => ({ notify: (...a) => mockNotify(...a) }
 
 // The Tauri event a (re)connected daemon channel raises.
 let daemonReconnected = null;
+let registerReconnect = cb => {
+  daemonReconnected = cb;
+  return Promise.resolve(() => { daemonReconnected = null; });
+};
 vi.mock('../../services/searchIndex', () => ({
-  onDaemonReconnected: (cb) => { daemonReconnected = cb; return Promise.resolve(() => { daemonReconnected = null; }); },
+  onDaemonReconnected: cb => registerReconnect(cb),
 }));
 
 // The saved-view badges and the Notes to Self board, which a synced change
@@ -94,7 +133,10 @@ const mailState = () => ({
   refreshAllAccounts: vi.fn().mockResolvedValue({ perAccountResults: [] }),
 });
 const mailStore = create(() => mailState());
-const facade = { useMailStore: Object.assign((s) => mailStore(s), { getState: () => mailStore.getState(), setState: (p) => mailStore.setState(p) }) };
+const facade = { useMailStore: Object.assign((s) => mailStore(s), {
+  getState: () => mailStore.getState(), setState: (p) => mailStore.setState(p),
+  subscribe: (...args) => mailStore.subscribe(...args),
+}) };
 vi.mock('../../stores/mailStore', () => ({ useMailStore: facade.useMailStore }));
 vi.mock('../../stores/accountStore', () => ({ useAccountStore: facade.useMailStore }));
 vi.mock('../../stores/messageListStore', () => ({ useMessageListStore: facade.useMailStore }));
@@ -110,6 +152,7 @@ const settingsState = () => ({
   hiddenAccounts: {},
   billingProfile: null,
   setUnreadForAccount: (id, count) => settingsStore.setState(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [id]: count } })),
+  setUnreadPerAccount: counts => settingsStore.setState({ unreadPerAccount: counts }),
 });
 const settingsStore = create(() => settingsState());
 vi.mock('../../stores/settingsStore', () => ({
@@ -124,7 +167,10 @@ const { ownAddresses } = await import('../../utils/ownAddresses.js');
 const { useEmailScheduler } = await import('../useEmailScheduler');
 const { useSnoozeStore } = await import('../../stores/snoozeStore');
 const { useViewHideStore } = await import('../../stores/viewHideStore');
-const { shiftInbox, selectTotalUnread } = await import('../../stores/unreadCounts');
+const { shiftInbox, selectTotalUnread, setListStore } = await import('../../stores/unreadCounts');
+// This suite replaces mailStore, so register the same facade real mailStore
+// registers at module initialization for native presentation and source fences.
+setListStore(facade.useMailStore);
 const { saveRestoreDescriptor, getRestoreDescriptor } = await import('../../services/cacheManager');
 
 const IMAP_A = { id: 'a1', email: 'a@one.co', password: 'pw', imapHost: 'imap.one.co', imapPort: 993 };
@@ -140,7 +186,11 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     vi.useFakeTimers();
     calls.length = 0;
     eventReplies = [];
-    countAnswer = null;
+    countAnswer = nativeCountAnswer;
+    registerReconnect = cb => {
+      daemonReconnected = cb;
+      return Promise.resolve(() => { daemonReconnected = null; });
+    };
     mockDaemonCall.mockClear();
     mockNotify.mockClear();
     mockLoadEmails.mockClear();
@@ -744,6 +794,41 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockNotify).not.toHaveBeenCalled();
   });
 
+  it('releases a reconnect listener whose registration succeeds after unmount', async () => {
+    let finishRegistration;
+    const unlisten = vi.fn();
+    registerReconnect = cb => {
+      daemonReconnected = cb;
+      return new Promise(resolve => { finishRegistration = () => resolve(unlisten); });
+    };
+    const { unmount } = renderHook(() => useEmailScheduler());
+    await flush();
+    unmount();
+    finishRegistration();
+    await flush();
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the scheduler alive when reconnect listener registration throws synchronously', async () => {
+    mailStore.setState({ accounts: [IMAP_A] });
+    registerReconnect = () => { throw new Error('listener setup failed'); };
+    let mounted;
+    expect(() => { mounted = renderHook(() => useEmailScheduler()); },
+      'W4S3_LISTENER_RED synchronous registration must be contained').not.toThrow();
+    await flush();
+    expect(methods('sync.events')).toHaveLength(1);
+    mounted.unmount();
+  });
+
+  it('contains a rejected reconnect registration and keeps polling', async () => {
+    mailStore.setState({ accounts: [IMAP_A] });
+    registerReconnect = () => Promise.reject(new Error('listener setup failed'));
+    const { unmount } = renderHook(() => useEmailScheduler());
+    await flush();
+    expect(methods('sync.events')).toHaveLength(1);
+    unmount();
+  });
+
   // A token that was just refreshed has to reach the daemon, or the watcher
   // it holds keeps failing to authenticate until the next mount.
   it('re-registers the watchers on a manual refresh', async () => {
@@ -944,7 +1029,9 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
       expect(badgeCalls().at(-1)).toBe(5);
 
-      act(() => { shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { flags: [] } }], -1); });
+      await act(async () => {
+        expect(await shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { uid: 1, flags: [] } }], -1)).toBe(true);
+      });
       await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
 
       expect(badgeCalls().at(-1)).toBe(4);
@@ -986,6 +1073,55 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
       expect(badgeCalls().at(-1)).toBe(3);
     });
+
+    it('drops a held old rows reply after hidden, label and order settings change', async () => {
+      mailStore.setState({ accounts: [IMAP_A, IMAP_B] });
+      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread',
+        unreadPerAccount: { a1: 3, a2: 2 } });
+      let releaseOld;
+      let first = true;
+      countAnswer = params => {
+        if (params.op !== 'rows') return nativeCountAnswer(params);
+        if (first) {
+          first = false;
+          return new Promise(resolve => { releaseOld = resolve; });
+        }
+        return nativeCountAnswer(params);
+      };
+      mockInvoke.mockClear();
+      const { unmount } = renderHook(() => useEmailScheduler());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(methods('counts.unread').filter(call => call[1].op === 'rows')).toHaveLength(1);
+      act(() => { settingsStore.setState({ hiddenAccounts: { a1: true },
+        displayNames: { a2: 'Current B' }, accountOrder: ['a2', 'a1'] }); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      await act(async () => { releaseOld({ counts: { a1: 3, a2: 2 },
+        rows: [{ id: 'a1', label: 'Old A', unread: 3 }, { id: 'a2', label: 'Old B', unread: 2 }],
+        total: 5, wrote: false }); });
+      await flush();
+      const tray = mockInvoke.mock.calls.filter(call => call[0] === 'set_tray_accounts').map(call => call[1].accounts);
+      const badge = mockInvoke.mock.calls.filter(call => call[0] === 'set_badge_count').map(call => call[1].count);
+      expect(tray).toEqual([[{ id: 'a2', label: 'Current B', unread: 2 }]]);
+      expect(badge).toEqual([2]);
+      unmount();
+    });
+
+    it('makes no OS call from a native rows reply settled after unmount', async () => {
+      mailStore.setState({ accounts: [IMAP_A] });
+      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3 } });
+      let release;
+      countAnswer = params => params.op === 'rows'
+        ? new Promise(resolve => { release = resolve; }) : nativeCountAnswer(params);
+      mockInvoke.mockClear();
+      const { unmount } = renderHook(() => useEmailScheduler());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+      expect(methods('counts.unread').filter(call => call[1].op === 'rows')).toHaveLength(1);
+      unmount();
+      await act(async () => { release({ counts: { a1: 3 }, rows: [{ id: 'a1', label: 'A', unread: 3 }],
+        total: 3, wrote: false }); });
+      await flush();
+      expect(mockInvoke.mock.calls.filter(call => ['set_badge_count', 'set_tray_accounts'].includes(call[0]))).toEqual([]);
+    });
   });
 
   // The menu bar menu lists the sidebar's accounts with their counts, whatever
@@ -1009,7 +1145,9 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
       expect(trayCalls()).toHaveLength(1);
 
-      act(() => { shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { flags: [] } }], -1); });
+      await act(async () => {
+        expect(await shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { uid: 1, flags: [] } }], -1)).toBe(true);
+      });
       await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
       expect(trayCalls().at(-1)[0].unread).toBe(2);
     });
@@ -1033,7 +1171,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
       expect(settingsStore.getState().unreadPerAccount).toEqual({ a1: 3, a2: 2 });
-      expect(selectTotalUnread(settingsStore.getState(), [{ id: 'a1' }, { id: 'a2' }])).toBe(5);
+      expect(await selectTotalUnread()).toBe(5);
     });
 
     it('recounts on a flags-only change too (read on another device)', async () => {
@@ -1121,7 +1259,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
       expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
       expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
-      expect(selectTotalUnread(settingsStore.getState(), [{ id: 'a1' }, { id: 'a2' }])).toBe(1);
+      expect(await selectTotalUnread()).toBe(1);
 
       useSnoozeStore.getState().applyEvent({ id: 's1', state: 'woken' });
       await flush();

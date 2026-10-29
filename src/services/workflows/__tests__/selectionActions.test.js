@@ -28,6 +28,26 @@ const mockQueueOp = vi.fn().mockResolvedValue(undefined);
 const mockNoteOpFailure = vi.fn();
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSetUnreadForAccount = vi.fn();
+const unreadProjection = {};
+vi.mock('../../daemonClient', async importOriginal => ({
+  ...(await importOriginal()),
+  daemonCall: async (method, p) => {
+    if (method !== 'counts.unread') return {};
+    const counts = { ...p.baseline };
+    let wrote = false;
+    if (p.op === 'recountRows' && Array.isArray(p.cache?.emails)
+      && !(p.cache.totalEmails > p.cache.emails.length)) {
+      counts[p.accountId] = p.cache.emails.filter(row => !row.flags?.includes('\\Seen')).length;
+      wrote = true;
+    }
+    if (p.op === 'shift') for (const entry of p.entries) {
+      if (entry.mailbox !== 'INBOX' || p.mode === 'unreadOnly' && entry.row.flags?.includes('\\Seen')) continue;
+      counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
+      wrote = true;
+    }
+    return { counts, rows: [], total: 0, wrote };
+  },
+}));
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
@@ -133,6 +153,12 @@ vi.mock('../../../stores/settingsStore', () => ({
       linkAlerts: {},
       linkSafetyEnabled: false,
       afterDeleteSelect,
+      unreadPerAccount: unreadProjection,
+      setUnreadPerAccount: counts => {
+        for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
+        Object.assign(unreadProjection, counts);
+        if (Object.hasOwn(counts, 'acct1')) mockSetUnreadForAccount('acct1', counts.acct1);
+      },
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -143,6 +169,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+const { whenUnreadIdle } = await import('../../unreadCountsClient');
 const { removeLocalEmail: removeLocalEmailWorkflow, removeLocalEmails: removeLocalEmailsWorkflow } = await import('../messageMutations');
 const { loadEmails: realLoadEmails } = await import('../loadEmails');
 const { invalidateChatAndThreadCaches, _resetArchivedGroupsForTest, setArchivedGroup, getArchivedGroup } = await import('../../../stores/slices/messageListSlice');
@@ -204,6 +231,7 @@ const seenOf = (uid) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
   _resetArchivedGroupsForTest();
   netOnline = true;
   afterDeleteSelect = 'none';
@@ -285,6 +313,8 @@ describe('markSelectedAsRead', () => {
 
     await useMailStore.getState().markSelectedAsRead();
 
+    await whenUnreadIdle();
+
     expect(mockSetUnreadForAccount).toHaveBeenCalledWith('acct1', 1);
   });
 
@@ -358,9 +388,11 @@ describe('deleteSelectedFromServer', () => {
   // optimistic removal can move this count.
   it('drops the sidebar unread badge with the row, before any reload', async () => {
     primeStore(seedThread(), [1]);
+    await whenUnreadIdle();
     expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 2);
 
     await useMailStore.getState().deleteSelectedFromServer();
+    await whenUnreadIdle();
 
     expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);
   });

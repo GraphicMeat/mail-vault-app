@@ -130,7 +130,7 @@ export async function _prewarmAccountCaches() {
           .filter(e => archivedEmailIds.has(e.uid)).map(e => e.uid),
         timestamp: Date.now(),
       });
-      recountInbox(account.id, cachedHeaders);
+      void recountInbox(account.id, cachedHeaders);
 
       console.log('[prewarm] Cached', cachedHeaders.emails.length, 'headers +', localEmails.length, 'local emails for', account.email);
     } catch (e) {

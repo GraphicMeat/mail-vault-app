@@ -22,7 +22,15 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('../../services/daemonClient', async (importOriginal) => ({
   ...(await importOriginal()),
-  daemonCall: vi.fn().mockResolvedValue([]),
+  daemonCall: vi.fn().mockImplementation(async (method, params) => {
+    if (method !== 'counts.unread') return [];
+    const counts = { ...params.baseline };
+    const cache = params.cache;
+    const wrote = params.op === 'recountRows' && Array.isArray(cache?.emails)
+      && !(cache.totalEmails > cache.emails.length);
+    if (wrote) counts[params.accountId] = cache.emails.filter(row => !row.flags?.includes('\\Seen')).length;
+    return { counts, rows: [], total: 0, wrote };
+  }),
 }));
 
 const mockGetEmailHeadersMeta = vi.fn();
@@ -106,6 +114,7 @@ vi.mock('../settingsStore', () => ({
       linkSafetyEnabled: false,
       markAsReadMode: 'manual',
       markAsReadDelay: 3,
+      setUnreadPerAccount: counts => mockSetUnread('a1', counts.a1),
       setUnreadForAccount: (...a) => mockSetUnread(...a),
       addSearchToHistory: () => {},
     }),

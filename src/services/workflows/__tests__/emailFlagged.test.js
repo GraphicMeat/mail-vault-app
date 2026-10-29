@@ -25,6 +25,23 @@ const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockUnread = {};
 const mockSetUnreadForAccount = vi.fn();
+vi.mock('../../daemonClient', async importOriginal => ({
+  ...(await importOriginal()),
+  daemonCall: async (method, p) => {
+    if (method !== 'counts.unread') return {};
+    const counts = { ...p.baseline };
+    let wrote = false;
+    if (p.op === 'shift') for (const entry of p.entries) {
+      if (entry.mailbox !== 'INBOX' || p.mode === 'unreadOnly' && entry.row.flags?.includes('\\Seen')
+        || p.projection?.snoozes?.some(s => s.accountId === entry.accountId
+          && s.snoozedMailbox === '' && s.state === 'snoozed'
+          && s.messageId.replace(/[<>]/g, '') === entry.row.messageId?.replace(/[<>]/g, ''))) continue;
+      counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
+      wrote = true;
+    }
+    return { counts, rows: [], total: 0, wrote };
+  },
+}));
 
 // The connectivity verdict the workflow reads. Offline is not a failure — the
 // journal entry stays and replayOps sends it when the link is back.
@@ -113,6 +130,11 @@ vi.mock('../../../stores/settingsStore', () => ({
       markAsReadMode: 'manual',
       markAsReadDelay: 3,
       unreadPerAccount: mockUnread,
+      setUnreadPerAccount: counts => {
+        for (const id of Object.keys(mockUnread)) delete mockUnread[id];
+        Object.assign(mockUnread, counts);
+        if (Object.hasOwn(counts, 'a1')) mockSetUnreadForAccount('a1', counts.a1);
+      },
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -127,6 +149,7 @@ const { useSearchStore } = await import('../../../stores/searchStore');
 const { useSnoozeStore } = await import('../../../stores/snoozeStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { toggleFlagged, markAnswered, markForwarded, applyFlagToTargets, applySeenLocally } = await import('../messageMutations');
+const { whenUnreadIdle } = await import('../../unreadCountsClient');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
 
@@ -445,6 +468,7 @@ describe('mark read, through the same core', () => {
     });
 
     await useMailStore.getState().markSelectedAsRead();
+    await whenUnreadIdle();
 
     expect(flagsOf(7)).toContain('\\Seen');
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Seen'], 'add', 'INBOX');
@@ -476,7 +500,7 @@ describe('mark read, through the same core', () => {
   // All Inboxes lists a window of each account's mail, so its badge is moved by
   // one, never recounted from those rows (unreadCounts). A message a local
   // snooze holds out of the inbox is on no badge, so its read change moves none.
-  it('a read change in All Inboxes moves the badge by one, and not for a locally snoozed message', () => {
+  it('a read change in All Inboxes moves the badge by one, and not for a locally snoozed message', async () => {
     const row = (uid, messageId) => ({ uid, _accountId: 'a1', _mailbox: 'INBOX', messageId, subject: `m${uid}`, flags: [], from: { address: 'them@x' }, date: `2026-08-0${uid - 6}T10:00:00Z` });
     primeStore({ emails: [row(7, '<a@mock>'), row(8, '<held@mock>'), row(9, '<c@mock>')], activeMailbox: 'UNIFIED' });
     useSnoozeStore.setState({ rows: [{ id: 's1', accountId: 'a1', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@mock>', state: 'snoozed' }] });
@@ -484,9 +508,11 @@ describe('mark read, through the same core', () => {
     mockSetUnreadForAccount.mockClear();
     try {
       applySeenLocally(useMailStore, { accountId: 'a1', mailbox: 'INBOX', uid: 8, read: true, isUnified: true });
+      await whenUnreadIdle();
       expect(mockSetUnreadForAccount).not.toHaveBeenCalled();
 
       applySeenLocally(useMailStore, { accountId: 'a1', mailbox: 'INBOX', uid: 7, read: true, isUnified: true });
+      await whenUnreadIdle();
       expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('a1', 4);
     } finally {
       useSnoozeStore.setState({ rows: [] });

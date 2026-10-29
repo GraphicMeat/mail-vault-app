@@ -174,5 +174,5 @@ useViewHideStore.subscribe((state, prev) => {
 // (components/FollowUpPinnedRows.jsx), but an unread one counts in the
 // account's badge: one going due, opened or dismissed moves the number.
 useFollowUpStore.subscribe((state, prev) => {
-  if (state.rows !== prev.rows) shiftFollowUps(prev.rows, state.rows);
+  if (state.rows !== prev.rows) void shiftFollowUps(prev.rows, state.rows);
 });

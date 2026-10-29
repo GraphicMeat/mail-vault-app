@@ -74,9 +74,23 @@ vi.mock('../../api', () => ({
 
 // The daemon's deleted-mail bin.
 const mockDaemonCall = vi.fn();
+const nativeUnreadAnswer = async params => {
+  const counts = { ...params.baseline };
+  let wrote = false;
+  if (params.op === 'shift') {
+    for (const entry of params.entries) {
+      if (entry.mailbox !== 'INBOX' || params.mode === 'unreadOnly'
+        && entry.row.flags?.includes('\\Seen')) continue;
+      counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + params.sign);
+      wrote = true;
+    }
+  }
+  return { counts, rows: [], total: 0, wrote };
+};
 vi.mock('../../daemonClient', async (importOriginal) => ({
   ...(await importOriginal()),
-  daemonCall: (...a) => mockDaemonCall(...a),
+  daemonCall: (method, params) => method === 'counts.unread'
+    ? nativeUnreadAnswer(params) : mockDaemonCall(method, params),
 }));
 
 // The unified view's reload verb. Real, it refetches every account — here it
@@ -124,6 +138,10 @@ vi.mock('../../../stores/settingsStore', () => ({
       linkAlerts: {},
       linkSafetyEnabled: false,
       unreadPerAccount,
+      setUnreadPerAccount: counts => {
+        for (const id of Object.keys(unreadPerAccount)) delete unreadPerAccount[id];
+        Object.assign(unreadPerAccount, counts);
+      },
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -136,6 +154,7 @@ vi.mock('../../safeStorage', () => ({
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 const { markAnswered, setDeleteUndo, undoLastAction, recoverFromBin } = await import('../messageMutations');
+const { whenUnreadIdle } = await import('../../unreadCountsClient');
 const { t, tErr } = await import('../../../i18n/index.js');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
@@ -842,8 +861,9 @@ describe('undo puts the row back first, then the server follows', () => {
 
     const pending = useMailStore.getState().deleteEmailFromServer('a1:INBOX:7');
     await vi.waitFor(() => expect(mockDeleteEmail).toHaveBeenCalled());
-    // Same paint as the row, not a round trip later.
+    // The row paints immediately; its count follows the ordered native lane.
     expect(useMailStore.getState().totalEmails).toBe(1);
+    await whenUnreadIdle();
     expect(unreadPerAccount.a1).toBe(2);
 
     release.resolve({ trash: 'Trash', trashUid: 5 });
@@ -852,6 +872,7 @@ describe('undo puts the row back first, then the server follows', () => {
 
     await useMailStore.getState().runUndo();
     expect(useMailStore.getState().totalEmails).toBe(2);
+    await whenUnreadIdle();
     expect(unreadPerAccount.a1).toBe(3);
   });
 

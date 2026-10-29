@@ -26,6 +26,21 @@ const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(undefined);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSetUnreadForAccount = vi.fn();
+const unreadProjection = { 'acct-b': 2 };
+vi.mock('../../daemonClient', async importOriginal => ({
+  ...(await importOriginal()),
+  daemonCall: async (method, p) => {
+    if (method !== 'counts.unread') return {};
+    const counts = { ...p.baseline };
+    let wrote = false;
+    if (p.op === 'shift') for (const entry of p.entries) {
+      if (entry.mailbox !== 'INBOX' || p.mode === 'unreadOnly' && entry.row.flags?.includes('\\Seen')) continue;
+      counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
+      wrote = true;
+    }
+    return { counts, rows: [], total: 0, wrote };
+  },
+}));
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
@@ -104,7 +119,12 @@ vi.mock('../../../stores/settingsStore', () => ({
       emailListStyle: 'default',
       linkAlerts: {},
       linkSafetyEnabled: false,
-      unreadPerAccount: { 'acct-b': 2 },
+      unreadPerAccount: unreadProjection,
+      setUnreadPerAccount: counts => {
+        for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
+        Object.assign(unreadProjection, counts);
+        if (Object.hasOwn(counts, 'acct-b')) mockSetUnreadForAccount('acct-b', counts['acct-b']);
+      },
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -125,6 +145,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+const { whenUnreadIdle } = await import('../../unreadCountsClient');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 
 const ACCT_A = { id: 'acct-a', email: 'a@mock.test' };
@@ -164,6 +185,8 @@ function primeUnified(emails, selected = []) {
 describe('deleting from a unified list', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
+    unreadProjection['acct-b'] = 2;
     netOnline = true;
     mockDeleteEmail.mockResolvedValue(undefined);
     mockGetLocalIndexEntry.mockResolvedValue(null);
@@ -300,7 +323,7 @@ describe('deleting from a unified list', () => {
 
   // The unified list holds a window of each account's cache, so the badge is
   // never recounted from it: an unread row leaving takes one off ITS account.
-  it('takes an unread row off its own account\'s badge, in the same paint', async () => {
+  it('takes an unread row off its own account\'s badge after the ordered native answer', async () => {
     let release;
     mockDeleteEmail.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
     const unread = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
@@ -309,6 +332,7 @@ describe('deleting from a unified list', () => {
 
     const pending = useMailStore.getState().deleteEmailFromServer(_selKey(unread));
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await whenUnreadIdle();
     expect(mockSetUnreadForAccount).toHaveBeenCalledWith(ACCT_B.id, 1);
     expect(useMailStore.getState().totalEmails).toBe(1);
     release();
@@ -316,6 +340,7 @@ describe('deleting from a unified list', () => {
 
     mockSetUnreadForAccount.mockClear();
     await useMailStore.getState().deleteEmailFromServer(_selKey(read));
+    await whenUnreadIdle();
     // Already read: nothing to take off.
     expect(mockSetUnreadForAccount).not.toHaveBeenCalled();
   });

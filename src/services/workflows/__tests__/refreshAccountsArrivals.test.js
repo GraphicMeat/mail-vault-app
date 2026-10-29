@@ -86,6 +86,24 @@ vi.mock('../../../stores/settingsStore', () => ({
   },
   hasPremiumAccess: () => false,
 }));
+vi.mock('../../daemonClient', async importOriginal => ({
+  ...(await importOriginal()),
+  daemonCall: async (method, p) => {
+    if (method !== 'counts.unread') return {};
+    const counts = { ...p.baseline };
+    if (p.op === 'merge' && p.kind === 'recounts') {
+      for (const item of p.observations) {
+        const cache = item.cache;
+        if (!Array.isArray(cache?.emails) || cache.totalEmails > cache.emails.length) continue;
+        counts[item.accountId] = cache.emails.filter(row => !row.flags?.includes('\\Seen')
+          && !item.projection?.snoozes?.some(s => s.accountId === item.accountId && s.state === 'snoozed'
+            && s.snoozedMailbox === '' && s.messageId === row.messageId)).length;
+      }
+      return { counts, rows: [], total: 0, wrote: true };
+    }
+    return { counts, rows: [], total: 0, wrote: false };
+  },
+}));
 
 const { refreshAllAccounts } = await import('../refreshAccounts');
 const { useSnoozeStore } = await import('../../../stores/snoozeStore');

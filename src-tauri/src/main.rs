@@ -3057,7 +3057,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
     }
     use std::time::Duration;
     match method {
-        "sync.probe" => Some(Duration::from_secs(30)),
+        "sync.probe" | "counts.unread" => Some(Duration::from_secs(30)),
         "sync.refresh" | "sync.refresh_status" | "sync.context" => Some(Duration::from_secs(30)),
         "folders.status" => Some(Duration::from_secs(125)),
         // Full draft MIME/attachment preparation may outlast a short UI read.
@@ -4750,6 +4750,11 @@ mod tests {
     #[test]
     fn reply_timeout_gives_vault_close_a_five_minute_budget() {
         assert_eq!(crate::reply_timeout("vault_close"), Some(std::time::Duration::from_secs(300)));
+    }
+
+    #[test]
+    fn reply_timeout_bounds_read_only_unread_reduction() {
+        assert_eq!(crate::reply_timeout("counts.unread"), Some(std::time::Duration::from_secs(30)));
     }
 
     #[test]

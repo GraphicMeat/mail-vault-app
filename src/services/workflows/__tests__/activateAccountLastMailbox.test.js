@@ -69,7 +69,7 @@ vi.mock('../../../stores/settingsStore', () => ({
     }),
   },
 }));
-vi.mock('../../transport', () => ({ getDaemonHealth: () => ({ alive: false }) }));
+vi.mock('../../transport', () => ({ getDaemonHealth: () => ({ alive: false }), send: vi.fn().mockResolvedValue(null) }));
 vi.mock('../../syncProbe', () => ({
   mailboxIsUnchanged: vi.fn().mockResolvedValue(false),
   markVerified: vi.fn(),

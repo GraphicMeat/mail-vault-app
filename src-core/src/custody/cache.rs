@@ -230,6 +230,39 @@ pub fn native_identity(conn: &Connection, account: &str, mailbox: &str) -> Resul
     Ok(Some(identity))
 }
 
+/// Predicate fields for an unread recount. One bounded custody hold reads one
+/// page, and no subject, address, body or full header leaves this query.
+pub fn unread_rows_page(conn: &Connection, account: &str, mailbox: &str, after_uid: u32,
+    limit: usize) -> Result<Vec<Value>, String> {
+    let mut stmt = conn.prepare(
+        "SELECT uid, CASE WHEN json_type(header_json,'$.flags')='array' THEN json_extract(header_json,'$.flags') END, \
+         json_extract(header_json,'$.messageId'), json_extract(header_json,'$._accountId'), \
+         json_extract(header_json,'$._srcAccountId'), json_extract(header_json,'$._mailbox'), \
+         CASE WHEN json_type(header_json,'$.isArchived') IN ('true','false') \
+              THEN json_extract(header_json,'$.isArchived') END \
+         FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid>?3 \
+         AND json_valid(header_json) ORDER BY uid ASC LIMIT ?4"
+    ).map_err(err)?;
+    let rows = stmt.query_map(params![account, mailbox, after_uid, limit as i64], |r| {
+        let uid: u32 = r.get(0)?;
+        let flags: Option<String> = r.get(1)?;
+        let message_id: Option<String> = r.get(2)?;
+        let row_account: Option<String> = r.get(3)?;
+        let source_account: Option<String> = r.get(4)?;
+        let row_mailbox: Option<String> = r.get(5)?;
+        let archived: Option<i64> = r.get(6)?;
+        let mut value = json!({"uid":uid});
+        if let Some(flags) = flags.and_then(|s| serde_json::from_str::<Value>(&s).ok()) { value["flags"] = flags; }
+        if let Some(v) = message_id { value["messageId"] = json!(v); }
+        if let Some(v) = row_account { value["_accountId"] = json!(v); }
+        if let Some(v) = source_account { value["_srcAccountId"] = json!(v); }
+        if let Some(v) = row_mailbox { value["_mailbox"] = json!(v); }
+        if let Some(v) = archived { value["isArchived"] = json!(v != 0); }
+        Ok(value)
+    }).map_err(err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(err)
+}
+
 /// Uids per `IN (...)`: under SQLITE_MAX_VARIABLE_NUMBER on every build
 /// (999 before SQLite 3.32), with the two scope parameters on top.
 const UID_CHUNK: usize = 900;

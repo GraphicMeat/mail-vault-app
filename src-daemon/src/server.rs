@@ -531,6 +531,7 @@ async fn handle_request(state: &Arc<DaemonState>, mut req: RpcRequest) -> RpcRes
     if matches!(
         method.as_str(),
         "sync.probe"
+            | "counts.unread"
             | "sync.refresh"
             | "sync.refresh_status"
             | "sync.context"
@@ -871,6 +872,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
         "sync.status" => handle_sync_status(&state.sync_engine, req.params, id).await,
         "sync.probe" | "folders.status" => crate::handlers::sync_observation::route(state, &req.method, req.params, id).await,
+        "counts.unread" => crate::handlers::counts::route(state, req.params, id).await,
         "sync.refresh" | "sync.refresh_status" | "sync.context" => crate::handlers::refresh::route(state, &req.method, req.params, id).await,
 
         // ── IDLE watchers + the change feed they push into ──────────
@@ -2305,12 +2307,430 @@ mod tests {
                 "an explicit empty transient snapshot overrides the persisted local snooze");
             assert_eq!(explicit_empty["total"], json!(7));
             assert_eq!(explicit_empty["wrote"], json!(true));
+            mailvault_core::app_db::with(&state.app_dir, |conn| {
+                let key=mailvault_core::app_db::identity::msg_key(
+                    Some("<synthetic-1@example.com>"),"INBOX",1);
+                conn.execute("INSERT INTO tags(id,name,color,created_at) VALUES ('hide-tag','Hidden','',1)", [])
+                    .map_err(|e|e.to_string())?;
+                conn.execute("INSERT INTO auto_tag_rules(id,name,instruction,constraints,tag_id,inbox_action,min_confidence,enabled,created_at,updated_at) VALUES ('rule','Hide','','{}','hide-tag','hide',0.5,1,1,1)", [])
+                    .map_err(|e|e.to_string())?;
+                conn.execute("INSERT INTO tag_assignments(tag_id,account_id,msg_key,at) VALUES (?1,?2,?3,1)",
+                    rusqlite::params!["hide-tag","acc1",key]).map_err(|e|e.to_string())?;
+                conn.execute("INSERT INTO follow_ups(id,account_id,message_id,sent_at,remind_at,created_at,state,sent_mailbox,sent_uid) VALUES ('due','acc1','<sent@example.com>',1,1,1,'due','Sent',42)", [])
+                    .map_err(|e|e.to_string())?;
+                Ok(())
+            }).unwrap();
+            let tag_fallback=boxed_request(&state,req("counts.unread",json!({
+                "op":"recountCache","accountId":"acc1","baseline":{"acc1":9,"acc2":5},
+                "presentation":{"accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}]},
+                "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                    "viewHiddenKeys":[],"hideViewMail":false,"followUps":[]}
+            }))).await;
+            assert!(tag_fallback.error.is_none(),"omitted tag categories must read persisted predicates: {:?}",tag_fallback.error);
+            assert_eq!(tag_fallback.result.unwrap()["counts"],json!({"acc1":1,"acc2":5}),
+                "persisted hidden tag removes only its assigned INBOX row");
+            let reminder_fallback=boxed_request(&state,req("counts.unread",json!({
+                "op":"recountCache","accountId":"acc1","baseline":{"acc1":9,"acc2":5},
+                "presentation":{"accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}]},
+                "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                    "autoTagRules":[],"tagsByRow":{},"viewHiddenKeys":[],"hideViewMail":false}
+            }))).await;
+            assert!(reminder_fallback.error.is_none(),"omitted reminders must read persisted predicates: {:?}",reminder_fallback.error);
+            assert_eq!(reminder_fallback.result.unwrap()["counts"],json!({"acc1":3,"acc2":5}),
+                "a persisted due unread reminder adds one without reading its subject");
+            for extra in [
+                json!({"password":"not-a-count-field"}),
+                json!({"accountEmail":"not-a-count-field"}),
+                json!({"unknown":"not-a-count-field"}),
+            ] {
+                let mut params = json!({"op":"recountCache","accountId":"acc1",
+                    "baseline":{"acc1":9,"acc2":5},"projection":{"snoozes":[]}});
+                params.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+                let denied = boxed_request(&state, req("counts.unread", params)).await;
+                assert!(denied.result.is_none() && denied.error.is_some(),
+                    "unknown or credential-shaped count fields must fail before OAuth injection");
+            }
+            for invalid in [
+                json!({"op":"unknown","baseline":{"acc1":9}}),
+                json!({"op":"rows","baseline":{"acc1":9},"accountId":"acc1"}),
+                json!({"op":"shift","baseline":{"acc1":9},"entries":[],"sign":1,"mode":"unknown"}),
+            ] {
+                let denied=boxed_request(&state,req("counts.unread",invalid)).await;
+                assert!(denied.result.is_none() && denied.error.is_some(),
+                    "unknown operation variants and cross-variant fields must fail strictly");
+            }
             assert_eq!(server.commands(), before_commands, "unread route may not dial IMAP");
             assert_eq!(refresh_cached_headers(&state, "acc1", "INBOX"), Some(before_cache));
             assert_eq!(mailvault_core::app_db::with(&state.app_dir, |conn|
                 mailvault_core::app_db::snooze::list(conn, Some("acc1"))).unwrap(), before_snoozes);
             assert_eq!(std::fs::read(&settings_path).ok(), before_settings,
                 "unread route may not replace settings");
+
+            // Keep the same native owner, but make its INBOX coverage partial.
+            // The actual route, not a renderer double, must distinguish an
+            // additive fallback from an unavailable no-write answer.
+            crate::custody::with_conn(&state, |conn| {
+                mailvault_core::custody::cache::save_headers(conn, "acc1", "INBOX", &json!({
+                    "emails":[
+                        {"uid":1,"flags":[],"messageId":"<synthetic-1@example.com>"},
+                        {"uid":2,"flags":[],"messageId":"<synthetic-2@example.com>"},
+                        {"uid":3,"flags":["\\Seen"],"messageId":"<synthetic-3@example.com>"}
+                    ],
+                    "totalEmails":500,"nativeIdentity":owner.clone(),"nativeExpectedIdentity":null
+                }).to_string())
+            }).unwrap();
+            let partial_params=|arrival:Option<i64>| {
+                let mut params=json!({
+                    "op":"recountCache","accountId":"acc1","baseline":{"acc1":9,"acc2":5},
+                    "presentation":{"accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}]},
+                    "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                        "autoTagRules":[],"tagsByRow":{},"viewHiddenKeys":[],
+                        "hideViewMail":false,"followUps":[]}
+                });
+                if let Some(n)=arrival { params["arrivalCount"]=json!(n); }
+                params
+            };
+            let fallback=boxed_request(&state,req("counts.unread",partial_params(Some(2)))).await;
+            assert!(fallback.error.is_none(),"partial fallback must dispatch: {:?}",fallback.error);
+            let fallback=fallback.result.unwrap();
+            assert_eq!(fallback["counts"],json!({"acc1":11,"acc2":5}));
+            assert_eq!(fallback["wrote"],json!(true));
+            let unavailable=boxed_request(&state,req("counts.unread",partial_params(None))).await;
+            assert!(unavailable.error.is_none(),"partial no-fallback must dispatch: {:?}",unavailable.error);
+            let unavailable=unavailable.result.unwrap();
+            assert_eq!(unavailable["counts"],json!({"acc1":9,"acc2":5}));
+            assert_eq!(unavailable["wrote"],json!(false));
+            assert_eq!(server.commands(),before_commands,"count paths must not dial IMAP");
+            assert_eq!(json!({
+                "complete":result["recountSource"],
+                "explicitComplete":explicit_empty["recountSource"],
+                "arrivalFallback":fallback["recountSource"],
+                "none":unavailable["recountSource"]
+            }),json!({
+                "complete":"complete","explicitComplete":"complete",
+                "arrivalFallback":"arrivalFallback","none":"none"
+            }),"W4S3_RECOUNT_SOURCE_RED actual serialized paths must distinguish complete, fallback and no-write");
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_rejects_a_replaced_inbox_owner_after_a_held_read() {
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = json!({"id":"acc1","email":"one@example.test","authType":"password",
+                "imapHost":server.host(),"imapPort":server.port(),"imapSecure":false});
+            std::fs::write(state.app_dir.join("accounts.json"), json!([account]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let original=state.account_lifecycle.capture("acc1").unwrap();
+            let origin=crate::sync_observation::origin(&state,original).await.unwrap();
+            let owner=json!({"accountId":"acc1","mailbox":"INBOX","uidValidity":1,
+                "originHash":origin.hash});
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(conn,
+                "acc1","INBOX",&json!({"emails":[{"uid":1,"flags":[]}],"totalEmails":1,
+                    "nativeIdentity":owner,"nativeExpectedIdentity":null}).to_string())).unwrap();
+            let (entered,release)=crate::handlers::counts::pause_next_cache_read_for_test();
+            let running=Arc::clone(&state);
+            let request=tokio::spawn(async move { boxed_request(&running,req("counts.unread",json!({
+                "op":"recountCache","accountId":"acc1","baseline":{"acc1":9,"acc2":5},
+                "presentation":{"accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}]},
+                "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                    "autoTagRules":[],"tagsByRow":{},"viewHiddenKeys":[],"hideViewMail":false,"followUps":[]}
+            }))).await });
+            tokio::task::spawn_blocking(move || entered.recv_timeout(std::time::Duration::from_secs(5)))
+                .await.unwrap().expect("real cache read must reach the held boundary");
+            let next_owner=json!({"accountId":"acc1","mailbox":"INBOX","uidValidity":2,
+                "originHash":origin.hash});
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(conn,
+                "acc1","INBOX",&json!({"emails":[{"uid":1,"flags":[]}],"totalEmails":1,
+                    "nativeIdentity":next_owner,"nativeExpectedIdentity":owner}).to_string())).unwrap();
+            release.send(()).unwrap();
+            let answer=request.await.unwrap();
+            assert!(answer.result.is_none() && answer.error.is_some(),
+                "a replaced native cache owner cannot return the old count as current");
+            let (entered,release)=crate::handlers::counts::pause_next_cache_read_for_test();
+            let running=Arc::clone(&state);
+            let source_request=tokio::spawn(async move { boxed_request(&running,req("counts.unread",json!({
+                "op":"recountCache","accountId":"acc1","baseline":{"acc1":9,"acc2":5},
+                "presentation":{"accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}]},
+                "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                    "autoTagRules":[],"tagsByRow":{},"viewHiddenKeys":[],"hideViewMail":false,"followUps":[]}
+            }))).await });
+            tokio::task::spawn_blocking(move || entered.recv_timeout(std::time::Duration::from_secs(5)))
+                .await.unwrap().expect("second actual cache read must reach the held boundary");
+            let mut replaced:serde_json::Value=serde_json::from_slice(
+                &std::fs::read(state.app_dir.join("accounts.json")).unwrap()).unwrap();
+            replaced[0]["imapHost"]=json!("other.example.test");
+            std::fs::write(state.app_dir.join("accounts.json"),replaced.to_string()).unwrap();
+            release.send(()).unwrap();
+            let answer=source_request.await.unwrap();
+            assert!(answer.result.is_none() && answer.error.is_some(),
+                "a changed authoritative account source cannot receive an old cache count");
+            assert!(server.commands().is_empty(),"read-only unread request may not dial IMAP");
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_accepts_graph_and_jmap_ids_without_credentials_or_provider_calls() {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+            let accounts=json!([
+                {"id":"graph","email":"graph@example.test","authType":"oauth2",
+                    "oauth2Provider":"microsoft","oauth2Transport":"graph"},
+                {"id":"jmap","email":"jmap@example.test","authType":"password",
+                    "imapHost":"127.0.0.1","imapPort":9,"jmapSessionUrl":"http://127.0.0.1:9/session",
+                    "jmapAuth":"basic"}
+            ]);
+            std::fs::write(state.app_dir.join("accounts.json"),accounts.to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            for account in ["graph","jmap"] {
+                let answer=boxed_request(&state,req("counts.unread",json!({
+                    "op":"recountRows","accountId":account,"cache":{"emails":[],"totalEmails":0},
+                    "baseline":{"graph":4,"jmap":5},
+                    "presentation":{"accounts":[{"id":"graph","name":"Graph"},{"id":"jmap","name":"JMAP"}]},
+                    "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                        "autoTagRules":[],"tagsByRow":{},"viewHiddenKeys":[],
+                        "hideViewMail":false,"followUps":[]}
+                }))).await;
+                assert!(answer.error.is_none(),"{account} local count may not require a token: {:?}",answer.error);
+                let result=answer.result.unwrap();
+                assert_eq!(result["counts"][account],json!(0));
+                assert_eq!(result["wrote"],json!(true));
+            }
+        }
+
+        fn s3_bounded_read_request() -> crate::ipc::RpcRequest {
+            req("counts.unread", json!({
+                "op":"recountCache","accountId":"acc1","baseline":{"acc1":9,"acc2":5},
+                "presentation":{"accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}]},
+                "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                    "autoTagRules":[],"tagsByRow":{},"viewHiddenKeys":[],
+                    "hideViewMail":false,"followUps":[]}
+            }))
+        }
+
+        fn s3_seed_account(state: &Arc<DaemonState>) {
+            let account=json!({"id":"acc1","email":"one@example.test","authType":"password",
+                "imapHost":"127.0.0.1","imapPort":143,"imapSecure":false});
+            std::fs::write(state.app_dir.join("accounts.json"),json!([account]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_closed_custody_refuses_without_publishing_a_count() {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+            s3_seed_account(&state);
+            crate::custody::close(&state);
+            let answer=boxed_request(&state,s3_bounded_read_request()).await;
+            assert!(answer.result.is_none() && answer.error.is_some(),
+                "closed custody must not turn an unknown cache into a zero count: {answer:?}");
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_unreadable_settings_refuses_without_publishing_a_count() {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+            s3_seed_account(&state);
+            let settings_path=mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).path();
+            assert!(!settings_path.exists(),"fixture starts without a settings document");
+            std::fs::create_dir(&settings_path).unwrap();
+            let answer=boxed_request(&state,req("counts.unread",json!({
+                "op":"rows","baseline":{"acc1":9,"acc2":5}
+            }))).await;
+            assert!(answer.result.is_none() && answer.error.is_some(),
+                "unreadable presentation settings cannot authorize a count projection: {answer:?}");
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_recovers_once_after_same_owner_generation_fence() {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+            s3_seed_account(&state);
+            let original=state.account_lifecycle.capture("acc1").unwrap();
+            let origin=crate::sync_observation::origin(&state,original).await.unwrap();
+            let owner=json!({"accountId":"acc1","mailbox":"INBOX","uidValidity":1,
+                "originHash":origin.hash});
+            let rows:Vec<Value>=(1..=513).map(|uid|json!({"uid":uid,"flags":[],
+                "messageId":format!("<s3-{uid}@example.test>")})).collect();
+            let seed=json!({"emails":rows,"totalEmails":513,"nativeIdentity":owner,
+                "nativeExpectedIdentity":null});
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                conn,"acc1","INBOX",&seed.to_string())).unwrap();
+            let first_generation=crate::custody::generation(&state);
+            let first_owner=crate::custody::with_conn(&state,|conn|
+                mailvault_core::custody::cache::native_identity(conn,"acc1","INBOX")).unwrap();
+            let (entered,release)=crate::handlers::counts::pause_next_cache_read_for_test();
+            let running=Arc::clone(&state);
+            let pending=tokio::spawn(async move { boxed_request(&running,s3_bounded_read_request()).await });
+            tokio::task::spawn_blocking(move || entered.recv_timeout(std::time::Duration::from_secs(5)))
+                .await.unwrap().expect("the original-bound count must reach its first metadata sample");
+            let mut current=seed.clone();
+            current["emails"][0]["flags"]=json!(["\\Seen"]);
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                conn,"acc1","INBOX",&current.to_string())).unwrap();
+            assert!(crate::custody::generation(&state)>first_generation);
+            assert_eq!(crate::custody::with_conn(&state,|conn|
+                mailvault_core::custody::cache::native_identity(conn,"acc1","INBOX")).unwrap(),
+                first_owner,"only the cache generation changed, not its original owner");
+            release.send(()).unwrap();
+            let answer=pending.await.unwrap();
+            assert!(answer.error.is_none(),
+                "W4S3_COUNT_RECOVERY_RED one same-owner generation fence must reread under its original source: {answer:?}");
+            let result=answer.result.unwrap();
+            assert_eq!(result["counts"],json!({"acc1":512,"acc2":5}),
+                "W4S3_COUNT_RECOVERY_RED the current cache and unaffected B must publish together");
+            assert_eq!(result["wrote"],json!(true));
+            assert_eq!(result["recountSource"],json!("complete"));
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_same_owner_generation_change_refuses_mixed_pages_and_keeps_foreground_live() {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+            s3_seed_account(&state);
+            let original=state.account_lifecycle.capture("acc1").unwrap();
+            let origin=crate::sync_observation::origin(&state,original).await.unwrap();
+            let owner=json!({"accountId":"acc1","mailbox":"INBOX","uidValidity":1,
+                "originHash":origin.hash});
+            let rows: Vec<Value>=(1..=513).map(|uid|json!({"uid":uid,"flags":[],
+                "messageId":format!("<s3-{uid}@example.test>")})).collect();
+            let seed=json!({"emails":rows,"totalEmails":513,"nativeIdentity":owner,
+                "nativeExpectedIdentity":null}).to_string();
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                conn,"acc1","INBOX",&seed)).unwrap();
+            let before_generation=crate::custody::generation(&state);
+            let (entered,release)=crate::handlers::counts::pause_next_cache_read_for_test();
+            let running=Arc::clone(&state);
+            let pending=tokio::spawn(async move { boxed_request(&running,s3_bounded_read_request()).await });
+            tokio::task::spawn_blocking(move || entered.recv_timeout(std::time::Duration::from_secs(5)))
+                .await.unwrap().expect("actual cache read must hold after its first metadata sample");
+            let foreground=tokio::time::timeout(std::time::Duration::from_secs(2),
+                boxed_request(&state,req("accounts.list",json!({})))).await;
+            let original_owner=crate::custody::with_conn(&state,|conn|
+                mailvault_core::custody::cache::native_identity(conn,"acc1","INBOX")).unwrap();
+            let (second_entered,second_release)=crate::handlers::counts::pause_next_cache_read_for_test();
+            let mut once:Value=serde_json::from_str(&seed).unwrap();
+            once["emails"][0]["flags"]=json!(["\\Seen"]);
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                conn,"acc1","INBOX",&once.to_string())).unwrap();
+            let after_generation=crate::custody::generation(&state);
+            let same_owner=crate::custody::with_conn(&state,|conn|
+                mailvault_core::custody::cache::native_identity(conn,"acc1","INBOX")).unwrap();
+            release.send(()).unwrap();
+            let second=tokio::task::spawn_blocking(move ||
+                second_entered.recv_timeout(std::time::Duration::from_secs(5))).await.unwrap();
+            if second.is_err() {
+                crate::handlers::counts::clear_pending_cache_read_for_test();
+                panic!("W4S3_COUNT_BOUNDED_RED a first generation refusal must try exactly one fresh original-bound read");
+            }
+            let mut twice=once;
+            twice["emails"][1]["flags"]=json!(["\\Seen"]);
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                conn,"acc1","INBOX",&twice.to_string())).unwrap();
+            assert!(crate::custody::generation(&state)>after_generation,
+                "a second same-owner generation change reaches the bounded retry");
+            second_release.send(()).unwrap();
+            let answer=pending.await.unwrap();
+            assert!(foreground.is_ok_and(|reply|reply.error.is_none()),
+                "foreground accounts.list must finish while a count cache read is held");
+            assert!(after_generation>before_generation,"same-owner cache rewrite must advance custody generation");
+            assert_eq!(same_owner,original_owner,"this race changes generation, not native owner");
+            if let Some(result)=answer.result {
+                assert_eq!(result["counts"],json!({"acc1":9,"acc2":5}),
+                    "two changing generations must keep A baseline and B continuity");
+                assert_eq!(result["wrote"],json!(false),
+                    "a twice mixed bounded read cannot authorize a current count");
+            } else {
+                assert!(answer.error.is_some(),"the second invalidated read needs an explicit refusal");
+            }
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_retry_refuses_second_read_owner_or_original_retirement() {
+            for retire_original in [false,true] {
+                let dir=tempfile::tempdir().unwrap();
+                let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+                s3_seed_account(&state);
+                let original=state.account_lifecycle.capture("acc1").unwrap();
+                let origin=crate::sync_observation::origin(&state,original).await.unwrap();
+                let owner=json!({"accountId":"acc1","mailbox":"INBOX","uidValidity":1,
+                    "originHash":origin.hash});
+                let rows:Vec<Value>=(1..=513).map(|uid|json!({"uid":uid,"flags":[],
+                    "messageId":format!("<s3-{uid}@example.test>")})).collect();
+                let seed=json!({"emails":rows,"totalEmails":513,"nativeIdentity":owner,
+                    "nativeExpectedIdentity":null});
+                crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                    conn,"acc1","INBOX",&seed.to_string())).unwrap();
+                let (first_entered,first_release)=crate::handlers::counts::pause_next_cache_read_for_test();
+                let running=Arc::clone(&state);
+                let pending=tokio::spawn(async move { boxed_request(&running,s3_bounded_read_request()).await });
+                tokio::task::spawn_blocking(move || first_entered.recv_timeout(std::time::Duration::from_secs(5)))
+                    .await.unwrap().expect("first original-bound read must hold");
+                let (second_entered,second_release)=crate::handlers::counts::pause_next_cache_read_for_test();
+                let mut changed=seed.clone();
+                changed["emails"][0]["flags"]=json!(["\\Seen"]);
+                crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                    conn,"acc1","INBOX",&changed.to_string())).unwrap();
+                first_release.send(()).unwrap();
+                let second=tokio::task::spawn_blocking(move ||
+                    second_entered.recv_timeout(std::time::Duration::from_secs(5))).await.unwrap();
+                if second.is_err() {
+                    crate::handlers::counts::clear_pending_cache_read_for_test();
+                    panic!("same-owner generation change must enter the single retry before replacement");
+                }
+                if retire_original {
+                    state.account_lifecycle.apply_committed_membership(None,
+                        &mailvault_core::accounts_doc::MembershipDelta {
+                            removed:["acc1".to_owned()].into(),..Default::default()
+                        });
+                } else {
+                    // A replacement is a CAS write against the owner the held
+                    // count read saw, not a write with no expected identity.
+                    changed["nativeExpectedIdentity"]=changed["nativeIdentity"].clone();
+                    changed["nativeIdentity"]["uidValidity"]=json!(2);
+                    crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                        conn,"acc1","INBOX",&changed.to_string())).unwrap();
+                }
+                second_release.send(()).unwrap();
+                let answer=pending.await.unwrap();
+                if let Some(result)=answer.result {
+                    assert_eq!(result["counts"],json!({"acc1":9,"acc2":5}),
+                        "a changed retry owner/original cannot overwrite A or surviving B");
+                    assert_eq!(result["wrote"],json!(false));
+                } else {
+                    assert!(answer.error.is_some(),
+                        "a changed retry owner/original must explicitly refuse: {answer:?}");
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn s3_counts_unread_retired_original_during_held_cache_read_cannot_publish() {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+            s3_seed_account(&state);
+            let original=state.account_lifecycle.capture("acc1").unwrap();
+            let origin=crate::sync_observation::origin(&state,original).await.unwrap();
+            let owner=json!({"accountId":"acc1","mailbox":"INBOX","uidValidity":1,
+                "originHash":origin.hash});
+            crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                conn,"acc1","INBOX",&json!({"emails":[{"uid":1,"flags":[]}],
+                    "totalEmails":1,"nativeIdentity":owner,"nativeExpectedIdentity":null}).to_string())).unwrap();
+            let (entered,release)=crate::handlers::counts::pause_next_cache_read_for_test();
+            let running=Arc::clone(&state);
+            let pending=tokio::spawn(async move { boxed_request(&running,s3_bounded_read_request()).await });
+            tokio::task::spawn_blocking(move || entered.recv_timeout(std::time::Duration::from_secs(5)))
+                .await.unwrap().expect("actual cache read must enter before retirement");
+            state.account_lifecycle.apply_committed_membership(None,
+                &mailvault_core::accounts_doc::MembershipDelta {
+                    removed:["acc1".to_owned()].into(),..Default::default()
+                });
+            release.send(()).unwrap();
+            let answer=pending.await.unwrap();
+            assert!(answer.result.is_none() && answer.error.is_some(),
+                "retired original must not publish a stale account's count: {answer:?}");
         }
 
         #[tokio::test]

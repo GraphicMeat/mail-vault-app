@@ -76,6 +76,7 @@ vi.mock('../../utils/emailParser', async (importOriginal) => ({
 const mockSettingsState = {
   cacheLimitMB: 128,
   hiddenAccounts: {},
+  unreadPerAccount: {},
   getLastMailbox: () => 'INBOX',
   setLastMailbox: () => {},
   emailListStyle: 'default',
@@ -83,7 +84,9 @@ const mockSettingsState = {
   // updateSortedEmails recounts the sidebar's unread badge from the list it
   // just derived, so every spec that drives it needs the setter.
   setUnreadForAccount: () => {},
+  setUnreadPerAccount: counts => { mockSettingsState.unreadPerAccount = counts; },
 };
+const mockUnreadAnswer = vi.fn(async params => ({ counts: { ...params.baseline }, rows: [], total: 0, wrote: false }));
 // The row verdicts are the daemon's (`body.verdicts`): it reads the persisted
 // link alerts by the scoped key the list sends, as this stand-in does.
 vi.mock('../../services/daemonClient', async (orig) => {
@@ -91,6 +94,7 @@ vi.mock('../../services/daemonClient', async (orig) => {
   return {
     ...real,
     daemonCall: async (method, params) => {
+      if (method === 'counts.unread') return mockUnreadAnswer(params);
       if (method !== 'body.verdicts') return real.daemonCall(method, params);
       const rows = {};
       for (const r of params.rows || []) {
@@ -133,6 +137,7 @@ const { serverUids, NO_SERVER_UIDS } = await import('../slices/serverUids');
 const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 const { useSnoozeStore } = await import('../snoozeStore');
 const { useFollowUpStore } = await import('../followUpStore');
+const { whenUnreadIdle } = await import('../../services/unreadCountsClient');
 
 /**
  * loadUnifiedInbox asks every account for its Sent headers once the list has
@@ -980,6 +985,7 @@ describe('local snooze', () => {
   afterEach(() => {
     useSnoozeStore.setState({ rows: [] });
     mockSettingsState.setUnreadForAccount = realSetUnread;
+    mockUnreadAnswer.mockReset().mockImplementation(async params => ({ counts: { ...params.baseline }, rows: [], total: 0, wrote: false }));
   });
 
   it('hides the message as its row lands and shows it again when the row wakes', () => {
@@ -1015,11 +1021,19 @@ describe('local snooze', () => {
     expect(uids()).toEqual(['acct-21']);
   });
 
-  it('leaves a held message out of the inbox badge', () => {
-    const setUnread = vi.fn();
-    mockSettingsState.setUnreadForAccount = setUnread;
+  it('leaves a held message out of the inbox badge', async () => {
+    await whenUnreadIdle();
+    mockSettingsState.unreadPerAccount = { 'acct-1': 2 };
+    mockUnreadAnswer.mockClear().mockImplementation(async params => ({
+      counts: { ...params.baseline, 'acct-1': 1 }, rows: [], total: 0, wrote: true,
+    }));
     useSnoozeStore.getState().upsert([held]);
-    expect(setUnread).toHaveBeenLastCalledWith('acct-1', 1);
+    await whenUnreadIdle();
+    expect(mockUnreadAnswer).toHaveBeenCalledWith(expect.objectContaining({
+      op: 'recountRows', accountId: 'acct-1',
+      projection: expect.objectContaining({ snoozes: [expect.objectContaining({ id: 's1', state: 'snoozed' })] }),
+    }));
+    expect(mockSettingsState.unreadPerAccount['acct-1']).toBe(1);
   });
 });
 
@@ -1066,6 +1080,7 @@ describe('follow-up reminders', () => {
   afterEach(() => {
     useFollowUpStore.setState({ rows: [] });
     mockSettingsState.setUnreadForAccount = realSetUnread;
+    mockUnreadAnswer.mockReset().mockImplementation(async params => ({ counts: { ...params.baseline }, rows: [], total: 0, wrote: false }));
   });
 
   it('is never a row of the list, in a single inbox or All inboxes', () => {
@@ -1076,13 +1091,21 @@ describe('follow-up reminders', () => {
     expect(useMailStore.getState().sortedEmails.some(e => e.uid === 77)).toBe(false);
   });
 
-  it('counts in the inbox badge while unread', () => {
-    const setUnread = vi.fn();
-    mockSettingsState.setUnreadForAccount = setUnread;
+  it('counts in the inbox badge while unread', async () => {
+    await whenUnreadIdle();
+    mockSettingsState.unreadPerAccount = { 'acct-1': 1 };
+    mockUnreadAnswer.mockClear().mockImplementation(async params => ({
+      counts: { ...params.baseline, 'acct-1': 2 }, rows: [], total: 0, wrote: true,
+    }));
     useFollowUpStore.setState({ rows: [reminder] });
     useMailStore.setState({ emails: inbox(), _sortedEmailsFingerprint: '' });
     useMailStore.getState().updateSortedEmails();
-    expect(setUnread).toHaveBeenLastCalledWith('acct-1', 2);
+    await whenUnreadIdle();
+    expect(mockUnreadAnswer).toHaveBeenCalledWith(expect.objectContaining({
+      op: 'recountRows', accountId: 'acct-1',
+      projection: expect.objectContaining({ followUps: [expect.objectContaining({ id: 'f1', state: 'due', seen: false })] }),
+    }));
+    expect(mockSettingsState.unreadPerAccount['acct-1']).toBe(2);
   });
 });
 

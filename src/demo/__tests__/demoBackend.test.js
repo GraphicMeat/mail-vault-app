@@ -2,6 +2,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoBackend } from '../backend.js';
 
 describe('demo mailbox backend', () => {
+  it('answers unread rows from the supplied projection without saving demo settings', async () => {
+    const backend = createDemoBackend();
+    const before = await backend.invoke('read_settings_json');
+    const result = await backend.invoke('daemon_rpc', { method: 'counts.unread', params: {
+      op: 'rows', baseline: { a: 2, b: 3 }, presentation: {
+        accounts: [{ id: 'a', name: 'Alpha' }, { id: 'b', name: 'Beta' }],
+        hiddenAccounts: { b: true }, displayNames: { a: 'Preferred' }, accountOrder: ['b', 'a'],
+      },
+    } });
+    expect(result).toEqual({ counts: { a: 2, b: 3 }, rows: [{ id: 'a', label: 'Preferred', unread: 2 }],
+      total: 2, wrote: false });
+    expect(await backend.invoke('read_settings_json')).toBe(before);
+  });
+  it('labels complete, partial fallback and unavailable cache recounts in demo replies', async () => {
+    const backend = createDemoBackend();
+    const accountId = backend.accounts[0].id;
+    const call = params => backend.invoke('daemon_rpc', { method: 'counts.unread', params });
+    const base = { op: 'recountCache', accountId, baseline: { [accountId]: 5 },
+      presentation: { accounts: [{ id: accountId, name: 'Demo' }] } };
+    const complete = await call({ ...base, preferredRows: {
+      emails: [{ uid: 1, flags: [] }], totalEmails: 1,
+    } });
+    const partial = await call({ ...base, preferredRows: {
+      emails: [{ uid: 1, flags: [] }], totalEmails: 500,
+    }, arrivalCount: 2 });
+    const unavailable = await call({ ...base, preferredRows: {
+      emails: [{ uid: 1, flags: [] }], totalEmails: 500,
+    } });
+    expect([complete.recountSource, partial.recountSource, unavailable.recountSource])
+      .toEqual(['complete', 'arrivalFallback', 'none']);
+    expect([complete.wrote, partial.wrote, unavailable.wrote]).toEqual([true, true, false]);
+  });
+
   it('keeps native refresh receipts observable without claiming provider work in the browser', async () => {
     const backend = createDemoBackend({ now: () => 12345 });
     const call = (method, params = {}) => backend.invoke('daemon_rpc', { method, params });

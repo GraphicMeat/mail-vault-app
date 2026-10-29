@@ -456,7 +456,7 @@ export const createMessageListSlice = (set, get) => ({
     // shifted by whoever removed it. A message a local snooze holds out of the
     // list is not counted either.
     if (activeAccountId && !unifiedInbox && !mailboxScope && activeMailbox === 'INBOX') {
-      recountInbox(activeAccountId, { emails, totalEmails: get().totalEmails });
+      void recountInbox(activeAccountId, { emails, totalEmails: get().totalEmails });
     }
 
     _chatEmailsFingerprint = '';

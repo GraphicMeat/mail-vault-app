@@ -828,7 +828,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         }
 
         if (resolvedMailbox === 'INBOX') {
-          recountInbox(accountId, cachedHeaders);
+          void recountInbox(accountId, cachedHeaders);
         }
       } else if (savedEmailIds.size > 0 && !isBackgroundRefresh) {
         // Expected recovery, not an anomaly: the sync that follows repopulates

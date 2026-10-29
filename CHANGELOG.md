@@ -10,6 +10,8 @@
 
 - The update dialogs (portable copy, Snap, up to date, check failed) and the Settings, Export, Original Message and New Message window titles now follow the app language. Before, they stayed English in every locale. A new test fails on any native dialog or window title written as a literal.
 
+- Unread counts now come from a read-only native reducer. Message actions, refreshes and the change feed submit raw observations in order; the app still saves the resulting per-account counts. The dock badge and tray use the reducer's rows and total, and a late answer from an old account source cannot replace current counts. A local read racing a complete cache recount keeps its raw change and triggers one fresh read, avoiding a double decrement. A native cache write during a recount gets one same-owner reread; a changed owner or another concurrent write keeps the old count for later observation. If that fresh read fails, valid local changes remain and later observation repairs any unrelated count drift.
+
 - Added dormant daemon refresh receipts, native header warming, scheduling and watcher reconciliation that activate after an explicit sync context. The current app refresh flow stays in place until its later cutover.
 
 - The "Operation Complete" panel in the corner now appears only for a run started from a bulk selection (and one picked up again after a restart). Deleting messages from the list or the reader, one or several, shows just the deleted toast.

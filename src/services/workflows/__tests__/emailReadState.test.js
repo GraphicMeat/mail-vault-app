@@ -22,6 +22,26 @@ const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockFetchEmailLight = vi.fn();
 const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
 const mockSetUnreadForAccount = vi.fn();
+const unreadProjection = {};
+vi.mock('../../daemonClient', async importOriginal => ({
+  ...(await importOriginal()),
+  daemonCall: async (method, p) => {
+    if (method !== 'counts.unread') return {};
+    const counts = { ...p.baseline };
+    let wrote = false;
+    if (p.op === 'recountRows' && Array.isArray(p.cache?.emails)
+      && !(p.cache.totalEmails > p.cache.emails.length)) {
+      counts[p.accountId] = p.cache.emails.filter(row => !row.flags?.includes('\\Seen')).length;
+      wrote = true;
+    }
+    if (p.op === 'shift') for (const entry of p.entries) {
+      if (entry.mailbox !== 'INBOX' || p.mode === 'unreadOnly' && entry.row.flags?.includes('\\Seen')) continue;
+      counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
+      wrote = true;
+    }
+    return { counts, rows: [], total: 0, wrote };
+  },
+}));
 
 let markAsReadMode = 'auto';
 let markAsReadDelay = 3;
@@ -102,6 +122,12 @@ vi.mock('../../../stores/settingsStore', () => ({
       linkSafetyEnabled: false,
       get markAsReadMode() { return markAsReadMode; },
       get markAsReadDelay() { return markAsReadDelay; },
+      unreadPerAccount: unreadProjection,
+      setUnreadPerAccount: counts => {
+        for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
+        Object.assign(unreadProjection, counts);
+        if (Object.hasOwn(counts, 'acct1')) mockSetUnreadForAccount('acct1', counts.acct1);
+      },
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -112,6 +138,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+const { whenUnreadIdle } = await import('../../unreadCountsClient');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
@@ -166,6 +193,7 @@ function seedCache(flags) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  for (const id of Object.keys(unreadProjection)) delete unreadProjection[id];
   markAsReadMode = 'auto';
   markAsReadDelay = 3;
   mockFetchEmailLight.mockResolvedValue({ uid: 1, subject: 'General', flags: [], html: '<p>body</p>', text: 'body' });
@@ -187,6 +215,7 @@ describe('selectEmail — auto mark as read', () => {
     primeStore([]);
 
     await useMailStore.getState().selectEmail(1);
+    await whenUnreadIdle();
 
     expect(mockSetUnreadForAccount).toHaveBeenCalledWith('acct1', 0);
   });
@@ -637,19 +666,22 @@ describe('markEmailReadStatus', () => {
 // primeStore), which is what the report looked like: an empty folder under a
 // badge that said 1, catching up "after a while".
 describe('sidebar unread badge', () => {
-  it('drops as soon as the unread row leaves the inbox list', () => {
+  it('drops as soon as the unread row leaves the inbox list', async () => {
     primeStore([]);
+    await whenUnreadIdle();
     expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);
 
     // What every delete/move does first: the row goes, optimistically.
     useMailStore.setState({ emails: [], totalEmails: 0 });
     useMailStore.getState().updateSortedEmails();
+    await whenUnreadIdle();
 
     expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 0);
   });
 
-  it('is not overwritten by another folder that is on screen', () => {
+  it('is not overwritten by another folder that is on screen', async () => {
     primeStore([]);
+    await whenUnreadIdle();
     expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);
 
     // The deleted message, unread, in the Bin — the folder the user is now
@@ -664,6 +696,7 @@ describe('sidebar unread badge', () => {
       serverUids: serverUids(new Set([9]), { complete: false }),
     });
     useMailStore.getState().updateSortedEmails();
+    await whenUnreadIdle();
 
     // Still the inbox's count, not the Bin's one unread.
     expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);

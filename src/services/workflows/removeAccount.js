@@ -30,7 +30,7 @@ export async function removeAccount(accountId) {
   _clearGraphIdMap(accountId);
 
   const newAccounts = get().accounts.filter(a => a.id !== accountId);
-  forgetAccount(accountId);
+  await forgetAccount(accountId);
   // Its follow-up reminders end with it (snooze rows have no such rule: a
   // removed account's snoozes are left to fail at their wake).
   dismissAccountFollowUps(accountId);

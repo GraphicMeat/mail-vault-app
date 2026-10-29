@@ -162,10 +162,31 @@ vi.mock('../../syncProbe', () => ({
 vi.mock('../../syncService', () => ({
   syncNow: vi.fn(), waitForSync: vi.fn(), toSyncAccount: (a) => a, watchAccount: vi.fn(), unwatchAccount: vi.fn(),
 }));
+vi.mock('../../daemonClient', async importOriginal => ({
+  ...(await importOriginal()),
+  daemonCall: async (method, p) => {
+    if (method !== 'counts.unread') return {};
+    const counts = { ...p.baseline };
+    let wrote = false;
+    if (p.op === 'recountRows' && Array.isArray(p.cache?.emails)
+      && !(p.cache.totalEmails > p.cache.emails.length)) {
+      counts[p.accountId] = p.cache.emails.filter(row => !row.flags?.includes('\\Seen')).length;
+      wrote = true;
+    }
+    if (p.op === 'shift') {
+      for (const entry of p.entries) {
+        if (entry.mailbox !== 'INBOX' || p.mode === 'unreadOnly' && entry.row.flags?.includes('\\Seen')) continue;
+        counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
+        wrote = true;
+      }
+    }
+    return { counts, rows: [], total: 0, wrote };
+  },
+}));
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { useSearchStore } = await import('../../../stores/searchStore');
-const { selectTotalUnread } = await import('../../../stores/unreadCounts');
+const { whenUnreadIdle } = await import('../../unreadCountsClient');
 
 const A = { id: 'acctA', email: 'a@mock.test', password: 'pw' };
 const B = { id: 'acctB', email: 'b@mock.test', password: 'pw' };
@@ -255,7 +276,7 @@ function parked() {
 const never = () => new Promise(() => {});
 
 const badge = (id) => unreadPerAccount[id];
-const total = () => selectTotalUnread({ hiddenAccounts: {}, unreadPerAccount }, [A, B, G]);
+const total = () => [A, B, G].reduce((sum, account) => sum + (unreadPerAccount[account.id] || 0), 0);
 const storeFlags = (uid, accountId = null) => useMailStore.getState().emails
   .find(e => e.uid === uid && (!accountId || e._accountId === accountId)).flags;
 
@@ -288,6 +309,7 @@ describe('the open publishes without waiting for the server half of the mark', (
 
     expect(storeFlags(42)).toContain('\\Seen');
     expect(useMailStore.getState().selectedEmail.flags).toContain('\\Seen');
+    await whenUnreadIdle();
     expect(badge(A.id)).toBe(4);
     expect(total()).toBe(14);
   });
@@ -371,6 +393,7 @@ describe('opening one unread INBOX message moves the badge and the dock total by
 
     await useMailStore.getState().selectEmail(42, 'server');
 
+    await whenUnreadIdle();
     expect(badge(A.id)).toBe(4);
     expect(total()).toBe(totalBefore - 1);
   });
@@ -383,7 +406,9 @@ describe('opening one unread INBOX message moves the badge and the dock total by
 
     expect(storeFlags(42, A.id)).toContain('\\Seen');
     expect(storeFlags(42, B.id)).toEqual([]); // the same uid in another account
+    await whenUnreadIdle();
     expect(badge(A.id)).toBe(4);
+    await whenUnreadIdle();
     expect(badge(B.id)).toBe(5);
     expect(total()).toBe(totalBefore - 1);
   });
@@ -398,6 +423,7 @@ describe('opening one unread INBOX message moves the badge and the dock total by
     const loading = useMailStore.getState().loadEmails();
     await vi.waitFor(() => expect(mockFetchEmails).toHaveBeenCalled());
     await useMailStore.getState().selectEmail(42, 'server');
+    await whenUnreadIdle();
     expect(badge(A.id)).toBe(4);
 
     // The page was fetched before the open: every row unread.
@@ -405,6 +431,7 @@ describe('opening one unread INBOX message moves the badge and the dock total by
     await loading;
 
     expect(storeFlags(42)).toContain('\\Seen');
+    await whenUnreadIdle();
     expect(badge(A.id)).toBe(4);
     expect(total()).toBe(totalBefore - 1);
   });
@@ -418,6 +445,7 @@ describe('opening one unread INBOX message moves the badge and the dock total by
     const loading = useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
     await vi.waitFor(() => expect(mockGetEmailHeadersPartial).toHaveBeenCalled());
     await useMailStore.getState().selectEmail(`${A.id}:INBOX:42`, 'server');
+    await whenUnreadIdle();
     expect(badge(A.id)).toBe(4);
 
     disk.resolve({ emails: UIDS.map(u => mkRow(u)), totalEmails: 5 });
@@ -425,7 +453,9 @@ describe('opening one unread INBOX message moves the badge and the dock total by
 
     expect(storeFlags(42, A.id)).toContain('\\Seen');
     expect(storeFlags(42, B.id)).toEqual([]);
+    await whenUnreadIdle();
     expect(badge(A.id)).toBe(4);
+    await whenUnreadIdle();
     expect(badge(B.id)).toBe(5);
     expect(total()).toBe(totalBefore - 1);
   });

@@ -37,6 +37,7 @@ describe('daemon-owned commands', () => {
     for (const [method, params] of [
       ['sync.probe', { op: 'check', accountId: 'a', mailbox: 'INBOX' }],
       ['folders.status', { op: 'invalidate', accountId: 'a' }],
+      ['counts.unread', { op: 'rows', baseline: {}, presentation: { accounts: [] } }],
     ]) {
       expect(declaredDaemonOwned.has(method)).toBe(true);
       DAEMON_OWNED.add(method);
