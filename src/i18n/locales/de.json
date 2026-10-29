@@ -2404,6 +2404,7 @@
   "settings.billing.mailvaultEarlyAccessLockDiscounted": "MailVault ist im Early Access. Sichere dir heute den vergünstigten Preis: Er bleibt, solange dein Abo aktiv ist, auch nach Preiserhöhungen.",
   "settings.billing.manageSubscription": "Abo verwalten",
   "settings.billing.trialIssuesQuestion": "Haben Sie Probleme mit MailVault?",
+  "settings.billing.trialIssuesIntro": "Wenn Sie Probleme haben, melden Sie sie bitte. Jedes einzelne ist uns wichtig, und wir sind extrem schnell.",
   "settings.billing.trialIssuesYes": "Ja",
   "settings.billing.trialIssuesNo": "Nein",
   "settings.billing.trialIssuesPromise": "Wir möchten, dass Sie rundum zufrieden sind, und beantworten Fehlermeldungen und Funktionswünsche deshalb extrem schnell. Sagen Sie uns, was nicht stimmt, wir kümmern uns darum.",

@@ -25,6 +25,11 @@ export function BillingIssuesDialog({ onClose, onContinue, onReportBug }) {
     <Dialog open onClose={onClose} portal size="sm" data-testid="billing-issues"
       title={t('settings.billing.trialIssuesQuestion')}>
       {!hasIssues && (
+        <p className="text-sm text-mail-text-muted leading-relaxed mb-4" data-testid="billing-issues-intro">
+          {t('settings.billing.trialIssuesIntro')}
+        </p>
+      )}
+      {!hasIssues && (
         <div className="flex gap-2">
           <Button variant="subtle" size="md" className="flex-1" onClick={() => setHasIssues(true)} data-testid="billing-issues-yes">
             {t('settings.billing.trialIssuesYes')}

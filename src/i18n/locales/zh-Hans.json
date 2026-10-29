@@ -2404,6 +2404,7 @@
   "settings.billing.mailvaultEarlyAccessLockDiscounted": "MailVault 处于早期访问阶段。今天锁定优惠价：只要订阅有效，即使日后涨价，你的价格也保持不变。",
   "settings.billing.manageSubscription": "管理订阅",
   "settings.billing.trialIssuesQuestion": "使用 MailVault 时遇到问题了吗?",
+  "settings.billing.trialIssuesIntro": "如果你遇到问题,请告诉我们。我们在意每一个问题,响应非常迅速。",
   "settings.billing.trialIssuesYes": "是",
   "settings.billing.trialIssuesNo": "否",
   "settings.billing.trialIssuesPromise": "我们希望你完全满意,因此会非常迅速地回复错误报告和功能建议。告诉我们哪里出了问题,我们马上处理。",

@@ -28,6 +28,16 @@ describe('BillingIssuesDialog', () => {
     expect(screen.queryByTestId('billing-issues-report')).toBeNull();
   });
 
+  it('under the question, before Yes or No, asks them to report issues and promises a quick turnaround', () => {
+    open();
+    const intro = screen.getByTestId('billing-issues-intro').textContent;
+    expect(intro).toMatch(/report/i);
+    expect(intro).toMatch(/care about every one/i);
+    expect(intro).toMatch(/super quick/i);
+    fireEvent.click(screen.getByTestId('billing-issues-yes'));
+    expect(screen.queryByTestId('billing-issues-intro')).toBeNull();
+  });
+
   it('on No carries on to Manage Subscription without a second step', () => {
     const { onContinue } = open();
     fireEvent.click(screen.getByTestId('billing-issues-no'));

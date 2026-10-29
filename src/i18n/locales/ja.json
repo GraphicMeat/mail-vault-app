@@ -2404,6 +2404,7 @@
   "settings.billing.mailvaultEarlyAccessLockDiscounted": "MailVault は早期アクセス中です。今なら割引価格を固定でき、サブスクリプションが有効な限り、値上げ後も同じ料金のままです。",
   "settings.billing.manageSubscription": "サブスクリプションを管理",
   "settings.billing.trialIssuesQuestion": "MailVaultで問題が起きていますか?",
+  "settings.billing.trialIssuesIntro": "問題が起きている場合は、ぜひ報告してください。どんな問題も大切にしており、対応は非常に迅速です。",
   "settings.billing.trialIssuesYes": "はい",
   "settings.billing.trialIssuesNo": "いいえ",
   "settings.billing.trialIssuesPromise": "ご満足いただくことが私たちの目標です。不具合の報告や機能のご要望には、非常に素早くお答えします。何が問題かお知らせください。すぐに対応します。",

@@ -2404,6 +2404,7 @@
   "settings.billing.mailvaultEarlyAccessLockDiscounted": "MailVault está en acceso anticipado. Fija hoy el precio con descuento: tu tarifa se mantiene mientras la suscripción siga activa, incluso si suben los precios.",
   "settings.billing.manageSubscription": "Gestionar la suscripción",
   "settings.billing.trialIssuesQuestion": "¿Tienes problemas con MailVault?",
+  "settings.billing.trialIssuesIntro": "Si tienes problemas, por favor infórmanos. Nos importa cada uno de ellos y respondemos rapidísimo.",
   "settings.billing.trialIssuesYes": "Sí",
   "settings.billing.trialIssuesNo": "No",
   "settings.billing.trialIssuesPromise": "Queremos que estés totalmente satisfecho, por eso respondemos muy rápido a los informes de errores y a las ideas nuevas. Cuéntanos qué falla y nos ponemos con ello.",
