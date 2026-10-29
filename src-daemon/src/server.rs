@@ -3637,6 +3637,41 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn s4_real_imap_delta_prepares_source_bound_notification_red() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let since = state.sync_engine.change_gen();
+            append_refresh_imap(&server, "A real new subject");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"s4-real-arrival-red", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none(), "real refresh ACK: {:?}", accepted.error);
+            let receipt = terminal_refresh(&state, "s4-real-arrival-red").await;
+            assert_eq!(receipt["status"], json!("complete"), "provider delta must complete: {receipt:?}");
+            let events = boxed_request(&state, req("sync.events", json!({
+                "since":since, "timeoutMs":1000,
+            }))).await;
+            assert!(events.error.is_none(), "real change poll: {:?}", events.error);
+            let body = events.result.expect("real change poll body");
+            let changes = body["changes"].as_array().expect("real change array");
+            assert!(changes.iter().any(|change| change["accountId"] == "acc1"
+                && change["mailbox"] == "INBOX" && change["arrivalUids"] == json!([2])),
+                "real mock IMAP delta must prove UID 2 before notice: {body:?}");
+            let prepared = body["notifications"].as_array().is_some_and(|notices|
+                notices.iter().any(|notice| notice["accountId"] == "acc1"
+                    && notice["mailbox"] == "INBOX" && notice["uids"] == json!([2])
+                    && notice["from"].as_str().is_some_and(|from| from.contains("New Sender"))));
+            assert!(prepared, "W4S4_NATIVE_ARRIVAL_RED: source-bound real UID 2 and sender missing from prepared notice: {body:?}");
+        }
+
+        #[tokio::test]
         async fn refresh_route_red_detached_imap_observer_keeps_real_header_work() {
             let _env_lock = crate::credentials::test_env_lock().lock()
                 .unwrap_or_else(|error| error.into_inner());

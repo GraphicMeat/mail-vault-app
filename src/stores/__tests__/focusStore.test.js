@@ -557,3 +557,22 @@ it.skipIf(!process.env.W4S4_ORACLE_F06_OUT)('captures F06 old privacy enabled, d
     usePrivacyStore.setState({ enabled: false });
   }
 });
+
+// S4 behavioral RED: the native policy answer enters the existing Focus/OS
+// chokepoint and must never call the public notify.decide route again.
+it('W4S4 prepared native mail delivery uses Focus without a second policy decision', async () => {
+  usePrivacyStore.setState({ enabled: false });
+  const hydration = vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+  try {
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'new@example.test', viewIds: [] };
+    const target = { accountId: 'a1', mailbox: 'INBOX', uid: 2 };
+    const prepared = { deliver: true, reason: 'delivered-default' };
+    await notify('New Sender', 'A real new subject', 'Ping', target, ctx, prepared);
+    if (notifyDecision.mock.calls.length !== 0) {
+      throw new Error('W4S4_FOCUS_PREDECIDED_RED: prepared native notice called notify.decide again');
+    }
+    expect(sendNotification).toHaveBeenCalledWith('New Sender', 'A real new subject', 'Ping', target);
+    expect(getNotificationDecisions()).toHaveLength(1);
+    expect(getNotificationDecisions()[0]).toMatchObject({ deliver: true, reason: 'delivered-default' });
+  } finally { hydration.mockRestore(); }
+});

@@ -113,3 +113,25 @@ describe('conditional S4 old manual refresh input oracle', () => {
     captured.push({ id: 'T03', samples });
   });
 });
+
+// Expected-new S4-T regression, kept separate from the immutable old-JS
+// T01/T02 capture above. The legacy in-flight completion drops this intent.
+it('W4S4 manual in-flight click runs one trailing refresh on the latest view', async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  mockRefreshCurrentView.mockImplementationOnce(() => {
+    invocations.push({ elapsedMs: Date.now() - BASE_MS, mailbox: state.activeMailbox });
+    return held;
+  });
+  actions.refreshCurrentView();
+  actions.refreshCurrentView();
+  state.activeMailbox = 'Archive';
+  release();
+  await flush();
+  await vi.advanceTimersByTimeAsync(14_999);
+  expect(invocations.map(call => call.mailbox)).toEqual(['INBOX']);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(invocations.map(call => call.mailbox),
+    'W4S4_T_TRAILING_RED: in-flight gesture must survive cooldown and use the latest view')
+    .toEqual(['INBOX', 'Archive']);
+});
