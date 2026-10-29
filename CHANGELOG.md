@@ -8,6 +8,8 @@
 
 - Deleting a Notes to Self card on an Outlook account no longer fails with "Cannot delete: no Graph message ID found for this email" when its folder was not open. The delete now reads the message id from the saved Outlook ledger, which also reaches messages older than the newest 200 that a relist can see, instead of only the folder open on screen.
 
+- Delete everywhere on a search result now deletes it. A hit carries no folder identity of its own, so the message was refused and the toast said "0 removed. 1 could not be deleted from the server and was left untouched locally. 1 was skipped because this mailbox needs to resync". The hit is now proved from the header cache, or, for a message older than the cached window, from its folder's identity (the server copy is still checked by UIDVALIDITY and Message-ID before anything is removed); a mailbox sync runs only when neither is there. A uid the cache shows holding another message is refused as changed.
+
 - The one-time code bubble no longer offers a number from a sender's street address when the company has "Security" in its name. A login mail from "TAC Security" showed 1390 (from "HQ 1390 Market St") instead of the code 128321, and its welcome mail, which carries no code, got a bubble with 1390 too. "Security" on its own no longer counts as talk of a code; "security code" still does.
 
 - The update dialogs (portable copy, Snap, up to date, check failed) and the Settings, Export, Original Message and New Message window titles now follow the app language. Before, they stayed English in every locale. A new test fails on any native dialog or window title written as a literal.

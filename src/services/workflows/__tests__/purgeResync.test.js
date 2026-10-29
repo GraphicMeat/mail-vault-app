@@ -1,5 +1,6 @@
 // A delete the native worker refuses for want of identity (a row cached before
-// the identity existed) resyncs its mailbox, re-proves the row and runs again.
+// the identity existed, a search hit) is proved from the header cache, or after
+// a resync of its mailbox, and runs again.
 import { it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../rowVerdicts', async (original) => ({
   ...(await original()),
@@ -21,6 +22,7 @@ import {
   mockGetEmailHeadersByUids,
   mockGetEmailHeadersMeta,
 } from './purgeEverywhereHarness';
+import { retryAfterResync } from '../purgeResync.js';
 
 const MAILBOX = 'INBOX.Spam';
 const identity = { accountId: ACCOUNT.id, mailbox: MAILBOX, uidValidity: 1, originHash: 'A' };
@@ -61,7 +63,19 @@ beforeEach(() => {
   mockGetEmailHeadersByUids.mockImplementation(async (_a, _m, uids) => uids.map(bare));
 });
 
-it('resyncs the refused mailbox, re-proves the row by Message-ID and deletes it', async () => {
+it('re-proves the refused row from the header cache by Message-ID and deletes it', async () => {
+  const result = await purgeEverywhere([1]);
+  expect(mockSyncNow).not.toHaveBeenCalled();
+  expect(native.start).toHaveBeenCalledTimes(2);
+  expect(native.start.mock.calls[1][0].scope.targetHints[0]).toMatchObject({
+    uid: 1, messageId: 'm1@mock', nativeIdentity: { originHash: 'A' },
+  });
+  expect(result).toEqual(counts(1, 0, 0));
+  expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
+});
+
+it('resyncs the mailbox when the cache cannot prove the row, then deletes it', async () => {
+  mockGetEmailHeadersMeta.mockResolvedValueOnce({ uidValidity: 1, nativeIdentity: null });
   const result = await purgeEverywhere([1]);
   expect(mockSyncNow).toHaveBeenCalledTimes(1);
   expect(mockSyncNow.mock.calls[0][1]).toBe(MAILBOX);
@@ -69,6 +83,21 @@ it('resyncs the refused mailbox, re-proves the row by Message-ID and deletes it'
   expect(native.start).toHaveBeenCalledTimes(2);
   expect(native.start.mock.calls[1][0].scope.targetHints[0]).toMatchObject({
     uid: 1, messageId: 'm1@mock', nativeIdentity: { originHash: 'A' },
+  });
+  expect(result).toEqual(counts(1, 0, 0));
+  expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
+});
+
+// A search hit past the cached window: the cache holds no row for its uid, so
+// the folder's identity stands in. The worker checks UIDVALIDITY and the
+// Message-ID at that uid on the server before it deletes anything.
+it('proves a search hit the cache never held by its folder identity', async () => {
+  mockGetEmailHeadersByUids.mockResolvedValue([]);
+  const result = await purgeEverywhere([1]);
+  expect(mockSyncNow).not.toHaveBeenCalled();
+  expect(native.start).toHaveBeenCalledTimes(2);
+  expect(native.start.mock.calls[1][0].scope.targetHints[0]).toMatchObject({
+    uid: 1, messageId: 'm1@mock', nativeIdentity: identity,
   });
   expect(result).toEqual(counts(1, 0, 0));
   expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
@@ -82,7 +111,21 @@ it('never retries a row whose Message-ID changed under the uid', async () => {
   expect(useMailStore.getState().emails.map((e) => e.uid).sort()).toEqual([1, 2]);
 });
 
-it('keeps the refusal when the resync fails', async () => {
+// The verdict callers key on: a uid the cache shows holding another message is
+// refused as changed, not left looking like a wait for identity.
+it('files a uid the cache shows holding another message as changed', async () => {
+  mockGetEmailHeadersByUids.mockResolvedValue([{ ...bare(1), messageId: 'stranger@mock' }]);
+  const hint = { accountId: ACCOUNT.id, mailbox: MAILBOX, uid: 1, nativeIdentity: null,
+    messageIdPresent: true, messageId: 'm1@mock', graphId: null, jmapId: null };
+  const operation = { result: counts(0, 1, 1), outcomes: [{ hint, target: refused(hint) }] };
+  const judged = await retryAfterResync(operation, { accountId: ACCOUNT.id, mailbox: MAILBOX, keys: [1], targetHints: [hint] });
+  expect(judged.outcomes[0].target.lastError).toBe('errors.bulkIdentityChanged');
+  expect(mockSyncNow).not.toHaveBeenCalled();
+  expect(native.start).not.toHaveBeenCalled();
+});
+
+it('keeps the refusal when nothing proves the row and the resync fails', async () => {
+  mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, nativeIdentity: null });
   mockWaitForSync.mockResolvedValue({ success: false });
   await purgeEverywhere([1]);
   expect(native.start).toHaveBeenCalledTimes(1);
@@ -107,6 +150,7 @@ it('does not retry when the resynced cache still carries no identity', async () 
   mockGetEmailHeadersByUids.mockImplementation(async (_a, _m, uids) => uids.map(bare));
   mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, nativeIdentity: null });
   await purgeEverywhere([1]);
+  expect(mockSyncNow).toHaveBeenCalledTimes(1);
   expect(native.start).toHaveBeenCalledTimes(1);
   expect(useMailStore.getState().emails.map((e) => e.uid).sort()).toEqual([1, 2]);
 });

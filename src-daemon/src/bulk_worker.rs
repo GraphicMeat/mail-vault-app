@@ -2555,6 +2555,34 @@ mod tests {
         }
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
     }
+    // A search hit past the cached window: the app binds the folder's identity to
+    // a uid the header cache holds no row for (purgeResync.js). The live
+    // UIDVALIDITY and Message-ID at that uid are the proof; another message under
+    // the uid is refused before anything is removed.
+    #[tokio::test(flavor="multi_thread")]
+    async fn bulk_purge_folder_identity_proves_a_uid_without_a_cache_row() {
+        let _env=crate::credentials::test_env_lock().lock().unwrap_or_else(|e|e.into_inner());
+        for (mid,deleted) in [("selected@test",true),("other@test",false)] {
+            let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
+            seed_selection(&state,"INBOX");seed_purge_file(&state,PURGE_RAW);
+            let provider=MockImap::start(Scenario::new().mailbox(inbox(1)));let cfg=purge_credentials(&state,&provider);
+            let owner=mailvault_core::imap::NativeHeaderIdentity::new(&cfg,"acc","INBOX",Some(1));publish_purge_owner(&state,&owner,json!([]));
+            crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::remove_headers(c,"acc","INBOX",&[7]).map(|_|())).unwrap();
+            assert!(crate::custody::with_conn(&state,|c|mailvault_core::custody::cache::load_by_uids(c,"acc","INBOX",&[7])).unwrap().is_empty(),"precondition: no cache row for the hit");
+            let reply=handle_request_for_test(&state,"bulk.start",json!({"operationId":mid,"type":"delete_everywhere","scope":original_scope(&cfg,"INBOX",Some(mid)),"externalStatus":"unavailable"})).await;
+            assert!(reply.error.is_none(),"{:?}",reply.error);let pending=wait_drained(&state).await;
+            let expunged=provider.commands().iter().any(|c|c.contains("EXPUNGE"));
+            let kept=mailvault_core::message_store::read_raw(dir.path(),"acc","INBOX",7).unwrap().is_some();
+            if deleted {
+                assert_eq!((&pending["result"]["deleted"],&pending["result"]["failed"],&pending["result"]["needsResync"]),(&json!(1),&json!(0),&json!(0)),"{pending}");
+                assert!(expunged && !kept,"server and vault copies both go: {pending}");
+            } else {
+                assert_eq!(pending["worker"]["purgeTargets"][0]["lastError"],json!("errors.bulkIdentityChanged"),"{pending}");
+                assert!(!expunged && kept,"another message under the uid is never touched: {pending}");
+            }
+        }
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
     #[tokio::test(flavor="multi_thread")]
     async fn bulk_purge_local_replacement_after_actual_server_success_is_preserved() {
         let dir=tempfile::tempdir().unwrap();let state=DaemonState::for_test(dir.path().into(),dir.path().into(),true);
