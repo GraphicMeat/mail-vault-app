@@ -662,7 +662,7 @@ export function SettingsPage({ onClose, onAddAccount, onExportAccounts, onImport
       )}
 
       {activeTab === 'daemon' && (
-        <DaemonSettings />
+        <DaemonSettings initialSection={resolvedInitialTab === 'daemon' ? initialSection : null} />
       )}
 
       {activeTab === 'billing' && (

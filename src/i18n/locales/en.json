@@ -2735,6 +2735,12 @@
   "settings.pendingActions.opDelete": "Delete from server",
   "settings.pendingActions.opFlag": "Flag change",
   "settings.pendingActions.opMove": "Move to another folder",
+  "settings.pendingActions.opPurge": "Delete everywhere",
+  "settings.pendingActions.progress": "{{deleted}} deleted, {{left}} not yet",
+  "settings.pendingActions.showMessages": "Show messages",
+  "settings.pendingActions.statusDeleted": "Deleted",
+  "settings.pendingActions.statusRefused": "Not deleted",
+  "settings.pendingActions.statusWaiting": "Not deleted yet",
   "settings.pendingActions.opOther": "Server action",
   "settings.pendingActions.queuedAt": "Queued {{date}}",
   "settings.pendingActions.retryNow": "Retry now",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "{{count}} New Emails",
   "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (and {{more}} more)",
   "notify.arrival.singlePrivateBody": "New email in {{accountEmail}}",
-  "notify.arrival.batchPrivateBody": "{{count}} new emails in {{accountEmail}}"
-
+  "notify.arrival.batchPrivateBody": "{{count}} new emails in {{accountEmail}}",
+  "pendingActions.reminder.title": "Some server actions have not gone through",
+  "pendingActions.reminder.body_one": "{{count}} message is still waiting for your server to accept a delete or another change. MailVault keeps retrying it.",
+  "pendingActions.reminder.body_other": "{{count}} messages are still waiting for your server to accept a delete or another change. MailVault keeps retrying them.",
+  "pendingActions.reminder.open": "Open unfinished server actions",
+  "pendingActions.reminder.later": "Later"
 }

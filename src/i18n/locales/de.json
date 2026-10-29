@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "Vom Server löschen",
   "settings.pendingActions.opFlag": "Markierungsänderung",
   "settings.pendingActions.opMove": "In anderen Ordner verschieben",
+  "settings.pendingActions.opPurge": "Überall löschen",
+  "settings.pendingActions.progress": "{{deleted}} gelöscht, {{left}} noch nicht",
+  "settings.pendingActions.showMessages": "Nachrichten anzeigen",
+  "settings.pendingActions.statusDeleted": "Gelöscht",
+  "settings.pendingActions.statusRefused": "Nicht gelöscht",
+  "settings.pendingActions.statusWaiting": "Noch nicht gelöscht",
   "settings.pendingActions.opOther": "Serveraktion",
   "settings.pendingActions.queuedAt": "In Warteschlange seit {{date}}",
   "settings.pendingActions.retryNow": "Jetzt erneut versuchen",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "{{count}} neue E-Mails",
   "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (und {{more}} weitere)",
   "notify.arrival.singlePrivateBody": "Neue E-Mail in {{accountEmail}}",
-  "notify.arrival.batchPrivateBody": "{{count}} neue E-Mails in {{accountEmail}}"
-
+  "notify.arrival.batchPrivateBody": "{{count}} neue E-Mails in {{accountEmail}}",
+  "pendingActions.reminder.title": "Einige Serveraktionen sind noch nicht durchgegangen",
+  "pendingActions.reminder.body_one": "{{count}} Nachricht wartet noch darauf, dass dein Server eine Löschung oder andere Änderung annimmt. MailVault versucht es weiter.",
+  "pendingActions.reminder.body_other": "{{count}} Nachrichten warten noch darauf, dass dein Server eine Löschung oder andere Änderung annimmt. MailVault versucht es weiter.",
+  "pendingActions.reminder.open": "Nicht abgeschlossene Serveraktionen öffnen",
+  "pendingActions.reminder.later": "Später"
 }

@@ -610,8 +610,10 @@ describe('deleteSelectedFromServer', () => {
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(order[0]).toEqual(['queue', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2] }]);
-    expect(order.at(-1)).toEqual(['clear', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2], arg: {} }]);
+    // Both messages named once, at queue time; the clear matches by that arg.
+    const arg = { total: 2, messages: [expect.objectContaining({ uid: 1 }), expect.objectContaining({ uid: 2 })] };
+    expect(order[0]).toEqual(['queue', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2], arg }]);
+    expect(order.at(-1)).toEqual(['clear', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2], arg }]);
     expect(order.filter(o => o[0] === 'delete')).toHaveLength(2);
   });
 
@@ -646,7 +648,7 @@ describe('deleteSelectedFromServer', () => {
 
     const out = await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1] });
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1], arg: {} });
     expect(mockDeleteEmail).not.toHaveBeenCalled();
     // Nothing was deleted, so nothing may be cleared or pruned — replayOps
     // finishes the job, and the tombstone keeps the row off the list meanwhile.

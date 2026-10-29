@@ -76,6 +76,44 @@ describe('pending actions', () => {
   });
 });
 
+describe('a delete of several messages', () => {
+  it('keeps every message listed and says which went and which did not', async () => {
+    mockReadOps.mockResolvedValue([entry({
+      uids: [9, 11],
+      arg: { total: 3, messages: [
+        { uid: 7, subject: 'Invoice March', from: 'Shop' },
+        { uid: 9, subject: 'Weekly digest', from: 'News' },
+        { uid: 11, subject: '', from: 'Bank' },
+      ] },
+    })]);
+    mockOpFailures.mockReturnValue(new Map([['delete|acct-a|INBOX|9', { message: 'NO server busy', at: Date.now() }]]));
+
+    render(<PendingActionsSettings />);
+
+    expect(await screen.findByText(/3 messages/i)).toBeTruthy();
+    expect(screen.getByText(/1 deleted, 2 not yet/)).toBeTruthy();
+    const line = (text) => screen.getByText(text).closest('li');
+    expect(line('Invoice March').textContent).toMatch(/Deleted/);
+    expect(line('Weekly digest').textContent).toMatch(/Not deleted yet/);
+    expect(line(/No subject/i).textContent).toMatch(/Not deleted yet/);
+  });
+
+  it('marks a message the server refused as not deleted, not as gone', async () => {
+    mockReadOps.mockResolvedValue([entry({
+      op: 'purge',
+      uids: [9],
+      arg: { hints: [], total: 2, messages: [{ uid: 7, subject: 'Refused one', from: '' }, { uid: 9, subject: 'Owed one', from: '' }] },
+    })]);
+    mockOpFailures.mockReturnValue(new Map([['purge|acct-a|INBOX|7', { message: 'errors.bulkIdentityUncertain', at: Date.now() }]]));
+
+    render(<PendingActionsSettings />);
+
+    const refusedLine = (await screen.findByText('Refused one')).closest('li');
+    expect(refusedLine.textContent).toMatch(/Not deleted$/);
+    expect(screen.getByText('Owed one').closest('li').textContent).toMatch(/Not deleted yet/);
+  });
+});
+
 describe('a JMAP refusal', () => {
   it('reads in the app\'s words, not the daemon\'s code', async () => {
     mockReadOps.mockResolvedValue([entry()]);

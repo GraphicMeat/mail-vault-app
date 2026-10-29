@@ -124,12 +124,15 @@ it('files a uid the cache shows holding another message as changed', async () =>
   expect(native.start).not.toHaveBeenCalled();
 });
 
-it('keeps the refusal when nothing proves the row and the resync fails', async () => {
+// A refusal still unproved after the resync is queued (messageMutations
+// `_purgeQueueable`): the row stays gone and a later replay tries again.
+it('keeps the refusal queued when the resync fails', async () => {
   mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, nativeIdentity: null });
   mockWaitForSync.mockResolvedValue({ success: false });
-  await purgeEverywhere([1]);
+  const result = await purgeEverywhere([1]);
   expect(native.start).toHaveBeenCalledTimes(1);
-  expect(useMailStore.getState().emails.map((e) => e.uid).sort()).toEqual([1, 2]);
+  expect(result).toMatchObject({ queued: 1 });
+  expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
 });
 
 it('does not resync a row that has no Message-ID to prove it by', async () => {
@@ -149,8 +152,9 @@ it('does not resync when the worker saw the identity change', async () => {
 it('does not retry when the resynced cache still carries no identity', async () => {
   mockGetEmailHeadersByUids.mockImplementation(async (_a, _m, uids) => uids.map(bare));
   mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, nativeIdentity: null });
-  await purgeEverywhere([1]);
+  const result = await purgeEverywhere([1]);
   expect(mockSyncNow).toHaveBeenCalledTimes(1);
   expect(native.start).toHaveBeenCalledTimes(1);
-  expect(useMailStore.getState().emails.map((e) => e.uid).sort()).toEqual([1, 2]);
+  expect(result).toMatchObject({ queued: 1 });
+  expect(useMailStore.getState().emails.map((e) => e.uid)).toEqual([2]);
 });

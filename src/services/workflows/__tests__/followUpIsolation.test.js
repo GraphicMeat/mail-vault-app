@@ -266,7 +266,7 @@ describe('a due follow-up reminder and the inbox list', () => {
   it('keeps the reminder when the delete fails', async () => {
     mockDaemonCall.mockClear();
     prime({ sentEmails: [sentRow()] });
-    // Every try refused: the delete retries a refusal once (retryOnce).
+    // Every try refused: the delete retries a refusal five times (DELETE_RETRY).
     mockDeleteEmail.mockRejectedValue(new Error('NO server says no'));
     await useMailStore.getState().deleteEmailFromServer(`${ACCT_A.id}:Sent:77`).catch(() => {});
     expect(mockDeleteEmail).toHaveBeenCalled();

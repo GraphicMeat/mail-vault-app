@@ -234,7 +234,7 @@ export const useNotesStore = create((set, get) => ({
   /// that is all of them), and a refusal puts back what did not go, where it
   /// was.
   ///
-  /// One copy at a time (`skipRefresh`), and one undo for all of them: a slot
+  /// Every copy at once (`skipRefresh`), and one undo for all of them: a slot
   /// per copy put back only the last. The undo brings the card back too; the
   /// restored copies carry new uids, which only a fresh list knows.
   deleteCard: card => guarded(card, async () => {
@@ -263,15 +263,20 @@ export const useNotesStore = create((set, get) => ({
     });
     const kept = paint((card.copies || []).filter(copy => !copies.includes(copy)));
     const { deleteEmailFromServer } = await loading;
-    try {
-      for (const copy of copies) {
-        outcomes.push(await deleteEmailFromServer(copy.uid, { accountId: copy.accountId, mailboxOverride: copy.mailbox, skipRefresh: true }));
-        gone.add(copy);
-      }
-    } catch (error) {
+    // Every copy at once: a refused one retries for up to half a minute, and
+    // the others must not wait behind it.
+    const settled = await Promise.allSettled(copies.map(copy =>
+      deleteEmailFromServer(copy.uid, { accountId: copy.accountId, mailboxOverride: copy.mailbox, skipRefresh: true })));
+    settled.forEach((result, i) => {
+      if (result.status !== 'fulfilled') return;
+      outcomes.push(result.value);
+      gone.add(copies[i]);
+    });
+    const refused = settled.find(result => result.status === 'rejected');
+    if (refused) {
       paint((card.copies || []).filter(copy => !gone.has(copy)));
       if (gone.size) await offerUndo(false);
-      throw error;
+      throw refused.reason;
     }
     // The board lists the vault's copies, and a server delete leaves those:
     // tag the note Done so it does not come back with the next list.

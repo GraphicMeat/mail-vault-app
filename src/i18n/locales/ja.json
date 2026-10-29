@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "サーバーから削除",
   "settings.pendingActions.opFlag": "フラグの変更",
   "settings.pendingActions.opMove": "別のフォルダーに移動",
+  "settings.pendingActions.opPurge": "すべてから削除",
+  "settings.pendingActions.progress": "{{deleted}} 件削除済み、{{left}} 件未完了",
+  "settings.pendingActions.showMessages": "メッセージを表示",
+  "settings.pendingActions.statusDeleted": "削除済み",
+  "settings.pendingActions.statusRefused": "削除されませんでした",
+  "settings.pendingActions.statusWaiting": "未削除",
   "settings.pendingActions.opOther": "サーバー操作",
   "settings.pendingActions.queuedAt": "{{date}} から待機中",
   "settings.pendingActions.retryNow": "今すぐ再試行",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "新着メール {{count}} 件",
   "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}}（ほか {{more}} 件）",
   "notify.arrival.singlePrivateBody": "{{accountEmail}} に新着メール",
-  "notify.arrival.batchPrivateBody": "{{accountEmail}} に新着メール {{count}} 件"
-
+  "notify.arrival.batchPrivateBody": "{{accountEmail}} に新着メール {{count}} 件",
+  "pendingActions.reminder.title": "一部のサーバー操作が完了していません",
+  "pendingActions.reminder.body_one": "{{count}} 件のメッセージが、サーバーによる削除などの変更の受け付けを待っています。MailVault は再試行を続けます。",
+  "pendingActions.reminder.body_other": "{{count}} 件のメッセージが、サーバーによる削除などの変更の受け付けを待っています。MailVault は再試行を続けます。",
+  "pendingActions.reminder.open": "未完了のサーバー操作を開く",
+  "pendingActions.reminder.later": "後で"
 }

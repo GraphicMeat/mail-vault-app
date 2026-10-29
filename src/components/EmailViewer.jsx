@@ -133,7 +133,10 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingRead, setTogglingRead] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  // The selection key of the message whose delete is on the wire. Only that
+  // message's Delete waits: a refused delete retries for up to half a minute,
+  // and the next message opened meanwhile is the user's to delete now.
+  const [deleting, setDeleting] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [pendingPurge, setPendingPurge] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
@@ -355,7 +358,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
   };
 
   const handleDelete = (target = selectedEmail) => {
-    if (!target || deleting) return;
+    if (!target || (deleting && deleting === selectionKey(target, useMailStore.getState()))) return;
     const location = resolveEmailLocation(target, useMailStore.getState());
     if (!location) return;
     setPendingDelete({
@@ -404,7 +407,8 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
 
   const confirmDeleteEmail = async (target = selectedEmail, location = resolveEmailLocation(target, useMailStore.getState())) => {
     const originalSnapshot = location ? captureSelectionSnapshot(target, location.accountId, location.mailbox) : null;
-    setDeleting(true);
+    const deletingKey = selectionKey(target, useMailStore.getState());
+    setDeleting(deletingKey);
     try {
       // A bare uid names a message only inside one folder of one account: in
       // a list that spans mailboxes it matches whichever row carries that
@@ -420,7 +424,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
       console.error('[EmailViewer] delete failed:', err);
       useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });
     } finally {
-      setDeleting(false);
+      setDeleting(current => (current === deletingKey ? null : current));
     }
   };
 
@@ -819,7 +823,7 @@ function EmailViewerComponent({ onComposeReply, onClose, showOpenInWindow = fals
             isLocalOnly={isLocalOnly}
             isSentEmail={isSentEmail}
             singleRecipient={(selectedEmail.to || []).length <= 1 && !(selectedEmail.cc?.length > 0)}
-            disabled={{ delete: deleting, toggleRead: togglingRead, archive: saving, compose: composing }}
+            disabled={{ delete: !!deleting && deleting === selectionKey(selectedEmail, useMailStore.getState()), toggleRead: togglingRead, archive: saving, compose: composing }}
             moveDropdownOpen={showMoveDropdown}
             moveButtonRef={moveButtonRef}
             onActionStart={(_event, trigger, entry) => {

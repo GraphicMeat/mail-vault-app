@@ -737,6 +737,11 @@ export const useSettingsStore = create(
       }),
       markShareUnlockShown: () => set({ shareUnlockLastShownAt: Date.now() }),
 
+      // When the "unfinished server actions" reminder last showed: at most once
+      // a day, set when it shows so a quit does not bring it back on launch.
+      pendingActionsRemindedAt: null,
+      markPendingActionsReminded: (at = Date.now()) => set({ pendingActionsRemindedAt: at }),
+
       // Post-backup automation upsell — shown once ever after the first manual backup.
       upsellBackupShown: false,
       markUpsellBackupShown: () => set({ upsellBackupShown: true }),

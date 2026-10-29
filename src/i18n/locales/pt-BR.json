@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "Excluir do servidor",
   "settings.pendingActions.opFlag": "Mudança de marcação",
   "settings.pendingActions.opMove": "Mover para outra pasta",
+  "settings.pendingActions.opPurge": "Excluir em todo lugar",
+  "settings.pendingActions.progress": "{{deleted}} excluídas, {{left}} ainda não",
+  "settings.pendingActions.showMessages": "Mostrar mensagens",
+  "settings.pendingActions.statusDeleted": "Excluída",
+  "settings.pendingActions.statusRefused": "Não excluída",
+  "settings.pendingActions.statusWaiting": "Ainda não excluída",
   "settings.pendingActions.opOther": "Ação no servidor",
   "settings.pendingActions.queuedAt": "Na fila desde {{date}}",
   "settings.pendingActions.retryNow": "Tentar agora",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "{{count}} novos e-mails",
   "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (e mais {{more}})",
   "notify.arrival.singlePrivateBody": "Novo e-mail em {{accountEmail}}",
-  "notify.arrival.batchPrivateBody": "{{count}} novos e-mails em {{accountEmail}}"
-
+  "notify.arrival.batchPrivateBody": "{{count}} novos e-mails em {{accountEmail}}",
+  "pendingActions.reminder.title": "Algumas ações no servidor não foram concluídas",
+  "pendingActions.reminder.body_one": "{{count}} mensagem ainda aguarda o servidor aceitar uma exclusão ou outra alteração. O MailVault continua tentando.",
+  "pendingActions.reminder.body_other": "{{count}} mensagens ainda aguardam o servidor aceitar uma exclusão ou outra alteração. O MailVault continua tentando.",
+  "pendingActions.reminder.open": "Abrir ações no servidor não concluídas",
+  "pendingActions.reminder.later": "Mais tarde"
 }

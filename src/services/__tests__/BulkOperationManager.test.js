@@ -457,8 +457,11 @@ it('tells subscribers whether a run belongs to the corner panel', async () => {
   await manager.start({ type: 'delete_everywhere', scope });
   expect(seen.length).toBeGreaterThan(0);
   expect(seen.every((panel) => panel === false)).toBe(true);
-  await manager.start({ type: 'delete', scope, panel: true });
+  await manager.start({ type: 'archive', scope, panel: true });
   expect(seen.at(-1)).toBe(true);
+  // A delete never gets the panel, whoever asks: its rows are already gone.
+  await manager.start({ type: 'delete', scope, panel: true });
+  expect(seen.at(-1)).toBe(false);
 
   seen.length = 0;
   const active = { id: 'existing', attemptId: 'A', type: 'archive', status: 'archiving' };
@@ -471,5 +474,51 @@ it('tells subscribers whether a run belongs to the corner panel', async () => {
   await run;
   expect(seen.length).toBeGreaterThan(0);
   expect(seen.every((panel) => panel === true)).toBe(true);
+
+  seen.length = 0;
+  const purge = { id: 'purge', attemptId: 'B', type: 'delete_everywhere', status: 'deleting' };
+  m.send.mockResolvedValue({ active: purge, pending: null });
+  const reattached = manager.attach(purge);
+  await tick();
+  m.events['bulk-progress']({
+    payload: { operationId: 'purge', attemptId: 'B', finished: true, operation: { ...purge, status: 'complete' } },
+  });
+  await reattached;
+  expect(seen.length).toBeGreaterThan(0);
+  expect(seen.every((panel) => panel === false)).toBe(true);
   stop();
+});
+// A plain server delete hands back what its own durable row says it removed,
+// group by group, so the queue takes off only those. A row that is not this
+// exact run says nothing, never "all deleted".
+it('reports which uids a delete removed from its exact native row', async () => {
+  const finished = (rowFor) => {
+    m.send.mockImplementation(async (cmd, p) => {
+      if (cmd === 'bulk.start') {
+        m.accepted = { id: p.operationId, attemptId: p.attemptId, type: p.type, status: 'complete', errors: 1, total: 2, completed: 2 };
+        return m.accepted;
+      }
+      if (cmd === 'read_pending_operation') return rowFor(m.accepted);
+      return { active: null, pending: null };
+    });
+    return manager.start({ type: 'delete', scope: { ...scope, keys: [7, 8] } });
+  };
+  const row = (run, over = {}) => ({
+    id: run.id,
+    attemptId: run.attemptId,
+    schemaVersion: 1,
+    type: 'delete',
+    status: 'complete',
+    worker: { groups: [{ group: { accountId: 'a', mailbox: 'INBOX', uids: [7, 8] }, deleted: [8] }] },
+    ...over,
+  });
+
+  const run = await finished((r) => row(r));
+  expect(run.deleted).toEqual([{ accountId: 'a', mailbox: 'INBOX', uids: [8] }]);
+
+  const other = await finished((r) => row(r, { attemptId: 'another-run' }));
+  expect(other.deleted).toBeUndefined();
+
+  const unreadable = await finished(() => { throw new Error('locked'); });
+  expect(unreadable.deleted).toBeUndefined();
 });

@@ -126,9 +126,8 @@ function prime(emails, selected = []) {
   useMailStore.getState().updateSortedEmails();
 }
 
-// Real timers: the workflow waits SERVER_RETRY_MS between the two attempts,
-// and these cases are about what that retry leaves behind. Fake timers turn
-// the wait into a race with the workflow's own dynamic imports.
+// The workflow retries a refusal five times (DELETE_RETRY); under test the
+// schedule runs with no wait, so these cases see what the retries leave behind.
 beforeEach(() => {
   vi.clearAllMocks();
   netOnline = true;
@@ -137,13 +136,17 @@ beforeEach(() => {
 });
 
 describe('a server delete the server refuses', () => {
-  it('retries once, then keeps the row evicted and the journal entry queued', async () => {
+  it('retries five times, then keeps the row evicted and the journal entry queued, silently', async () => {
     prime([row(7)]);
+    useMailStore.setState({ error: null });
     mockDeleteEmail.mockRejectedValue(new Error('socket closed'));
 
     await expect(useMailStore.getState().deleteEmailFromServer(7)).resolves.toBeUndefined();
 
-    expect(mockDeleteEmail).toHaveBeenCalledTimes(2);
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(6);
+    // Owed, not failed: Settings › Unfinished server actions and the daily
+    // reminder say it, not a toast.
+    expect(useMailStore.getState().error).toBeNull();
     expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCT.id, mailbox: 'INBOX', uids: [7] });
     // The whole point: nothing clears the entry, so replayOps owns it now.
     expect(mockClearOps).not.toHaveBeenCalled();
@@ -179,9 +182,50 @@ describe('a server delete the server refuses', () => {
     await useMailStore.getState().deleteSelectedFromServer();
 
     // The group was journalled as one entry; only uid 7 landed, so only uid 7
-    // may be forgotten.
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCT.id, mailbox: 'INBOX', uids: [7], arg: {} });
+    // may be forgotten. Only the refused uid is retried.
+    expect(mockDeleteEmail.mock.calls.filter(([, uid]) => uid === 7)).toHaveLength(1);
+    expect(mockDeleteEmail.mock.calls.filter(([, uid]) => uid === 8)).toHaveLength(6);
+    // Cleared by the arg it was queued with, which still names both messages.
+    const { arg } = mockQueueOp.mock.calls[0][0];
+    expect(arg.messages.map((m) => m.uid)).toEqual([7, 8]);
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCT.id, mailbox: 'INBOX', uids: [7], arg });
     expect(useMailStore.getState().deleteTombstones.has(`${ACCT.id}|INBOX|8`)).toBe(true);
     expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([]);
+  });
+});
+
+describe('a server delete that is refused and then lands', () => {
+  it('stays gone, clears its journal entry and says nothing', async () => {
+    prime([row(7), row(8)], [7, 8]);
+    useMailStore.setState({ error: null });
+    let refusals = 2;
+    mockDeleteEmail.mockImplementation(async (_a, uid) => {
+      if (uid === 8 && refusals-- > 0) throw new Error('socket closed');
+      return { success: true };
+    });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockDeleteEmail.mock.calls.filter(([, uid]) => uid === 8)).toHaveLength(3);
+    // Two messages: the entry names both, and is cleared by that same arg.
+    const { arg } = mockQueueOp.mock.calls[0][0];
+    expect(arg.total).toBe(2);
+    expect(arg.messages.map((m) => m.uid)).toEqual([7, 8]);
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCT.id, mailbox: 'INBOX', uids: [7, 8], arg });
+    expect(mockNoteOpFailure).not.toHaveBeenCalled();
+    expect(useMailStore.getState().emails).toEqual([]);
+    expect(useMailStore.getState().error).toBeNull();
+  });
+
+  it('waits 1, 2, 4, 8 and 16 seconds between tries', async () => {
+    const { DELETE_RETRY, deleteRetryDelay } = await import('../messageMutations');
+    const base = DELETE_RETRY.baseMs;
+    DELETE_RETRY.baseMs = 1000;
+    try {
+      expect([0, 1, 2, 3, 4].map(deleteRetryDelay)).toEqual([1000, 2000, 4000, 8000, 16000]);
+      expect(DELETE_RETRY.retries).toBe(5);
+    } finally {
+      DELETE_RETRY.baseMs = base;
+    }
   });
 });

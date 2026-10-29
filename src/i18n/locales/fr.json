@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "Supprimer du serveur",
   "settings.pendingActions.opFlag": "Changement de marqueur",
   "settings.pendingActions.opMove": "Déplacer vers un autre dossier",
+  "settings.pendingActions.opPurge": "Supprimer partout",
+  "settings.pendingActions.progress": "{{deleted}} supprimés, {{left}} pas encore",
+  "settings.pendingActions.showMessages": "Afficher les messages",
+  "settings.pendingActions.statusDeleted": "Supprimé",
+  "settings.pendingActions.statusRefused": "Non supprimé",
+  "settings.pendingActions.statusWaiting": "Pas encore supprimé",
   "settings.pendingActions.opOther": "Action serveur",
   "settings.pendingActions.queuedAt": "En file depuis le {{date}}",
   "settings.pendingActions.retryNow": "Réessayer maintenant",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "{{count}} nouveaux messages",
   "notify.arrival.batchPreviewBody": "{{sender}} : {{subject}} (et {{more}} autres)",
   "notify.arrival.singlePrivateBody": "Nouveau message dans {{accountEmail}}",
-  "notify.arrival.batchPrivateBody": "{{count}} nouveaux messages dans {{accountEmail}}"
-
+  "notify.arrival.batchPrivateBody": "{{count}} nouveaux messages dans {{accountEmail}}",
+  "pendingActions.reminder.title": "Certaines actions serveur n'ont pas abouti",
+  "pendingActions.reminder.body_one": "{{count}} message attend encore que votre serveur accepte une suppression ou une autre modification. MailVault continue de réessayer.",
+  "pendingActions.reminder.body_other": "{{count}} messages attendent encore que votre serveur accepte une suppression ou une autre modification. MailVault continue de réessayer.",
+  "pendingActions.reminder.open": "Ouvrir les actions serveur inachevées",
+  "pendingActions.reminder.later": "Plus tard"
 }

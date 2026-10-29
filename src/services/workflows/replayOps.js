@@ -3,7 +3,8 @@
 import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
-import { markServerDeleted } from './messageMutations';
+import { markServerDeleted, replayPurge, hideQueuedDeletes, showQueuedRows } from './messageMutations';
+import { remindOfUnfinished } from './pendingActionsReminder';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { UNDO_TOAST_MS } from '../../stores/slices/undoSlice';
 
@@ -65,6 +66,8 @@ export async function replayOps({ reason = 'launch' } = {}) {
 
   const ops = await db.readOps();
   if (!ops.length) return finish({ attempted: 0, done: 0, failed: 0, kept: 0, errors: [] });
+  // Rows owed a delete stay hidden, whichever session queued them.
+  await hideQueuedDeletes(ops);
 
   // Withdraw the undo offer before sending anything.
   //
@@ -122,6 +125,32 @@ export async function replayOps({ reason = 'launch' } = {}) {
     // journalled: nothing here can act on it, so stop carrying it.
     if (!account || isGraphAccount(account)) {
       await db.clearOps({ op, accountId, mailbox, uids, arg });
+      await showQueuedRows(entry);
+      continue;
+    }
+
+    // Delete everywhere: one native run for the whole entry, with the proof
+    // each message was captured with. Only what landed is cleared.
+    if (op === 'purge') {
+      attempted += uids.length;
+      const { landed, kept: owed, dropped = [], error } = await replayPurge(entry);
+      ok += landed.length;
+      failed += owed.length + dropped.length;
+      kept += owed.length;
+      for (const uid of owed) db.noteOpFailure({ op, accountId, mailbox, uid }, error);
+      if (owed.length) errors.push(`purge ${mailbox}/${owed.join(',')}: ${error}`);
+      if (landed.length) await db.clearOps({ op, accountId, mailbox, uids: landed, arg });
+      // Refused for good: off the queue and back in the list, its reason kept
+      // (after the clear, which drops reasons) for the entry's message list.
+      if (dropped.length) {
+        const uidsDropped = dropped.map((d) => d.uid);
+        await db.clearOps({ op, accountId, mailbox, uids: uidsDropped, arg });
+        for (const d of dropped) db.noteOpFailure({ op, accountId, mailbox, uid: d.uid }, d.error);
+        errors.push(`purge ${mailbox}/${uidsDropped.join(',')}: refused`);
+        await showQueuedRows(entry, uidsDropped);
+      }
+      const s = useMailStore.getState();
+      if (landed.length && s.activeAccountId === accountId && s.activeMailbox === mailbox) s.loadEmails?.();
       continue;
     }
 
@@ -183,6 +212,9 @@ export async function replayOps({ reason = 'launch' } = {}) {
       // the uids (same shape the delete workflows use when the view has moved).
       await db.saveEmailHeaders(accountId, mailbox, [], null, { removedUids: removed });
     }
+    // The server row is pruned now, so lifting the tombstone shows only what
+    // is left: a vault copy, marked as off the server.
+    if (op === 'delete' && removed.length) await showQueuedRows(entry, removed);
 
     // If that mailbox is what the user is looking at right now, reload it — the
     // rows on screen were painted before the op landed. A flag changes no uid,
@@ -196,6 +228,8 @@ export async function replayOps({ reason = 'launch' } = {}) {
   }
 
   log(`[replayOps] finished ${attempted} unfinished op(s): ${ok} ok, ${failed} failed, ${kept} still queued`);
+  // A replay the user started from that Settings list answers there.
+  if (reason !== 'manual') await remindOfUnfinished(kept);
   return finish({ attempted, done: ok, failed, kept, errors });
 }
 

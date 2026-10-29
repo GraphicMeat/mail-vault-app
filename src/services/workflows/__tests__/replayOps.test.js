@@ -46,10 +46,18 @@ vi.mock('../../api', () => ({
 vi.mock('../../authUtils', () => ({ ensureFreshToken: async (a) => a }));
 vi.mock('../../graphConfig', () => ({ isGraphAccount: () => false }));
 
+const mockReplayPurge = vi.fn();
+const mockHideQueued = vi.fn().mockResolvedValue(undefined);
+const mockShowQueued = vi.fn().mockResolvedValue(undefined);
 vi.mock('../messageMutations', async (importOriginal) => ({
   ...(await importOriginal()),
   markServerDeleted: (...a) => mockMarkServerDeleted(...a),
+  replayPurge: (...a) => mockReplayPurge(...a),
+  hideQueuedDeletes: (...a) => mockHideQueued(...a),
+  showQueuedRows: (...a) => mockShowQueued(...a),
 }));
+const mockRemind = vi.fn().mockResolvedValue(false);
+vi.mock('../pendingActionsReminder', () => ({ remindOfUnfinished: (...a) => mockRemind(...a) }));
 
 const mockClearUndo = vi.fn();
 const mailState = { undo: null, activeAccountId: 'acct1', activeMailbox: 'INBOX', loadEmails: (...a) => mockLoadEmails(...a), clearUndo: (...a) => mockClearUndo(...a) };
@@ -140,6 +148,8 @@ describe('replayOps', () => {
     mockDeleteEmail.mockRejectedValueOnce(new Error('UID 7 not found'));
 
     const other = await replayOps();
+    // Still owed after a replay: the daily reminder decides whether to say so.
+    expect(mockRemind).toHaveBeenCalledWith(1);
 
     expect(mockClearOps).not.toHaveBeenCalled();
     expect(other).toMatchObject({ failed: 1, kept: 1 });
@@ -177,6 +187,59 @@ describe('replayOps', () => {
 
     expect(mockDeleteEmail).not.toHaveBeenCalled();
     expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'vanished', mailbox: 'INBOX', uids: [7], arg: {} });
+    expect(mockShowQueued).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'vanished', uids: [7] }));
+  });
+
+  it('hides the rows every owed entry names before sending anything', async () => {
+    const ops = [entry()];
+    mockReadOps.mockResolvedValue(ops);
+    await replayOps();
+    expect(mockHideQueued).toHaveBeenCalledWith(ops);
+    expect(mockHideQueued.mock.invocationCallOrder[0]).toBeLessThan(mockDeleteEmail.mock.invocationCallOrder[0]);
+  });
+
+  // The server row is pruned first, so lifting the tombstone can only show the
+  // vault copy, never the deleted server row for a repaint.
+  it('shows what is left of a replayed delete once its server row is pruned', async () => {
+    mockReadOps.mockResolvedValue([entry()]);
+    await replayOps();
+    expect(mockShowQueued).toHaveBeenCalledWith(expect.objectContaining({ op: 'delete' }), [7]);
+    expect(mockSaveEmailHeaders.mock.invocationCallOrder[0]).toBeLessThan(mockShowQueued.mock.invocationCallOrder[0]);
+  });
+
+  it('replays a delete everywhere as one run, clears what landed and keeps the rest', async () => {
+    const purge = entry({ op: 'purge', uids: [7, 8], arg: { hints: [{ uid: 7 }, { uid: 8 }] } });
+    mockReadOps.mockResolvedValue([purge]);
+    mockReplayPurge.mockResolvedValue({ landed: [7], kept: [8], error: 'NO try later' });
+
+    const result = await replayOps();
+
+    expect(mockReplayPurge).toHaveBeenCalledWith(purge);
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: purge.arg });
+    expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uid: 8 }, 'NO try later');
+    expect(result).toMatchObject({ attempted: 2, done: 1, kept: 1 });
+    expect(mockRemind).toHaveBeenCalledWith(1);
+  });
+
+  it('takes a delete everywhere the daemon refuses for good off the queue and shows its row', async () => {
+    const purge = entry({ op: 'purge', uids: [7, 8], arg: { hints: [{ uid: 7 }, { uid: 8 }] } });
+    mockReadOps.mockResolvedValue([purge]);
+    mockReplayPurge.mockResolvedValue({ landed: [], kept: [8], dropped: [{ uid: 7, error: 'errors.bulkIdentityChanged' }], error: 'NO try later' });
+
+    const result = await replayOps();
+
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: purge.arg });
+    expect(mockNoteOpFailure).toHaveBeenCalledWith({ op: 'purge', accountId: 'acct1', mailbox: 'INBOX', uid: 7 }, 'errors.bulkIdentityChanged');
+    expect(mockShowQueued).toHaveBeenCalledWith(purge, [7]);
+    expect(result).toMatchObject({ attempted: 2, done: 0, kept: 1 });
+  });
+
+  it('does not raise the reminder for a replay started from the Settings list', async () => {
+    mockReadOps.mockResolvedValue([entry()]);
+    mockDeleteEmail.mockRejectedValueOnce(new Error('NO'));
+    await replayOps({ reason: 'manual' });
+    expect(mockRemind).not.toHaveBeenCalled();
   });
 });
 

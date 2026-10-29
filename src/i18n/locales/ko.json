@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "서버에서 삭제",
   "settings.pendingActions.opFlag": "플래그 변경",
   "settings.pendingActions.opMove": "다른 폴더로 이동",
+  "settings.pendingActions.opPurge": "모든 곳에서 삭제",
+  "settings.pendingActions.progress": "{{deleted}}개 삭제됨, {{left}}개 남음",
+  "settings.pendingActions.showMessages": "메시지 보기",
+  "settings.pendingActions.statusDeleted": "삭제됨",
+  "settings.pendingActions.statusRefused": "삭제되지 않음",
+  "settings.pendingActions.statusWaiting": "아직 삭제되지 않음",
   "settings.pendingActions.opOther": "서버 작업",
   "settings.pendingActions.queuedAt": "{{date}}부터 대기 중",
   "settings.pendingActions.retryNow": "지금 다시 시도",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "새 메일 {{count}}개",
   "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (외 {{more}}개)",
   "notify.arrival.singlePrivateBody": "{{accountEmail}}에 새 메일",
-  "notify.arrival.batchPrivateBody": "{{accountEmail}}에 새 메일 {{count}}개"
-
+  "notify.arrival.batchPrivateBody": "{{accountEmail}}에 새 메일 {{count}}개",
+  "pendingActions.reminder.title": "일부 서버 작업이 완료되지 않았습니다",
+  "pendingActions.reminder.body_one": "메시지 {{count}}건이 서버가 삭제 또는 다른 변경을 받아들이기를 기다리고 있습니다. MailVault가 계속 다시 시도합니다.",
+  "pendingActions.reminder.body_other": "메시지 {{count}}건이 서버가 삭제 또는 다른 변경을 받아들이기를 기다리고 있습니다. MailVault가 계속 다시 시도합니다.",
+  "pendingActions.reminder.open": "완료되지 않은 서버 작업 열기",
+  "pendingActions.reminder.later": "나중에"
 }

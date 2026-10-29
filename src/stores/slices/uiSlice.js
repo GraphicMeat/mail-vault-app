@@ -52,6 +52,11 @@ export const createUiSlice = (set, get) => ({
   } }),
   clearSettingsRequest: () => set({ settingsRequest: null }),
 
+  // The once-a-day reminder that server actions are still owed:
+  // { count } while it shows (services/workflows/pendingActionsReminder.js).
+  pendingActionsReminder: null,
+  dismissPendingActionsReminder: () => set({ pendingActionsReminder: null }),
+
   // Bulk save progress
   bulkSaveProgress: null, // { total, completed, errors, active }
   exportProgress: null, // { total, completed, active, mode: 'export'|'import' }

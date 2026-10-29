@@ -62,7 +62,7 @@ import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
 import { bulkOperationManager } from '../services/BulkOperationManager';
 import { captureBulkScope } from '../services/bulkSelection.js';
-import { purgeEverywhere } from '../services/workflows/messageMutations';
+import { purgeEverywhereReporting, bulkDeleteFromServer } from '../services/workflows/messageMutations';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow, listRowHeight } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
@@ -1216,15 +1216,27 @@ function EmailListComponent({ stacked = false }) {
       return;
     }
 
+    // Delete everywhere took its rows off the list at the click and retries
+    // quietly; only what it could not do is said, as a toast. No panel.
+    if (action === 'delete_everywhere') {
+      purgeEverywhereReporting(uids, { scope }).catch(err => {
+        console.error('[EmailList] Delete everywhere failed:', err);
+        useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });
+      });
+      return;
+    }
+
     try {
       // The selection's keys can name any account and folder; a bare uid
       // names the open folder's message only where the view is one folder.
-      const onProgress = op => setBulkOpProgress({ ...op });
-      if (action === 'delete_everywhere') await purgeEverywhere(uids, { scope, onProgress, panel: true });
-      else await bulkOperationManager.start({ type: action, scope, onProgress, panel: true });
-
-      if (bulkOperationManager.operation?.status === 'complete') {
-        await useMailStore.getState().loadEmails();
+      // A delete leaves the list at the click and reports by toast alone; the
+      // corner panel is for archiving.
+      if (action === 'delete') await bulkDeleteFromServer(scope);
+      else {
+        await bulkOperationManager.start({ type: action, scope, onProgress: op => setBulkOpProgress({ ...op }), panel: true });
+        if (bulkOperationManager.operation?.status === 'complete') {
+          await useMailStore.getState().loadEmails();
+        }
       }
 
       // Only delete_everywhere and archive_backup_delete populate `result`

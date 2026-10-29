@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "从服务器删除",
   "settings.pendingActions.opFlag": "标记变更",
   "settings.pendingActions.opMove": "移动到其他文件夹",
+  "settings.pendingActions.opPurge": "全部删除",
+  "settings.pendingActions.progress": "已删除 {{deleted}} 封，{{left}} 封尚未删除",
+  "settings.pendingActions.showMessages": "显示邮件",
+  "settings.pendingActions.statusDeleted": "已删除",
+  "settings.pendingActions.statusRefused": "未删除",
+  "settings.pendingActions.statusWaiting": "尚未删除",
   "settings.pendingActions.opOther": "服务器操作",
   "settings.pendingActions.queuedAt": "自 {{date}} 起排队",
   "settings.pendingActions.retryNow": "立即重试",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "{{count}} 封新邮件",
   "notify.arrival.batchPreviewBody": "{{sender}}：{{subject}}（另有 {{more}} 封）",
   "notify.arrival.singlePrivateBody": "{{accountEmail}} 中有新邮件",
-  "notify.arrival.batchPrivateBody": "{{accountEmail}} 中有 {{count}} 封新邮件"
-
+  "notify.arrival.batchPrivateBody": "{{accountEmail}} 中有 {{count}} 封新邮件",
+  "pendingActions.reminder.title": "部分服务器操作尚未完成",
+  "pendingActions.reminder.body_one": "有 {{count}} 封邮件仍在等待服务器接受删除或其他更改。MailVault 会继续重试。",
+  "pendingActions.reminder.body_other": "有 {{count}} 封邮件仍在等待服务器接受删除或其他更改。MailVault 会继续重试。",
+  "pendingActions.reminder.open": "打开未完成的服务器操作",
+  "pendingActions.reminder.later": "稍后"
 }

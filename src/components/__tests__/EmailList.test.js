@@ -77,6 +77,14 @@ const bulkManager = vi.hoisted(() => ({ cancel: vi.fn(), start: vi.fn(), subscri
 vi.mock('../../services/BulkOperationManager', () => ({
   bulkOperationManager: bulkManager,
 }));
+// The delete workflows have their own suites; here only what the list hands
+// them, through the same manager stub.
+const purgeReporting = vi.hoisted(() => vi.fn(async () => ({})));
+vi.mock('../../services/workflows/messageMutations', async (original) => ({
+  ...(await original()),
+  bulkDeleteFromServer: (scope) => bulkManager.start({ type: 'delete', scope }),
+  purgeEverywhereReporting: (...a) => purgeReporting(...a),
+}));
 vi.mock('../../services/bodyScan', () => ({
   getLinkAlertLevel: () => null,
   getCachedAlerts: () => [],
@@ -753,7 +761,7 @@ describe('bulk run across folders', () => {
     const accounts = [{ id: 'acc1', email: 'one@test.com' }];
     const localFolders = { acc1: [{ name: 'Imported', dir: 'Imported' }] };
     bulkManager.start.mockImplementation(async () => { bulkManager.operation = { status: 'complete', skipped: 0, skippedLocal: 1 }; });
-    useMailStore.setState({ accounts, localFolders, activeAccountId: 'acc1', activeMailbox: 'INBOX', loadEmails: vi.fn(async () => {}), error: null });
+    useMailStore.setState({ accounts, localFolders, activeAccountId: 'acc1', activeMailbox: 'INBOX', emails: [], sentEmails: [], loadEmails: vi.fn(async () => {}), error: null });
     try {
       const { EmailList } = await import('../EmailList.jsx');
       render(React.createElement(EmailList));
@@ -764,7 +772,7 @@ describe('bulk run across folders', () => {
     } finally {
       bulkManager.start.mockReset();
       bulkManager.operation = null;
-      useMailStore.setState({ accounts: prev.accounts, localFolders: prev.localFolders, activeAccountId: prev.activeAccountId, activeMailbox: prev.activeMailbox, loadEmails: prev.loadEmails, error: null });
+      useMailStore.setState({ accounts: prev.accounts, localFolders: prev.localFolders, activeAccountId: prev.activeAccountId, activeMailbox: prev.activeMailbox, emails: prev.emails, sentEmails: prev.sentEmails, loadEmails: prev.loadEmails, error: null });
     }
   });
 });
@@ -783,6 +791,31 @@ describe('the bulk operation panel', () => {
     expect(bulkProgress.props.operation).toBeNull();
     act(() => listener(op, { settled: true, panel: true }));
     expect(bulkProgress.props.operation).toMatchObject({ id: 'x' });
+  });
+
+  // The bulk tool's deletes report by toast alone: their progress never
+  // reaches the panel, and the handler does not wait on the run.
+  it.each(['delete', 'delete_everywhere'])('never shows a bulk-tool %s', async (action) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const prev = useMailStore.getState();
+    const accounts = [{ id: 'acc1', email: 'one@test.com' }];
+    bulkManager.start.mockImplementation(async ({ onProgress }) => {
+      onProgress?.({ id: 'run', type: action, status: 'deleting', total: 1, completed: 0 });
+      bulkManager.operation = { status: 'complete' };
+    });
+    useMailStore.setState({ accounts, activeAccountId: 'acc1', activeMailbox: 'INBOX', emails: [], sentEmails: [], loadEmails: vi.fn(async () => {}), error: null });
+    try {
+      const { EmailList } = await import('../EmailList.jsx');
+      render(React.createElement(EmailList));
+      await act(() => bulkModal.props.onConfirm({ action, uids: [3] }));
+      await act(async () => {});
+      expect(action === 'delete' ? bulkManager.start : purgeReporting).toHaveBeenCalled();
+      expect(bulkProgress.props.operation).toBeNull();
+    } finally {
+      bulkManager.start.mockReset();
+      bulkManager.operation = null;
+      useMailStore.setState({ accounts: prev.accounts, activeAccountId: prev.activeAccountId, activeMailbox: prev.activeMailbox, emails: prev.emails, sentEmails: prev.sentEmails, loadEmails: prev.loadEmails, error: null });
+    }
   });
 });
 

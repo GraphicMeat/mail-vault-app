@@ -162,6 +162,40 @@ function fullTargets(raw, owner) {
   return work.purgeTargets;
 }
 
+// What a plain server delete removed, group by group, from the run's own
+// durable row: the queue keeps every other uid owed. Anything that does not
+// match this run exactly reads as unknown (null), never as all deleted.
+function deletedGroups(raw, owner) {
+  const groups = raw?.worker?.groups;
+  if (
+    raw?.id !== owner.id ||
+    raw?.attemptId !== owner.attempt ||
+    raw?.schemaVersion !== 1 ||
+    raw?.type !== 'delete' ||
+    !Array.isArray(groups) ||
+    !groups.every(
+      (g) =>
+        typeof g?.group?.accountId === 'string' &&
+        typeof g.group.mailbox === 'string' &&
+        Array.isArray(g.deleted) &&
+        g.deleted.every(Number.isInteger)
+    )
+  )
+    return null;
+  return groups.map((g) => ({
+    accountId: g.group.accountId,
+    mailbox: g.group.mailbox,
+    uids: [...g.deleted],
+  }));
+}
+
+// A delete never gets the corner panel: its rows left the list when it was
+// clicked, and only a final failure is said, as a toast. A recovered archive
+// run has no caller of its own and reports there.
+const DELETE_TYPES = new Set(['delete', 'delete_everywhere']);
+export const isDeleteBulkType = (type) => DELETE_TYPES.has(type);
+const panelFor = (type) => !isDeleteBulkType(type);
+
 // All mail decisions and pending writes belong to the native worker. This
 // adapter owns only one subscription, attempt matching and status recovery.
 export class BulkOperationManager {
@@ -197,8 +231,8 @@ export class BulkOperationManager {
     spans = false,
     uids = [],
     onProgress,
-    // The bulk selection's run reports in the list's corner panel; a delete
-    // from the list or the reader answers with its toast alone.
+    // The bulk selection's archive runs report in the list's corner panel;
+    // any delete answers with its toast alone (panelFor).
     panel = false,
   }) {
     return this._run(
@@ -211,7 +245,7 @@ export class BulkOperationManager {
       },
       onProgress,
       undefined,
-      panel
+      panel && panelFor(type)
     );
   }
   resume(pending, _account, onProgress) {
@@ -220,7 +254,7 @@ export class BulkOperationManager {
       { operationId: pending.id, attemptId: uuid(), type: pending.type },
       onProgress,
       undefined,
-      true
+      panelFor(pending.type)
     );
   }
   attach(active, onProgress) {
@@ -233,7 +267,7 @@ export class BulkOperationManager {
       },
       onProgress,
       active,
-      true
+      panelFor(active.type)
     );
   }
   async _run(command, params, onProgress, attached, panel = false) {
@@ -478,10 +512,27 @@ export class BulkOperationManager {
         /* Missing full outcomes never becomes inferred success. */
       }
     }
+    // Only a run that ended short needs it: a clean one removed everything,
+    // and a paused one is picked up again before anything is settled.
+    let deleted = null;
+    const { type, status, errors } = this._operation;
+    if (
+      type === 'delete' &&
+      owner.attempt &&
+      ['complete', 'cancelled', 'error'].includes(status) &&
+      (status !== 'complete' || errors)
+    ) {
+      try {
+        deleted = deletedGroups(owner.raw || (await send('read_pending_operation')), owner);
+      } catch {
+        /* Unknown, and so nothing is taken off the queue. */
+      }
+    }
     if (this._owner !== owner) return;
     this._operation = {
       ...this._operation,
       outcomes: [...owner.outcomes.values()],
+      ...(deleted ? { deleted } : {}),
     };
     const result = this._operation;
     this._emit(owner, true);

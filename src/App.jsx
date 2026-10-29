@@ -73,6 +73,7 @@ import { PrivacyDictionaryHost } from './components/privacy/PrivacyDictionaryHos
 import { usePrivacyStore, isPrivacyMasking } from './stores/privacyStore';
 import { usePrivacyPeekListeners } from './hooks/usePrivacy';
 import ShareUnlockModal from './components/ShareUnlockModal';
+import { PendingActionsReminder } from './components/PendingActionsReminder';
 import BackupUpsellModal from './components/BackupUpsellModal.jsx';
 import { ExportDialog } from './components/export/ExportDialog.jsx';
 import { ExportUpsellModal } from './components/export/ExportUpsellModal.jsx';
@@ -92,7 +93,7 @@ import { currentQuickActionScopeSnapshot, watchQuickActionScope } from './hooks/
 import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
-import { bulkOperationManager } from './services/BulkOperationManager';
+import { bulkOperationManager, isDeleteBulkType } from './services/BulkOperationManager';
 import { BulkPendingOperationBanner } from './components/BulkPendingOperationBanner';
 import { resolveErrorToastProps } from './utils/errorToast';
 import { resolveEscapeAction, resolveContactsEscape } from './utils/escapeAction';
@@ -1259,6 +1260,17 @@ function App() {
             loading: true,
           });
 
+          // Before the first paint: a delete still owed to the server from an
+          // earlier session keeps its rows hidden (one journal read).
+          try {
+            const { hideQueuedDeletes } = await import('./services/workflows/messageMutations');
+            // Capped: a daemon still starting must not hold the first paint.
+            // The launch replay hides them too once the journal answers.
+            await Promise.race([hideQueuedDeletes(), new Promise(resolve => setTimeout(resolve, 300))]);
+          } catch (e) {
+            console.warn('[QuickLoad] Could not hide queued deletes:', e);
+          }
+
           // activateAccount handles all local cache + server loading in parallel
           useMailStore.getState().activateAccount(firstVisible.id, 'INBOX')
             .catch(e => console.warn('[QuickLoad] activateAccount failed (non-fatal):', e));
@@ -1269,7 +1281,14 @@ function App() {
             if (status.active) void bulkOperationManager.attach(status.active, () => {}).catch(error => {
               useMailStore.setState({ error: tErr(error) });
             });
-            if (status.pending) setPendingOperation(status.pending);
+            // An interrupted delete finishes on its own: its rows left the list
+            // when it was clicked, and its journal entry owns any retry. Only
+            // an archive run asks Resume or Discard.
+            if (status.pending && isDeleteBulkType(status.pending.type)) {
+              void bulkOperationManager.resume(status.pending, null, () => {}).catch(error => {
+                console.warn('[QuickLoad] Could not resume the interrupted delete:', error);
+              });
+            } else if (status.pending) setPendingOperation(status.pending);
           } catch (e) {
             console.warn('[QuickLoad] Failed to check pending operations:', e);
           }
@@ -1753,6 +1772,7 @@ function App() {
       <MboxUploadProgress onOpenAccounts={(accountId) => openSettings({ tab: 'accounts', accountId })} />
       <FormatMigrationProgress />
       <ShareUnlockModal onSubscribe={() => openSettings({ tab: 'billing' })} />
+      <PendingActionsReminder />
       <BackupUpsellModal onUpgrade={() => openSettings({ tab: 'billing' })} />
 
       {/* Export — one dialog and one upsell for all four entry points */}

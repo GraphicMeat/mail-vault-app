@@ -9,7 +9,7 @@ import { PendingActionsSettings } from './PendingActionsSettings';
 import { DaemonAlwaysOn } from './DaemonAlwaysOn';
 import { SettingsPageLayout } from '../ui/SettingsForm';
 
-export function DaemonSettings() {
+export function DaemonSettings({ initialSection = null } = {}) {
   const t = useT();
   const alwaysOn = useSettingsStore((s) => s.daemonAlwaysOn);
   const isDemo = typeof window !== 'undefined' && !!window.__MAILVAULT_DEMO__;
@@ -81,7 +81,7 @@ export function DaemonSettings() {
       {!isDemo && <DaemonAlwaysOn />}
 
       {/* What the helper still owes the server */}
-      {!isDemo && <PendingActionsSettings />}
+      {!isDemo && <PendingActionsSettings focus={initialSection === 'pending-actions'} />}
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">

@@ -90,12 +90,11 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
       const { email, location, snapshot } = serverTargets[0];
       return actions.deleteEmailFromServer(email.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox, originalSnapshot: snapshot });
     }
-    const outcomes = [];
-    for (const { email, location, snapshot } of serverTargets) {
-      if (!location) continue;
-      try { outcomes.push(await actions.deleteEmailFromServer(email.uid, { skipRefresh: true, accountId: location.accountId, mailboxOverride: location.mailbox, originalSnapshot: snapshot })); }
-      catch (error) { console.error(`[RowQuickActions] Failed to delete email ${email.uid} from ${location.mailbox}:`, error); }
-    }
+    // All copies at once: a refused one retries for up to half a minute, and
+    // the other copies' rows must not wait behind it.
+    const outcomes = await Promise.all(serverTargets.filter(({ location }) => location).map(({ email, location, snapshot }) =>
+      actions.deleteEmailFromServer(email.uid, { skipRefresh: true, accountId: location.accountId, mailboxOverride: location.mailbox, originalSnapshot: snapshot })
+        .catch((error) => { console.error(`[RowQuickActions] Failed to delete email ${email.uid} from ${location.mailbox}:`, error); return null; })));
     await reloadListInView();
     setDeleteUndo(outcomes.filter(Boolean));
   };

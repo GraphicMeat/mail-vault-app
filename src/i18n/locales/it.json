@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "Elimina dal server",
   "settings.pendingActions.opFlag": "Modifica del contrassegno",
   "settings.pendingActions.opMove": "Sposta in un’altra cartella",
+  "settings.pendingActions.opPurge": "Elimina ovunque",
+  "settings.pendingActions.progress": "{{deleted}} eliminati, {{left}} non ancora",
+  "settings.pendingActions.showMessages": "Mostra messaggi",
+  "settings.pendingActions.statusDeleted": "Eliminato",
+  "settings.pendingActions.statusRefused": "Non eliminato",
+  "settings.pendingActions.statusWaiting": "Non ancora eliminato",
   "settings.pendingActions.opOther": "Azione sul server",
   "settings.pendingActions.queuedAt": "In coda dal {{date}}",
   "settings.pendingActions.retryNow": "Riprova ora",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "{{count}} nuove email",
   "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (e altre {{more}})",
   "notify.arrival.singlePrivateBody": "Nuova email in {{accountEmail}}",
-  "notify.arrival.batchPrivateBody": "{{count}} nuove email in {{accountEmail}}"
-
+  "notify.arrival.batchPrivateBody": "{{count}} nuove email in {{accountEmail}}",
+  "pendingActions.reminder.title": "Alcune azioni sul server non sono andate a buon fine",
+  "pendingActions.reminder.body_one": "{{count}} messaggio attende ancora che il server accetti un'eliminazione o un'altra modifica. MailVault continua a riprovare.",
+  "pendingActions.reminder.body_other": "{{count}} messaggi attendono ancora che il server accetti un'eliminazione o un'altra modifica. MailVault continua a riprovare.",
+  "pendingActions.reminder.open": "Apri le azioni sul server non completate",
+  "pendingActions.reminder.later": "Più tardi"
 }

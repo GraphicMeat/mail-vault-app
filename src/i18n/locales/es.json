@@ -2732,6 +2732,12 @@
   "settings.pendingActions.opDelete": "Eliminar del servidor",
   "settings.pendingActions.opFlag": "Cambio de marca",
   "settings.pendingActions.opMove": "Mover a otra carpeta",
+  "settings.pendingActions.opPurge": "Eliminar en todas partes",
+  "settings.pendingActions.progress": "{{deleted}} eliminados, {{left}} pendientes",
+  "settings.pendingActions.showMessages": "Mostrar mensajes",
+  "settings.pendingActions.statusDeleted": "Eliminado",
+  "settings.pendingActions.statusRefused": "No eliminado",
+  "settings.pendingActions.statusWaiting": "Aún no eliminado",
   "settings.pendingActions.opOther": "Acción del servidor",
   "settings.pendingActions.queuedAt": "En cola desde {{date}}",
   "settings.pendingActions.retryNow": "Reintentar ahora",
@@ -4093,6 +4099,10 @@
   "notify.arrival.newEmails": "{{count}} correos nuevos",
   "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (y {{more}} más)",
   "notify.arrival.singlePrivateBody": "Nuevo correo en {{accountEmail}}",
-  "notify.arrival.batchPrivateBody": "{{count}} correos nuevos en {{accountEmail}}"
-
+  "notify.arrival.batchPrivateBody": "{{count}} correos nuevos en {{accountEmail}}",
+  "pendingActions.reminder.title": "Algunas acciones del servidor no se han completado",
+  "pendingActions.reminder.body_one": "{{count}} mensaje sigue esperando a que tu servidor acepte una eliminación u otro cambio. MailVault sigue intentándolo.",
+  "pendingActions.reminder.body_other": "{{count}} mensajes siguen esperando a que tu servidor acepte una eliminación u otro cambio. MailVault sigue intentándolo.",
+  "pendingActions.reminder.open": "Abrir acciones del servidor pendientes",
+  "pendingActions.reminder.later": "Más tarde"
 }

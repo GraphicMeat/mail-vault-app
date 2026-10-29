@@ -54,8 +54,17 @@ const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
 const mockGetLocalIndexProvenance = vi.fn().mockResolvedValue(new Map());
 const mockGetEmailHeadersMeta = vi.fn().mockResolvedValue({ uidValidity: 1 });
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
+// The op journal: what a delete still owes the server.
+const mockQueueOp = vi.fn().mockResolvedValue(1);
+const mockClearOps = vi.fn().mockResolvedValue(undefined);
+const mockNoteOpFailure = vi.fn();
+const mockReadOps = vi.fn().mockResolvedValue([]);
 
 vi.mock('../../db', () => ({
+  queueOp: (...a) => mockQueueOp(...a),
+  clearOps: (...a) => mockClearOps(...a),
+  noteOpFailure: (...a) => mockNoteOpFailure(...a),
+  readOps: (...a) => mockReadOps(...a),
   initDB: vi.fn().mockResolvedValue(undefined),
   getVaultUidSets: (...a) => mockGetVaultUidSets(...a),
   getLocalEmails: (...a) => mockGetLocalEmails(...a),
@@ -119,7 +128,7 @@ vi.mock('../../../stores/searchStore', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
-const { purgeEverywhere, purgeEverywhereReporting, setDeleteUndo } = await import('../messageMutations');
+const { purgeEverywhere, purgeEverywhereReporting, bulkDeleteFromServer, replayPurge, hideQueuedDeletes, showQueuedRows, setDeleteUndo } = await import('../messageMutations');
 
 // 36-char UUID: db/emails.js parses `accountId-mailbox-uid` with a fixed-width
 // prefix and silently no-ops on anything shorter.
@@ -168,6 +177,10 @@ function resetPurgeMocks() {
   // Without this, prune assertions match a previous test's call and pass (or
   // fail) for the wrong reason.
   mockSaveEmailHeaders.mockReset().mockResolvedValue(undefined);
+  mockQueueOp.mockReset().mockResolvedValue(1);
+  mockClearOps.mockReset().mockResolvedValue(undefined);
+  mockNoteOpFailure.mockReset();
+  mockReadOps.mockReset().mockResolvedValue([]);
   mockCheckMailboxStatus.mockReset().mockResolvedValue({ uidValidity: 1 });
   mockGetEmailHeadersMeta.mockReset().mockResolvedValue({ uidValidity: 1 });
   mockGraphDeleteMessage.mockReset().mockResolvedValue(undefined);
@@ -191,7 +204,8 @@ function resetPurgeMocks() {
 beforeEach(resetPurgeMocks);
 
 export {
-  ACCOUNT, prime, serverMsg, useMailStore, purgeEverywhere, purgeEverywhereReporting,
+  ACCOUNT, prime, serverMsg, useMailStore, purgeEverywhere, purgeEverywhereReporting, bulkDeleteFromServer,
+  replayPurge, hideQueuedDeletes, showQueuedRows, mockQueueOp, mockClearOps, mockNoteOpFailure, mockReadOps,
   setDeleteUndo, resetPurgeMocks, mockDeleteEmail, mockMaildirDeleteMany,
   mockBackupPurgeUids, mockCheckMailboxStatus, mockGraphDeleteMessage,
   mockGetLocalIndexEntry, mockAppendLocalIndex, mockGetLocalIndexProvenance,
