@@ -98,7 +98,8 @@ describe('the daemon owns the token', () => {
     const exempt = /if matches!\(\s*method\.as_str\(\),\s*([^)]*)\s*\) \{\s*return route_request\(state, req\)\.await;\s*\}/.exec(handle);
     expect(exempt).not.toBeNull();
     expect([...exempt[1].matchAll(/"([^"]+)"/g)].map(match => match[1])).toEqual([
-      'sync.probe', 'counts.unread', 'sync.refresh', 'sync.refresh_status', 'sync.context', 'folders.status',
+      'sync.probe', 'counts.unread', 'sync.refresh', 'sync.refresh_status', 'sync.context',
+      'pipeline.focus', 'pipeline.status', 'folders.status',
       'compose.reply_context', 'compose.check',
       'backup.schedule.get', 'backup.schedule.set', 'backup.run_now',
       'backup.cancel', 'backup.stop', 'backup.schedule.status',

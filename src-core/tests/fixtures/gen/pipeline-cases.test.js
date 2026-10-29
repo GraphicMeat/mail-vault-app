@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// S5 characterization: runs the REAL EmailPipelineManager, the real
-// usePipelineCoordinator hook and the real sentFolder helpers with only their IO
+// S5 characterization: runs the REAL EmailPipelineManager and the real
+// sentFolder helpers with only their IO
 // seams replaced (daemon policy answer, db, stores, the AccountPipeline workers).
 // Capture mode (MV_PIPELINE_CAPTURE=1) prints the corpus between markers; an
 // ordinary run compares what the JS does now with the committed corpus, so the
@@ -8,8 +8,7 @@
 import { it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { renderHook, act, cleanup } from '@testing-library/react';
-import { create } from 'zustand';
+import { cleanup } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({
   trace: [], instances: [], gates: new Map(), policies: {}, policyDelay: null,
@@ -97,22 +96,14 @@ vi.mock('../../../../src/utils/sentFolder', async importOriginal => ({
 }));
 vi.mock('../../../../src/services/downloadCapWatch', () => ({ downloadCapChanged: () => false }));
 
-const accountState = create(() => ({ activeAccountId: null, accounts: [] }));
-const listState = create(() => ({ emails: [] }));
-const syncState = create(() => ({ loading: false }));
-vi.mock('../../../../src/stores/accountStore', () => ({ useAccountStore: accountState }));
-vi.mock('../../../../src/stores/messageListStore', () => ({ useMessageListStore: listState }));
-vi.mock('../../../../src/stores/syncStore', () => ({ useSyncStore: syncState }));
-
 const { pipelineManager } = await import('../../../../src/services/EmailPipelineManager');
-const { usePipelineCoordinator } = await import('../../../../src/hooks/usePipelineCoordinator');
 const { fetchesAhead } = await import('../../../../src/services/accountPolicy');
 const { findSentMailboxPath } = await import('../../../../src/utils/sentFolder');
 
 const FIXTURE = 'src-core/tests/fixtures/pipeline-cases.json';
 const PROVENANCE = 'src-core/tests/fixtures/pipeline-cases.provenance.json';
 const SOURCES = ['src/services/EmailPipelineManager.js', 'src/services/AccountPipeline.js',
-  'src/hooks/usePipelineCoordinator.js', 'src/services/accountPolicy.js', 'src/utils/sentFolder.js',
+  'src/services/accountPolicy.js', 'src/utils/sentFolder.js',
   'src/stores/slices/unifiedHelpers.js'];
 const sha = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -134,7 +125,7 @@ beforeEach(() => {
   pipelineManager._backgroundContentRunning = false;
   pipelineManager._contentCascadeDone.clear();
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); });
 
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const flush = async (turns = 12) => { for (let i = 0; i < turns; i++) await Promise.resolve(); };
@@ -144,8 +135,7 @@ function uidsOf(trace, event) {
 }
 
 it('captures the real EmailPipelineManager, coordinator and Sent lookup behavior', async () => {
-  const corpus = { candidates: [], scope: [], sent: [], headerChunks: null, contentCascade: [], coordinator: null,
-    constants: {} };
+  const corpus = { candidates: [], scope: [], sent: [], headerChunks: null, contentCascade: [], constants: {} };
 
   // ── 1. Candidate selection: _keptUids + _getUncachedUids over real fetchesAhead ──
   const day = n => `2026-0${n}-10T12:00:00Z`;
@@ -369,73 +359,27 @@ it('captures the real EmailPipelineManager, coordinator and Sent lookup behavior
       note: 'c3 has an unknown vault and is skipped unmarked; c4 (on demand) is walked with no uids' };
   }
 
-  // ── 6. The coordinator hook: 200ms start delay, switch, cache-empty reset, online/offline ──
-  {
-    vi.useFakeTimers();
-    const calls = [];
-    const original = {};
-    for (const name of ['startActiveAccountPipeline', 'onAccountSwitch', 'syncAccounts', 'pauseAll', 'resumeAll', 'destroyAll', 'watchTransferLimits']) {
-      original[name] = pipelineManager[name];
-      pipelineManager[name] = (...args) => { calls.push({ call: name, at: Date.now() - t0, args: name === 'syncAccounts' ? [args[0].map(a => a.id)] : args.filter(a => typeof a === 'string') }); return () => {}; };
-    }
-    const t0 = Date.now();
-    const starts = () => calls.filter(c => c.call === 'startActiveAccountPipeline').length;
-    const set = async change => { await act(async () => { change(); }); };
-    const wait = async ms => { await act(async () => { vi.advanceTimersByTime(ms); }); };
-    accountState.setState({ activeAccountId: 'a', accounts: [{ id: 'a' }, { id: 'b' }] });
-    listState.setState({ emails: [] }); syncState.setState({ loading: false });
-    const hook = renderHook(() => usePipelineCoordinator());
-    await wait(500);
-    const startsWithNoEmails = starts();
-    await set(() => listState.setState({ emails: [{ uid: 1 }] }));
-    await wait(199);
-    const startsAt199ms = starts();
-    await wait(1);
-    const startsAt200ms = starts();
-    await set(() => listState.setState({ emails: [{ uid: 1 }, { uid: 2 }] }));
-    await wait(600);
-    const startsAfterSameAccountEmailsChange = starts();
-    await set(() => listState.setState({ emails: [] }));
-    await set(() => listState.setState({ emails: [{ uid: 3 }] }));
-    await wait(200);
-    const startsAfterCacheEmptyReset = starts();
-    await set(() => syncState.setState({ loading: true }));
-    await set(() => listState.setState({ emails: [{ uid: 4 }, { uid: 5 }] }));
-    await wait(600);
-    const startsWhileSyncing = starts();
-    await set(() => syncState.setState({ loading: false }));
-    await wait(200);
-    const startsWhenSyncEnds = starts();
-    const beforeSwitch = calls.length;
-    await set(() => accountState.setState({ activeAccountId: 'b' }));
-    await wait(300);
-    const afterSwitchPlus300ms = calls.slice(beforeSwitch).map(c => `${c.call}:${c.args.join(',')}`);
-    await set(() => listState.setState({ emails: [] }));
-    await set(() => listState.setState({ emails: [{ uid: 9 }] }));
-    await wait(200);
-    const afterSwitchThenListReload = calls.slice(beforeSwitch).map(c => `${c.call}:${c.args.join(',')}`);
-    await set(() => accountState.setState({ accounts: [{ id: 'b' }] }));
-    await act(async () => { window.dispatchEvent(new Event('offline')); window.dispatchEvent(new Event('online')); });
-    hook.unmount();
-    corpus.coordinator = { startDelayMs: 200, startsWithNoEmails, startsAt199ms, startsAt200ms,
-      startsAfterSameAccountEmailsChange, startsAfterCacheEmptyReset, startsWhileSyncing, startsWhenSyncEnds,
-      afterSwitchPlus300ms, afterSwitchThenListReload,
-      otherCalls: calls.filter(c => ['syncAccounts', 'pauseAll', 'resumeAll', 'destroyAll'].includes(c.call))
-        .map(c => `${c.call}${c.call === 'syncAccounts' ? ':' + c.args[0].join(',') : ''}`) };
-    Object.assign(pipelineManager, original);
-  }
+  // ── 6. The coordinator hook: retired. ──
+  // The 200ms start delay, the account-switch and cache-empty restarts and the online/offline
+  // calls of the old usePipelineCoordinator were captured once from the real hook and live on in
+  // the corpus (`coordinator`); S7 replaced the hook, so it cannot be driven again. Its source hash
+  // is kept in the provenance file as a retired source.
 
   corpus.constants = { activeWorkers: 3, backgroundHeaderWorkers: 1, backgroundHeaderChunk: 3, backgroundContentWorkers: 1,
     activationDelayMs: 200 };
 
   if (process.env.MV_PIPELINE_CAPTURE === '1') {
     const text = JSON.stringify(corpus, null, 1);
+    process.stdout.write('NOTE the retired hook trace (coordinator) cannot be recaptured and is kept from the committed corpus\n');
     process.stdout.write('PIPELINE_FIXTURE_BEGIN\n' + Buffer.from(text).toString('base64') + '\nPIPELINE_FIXTURE_END\n');
     process.stdout.write('PIPELINE_PROVENANCE ' + JSON.stringify(Object.fromEntries(SOURCES.map(p => [p, sha(p)]))) + '\n');
     return;
   }
   const frozen = JSON.parse(readFileSync(FIXTURE, 'utf8'));
-  expect(corpus).toEqual(frozen);
+  // Everything the JS still does is compared live; the retired hook's trace stays as captured.
+  const { coordinator, ...stillLive } = frozen;
+  expect(coordinator.startDelayMs).toBe(corpus.constants.activationDelayMs);
+  expect(corpus).toEqual(stillLive);
   const provenance = JSON.parse(readFileSync(PROVENANCE, 'utf8'));
   // The corpus is only a parity oracle while these sources are the ones it was taken from.
   for (const path of SOURCES) expect(sha(path), path).toBe(provenance.sources[path]);
