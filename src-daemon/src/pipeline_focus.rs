@@ -293,6 +293,23 @@ struct Read {
 
 fn now_ms() -> i64 { chrono::Utc::now().timestamp_millis() }
 
+/// Cache rows per custody hold.
+const CACHE_PAGE: usize = 1000;
+
+/// Custody reads one account's queue derivation made, for the test that pins them bounded.
+#[cfg(test)]
+static CACHE_READS: std::sync::Mutex<BTreeMap<String, usize>> = std::sync::Mutex::new(BTreeMap::new());
+
+#[cfg(test)]
+pub(crate) fn cache_reads_of(account_id: &str) -> usize {
+    CACHE_READS.lock().unwrap_or_else(|e| e.into_inner()).get(account_id).copied().unwrap_or(0)
+}
+
+#[cfg(test)]
+fn note_cache_read(account_id: &str) {
+    *CACHE_READS.lock().unwrap_or_else(|e| e.into_inner()).entry(account_id.to_owned()).or_default() += 1;
+}
+
 /// The account's ORIGINAL lifetime stamp and origin hash as they are now.
 fn origin_of(state: &Arc<DaemonState>, accounts: &[Value], id: &str) -> Option<(AccountStamp, String)> {
     let row = accounts.iter().find(|row| row.get("id").and_then(Value::as_str) == Some(id))?;
@@ -307,24 +324,48 @@ async fn read_focused(state: &Arc<DaemonState>, scoped: &Scoped, index_only: boo
     crate::handlers::common::blocking(move || {
         let (account, mailbox) = (scoped.account_id.as_str(), scoped.mailbox.as_str());
         let uids: Vec<u32> = scoped.rows.iter().map(|row| row.uid).collect();
-        let cache = crate::custody::with_conn(&state, |conn| {
-            let rows = if all_cached {
-                // A background account has no list on screen: its whole cached INBOX is the list.
-                let text = mailvault_core::custody::cache::load_headers(conn, account, mailbox, None,
-                    mailvault_core::custody::cache::HeaderOrder::Arrival)?;
-                text.and_then(|text| serde_json::from_str::<Value>(&text).ok())
-                    .and_then(|value| value.get("emails").and_then(Value::as_array).cloned()).unwrap_or_default()
-            } else {
-                mailvault_core::custody::cache::load_by_uids(conn, account, mailbox, &uids)?
-            };
-            let total = mailvault_core::custody::cache::uid_set(conn, account, mailbox)?.len();
+        // One custody hold covers one bounded page: the connection is shared with every
+        // foreground header read and flag write, so a whole INBOX is never read in one go.
+        let read = |f: &dyn Fn(&rusqlite::Connection) -> Result<Vec<Value>, String>| {
+            #[cfg(test)]
+            note_cache_read(account);
+            crate::custody::with_conn(&state, |conn| f(conn))
+        };
+        let probe = crate::custody::with_conn(&state, |conn| {
+            let any = !mailvault_core::custody::cache::date_rows_page(conn, account, mailbox, 0, 1)?.is_empty();
             let identity = mailvault_core::custody::cache::native_identity(conn, account, mailbox)?
                 .and_then(|identity| serde_json::to_string(&identity).ok());
-            Ok((rows, total, identity))
+            Ok((any, identity))
         });
-        let (found, cache_total, identity) = match cache {
-            Ok((rows, total, identity)) => (rows, Some(total), identity),
-            Err(_) => (Vec::new(), None, None),
+        let mut found: Vec<Value> = Vec::new();
+        let mut readable = probe.is_ok();
+        if readable {
+            if all_cached {
+                // A background account has no list on screen: its whole cached INBOX is the list.
+                let mut after = 0u32;
+                loop {
+                    match read(&|conn| mailvault_core::custody::cache::date_rows_page(conn, account, mailbox, after, CACHE_PAGE)) {
+                        Ok(page) => {
+                            let last = page.last().and_then(|row| row.get("uid")?.as_u64()).and_then(|uid| u32::try_from(uid).ok());
+                            let full = page.len() == CACHE_PAGE;
+                            found.extend(page);
+                            match last { Some(uid) if full => after = uid, _ => break }
+                        }
+                        Err(_) => { readable = false; break; }
+                    }
+                }
+            } else {
+                for chunk in uids.chunks(CACHE_PAGE) {
+                    match read(&|conn| mailvault_core::custody::cache::load_by_uids(conn, account, mailbox, chunk)) {
+                        Ok(rows) => found.extend(rows),
+                        Err(_) => { readable = false; break; }
+                    }
+                }
+            }
+        }
+        let (cache_total, identity) = match (readable, probe) {
+            (true, Ok((any, identity))) => (Some(usize::from(any)), identity),
+            _ => { found.clear(); (None, None) }
         };
         let by_uid: HashMap<u32, &Value> = found.iter()
             .filter_map(|row| Some((u32::try_from(row.get("uid")?.as_u64()?).ok()?, row))).collect();

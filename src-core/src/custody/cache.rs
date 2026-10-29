@@ -263,6 +263,29 @@ pub fn unread_rows_page(conn: &Connection, account: &str, mailbox: &str, after_u
     rows.collect::<Result<Vec<_>, _>>().map_err(err)
 }
 
+/// The download-ahead's view of the cache: one bounded page of `{uid, date,
+/// internalDate}` after `after_uid`, ascending. No subject, address or body leaves
+/// this query, and a custody hold covers one page, never a whole mailbox.
+pub fn date_rows_page(conn: &Connection, account: &str, mailbox: &str, after_uid: u32, limit: usize)
+    -> Result<Vec<Value>, String> {
+    let mut stmt = conn.prepare(
+        "SELECT uid, json_extract(header_json,'$.date'), json_extract(header_json,'$.internalDate') \
+         FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 AND uid>?3 \
+         AND json_valid(header_json) ORDER BY uid ASC LIMIT ?4"
+    ).map_err(err)?;
+    let as_json = |value: rusqlite::types::Value| match value {
+        rusqlite::types::Value::Text(text) => json!(text),
+        rusqlite::types::Value::Integer(number) => json!(number),
+        rusqlite::types::Value::Real(number) => json!(number),
+        _ => Value::Null,
+    };
+    let rows = stmt.query_map(params![account, mailbox, after_uid, limit as i64], |r| {
+        let uid: u32 = r.get(0)?;
+        Ok(json!({"uid": uid, "date": as_json(r.get(1)?), "internalDate": as_json(r.get(2)?)}))
+    }).map_err(err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(err)
+}
+
 /// Uids per `IN (...)`: under SQLITE_MAX_VARIABLE_NUMBER on every build
 /// (999 before SQLite 3.32), with the two scope parameters on top.
 const UID_CHUNK: usize = 900;
@@ -2261,6 +2284,30 @@ mod tests {
         }
 
         #[test]
+    fn s6_date_rows_come_in_bounded_ascending_pages_with_typed_dates() {
+        let (_t, conn) = store();
+        let payload = serde_json::json!({"emails": [
+            {"uid": 3, "date": "2026-01-03T00:00:00Z", "internalDate": "2026-01-03T00:00:01Z"},
+            {"uid": 1, "date": 1788000000000i64},
+            {"uid": 5},
+            {"uid": 2, "date": "garbage"},
+            {"uid": 4, "date": null, "internalDate": "x"}], "totalEmails": 5}).to_string();
+        save_headers(&conn, "a", "INBOX", &payload).unwrap();
+        let first = date_rows_page(&conn, "a", "INBOX", 0, 2).unwrap();
+        assert_eq!(first.iter().map(|r| r["uid"].as_u64().unwrap()).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(first[0]["date"], serde_json::json!(1788000000000i64), "a number stays a number");
+        assert_eq!(first[1]["date"], serde_json::json!("garbage"), "an unusable date is passed on as the cache holds it");
+        let second = date_rows_page(&conn, "a", "INBOX", 2, 2).unwrap();
+        assert_eq!(second.iter().map(|r| r["uid"].as_u64().unwrap()).collect::<Vec<_>>(), vec![3, 4]);
+        assert_eq!(second[0]["internalDate"], serde_json::json!("2026-01-03T00:00:01Z"));
+        assert_eq!(second[1]["date"], serde_json::Value::Null);
+        let last = date_rows_page(&conn, "a", "INBOX", 4, 2).unwrap();
+        assert_eq!(last.len(), 1);
+        assert!(date_rows_page(&conn, "a", "INBOX", 5, 2).unwrap().is_empty());
+        assert!(date_rows_page(&conn, "a", "Other", 0, 2).unwrap().is_empty());
+    }
+
+    #[test]
         fn restore_missing_indexes_only_what_it_wrote() {
             let (_t, c) = open();
             save_headers(&c, "a", "INBOX", &emails(&[1])).unwrap();

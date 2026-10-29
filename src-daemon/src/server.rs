@@ -6860,6 +6860,24 @@ mod tests {
                 }
 
                 #[tokio::test]
+                async fn s6_a_large_inbox_cascade_reads_the_cache_in_bounded_pages() {
+                    let (_lock, _env, _dir, state, _server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+                    // One custody connection serves every reader: a single read of a whole
+                    // INBOX would stall foreground header reads and flag writes behind it.
+                    let rows: Vec<(u32, String)> = (1..=2500u32).map(|uid| (uid, "2026-08-10T12:00:00Z".to_owned())).collect();
+                    let refs: Vec<(u32, &str)> = rows.iter().map(|(uid, date)| (*uid, date.as_str())).collect();
+                    seed_cache(&state, &refs);
+                    let stamp = state.account_lifecycle.capture("acc1").unwrap();
+                    let hash = account_origin(&state).await;
+                    let origin = crate::ordinary_runner::Origin { account_id: "acc1".into(), stamp, origin_hash: hash };
+                    let spec = crate::pipeline_focus::derive_cascade(&state, &origin).await.expect("the INBOX is derived");
+                    assert_eq!(spec.uids.len(), 2500, "every cached row is a candidate in Hoarder mode");
+                    assert_eq!(spec.uids.first(), Some(&1));
+                    assert!(crate::pipeline_focus::cache_reads_of("acc1") >= 3,
+                        "a 2,500-row cache was read in {} custody hold(s), not in bounded pages", crate::pipeline_focus::cache_reads_of("acc1"));
+                }
+
+                #[tokio::test]
                 async fn s6_a_failed_write_is_retried_and_never_counted_as_done() {
                     let (_lock, _env, dir, state, _server) = rig(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
                     let hash = account_origin(&state).await;
