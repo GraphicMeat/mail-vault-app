@@ -8,6 +8,7 @@ pub mod accounts_doc;
 pub mod abd;
 pub mod ai;
 pub mod aliases;
+pub mod arrival;
 pub mod app_db;
 pub mod archive;
 pub mod autostart;

@@ -11,6 +11,7 @@
 //!   one is shown once, whoever asks again.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::Hash;
 use std::sync::Mutex;
 
 /// How many of each the ledger keeps; the oldest go first.
@@ -18,14 +19,41 @@ const CAPACITY: usize = 4096;
 
 type Key = (String, String, u32);
 
-#[derive(Default)]
-struct Bounded<V> {
-    order: VecDeque<Key>,
-    map: HashMap<Key, V>,
+#[derive(Clone, Hash, PartialEq, Eq)]
+enum AnnouncementKey {
+    Legacy(Key),
+    Native { source_ref: String, account: String, folder: String, uid: u32 },
+    Wake(String),
 }
 
-impl<V> Bounded<V> {
-    fn put(&mut self, key: Key, value: V) {
+#[derive(Clone, Default)]
+struct Announcement {
+    banner: bool,
+    code_attempted: bool,
+    wake: Option<WakeProof>,
+}
+
+/// A successful timed local wake's original source and Message-ID. This lives
+/// in the same bounded volatile ring as native announcement claims.
+#[derive(Clone)]
+pub(crate) struct WakeProof {
+    pub source: crate::sync_observation::SourceKey,
+    pub message_id: String,
+    pub generation: u64,
+    pub consumed: bool,
+}
+
+struct Bounded<K, V> {
+    order: VecDeque<K>,
+    map: HashMap<K, V>,
+}
+
+impl<K, V> Default for Bounded<K, V> {
+    fn default() -> Self { Self { order: VecDeque::new(), map: HashMap::new() } }
+}
+
+impl<K: Clone + Eq + Hash, V> Bounded<K, V> {
+    fn put(&mut self, key: K, value: V) {
         if self.map.insert(key.clone(), value).is_none() {
             self.order.push_back(key);
             if self.order.len() > CAPACITY {
@@ -48,8 +76,8 @@ struct Purged {
 
 #[derive(Default)]
 pub struct RecentActions {
-    purged: Mutex<Bounded<Purged>>,
-    announced: Mutex<Bounded<()>>,
+    purged: Mutex<Bounded<Key, Purged>>,
+    announced: Mutex<Bounded<AnnouncementKey, Announcement>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -104,13 +132,69 @@ impl RecentActions {
         let mut fresh = false;
         let mut seen = HashSet::new();
         for uid in uids.iter().copied().filter(|uid| seen.insert(*uid)) {
-            let key = (account.to_string(), folder.to_string(), uid);
+            let key = AnnouncementKey::Legacy((account.to_string(), folder.to_string(), uid));
             if !announced.map.contains_key(&key) {
                 fresh = true;
-                announced.put(key, ());
+                announced.put(key, Announcement { banner: true, ..Announcement::default() });
             }
         }
         fresh
+    }
+
+    /// Claim one source-qualified group in the existing bounded announcement
+    /// state. A muted banner leaves its banner bit clear, while its newest code
+    /// child is still attempted once. Public notify.decide keeps Legacy keys.
+    pub fn claim_native(&self, source_ref: &str, account: &str, folder: &str,
+        uids: &[u32], code_uid: Option<u32>, banner_allowed: bool) -> (bool, bool) {
+        let mut announced = lock(&self.announced);
+        let mut seen = HashSet::new();
+        let (mut banner, mut code) = (false, false);
+        for uid in uids.iter().copied().filter(|uid| *uid > 0 && seen.insert(*uid)) {
+            let key = AnnouncementKey::Native {
+                source_ref: source_ref.to_owned(), account: account.to_owned(),
+                folder: folder.to_owned(), uid,
+            };
+            let mut status = announced.map.get(&key).cloned().unwrap_or_default();
+            let before = (status.banner, status.code_attempted);
+            if banner_allowed && !status.banner { status.banner = true; banner = true; }
+            if code_uid == Some(uid) && !status.code_attempted {
+                status.code_attempted = true; code = true;
+            }
+            if before != (status.banner, status.code_attempted) { announced.put(key, status); }
+        }
+        (banner, code)
+    }
+
+    /// Retain only a real timed local wake in the existing bounded ring.
+    pub(crate) fn note_wake(&self, id: &str, proof: WakeProof) {
+        lock(&self.announced).put(AnnouncementKey::Wake(id.to_owned()),
+            Announcement { wake: Some(proof), ..Announcement::default() });
+    }
+
+    pub(crate) fn wake_generation(&self, id: &str) -> Option<u64> {
+        lock(&self.announced).map.get(&AnnouncementKey::Wake(id.to_owned()))
+            .and_then(|slot| slot.wake.as_ref()).filter(|proof| !proof.consumed)
+            .map(|proof| proof.generation)
+    }
+
+    /// Consume before asynchronous preparation. The second RPC or event for
+    /// one wake cannot claim the same proof, even when the first reply is lost.
+    pub(crate) fn consume_wake(&self, id: &str, generation: u64) -> Option<WakeProof> {
+        let mut announced = lock(&self.announced);
+        let proof = announced.map.get_mut(&AnnouncementKey::Wake(id.to_owned()))?
+            .wake.as_mut()?;
+        if proof.consumed || proof.generation != generation { return None; }
+        proof.consumed = true;
+        Some(proof.clone())
+    }
+
+    pub(crate) fn wake_refusal(&self, id: &str, generation: u64) -> &'static str {
+        let announced = lock(&self.announced);
+        let Some(proof) = announced.map.get(&AnnouncementKey::Wake(id.to_owned()))
+            .and_then(|slot| slot.wake.as_ref()) else { return "missing-proof" };
+        if proof.generation != generation { "expired-proof" }
+        else if proof.consumed { "consumed-proof" }
+        else { "missing-proof" }
     }
 
     /// Records a banner that is always shown: a wake brings a message back that
@@ -120,7 +204,8 @@ impl RecentActions {
     pub fn reannounce(&self, account: &str, folder: &str, uids: &[u32]) {
         let mut announced = lock(&self.announced);
         for uid in uids {
-            announced.put((account.to_string(), folder.to_string(), *uid), ());
+            announced.put(AnnouncementKey::Legacy((account.to_string(), folder.to_string(), *uid)),
+                Announcement { banner: true, ..Announcement::default() });
         }
     }
 }
@@ -128,6 +213,40 @@ impl RecentActions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_notice_and_code_claim_share_the_bounded_state_but_not_legacy_identity() {
+        let recent = RecentActions::default();
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[7], Some(7), false), (false, true));
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[7], Some(7), true), (true, false),
+            "a muted code offer does not spend the banner");
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[7], Some(7), true), (false, false));
+        assert_eq!(recent.claim_native("owner-two", "a", "INBOX", &[7], Some(7), true), (true, true),
+            "reused UID under a changed source is a distinct message");
+        assert!(recent.announce("a", "INBOX", &[7]), "the legacy route stays independent");
+        assert!(!recent.announce("a", "INBOX", &[7]));
+    }
+
+    #[test]
+    fn native_overlaps_rollover_and_lost_reply_spend_only_original_claims() {
+        let recent = RecentActions::default();
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[7, 7, 8], Some(8), true),
+            (true, true));
+        // Dropping a prepared reply cannot allow a second banner. This is the
+        // adopted at-most-once cost when the first OS submission is uncertain.
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[8, 7], Some(8), true),
+            (false, false));
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[8, 9], Some(9), true),
+            (true, true), "only fresh UID 9 makes the overlapping group new");
+        assert_eq!(recent.claim_native("owner-two", "a", "INBOX", &[7], Some(7), true),
+            (true, true), "a UIDVALIDITY/source change may reuse numeric UID 7");
+        assert_eq!(recent.claim_native("owner-one", "b", "INBOX", &[7], Some(7), true),
+            (true, true), "independent B cannot spend A's claim");
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[10], Some(10), false),
+            (false, true), "muted banner still offers its code once");
+        assert_eq!(recent.claim_native("owner-one", "a", "INBOX", &[10], Some(10), true),
+            (true, false), "the earlier muted decision did not spend the banner");
+    }
 
     #[test]
     fn a_purged_message_is_remembered_only_against_proof_it_is_the_same_message() {

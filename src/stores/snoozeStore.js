@@ -57,20 +57,27 @@ export function localSnoozeKeys(rows) {
   return keys;
 }
 
-// A local wake only clears \Seen, so no sync reports an arrival: the banner
-// is raised here, previewing that message rather than the folder's newest.
-async function announceLocalWake(row) {
-  const [{ getEmailHeaders }, { notifyArrival }] = await Promise.all([
-    import('../services/db'),
-    import('../hooks/useEmailScheduler'),
+// The timed native wake supplies a one-use ring reference. The UI cannot
+// derive a message from a stale saved UID or the folder's newest header.
+async function announceLocalWake(payload) {
+  const wakeRef = payload?.arrival?.kind === 'local-wake' && payload.arrival.wakeRef;
+  if (!payload?.id || !wakeRef) return;
+  const [{ daemonCall }, { deliverPreparedNotice }, { useMailStore }, { accountExpectedContext }, { nativeInstanceId }] = await Promise.all([
+    import('../services/daemonClient.js'), import('../services/nativeArrival.js'),
+    import('./mailStore.js'), import('../services/db/accounts.js'), import('../services/nativeSyncContext.js'),
   ]);
-  const id = normalizeMessageId(row.messageId);
-  const cache = await getEmailHeaders(row.accountId, row.fromMailbox);
-  const header = cache?.emails?.find(e => normalizeMessageId(e.messageId) === id) || null;
-  // Named by account and uid: the daemon then counts this banner as the
-  // message's own, so the refresh that sees it back raises no second one.
-  const uid = Number(header?.uid);
-  notifyArrival(row.accountId, row.fromMailbox, 1, header, null, uid > 0 ? { uids: [uid], rearm: true } : {});
+  const contexts = new Map(useMailStore.getState().accounts.map(account =>
+    [account.id, JSON.stringify(accountExpectedContext(account, 'all'))]));
+  const result = await daemonCall('notify.arrival', {
+    snoozeId: payload.id, wakeRef, rearm: true,
+  });
+  const notice = result?.notification;
+  const current = useMailStore.getState().accounts.find(account => account.id === notice?.accountId);
+  if (result?.status === 'prepared' && notice?.instanceId === wakeRef.instanceId
+    && (!nativeInstanceId() || nativeInstanceId() === wakeRef.instanceId)
+    && current && contexts.get(current.id) === JSON.stringify(accountExpectedContext(current, 'all'))) {
+    await deliverPreparedNotice(notice);
+  }
 }
 
 // The daemon's sync wrote the cleared \Seen into the header cache, and the
@@ -121,9 +128,10 @@ export function initSnooze() {
     if (payload?.state !== 'woken') return;
     const { reloadListInView, applySeenLocally } = await import('../services/workflows/messageMutations');
     // `woke` is false for an undo, which left \Seen alone: that is no news.
-    const localWake = payload.woke && row?.snoozedMailbox === '';
-    if (localWake) await markWokenUnread(row, applySeenLocally).catch(() => {});
+    const localWake = payload.woke && payload.arrival?.kind === 'local-wake'
+      && payload.arrival.wakeRef;
+    if (localWake && row?.snoozedMailbox === '') await markWokenUnread(row, applySeenLocally).catch(() => {});
     reloadListInView().catch(() => {});
-    if (localWake) await announceLocalWake(row).catch(() => {});
+    if (localWake) await announceLocalWake(payload).catch(() => {});
   });
 }

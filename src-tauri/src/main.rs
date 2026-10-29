@@ -3240,7 +3240,9 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "backup.schedule.status"
         | "backup.context"
         | "backup.attach_access"
-        | "backup.access_status" => Some(Duration::from_secs(30)),
+        | "backup.access_status"
+        | "notify.decide"
+        | "notify.arrival" => Some(Duration::from_secs(30)),
 
         // Task 4.4 / decision 8: inline-blocking, same reasoning as
         // archive_emails/bulk_delete_emails above, the whole ZIP
@@ -3594,6 +3596,9 @@ async fn daemon_rpc(
 #[tauri::command]
 fn daemon_channel_notify(window: tauri::WebviewWindow, method: String, mut params: serde_json::Value) {
     if webview_rpc_token(&method, false, 0, None).is_ok() {
+        // Only the main window owns the native refresh context. A secondary
+        // window may keep using other channel notifications as before.
+        if method == "sync.owner" && window.label() != "main" { return; }
         if method == "backup.context" {
             let Ok(native) = backup::surface_params(window.label(), params) else { return; };
             params = native;

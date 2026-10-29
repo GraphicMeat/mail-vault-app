@@ -4057,6 +4057,10 @@
   "errors.syncFailed": "Impossibile aggiornare questo account. Riprova.",
   "errors.syncHeadersIncomplete": "Impossibile aggiornare completamente le intestazioni della cartella.",
   "errors.syncGraphAdoptionRequired": "Questa cartella Graph deve essere preparata nell’app prima di poter essere aggiornata.",
+  "errors.syncGraphSettingsAckUnavailable": "La conferma delle impostazioni Graph non è disponibile",
+  "errors.syncGraphAdoptionPending": "L’adozione della cartella Graph per {accountId} è in sospeso",
+  "errors.syncStatusUnavailable": "Lo stato dell’aggiornamento nativo non è disponibile",
+  "errors.syncReceiptUncertain": "La conferma dell’aggiornamento nativo è incerta",
   "errors.bulkIdentityUncertain": "L’identità del messaggio è incerta. Aggiorna la cartella prima di riprovare.",
   "errors.bulkIdentityChanged": "L’identità della cartella o del messaggio selezionato è cambiata.",
   "errors.bulkGraphDeleteUnsupported": "L’eliminazione sul server non è disponibile per questo account Graph.",
@@ -4083,5 +4087,12 @@
   "settings.accounts.removeBusy": "Questo account è occupato. Attendi che l’operazione in corso finisca, poi riprova.",
   "settings.accounts.removeFailed": "Impossibile rimuovere questo account. Riprova.",
   "settings.accounts.removeIncomplete": "La rimozione dell’account non è stata completata. Riprova quando l’operazione in corso sarà terminata.",
-  "settings.storage.emptyVaultFailed": "Impossibile svuotare la cassaforte. Alcuni account o dati potrebbero essere ancora presenti. Riprova al termine dell’operazione in corso."
+  "settings.storage.emptyVaultFailed": "Impossibile svuotare la cassaforte. Alcuni account o dati potrebbero essere ancora presenti. Riprova al termine dell’operazione in corso.",
+  "notify.arrival.unknownSender": "Mittente sconosciuto",
+  "notify.arrival.newEmail": "Nuova email",
+  "notify.arrival.newEmails": "{{count}} nuove email",
+  "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (e altre {{more}})",
+  "notify.arrival.singlePrivateBody": "Nuova email in {{accountEmail}}",
+  "notify.arrival.batchPrivateBody": "{{count}} nuove email in {{accountEmail}}"
+
 }

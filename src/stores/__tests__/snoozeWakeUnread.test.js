@@ -142,6 +142,8 @@ const { saveRestoreDescriptor } = await import('../../services/cacheManager');
 const A1 = { id: 'a1', email: 'me@one.co', imapHost: 'h', password: 'x' };
 const A2 = { id: 'a2', email: 'me@two.co', imapHost: 'h', password: 'x' };
 const LOCAL = { id: 'local', accountId: 'a1', fromMailbox: 'INBOX', snoozedMailbox: '', uidInSnoozed: 5, messageId: '<held@x>', wakeAt: 1, state: 'snoozed' };
+const localWake = { id: 'local', state: 'woken', woke: true,
+  arrival: { kind: 'local-wake', wakeRef: { instanceId: 'native-1', gen: 4 } } };
 
 const row = (uid, messageId, flags, extra = {}) => ({
   uid, messageId, flags, subject: `Message ${uid}`, source: 'server',
@@ -220,7 +222,7 @@ describe('a woken local snooze comes back unread', () => {
     }
 
     it('shows the message unread and counts it on the badge, though the reload reads nothing', async () => {
-      await wakeAndReload({ id: 'local', state: 'woken', woke: true });
+      await wakeAndReload(localWake);
 
       expect(shown('a1', 5)).toBe(true);
       expect(flagsOf('a1', 5)).not.toContain('\\Seen');
@@ -256,7 +258,7 @@ describe('a woken local snooze comes back unread', () => {
     });
 
     it('shows the message unread, counts it on its account, and a repaint from the caches agrees', async () => {
-      await fire({ id: 'local', state: 'woken', woke: true });
+      await fire(localWake);
       await vi.waitFor(() => expect(mockRefreshCurrentView).toHaveBeenCalled());
 
       expect(shown('a1', 5)).toBe(true);

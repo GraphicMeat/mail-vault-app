@@ -12,7 +12,7 @@ import { buildThreads } from '../../utils/emailParser';
 import { describeConnectionError } from '../../utils/connectionError';
 import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
-import { syncNow, waitForSync, toSyncAccount, watchAccount } from '../syncService';
+import { syncNow, waitForSync, toSyncAccount } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { proveServerUidsIfUnproven, loadLocalFolder } from './loadEmails';
 import {
@@ -1427,10 +1427,6 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     // throttled inside, never allowed to break activation.
     refreshFolderStatus(detectAccount, get().mailboxes, get().activeMailbox)
       .catch(e => console.warn('[folderStatus] STATUS sweep failed:', e));
-    // Hold this account's INBOX in IDLE. Done here as well as in the scheduler
-    // so a freshly added account is watched the moment it is opened, rather
-    // than whenever the scheduler's effect next notices it.
-    if (!isGraphAccount(detectAccount) && hasValidCredentials(detectAccount)) watchAccount(detectAccount);
     // The addresses this account can send as, once per daemon run, well after
     // this first paint and sync. Fire-and-forget; the daemon reads at
     // background QoS.

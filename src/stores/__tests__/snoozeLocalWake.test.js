@@ -1,171 +1,97 @@
 // @vitest-environment jsdom
-//
-// A local snooze's wake (no Snoozed folder on the server) only clears \Seen
-// where the message already is: the sync that follows sees no arrival, so no
-// new-mail banner would ever say it is back. The app raises it off the
-// daemon's `snooze` event instead, for THAT message, not the folder's newest.
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import { writeFileSync as captureWriteFileSync } from 'node:fs';
-import { create } from 'zustand';
-
-// The scheduler reads `window.__TAURI__.core.invoke` at module load; without
-// it every banner is dropped before notify() is reached.
-window.__TAURI__ = { core: { invoke: vi.fn().mockResolvedValue(undefined) } };
 
 const listeners = {};
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: (name, cb) => { listeners[name] = cb; return Promise.resolve(() => {}); },
-}));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async (name, cb) => {
+  listeners[name] = cb;
+  return () => { delete listeners[name]; };
+} }));
 
-const LOCAL = { id: 'local', accountId: 'a1', fromMailbox: 'INBOX', snoozedMailbox: '', uidInSnoozed: 5, messageId: '<held@x>', wakeAt: 1, state: 'snoozed' };
-const SERVER = { ...LOCAL, id: 'server', snoozedMailbox: 'Snoozed', messageId: '<moved@x>' };
-
+const LOCAL = { id: 'local', accountId: 'a1', fromMailbox: 'INBOX',
+  snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' };
+const REMOTE = { ...LOCAL, id: 'remote', snoozedMailbox: 'Snoozed' };
+const proof = { instanceId: 'native-1', gen: 4 };
+const notification = { id: 'notice-1', instanceId: 'native-1', accountId: 'a1', mailbox: 'INBOX' };
 const mockDaemonCall = vi.fn();
-vi.mock('../../services/daemonClient', () => ({
-  daemonCall: (...a) => mockDaemonCall(...a),
-  DaemonError: class DaemonError extends Error {},
+const mockDeliver = vi.fn(async () => {});
+const mockReload = vi.fn(async () => {});
+const mockApplySeen = vi.fn();
+const mail = { accounts: [{ id: 'a1', email: 'a@test' }], emails: [], activeAccountId: 'a1', activeMailbox: 'INBOX' };
+
+vi.mock('../../services/daemonClient.js', () => ({ daemonCall: (...args) => mockDaemonCall(...args) }));
+vi.mock('../../services/nativeArrival.js', () => ({ deliverPreparedNotice: (...args) => mockDeliver(...args) }));
+vi.mock('../../services/nativeSyncContext.js', () => ({ nativeInstanceId: () => 'native-1' }));
+vi.mock('../../services/db/accounts.js', () => ({ accountExpectedContext: account => ({
+  id: account.id, email: account.email,
+}) }));
+vi.mock('../mailStore.js', () => ({ useMailStore: { getState: () => mail } }));
+vi.mock('../../services/cacheManager.js', () => ({ invalidateRestoreDescriptors: vi.fn() }));
+vi.mock('../../services/workflows/messageMutations.js', () => ({
+  reloadListInView: (...args) => mockReload(...args),
+  applySeenLocally: (...args) => mockApplySeen(...args),
 }));
 
-// The folder's newest message is someone else's: the banner must not show it.
-const mockGetEmailHeaders = vi.fn().mockResolvedValue({
-  totalEmails: 2,
-  emails: [
-    { uid: 9, messageId: '<newest@x>', from: { name: 'Newest', address: 'n@x.co' }, subject: 'Not this one' },
-    { uid: 5, messageId: 'held@x', from: { name: 'Ada', address: 'ada@one.co' }, subject: 'Back again' },
-  ],
-});
-vi.mock('../../services/db', () => ({
-  getEmailHeaders: (...a) => mockGetEmailHeaders(...a),
-  getEmailHeadersPartial: vi.fn().mockResolvedValue(null),
-}));
+const { initSnooze, useSnoozeStore } = await import('../snoozeStore.js');
+const fire = payload => listeners.snooze({ payload });
 
-const mockNotify = vi.fn();
-vi.mock('../focusStore', () => ({ notify: (...a) => mockNotify(...a) }));
-
-const mockReload = vi.fn().mockResolvedValue(undefined);
-// The row coming back unread is snoozeWakeUnread.test.js's subject.
-vi.mock('../../services/workflows/messageMutations', () => ({ reloadListInView: (...a) => mockReload(...a), applySeenLocally: vi.fn() }));
-
-vi.mock('../../services/searchIndex', () => ({ onDaemonReconnected: () => Promise.resolve(() => {}) }));
-
-const mailStore = create(() => ({ accounts: [{ id: 'a1', email: 'me@one.co' }], emails: [] }));
-const facade = Object.assign((s) => mailStore(s), { getState: () => mailStore.getState(), setState: (p) => mailStore.setState(p) });
-vi.mock('../mailStore', () => ({ useMailStore: facade }));
-vi.mock('../accountStore', () => ({ useAccountStore: facade }));
-vi.mock('../messageListStore', () => ({ useMessageListStore: facade }));
-
-const settingsStore = create(() => ({ notificationSettings: { enabled: true, showPreview: true, accounts: {} } }));
-vi.mock('../settingsStore', () => ({
-  useSettingsStore: Object.assign((s) => settingsStore(s), { getState: () => settingsStore.getState() }),
-  hasPremiumAccess: () => false,
-  selectOwnAddresses: (_state, account) => [account?.email].filter(Boolean),
-}));
-
-const { initSnooze, useSnoozeStore } = await import('../snoozeStore');
-
-// What Tauri hands the callback: the event, its payload inside.
-const fire = (payload) => listeners.snooze({ payload });
-
-describe('the wake of a local snooze', () => {
+describe('one-use native local wake', () => {
   beforeAll(async () => {
-    mockDaemonCall.mockResolvedValue([LOCAL, SERVER]);
+    mockDaemonCall.mockResolvedValue([LOCAL, REMOTE]);
     initSnooze();
     await vi.waitFor(() => expect(listeners.snooze).toBeTypeOf('function'));
   });
 
   beforeEach(() => {
-    mockNotify.mockClear();
+    mail.accounts = [{ id: 'a1', email: 'a@test' }];
+    mail.emails = [];
+    useSnoozeStore.setState({ rows: [LOCAL, REMOTE] });
+    mockDaemonCall.mockReset().mockResolvedValue({ status: 'prepared', notification });
+    mockDeliver.mockClear();
     mockReload.mockClear();
-    mockGetEmailHeaders.mockClear();
-    useSnoozeStore.setState({ rows: [LOCAL, SERVER] });
+    mockApplySeen.mockClear();
   });
 
-  it('announces the message that came back, by its own header', async () => {
+  it('uses only the timed native proof and delivers the prepared decision', async () => {
+    await fire({ id: 'local', state: 'woken', woke: true,
+      arrival: { kind: 'local-wake', wakeRef: proof } });
+    expect(mockDaemonCall).toHaveBeenCalledWith('notify.arrival', {
+      snoozeId: 'local', wakeRef: proof, rearm: true,
+    });
+    expect(mockDeliver).toHaveBeenCalledTimes(1);
+    expect(mockDeliver).toHaveBeenCalledWith(notification);
+    expect(mockReload).toHaveBeenCalledTimes(1);
+    expect(useSnoozeStore.getState().rows.map(row => row.id)).toEqual(['remote']);
+  });
+
+  it('does not derive authority from a saved local row or old UID', async () => {
     await fire({ id: 'local', state: 'woken', woke: true });
-
-    expect(mockGetEmailHeaders).toHaveBeenCalledWith('a1', 'INBOX');
-    expect(mockNotify).toHaveBeenCalledTimes(1);
-    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Back again', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 5 },
-      { accountId: 'a1', folder: 'INBOX', from: 'ada@one.co', viewIds: [], uids: [5], rearm: true });
-    // The row is history, so the list shows the message again.
-    expect(useSnoozeStore.getState().rows.map(r => r.id)).toEqual(['server']);
-    expect(mockReload).toHaveBeenCalled();
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+    expect(mockDeliver).not.toHaveBeenCalled();
+    expect(mockReload).toHaveBeenCalledTimes(1);
   });
 
-  // The daemon holds back a second banner for a message by (account, folder,
-  // uid); the wake names its message that way and says it is a wake, so the
-  // arrival banner it already had does not swallow it.
-  it('names the account and the message, and asks to be shown though the arrival was announced', async () => {
-    await fire({ id: 'local', state: 'woken', woke: true });
-
-    const [, , , target, mailCtx] = mockNotify.mock.calls[0];
-    expect(mailCtx).toMatchObject({ accountId: 'a1', folder: 'INBOX', uids: [5], rearm: true });
-    expect(target).toMatchObject({ accountId: 'a1', mailbox: 'INBOX', uid: 5 });
+  it('does not prepare undo or remote wake', async () => {
+    await fire({ id: 'local', state: 'woken', woke: false,
+      arrival: { kind: 'local-wake', wakeRef: proof } });
+    await fire({ id: 'remote', state: 'woken', woke: true });
+    expect(mockDaemonCall).not.toHaveBeenCalled();
+    expect(mockDeliver).not.toHaveBeenCalled();
   });
 
-  it('still announces a message the cache no longer holds, naming none', async () => {
-    mockGetEmailHeaders.mockResolvedValueOnce({ totalEmails: 1, emails: [{ uid: 9, messageId: '<newest@x>', from: { address: 'n@x.co' }, subject: 'Not this one' }] });
-    await fire({ id: 'local', state: 'woken', woke: true });
-
-    expect(mockNotify).toHaveBeenCalledTimes(1);
-    const [, , , , mailCtx] = mockNotify.mock.calls[0];
-    expect(mailCtx).toEqual({ accountId: 'a1', folder: 'INBOX', from: '', viewIds: [] });
-  });
-
-  it('says nothing for an undo, which is no wake', async () => {
-    await fire({ id: 'local', state: 'woken', woke: false });
-
-    expect(mockNotify).not.toHaveBeenCalled();
-    expect(useSnoozeStore.getState().rows.map(r => r.id)).toEqual(['server']);
-  });
-
-  // A server snooze's wake is a real arrival, which the sync already announces.
-  it('leaves a server snooze to the sync that reports its arrival', async () => {
-    await fire({ id: 'server', state: 'woken', woke: true });
-
-    expect(mockNotify).not.toHaveBeenCalled();
-    expect(mockGetEmailHeaders).not.toHaveBeenCalled();
-    // The event did land: the row is gone.
-    expect(useSnoozeStore.getState().rows.map(r => r.id)).toEqual(['local']);
-  });
-  // Conditional S4 capture of old local wake behavior through the real
-  // snooze event callback. The expected-new no-generic-bounce rule is separate.
-  it.skipIf(!process.env.W4S4_ORACLE_W_OUT)('captures W01-W04 old local wake event effects', async () => {
-    const target = process.env.W4S4_ORACLE_W_OUT;
-    if (!target) throw new Error('W4S4_ORACLE_W_OUT is required');
-    const encode = value => value === undefined ? { $undefined: true }
-      : Array.isArray(value) ? value.map(encode)
-      : value && typeof value === 'object'
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
-        : value;
-    const defaultCache = { totalEmails: 2, emails: [
-      { uid: 9, messageId: '<newest@x>', from: { name: 'Newest', address: 'n@x.co' }, subject: 'Not this one' },
-      { uid: 5, messageId: 'held@x', from: { name: 'Ada', address: 'ada@one.co' }, subject: 'Back again' },
-    ] };
-    const scenarios = [
-      { id: 'W01', payload: { id: 'local', state: 'woken', woke: true }, cache: defaultCache },
-      { id: 'W02', payload: { id: 'local', state: 'woken', woke: true }, cache: {
-        totalEmails: 1, emails: [defaultCache.emails[0]],
-      } },
-      { id: 'W03', payload: { id: 'local', state: 'woken', woke: false }, cache: defaultCache },
-      { id: 'W04', payload: { id: 'local', state: 'woken', woke: true }, cache: {
-        totalEmails: 2, emails: [defaultCache.emails[0],
-          { ...defaultCache.emails[1], uid: 7, messageId: '  <held@x>  ' }],
-      } },
-    ];
-    const cases = [];
-    for (const sample of scenarios) {
-      useSnoozeStore.setState({ rows: [LOCAL, SERVER] });
-      mockNotify.mockClear();
-      mockReload.mockClear();
-      mockGetEmailHeaders.mockReset().mockResolvedValue(sample.cache);
-      await fire(sample.payload);
-      cases.push({ id: sample.id, input: encode({ payload: sample.payload,
-        cache: sample.cache, storedUidHint: LOCAL.uidInSnoozed }), output: encode({
-        notifyCalls: mockNotify.mock.calls, cacheCalls: mockGetEmailHeaders.mock.calls,
-        reloadCalls: mockReload.mock.calls, remainingRows: useSnoozeStore.getState().rows,
-      }) });
-    }
-    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-local-wakes', cases }, null, 2) + '\n');
+  it('does not display an unavailable or stale-source response', async () => {
+    mockDaemonCall.mockResolvedValueOnce({ status: 'unavailable', reason: 'consumed-proof' });
+    await fire({ id: 'local', state: 'woken', woke: true,
+      arrival: { kind: 'local-wake', wakeRef: proof } });
+    expect(mockDeliver).not.toHaveBeenCalled();
+    useSnoozeStore.setState({ rows: [LOCAL] });
+    let finish;
+    mockDaemonCall.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = fire({ id: 'local', state: 'woken', woke: true,
+      arrival: { kind: 'local-wake', wakeRef: proof } });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    mail.accounts = [{ id: 'a1', email: 'replacement@test' }];
+    finish({ status: 'prepared', notification });
+    await pending;
+    expect(mockDeliver).not.toHaveBeenCalled();
   });
 });

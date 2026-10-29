@@ -410,16 +410,46 @@ impl IdleWatchers {
     }
 
     async fn sync_inbox(&self, slot: &Mutex<SyncAccount>, woken: bool) {
-        let arrival_stamp = self.daemon.get().and_then(Weak::upgrade).and_then(|state| {
+        let daemon = self.daemon.get().and_then(Weak::upgrade);
+        let arrival_stamp = daemon.as_ref().and_then(|state| {
             let id = slot.lock().unwrap().id.clone();
             state.account_lifecycle.capture(&id).ok()
         });
         self.renew_token(slot).await;
         let account = slot.lock().unwrap().clone();
-        // `announcing`: new headers are published the moment they are cached,
-        // before the flag step and the reconcile, which on a large mailbox
-        // took most of a minute.
-        let result = self.engine.sync_account_announcing(&account, "INBOX").await;
+        // Bind the cache write and both publications to the stamp captured
+        // before token/provider waits. A missing daemon means the standalone
+        // engine test path; a dead daemon or invalid original never falls
+        // back to an unqualified change record.
+        let evidence = match (daemon.as_ref(), arrival_stamp.as_ref()) {
+            (Some(state), Some(stamp)) => {
+                let Some(origin) = crate::sync_observation::current_imap_origin(state, stamp,
+                    &mailvault_core::bulk_worker::origin_hash(&account.imap_config)).await
+                else { return };
+                Some(state.sync_observation.issue_ticket(&origin, "INBOX"))
+            }
+            (Some(_), None) => return,
+            (None, _) if self.daemon.get().is_some() => return,
+            (None, _) => None,
+        };
+        // The finite sync round owns its operation permit. The socket remains
+        // unadmitted while it waits in IDLE, and an account close can abort
+        // that wait without holding a lifetime owner.
+        let _operation = match (daemon.as_ref(), arrival_stamp.as_ref()) {
+            (Some(state), Some(stamp)) => match state.account_lifecycle.try_operation(
+                std::slice::from_ref(stamp)) {
+                Ok(permit) => Some(permit),
+                Err(_) => return,
+            },
+            _ => None,
+        };
+        // Early arrival publication uses that same evidence; the later flag
+        // and repaint record cannot recapture a replacement source.
+        let result = match (arrival_stamp.as_ref(), evidence.as_ref()) {
+            (Some(stamp), Some(evidence)) => self.engine.sync_account_announcing_with_original(
+                &account, "INBOX", stamp.clone(), evidence).await,
+            _ => self.engine.sync_account_announcing(&account, "INBOX").await,
+        };
         if !result.success {
             // Re-idle anyway: the 5-minute timer covers a sync that failed,
             // and dropping the watch would cost this account every later
@@ -431,7 +461,43 @@ impl IdleWatchers {
         // far-behind cache writes a whole page of old headers, and the app
         // turns this number straight into a "N new emails" banner.
         let unannounced = if result.announced { 0 } else { result.arrivals };
-        if woken || unannounced > 0 || result.updated_flags > 0 {
+        let publish = woken || unannounced > 0 || result.updated_flags > 0;
+        if let (Some(state), Some(evidence)) = (daemon.as_ref(), evidence.as_ref()) {
+            let expected = mailvault_core::bulk_worker::origin_hash(&account.imap_config);
+            let mut ticket = crate::sync_observation::complete_ticket_in_mailbox(
+                state, evidence, &result.mailbox).await
+                .map(|source| (evidence.clone(), source));
+            if ticket.is_none() {
+                // Another observation of this mailbox landed while the round was
+                // at the provider. Its own delta filters these already-cached
+                // UIDs out, so only this round can still announce them: take a
+                // fresh ticket while the account is still the original one.
+                let Some(stamp) = arrival_stamp.as_ref() else { return };
+                let Some(origin) = crate::sync_observation::current_imap_origin(
+                    state, stamp, &expected).await else { return };
+                let fresh = state.sync_observation.issue_ticket(&origin, "INBOX");
+                ticket = crate::sync_observation::complete_ticket_in_mailbox(
+                    state, &fresh, &result.mailbox).await.map(|source| (fresh, source));
+            }
+            if let (true, Some((evidence, source))) = (publish, ticket) {
+                let arrivals = if result.announced { Vec::new() }
+                    else { result.arrival_uids.clone() };
+                let published = crate::sync_observation::retry_busy(|| {
+                    crate::sync_observation::publish_sources(state, &evidence,
+                        vec![(source.clone(), arrivals.clone(), result.updated_flags)])
+                }).await;
+                if let Err(error) = published {
+                    warn!("[idle] {}: source publication refused: {}", account.id, error);
+                    // A refusal that is not about the source (still busy, or a
+                    // newer observation moved the generation) leaves the
+                    // arrivals real: keep their bodies while the account is
+                    // still the original one.
+                    let Some(stamp) = arrival_stamp.as_ref() else { return };
+                    if crate::sync_observation::current_imap_origin(state, stamp, &expected)
+                        .await.is_none() { return; }
+                }
+            }
+        } else if publish {
             self.engine.note_change(&account.id, "INBOX", unannounced, result.updated_flags);
         }
         if result.arrivals == 0 {
@@ -445,7 +511,7 @@ impl IdleWatchers {
         }
         // Its own task: the IDLE is re-issued now, not after the downloads,
         // so a message that lands meanwhile still raises its EXISTS.
-        if let Some(state) = self.daemon.get().and_then(Weak::upgrade) {
+        if let Some(state) = daemon {
             let uids = result.arrival_uids;
             let Some(stamp) = arrival_stamp else { return };
             tokio::spawn(async move {
@@ -1011,9 +1077,12 @@ mod tests {
         use mailvault_core::search_index::query::SearchRequest;
         let dir = scratch_dir("idle_body");
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
-        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"}]"#).unwrap();
-        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        std::fs::write(dir.join("accounts.json"), serde_json::json!([{
+            "id":"acc1", "email":"user@example.com", "imapHost":server.host(),
+            "imapPort":server.port(),
+        }]).to_string()).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         let account = account_for(&server);
         state.sync_engine.sync_account(&account, "INBOX").await;
         crate::search_index::start(Arc::clone(&state.search_index));
@@ -1054,9 +1123,12 @@ mod tests {
         let dir = scratch_dir("p2_idle_child");
         std::fs::write(dir.join("frontend-settings.json"), serde_json::json!({"mailvault-settings":{"state":{"fetchMode":"hoarder"}}}).to_string()).unwrap();
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
-        std::fs::write(dir.join("accounts.json"), r#"[{"id":"acc1"},{"id":"b"}]"#).unwrap();
-        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        std::fs::write(dir.join("accounts.json"), serde_json::json!([{
+            "id":"acc1", "email":"user@example.com", "imapHost":server.host(),
+            "imapPort":server.port(),
+        }, {"id":"b"}]).to_string()).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
         let account = account_for(&server);
         assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
         state.idle.watch(account, Duration::from_secs(29 * 60)).await;
@@ -1083,6 +1155,45 @@ mod tests {
         let b_copy = mailvault_core::vault_files::cur_path(&dir, "b", "INBOX").join(format!("9{}.eml", mailvault_core::maildir::INFO_PREFIX));
         assert!(!a_copy.exists(), "old arrival child recreated retired A cache after watcher abort");
         assert!(b_stored && b_copy.exists(), "independent B cache remains available");
+        state.idle.shutdown().await;
+    }
+
+    /// Another INBOX observation landing while the IDLE round is at the
+    /// provider makes the round's ticket stale. That only hands the final
+    /// publication to the newer observation: the arrival is still real, so
+    /// its body must be kept.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn s4_idle_arrival_body_is_kept_when_a_newer_inbox_observation_lands_first() {
+        let dir = scratch_dir("s4_superseded_ticket");
+        std::fs::write(dir.join("frontend-settings.json"), serde_json::json!({"mailvault-settings":{"state":{"fetchMode":"hoarder"}}}).to_string()).unwrap();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        std::fs::write(dir.join("accounts.json"), serde_json::json!([{
+            "id":"acc1", "email":"user@example.com", "imapHost":server.host(),
+            "imapPort":server.port(),
+        }]).to_string()).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(&mailvault_core::accounts_doc::shared(&dir)).unwrap());
+        let account = account_for(&server);
+        assert!(state.sync_engine.sync_account(&account, "INBOX").await.success);
+        state.idle.watch(account, Duration::from_secs(29 * 60)).await;
+        wait_until(|| server.count_commands("IDLE") >= 1, 5_000, "silent IDLE established").await;
+        let since = state.sync_engine.change_gen();
+        let pause = server.pause_command("SELECT");
+        let uid = add_message(&server, "From: sender@example.com\r\nSubject: superseded\r\nDate: Thu, 01 Jan 2015 00:00:00 +0000\r\n\r\nkept body\r\n");
+        let mut pause = tokio::task::spawn_blocking(move || {
+            assert!(pause.entered(Duration::from_secs(10)), "IDLE round must hold its provider SELECT");
+            pause
+        }).await.unwrap();
+        state.sync_observation.invalidate_probe("acc1", Some("INBOX"));
+        pause.release();
+        let a_copy = mailvault_core::vault_files::cur_path(&dir, "acc1", "INBOX")
+            .join(format!("{uid}{}.eml", mailvault_core::maildir::INFO_PREFIX));
+        wait_until(|| a_copy.exists(), 10_000, "arrival body kept after its ticket went stale").await;
+        // The newer observation filters this already-cached UID out of its own
+        // delta, so only this round can still announce it.
+        let (_, changes) = state.sync_engine.wait_changes(since, 3_000).await;
+        assert!(changes.iter().any(|change| change.arrival_uids.contains(&uid)),
+            "a stale ticket must not swallow the arrival's announcement: {changes:?}");
         state.idle.shutdown().await;
     }
 }

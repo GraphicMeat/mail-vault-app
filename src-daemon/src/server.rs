@@ -878,7 +878,7 @@ async fn route_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse
         // ── IDLE watchers + the change feed they push into ──────────
         "sync.watch" => handle_sync_watch(Arc::clone(state), req.params, id).await,
         "sync.unwatch" => handle_sync_unwatch(Arc::clone(state), req.params, id).await,
-        "sync.events" => handle_sync_events(Arc::clone(&state.sync_engine), req.params, id).await,
+        "sync.events" => handle_sync_events(Arc::clone(state), req.params, id).await,
         "sync.watch_status" => RpcResponse::success(
             id,
             serde_json::to_value(state.idle.status().await).unwrap_or_default(),
@@ -2225,6 +2225,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_route_recounts_owned_cache_with_persisted_local_snooze() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir = tempfile::tempdir().unwrap();
             let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)));
             let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
@@ -2414,6 +2415,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_rejects_a_replaced_inbox_owner_after_a_held_read() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir = tempfile::tempdir().unwrap();
             let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 0)));
             let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
@@ -2471,6 +2473,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_accepts_graph_and_jmap_ids_without_credentials_or_provider_calls() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir=tempfile::tempdir().unwrap();
             let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
             let accounts=json!([
@@ -2519,6 +2522,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_closed_custody_refuses_without_publishing_a_count() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir=tempfile::tempdir().unwrap();
             let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
             s3_seed_account(&state);
@@ -2530,6 +2534,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_unreadable_settings_refuses_without_publishing_a_count() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir=tempfile::tempdir().unwrap();
             let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
             s3_seed_account(&state);
@@ -2545,6 +2550,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_recovers_once_after_same_owner_generation_fence() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir=tempfile::tempdir().unwrap();
             let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
             s3_seed_account(&state);
@@ -2587,6 +2593,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_same_owner_generation_change_refuses_mixed_pages_and_keeps_foreground_live() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir=tempfile::tempdir().unwrap();
             let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
             s3_seed_account(&state);
@@ -2649,6 +2656,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_retry_refuses_second_read_owner_or_original_retirement() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             for retire_original in [false,true] {
                 let dir=tempfile::tempdir().unwrap();
                 let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
@@ -2708,6 +2716,7 @@ mod tests {
 
         #[tokio::test]
         async fn s3_counts_unread_retired_original_during_held_cache_read_cannot_publish() {
+            let _serial=crate::handlers::counts::serialize_cache_gate_for_test();
             let dir=tempfile::tempdir().unwrap();
             let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
             s3_seed_account(&state);
@@ -2731,6 +2740,56 @@ mod tests {
             let answer=pending.await.unwrap();
             assert!(answer.result.is_none() && answer.error.is_some(),
                 "retired original must not publish a stale account's count: {answer:?}");
+        }
+
+        #[tokio::test]
+        async fn s4_held_a_source_change_keeps_real_b_cache_count_and_foreground_live() {
+            let dir=tempfile::tempdir().unwrap();
+            let state=DaemonState::for_test(dir.path().to_path_buf(),dir.path().to_path_buf(),true);
+            let a=json!({"id":"acc1","email":"one@example.test","authType":"password",
+                "imapHost":"127.0.0.1","imapPort":143,"imapSecure":false});
+            let b=json!({"id":"acc2","email":"two@example.test","authType":"password",
+                "imapHost":"127.0.0.1","imapPort":143,"imapSecure":false});
+            std::fs::write(state.app_dir.join("accounts.json"),json!([a,b]).to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            for (id, rows) in [("acc1",json!([{"uid":1,"flags":["\\Seen"]}])),
+                ("acc2",json!([{"uid":21,"flags":[]},{"uid":22,"flags":[]}]))] {
+                let original=state.account_lifecycle.capture(id).unwrap();
+                let origin=crate::sync_observation::origin(&state,original).await.unwrap();
+                let owner=json!({"accountId":id,"mailbox":"INBOX","uidValidity":1,
+                    "originHash":origin.hash});
+                crate::custody::with_conn(&state,|conn|mailvault_core::custody::cache::save_headers(
+                    conn,id,"INBOX",&json!({"emails":rows,"totalEmails":if id=="acc1" {1} else {2},
+                        "nativeIdentity":owner,"nativeExpectedIdentity":null}).to_string())).unwrap();
+            }
+            let (entered,release)=crate::handlers::counts::pause_next_cache_read_for_test();
+            let held=Arc::clone(&state);
+            let a_count=tokio::spawn(async move { boxed_request(&held,s3_bounded_read_request()).await });
+            tokio::task::spawn_blocking(move || entered.recv_timeout(std::time::Duration::from_secs(5)))
+                .await.unwrap().expect("A's actual native cache read must be held");
+            let b_count=tokio::time::timeout(std::time::Duration::from_secs(2),boxed_request(&state,
+                req("counts.unread",json!({"op":"recountCache","accountId":"acc2",
+                    "baseline":{"acc1":9,"acc2":5},
+                    "presentation":{"accounts":[{"id":"acc1","name":"One"},{"id":"acc2","name":"Two"}]},
+                    "projection":{"archivedKeys":[],"deleteTombstones":[],"snoozes":[],
+                        "autoTagRules":[],"tagsByRow":{},"viewHiddenKeys":[],
+                        "hideViewMail":false,"followUps":[]}
+                })))).await.expect("B must finish while A is held");
+            let b_result=b_count.result.expect("B's actual cache read must succeed");
+            assert_eq!(b_result["counts"],json!({"acc1":9,"acc2":2}));
+            let path=state.app_dir.join("accounts.json");
+            let mut changed:Value=serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            changed[0]["email"]=json!("changed@example.test");
+            std::fs::write(path,changed.to_string()).unwrap();
+            release.send(()).unwrap();
+            let a_result=a_count.await.unwrap();
+            if let Some(result)=a_result.result {
+                assert_eq!(result["counts"],json!({"acc1":9,"acc2":5}));
+                assert_eq!(result["wrote"],json!(false));
+            } else {
+                assert!(a_result.error.is_some(),"stale A must explicitly refuse");
+            }
         }
 
         #[tokio::test]
@@ -3669,6 +3728,677 @@ mod tests {
                     && notice["mailbox"] == "INBOX" && notice["uids"] == json!([2])
                     && notice["from"].as_str().is_some_and(|from| from.contains("New Sender"))));
             assert!(prepared, "W4S4_NATIVE_ARRIVAL_RED: source-bound real UID 2 and sender missing from prepared notice: {body:?}");
+            let notice = body["notifications"].as_array().unwrap().iter()
+                .find(|notice| notice["uids"] == json!([2])).unwrap();
+            assert_eq!(notice["banner"], json!(true));
+            assert_eq!(notice["target"]["uid"], json!(2));
+            assert_eq!(notice["presentation"]["kind"], json!("singlePreview"));
+            assert_eq!(notice["sourceRef"], changes.iter().find(|change|
+                change["arrivalUids"] == json!([2])).unwrap()["sourceRef"]);
+            assert!(notice.get("raw").is_none() && notice.get("body").is_none());
+            let again = boxed_request(&state, req("sync.events", json!({
+                "since":since, "timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(again["notifications"].as_array().unwrap().is_empty(),
+                "one real delivery cannot claim another banner on a repeated poll: {again:?}");
+            replace_refresh_source_same_epoch(&state);
+            let stale = boxed_request(&state, req("sync.events", json!({
+                "since":since, "timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(stale["changes"].as_array().unwrap().is_empty()
+                && stale["notifications"].as_array().unwrap().is_empty(),
+                "a retained old-source record cannot recount or notify after replacement: {stale:?}");
+        }
+
+        #[tokio::test]
+        async fn s4_proved_uid_without_exact_header_uses_generic_folder_notice() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let since = state.sync_engine.change_gen();
+            append_refresh_imap(&server, "A proved but uncached preview");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"s4-generic-exact-uid", "accountId":"acc1", "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            assert_eq!(terminal_refresh(&state, "s4-generic-exact-uid").await["status"], json!("complete"));
+            let cached = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            let owner = cached["nativeIdentity"].clone();
+            crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(conn,
+                "acc1", "INBOX", &json!({"emails":[],"removedUids":[2],
+                    "nativeIdentity":owner.clone(),"nativeExpectedIdentity":owner}).to_string())).unwrap();
+            let body = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(body["changes"].as_array().unwrap().iter().any(|row|
+                row["arrivalUids"] == json!([2])), "original delivery proof must survive: {body:?}");
+            let notice = body["notifications"].as_array().unwrap().first()
+                .expect("proved delivery keeps a generic folder notice");
+            assert_eq!(notice["presentation"]["kind"], json!("singlePrivate"));
+            assert!(notice["target"].get("uid").is_none());
+            assert_eq!(notice["uids"], json!([2]));
+        }
+
+        #[tokio::test]
+        async fn s4_real_held_body_keeps_feed_prompt_and_emits_one_deadline_banner_then_code() {
+            async fn next_event(rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>,
+                wanted: &str) -> Value {
+                tokio::time::timeout(std::time::Duration::from_secs(7), async {
+                    loop {
+                        let line = rx.recv().await.expect("event channel remains open");
+                        if let Some((name, value)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                            if name == wanted { return value; }
+                        }
+                    }
+                }).await.expect("expected native deferred event")
+            }
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let since = state.sync_engine.change_gen();
+            let raw = "From: Codes <codes@example.test>\r\nTo: user@example.com\r\nSubject: Password Reset Request\r\nDate: Thu, 01 Jan 2026 12:01:00 +0000\r\nMessage-ID: <body-code-2@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nYour verification code is 364758.\r\n";
+            server.mutate(|server_state| {
+                server_state.find_mut("INBOX").unwrap()
+                    .add(mock_imap::state::Message::new(2, raw).with_modseq(2));
+            });
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"s4-held-body", "accountId":"acc1",
+                "mailbox":"INBOX", "reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            assert_eq!(terminal_refresh(&state, "s4-held-body").await["status"], json!("complete"));
+            let mut events = state.events.subscribe();
+            let pause = server.pause_command("FETCH");
+            let reply = tokio::time::timeout(std::time::Duration::from_secs(2),
+                boxed_request(&state, req("sync.events", json!({
+                    "since":since,"timeoutMs":1000,
+                })))).await.expect("the change feed must not wait for a body read")
+                .result.unwrap();
+            assert!(reply["changes"].as_array().unwrap().iter().any(|change|
+                change["arrivalUids"] == json!([2])));
+            assert!(reply["notifications"].as_array().unwrap().is_empty(),
+                "a lone body-code candidate must wait for its bounded deadline");
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(5)),
+                    "one actual provider FETCH must enter the code child");
+                pause
+            }).await.unwrap();
+            let banner = next_event(&mut events, "notify").await;
+            assert_eq!(banner["uids"], json!([2]));
+            assert_eq!(banner["banner"], json!(true));
+            assert!(banner["target"].get("code").is_none(),
+                "the deadline banner cannot claim a code the held body has not supplied");
+            pause.release();
+            let mut second_banners = 0;
+            let ready = tokio::time::timeout(std::time::Duration::from_secs(7), async {
+                loop {
+                    let line = events.recv().await.expect("event channel remains open");
+                    if let Some((name, value)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                        if name == "notify" { second_banners += 1; }
+                        if name == "code-ready" { return value; }
+                    }
+                }
+            }).await.expect("the released real body must yield code-ready");
+            assert_eq!(ready["uid"], json!(2));
+            assert_eq!(ready["code"], json!("364758"));
+            assert_eq!(second_banners, 0, "late code must not emit a second OS banner");
+        }
+
+        #[tokio::test]
+        async fn s4_real_body_code_survives_muted_and_private_banner_paths() {
+            for (label, enabled, show_preview) in [("muted", false, true), ("private", true, false)] {
+                let _env_lock = crate::credentials::test_env_lock().lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                let _env = CredentialsEnv::capture();
+                let dir = tempfile::tempdir().unwrap();
+                let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+                let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+                mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                    "mailvault-settings":{"state":{"notificationSettings":{
+                        "enabled":enabled,"showPreview":show_preview,
+                    }}},
+                }), None).unwrap();
+                let account = bind_account(&state, &server);
+                seed_refresh_imap(&state, account).await;
+                let since = state.sync_engine.change_gen();
+                let raw = "From: Codes <codes@example.test>\r\nTo: user@example.com\r\nSubject: Password Reset Request\r\nDate: Thu, 01 Jan 2026 12:01:00 +0000\r\nMessage-ID: <body-code-2@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nYour verification code is 364758.\r\n";
+                server.mutate(|rows| {
+                    rows.find_mut("INBOX").unwrap()
+                        .add(mock_imap::state::Message::new(2, raw).with_modseq(2));
+                });
+                let request_id = format!("s4-{label}-body-code");
+                let accepted = boxed_request(&state, req("sync.refresh", json!({
+                    "requestId":request_id,"accountId":"acc1","mailbox":"INBOX","reason":"manual",
+                }))).await;
+                assert!(accepted.error.is_none(), "{label}: real refresh ACK: {:?}", accepted.error);
+                assert_eq!(terminal_refresh(&state, &request_id).await["status"], json!("complete"));
+                let mut events = state.events.subscribe();
+                let header_fetches = server.count_commands("FETCH");
+                let reply = boxed_request(&state, req("sync.events", json!({
+                    "since":since,"timeoutMs":1000,
+                }))).await.result.unwrap();
+                assert!(reply["changes"].as_array().unwrap().iter().any(|row|
+                    row["arrivalUids"] == json!([2])), "{label}: real UID proof: {reply:?}");
+                if !enabled {
+                    let notice = reply["notifications"].as_array().unwrap().first()
+                        .expect("muted policy outcome remains observable without an OS banner");
+                    assert_eq!(notice["banner"], json!(false));
+                    assert_eq!(notice["reason"], json!("notifications-off"));
+                    assert_eq!(notice["logPolicy"], json!(true));
+                } else {
+                    let banner = tokio::time::timeout(std::time::Duration::from_secs(7), async {
+                        loop {
+                            let line = events.recv().await.expect("native event channel stays live");
+                            if let Some((name, value)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                                if name == "notify" { return value; }
+                            }
+                        }
+                    }).await.expect("private banner must arrive from real code preparation");
+                    assert_eq!(banner["banner"], json!(true));
+                    assert_eq!(banner["presentation"]["kind"], json!("singlePrivate"));
+                    assert!(banner["target"].get("uid").is_none()
+                        && banner["target"].get("code").is_none(),
+                        "private OS target must contain neither UID nor code: {banner:?}");
+                }
+                let ready = tokio::time::timeout(std::time::Duration::from_secs(7), async {
+                    loop {
+                        let line = events.recv().await.expect("native event channel stays live");
+                        if let Some((name, value)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                            if name == "code-ready" { return value; }
+                        }
+                    }
+                }).await.expect("a muted/private banner cannot suppress the real body code");
+                assert_eq!(ready["uid"], json!(2), "{label}: original UID survives");
+                assert_eq!(ready["code"], json!("364758"), "{label}: real provider body was scanned");
+                assert!(server.count_commands("FETCH") > header_fetches,
+                    "{label}: provider body must be read after the header refresh");
+            }
+        }
+
+        #[tokio::test]
+        async fn s4_held_real_body_refuses_old_source_after_same_epoch_replacement() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let since = state.sync_engine.change_gen();
+            let raw = "From: Codes <codes@example.test>\r\nTo: user@example.com\r\nSubject: Password Reset Request\r\nDate: Thu, 01 Jan 2026 12:01:00 +0000\r\nMessage-ID: <retired-body-code-2@example.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nYour verification code is 364758.\r\n";
+            server.mutate(|rows| {
+                rows.find_mut("INBOX").unwrap()
+                    .add(mock_imap::state::Message::new(2, raw).with_modseq(2));
+            });
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"s4-retired-code-body","accountId":"acc1",
+                "mailbox":"INBOX","reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            assert_eq!(terminal_refresh(&state, "s4-retired-code-body").await["status"], json!("complete"));
+            let mut events = state.events.subscribe();
+            let pause = server.pause_command("FETCH");
+            let reply = tokio::time::timeout(std::time::Duration::from_secs(2),
+                boxed_request(&state, req("sync.events", json!({
+                    "since":since,"timeoutMs":1000,
+                })))).await.expect("the real source-bound change must repaint before body I/O")
+                .result.unwrap();
+            assert!(reply["changes"].as_array().unwrap().iter().any(|change|
+                change["arrivalUids"] == json!([2])));
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(5)),
+                    "the real original-source code child must reach provider FETCH");
+                pause
+            }).await.unwrap();
+            replace_refresh_source_same_epoch(&state);
+            pause.release();
+            let late = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                loop {
+                    let line = events.recv().await.expect("native event channel stays live");
+                    if let Some((name, value)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                        if name == "notify" || name == "code-ready" { return (name, value); }
+                    }
+                }
+            }).await;
+            assert!(late.is_err(), "a retired original must not emit a late banner or code: {late:?}");
+            assert!(!state.raw_messages.test_holds("acc1", "INBOX", 2),
+                "an old provider body must not enter the replacement's raw-message memory");
+            let stale = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(stale["notifications"].as_array().unwrap().is_empty(),
+                "a second poll cannot rescue the retired original's notice: {stale:?}");
+        }
+
+
+        #[tokio::test]
+        async fn s4_real_idle_arrival_publishes_original_source_and_prepared_notice() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account.clone()).await;
+            let watched = boxed_request(&state, req("sync.watch", json!({
+                "account":account,
+            }))).await;
+            assert_eq!(watched.result.expect("existing credential-resolving watch route")
+                ["watching"], json!(true));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while server.count_commands("IDLE") == 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            }).await.expect("the original watcher must enter real provider IDLE");
+            let since = state.sync_engine.change_gen();
+            let raw = format!("From: Codes <codes@outside.test>\r\nTo: user@example.com\r\nSubject: Your verification code is 364758\r\nDate: {}\r\nMessage-ID: <s4-idle-2@outside.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nYour code is 364758.\r\n", chrono::Utc::now().to_rfc2822());
+            server.mutate(|rows| {
+                rows.find_mut("INBOX").unwrap().add(
+                    mock_imap::state::Message::new(2, raw).with_modseq(2));
+            });
+            let (gen, _) = state.sync_engine.wait_changes(since, 10_000).await;
+            assert!(gen > since, "real provider IDLE must publish the appended UID");
+            let reply = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":1000,
+            }))).await.result.unwrap();
+            assert_eq!(reply["resyncRequired"], json!(false));
+            let change = reply["changes"].as_array().unwrap().iter().find(|row|
+                row["accountId"] == json!("acc1") && row["newEmails"] == json!(1))
+                .expect("the actual watcher arrival must reach the native change feed");
+            assert_eq!(change["arrivalUids"], json!([2]),
+                "W4S4_IDLE_SOURCE_RED: actual IDLE must carry its proven unique UID: {reply:?}");
+            let source_ref = change["sourceRef"].as_str()
+                .filter(|reference| !reference.is_empty())
+                .expect("W4S4_IDLE_SOURCE_RED: actual IDLE must publish its original source reference");
+            let notices = reply["notifications"].as_array().unwrap();
+            assert_eq!(notices.len(), 1,
+                "one original-source IDLE arrival must prepare one native notice: {reply:?}");
+            assert_eq!(notices[0]["sourceRef"], json!(source_ref));
+            assert_eq!(notices[0]["target"]["uid"], json!(2));
+            assert_eq!(notices[0]["codeReady"], json!({"uid":2,"code":"364758"}));
+            let repeated = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(repeated["notifications"].as_array().unwrap().is_empty(),
+                "an already claimed IDLE arrival cannot prepare a second notice");
+            state.idle.shutdown().await;
+        }
+
+        #[tokio::test]
+        async fn s4_real_idle_held_select_cannot_publish_or_cache_replaced_original() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account.clone()).await;
+            let watched = boxed_request(&state, req("sync.watch", json!({"account":account}))).await;
+            assert_eq!(watched.result.unwrap()["watching"], json!(true));
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while server.count_commands("IDLE") == 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            }).await.expect("original watcher must reach real provider IDLE");
+            let since = state.sync_engine.change_gen();
+            let pause = server.pause_command("SELECT");
+            append_refresh_imap(&server, "old source held at provider SELECT");
+            let mut pause = tokio::task::spawn_blocking(move || {
+                assert!(pause.entered(std::time::Duration::from_secs(10)),
+                    "actual IDLE child must hold its provider SELECT");
+                pause
+            }).await.unwrap();
+            replace_refresh_source_same_epoch(&state);
+            pause.release();
+            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                loop {
+                    if state.idle.status().await.iter().any(|status|
+                        status.account_id == "acc1" && status.wakeups > 0) { break; }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            }).await.expect("held IDLE round must finish after release");
+            let reply = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(reply["changes"].as_array().unwrap().iter().all(|change|
+                change["accountId"] != json!("acc1")),
+                "a replacement cannot borrow any held original IDLE publication: {reply:?}");
+            assert!(reply["notifications"].as_array().unwrap().is_empty(),
+                "old original cannot prepare a replacement notice: {reply:?}");
+            let saved = refresh_cached_headers(&state, "acc1", "INBOX").unwrap();
+            assert!(saved["emails"].as_array().unwrap().iter().all(|row| row["uid"] != json!(2)),
+                "old provider work cannot write UID 2 under replacement: {saved:?}");
+            state.idle.shutdown().await;
+        }
+
+        #[tokio::test]
+        async fn s4_real_two_uid_batch_prepares_one_banner_and_newest_code() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let since = state.sync_engine.change_gen();
+            for (uid, subject, from) in [(2, "First arrival", "One <one@outside.test>"),
+                (3, "Your verification code is 364758", "Two <two@outside.test>")] {
+                let raw = format!("From: {from}\r\nTo: user@example.com\r\nSubject: {subject}\r\nDate: Thu, 01 Jan 2026 12:01:00 +0000\r\nMessage-ID: <batch-{uid}@outside.test>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nBatch body.\r\n");
+                server.mutate(|rows| {
+                    rows.find_mut("INBOX").unwrap().add(mock_imap::state::Message::new(uid, raw).with_modseq(uid as u64));
+                });
+            }
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"s4-real-batch","accountId":"acc1","mailbox":"INBOX","reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            assert_eq!(terminal_refresh(&state, "s4-real-batch").await["status"], json!("complete"));
+            let reply = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":1000,
+            }))).await.result.unwrap();
+            let change = reply["changes"].as_array().unwrap().iter()
+                .find(|row| row["accountId"] == json!("acc1") && row["mailbox"] == json!("INBOX"))
+                .expect("the real batch must publish its INBOX change");
+            assert_eq!(change["newEmails"], json!(2));
+            let sorted_uids = |value: &Value| {
+                let mut uids: Vec<u64> = value.as_array().unwrap().iter()
+                    .map(|uid| uid.as_u64().expect("an actual arrival UID is positive")).collect();
+                uids.sort_unstable();
+                uids
+            };
+            assert_eq!(sorted_uids(&change["arrivalUids"]), vec![2, 3],
+                "real batch UIDs must be proved exactly once: {reply:?}");
+            let notices = reply["notifications"].as_array().unwrap();
+            assert_eq!(notices.len(), 1, "one real provider batch makes one notice: {reply:?}");
+            let notice = &notices[0];
+            assert_eq!(sorted_uids(&notice["uids"]), vec![2, 3]);
+            assert_eq!(notice["banner"], json!(true));
+            assert_eq!(notice["presentation"]["kind"], json!("batchPreview"));
+            assert_eq!(notice["target"]["uid"], json!(3));
+            assert!(notice["target"].get("code").is_none()
+                && notice["presentation"]["data"].get("code").is_none(),
+                "a batch OS banner never carries even its newest code");
+            assert_eq!(notice["codeReady"], json!({"uid":3,"code":"364758"}));
+            let repeated = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(repeated["notifications"].as_array().unwrap().is_empty(),
+                "same two-UId delivery cannot claim another banner");
+        }
+
+        #[tokio::test]
+        async fn s4_real_alias_sender_and_sent_mailbox_suppress_only_their_banners() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailboxes(vec![
+                synthetic_mailbox("INBOX", 1), synthetic_mailbox("Sent", 1),
+            ]));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            mailvault_core::settings_doc::SettingsDoc::shared(&state.app_dir).patch(&json!({
+                "mailvault-settings":{"state":{"aliases":{"acc1":[
+                    {"address":"alias@example.test","name":"Alias","source":"manual"}
+                ]}}},
+            }), None).unwrap();
+            seed_refresh_imap(&state, account.clone()).await;
+            let started = boxed_request(&state, req("sync.now", json!({
+                "account":account,"mailbox":"Sent","autoClassify":false,
+            }))).await;
+            let ticket = started.result.unwrap()["ticket"].as_u64().unwrap();
+            assert_eq!(boxed_request(&state, req("sync.wait", json!({
+                "ticket":ticket,"timeoutMs":10_000,
+            }))).await.result.unwrap()["success"], json!(true));
+            let since = state.sync_engine.change_gen();
+            let own = "From: Alias <alias@example.test>\r\nTo: user@example.com\r\nSubject: Own alias\r\nDate: Thu, 01 Jan 2026 12:01:00 +0000\r\nMessage-ID: <own-alias@example.test>\r\n\r\nBody\r\n";
+            let sent = "From: Other <other@outside.test>\r\nTo: user@example.com\r\nSubject: Sent folder\r\nDate: Thu, 01 Jan 2026 12:02:00 +0000\r\nMessage-ID: <sent-folder@example.test>\r\n\r\nBody\r\n";
+            server.mutate(|rows| {
+                rows.find_mut("INBOX").unwrap().add(mock_imap::state::Message::new(2, own).with_modseq(2));
+                rows.find_mut("Sent").unwrap().add(mock_imap::state::Message::new(2, sent).with_modseq(2));
+            });
+            for mailbox in ["INBOX", "Sent"] {
+                let request_id = format!("s4-silent-{mailbox}");
+                let accepted = boxed_request(&state, req("sync.refresh", json!({
+                    "requestId":request_id,"accountId":"acc1","mailbox":mailbox,"reason":"manual",
+                }))).await;
+                assert!(accepted.error.is_none());
+                assert_eq!(terminal_refresh(&state, &request_id).await["status"], json!("complete"));
+            }
+            let reply = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":1000,
+            }))).await.result.unwrap();
+            for mailbox in ["INBOX", "Sent"] {
+                assert!(reply["changes"].as_array().unwrap().iter().any(|row|
+                    row["mailbox"] == mailbox && row["arrivalUids"] == json!([2])),
+                    "the silent banner still repaints its real source: {reply:?}");
+            }
+            assert!(reply["notifications"].as_array().unwrap().is_empty(),
+                "authoritative own alias and actual Sent folder must not announce: {reply:?}");
+        }
+
+        #[tokio::test]
+        async fn s4_lost_drain_reply_spends_once_but_keeps_cache_and_change_recovery() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let since = state.sync_engine.change_gen();
+            append_refresh_imap(&server, "Lost prepared reply");
+            let accepted = boxed_request(&state, req("sync.refresh", json!({
+                "requestId":"s4-lost-reply","accountId":"acc1","mailbox":"INBOX","reason":"manual",
+            }))).await;
+            assert!(accepted.error.is_none());
+            assert_eq!(terminal_refresh(&state, "s4-lost-reply").await["status"], json!("complete"));
+            let lost = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":1000,
+            }))).await.result.unwrap();
+            assert_eq!(lost["notifications"].as_array().unwrap().len(), 1,
+                "the first accepted drain actually spent a native banner");
+            drop(lost);
+            let recovered = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert!(recovered["changes"].as_array().unwrap().iter().any(|row|
+                row["arrivalUids"] == json!([2])),
+                "the same cursor still recovers the original change: {recovered:?}");
+            assert!(recovered["notifications"].as_array().unwrap().is_empty(),
+                "a lost prepared response may lose its OS banner but must not replay it");
+            assert!(refresh_cached_headers(&state, "acc1", "INBOX").unwrap()["emails"]
+                .as_array().unwrap().iter().any(|row| row["uid"] == 2),
+                "uncertain notification delivery cannot undo the native cache effect");
+        }
+
+        #[tokio::test]
+        async fn s4_ring_overrun_requires_resync_without_historical_notices() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let original = state.account_lifecycle.capture("acc1").unwrap();
+            let origin = crate::sync_observation::origin(&state, original).await.unwrap();
+            let (_, source) = crate::sync_observation::source(&state, &origin, "INBOX").await.unwrap();
+            let since = state.sync_engine.change_gen();
+            for _ in 0..65 {
+                state.sync_engine.note_source_change(source.clone(), vec![2], 0);
+            }
+            let reply = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert_eq!(reply["resyncRequired"], json!(true));
+            assert_eq!(reply["gen"], json!(since + 65));
+            assert_eq!(reply["changes"].as_array().unwrap().len(), 64,
+                "the finite ring does not fabricate missing history");
+            assert!(reply["notifications"].as_array().unwrap().is_empty(),
+                "overrun recovery must never synthesize historical banners");
+            let restart_cursor = boxed_request(&state, req("sync.events", json!({
+                "since":since + 1000,"timeoutMs":0,
+            }))).await.result.unwrap();
+            assert_eq!(restart_cursor["resyncRequired"], json!(true));
+            assert!(restart_cursor["notifications"].as_array().unwrap().is_empty());
+        }
+
+        #[tokio::test]
+        async fn s4_jmap_real_body_code_and_email_get_failure_keep_original_uid_and_banner() {
+            for fail_body in [false, true] {
+                let _env_lock = crate::credentials::test_env_lock().lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                let _env = CredentialsEnv::capture();
+                let dir = tempfile::tempdir().unwrap();
+                let mock = mock_jmap::MockJmap::start(crate::jmap_test_support::scenario());
+                let (trap, imap_port) = crate::jmap_test_support::imap_trap();
+                let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+                let account = bind_jmap_refresh(&state, &mock, imap_port);
+                let seeded = state.sync_engine.sync_account(&account, "INBOX").await;
+                assert!(seeded.success, "real JMAP baseline: {:?}", seeded.error);
+                let since = state.sync_engine.change_gen();
+                let mut new = crate::jmap_test_support::email("code-e9", "Password Reset Request",
+                    "2026-10-04T10:00:00Z");
+                new.raw = "From: Codes <codes@example.test>\r\nTo: alice@example.test\r\nSubject: Password Reset Request\r\nDate: Sun, 04 Oct 2026 10:00:00 +0000\r\nMessage-ID: <code-e9@x>\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nYour verification code is 364758.\r\n".into();
+                mock.mutate(|server| server.add_email("acc1", "mb-inbox", new));
+                let request_id = if fail_body { "s4-jmap-code-fail" } else { "s4-jmap-code" };
+                let accepted = boxed_request(&state, req("sync.refresh", json!({
+                    "requestId":request_id,"accountId":"acc1","mailbox":"INBOX","reason":"manual",
+                }))).await;
+                assert!(accepted.error.is_none());
+                assert_eq!(terminal_refresh(&state, request_id).await["status"], json!("complete"));
+                let uid = jmap_refresh_ledger(&state).iter().find_map(|(uid,id)|
+                    (id == "code-e9").then_some(*uid)).expect("new JMAP id must have a native UID");
+                if fail_body {
+                    mock.mutate(|server| server.faults.push(mock_jmap::Fault::ServerFail {
+                        method:"Email/get".into(),
+                    }));
+                }
+                let requests_before = mock.requests().len();
+                let mut events = state.events.subscribe();
+                let reply = boxed_request(&state, req("sync.events", json!({
+                    "since":since,"timeoutMs":1000,
+                }))).await.result.unwrap();
+                assert!(reply["changes"].as_array().unwrap().iter().any(|change|
+                    change["arrivalUids"] == json!([uid])),
+                    "JMAP ID must retain its original allocated UID: {reply:?}");
+                let (banner, maybe_code) = tokio::time::timeout(std::time::Duration::from_secs(7), async {
+                    let mut banner = None;
+                    loop {
+                        let line = events.recv().await.expect("native event channel stays live");
+                        if let Some((name, value)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                            if name == "notify" { banner = Some(value); }
+                            else if name == "code-ready" { break (banner, Some(value)); }
+                            if fail_body && banner.is_some() { break (banner, None); }
+                        }
+                    }
+                }).await.expect("real JMAP body attempt must resolve to banner/code outcome");
+                let banner = banner.expect("one proven delivery gets a banner even if body fails");
+                assert_eq!(banner["uids"], json!([uid]));
+                assert_eq!(banner["banner"], json!(true));
+                if fail_body {
+                    assert!(banner["target"].get("code").is_none());
+                    assert!(maybe_code.is_none(), "failed JMAP Email/get cannot produce a code");
+                } else {
+                    let code = maybe_code.expect("real JMAP body supplies one code-ready event");
+                    assert_eq!(code["uid"], json!(uid));
+                    assert_eq!(code["code"], json!("364758"));
+                }
+                assert!(mock.requests().len() > requests_before,
+                    "code child must ask the actual JMAP provider for Email/get");
+                assert!(trap.accept().is_err(), "JMAP body read must never dial IMAP");
+            }
+        }
+
+        #[tokio::test]
+        async fn s4_change_published_under_its_short_source_lease_survives_feed_race() {
+            let _env_lock = crate::credentials::test_env_lock().lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let _env = CredentialsEnv::capture();
+            let dir = tempfile::tempdir().unwrap();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let account = bind_account(&state, &server);
+            seed_refresh_imap(&state, account).await;
+            let original = state.account_lifecycle.capture("acc1").unwrap();
+            let origin = crate::sync_observation::origin(&state, original).await.unwrap();
+            let (_, source) = crate::sync_observation::source(&state, &origin, "INBOX").await.unwrap();
+            let lease = crate::sync_observation::source_lease(&state,
+                &source.original, &source.origin_hash).unwrap();
+            let since = state.sync_engine.change_gen();
+            state.sync_engine.note_source_change(source, vec![2], 0);
+            let waiting = Arc::clone(&state);
+            let feed = tokio::spawn(async move {
+                boxed_request(&waiting, req("sync.events", json!({
+                    "since":since, "timeoutMs":1000,
+                }))).await
+            });
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            drop(lease);
+            let body = feed.await.unwrap().result.unwrap();
+            assert!(body["changes"].as_array().unwrap().iter().any(|change|
+                change["accountId"] == "acc1" && change["arrivalUids"] == json!([2])),
+                "W4S4_FEED_LEASE_RED: a valid published record cannot disappear merely because its publisher still held the short lease: {body:?}");
+        }
+
+        #[tokio::test]
+        async fn s4_persistent_a_lease_keeps_cursor_for_a_and_b_after_release() {
+            let dir = tempfile::tempdir().unwrap();
+            let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+            let rows = json!([
+                {"id":"acc1","email":"one@example.test","imapHost":"127.0.0.1"},
+                {"id":"acc2","email":"two@example.test","imapHost":"127.0.0.1"},
+            ]);
+            std::fs::write(state.app_dir.join("accounts.json"), rows.to_string()).unwrap();
+            state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+                &mailvault_core::accounts_doc::shared(&state.app_dir)).unwrap());
+            let mut sources = Vec::new();
+            for (id, uid) in [("acc1", 1), ("acc2", 21)] {
+                let original = state.account_lifecycle.capture(id).unwrap();
+                let origin = crate::sync_observation::origin(&state, original).await.unwrap();
+                let owner = json!({"accountId":id,"mailbox":"INBOX","uidValidity":1,
+                    "originHash":origin.hash});
+                crate::custody::with_conn(&state, |conn| mailvault_core::custody::cache::save_headers(
+                    conn, id, "INBOX", &json!({"emails":[{"uid":uid,"flags":[]}],
+                        "totalEmails":1,"nativeIdentity":owner,"nativeExpectedIdentity":null}).to_string())).unwrap();
+                let (_, source) = crate::sync_observation::source(&state, &origin, "INBOX").await.unwrap();
+                sources.push(source);
+            }
+            let lease = crate::sync_observation::source_lease(&state,
+                &sources[0].original, &sources[0].origin_hash).unwrap();
+            let since = state.sync_engine.change_gen();
+            state.sync_engine.note_source_change(sources[0].clone(), vec![1], 0);
+            state.sync_engine.note_source_change(sources[1].clone(), vec![21], 0);
+            let blocked = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await;
+            assert!(blocked.error.as_ref().is_some_and(|error|
+                error.message.contains("errors.keychainBusy")),
+                "a persistently busy A must not advance the cursor or silently drop it: {blocked:?}");
+            drop(lease);
+            let recovered = boxed_request(&state, req("sync.events", json!({
+                "since":since,"timeoutMs":0,
+            }))).await.result.unwrap();
+            let ids: Vec<_> = recovered["changes"].as_array().unwrap().iter()
+                .map(|row| row["accountId"].as_str().unwrap()).collect();
+            assert_eq!(ids, vec!["acc1", "acc2"], "A and unaffected B both remain observable: {recovered:?}");
         }
 
         #[tokio::test]
@@ -5628,6 +6358,102 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn s4_graph_real_body_code_or_provider_error_keeps_stable_uid_and_banner() {
+            for fail_body in [false, true] {
+                let _env_lock = crate::credentials::test_env_lock().lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                let _env = CredentialsEnv::capture();
+                let dir = tempfile::tempdir().unwrap();
+                let state = DaemonState::for_test(dir.path().to_path_buf(), dir.path().to_path_buf(), true);
+                let (_config, _origin) = graph_complete_source(&state).await;
+                let credential = json!({"id":"acc1", "email":"complete@example.test",
+                    "authType":"oauth2", "oauth2Provider":"microsoft", "oauth2Transport":"graph",
+                    "oauth2AccessToken":"synthetic-graph-complete", "oauth2ExpiresAt":4_000_000_000_000i64});
+                let credentials = state.app_dir.join("credentials.json");
+                std::fs::write(&credentials, json!({"acc1":credential.to_string()}).to_string()).unwrap();
+                std::env::set_var("MAILVAULT_TEST_CREDENTIALS", credentials);
+                let folder = refresh_graph_folder("fld-complete", "Inbox");
+                let mut folder_three = folder.clone();
+                folder_three["totalItemCount"] = json!(3);
+                let batch = json!({"responses":[{"id":"inbox","status":200,
+                    "body":{"id":"fld-complete"}}]});
+                let old_one = refresh_graph_message("baseline-one", "baseline one");
+                let old_two = refresh_graph_message("baseline-two", "baseline two");
+                let subject = "Password Reset Request";
+                let delivery = refresh_graph_message("later-code", subject);
+                let mut full = delivery.clone();
+                full["body"] = json!({"contentType":"html",
+                    "content":"<p>Use your verification code <strong>364758</strong> to sign in.</p>"});
+                let body_response = if fail_body {
+                    (404, "missing Graph body".to_owned())
+                } else { (200, full.to_string()) };
+                let _graph = crate::handlers::graph::test_graph_mock_with(vec![
+                    (200, json!({"value":[folder]}).to_string()),
+                    (200, batch.to_string()),
+                    (200, json!({"value":[old_one.clone(),old_two.clone()],
+                        "@odata.nextLink":null}).to_string()),
+                    (200, json!({"value":[folder_three]}).to_string()),
+                    (200, batch.to_string()),
+                    (200, json!({"value":[delivery,old_one,old_two],
+                        "@odata.nextLink":null}).to_string()),
+                    body_response,
+                ]);
+                let baseline = boxed_request(&state, req("sync.refresh", json!({
+                    "requestId":"s4-graph-code-baseline", "accountId":"acc1",
+                    "mailbox":"INBOX", "reason":"manual",
+                }))).await;
+                assert!(baseline.error.is_none(), "real Graph baseline ACK: {:?}", baseline.error);
+                assert_eq!(terminal_refresh(&state, "s4-graph-code-baseline").await["status"], json!("complete"));
+                let before = state.sync_engine.change_gen();
+                let request_id = if fail_body { "s4-graph-code-fail" } else { "s4-graph-code" };
+                let accepted = boxed_request(&state, req("sync.refresh", json!({
+                    "requestId":request_id, "accountId":"acc1",
+                    "mailbox":"INBOX", "reason":"manual",
+                }))).await;
+                assert!(accepted.error.is_none(), "real Graph delivery ACK: {:?}", accepted.error);
+                assert_eq!(terminal_refresh(&state, request_id).await["status"], json!("complete"));
+                let ledger = refresh_graph_map(&state, "acc1").await.unwrap();
+                let uid = ledger.as_object().unwrap().iter().find_map(|(uid, id)|
+                    (id == "later-code").then(|| uid.parse::<u32>().unwrap()))
+                    .expect("the provider ID receives a stable native UID");
+                let mut events = state.events.subscribe();
+                let reply = boxed_request(&state, req("sync.events", json!({
+                    "since":before,"timeoutMs":1000,
+                }))).await.result.unwrap();
+                assert!(reply["changes"].as_array().unwrap().iter().any(|row|
+                    row["arrivalUids"] == json!([uid])),
+                    "Graph arrival must keep its ledger UID: {reply:?}");
+                let (notice, code) = tokio::time::timeout(std::time::Duration::from_secs(7), async {
+                    let mut notice = None;
+                    loop {
+                        let line = events.recv().await.expect("native Graph event channel stays live");
+                        if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                            if name == "notify" { notice = Some(payload); }
+                            else if name == "code-ready" { break (notice, Some(payload)); }
+                            if fail_body && notice.is_some() { break (notice, None); }
+                        }
+                    }
+                }).await.expect("real Graph body outcome must finish within the bounded child");
+                let notice = notice.expect("a proved Graph UID retains its banner on body failure");
+                assert_eq!(notice["uids"], json!([uid]));
+                assert_eq!(notice["banner"], json!(true));
+                if fail_body {
+                    assert!(code.is_none(), "Graph 404 must not offer a code");
+                    assert!(notice["target"].get("code").is_none());
+                } else {
+                    let code = code.expect("real Graph body supplies a code-ready event");
+                    assert_eq!(code["uid"], json!(uid));
+                    assert_eq!(code["code"], json!("364758"));
+                }
+                let calls = crate::handlers::graph::test_graph_requests();
+                assert_eq!(calls.len(), 7, "the child must read the actual Graph message once: {calls:?}");
+                assert!(calls[6].path.contains("/me/messages/later-code?"));
+                assert_eq!(calls[6].headers.get("authorization").map(String::as_str),
+                    Some("Bearer synthetic-graph-complete"));
+            }
+        }
+
+        #[tokio::test]
         async fn refresh_graph_foreign_complete_owner_cannot_announce_historical_arrivals() {
             use sha2::{Digest, Sha256};
             let _env_lock = crate::credentials::test_env_lock().lock()
@@ -6239,6 +7065,57 @@ mod tests {
             .await.expect("stale owner tuple must be explicitly acknowledged");
         assert_eq!(stale["params"]["name"], json!("sync-owner"));
         assert_eq!(stale["params"]["payload"]["accepted"], json!(false));
+        served.stop();
+    }
+
+
+    #[tokio::test]
+    async fn s4_same_channel_newer_owner_revision_recovers_without_reclaiming_stale_guard() {
+        let served = Served::start().await;
+        let (mut lines, mut writer) = open_channel(&served).await;
+        send(&mut writer, r#"{"jsonrpc":"2.0","method":"sync.owner","params":{"launchId":"s4-live","revision":1}}"#).await;
+        let first = tokio::time::timeout(std::time::Duration::from_secs(2), recv(&mut lines))
+            .await.expect("first real same-channel owner ACK");
+        assert_eq!(first["params"]["payload"]["accepted"], json!(true));
+        let first_generation = first["params"]["payload"]["ownerGeneration"].as_u64().unwrap();
+        let admitted = handle_request_for_test(&served.state, "sync.context", json!({
+            "launchId":"s4-live","revision":1,"phase":"resume","view":null,
+        })).await.result.unwrap();
+        assert_eq!(admitted["accepted"], json!(true));
+
+        send(&mut writer, r#"{"jsonrpc":"2.0","method":"sync.owner","params":{"launchId":"s4-live","revision":2}}"#).await;
+        let newer = tokio::time::timeout(std::time::Duration::from_secs(2), recv(&mut lines))
+            .await.expect("newer same-channel owner ACK must be bounded");
+        assert_eq!(newer["params"]["name"], json!("sync-owner"));
+        assert_eq!(newer["params"]["payload"]["accepted"], json!(true),
+            "W4S4_OWNER_REVISION_RED: a live launch's newer revision must replace its own same-channel guard: {newer:?}");
+        let newer_generation = newer["params"]["payload"]["ownerGeneration"].as_u64()
+            .expect("new accepted owner exposes its native generation");
+        assert!(newer_generation > first_generation,
+            "a replacement must retain a new generation when the old guard drops");
+        let resumed = handle_request_for_test(&served.state, "sync.context", json!({
+            "launchId":"s4-live","revision":2,"phase":"resume","view":null,
+        })).await.result.unwrap();
+        assert_eq!(resumed["accepted"], json!(true));
+        assert_eq!(resumed["revision"], json!(2));
+
+        send(&mut writer, r#"{"jsonrpc":"2.0","method":"sync.owner","params":{"launchId":"s4-live","revision":2}}"#).await;
+        let duplicate = recv(&mut lines).await;
+        assert_eq!(duplicate["params"]["payload"]["accepted"], json!(true));
+        assert_eq!(duplicate["params"]["payload"]["ownerGeneration"], json!(newer_generation),
+            "an identical retry cannot replace the new guard");
+        send(&mut writer, r#"{"jsonrpc":"2.0","method":"sync.owner","params":{"launchId":"s4-live","revision":1}}"#).await;
+        let stale = recv(&mut lines).await;
+        assert_eq!(stale["params"]["payload"]["accepted"], json!(false),
+            "an old revision cannot reclaim the same channel");
+        send(&mut writer, r#"{"jsonrpc":"2.0","method":"sync.owner","params":{"launchId":"s4-other","revision":3}}"#).await;
+        let other = recv(&mut lines).await;
+        assert_eq!(other["params"]["payload"]["accepted"], json!(false),
+            "another launch cannot take over an already owned same channel");
+        let status = handle_request_for_test(&served.state, "sync.refresh_status", json!({}))
+            .await.result.unwrap();
+        assert_eq!(status["contextRevision"], json!(2));
+        assert_eq!(status["automaticEnabled"], json!(true));
         served.stop();
     }
 

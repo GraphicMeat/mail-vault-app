@@ -69,6 +69,25 @@ function arm(get) {
  * to not be interrupted, and ending it with eight banners in a row undoes that.
  * // ponytail: 3 is a guess; tune when someone complains
  */
+function mailPresentation(title, body, target) {
+  if (!usePrivacyStore.getState().enabled && usePrivacyStore.persist.hasHydrated()) {
+    return { title, body, target };
+  }
+  // Check again at OS delivery, including a banner released from Focus.
+  const safeTarget = target?.code ? (({ code: _code, ...rest }) => rest)(target) : target;
+  return { title: t('privacy.notificationTitle'), body: '', target: safeTarget };
+}
+
+function sendNow(title, body, sound, target, mail = false) {
+  if (mail) ({ title, body, target } = mailPresentation(title, body, target));
+  const selectedSound = normalizeNotificationSound(sound);
+  const audible = selectedSound !== 'none';
+  const sent = target
+    ? sendNotification(title, body, audible ? selectedSound : undefined, target)
+    : audible ? sendNotification(title, body, selectedSound) : sendNotification(title, body);
+  return sent.catch(err => console.error('[focus] notification failed:', err));
+}
+
 function flushHeld(held) {
   if (!held.length) return;
   if (held.length > 3) {
@@ -78,7 +97,16 @@ function flushHeld(held) {
   // A released batch gets one chime, even when it has several banners.
   let playedSound = false;
   for (const n of held) {
-    notify(n.title, n.body, playedSound ? undefined : n.sound, n.target);
+    if (n.mail) {
+      // A new Focus session may have started while the old one flushed.
+      if (useFocusStore.getState().endsAt) {
+        useFocusStore.getState().hold(n);
+        continue;
+      }
+      sendNow(n.title, n.body, playedSound ? undefined : n.sound, n.target, true);
+    } else {
+      notify(n.title, n.body, playedSound ? undefined : n.sound, n.target);
+    }
     if (n.sound) playedSound = true;
   }
 }
@@ -205,44 +233,43 @@ export function clearNotificationDecisions() {
  * A daemon that cannot answer lets the banner out: a missed mail is worse
  * than one a mute should have caught.
  */
-export async function notify(title, body, sound, target, mailCtx) {
-  // Privacy mode: a banner is on screen too. Mail banners say only that mail
-  // came; anything else is masked like the window behind it. Until the saved
-  // choice has loaded it counts as on: a banner cannot be taken back.
-  if (usePrivacyStore.getState().enabled || !usePrivacyStore.persist.hasHydrated()) {
-    if (mailCtx) {
-      title = t('privacy.notificationTitle'); body = '';
-      // The one-time code is the mail's content too, and with it go its buttons.
-      if (target?.code) { const { code: _code, ...rest } = target; target = rest; }
-    }
-    else { const d = getPrivacyDictionary(); title = maskString(title, d); body = maskString(body, d); }
+export async function notify(title, body, sound, target, mailCtx, preparedDecision = null) {
+  // Generic notifications retain their existing privacy masking. Mail keeps
+  // its original presentation until the final OS boundary so a privacy change
+  // during policy I/O or Focus hold cannot expose a subject or code.
+  if (!mailCtx && (usePrivacyStore.getState().enabled || !usePrivacyStore.persist.hasHydrated())) {
+    const d = getPrivacyDictionary();
+    title = maskString(title, d);
+    body = maskString(body, d);
   }
   const selectedSound = normalizeNotificationSound(sound);
   const audible = selectedSound !== 'none';
 
   if (mailCtx) {
     const ts = Date.now();
-    let decision = null;
-    try {
-      decision = await notifyDecision({ ...mailCtx, focusHeld: !!useFocusStore.getState().endsAt });
-    } catch { /* no answer: let it out, logged as such */ }
+    let decision = preparedDecision && typeof preparedDecision.deliver === 'boolean'
+      ? preparedDecision : null;
+    if (!decision) {
+      try {
+        decision = await notifyDecision({ ...mailCtx, focusHeld: !!useFocusStore.getState().endsAt });
+      } catch { /* no answer: let it out, logged as such */ }
+    }
     if (typeof decision?.deliver !== 'boolean') decision = POLICY_UNAVAILABLE;
-    recordDecision({ ts, subject: title, from: mailCtx.from || '', deliver: decision.deliver, reason: decision.reason });
+    const presented = mailPresentation(title, body, target);
+    recordDecision({ ts, subject: presented.title, from: mailCtx.from || '',
+      deliver: decision.deliver, reason: decision.reason });
     if (!decision.deliver && decision.reason !== 'focus-hold') return;
   }
 
-  // Read after the decision: a session that started or ended while the
-  // daemon answered decides whether this is held or shown now.
+  // The same current Focus check applies to public and pre-decided mail. A
+  // held mail item keeps its mail identity, so release masks it as mail again.
   const s = useFocusStore.getState();
   if (s.endsAt) {
-    s.hold({ title, body, ...(audible ? { sound: selectedSound } : {}), ...(target ? { target } : {}) });
+    s.hold({ title, body, ...(audible ? { sound: selectedSound } : {}),
+      ...(target ? { target } : {}), ...(mailCtx ? { mail: true } : {}) });
     return;
   }
-  const sent = target
-    ? sendNotification(title, body, audible ? selectedSound : undefined, target)
-    : audible ? sendNotification(title, body, selectedSound) : sendNotification(title, body);
-  return sent
-    .catch(err => console.error('[focus] notification failed:', err));
+  return sendNow(title, body, selectedSound, target, !!mailCtx);
 }
 
 export const remainingMs = (state) =>

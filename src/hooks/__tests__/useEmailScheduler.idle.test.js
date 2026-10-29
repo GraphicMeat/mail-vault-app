@@ -1,1629 +1,280 @@
 // @vitest-environment jsdom
-//
-// The app half of IDLE parity: the scheduler registers a watcher per IMAP
-// account and then follows the daemon's change feed, repainting only the
-// folder that is on screen and telling the user about the rest.
+// The live side of the S4 cutover. The 66-case immutable archived replay keeps
+// the former JS owner executable; these assertions cover the new thin feed.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup, act } from '@testing-library/react';
-import { writeFileSync as captureWriteFileSync } from 'node:fs';
 import { create } from 'zustand';
 
-// The scheduler reads `window.__TAURI__.core.invoke` at module load — set it
-// before the import or notifications and the badge are dead for every test.
-const mockInvoke = vi.fn().mockResolvedValue(undefined);
-window.__TAURI__ = { core: { invoke: (...a) => mockInvoke(...a) } };
+const invoke = vi.fn(async () => {});
+window.__TAURI__ = { core: { invoke: (...args) => invoke(...args) } };
+const listeners = new Map();
+const listenerOrder = [];
+vi.mock('@tauri-apps/api/event', () => ({ listen: async (name, cb) => {
+  listenerOrder.push(name);
+  listeners.set(name, cb);
+  return () => listeners.delete(name);
+} }));
 
-// ── daemon double ───────────────────────────────────────────────────────────
-// `sync.events` answers from a scripted queue; once the queue is empty the
-// call parks for ever, which is what a real long poll with nothing to say
-// does — and what keeps the loop from spinning through the test.
-const calls = [];
-let eventReplies = [];
-let countAnswer = null;
-const reply = (v) => () => Promise.resolve(v);
-const fails = (code) => () => Promise.reject(Object.assign(new Error(code), { code }));
-const parked = () => new Promise(() => {});
-
-const mockDaemonCall = vi.fn((method, params) => {
-  calls.push([method, params]);
-  if (method === 'sync.events') {
-    const next = eventReplies.shift();
-    return next ? next() : parked();
-  }
-  if (method === 'counts.unread' && countAnswer) return countAnswer(params);
-  return Promise.resolve({});
+const loadEmails = vi.fn(async () => {});
+const loadUnifiedInbox = vi.fn(async () => {});
+const loadSubtree = vi.fn(async () => {});
+const A = { id: 'a', email: 'a@test', imapHost: 'imap.test' };
+const B = { id: 'b', email: 'b@test', imapHost: 'imap.test' };
+const mail = create(() => ({ accounts: [A, B], activeAccountId: 'a', activeMailbox: 'INBOX',
+  unifiedInbox: false, unifiedFolder: 'INBOX', mailboxScope: null, emails: [], totalEmails: 0,
+  loadEmails, loadUnifiedInbox, loadSubtree, refreshAllAccounts: vi.fn(async () => ({})) }));
+const facade = Object.assign(selector => mail(selector), {
+  getState: () => mail.getState(), setState: value => mail.setState(value),
+  subscribe: listener => mail.subscribe(listener),
 });
-vi.mock('../../services/daemonClient.js', () => ({
-  daemonCall: (...a) => mockDaemonCall(...a),
-  DaemonError: class DaemonError extends Error {},
+vi.mock('../../stores/mailStore', () => ({ useMailStore: facade }));
+vi.mock('../../stores/accountStore', () => ({ useAccountStore: facade }));
+vi.mock('../../stores/messageListStore', () => ({ useMessageListStore: facade }));
+
+const settings = create(() => ({ badgeEnabled: false, badgeMode: 'unread', unreadPerAccount: {},
+  hiddenAccounts: {}, displayNames: {}, accountOrder: [], setLastRefreshTime: vi.fn() }));
+const settingsFacade = Object.assign(selector => settings(selector), { getState: () => settings.getState() });
+vi.mock('../../stores/settingsStore', () => ({ useSettingsStore: settingsFacade }));
+const snoozes = create(() => ({ rows: [] }));
+const hidden = create(() => ({ keys: null }));
+vi.mock('../../stores/snoozeStore', () => ({ useSnoozeStore: snoozes }));
+vi.mock('../../stores/viewHideStore', () => ({ useViewHideStore: hidden }));
+
+const recount = vi.fn(async () => {});
+const unreadPresentation = vi.fn(async () => ({ total: 0, rows: [] }));
+vi.mock('../../stores/unreadCounts', () => ({ recountNativeInbox: (...args) => recount(...args),
+  unreadPresentation: (...args) => unreadPresentation(...args) }));
+const invalidateUnread = vi.fn();
+const invalidateRestore = vi.fn();
+vi.mock('../../services/unreadCountsClient', () => ({ invalidateUnreadConnection: () => invalidateUnread() }));
+vi.mock('../../services/cacheManager', () => ({ invalidateRestoreDescriptors: (...args) => invalidateRestore(...args) }));
+vi.mock('../../services/db/accounts', () => ({ accountExpectedContext: account => ({
+  id: account.id, email: account.email,
+}) }));
+
+const polls = [];
+const waitForSyncChanges = vi.fn((since, timeout) => new Promise(resolve => polls.push({ since, timeout, resolve })));
+vi.mock('../../services/syncService', () => ({ waitForSyncChanges: (...args) => waitForSyncChanges(...args) }));
+let instance = 'native-1';
+const connect = vi.fn(async () => ({ instanceId: instance }));
+const observe = vi.fn(async () => {});
+vi.mock('../../services/nativeSyncContext.js', () => ({
+  connectNativeSync: (...args) => connect(...args), observeNativeView: (...args) => observe(...args),
+  currentNativeView: () => ({ accountId: mail.getState().activeAccountId, mailbox: mail.getState().activeMailbox }),
+  nativeInstanceId: () => instance,
 }));
-
-const mockGetHeaders = vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 });
-// The whole INBOX cache, which the badge is recounted from.
-const mockGetAllHeaders = vi.fn().mockResolvedValue(null);
-async function nativeCountAnswer(p) {
-  const counts = { ...p.baseline };
-  let wrote = false;
-  const inboxKeys = rows => (rows || []).filter(key => key.startsWith(`${p.accountId}|INBOX|`)).sort();
-  const unchangedView = p.change?.kind === 'viewHiddenKeys'
-    && JSON.stringify(inboxKeys(p.change.before)) === JSON.stringify(inboxKeys(p.change.after));
-  if (p.op === 'recountCache' && !unchangedView) {
-    const cache = p.preferredRows && Array.isArray(p.preferredRows.emails)
-      && !(p.preferredRows.totalEmails > p.preferredRows.emails.length)
-      ? p.preferredRows : await mockGetAllHeaders(p.accountId, 'INBOX');
-    if (Array.isArray(cache?.emails) && !(cache.totalEmails > cache.emails.length)) {
-      counts[p.accountId] = cache.emails.filter(row => !row.flags?.includes('\\Seen')
-        && !row.flags?.includes('\\Deleted')
-        && !p.projection?.snoozes?.some(s => s.accountId === p.accountId && s.state === 'snoozed'
-          && s.snoozedMailbox === '' && s.messageId === row.messageId)
-        && !(p.projection?.hideViewMail && p.projection?.viewHiddenKeys?.includes(`${p.accountId}|INBOX|${row.uid}`))).length;
-      wrote = true;
-    } else if (p.arrivalCount > 0) {
-      counts[p.accountId] = (counts[p.accountId] || 0) + p.arrivalCount;
-      wrote = true;
-    }
-  }
-  if (p.op === 'shift') {
-    for (const entry of p.entries) {
-      if (entry.mailbox !== 'INBOX' || p.mode === 'unreadOnly' && entry.row.flags?.includes('\\Seen')) continue;
-      counts[entry.accountId] = Math.max(0, (counts[entry.accountId] || 0) + p.sign);
-      wrote = true;
-    }
-  }
-  const view = p.presentation || {};
-  const rows = (view.accounts || []).filter(account => !view.hiddenAccounts?.[account.id])
-    .map(account => ({ id: account.id, label: view.displayNames?.[account.id] || account.name || account.email || '',
-      unread: counts[account.id] || 0 }));
-  return { counts, rows, total: rows.reduce((sum, row) => sum + row.unread, 0), wrote };
-}
-vi.mock('../../services/db', () => ({
-  getEmailHeadersPartial: (...a) => mockGetHeaders(...a),
-  getEmailHeaders: (...a) => mockGetAllHeaders(...a),
+const deliver = vi.fn(async () => {});
+const offer = vi.fn();
+vi.mock('../../services/nativeArrival.js', () => ({
+  deliverPreparedNotice: (...args) => deliver(...args), offerPreparedCode: (...args) => offer(...args),
 }));
+const viewCounts = vi.fn();
+const notesReload = vi.fn();
+const noteFlags = vi.fn();
+vi.mock('../../stores/viewStore', () => ({ scheduleViewCountsRefresh: (...args) => viewCounts(...args) }));
+vi.mock('../../stores/notesStore', () => ({ scheduleNotesReload: (...args) => notesReload(...args),
+  useNotesStore: { getState: () => ({ rereadCopyFlags: (...args) => noteFlags(...args) }) } }));
+vi.mock('../../services/workflows/replayOps', () => ({ replayOps: vi.fn(async () => {}),
+  wireReplayOnReconnect: vi.fn() }));
 
-const mockNotify = vi.fn();
-vi.mock('../../stores/focusStore', () => ({ notify: (...a) => mockNotify(...a) }));
-
-// The Tauri event a (re)connected daemon channel raises.
-let daemonReconnected = null;
-let registerReconnect = cb => {
-  daemonReconnected = cb;
-  return Promise.resolve(() => { daemonReconnected = null; });
+const { useEmailScheduler } = await import('../useEmailScheduler.js');
+const tick = async () => { await act(async () => { await Promise.resolve(); }); };
+const nextPoll = async () => {
+  await vi.waitFor(() => expect(polls.length).toBeGreaterThan(0));
+  return polls.shift();
 };
-vi.mock('../../services/searchIndex', () => ({
-  onDaemonReconnected: cb => registerReconnect(cb),
-}));
+const ready = async () => {
+  await vi.waitFor(() => expect(polls.length).toBeGreaterThan(0));
+  await vi.waitFor(() => expect(viewCounts).toHaveBeenCalled());
+  await vi.waitFor(() => expect(notesReload).toHaveBeenCalled());
+};
+const answer = async value => {
+  const poll = await nextPoll();
+  await act(async () => { poll.resolve({ instanceId: instance, resyncRequired: false, ...value }); });
+  return poll;
+};
+const source = account => ({ accountId: account, mailbox: 'INBOX', sourceRef: `${account}-owner`,
+  newEmails: 1, updatedFlags: 0, gen: 1, at: 1 });
 
-// The saved-view badges and the Notes to Self board, which a synced change
-// makes stale too.
-const mockScheduleViewCounts = vi.fn();
-vi.mock('../../stores/viewStore', () => ({
-  scheduleViewCountsRefresh: (...a) => mockScheduleViewCounts(...a),
-}));
-const mockRereadCopyFlags = vi.fn();
-const mockScheduleNotesReload = vi.fn();
-vi.mock('../../stores/notesStore', () => ({
-  useNotesStore: { getState: () => ({ rereadCopyFlags: (...a) => mockRereadCopyFlags(...a) }) },
-  scheduleNotesReload: (...a) => mockScheduleNotesReload(...a),
-}));
-
-vi.mock('../../services/workflows/replayOps', () => ({
-  replayOps: vi.fn().mockResolvedValue(undefined),
-  wireReplayOnReconnect: vi.fn(),
-}));
-
-// The corner bubble for a one-time code: handed every arrival's newest header.
-const mockOfferCode = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../services/codeBubble', () => ({
-  offerCodeFromArrival: (...a) => mockOfferCode(...a),
-}));
-
-// ── stores ──────────────────────────────────────────────────────────────────
-// One store behind all three facades, exactly as the app composes them.
-const mockLoadEmails = vi.fn();
-const mockLoadUnifiedInbox = vi.fn();
-const mailState = () => ({
-  accounts: [],
-  activeAccountId: null,
-  activeMailbox: 'INBOX',
-  unifiedInbox: false,
-  unifiedFolder: 'INBOX',
-  emails: [],
-  loadEmails: mockLoadEmails,
-  loadUnifiedInbox: mockLoadUnifiedInbox,
-  refreshAllAccounts: vi.fn().mockResolvedValue({ perAccountResults: [] }),
+beforeEach(() => {
+  listeners.clear(); listenerOrder.length = 0; polls.length = 0;
+  instance = 'native-1';
+  mail.setState({ accounts: [A, B], activeAccountId: 'a', activeMailbox: 'INBOX',
+    unifiedInbox: false, unifiedFolder: 'INBOX', mailboxScope: null, emails: [], totalEmails: 0 });
+  settings.setState({ badgeEnabled: false, badgeMode: 'unread', unreadPerAccount: {},
+    hiddenAccounts: {}, displayNames: {}, accountOrder: [] });
+  loadEmails.mockClear(); loadUnifiedInbox.mockClear(); loadSubtree.mockClear();
+  connect.mockClear(); observe.mockClear(); recount.mockClear(); deliver.mockClear(); offer.mockClear();
+  invalidateUnread.mockClear(); invalidateRestore.mockClear();
+  viewCounts.mockClear(); notesReload.mockClear(); noteFlags.mockClear();
+  invoke.mockClear(); waitForSyncChanges.mockClear();
 });
-const mailStore = create(() => mailState());
-const facade = { useMailStore: Object.assign((s) => mailStore(s), {
-  getState: () => mailStore.getState(), setState: (p) => mailStore.setState(p),
-  subscribe: (...args) => mailStore.subscribe(...args),
-}) };
-vi.mock('../../stores/mailStore', () => ({ useMailStore: facade.useMailStore }));
-vi.mock('../../stores/accountStore', () => ({ useAccountStore: facade.useMailStore }));
-vi.mock('../../stores/messageListStore', () => ({ useMessageListStore: facade.useMailStore }));
+afterEach(() => { cleanup(); });
 
-const settingsState = () => ({
-  refreshInterval: 0,
-  refreshOnLaunch: false,
-  setLastRefreshTime: vi.fn(),
-  notificationSettings: { enabled: true, showPreview: true, accounts: {} },
-  badgeEnabled: false,
-  badgeMode: 'unread',
-  unreadPerAccount: {},
-  hiddenAccounts: {},
-  billingProfile: null,
-  setUnreadForAccount: (id, count) => settingsStore.setState(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [id]: count } })),
-  setUnreadPerAccount: counts => settingsStore.setState({ unreadPerAccount: counts }),
-});
-const settingsStore = create(() => settingsState());
-vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: Object.assign((s) => settingsStore(s), { getState: () => settingsStore.getState() }),
-  hasPremiumAccess: () => false,
-  selectOwnAddresses: (state, account) => ownAddresses({
-    account, sendAsAddress: state?.sendAsAddresses?.[account?.id], aliases: state?.aliases?.[account?.id],
-  }),
-}));
-
-const { ownAddresses } = await import('../../utils/ownAddresses.js');
-const { useEmailScheduler, notifyArrival } = await import('../useEmailScheduler');
-const notificationSounds = await import('../../utils/notificationSounds');
-const { useSnoozeStore } = await import('../../stores/snoozeStore');
-const { useViewHideStore } = await import('../../stores/viewHideStore');
-const { shiftInbox, selectTotalUnread, setListStore } = await import('../../stores/unreadCounts');
-// This suite replaces mailStore, so register the same facade real mailStore
-// registers at module initialization for native presentation and source fences.
-setListStore(facade.useMailStore);
-const { saveRestoreDescriptor, getRestoreDescriptor } = await import('../../services/cacheManager');
-
-const IMAP_A = { id: 'a1', email: 'a@one.co', password: 'pw', imapHost: 'imap.one.co', imapPort: 993 };
-const IMAP_B = { id: 'a2', email: 'b@two.co', authType: 'oauth2', oauth2AccessToken: 'tok' };
-const GRAPH = { id: 'g1', email: 'g@ms.com', authType: 'oauth2', oauth2AccessToken: 'tok', oauth2Transport: 'graph' };
-const NO_CREDS = { id: 'n1', email: 'n@none.co' };
-
-const methods = (name) => calls.filter(c => c[0] === name);
-const flush = async () => { await act(async () => { await vi.advanceTimersByTimeAsync(1); }); };
-
-describe('useEmailScheduler — IDLE watchers and the change feed', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    calls.length = 0;
-    eventReplies = [];
-    countAnswer = nativeCountAnswer;
-    registerReconnect = cb => {
-      daemonReconnected = cb;
-      return Promise.resolve(() => { daemonReconnected = null; });
-    };
-    mockDaemonCall.mockClear();
-    mockNotify.mockClear();
-    mockLoadEmails.mockClear();
-    mockLoadUnifiedInbox.mockClear();
-    mockScheduleViewCounts.mockClear();
-    mockRereadCopyFlags.mockClear();
-    mockScheduleNotesReload.mockClear();
-    mockOfferCode.mockClear();
-    mockGetHeaders.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
-    mockGetAllHeaders.mockReset().mockResolvedValue(null);
-    mailStore.setState(mailState());
-    settingsStore.setState(settingsState());
-  });
-  afterEach(() => {
-    cleanup();
-    vi.useRealTimers();
-  });
-
-  it('watches every IMAP account that has credentials, and nothing else', async () => {
-    mailStore.setState({ accounts: [IMAP_A, IMAP_B, GRAPH, NO_CREDS] });
-
+describe('S4 native change feed consumer', () => {
+  it('installs typed, reconnect and lag listeners before context attachment and first poll', async () => {
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(methods('sync.watch').map(c => c[1].account.id)).toEqual(['a1', 'a2']);
-    // and the daemon gets the sync shape, not the store row
-    expect(Object.keys(methods('sync.watch')[0][1].account).sort()).toEqual(['email', 'id', 'imapConfig']);
+    await ready();
+    expect(listenerOrder).toEqual(['notify', 'code-ready', 'daemon-reconnected', 'daemon-events-lagged']);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(waitForSyncChanges).toHaveBeenCalledWith(null, 25000);
+    expect(invalidateUnread).toHaveBeenCalled();
   });
 
-  it('long-polls without a cursor, then from the generation it was handed', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-    eventReplies = [reply({ gen: 5, changes: [] })];
-
+  it('repaints once per reply, recounts flags and uses native prepared notices', async () => {
+    mail.setState({ activeMailbox: 'INBOX' });
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(methods('sync.events').map(c => c[1].since)).toEqual([null, 5]);
-    expect(methods('sync.events')[0][1].timeoutMs).toBe(25000);
-    // a first answer is not a daemon whose generation went backwards
-    expect(methods('sync.watch')).toHaveLength(1);
+    await ready(); loadEmails.mockClear(); recount.mockClear(); viewCounts.mockClear(); notesReload.mockClear();
+    const change = { ...source('a'), updatedFlags: 1 };
+    const notice = { id: 'n1', accountId: 'a', sourceRef: 'a-owner', instanceId: instance };
+    await answer({ gen: 1, changes: [change, change], notifications: [notice] });
+    await vi.waitFor(() => expect(loadEmails).toHaveBeenCalledTimes(1));
+    expect(loadEmails).toHaveBeenCalledWith({ rereadFlags: true });
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(deliver).toHaveBeenCalledWith(notice);
+    expect(recount).toHaveBeenCalledWith('a', expect.objectContaining({ arrivalCount: 1 }));
+    expect(noteFlags).toHaveBeenCalledWith('a', 'INBOX');
+    expect(viewCounts).toHaveBeenCalledTimes(1);
+    expect(notesReload).toHaveBeenCalledTimes(1);
   });
 
-  // The daemon's counter restarts at 0 when the daemon does, and it answers a
-  // cursor from the future at once with where it actually is. Clamping with
-  // Math.max would park the app on a generation that will never come back.
-  it('adopts a generation lower than the cursor it sent', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-    eventReplies = [reply({ gen: 900, changes: [] }), reply({ gen: 3, changes: [] })];
-
+  it('buffers a typed event until its source reply, then rejects replacement context', async () => {
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(methods('sync.events').map(c => c[1].since)).toEqual([null, 900, 3]);
+    await ready();
+    const first = { id: 'n1', accountId: 'a', sourceRef: 'a-owner', instanceId: instance };
+    listeners.get('notify')({ payload: first });
+    expect(deliver).not.toHaveBeenCalled();
+    await answer({ gen: 1, changes: [source('a')], notifications: [] });
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(first));
+    mail.setState({ accounts: [{ ...A, email: 'replacement@test' }, B] });
+    listeners.get('notify')({ payload: { ...first, id: 'late' } });
+    listeners.get('code-ready')({ payload: { ...first, code: '123456', uid: 2 } });
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(offer).not.toHaveBeenCalled();
   });
 
-  // That lower generation is a daemon that restarted, and a restarted daemon
-  // holds no watchers: nothing idled until the next scheduled refresh.
-  it('hands the watchers back to a daemon whose generation went backwards', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-    eventReplies = [reply({ gen: 900, changes: [] }), reply({ gen: 3, changes: [] })];
+  for (const scenario of [
+    { name: 'replacement', change: () => mail.setState({ accounts: [{ ...A, email: 'changed@test' }, B] }), stale: true },
+    { name: 'remove and readd', change: () => {
+      mail.setState({ accounts: [B] }); mail.setState({ accounts: [A, B] });
+    }, stale: true },
+    { name: 'away and back', change: () => {
+      mail.setState({ accounts: [{ ...A, email: 'changed@test' }, B] });
+      mail.setState({ accounts: [A, B] });
+    }, stale: true },
+    { name: 'harmless hydration', change: () => mail.setState({ accounts: [{ ...A, name: 'Renamed' }, B] }), stale: false },
+  ]) {
+    it(`keeps B's live change while a held A poll sees ${scenario.name}`, async () => {
+      renderHook(() => useEmailScheduler());
+      await ready(); recount.mockClear(); deliver.mockClear();
+      const first = source('a');
+      const second = { ...source('b'), gen: 2 };
+      scenario.change();
+      await answer({ gen: 2, changes: [first, second], notifications: [
+        { id: 'old-a', accountId: 'a', sourceRef: 'a-owner', instanceId: instance },
+        { id: 'live-b', accountId: 'b', sourceRef: 'b-owner', instanceId: instance },
+      ] });
+      await vi.waitFor(() => expect(recount.mock.calls.some(([id]) => id === 'b')).toBe(true));
+      expect(recount.mock.calls.some(([id]) => id === 'a')).toBe(!scenario.stale);
+      expect(deliver.mock.calls.map(([notice]) => notice.id))
+        .toEqual(scenario.stale ? ['live-b'] : ['old-a', 'live-b']);
+    });
+  }
 
+  it('delivers the first prepared notice of an account added while a poll is in flight', async () => {
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(methods('sync.watch')).toHaveLength(2);
+    await ready();
+    const poll = await nextPoll();
+    const C = { id: 'c', email: 'c@test', imapHost: 'imap.test' };
+    mail.setState({ accounts: [A, B, C] });
+    const notice = { id: 'n-c', accountId: 'c', sourceRef: 'c-owner', instanceId: instance };
+    await act(async () => { poll.resolve({ instanceId: instance, resyncRequired: false, gen: 1,
+      changes: [source('c')], notifications: [notice] }); });
+    // The daemon spent its one claim when it prepared this notice.
+    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(notice));
+    expect(recount).toHaveBeenCalledWith('c', expect.objectContaining({ arrivalCount: 1 }));
   });
 
-  it('hands the watchers back when the daemon channel reconnects', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-
+  it('still drops a notice whose account was replaced while its poll was in flight', async () => {
     renderHook(() => useEmailScheduler());
-    await flush();
-    expect(methods('sync.watch')).toHaveLength(1);
-
-    await act(async () => { daemonReconnected?.({}); });
-
-    expect(methods('sync.watch')).toHaveLength(2);
+    await ready();
+    const poll = await nextPoll();
+    mail.setState({ accounts: [{ ...A, email: 'replacement@test' }, B] });
+    const notice = { id: 'n-a', accountId: 'a', sourceRef: 'a-owner', instanceId: instance };
+    await act(async () => { poll.resolve({ instanceId: instance, resyncRequired: false, gen: 1,
+      changes: [source('a')], notifications: [notice] }); });
+    await tick();
+    expect(deliver).not.toHaveBeenCalled();
   });
 
-  it('repaints the open folder and tells the user about the new mail', async () => {
-    mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'Ada' }, subject: 'Difference engine' }] });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
+  it('keeps its listeners and polling when one change recount rejects', async () => {
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadEmails).toHaveBeenCalledTimes(1);
-    expect(mockLoadUnifiedInbox).not.toHaveBeenCalled();
-    expect(mockGetHeaders).toHaveBeenCalledWith('a1', 'INBOX', 1);
-    expect(mockNotify).toHaveBeenCalledTimes(1);
-    // A click on the banner opens that message in the folder it arrived in.
-    // The 5th arg is the notification-policy context; notify() itself (not
-    // this mock) is what decides whether the policy actually suppresses it —
-    // see focusStore.test.js for that.
-    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 },
-      { accountId: 'a1', folder: 'INBOX', from: '', viewIds: [] });
+    await ready();
+    recount.mockRejectedValueOnce(new Error('daemon recount unavailable'));
+    const first = { id: 'n1', accountId: 'a', sourceRef: 'a-owner', instanceId: instance };
+    await answer({ gen: 1, changes: [source('a')], notifications: [first] });
+    // The loop asks for the next change at once; it does not tear down and
+    // rebind (which would clear every parked source for five seconds).
+    await vi.waitFor(() => expect(polls.length).toBeGreaterThan(0), { timeout: 1000 });
+    expect(listeners.has('notify')).toBe(true);
+    expect(listeners.has('code-ready')).toBe(true);
+    expect(listeners.has('daemon-reconnected')).toBe(true);
+    expect(listeners.has('daemon-events-lagged')).toBe(true);
+    expect(deliver).toHaveBeenCalledWith(first);
   });
 
-  describe('a one-time code in the mail', () => {
-    it('hands the arrival to the code bubble', async () => {
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      const header = { uid: 7, from: { name: 'Acme' }, subject: 'Your verification code is 364758' };
-      mockGetHeaders.mockResolvedValue({ emails: [header] });
-      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockOfferCode).toHaveBeenCalledWith('a1', 'INBOX', header);
-    });
-
-    // One read feeds both: the banner shows the code the bubble got, and its
-    // target carries it for Copy & delete (macOS).
-    it('puts the code in the banner of a lone arrival', async () => {
-      mailStore.setState({ accounts: [IMAP_A] });
-      const header = { uid: 7, from: { name: 'PlayBall', address: 'smtp@playball.lt' }, subject: 'Password Reset Request' };
-      mockGetHeaders.mockResolvedValue({ emails: [header] });
-      mockOfferCode.mockResolvedValueOnce('26313');
-      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockNotify).toHaveBeenCalledWith('PlayBall', '26313\nPassword Reset Request', undefined,
-        { accountId: 'a1', mailbox: 'INBOX', uid: 7, code: '26313' },
-        { accountId: 'a1', folder: 'INBOX', from: 'smtp@playball.lt', viewIds: [] });
-    });
-
-    it('keeps the code out of a banner that shows no preview', async () => {
-      settingsStore.setState({ notificationSettings: { ...settingsState().notificationSettings, showPreview: false } });
-      mailStore.setState({ accounts: [IMAP_A] });
-      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'PlayBall' }, subject: 'Password Reset Request' }] });
-      mockOfferCode.mockResolvedValueOnce('26313');
-      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockNotify.mock.calls[0][1]).not.toContain('26313');
-      expect(mockNotify.mock.calls[0][3]).toEqual({ accountId: 'a1', mailbox: 'INBOX' });
-    });
-
-    it('keeps the code out of a banner for several arrivals', async () => {
-      mailStore.setState({ accounts: [IMAP_A] });
-      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'PlayBall' }, subject: 'Password Reset Request' }] });
-      mockOfferCode.mockResolvedValueOnce('26313');
-      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 2, updatedFlags: 0, at: 1 }] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockNotify.mock.calls[0][0]).toBe('2 New Emails');
-      expect(mockNotify.mock.calls[0][3]).toEqual({ accountId: 'a1', mailbox: 'INBOX', uid: 7 });
-    });
-
-    it('still notifies when the code read fails', async () => {
-      mailStore.setState({ accounts: [IMAP_A] });
-      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'Ada' }, subject: 'Hello' }] });
-      mockOfferCode.mockRejectedValueOnce(new Error('daemon gone'));
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
-      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 }, expect.any(Object));
-    });
-
-    it('offers nothing for a change without new mail', async () => {
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1 }] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockOfferCode).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('mail the user sent', () => {
-    const feed = () => [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-    const run = async (from) => {
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      mockGetHeaders.mockResolvedValue({ emails: [{ uid: 9, from, subject: 'Re: plans' }] });
-      eventReplies = feed();
-      renderHook(() => useEmailScheduler());
-      await flush();
-    };
-
-    it('stays silent for your own reply that lands in the inbox thread', async () => {
-      await run({ name: 'Me', address: 'A@One.co' });
-      expect(mockLoadEmails).toHaveBeenCalledTimes(1);
-      expect(mockNotify).not.toHaveBeenCalled();
-    });
-
-    it('stays silent for one of your aliases', async () => {
-      settingsStore.setState({ aliases: { a1: [{ address: 'work@one.co' }] } });
-      await run({ address: 'work@one.co' });
-      expect(mockNotify).not.toHaveBeenCalled();
-    });
-
-    it('still notifies for someone else', async () => {
-      await run({ name: 'Ada', address: 'ada@lovelace.org' });
-      expect(mockNotify).toHaveBeenCalledTimes(1);
-    });
-
-    // The copy of a message you just sent lands in Sent: nothing arrived. The
-    // sender can be anyone (a send-as the account does not list, a bounce-back
-    // copy), so the folder decides, not the From address.
-    describe('landing in the Sent folder', () => {
-      const runIn = async (mailbox, newEmails, account = IMAP_A, extra = {}) => {
-        mailStore.setState({ accounts: [account], activeAccountId: account.id, activeMailbox: 'INBOX', ...extra });
-        mockGetHeaders.mockResolvedValue({ emails: [{ uid: 9, from: { name: 'Ada', address: 'ada@lovelace.org' }, subject: 'Sent copy' }] });
-        eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: account.id, mailbox, newEmails, updatedFlags: 0, at: 1 }] })];
-        renderHook(() => useEmailScheduler());
-        await flush();
-      };
-
-      it.each(['Sent', 'INBOX.Sent', '[Gmail]/Sent Mail', 'Gesendete Elemente'])('stays silent for %s', async (mailbox) => {
-        await runIn(mailbox, 1);
-        expect(mockNotify).not.toHaveBeenCalled();
-      });
-
-      it('stays silent for several at once', async () => {
-        await runIn('Sent', 3);
-        expect(mockNotify).not.toHaveBeenCalled();
-      });
-
-      it("stays silent for the account's chosen Sent folder", async () => {
-        await runIn('Mine/Out', 1, { ...IMAP_A, sentFolderOverride: 'Mine/Out' });
-        expect(mockNotify).not.toHaveBeenCalled();
-      });
-
-      it('stays silent for a Sent folder only SPECIAL-USE names', async () => {
-        await runIn('Skickat-ish', 1, IMAP_A, { mailboxes: [{ path: 'INBOX', name: 'INBOX' }, { path: 'Skickat-ish', name: 'Skickat-ish', specialUse: '\\Sent' }] });
-        expect(mockNotify).not.toHaveBeenCalled();
-      });
-
-      it('still notifies for the inbox and other folders', async () => {
-        await runIn('Sentinel', 1);
-        expect(mockNotify).toHaveBeenCalledTimes(1);
-      });
-    });
-  });
-
-  it('notifies for an account that is not on screen without repainting the list', async () => {
-    mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 12, from: { address: 'c@three.co' }, subject: 'Elsewhere' }] });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
+  it('waits for the accounts to load before it attaches the native context or polls', async () => {
+    mail.setState({ accounts: [] });
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadEmails).not.toHaveBeenCalled();
-    expect(mockNotify).toHaveBeenCalledWith('c@three.co', 'Elsewhere', undefined, { accountId: 'a2', mailbox: 'INBOX', uid: 12 },
-      { accountId: 'a2', folder: 'INBOX', from: 'c@three.co', viewIds: [] });
+    await tick(); await tick();
+    expect(connect).not.toHaveBeenCalled();
+    expect(waitForSyncChanges).not.toHaveBeenCalled();
+    // The typed listeners are already live, so nothing emitted meanwhile is lost.
+    expect(listenerOrder).toEqual(['notify', 'code-ready', 'daemon-reconnected', 'daemon-events-lagged']);
+    mail.setState({ accounts: [A, B] });
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(waitForSyncChanges).toHaveBeenCalledWith(null, 25000));
   });
 
-  // The scheduled refresh knows exactly which messages it announces. The daemon
-  // allows one banner per message, so it is told which: a refresh that sees the
-  // same arrival again (a row that outlived a delete) cannot raise it twice.
-  it('names the messages a scheduled refresh announces in the notification context', async () => {
-    settingsStore.setState({ refreshOnLaunch: true });
-    mailStore.setState({
-      accounts: [IMAP_A],
-      activeAccountId: 'a1',
-      activeMailbox: 'INBOX',
-      refreshAllAccounts: vi.fn().mockResolvedValue({
-        perAccountResults: [{ accountId: 'a1', accountEmail: 'a@one.co', folder: 'INBOX', newCount: 2, uids: [9, 8],
-          newestSender: 'Sender', newestSubject: 'Subject', newestUid: 9, newestFromAddress: 's@x.co' }],
-      }),
-    });
-
+  it('recovers status and current state on lag without synthesizing old notices', async () => {
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockNotify).toHaveBeenCalledTimes(1);
-    expect(mockNotify.mock.calls[0][4]).toEqual({ accountId: 'a1', folder: 'INBOX', from: 's@x.co', viewIds: [], uids: [9, 8] });
+    await ready(); connect.mockClear(); deliver.mockClear();
+    listeners.get('daemon-events-lagged')({ payload: {} });
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+    expect(deliver).not.toHaveBeenCalled();
+    await answer({ gen: 65, changes: [], notifications: [], resyncRequired: true });
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
+    expect(deliver).not.toHaveBeenCalled();
   });
 
-  // A code that a scheduled refresh finds before the daemon's IDLE does never
-  // reaches the change feed: the refresh hands it to the bubble and the banner.
-  it('offers the code in a mail a scheduled refresh finds', async () => {
-    settingsStore.setState({ refreshOnLaunch: true });
-    mockOfferCode.mockResolvedValueOnce('906919');
-    mailStore.setState({
-      accounts: [IMAP_A],
-      activeAccountId: 'a1',
-      activeMailbox: 'INBOX',
-      refreshAllAccounts: vi.fn().mockResolvedValue({
-        perAccountResults: [{ accountId: 'a1', accountEmail: 'a@one.co', folder: 'INBOX', newCount: 1, uids: [9],
-          newestSender: 'Privacy Guides', newestSubject: '906919 is your login code', newestUid: 9,
-          newestFromAddress: 'discourse@privacyguides.org', newestSnippet: 'Use this code' }],
-      }),
-    });
-
+  it('repaints unified current folder once, and ignores an unrelated folder', async () => {
+    mail.setState({ activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'Archive' });
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockOfferCode).toHaveBeenCalledWith('a1', 'INBOX', {
-      uid: 9, subject: '906919 is your login code', snippet: 'Use this code',
-      from: { name: 'Privacy Guides', address: 'discourse@privacyguides.org' },
-    });
-    expect(mockNotify).toHaveBeenCalledWith('Privacy Guides', '906919\n906919 is your login code', undefined,
-      { accountId: 'a1', mailbox: 'INBOX', uid: 9, code: '906919' },
-      { accountId: 'a1', folder: 'INBOX', from: 'discourse@privacyguides.org', viewIds: [], uids: [9] });
+    await ready(); loadUnifiedInbox.mockClear(); loadEmails.mockClear();
+    await answer({ gen: 1, changes: [{ ...source('a'), mailbox: 'INBOX' }], notifications: [] });
+    expect(loadUnifiedInbox).not.toHaveBeenCalled();
+    await answer({ gen: 2, changes: [{ ...source('b'), gen: 2, mailbox: 'Archive' }], notifications: [] });
+    await vi.waitFor(() => expect(loadUnifiedInbox).toHaveBeenCalledTimes(1));
+    expect(loadUnifiedInbox).toHaveBeenCalledWith(null, 'Archive');
+    expect(loadEmails).not.toHaveBeenCalled();
   });
 
-  // A launch after a night closed collects every arrival at once. The preview
-  // is the folder's newest message, so one banner per change repeated that
-  // same message once per arrival: one banner per folder, counting them all.
-  it('announces several changes to one folder as one banner', async () => {
-    mailStore.setState({ accounts: [IMAP_A, IMAP_B] });
-    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 9, from: { name: 'Netflix' }, subject: 'Tonight?' }] });
-    const change = (gen, accountId, newEmails) => ({ gen, accountId, mailbox: 'INBOX', newEmails, updatedFlags: 0, at: gen });
-    eventReplies = [reply({ gen: 4, changes: [change(1, 'a1', 1), change(2, 'a2', 1), change(3, 'a1', 2), change(4, 'a1', 0)] })];
+  it('removes listeners and ignores a parked reply after unmount', async () => {
+    const hook = renderHook(() => useEmailScheduler());
+    const poll = await nextPoll();
+    hook.unmount();
+    expect(listeners.size).toBe(0);
+    await act(async () => { poll.resolve({ instanceId: instance, gen: 1,
+      changes: [source('a')], notifications: [] }); });
+    await tick();
+    expect(deliver).not.toHaveBeenCalled();
+  });
 
+  it('does not schedule provider pages, watchers or JS arrival policy', async () => {
     renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockNotify.mock.calls.map(c => [c[3].accountId, c[0]])).toEqual([
-      ['a1', '3 New Emails'],
-      ['a2', 'Netflix'],
-    ]);
-  });
-
-  it('attaches the selected sound to incoming mail', async () => {
-    settingsStore.setState({ notificationSettings: { ...settingsState().notificationSettings, sound: 'Ping' } });
-    mailStore.setState({ accounts: [IMAP_A] });
-    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Hello' }] });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    // No uid on that header: the banner still opens its folder.
-    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', 'Ping', { accountId: 'a1', mailbox: 'INBOX' },
-      { accountId: 'a1', folder: 'INBOX', from: '', viewIds: [] });
-  });
-
-  it('opens only the folder when the banner shows no preview', async () => {
-    settingsStore.setState({ notificationSettings: { ...settingsState().notificationSettings, showPreview: false } });
-    mailStore.setState({ accounts: [IMAP_A] });
-    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'Ada' }, subject: 'Hello' }] });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockNotify.mock.calls[0][3]).toEqual({ accountId: 'a1', mailbox: 'INBOX' });
-  });
-
-  // Flag-only changes on a folder nobody is looking at are silent.
-  it('says nothing when a change carries no new mail', async () => {
-    mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'Archive', newEmails: 0, updatedFlags: 4, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockNotify).not.toHaveBeenCalled();
-    expect(mockLoadEmails).not.toHaveBeenCalled();
-    // and the change was actually consumed — otherwise this asserts nothing
-    expect(methods('sync.events').map(c => c[1].since)).toEqual([null, 1]);
-  });
-
-  // A read or a star on another device: the daemon's sync wrote the flags and
-  // the mailbox's modseq into the cache, so a plain reload finds nothing
-  // changed. The change says flags moved, and the reload has to reread them.
-  describe('flag changes', () => {
-    const flagChange = (fields) => reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1, ...fields }] });
-
-    it('has the open folder reread its cached flags', async () => {
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [flagChange()];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockLoadEmails).toHaveBeenCalledTimes(1);
-      expect(mockLoadEmails).toHaveBeenCalledWith({ rereadFlags: true });
-    });
-
-    it('still rereads when the same reply also carries an arrival for that folder', async () => {
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [reply({ gen: 2, changes: [
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-        { gen: 2, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 2, at: 2 },
-      ] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockLoadEmails).toHaveBeenCalledTimes(1);
-      expect(mockLoadEmails).toHaveBeenCalledWith({ rereadFlags: true });
-    });
-
-    // The saved-view badges count from the index, which a sync changes as
-    // well, whichever folder is on screen.
-    it('counts the saved views again, once for the whole reply', async () => {
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'Archive' });
-      eventReplies = [reply({ gen: 2, changes: [
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1 },
-        { gen: 2, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 2 },
-      ] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      await vi.waitFor(() => expect(mockScheduleViewCounts).toHaveBeenCalled());
-      await flush();
-      expect(mockScheduleViewCounts).toHaveBeenCalledTimes(1);
-    });
-
-    it('asks nothing of the views while the feed is quiet', async () => {
-      eventReplies = [reply({ gen: 0, changes: [] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-      await flush();
-
-      expect(mockScheduleViewCounts).not.toHaveBeenCalled();
-    });
-
-    // The Notes to Self board keeps its own copy of each note's flags.
-    it('has the notes board reread the flags of the folder that changed, on screen or not', async () => {
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [reply({ gen: 2, changes: [
-        { gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 0, updatedFlags: 1, at: 1 },
-        { gen: 2, accountId: 'a2', mailbox: 'INBOX', newEmails: 0, updatedFlags: 2, at: 2 },
-      ] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      await vi.waitFor(() => expect(mockRereadCopyFlags).toHaveBeenCalledWith('a2', 'INBOX'));
-      expect(mockRereadCopyFlags).toHaveBeenCalledTimes(1);
-    });
-
-    it('leaves the notes board alone for an arrival', async () => {
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [flagChange({ newEmails: 1, updatedFlags: 0 })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-      await vi.waitFor(() => expect(mockScheduleViewCounts).toHaveBeenCalled());
-
-      expect(mockRereadCopyFlags).not.toHaveBeenCalled();
-    });
-
-    // A new note, or a copy now proven gone from the server, changes the
-    // board's cards: it lists again, once per reply.
-    it('has the notes board list again once per reply that changed anything', async () => {
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [reply({ gen: 2, changes: [
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-        { gen: 2, accountId: 'a2', mailbox: 'Sent', newEmails: 0, updatedFlags: 0, at: 2 },
-      ] })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      await vi.waitFor(() => expect(mockScheduleNotesReload).toHaveBeenCalled());
-      expect(mockScheduleNotesReload).toHaveBeenCalledTimes(1);
-    });
-
-    it('leaves an arrival-only reload alone', async () => {
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [flagChange({ newEmails: 1, updatedFlags: 0 })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockLoadEmails).toHaveBeenCalledWith(undefined);
-    });
-
-    // All Inboxes pushes a saved restore window's rows before the disk rows
-    // and keeps the first copy of each: one saved before the change holds the
-    // old flags, so it goes before the repaint reads anything.
-    it("drops the account's restore windows before repainting All Inboxes", async () => {
-      const window = { accountId: 'a1', mailbox: 'INBOX', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] };
-      saveRestoreDescriptor(window);
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' });
-      let held = null;
-      mockLoadUnifiedInbox.mockImplementation(() => { held = getRestoreDescriptor('a1', 'INBOX', 'all'); });
-      eventReplies = [flagChange()];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
-      expect(held).toBeNull();
-    });
-
-    it('drops them for a folder that is not on screen too', async () => {
-      saveRestoreDescriptor({ accountId: 'a1', mailbox: 'Archive', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] });
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [flagChange({ mailbox: 'Archive' })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockLoadEmails).not.toHaveBeenCalled();
-      expect(getRestoreDescriptor('a1', 'Archive', 'all')).toBeNull();
-    });
-  });
-
-  // A message deleted at the mailbox (webmail, another client) is an EXPUNGE
-  // that wakes the watcher: the change carries no count of its own. The
-  // restore window saved before it still holds the row, and All Inboxes puts
-  // that window in ahead of the disk rows, so the deleted mail came back on
-  // every repaint until the app restarted.
-  describe('a message deleted at the mailbox', () => {
-    const removal = (fields) => reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 0, updatedFlags: 0, at: 1, ...fields }] });
-    const held = () => saveRestoreDescriptor({ accountId: 'a1', mailbox: 'INBOX', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] });
-
-    it('drops the restore window before repainting All Inboxes', async () => {
-      held();
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' });
-      let seen = 'unread';
-      mockLoadUnifiedInbox.mockImplementation(() => { seen = getRestoreDescriptor('a1', 'INBOX', 'all'); });
-      eventReplies = [removal()];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
-      expect(seen).toBeNull();
-    });
-
-    it('drops it when the same reply also carries an arrival', async () => {
-      held();
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' });
-      let seen = 'unread';
-      mockLoadUnifiedInbox.mockImplementation(() => { seen = getRestoreDescriptor('a1', 'INBOX', 'all'); });
-      eventReplies = [removal({ newEmails: 1 })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
-      expect(seen).toBeNull();
-    });
-
-    it('drops it for a folder that is not on screen too', async () => {
-      saveRestoreDescriptor({ accountId: 'a1', mailbox: 'Archive', viewMode: 'all', firstWindow: [{ uid: 1, flags: [] }] });
-      mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-      eventReplies = [removal({ mailbox: 'Archive' })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(getRestoreDescriptor('a1', 'Archive', 'all')).toBeNull();
-    });
-  });
-
-  it('pauses 30s when the daemon is offline, then polls again', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-    eventReplies = [fails('DAEMON_OFFLINE')];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-    expect(methods('sync.events')).toHaveLength(1);
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(29000); });
-    expect(methods('sync.events')).toHaveLength(1);
-
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
-    expect(methods('sync.events')).toHaveLength(2);
-  });
-
-  // The web build has no daemon and never will within a session: a retry loop
-  // there is a spin, not a recovery.
-  it('stops for good when there is no Tauri to reach a daemon through', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-    eventReplies = [fails('NO_TAURI')];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-    await act(async () => { await vi.advanceTimersByTimeAsync(120000); });
-
-    expect(methods('sync.events')).toHaveLength(1);
-  });
-
-  it('stops on unmount, even when the parked poll answers afterwards', async () => {
-    mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    let land;
-    eventReplies = [() => new Promise(r => { land = r; })];
-
-    const { unmount } = renderHook(() => useEmailScheduler());
-    await flush();
-    expect(methods('sync.events')).toHaveLength(1);
-
-    unmount();
-    land({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 2, updatedFlags: 0, at: 1 }] });
-    await flush();
-
-    expect(methods('sync.events')).toHaveLength(1);
-    expect(mockLoadEmails).not.toHaveBeenCalled();
-    expect(mockNotify).not.toHaveBeenCalled();
-  });
-
-  it('releases a reconnect listener whose registration succeeds after unmount', async () => {
-    let finishRegistration;
-    const unlisten = vi.fn();
-    registerReconnect = cb => {
-      daemonReconnected = cb;
-      return new Promise(resolve => { finishRegistration = () => resolve(unlisten); });
-    };
-    const { unmount } = renderHook(() => useEmailScheduler());
-    await flush();
-    unmount();
-    finishRegistration();
-    await flush();
-    expect(unlisten).toHaveBeenCalledOnce();
-  });
-
-  it('keeps the scheduler alive when reconnect listener registration throws synchronously', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-    registerReconnect = () => { throw new Error('listener setup failed'); };
-    let mounted;
-    expect(() => { mounted = renderHook(() => useEmailScheduler()); },
-      'W4S3_LISTENER_RED synchronous registration must be contained').not.toThrow();
-    await flush();
-    expect(methods('sync.events')).toHaveLength(1);
-    mounted.unmount();
-  });
-
-  it('contains a rejected reconnect registration and keeps polling', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-    registerReconnect = () => Promise.reject(new Error('listener setup failed'));
-    const { unmount } = renderHook(() => useEmailScheduler());
-    await flush();
-    expect(methods('sync.events')).toHaveLength(1);
-    unmount();
-  });
-
-  // A token that was just refreshed has to reach the daemon, or the watcher
-  // it holds keeps failing to authenticate until the next mount.
-  it('re-registers the watchers on a manual refresh', async () => {
-    mailStore.setState({ accounts: [IMAP_A] });
-
-    const { result } = renderHook(() => useEmailScheduler());
-    await flush();
-    expect(methods('sync.watch')).toHaveLength(1);
-
-    await act(async () => { await result.current.doRefresh(); });
-
-    expect(methods('sync.watch')).toHaveLength(2);
-  });
-
-  // A folder-subtree view (mailboxScope) lists every folder under its root;
-  // spansMailboxes(state) already treats a mailboxScope the same as UNIFIED,
-  // but the change-feed predicate did not, so a change to a folder under the
-  // open branch (not the root itself) drew no repaint.
-  it('repaints a subtree view for a change under the scope root', async () => {
-    mailStore.setState({
-      accounts: [IMAP_A],
-      activeAccountId: 'a1',
-      activeMailbox: 'Projects',
-      mailboxScope: { root: 'Projects', paths: ['Projects', 'Projects/Alpha'] },
-    });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'Projects/Alpha', newEmails: 0, updatedFlags: 3, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadEmails).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not repaint a subtree view for a folder outside the scope', async () => {
-    mailStore.setState({
-      accounts: [IMAP_A],
-      activeAccountId: 'a1',
-      activeMailbox: 'Projects',
-      mailboxScope: { root: 'Projects', paths: ['Projects', 'Projects/Alpha'] },
-    });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'Archive', newEmails: 0, updatedFlags: 3, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadEmails).not.toHaveBeenCalled();
-  });
-
-  // `stopped` was checked before the for-of loop over a reply's changes, but
-  // not between iterations — each iteration awaits db.getEmailHeadersPartial,
-  // so an unmount between change 1 and change 2 still let change 2 fire.
-  it('stops between changes in the same reply on unmount', async () => {
-    mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    let land;
-    mockGetHeaders.mockImplementation(() => new Promise(r => { land = r; }));
-    eventReplies = [reply({
-      gen: 1,
-      changes: [
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-      ],
-    })];
-
-    const { unmount } = renderHook(() => useEmailScheduler());
-    await flush();
-
-    // The first change's onSyncChange is parked awaiting getEmailHeadersPartial.
-    unmount();
-    land({ emails: [{ from: { name: 'Ada' }, subject: 'One' }] });
-    await flush();
-
-    expect(mockNotify.mock.calls.length).toBeLessThanOrEqual(1);
-    expect(mockLoadEmails.mock.calls.length).toBeLessThanOrEqual(1);
-  });
-
-  // 'UNIFIED' is a sentinel, not a mailbox: loadEmails has no reference to it
-  // anywhere, so it walks on to SELECT "UNIFIED", fails, restores the previous
-  // rows and sets an error — the list never moved. loadUnifiedInbox re-reads
-  // each account's disk cache, which is the repaint a daemon-announced change
-  // needs. Not refreshAllAccounts/refreshCurrentView: the daemon already
-  // synced, this is a repaint, not a user-requested refresh.
-  it('repaints All Inboxes through loadUnifiedInbox, never loadEmails', async () => {
-    mailStore.setState({
-      accounts: [IMAP_A],
-      activeAccountId: 'a1',
-      activeMailbox: 'UNIFIED',
-      unifiedInbox: true,
-      unifiedFolder: 'INBOX',
-    });
-    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Unified' }] });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
-    expect(mockLoadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
-    expect(mockLoadEmails).not.toHaveBeenCalled();
-  });
-
-  // The account underneath All Inboxes is whichever was open last; a message
-  // for any OTHER account lands in the unified list too.
-  it('repaints All Inboxes for an arrival on an account that is not the active one', async () => {
-    mailStore.setState({
-      accounts: [IMAP_A, IMAP_B],
-      activeAccountId: 'a1',
-      activeMailbox: 'UNIFIED',
-      unifiedInbox: false,
-      unifiedFolder: 'INBOX',
-    });
-    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Bea' }, subject: 'Other account' }] });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
-  });
-
-  // The unified view is not always INBOX — a unified Sent must repaint Sent.
-  it('repaints the unified folder that is actually open', async () => {
-    mailStore.setState({
-      accounts: [IMAP_A],
-      activeAccountId: 'a1',
-      activeMailbox: 'UNIFIED',
-      unifiedInbox: true,
-      unifiedFolder: 'Sent',
-    });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'Sent', newEmails: 0, updatedFlags: 2, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadUnifiedInbox).toHaveBeenCalledWith(null, 'Sent');
-  });
-
-  // `loadEmails()` takes no arguments and always reloads the view that is
-  // open, so a reply naming two on-screen folders is still one list to
-  // repaint. Deduping by (account, mailbox) deduped the keys and not the work.
-  it('reloads once for a reply that names two on-screen folders', async () => {
-    mailStore.setState({
-      accounts: [IMAP_A, IMAP_B],
-      activeAccountId: 'a1',
-      activeMailbox: 'INBOX',
-      unifiedInbox: true,
-      unifiedFolder: 'INBOX',
-    });
-    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Two folders' }] });
-    eventReplies = [reply({
-      gen: 1,
-      changes: [
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-        { gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-      ],
-    })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
-    expect(mockNotify).toHaveBeenCalledTimes(2);
-  });
-
-  // One reload per reply, even when the reply names one folder twice —
-  // notifications still fire once per change.
-  it('reloads once per distinct on-screen folder even when a reply names it twice', async () => {
-    mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Difference engine' }] });
-    eventReplies = [reply({
-      gen: 1,
-      changes: [
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
-      ],
-    })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockLoadEmails).toHaveBeenCalledTimes(1);
-    // and one banner counting both, not the same preview twice
-    expect(mockNotify).toHaveBeenCalledTimes(1);
-    expect(mockNotify.mock.calls[0][0]).toBe('2 New Emails');
-  });
-  // The dock badge is the sum of the sidebar's counts. A mark-read moved the
-  // sidebar and left the dock on the old number until the next refresh: the
-  // effect that paints it re-ran on a stored total no mark-read ever wrote.
-  describe('dock badge', () => {
-    const badgeCalls = () => mockInvoke.mock.calls.filter(c => c[0] === 'set_badge_count').map(c => c[1].count);
-
-    beforeEach(() => { mailStore.setState({ accounts: [IMAP_A, IMAP_B] }); });
-
-    it('follows a message marked read, without a refresh', async () => {
-      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3, a2: 2 } });
-      mockInvoke.mockClear();
-
-      renderHook(() => useEmailScheduler());
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(badgeCalls().at(-1)).toBe(5);
-
-      await act(async () => {
-        expect(await shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { uid: 1, flags: [] } }], -1)).toBe(true);
-      });
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-
-      expect(badgeCalls().at(-1)).toBe(4);
-    });
-
-    it('drops an account the user hides', async () => {
-      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3, a2: 2 } });
-      mockInvoke.mockClear();
-
-      renderHook(() => useEmailScheduler());
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      act(() => { settingsStore.setState({ hiddenAccounts: { a2: true } }); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-
-      expect(badgeCalls().at(-1)).toBe(3);
-    });
-
-    // The dock counted more than the sidebar rows added up to.
-    it('leaves out a count whose account is gone', async () => {
-      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3, a2: 2, gone: 10 } });
-      mockInvoke.mockClear();
-
-      renderHook(() => useEmailScheduler());
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-
-      expect(badgeCalls().at(-1)).toBe(5);
-    });
-
-    it('waits for the accounts: counts with none loaded would paint a 0', async () => {
-      mailStore.setState({ accounts: [] });
-      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3 } });
-      mockInvoke.mockClear();
-
-      renderHook(() => useEmailScheduler());
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(badgeCalls()).toEqual([]);
-
-      act(() => { mailStore.setState({ accounts: [IMAP_A] }); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(badgeCalls().at(-1)).toBe(3);
-    });
-
-    it('drops a held old rows reply after hidden, label and order settings change', async () => {
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B] });
-      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread',
-        unreadPerAccount: { a1: 3, a2: 2 } });
-      let releaseOld;
-      let first = true;
-      countAnswer = params => {
-        if (params.op !== 'rows') return nativeCountAnswer(params);
-        if (first) {
-          first = false;
-          return new Promise(resolve => { releaseOld = resolve; });
-        }
-        return nativeCountAnswer(params);
-      };
-      mockInvoke.mockClear();
-      const { unmount } = renderHook(() => useEmailScheduler());
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(methods('counts.unread').filter(call => call[1].op === 'rows')).toHaveLength(1);
-      act(() => { settingsStore.setState({ hiddenAccounts: { a1: true },
-        displayNames: { a2: 'Current B' }, accountOrder: ['a2', 'a1'] }); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      await act(async () => { releaseOld({ counts: { a1: 3, a2: 2 },
-        rows: [{ id: 'a1', label: 'Old A', unread: 3 }, { id: 'a2', label: 'Old B', unread: 2 }],
-        total: 5, wrote: false }); });
-      await flush();
-      const tray = mockInvoke.mock.calls.filter(call => call[0] === 'set_tray_accounts').map(call => call[1].accounts);
-      const badge = mockInvoke.mock.calls.filter(call => call[0] === 'set_badge_count').map(call => call[1].count);
-      expect(tray).toEqual([[{ id: 'a2', label: 'Current B', unread: 2 }]]);
-      expect(badge).toEqual([2]);
-      unmount();
-    });
-
-    it('makes no OS call from a native rows reply settled after unmount', async () => {
-      mailStore.setState({ accounts: [IMAP_A] });
-      settingsStore.setState({ badgeEnabled: true, badgeMode: 'unread', unreadPerAccount: { a1: 3 } });
-      let release;
-      countAnswer = params => params.op === 'rows'
-        ? new Promise(resolve => { release = resolve; }) : nativeCountAnswer(params);
-      mockInvoke.mockClear();
-      const { unmount } = renderHook(() => useEmailScheduler());
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(methods('counts.unread').filter(call => call[1].op === 'rows')).toHaveLength(1);
-      unmount();
-      await act(async () => { release({ counts: { a1: 3 }, rows: [{ id: 'a1', label: 'A', unread: 3 }],
-        total: 3, wrote: false }); });
-      await flush();
-      expect(mockInvoke.mock.calls.filter(call => ['set_badge_count', 'set_tray_accounts'].includes(call[0]))).toEqual([]);
-    });
-  });
-
-  // The menu bar menu lists the sidebar's accounts with their counts, whatever
-  // the dock badge setting.
-  describe('tray menu', () => {
-    const trayCalls = () => mockInvoke.mock.calls.filter(c => c[0] === 'set_tray_accounts').map(c => c[1].accounts);
-
-    it('pushes the sidebar rows, and again only when one changes', async () => {
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B] });
-      settingsStore.setState({ badgeEnabled: false, unreadPerAccount: { a1: 3, gone: 10 }, displayNames: { a2: 'Work' } });
-      mockInvoke.mockClear();
-
-      renderHook(() => useEmailScheduler());
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(trayCalls()).toEqual([[
-        { id: 'a1', label: 'a@one.co', unread: 3 },
-        { id: 'a2', label: 'Work', unread: 0 },
-      ]]);
-
-      act(() => { settingsStore.setState({ badgeMode: 'all' }); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(trayCalls()).toHaveLength(1);
-
-      await act(async () => {
-        expect(await shiftInbox([{ accountId: 'a1', mailbox: 'INBOX', row: { uid: 1, flags: [] } }], -1)).toBe(true);
-      });
-      await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-      expect(trayCalls().at(-1)[0].unread).toBe(2);
-    });
-  });
-
-  // All Inboxes painted the arrival from the daemon's cache while the sidebar
-  // badge of the account it landed in stayed at its old count until the next
-  // scheduled refresh.
-  describe('badge', () => {
-    const unifiedOpen = { accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' };
-    const change = (fields) => reply({ gen: 1, changes: [{ gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1, ...fields }] });
-
-    it('recounts the arrival account from its INBOX cache', async () => {
-      mailStore.setState(unifiedOpen);
-      settingsStore.setState({ unreadPerAccount: { a1: 3, a2: 0 } });
-      mockGetAllHeaders.mockResolvedValue({ totalEmails: 3, emails: [{ uid: 3, flags: [] }, { uid: 2, flags: ['\\Seen'] }, { uid: 1, flags: [] }] });
-      eventReplies = [change()];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
-      expect(settingsStore.getState().unreadPerAccount).toEqual({ a1: 3, a2: 2 });
-      expect(await selectTotalUnread()).toBe(5);
-    });
-
-    it('recounts on a flags-only change too (read on another device)', async () => {
-      mailStore.setState(unifiedOpen);
-      settingsStore.setState({ unreadPerAccount: { a2: 4 } });
-      mockGetAllHeaders.mockResolvedValue({ totalEmails: 1, emails: [{ uid: 1, flags: ['\\Seen'] }] });
-      eventReplies = [change({ newEmails: 0, updatedFlags: 1 })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(settingsStore.getState().unreadPerAccount.a2).toBe(0);
-    });
-
-    it('only adds the arrivals when the cache is partial', async () => {
-      mailStore.setState(unifiedOpen);
-      settingsStore.setState({ unreadPerAccount: { a2: 7 } });
-      mockGetAllHeaders.mockResolvedValue({ totalEmails: 500, emails: [{ uid: 1, flags: [] }] });
-      eventReplies = [change({ newEmails: 2 })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(settingsStore.getState().unreadPerAccount.a2).toBe(9);
-    });
-
-    // A partial cache needs the arrival fallback, but the native reduction is
-    // pending. A Promise is not a successful complete-cache recount.
-    it('holds the partial-cache arrival fallback until native recount settles', async () => {
-      mailStore.setState(unifiedOpen);
-      settingsStore.setState({ unreadPerAccount: { a1: 3, a2: 7 } });
-      mockGetAllHeaders.mockResolvedValue({ totalEmails: 500, emails: [{ uid: 1, flags: [] }] });
-      eventReplies = [change({ newEmails: 2 })];
-      let release;
-      const held = new Promise(resolve => { release = resolve; });
-      countAnswer = () => held;
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-      try {
-        expect(settingsStore.getState().unreadPerAccount.a2).toBe(7);
-        const countCalls = methods('counts.unread');
-        expect(countCalls, 'W4S3_SCHEDULER_RED arrival fallback must await one native recount request').toHaveLength(1);
-        expect(JSON.stringify(countCalls[0][1])).toContain('"arrivalCount":2');
-      } finally {
-        release({ counts: { a1: 3, a2: 9 }, rows: [
-          { id: 'a1', label: IMAP_A.email, unread: 3 },
-          { id: 'a2', label: IMAP_B.email, unread: 9 },
-        ], total: 12, wrote: true });
-      }
-      await flush();
-      expect(settingsStore.getState().unreadPerAccount).toEqual({ a1: 3, a2: 9 });
-      expect(methods('counts.unread')).toHaveLength(1);
-    });
-
-    // The inbox does not show a message a local snooze is holding out of it,
-    // so the badge does not count it either.
-    it('leaves out a message a local snooze is holding out of the inbox', async () => {
-      useSnoozeStore.setState({ rows: [{ id: 's1', accountId: 'a2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' }] });
-      mailStore.setState(unifiedOpen);
-      mockGetAllHeaders.mockResolvedValue({ totalEmails: 2, emails: [{ uid: 2, flags: [], messageId: '<held@x>' }, { uid: 1, flags: [], messageId: '<b@x>' }] });
-      eventReplies = [change({ newEmails: 0, updatedFlags: 1 })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-      useSnoozeStore.setState({ rows: [] });
-
-      expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
-    });
-
-    // A local snooze, its wake or its undo takes a message out of an inbox or
-    // puts it back with no sync to say so. An inbox that is not the list on
-    // screen has its badge recounted from its cache.
-    it('recounts an inbox a local snooze takes a message out of, or puts back into', async () => {
-      const held = { id: 's1', accountId: 'a2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' };
-      useSnoozeStore.setState({ rows: [] });
-      mailStore.setState(unifiedOpen);
-      settingsStore.setState({ unreadPerAccount: { a2: 2 } });
-      mockGetAllHeaders.mockResolvedValue({ totalEmails: 2, emails: [{ uid: 2, flags: [], messageId: '<held@x>' }, { uid: 1, flags: [], messageId: '<b@x>' }] });
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-      useSnoozeStore.getState().upsert([held]);
-      await flush();
-
-      expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
-      expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
-      expect(await selectTotalUnread()).toBe(1);
-
-      useSnoozeStore.getState().applyEvent({ id: 's1', state: 'woken' });
-      await flush();
-      expect(settingsStore.getState().unreadPerAccount.a2).toBe(2);
-    });
-
-    // That inbox's own list recounts it, from rows fresher than its cache.
-    it('leaves the inbox on screen to its list', async () => {
-      useSnoozeStore.setState({ rows: [] });
-      // mailboxScope: beforeEach merges, and a subtree case earlier leaves one.
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a2', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null });
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-      useSnoozeStore.getState().upsert([{ id: 's1', accountId: 'a2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' }]);
-      await flush();
-      useSnoozeStore.setState({ rows: [] });
-
-      expect(mockGetAllHeaders).not.toHaveBeenCalled();
-    });
-
-    // "Hide mail views hold": a saved view taking a message of an inbox not on
-    // screen (or the setting going off, which forgets the answer) changes what
-    // that inbox's list shows with no sync to say so. Its badge is recounted.
-    it('recounts an inbox a saved view takes a message out of, or gives back', async () => {
-      useSnoozeStore.setState({ rows: [] });
-      useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
-      settingsStore.setState({ hideViewMail: true, unreadPerAccount: { a2: 2 } });
-      mailStore.setState(unifiedOpen);
-      mockGetAllHeaders.mockResolvedValue({ totalEmails: 2, emails: [{ uid: 7, flags: [] }, { uid: 1, flags: [] }] });
-      try {
-        renderHook(() => useEmailScheduler());
-        await flush();
-        useViewHideStore.getState().setMembers({ available: true, members: { a2: { INBOX: { uids: [7], unread: 1 } } } });
-        await flush();
-
-        expect(mockGetAllHeaders).toHaveBeenCalledWith('a2', 'INBOX');
-        expect(settingsStore.getState().unreadPerAccount.a2).toBe(1);
-
-        useViewHideStore.getState().clear();
-        await flush();
-        expect(settingsStore.getState().unreadPerAccount.a2).toBe(2);
-      } finally {
-        useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
-        settingsStore.setState({ hideViewMail: false });
-      }
-    });
-
-    it('leaves a held inbox on screen to its list', async () => {
-      useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
-      mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a2', activeMailbox: 'INBOX', unifiedInbox: false, mailboxScope: null });
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-      useViewHideStore.getState().setMembers({ available: true, members: { a2: { INBOX: { uids: [7], unread: 1 } }, a1: { Work: { uids: [3], unread: 0 } } } });
-      await flush();
-      useViewHideStore.setState({ keys: null, unreadByMailbox: null, hiddenByMailbox: null });
-
-      // a2's inbox is the list on screen, and a1 only had a non-inbox folder change.
-      expect(mockGetAllHeaders).not.toHaveBeenCalled();
-    });
-
-    it('leaves other folders alone', async () => {
-      mailStore.setState(unifiedOpen);
-      eventReplies = [change({ mailbox: 'Archive' })];
-
-      renderHook(() => useEmailScheduler());
-      await flush();
-
-      expect(mockGetAllHeaders).not.toHaveBeenCalled();
-    });
-  });
-  // Conditional S4 capture. The result is emitted by the actual legacy export;
-  // this test adds no expected banner strings or notification decisions.
-  it.skipIf(!process.env.W4S4_ORACLE_N_OUT)('captures N01-N06 old direct arrival banner decisions', () => {
-    const target = process.env.W4S4_ORACLE_N_OUT;
-    if (!target) throw new Error('W4S4_ORACLE_N_OUT is required');
-    const encode = value => value === undefined ? { $undefined: true }
-      : Array.isArray(value) ? value.map(encode)
-      : value && typeof value === 'object'
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
-        : value;
-    mailStore.setState({ accounts: [IMAP_A] });
-    const sender = { name: 'Sender', address: 'sender@outside.test' };
-    const baseHeader = { uid: 42, from: sender, subject: 'A subject' };
-    const cases = [
-      { id: 'N01', samples: [{ preview: true, count: 1, header: baseHeader }] },
-      { id: 'N02', samples: [{ preview: false, count: 1, header: baseHeader }] },
-      { id: 'N03', samples: [{ preview: true, count: 2, header: baseHeader }] },
-      { id: 'N04', samples: [{ preview: false, count: 2, header: baseHeader }] },
-      { id: 'N05', samples: [
-        { preview: true, count: 1, header: { ...baseHeader, uid: undefined } },
-        { preview: true, count: 1, header: { ...baseHeader, uid: 'unsafe' } },
-        { preview: true, count: 1, header: { ...baseHeader, uid: '42' } },
-      ] },
-      { id: 'N06', samples: [
-        { preview: true, count: 1, header: baseHeader, code: '123456' },
-        { preview: false, count: 1, header: baseHeader, code: '123456' },
-        { preview: true, count: 2, header: baseHeader, code: '123456' },
-      ] },
-    ].map(item => ({ id: item.id, samples: item.samples.map(input => {
-      settingsStore.setState({ notificationSettings: { enabled: true,
-        showPreview: input.preview, sound: 'none', accounts: {} } });
-      mockNotify.mockClear();
-      notifyArrival('a1', 'INBOX', input.count, input.header, input.code || null,
-        { uids: [42] });
-      return { input: encode(input), output: encode(mockNotify.mock.calls) };
-    }) }));
-    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-direct-banners', cases }, null, 2) + '\n');
-  });
-  it.skipIf(!process.env.W4S4_ORACLE_N_MORE_OUT)('captures N07-N14 old sender, sound, own and Sent decisions', () => {
-    const target = process.env.W4S4_ORACLE_N_MORE_OUT;
-    if (!target) throw new Error('W4S4_ORACLE_N_MORE_OUT is required');
-    const encode = value => value === undefined ? { $undefined: true }
-      : Array.isArray(value) ? value.map(encode)
-      : value && typeof value === 'object'
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
-        : value;
-    const baseAccount = { id: 'a1', email: 'a@one.co' };
-    const ordinary = { uid: 42, from: { name: 'Sender', address: 'sender@outside.test' }, subject: 'A subject' };
-    const { NOTIFICATION_SOUNDS } = notificationSounds;
-    const scenarios = [
-      { id: 'N07', samples: [
-        { header: ordinary }, { header: { ...ordinary, from: { address: 'sender@outside.test' } } },
-      ] },
-      { id: 'N08', samples: [
-        { header: { ...ordinary, from: 'sender@outside.test' } },
-        { header: { ...ordinary, from: 'Sender Person' } },
-      ] },
-      { id: 'N09', samples: [
-        { header: { uid: 42, subject: '' } }, { header: { uid: 42 } },
-      ] },
-      { id: 'N10', samples: [...NOTIFICATION_SOUNDS, 'none', 'Unknown'].map(sound => ({
-        header: ordinary, sound,
-      })) },
-      { id: 'N11', samples: [
-        { header: { ...ordinary, from: { address: 'a@one.co' } } },
-        { header: { ...ordinary, from: { address: 'send@one.co' } }, sendAs: 'send@one.co' },
-        { header: { ...ordinary, from: { address: 'alias@one.co' } }, aliases: [{ address: 'alias@one.co' }] },
-        { header: { ...ordinary, from: { address: 'jdoe@gmail.com' } },
-          account: { id: 'a1', email: 'j.doe+mail@gmail.com' } },
-      ] },
-      { id: 'N12', samples: [{ header: { ...ordinary, from: { address: 'a@one.co' } }, count: 2 }] },
-      { id: 'N13', samples: [
-        { mailbox: '[Gmail]/Sent Mail', header: ordinary },
-        { mailbox: 'INBOX.Sent', header: ordinary },
-      ] },
-      { id: 'N14', samples: [
-        { mailbox: 'Custom/Out', header: ordinary, account: { ...baseAccount, sentFolderOverride: 'Custom/Out' } },
-        { mailbox: 'Archive/Outbound', header: ordinary,
-          mailboxes: [{ path: 'Archive/Outbound', name: 'Outbound', specialUse: '\\Sent' }] },
-        { mailbox: 'Archive/Envoyés', header: ordinary },
-        { mailbox: 'Sentinel', header: ordinary },
-      ] },
-    ].map(item => ({ id: item.id, samples: item.samples.map(input => {
-      const account = input.account || baseAccount;
-      mailStore.setState({ ...mailState(), accounts: [account], activeAccountId: 'a1',
-        mailboxes: input.mailboxes || [] }, true);
-      settingsStore.setState({ ...settingsState(),
-        sendAsAddresses: input.sendAs ? { a1: input.sendAs } : {},
-        aliases: input.aliases ? { a1: input.aliases } : {},
-        notificationSettings: { enabled: true, showPreview: true, sound: input.sound || 'none', accounts: {} },
-      }, true);
-      mockNotify.mockClear();
-      notifyArrival('a1', input.mailbox || 'INBOX', input.count || 1, input.header, null, { uids: [42] });
-      return { input: encode({ accountId: account.id, accountEmail: account.email,
-        mailbox: input.mailbox || 'INBOX', count: input.count || 1, header: input.header,
-        sound: input.sound || 'none', sendAs: input.sendAs, aliases: input.aliases,
-        mailboxes: input.mailboxes, sentFolderOverride: account.sentFolderOverride }),
-        output: encode(mockNotify.mock.calls) };
-    }) }));
-    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-direct-sender-sent', cases: scenarios }, null, 2) + '\n');
-  });
-  it.skipIf(!process.env.W4S4_ORACLE_E_OUT)('captures E01-E05 old change-feed grouping and repaint effects', async () => {
-    const target = process.env.W4S4_ORACLE_E_OUT;
-    if (!target) throw new Error('W4S4_ORACLE_E_OUT is required');
-    const encode = value => value === undefined ? { $undefined: true }
-      : Array.isArray(value) ? value.map(encode)
-      : value && typeof value === 'object'
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
-        : value;
-    const header = { uid: 7, from: { name: 'Sender', address: 'sender@outside.test' }, subject: 'A subject' };
-    const changed = (gen, accountId, mailbox, newEmails, updatedFlags = 0) =>
-      ({ gen, accountId, mailbox, newEmails, updatedFlags, at: gen });
-    const scenarios = [
-      { id: 'E01', replies: [{ gen: 1, changes: [] }] },
-      { id: 'E02', replies: [{ gen: 900, changes: [] }, { gen: 3, changes: [] }] },
-      { id: 'E03', replies: [{ gen: 2, changes: [
-        changed(1, 'a1', 'INBOX', 1), changed(2, 'a1', 'INBOX', 1),
-      ] }] },
-      { id: 'E04', replies: [{ gen: 2, changes: [
-        changed(1, 'a1', 'INBOX', 1), changed(2, 'a2', 'Archive', 1),
-      ] }] },
-      { id: 'E05', replies: [{ gen: 2, changes: [
-        changed(1, 'a1', 'INBOX', 0, 1), changed(2, 'a2', 'Archive', 0, 0),
-      ] }] },
-    ];
-    const cases = [];
-    for (const sample of scenarios) {
-      cleanup();
-      calls.length = 0;
-      eventReplies = sample.replies.map(reply);
-      countAnswer = nativeCountAnswer;
-      mockDaemonCall.mockClear();
-      mockNotify.mockClear();
-      mockLoadEmails.mockClear();
-      mockLoadUnifiedInbox.mockClear();
-      mockScheduleViewCounts.mockClear();
-      mockRereadCopyFlags.mockClear();
-      mockScheduleNotesReload.mockClear();
-      mockOfferCode.mockReset().mockResolvedValue(null);
-      mockGetHeaders.mockReset().mockResolvedValue({ totalEmails: 1, emails: [header] });
-      mockGetAllHeaders.mockReset().mockResolvedValue(null);
-      mailStore.setState({ ...mailState(), accounts: [IMAP_A, IMAP_B],
-        activeAccountId: 'a1', activeMailbox: 'INBOX' }, true);
-      settingsStore.setState(settingsState(), true);
-      renderHook(() => useEmailScheduler());
-      await flush();
-      await flush();
-      cases.push({ id: sample.id, input: encode(sample.replies), output: encode({
-        polls: methods('sync.events').map(call => call[1]),
-        watches: methods('sync.watch').map(call => call[1]?.account?.id),
-        listLoads: mockLoadEmails.mock.calls,
-        unifiedLoads: mockLoadUnifiedInbox.mock.calls,
-        notifications: mockNotify.mock.calls,
-        headerReads: mockGetHeaders.mock.calls,
-        codeOffers: mockOfferCode.mock.calls,
-        viewRefreshes: mockScheduleViewCounts.mock.calls,
-        noteFlagReads: mockRereadCopyFlags.mock.calls,
-        noteReloads: mockScheduleNotesReload.mock.calls,
-        unread: settingsStore.getState().unreadPerAccount,
-      }) });
-    }
-    cleanup();
-    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-feed-repaints', cases }, null, 2) + '\n');
-  });
-  it.skipIf(!process.env.W4S4_ORACLE_CODE_TIMING_OUT)('captures C10-C11 old lone-code deadline ordering through the hook', async () => {
-    const target = process.env.W4S4_ORACLE_CODE_TIMING_OUT;
-    if (!target) throw new Error('W4S4_ORACLE_CODE_TIMING_OUT is required');
-    const encode = value => value === undefined ? { $undefined: true }
-      : Array.isArray(value) ? value.map(encode)
-      : value && typeof value === 'object'
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
-        : value;
-    const header = { uid: 7, from: { name: 'Sender', address: 'sender@outside.test' },
-      subject: 'A subject' };
-    const cases = [];
-    for (const sample of [{ id: 'C10', advanceMs: 2998 }, { id: 'C11', advanceMs: 2999 }]) {
-      cleanup();
-      vi.setSystemTime(1_000_000);
-      calls.length = 0;
-      eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1',
-        mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-      mailStore.setState({ ...mailState(), accounts: [IMAP_A], activeAccountId: 'a1',
-        activeMailbox: 'INBOX' }, true);
-      settingsStore.setState(settingsState(), true);
-      mockNotify.mockClear();
-      mockGetHeaders.mockReset().mockResolvedValue({ totalEmails: 1, emails: [header] });
-      mockGetAllHeaders.mockReset().mockResolvedValue(null);
-      let releaseCode;
-      mockOfferCode.mockReset().mockReturnValueOnce(new Promise(done => { releaseCode = done; }));
-      renderHook(() => useEmailScheduler());
-      await flush(); // the code wait is active, one millisecond after registration
-      const before = encode({ now: Date.now(), notifications: mockNotify.mock.calls });
-      await act(async () => { await vi.advanceTimersByTimeAsync(sample.advanceMs); });
-      const atRelease = encode({ now: Date.now(), notifications: mockNotify.mock.calls });
-      await act(async () => { releaseCode('26313'); await Promise.resolve(); });
-      const after = encode({ now: Date.now(), notifications: mockNotify.mock.calls,
-        codeCalls: mockOfferCode.mock.calls, polls: methods('sync.events').map(call => call[1]) });
-      cases.push({ id: sample.id, input: { codeReleaseAdvanceMs: sample.advanceMs,
-        header, codeReply: '26313' }, output: { before, atRelease, after } });
-    }
-    cleanup();
-    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-code-deadline', cases }, null, 2) + '\n');
-  });
-  it.skipIf(!process.env.W4S4_ORACLE_E_MORE_OUT)('captures E06-E09 old view, recovery and held-code feed effects', async () => {
-    const target = process.env.W4S4_ORACLE_E_MORE_OUT;
-    if (!target) throw new Error('W4S4_ORACLE_E_MORE_OUT is required');
-    const encode = value => value === undefined ? { $undefined: true }
-      : Array.isArray(value) ? value.map(encode)
-      : value && typeof value === 'object'
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]))
-        : value;
-    const header = { uid: 7, from: { name: 'Sender', address: 'sender@outside.test' }, subject: 'A subject' };
-    const change = (accountId, mailbox, newEmails = 1, updatedFlags = 0) =>
-      ({ gen: 1, accountId, mailbox, newEmails, updatedFlags, at: 1 });
-    const reset = (view, replies) => {
-      cleanup();
-      vi.setSystemTime(1_000_000);
-      calls.length = 0;
-      eventReplies = replies;
-      countAnswer = nativeCountAnswer;
-      mockNotify.mockClear();
-      mockLoadEmails.mockClear();
-      mockLoadUnifiedInbox.mockClear();
-      mockScheduleViewCounts.mockClear();
-      mockScheduleNotesReload.mockClear();
-      mockOfferCode.mockReset().mockResolvedValue(null);
-      mockGetHeaders.mockReset().mockResolvedValue({ totalEmails: 1, emails: [header] });
-      mockGetAllHeaders.mockReset().mockResolvedValue(null);
-      mailStore.setState({ ...mailState(), accounts: [IMAP_A, IMAP_B],
-        activeAccountId: 'a1', activeMailbox: 'INBOX', ...view }, true);
-      settingsStore.setState(settingsState(), true);
-    };
-    const effects = () => encode({ polls: methods('sync.events').map(call => call[1]),
-      loadEmails: mockLoadEmails.mock.calls, loadUnified: mockLoadUnifiedInbox.mock.calls,
-      notifications: mockNotify.mock.calls, codeOffers: mockOfferCode.mock.calls,
-      viewRefreshes: mockScheduleViewCounts.mock.calls, noteReloads: mockScheduleNotesReload.mock.calls });
-    const cases = [];
-    const e06 = [];
-    for (const sample of [
-      { view: { activeAccountId: 'a1', activeMailbox: 'INBOX' }, changed: change('a1', 'INBOX') },
-      { view: { activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX' }, changed: change('a2', 'INBOX') },
-      { view: { activeMailbox: 'Projects', mailboxScope: { root: 'Projects', paths: ['Projects', 'Projects/Alpha'] } },
-        changed: change('a1', 'Projects/Alpha', 0, 3) },
-    ]) {
-      reset(sample.view, [reply({ gen: 1, changes: [sample.changed] })]);
-      renderHook(() => useEmailScheduler());
-      await flush();
-      e06.push({ input: encode(sample), output: effects() });
-    }
-    cases.push({ id: 'E06', samples: e06 });
-    reset({}, [reply({ gen: 1, changes: [change('a1', 'INBOX')] })]);
-    let releaseHeader;
-    mockGetHeaders.mockImplementation(() => new Promise(done => { releaseHeader = done; }));
-    renderHook(() => useEmailScheduler());
-    await flush();
-    const beforeSwitch = effects();
-    mailStore.setState({ activeAccountId: 'a2', activeMailbox: 'Archive' });
-    releaseHeader({ totalEmails: 1, emails: [header] });
-    await flush();
-    cases.push({ id: 'E07', input: { switchTo: { accountId: 'a2', mailbox: 'Archive' } },
-      output: { beforeSwitch, afterSwitch: effects() } });
-    const e08 = [];
-    for (const sample of [
-      { code: 'DAEMON_OFFLINE', advanceMs: 30000 },
-      { code: 'NO_TAURI', advanceMs: 30000 },
-      { code: 'TRANSIENT', advanceMs: 5000 },
-    ]) {
-      reset({}, [fails(sample.code), reply({ gen: 1, changes: [] })]);
-      renderHook(() => useEmailScheduler());
-      await flush();
-      const before = effects();
-      await act(async () => { await vi.advanceTimersByTimeAsync(sample.advanceMs); });
-      e08.push({ input: sample, output: { before, after: effects() } });
-    }
-    cases.push({ id: 'E08', samples: e08 });
-    const e09 = [];
-    reset({}, [reply({ gen: 1, changes: [change('a1', 'INBOX')] })]);
-    let releaseCode;
-    mockOfferCode.mockReset().mockReturnValueOnce(new Promise(done => { releaseCode = done; }));
-    renderHook(() => useEmailScheduler());
-    await flush();
-    const beforeCode = effects();
-    await act(async () => { releaseCode('26313'); await Promise.resolve(); });
-    e09.push({ input: { heldCode: true }, output: { beforeCode, afterCode: effects() } });
-    reset({}, [reply({ gen: 2, changes: [change('a1', 'INBOX'), change('a1', 'INBOX')] })]);
-    renderHook(() => useEmailScheduler());
-    await flush();
-    e09.push({ input: { groupedSameFolderChanges: 2 }, output: effects() });
-    cases.push({ id: 'E09', samples: e09 });
-    cleanup();
-    captureWriteFileSync(target, JSON.stringify({ kind: 's4-legacy-feed-view-recovery', cases }, null, 2) + '\n');
+    await ready();
+    await answer({ gen: 1, changes: [source('a')], notifications: [] });
+    expect(invoke.mock.calls.some(([name]) => name === 'sync.watch' || name === 'sync.now'
+      || name === 'notify.decide' || name === 'imap_fetch_emails')).toBe(false);
   });
 });

@@ -10,7 +10,15 @@ const mailListeners = new Set();
 const countCalls = [];
 const fetches = [];
 let provider;
-let nativeCounts;
+let cacheRows;
+let releaseCount;
+let enteredCount;
+const nativeRequest = vi.fn();
+vi.mock('../../nativeSyncContext.js', () => ({
+  requestNativeRefresh: (...args) => nativeRequest(...args),
+  observeNativeView: vi.fn(async () => {}),
+  currentNativeView: () => null,
+}));
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: {
     getState: () => mailState,
@@ -62,15 +70,24 @@ vi.mock('../../daemonClient', async importOriginal => ({
   daemonCall: async (method, params) => {
     if (method !== 'counts.unread') throw Error(`Unexpected daemon call ${method}`);
     countCalls.push(params);
-    return { counts: { ...nativeCounts }, rows: [
-      { id: 'a', label: 'a@example.test', unread: nativeCounts.a },
-      { id: 'b', label: 'b@example.test', unread: nativeCounts.b },
-    ], total: nativeCounts.a + nativeCounts.b, wrote: true };
+    if (params.op === 'recountCache' && params.accountId === 'a') {
+      enteredCount();
+      await new Promise(resolve => { releaseCount = resolve; });
+    }
+    const counts = { ...params.baseline };
+    if (params.op === 'recountCache') {
+      counts[params.accountId] = cacheRows[params.accountId].filter(row =>
+        !row.flags.includes('\\Seen')).length;
+    }
+    const rows = ['a', 'b'].map(id => ({ id, label: `${id}@example.test`, unread: counts[id] }));
+    return { counts, rows, total: rows.reduce((sum, row) => sum + row.unread, 0),
+      wrote: params.op === 'recountCache', recountSource: params.op === 'recountCache' ? 'complete' : 'none' };
   },
 }));
 
 const { useSettingsStore } = await import('../../../stores/settingsStore');
 const { useMailStore } = await import('../../../stores/mailStore');
+const { recountNativeInbox, setListStore } = await import('../../../stores/unreadCounts');
 const { refreshAllAccounts } = await import('../refreshAccounts');
 const A = { id: 'a', email: 'a@example.test', imapHost: 'imap.a.example.test' };
 const B = { id: 'b', email: 'b@example.test', imapHost: 'imap.b.example.test' };
@@ -95,11 +112,15 @@ beforeEach(() => {
   mailListeners.clear();
   countCalls.length = 0;
   fetches.length = 0;
-  nativeCounts = { a: 9, b: 2 };
+  cacheRows = { a: releaseAResult.emails, b: bResult.emails };
+  releaseCount = null;
+  enteredCount = null;
+  nativeRequest.mockReset().mockResolvedValue({ receipt: { status: 'complete' }, uncertain: false });
   useSettingsStore.setState({ unreadPerAccount: { a: 9, b: 5 }, hiddenAccounts: {} });
   mailState = { accounts: [A, B], activeAccountId: 'other', activeMailbox: 'INBOX',
     unifiedInbox: false, unifiedFolder: null, mailboxScope: null, emails: [],
     loadEmails: vi.fn().mockResolvedValue(undefined) };
+  setListStore(useMailStore);
 });
 
 const cases = [
@@ -110,25 +131,31 @@ const cases = [
 ];
 for (const scenario of cases) {
   it(`refresh held A: ${scenario.name} keeps B's merge and fences A as required`, async () => {
-    let entered, release;
-    const aEntered = new Promise(resolve => { entered = resolve; });
-    const held = new Promise(resolve => { release = resolve; });
-    provider = async account => {
-      if (account.id === 'a') { entered(); return held; }
-      return bResult;
-    };
-    nativeCounts = { a: scenario.expectedA, b: 2 };
+    let releaseIntent;
+    const heldIntent = new Promise(resolve => { releaseIntent = resolve; });
+    nativeRequest.mockImplementationOnce(() => heldIntent);
+    const countEntered = new Promise(resolve => { enteredCount = resolve; });
     const work = refreshAllAccounts();
-    await aEntered;
+    await vi.waitFor(() => expect(nativeRequest).toHaveBeenCalledTimes(1));
+    const aCount = recountNativeInbox('a');
+    await countEntered;
+    const bCount = recountNativeInbox('b');
     scenario.change(accounts => useMailStore.setState({ accounts }));
-    release(releaseAResult);
+    releaseCount();
+    await Promise.all([aCount, bCount]);
+    releaseIntent({ receipt: { status: 'complete' }, uncertain: false });
     await work;
 
-    expect(fetches.map(([account]) => account.id)).toEqual(['a', 'b']);
+    expect(fetches).toEqual([]);
+    expect(nativeRequest).toHaveBeenCalledWith({});
+    expect(countCalls.filter(params => params.op === 'recountCache').map(params => params.accountId))
+      .toEqual(['a', 'b']);
     expect(useSettingsStore.getState().unreadPerAccount, `W4S3_U3_RED ${scenario.name}: stale A must not publish; B must survive`).toEqual({ a: scenario.expectedA, b: 2 });
     if (scenario.expectedA === 9) {
-      expect(countCalls.some(params => rawObservationIds(params).includes('b'))).toBe(true);
-      expect(countCalls.every(params => !rawObservationIds(params).includes('a'))).toBe(true);
+      expect(countCalls.find(params => params.op === 'recountCache' && params.accountId === 'a')
+        .baseline.a).toBe(9);
+      expect(countCalls.find(params => params.op === 'recountCache' && params.accountId === 'b')
+        .baseline.a).toBe(9);
     }
     expect(mailListeners.size).toBe(0);
   });

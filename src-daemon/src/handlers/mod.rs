@@ -273,15 +273,48 @@ pub(crate) async fn handle_sync_unwatch(state: Arc<DaemonState>, params: Value, 
 /// Long-poll for changes newer than `since`. The app re-issues it with the gen
 /// it was handed, so nothing is lost between polls. No `since` = a new app:
 /// resume after what the previous one acknowledged.
-pub(crate) async fn handle_sync_events(engine: Arc<sync_engine::SyncEngine>, params: Value, id: Value) -> RpcResponse {
-    let since = params.get("since").and_then(|v| v.as_u64()).unwrap_or_else(|| engine.acked_gen());
-    let timeout_ms = params
-        .get("timeoutMs")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(25_000)
-        .min(60_000);
-    let (gen, changes) = engine.wait_changes(since, timeout_ms).await;
-    RpcResponse::success(id, serde_json::json!({"gen": gen, "changes": changes}))
+pub(crate) async fn handle_sync_events(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
+    let since = params.get("since").and_then(|v| v.as_u64())
+        .unwrap_or_else(|| state.sync_engine.acked_gen());
+    let timeout_ms = params.get("timeoutMs").and_then(|v| v.as_u64())
+        .unwrap_or(25_000).min(60_000);
+    let (gen, changes) = state.sync_engine.wait_changes(since, timeout_ms).await;
+    let resync_required = since > gen || (gen > since && changes.first()
+        .is_none_or(|change| change.gen != since.saturating_add(1)));
+    let mut current_changes = Vec::new();
+    for change in changes {
+        if let Some(source) = change.source.clone() {
+            let mut valid = None;
+            for attempt in 0..11 {
+                let current = Arc::clone(&state);
+                let original_source = source.clone();
+                match tokio::task::spawn_blocking(move ||
+                    crate::sync_observation::current_source(&current, &original_source)).await {
+                    Ok(Ok(answer)) => { valid = Some(answer); break; }
+                    Ok(Err(error)) if error == "errors.keychainBusy" && attempt < 10 => {
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    }
+                    Ok(Err(error)) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, error),
+                    Err(error) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, error.to_string()),
+                }
+            }
+            if valid != Some(true) { continue; }
+        }
+        current_changes.push(change);
+    }
+    let notifications = if resync_required { Vec::new() }
+        else { crate::arrival::prepare_changes(&state, &current_changes).await };
+    let visible_changes: Vec<Value> = current_changes.iter().filter_map(|change| {
+        let mut value = serde_json::to_value(change).ok()?;
+        if let Some(reference) = change.source.as_ref().and_then(crate::arrival::source_ref) {
+            value["sourceRef"] = serde_json::json!(reference);
+        }
+        Some(value)
+    }).collect();
+    RpcResponse::success(id, serde_json::json!({
+        "gen":gen,"changes":visible_changes,"notifications":notifications,
+        "resyncRequired":resync_required,"instanceId":state.refresh.instance_id(),
+    }))
 }
 
 /// Create a snapshot from provided email data (sent by frontend after backup).

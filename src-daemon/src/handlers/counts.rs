@@ -14,6 +14,17 @@ static UNREAD_READ_GATE: std::sync::Mutex<Option<(
     std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>> = std::sync::Mutex::new(None);
 
 #[cfg(test)]
+static UNREAD_GATE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The cache-read gate is one process-wide slot, so every test that counts
+/// unread mail holds this for its whole body: a parallel test's read would
+/// otherwise consume another test's pause.
+#[cfg(test)]
+pub(crate) fn serialize_cache_gate_for_test() -> std::sync::MutexGuard<'static, ()> {
+    UNREAD_GATE_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+#[cfg(test)]
 pub(crate) fn pause_next_cache_read_for_test() -> (
     std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
     let (entered, observed) = std::sync::mpsc::channel();

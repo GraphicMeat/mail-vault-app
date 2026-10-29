@@ -25,6 +25,9 @@ use std::sync::Arc;
 pub(crate) const DECIDE: &str = "notify.decide";
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
+    if method == "notify.arrival" {
+        return Some(local_wake(state, params, id).await);
+    }
     if method != DECIDE {
         return None;
     }
@@ -69,6 +72,47 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     })
 }
 
+/// The one-use native local-wake adapter. The native event carries no UID:
+/// only this route can resolve the persisted Message-ID under the original
+/// owner, and the claim is consumed before any asynchronous preparation.
+async fn local_wake(state: &Arc<DaemonState>, params: &Value, id: Value) -> RpcResponse {
+    let Some(object) = params.as_object().filter(|object| object.len() == 3
+        && object.keys().all(|key| ["snoozeId", "wakeRef", "rearm"].contains(&key.as_str()))) else {
+        return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+    };
+    let Some(snooze_id) = object.get("snoozeId").and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 128 && !value.chars().any(char::is_control)) else {
+        return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+    };
+    if object.get("rearm") != Some(&Value::Bool(true)) {
+        return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+    }
+    let Some(reference) = object.get("wakeRef").and_then(Value::as_object)
+        .filter(|reference| reference.len() == 2 && reference.contains_key("instanceId")
+            && reference.contains_key("gen")) else {
+        return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+    };
+    let Some(instance) = reference.get("instanceId").and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && value.len() <= 128 && !value.chars().any(char::is_control)) else {
+        return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+    };
+    let Some(generation) = reference.get("gen").and_then(Value::as_u64)
+        .filter(|value| *value > 0 && *value <= 9_007_199_254_740_991) else {
+        return RpcResponse::error(id, ipc::INVALID_PARAMS, "errors.accountsInvalid");
+    };
+    if instance != state.refresh.instance_id() {
+        return RpcResponse::success(id, json!({"status":"unavailable","reason":"expired-proof"}));
+    }
+    let Some(proof) = state.recent.consume_wake(snooze_id, generation) else {
+        return RpcResponse::success(id, json!({"status":"unavailable",
+            "reason":state.recent.wake_refusal(snooze_id, generation)}));
+    };
+    match crate::arrival::prepare_local_wake(state, snooze_id, proof).await {
+        Ok(notification) => RpcResponse::success(id, json!({"status":"prepared","notification":notification})),
+        Err(reason) => RpcResponse::success(id, json!({"status":"unavailable","reason":reason})),
+    }
+}
+
 fn ctx_from_params(params: &Value) -> Ctx {
     let mut ctx = Ctx::from_value(params);
     if !params.get("domain").is_some_and(Value::is_string) {
@@ -97,6 +141,28 @@ mod tests {
         let resp = handle_request_for_test(state, DECIDE, params).await;
         assert!(resp.error.is_none(), "{:?}", resp.error);
         resp.result.unwrap()
+    }
+
+    #[tokio::test]
+    async fn local_wake_route_rejects_caller_policy_and_missing_or_expired_proof() {
+        let (_dir, state) = rig();
+        for malformed in [
+            json!({"snoozeId":"a","wakeRef":{"instanceId":"x","gen":1},"rearm":true,
+                "subject":"caller cannot choose the banner"}),
+            json!({"snoozeId":"a","wakeRef":{"instanceId":"x","gen":0},"rearm":true}),
+            json!({"snoozeId":"a","wakeRef":{"instanceId":"x","gen":1},"rearm":false}),
+        ] {
+            let response = handle_request_for_test(&state, "notify.arrival", malformed).await;
+            assert_eq!(response.error.unwrap().code, ipc::INVALID_PARAMS);
+        }
+        let expired = handle_request_for_test(&state, "notify.arrival", json!({
+            "snoozeId":"a","wakeRef":{"instanceId":"old-process","gen":1},"rearm":true,
+        })).await.result.unwrap();
+        assert_eq!(expired, json!({"status":"unavailable","reason":"expired-proof"}));
+        let missing = handle_request_for_test(&state, "notify.arrival", json!({
+            "snoozeId":"a","wakeRef":{"instanceId":state.refresh.instance_id(),"gen":1},"rearm":true,
+        })).await.result.unwrap();
+        assert_eq!(missing, json!({"status":"unavailable","reason":"missing-proof"}));
     }
 
     #[tokio::test]

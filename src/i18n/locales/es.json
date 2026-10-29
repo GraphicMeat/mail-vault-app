@@ -4057,6 +4057,10 @@
   "errors.syncFailed": "No se pudo actualizar esta cuenta. Inténtalo de nuevo.",
   "errors.syncHeadersIncomplete": "No se pudieron actualizar todos los encabezados de la carpeta.",
   "errors.syncGraphAdoptionRequired": "Esta carpeta de Graph debe prepararse en la aplicación antes de poder actualizarse.",
+  "errors.syncGraphSettingsAckUnavailable": "La confirmación de la configuración de Graph no está disponible",
+  "errors.syncGraphAdoptionPending": "La adopción de la carpeta de Graph para {accountId} está pendiente",
+  "errors.syncStatusUnavailable": "El estado de la actualización nativa no está disponible",
+  "errors.syncReceiptUncertain": "La confirmación de la actualización nativa es incierta",
   "errors.bulkIdentityUncertain": "La identidad del mensaje es incierta. Actualiza la carpeta antes de volver a intentarlo.",
   "errors.bulkIdentityChanged": "La identidad de la carpeta o del mensaje seleccionado ha cambiado.",
   "errors.bulkGraphDeleteUnsupported": "La eliminación en el servidor no está disponible para esta cuenta de Graph.",
@@ -4083,5 +4087,12 @@
   "settings.accounts.removeBusy": "Esta cuenta está ocupada. Espera a que termine la operación actual y vuelve a intentarlo.",
   "settings.accounts.removeFailed": "No se pudo quitar esta cuenta. Vuelve a intentarlo.",
   "settings.accounts.removeIncomplete": "No se completó la eliminación de la cuenta. Vuelve a intentarlo cuando termine la operación actual.",
-  "settings.storage.emptyVaultFailed": "No se pudo vaciar la bóveda. Puede que todavía haya cuentas o datos. Vuelve a intentarlo cuando termine la operación actual."
+  "settings.storage.emptyVaultFailed": "No se pudo vaciar la bóveda. Puede que todavía haya cuentas o datos. Vuelve a intentarlo cuando termine la operación actual.",
+  "notify.arrival.unknownSender": "Remitente desconocido",
+  "notify.arrival.newEmail": "Nuevo correo",
+  "notify.arrival.newEmails": "{{count}} correos nuevos",
+  "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (y {{more}} más)",
+  "notify.arrival.singlePrivateBody": "Nuevo correo en {{accountEmail}}",
+  "notify.arrival.batchPrivateBody": "{{count}} correos nuevos en {{accountEmail}}"
+
 }

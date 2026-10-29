@@ -4057,6 +4057,10 @@
   "errors.syncFailed": "Não foi possível atualizar esta conta. Tente novamente.",
   "errors.syncHeadersIncomplete": "Não foi possível atualizar todos os cabeçalhos da pasta.",
   "errors.syncGraphAdoptionRequired": "Esta pasta do Graph precisa ser preparada no aplicativo antes de ser atualizada.",
+  "errors.syncGraphSettingsAckUnavailable": "A confirmação das configurações do Graph não está disponível",
+  "errors.syncGraphAdoptionPending": "A adoção da pasta do Graph para {accountId} está pendente",
+  "errors.syncStatusUnavailable": "O status da atualização nativa não está disponível",
+  "errors.syncReceiptUncertain": "A confirmação da atualização nativa é incerta",
   "errors.bulkIdentityUncertain": "A identidade da mensagem é incerta. Atualize a pasta antes de tentar novamente.",
   "errors.bulkIdentityChanged": "A identidade da pasta ou da mensagem selecionada foi alterada.",
   "errors.bulkGraphDeleteUnsupported": "A exclusão no servidor não está disponível para esta conta Graph.",
@@ -4083,5 +4087,12 @@
   "settings.accounts.removeBusy": "Esta conta está ocupada. Aguarde a operação atual terminar e tente novamente.",
   "settings.accounts.removeFailed": "Não foi possível remover esta conta. Tente novamente.",
   "settings.accounts.removeIncomplete": "A remoção da conta não foi concluída. Tente novamente depois que a operação atual terminar.",
-  "settings.storage.emptyVaultFailed": "Não foi possível esvaziar o cofre. Algumas contas ou dados ainda podem estar presentes. Tente novamente após o término da operação atual."
+  "settings.storage.emptyVaultFailed": "Não foi possível esvaziar o cofre. Algumas contas ou dados ainda podem estar presentes. Tente novamente após o término da operação atual.",
+  "notify.arrival.unknownSender": "Remetente desconhecido",
+  "notify.arrival.newEmail": "Novo e-mail",
+  "notify.arrival.newEmails": "{{count}} novos e-mails",
+  "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (e mais {{more}})",
+  "notify.arrival.singlePrivateBody": "Novo e-mail em {{accountEmail}}",
+  "notify.arrival.batchPrivateBody": "{{count}} novos e-mails em {{accountEmail}}"
+
 }

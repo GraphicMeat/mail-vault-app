@@ -106,8 +106,9 @@ where
                                     if sync_owner.as_ref().is_some_and(|guard| guard.matches(&launch_id, revision)) {
                                         let generation = sync_owner.as_ref().map(|guard| guard.generation());
                                         (launch_id, revision, true, generation)
-                                    } else if sync_owner.is_some() {
-                                        // This socket's guard was superseded; an old retry cannot reclaim it.
+                                    } else if sync_owner.as_ref().is_some_and(|guard|
+                                        !guard.may_advance(&launch_id, revision)) {
+                                        // A stale revision or another launch cannot reclaim this socket.
                                         (launch_id, revision, false, None)
                                     } else if let Some(new_owner) = crate::refresh_worker::RefreshState::attach_owner(
                                         &state, launch_id.clone(), revision) {

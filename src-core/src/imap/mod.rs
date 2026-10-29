@@ -3853,9 +3853,25 @@ pub async fn fetch_email_by_uid_light_timed(
     uid: u32,
     timings: &std::sync::Mutex<pool::ReadTimings>,
 ) -> Result<Option<LightFullEmail>, String> {
+    fetch_email_by_uid_light_timed_owned(session, mailbox, uid, None, timings).await
+}
+
+/// The arrival child also checks the selected generation before it reads the
+/// body. A UID from a replaced mailbox may name another message even while
+/// the cache still contains the earlier owner.
+pub async fn fetch_email_by_uid_light_timed_owned(
+    session: &mut ImapSession,
+    mailbox: &str,
+    uid: u32,
+    expected_uid_validity: Option<u32>,
+    timings: &std::sync::Mutex<pool::ReadTimings>,
+) -> Result<Option<LightFullEmail>, String> {
     let select_start = std::time::Instant::now();
-    let _mbox = select_mailbox(session, mailbox).await?;
+    let selected = select_mailbox(session, mailbox).await?;
     with_timings(timings, |t| t.select_ms = select_start.elapsed().as_millis() as u64);
+    if expected_uid_validity.is_some() && selected.uid_validity != expected_uid_validity {
+        return Err("errors.bulkIdentityChanged".to_owned());
+    }
 
     let fetch_start = std::time::Instant::now();
     let fetch_stream = session

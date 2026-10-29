@@ -78,6 +78,52 @@ describe('Snooze on a server with no room for a Snoozed folder', function () {
   };
   const ourRow = async () => (await rpc('snooze.list', {})).find((row) => row.messageId === MESSAGE_ID) || null;
 
+  // Observe the actual native snooze event and OS bridge while keeping the
+  // original Tauri transport and notification delivery live.
+  async function observeWake() {
+    const installed = await browser.executeAsync(done => {
+      const originalFetch = window.fetch;
+      const originalStringify = JSON.stringify;
+      const osURL = window.__TAURI_INTERNALS__.convertFileSrc('send_notification', 'ipc');
+      const trace = { events: [], os: [], originalFetch, originalStringify };
+      window.fetch = function (resource, options) {
+        const answer = originalFetch.call(this, resource, options);
+        if (String(resource) !== osURL) return answer;
+        const args = JSON.parse(options.body);
+        return answer.then(response => {
+          trace.os.push({ args, ok: response.headers.get('Tauri-Response') === 'ok' });
+          return response;
+        });
+      };
+      JSON.stringify = function (value, ...rest) {
+        if (value?.cmd === 'send_notification'
+          && Number.isInteger(value.callback) && Number.isInteger(value.error)) {
+          const callbacks = window.__TAURI_INTERNALS__.callbacks;
+          for (const [id, ok] of [[value.callback, true], [value.error, false]]) {
+            const callback = callbacks.get(id);
+            if (callback) callbacks.set(id, answer => {
+              trace.os.push({ args: value.payload, ok,
+                error: ok ? undefined : String(answer) });
+              return callback(answer);
+            });
+          }
+        }
+        return originalStringify.call(this, value, ...rest);
+      };
+      window.__LOCAL_SNOOZE_WAKE_TRACE__ = trace;
+      window.__TAURI__.event.listen('snooze', event => trace.events.push(event.payload)).then(
+        unlisten => { trace.unlisten = unlisten; done(true); },
+        error => { done(String(error?.message || error)); },
+      );
+    });
+    expect(installed).toBe(true);
+  }
+
+  const wakeTrace = () => browser.execute(() => {
+    const trace = window.__LOCAL_SNOOZE_WAKE_TRACE__;
+    return { events: trace?.events || [], os: trace?.os || [] };
+  });
+
   const listed = () => browser.execute((s) =>
     [...document.querySelectorAll('[data-testid="email-row"]')].some((r) => (r.textContent || '').includes(s)), SUBJECT);
 
@@ -124,9 +170,21 @@ describe('Snooze on a server with no room for a Snoozed folder', function () {
     accountId = await runInStore('addAccount', [account], 'addAccount');
     await runInStore('activateAccount', [accountId, 'INBOX'], 'activateAccount');
     await browser.waitUntil(listed, { timeout: 60_000, interval: 500, timeoutMsg: 'The appended message never showed up in the INBOX list' });
+    await observeWake();
   });
 
   after(async function () {
+    try {
+      await browser.execute(() => {
+        const trace = window.__LOCAL_SNOOZE_WAKE_TRACE__;
+        if (trace) {
+          window.fetch = trace.originalFetch;
+          JSON.stringify = trace.originalStringify;
+          trace.unlisten?.();
+        }
+        delete window.__LOCAL_SNOOZE_WAKE_TRACE__;
+      });
+    } catch { /* the app may already be closed */ }
     // A row a failed run left behind: end it before the account goes.
     const row = await ourRow().catch(() => null);
     if (row) await rpc('snooze.cancel', { id: row.id }).catch(() => {});
@@ -188,6 +246,28 @@ describe('Snooze on a server with no room for a Snoozed folder', function () {
     });
 
     await browser.waitUntil(listed, { timeout: 30_000, interval: 500, timeoutMsg: 'The woken message never came back to the INBOX list' });
+    await browser.waitUntil(async () => (await wakeTrace()).events.some(event =>
+      event.id === row.id && event.woke === true
+      && event.arrival?.kind === 'local-wake' && event.arrival.wakeRef?.instanceId), {
+      timeout: 30_000, interval: 250, timeoutMsg: 'the real local wake carried no one-use native proof',
+    });
+    const proof = (await wakeTrace()).events.find(event => event.id === row.id
+      && event.arrival?.kind === 'local-wake');
+    await browser.waitUntil(async () => (await wakeTrace()).os.some(call => call.ok
+      && call.args?.target?.accountId === accountId
+      && call.args?.target?.uid === before.uid), {
+      timeout: 30_000, interval: 250, timeoutMsg: 'the real local wake never reached the shell OS command',
+    });
+    const wakeOS = (await wakeTrace()).os.filter(call => call.args?.target?.accountId === accountId
+      && call.args?.target?.uid === before.uid);
+    expect(wakeOS).toHaveLength(1);
+    expect(wakeOS[0].args.target).toMatchObject({ accountId, mailbox: 'INBOX', uid: before.uid });
+    expect(wakeOS[0].args.target.code).toBeUndefined();
+    const duplicate = await rpc('notify.arrival', {
+      snoozeId: row.id, wakeRef: proof.arrival.wakeRef, rearm: true,
+    });
+    expect(duplicate).toEqual({ status: 'unavailable', reason: 'consumed-proof' });
+
     await browser.waitUntil(() => browser.execute((s) => {
       const e = window.__MAIL_STORE__.getState().emails.find((m) => m.subject === s);
       return !!e && !(e.flags || []).includes('\\Seen');

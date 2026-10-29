@@ -88,18 +88,23 @@ pub(crate) struct Origin {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SourceKey {
+    /// The original admitted account lifetime, retained inside the change ring.
+    pub original: AccountStamp,
     pub account_id: String,
     pub mailbox: String,
     pub epoch: u64,
     pub origin_hash: String,
+    pub graph: bool,
     pub cache_owner: Option<NativeHeaderIdentity>,
 }
 
 impl SourceKey {
     pub(crate) fn new(origin: &Origin, mailbox: &str, cache_owner: Option<NativeHeaderIdentity>) -> Self {
         Self {
+            original: origin.original.clone(),
             account_id: origin.original.id().to_owned(), mailbox: mailbox.to_owned(),
-            epoch: origin.original.epoch(), origin_hash: origin.hash.clone(), cache_owner,
+            epoch: origin.original.epoch(), origin_hash: origin.hash.clone(),
+            graph: origin.graph, cache_owner,
         }
     }
 }
@@ -326,6 +331,21 @@ pub(crate) fn source_lease(state: &DaemonState, original: &AccountStamp,
     Ok(lease)
 }
 
+/// A ring record keeps its admitted source. Before a later poll projects that
+/// record to the renderer, refuse an account or native mailbox owner that has
+/// since changed; other accounts in the same reply remain observable.
+pub(crate) fn current_source(state: &DaemonState, source: &SourceKey) -> Result<bool, String> {
+    let _lease = match source_lease(state, &source.original, &source.origin_hash) {
+        Ok(lease) => lease,
+        Err(error) if error == "errors.keychainBusy" => return Err(error),
+        Err(_) => return Ok(false),
+    };
+    crate::custody::with_conn(state, |conn| Ok(
+        mailvault_core::custody::cache::native_identity(conn,
+            &source.account_id, &source.mailbox)? == source.cache_owner
+    ))
+}
+
 pub(crate) async fn origin(state: &Arc<DaemonState>, original: AccountStamp) -> Result<Origin, String> {
     let app_dir = state.app_dir.clone();
     let account_id = original.id().to_owned();
@@ -442,6 +462,38 @@ pub(crate) async fn complete_ticket(state: &Arc<DaemonState>, evidence: &TicketE
     complete_ticket_in_mailbox(state, evidence, &evidence.mailbox).await
 }
 
+/// The account's commit slot can be held for a moment by another writer, which
+/// refuses a publication as `errors.keychainBusy`. Nothing about the source has
+/// changed, so a short bounded wait is the right answer, never a lost record.
+pub(crate) const BUSY: &str = "errors.keychainBusy";
+const BUSY_RETRIES: usize = 3;
+const BUSY_PAUSE: std::time::Duration = std::time::Duration::from_millis(150);
+
+pub(crate) async fn retry_busy<F, Fut>(mut attempt: F) -> Result<(), String>
+where F: FnMut() -> Fut, Fut: std::future::Future<Output = Result<(), String>> {
+    let mut result = attempt().await;
+    for _ in 0..BUSY_RETRIES {
+        if result.as_ref().err().map(String::as_str) != Some(BUSY) { break; }
+        tokio::time::sleep(BUSY_PAUSE).await;
+        result = attempt().await;
+    }
+    result
+}
+
+/// The IMAP origin of an account while it is still the one the round started
+/// with, after waiting out a busy commit slot. `None` means the account was
+/// replaced, moved to another provider kind, or cannot be read.
+pub(crate) async fn current_imap_origin(state: &Arc<DaemonState>, stamp: &AccountStamp,
+    expected_hash: &str) -> Option<Origin> {
+    let mut answer = origin(state, stamp.clone()).await;
+    for _ in 0..BUSY_RETRIES {
+        if answer.as_ref().err().map(String::as_str) != Some(BUSY) { break; }
+        tokio::time::sleep(BUSY_PAUSE).await;
+        answer = origin(state, stamp.clone()).await;
+    }
+    answer.ok().filter(|origin| !origin.graph && origin.hash == expected_hash)
+}
+
 /// Alias resolution can name a different actual folder. The issued request
 /// generation remains the proof; the completed owner names the real folder.
 pub(crate) async fn complete_ticket_in_mailbox(state: &Arc<DaemonState>,
@@ -465,8 +517,10 @@ mod tests {
     use serde_json::json;
 
     fn key(account_id: &str, mailbox: &str) -> SourceKey {
-        SourceKey { account_id: account_id.to_owned(), mailbox: mailbox.to_owned(),
-            epoch: 1, origin_hash: "origin-one".to_owned(), cache_owner: None }
+        SourceKey { original: origin(account_id).original,
+            account_id: account_id.to_owned(), mailbox: mailbox.to_owned(),
+            epoch: 1, origin_hash: "origin-one".to_owned(), graph: false,
+            cache_owner: None }
     }
 
     fn origin(account_id: &str) -> Origin {
@@ -476,6 +530,33 @@ mod tests {
         });
         let original = lifecycle.capture(account_id).unwrap();
         Origin { original, hash: "origin-one".to_owned(), graph: false }
+    }
+
+    #[tokio::test]
+    async fn s4_a_busy_publication_waits_and_retries_but_a_real_refusal_does_not() {
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let result = retry_busy(|| {
+            let seen = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async move { if seen < 2 { Err(BUSY.to_owned()) } else { Ok(()) } }
+        }).await;
+        assert_eq!(result, Ok(()), "two busy answers then success must publish");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let result = retry_busy(|| {
+            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async { Err("errors.bulkIdentityChanged".to_owned()) }
+        }).await;
+        assert_eq!(result, Err("errors.bulkIdentityChanged".to_owned()));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1, "a replaced source is never retried");
+
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let result = retry_busy(|| {
+            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async { Err(BUSY.to_owned()) }
+        }).await;
+        assert_eq!(result, Err(BUSY.to_owned()));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1 + BUSY_RETRIES, "retries are bounded");
     }
 
     #[test]

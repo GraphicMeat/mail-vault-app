@@ -725,6 +725,16 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'get_app_data_dir': return '/demo/app-data';
       case 'get_credentials': return { status: 'granted', credentials: Object.fromEntries(ACCOUNTS.map(item => [item.id, JSON.stringify(item)])) };
       case 'demo_emit_event': emit(args.event, args.payload); return null;
+      case 'daemon_channel_notify': {
+        if (args.method === 'sync.owner') {
+          const owner = args.params || {};
+          emit('sync-owner', { instanceId: refreshInstanceId,
+            launchId: owner.launchId, revision: owner.revision,
+            accepted: !!owner.launchId && Number.isSafeInteger(owner.revision),
+            ownerGeneration: owner.revision });
+        }
+        return null;
+      }
       case 'daemon_rpc': {
         const method = args.method;
         if (['drafts.save', 'drafts.list', 'drafts.discard'].includes(method)) return draftRpc(method, args.params || {});
@@ -1077,6 +1087,9 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
         // The demo's mail carries no authentication results and no codes to read.
         // The new-mail banner policy (handlers/notify.rs): the demo has no
         // rules to apply, so only a Focus session holds a banner.
+        if (method === 'notify.arrival') {
+          return { status: 'unavailable', reason: 'missing-proof', simulated: true };
+        }
         if (method === 'notify.decide') {
           return (args.params || {}).focusHeld
             ? { deliver: false, reason: 'focus-hold' }
@@ -1218,7 +1231,8 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
           // Keep the scheduler's long poll asynchronous. Resolving synchronously
           // makes its while-loop monopolise the browser microtask queue.
           await new Promise(resolve => setTimeout(resolve, timeoutMs));
-          return { gen: Number(args.params?.since ?? args.since ?? 0), changes: [], simulated: true };
+          return { gen: Number(args.params?.since ?? args.since ?? 0), changes: [],
+            notifications: [], resyncRequired: false, instanceId: refreshInstanceId, simulated: true };
         }
         // Like the daemon: mail the server lost leaves the classified set.
         const classified = args => messages.filter(row => (!paramsAccountId(args) || row.accountId === paramsAccountId(args)) && (row.serverPresent || row.vaultPresent) && !row.serverDeleted);

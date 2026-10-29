@@ -9,6 +9,7 @@ import { startMockImap, scenario, mockAccount, MOCK_PASSWORD, slowCommand } from
 const OWNER = 'native-refresh@mock.test';
 const ID = '52525252-5252-4525-8525-525252525252';
 const SUBJECT = 'Native refresh actual appended delivery';
+let base = 0;
 
 async function rpc(method, params = {}) {
   const reply = await browser.executeAsync((name, values, done) => {
@@ -150,12 +151,15 @@ describe('Connected native refresh foundation', function () {
     server?.stop();
   });
 
-  it('keeps ordinary boot dormant, then completes a real delivery after owner detach', async function () {
-    const dormant = await rpc('sync.refresh_status');
-    expect(dormant.automaticEnabled).toBe(false);
-    expect(dormant.receipts).toEqual([]);
-    owner = await openOwner('native-mini-launch', 1);
-    expect((await rpc('sync.context', { launchId: 'native-mini-launch', revision: 1,
+  it('completes a real delivery after an external owner detaches from the app-owned context', async function () {
+    // Since S4 the app attaches its own sync context at boot, so ordinary boot
+    // is no longer dormant. The external owner below takes over above the app's
+    // live revision, then the same detach and delivery checks run unchanged.
+    const boot = await rpc('sync.refresh_status');
+    expect(Number.isSafeInteger(boot.contextRevision)).toBe(true);
+    base = boot.contextRevision + 100;
+    owner = await openOwner('native-mini-launch', base + 1);
+    expect((await rpc('sync.context', { launchId: 'native-mini-launch', revision: base + 1,
       phase: 'resume', view: { accountId: ID, mailbox: 'INBOX' } })).accepted).toBe(true);
     const uid = await appendDelivery(server);
     const requestId = 'native-mini-actual-delivery';
@@ -180,10 +184,10 @@ describe('Connected native refresh foundation', function () {
   });
 
   it('resolves unified Sent and subtree paths from a new channel generation', async function () {
-    owner = await openOwner('native-mini-launch', 2);
+    owner = await openOwner('native-mini-launch', base + 2);
     expect((await rpc('sync.refresh_status', { requestId: 'native-mini-actual-delivery' }))
       .receipts[0].status).toBe('complete');
-    expect((await rpc('sync.context', { launchId: 'native-mini-launch', revision: 2,
+    expect((await rpc('sync.context', { launchId: 'native-mini-launch', revision: base + 2,
       phase: 'resume', view: { accountId: null, mailbox: 'UNIFIED', unifiedFolder: 'Sent' } })).accepted)
       .toBe(true);
     const unified = await rpc('sync.refresh', { requestId: 'native-mini-unified', accountId: ID, mailbox: 'UNIFIED',
@@ -194,7 +198,7 @@ describe('Connected native refresh foundation', function () {
     expect((await terminal('native-mini-unified')).status).toBe('complete');
     expect((await cached('Sent'))?.emails?.length).toBeGreaterThan(0);
     expect(await cached('UNIFIED')).toBeNull();
-    expect((await rpc('sync.context', { launchId: 'native-mini-launch', revision: 3,
+    expect((await rpc('sync.context', { launchId: 'native-mini-launch', revision: base + 3,
       phase: 'resume', view: { accountId: ID, mailbox: 'Projects',
         scopePaths: ['Projects', 'Projects/Child'] } })).accepted).toBe(true);
     const subtree = await rpc('sync.refresh', { requestId: 'native-mini-subtree', accountId: ID,

@@ -1,409 +1,125 @@
-/**
- * What a refresh is allowed to call "new mail".
- *
- * The count in the banner was a set difference taken against whatever happened
- * to be loaded: the open list (which renders 500 rows from cache and drains the
- * rest behind it) for the active account, the disk cache (capped at one
- * 500-header page by a cold daemon sync) for the others. A 1634-message INBOX
- * with 500 rows loaded therefore announced "1134 new emails", and a 14k
- * mailbox announced 10473.
- *
- * The baseline is the disk cache now, and only when it provably holds the whole
- * folder. Nothing arrived during a backfill, so nothing is announced during one.
- *
- * Second defect in the same lines: `from` is an object, so every banner body
- * read "[object Object]: <subject>".
- */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const A = { id: 'a', email: 'a@test' };
+const B = { id: 'b', email: 'b@test' };
 let state;
-let cachedByKey;
+let nativeView;
+const nativeRequest = vi.fn();
+const observe = vi.fn(async () => {});
+const invalidateProbe = vi.fn(async () => ({}));
+const invalidateFolder = vi.fn(async () => {});
+const forceMailbox = vi.fn();
+const invalidateRestore = vi.fn();
+const fetchMailboxes = vi.fn(async () => ['INBOX', 'Archive']);
+const refreshStatus = vi.fn(async () => {});
+const oldProviderPages = vi.fn();
 
-vi.mock('../../../stores/mailStore', () => ({
-  useMailStore: {
-    getState: () => state,
-    setState: (patch) => { state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }; },
-  },
+vi.mock('../../../stores/mailStore', () => ({ useMailStore: {
+  getState: () => state,
+  setState: patch => { state = { ...state, ...patch }; },
+} }));
+vi.mock('../../../stores/unreadCounts', () => ({ unreadPresentation: vi.fn(async () => ({ total: 4 })) }));
+vi.mock('../../nativeSyncContext.js', () => ({
+  requestNativeRefresh: (...args) => nativeRequest(...args),
+  observeNativeView: (...args) => observe(...args),
+  currentNativeView: () => nativeView,
 }));
-
-// The baseline reads the cache's meta and uid listing, never its rows: this
-// runs for every account on every scheduled refresh.
-const mockGetEmailHeaders = vi.fn();
-const mockGetEmailHeadersMeta = vi.fn(async (accountId, mailbox) => {
-  const entry = cachedByKey[`${accountId}|${mailbox}`];
-  return entry ? { totalEmails: entry.totalEmails, totalCached: entry.uids.length } : null;
-});
-const mockListCachedUids = vi.fn(async (accountId, mailbox) => {
-  const entry = cachedByKey[`${accountId}|${mailbox}`];
-  return entry ? { uids: entry.uids, changed: [] } : null;
-});
-const mockFetchEmails = vi.fn();
-vi.mock('../../db', () => ({
-  getEmailHeaders: (...a) => mockGetEmailHeaders(...a),
-  getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
-  listCachedUids: (...a) => mockListCachedUids(...a),
-  saveEmailHeaders: vi.fn().mockResolvedValue(undefined),
-  getCachedMailboxes: vi.fn().mockResolvedValue([]),
-}));
-vi.mock('../../api', () => ({
-  fetchEmails: (...a) => mockFetchEmails(...a),
-  graphListFolders: vi.fn(),
-}));
-vi.mock('../../cacheManager', () => ({
-  invalidateRestoreDescriptors: vi.fn(),
-  getAccountCacheMailboxes: () => null,
-  listGraphMessages: vi.fn(),
-}));
-const mockInvalidateProbe = vi.fn();
-vi.mock('../../syncProbe', () => ({ invalidate: (...a) => mockInvalidateProbe(...a) }));
-vi.mock('../helpers/mailboxRefetch', () => ({
-  forceMailboxRefetch: vi.fn(),
-  takeForcedMailboxRefetch: () => false,
-}));
+vi.mock('../../cacheManager', () => ({ invalidateRestoreDescriptors: (...args) => invalidateRestore(...args) }));
+vi.mock('../../syncProbe', () => ({ invalidate: (...args) => invalidateProbe(...args) }));
+vi.mock('../helpers/mailboxRefetch', () => ({ forceMailboxRefetch: (...args) => forceMailbox(...args) }));
 vi.mock('../folderStatus', () => ({
-  refreshFolderStatus: vi.fn().mockResolvedValue(null),
-  invalidateFolderStatus: vi.fn(),
+  invalidateFolderStatus: (...args) => invalidateFolder(...args),
+  refreshFolderStatus: (...args) => refreshStatus(...args),
 }));
-vi.mock('../adoptGraphFolderKeys', () => ({ adoptGraphFolderKeysFromListing: vi.fn() }));
-vi.mock('../../graphConfig', () => ({ isGraphAccount: () => false, storageKeyOf: (f) => f?.displayName }));
-vi.mock('../../authUtils', () => ({
-  hasValidCredentials: () => true,
-  ensureFreshToken: async (a) => a,
-}));
-vi.mock('../../../stores/slices/unifiedHelpers', async (importOriginal) => ({
-  ...(await importOriginal()),
-  _resolveMailboxPath: (_m, target) => target,
-}));
-const mockSetUnreadPerAccount = vi.fn();
-vi.mock('../../../stores/settingsStore', () => ({
-  useSettingsStore: {
-    getState: () => ({
-      isAccountHidden: () => false,
-      unreadPerAccount: {},
-      hiddenAccounts: {},
-      setUnreadPerAccount: (...a) => mockSetUnreadPerAccount(...a),
-    }),
-  },
-  hasPremiumAccess: () => false,
-}));
-vi.mock('../../daemonClient', async importOriginal => ({
-  ...(await importOriginal()),
-  daemonCall: async (method, p) => {
-    if (method !== 'counts.unread') return {};
-    const counts = { ...p.baseline };
-    if (p.op === 'merge' && p.kind === 'recounts') {
-      for (const item of p.observations) {
-        const cache = item.cache;
-        if (!Array.isArray(cache?.emails) || cache.totalEmails > cache.emails.length) continue;
-        counts[item.accountId] = cache.emails.filter(row => !row.flags?.includes('\\Seen')
-          && !item.projection?.snoozes?.some(s => s.accountId === item.accountId && s.state === 'snoozed'
-            && s.snoozedMailbox === '' && s.messageId === row.messageId)).length;
-      }
-      return { counts, rows: [], total: 0, wrote: true };
-    }
-    return { counts, rows: [], total: 0, wrote: false };
-  },
-}));
+vi.mock('../activateAccount', () => ({ fetchAccountMailboxes: (...args) => fetchMailboxes(...args) }));
+vi.mock('../../db/accounts', () => ({ accountExpectedContext: account => ({ id: account.id, email: account.email }) }));
+vi.mock('../../api', () => ({ fetchEmails: (...args) => oldProviderPages(...args) }));
 
-const { refreshAllAccounts } = await import('../refreshAccounts');
-const { useSnoozeStore } = await import('../../../stores/snoozeStore');
-
-const header = (uid, extra = {}) => ({ uid, subject: `msg ${uid}`, flags: ['\\Seen'], ...extra });
-const cacheEntry = (uids, totalEmails) => ({ uids, totalEmails });
+const { refreshCurrentView, refreshAllAccounts } = await import('../refreshAccounts.js');
+const loadEmails = vi.fn(async () => {});
+const loadUnifiedInbox = vi.fn(async () => {});
+const loadSubtree = vi.fn(async () => {});
 
 beforeEach(() => {
-  cachedByKey = {};
-  mockGetEmailHeaders.mockClear();
-  mockGetEmailHeadersMeta.mockClear();
-  mockListCachedUids.mockClear();
-  mockFetchEmails.mockReset();
-  mockInvalidateProbe.mockReset().mockResolvedValue({ invalidated: true });
-  state = {
-    accounts: [{ id: 'acct-1', email: 'me@example.com' }],
-    activeAccountId: 'acct-1',
-    activeMailbox: 'INBOX',
-    emails: [],
-    unifiedInbox: false,
-    unifiedFolder: null,
-    loadEmails: vi.fn().mockResolvedValue(undefined),
-  };
+  state = { accounts: [A, B], activeAccountId: 'a', activeMailbox: 'INBOX',
+    unifiedInbox: false, unifiedFolder: 'INBOX', mailboxScope: null,
+    loadEmails, loadUnifiedInbox, loadSubtree, connectionStatus: 'error' };
+  nativeView = { accountId: 'a', mailbox: 'INBOX' };
+  nativeRequest.mockReset().mockResolvedValue({ receipt: { status: 'complete' }, uncertain: false });
+  observe.mockClear(); invalidateProbe.mockReset().mockResolvedValue({});
+  invalidateFolder.mockReset().mockResolvedValue(undefined);
+  forceMailbox.mockClear(); invalidateRestore.mockClear();
+  fetchMailboxes.mockReset().mockResolvedValue(['INBOX', 'Archive']);
+  refreshStatus.mockReset().mockResolvedValue(undefined);
+  oldProviderPages.mockClear(); loadEmails.mockClear(); loadUnifiedInbox.mockClear(); loadSubtree.mockClear();
 });
 
-describe('the active account (the open list)', () => {
-  it('waits for probe invalidation before loading the active mailbox', async () => {
-    let entered;
+describe('S4 native refresh intent and current-view repaint', () => {
+  it('invalidates the ordinary probe/folder before repaint and sends only a native intent', async () => {
     let release;
-    const invalidationStarted = new Promise(resolve => { entered = resolve; });
-    const invalidationHeld = new Promise(resolve => { release = resolve; });
-    mockInvalidateProbe.mockImplementation(() => {
-      entered();
-      return invalidationHeld;
-    });
-
-    const refresh = refreshAllAccounts();
-    await invalidationStarted;
-    expect(state.loadEmails).not.toHaveBeenCalled();
-    release({ invalidated: true });
-    await refresh;
-    expect(state.loadEmails).toHaveBeenCalledTimes(1);
+    invalidateProbe.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const pending = refreshCurrentView();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(loadEmails).not.toHaveBeenCalled();
+    release({});
+    await pending;
+    expect(nativeRequest).toHaveBeenCalledWith({ accountId: 'a', mailbox: 'INBOX' });
+    expect(invalidateProbe).toHaveBeenCalledWith('a', 'INBOX');
+    expect(invalidateFolder).toHaveBeenCalledWith('a');
+    expect(forceMailbox).toHaveBeenCalledWith('a');
+    expect(loadEmails).toHaveBeenCalledWith({ rereadFlags: true });
+    expect(oldProviderPages).not.toHaveBeenCalled();
   });
 
-  it('announces nothing while the cache is still backfilling', async () => {
-    // 500 of a 1634-message INBOX cached, and the list drains to the full
-    // folder during the refresh: the 1134 the user was notified about.
-    const loaded = Array.from({ length: 500 }, (_, i) => i + 1);
-    cachedByKey['acct-1|INBOX'] = cacheEntry(loaded, 1634);
-    state.emails = loaded.map(u => header(u));
-    state.loadEmails = vi.fn(async () => {
-      state.emails = Array.from({ length: 1634 }, (_, i) => header(i + 1));
-    });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
-    // Short of the folder by its meta alone, so the uids are never listed.
-    expect(mockGetEmailHeadersMeta).toHaveBeenCalledWith('acct-1', 'INBOX');
-    expect(mockListCachedUids).not.toHaveBeenCalled();
+  it('keeps the mailbox omitted for a unified view and repaints its actual folder', async () => {
+    state = { ...state, activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'Archive' };
+    nativeView = { accountId: null, mailbox: 'UNIFIED', unifiedFolder: 'Archive' };
+    await refreshCurrentView();
+    expect(nativeRequest).toHaveBeenCalledWith({});
+    expect(loadUnifiedInbox).toHaveBeenCalledWith(null, 'Archive');
+    expect(fetchMailboxes).not.toHaveBeenCalled();
+    expect(oldProviderPages).not.toHaveBeenCalled();
   });
 
-  it('counts only what the complete cache did not hold', async () => {
-    cachedByKey['acct-1|INBOX'] = cacheEntry([1, 2, 3], 3);
-    state.emails = [1, 2, 3].map(u => header(u));
-    state.loadEmails = vi.fn(async () => {
-      state.emails = [
-        header(5, { from: { name: 'Rokas', address: 'rokas@example.com' }, subject: 'hello' }),
-        header(4),
-        ...[1, 2, 3].map(u => header(u)),
-      ];
-    });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toHaveLength(1);
-    expect(perAccountResults[0]).toMatchObject({
-      accountId: 'acct-1',
-      folder: 'INBOX',
-      newCount: 2,
-      uids: [5, 4],
-      newestUid: 5,
-      newestSubject: 'hello',
-      newestSender: 'Rokas',
-    });
-    expect(mockListCachedUids).toHaveBeenCalledWith('acct-1', 'INBOX');
-    expect(mockGetEmailHeaders).not.toHaveBeenCalled();
-  });
-});
-
-// An arrival is a DELIVERY: the server numbers it above every uid the cache
-// held (the daemon's own rule, `uid >= cached_uid_next`). A set difference
-// alone calls anything the cache lacks an arrival, so any comparison between
-// rows that are not one folder's before-and-after reads as a whole mailbox of
-// new mail ("1664 New Emails").
-describe('what is not a delivery is never announced', () => {
-  const backgroundAccount = () => {
-    state.accounts = [{ id: 'acct-2', email: 'other@example.com' }];
-    state.activeAccountId = 'acct-1';
-  };
-  const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
-
-  it('active: a re-issued uid space that restarts low is not 1664 arrivals', async () => {
-    // UIDVALIDITY changed under the refresh: the cache held the old numbers,
-    // the folder now lists 1..1664.
-    cachedByKey['acct-1|INBOX'] = cacheEntry(range(9001, 9010), 10);
-    state.loadEmails = vi.fn(async () => { state.emails = range(1, 1664).reverse().map(u => header(u)); });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
+  it('sends subtree context without projecting its root into the native mailbox intent', async () => {
+    state = { ...state, activeMailbox: 'Projects', mailboxScope: {
+      root: 'Projects', paths: ['Projects', 'Projects/A'],
+    } };
+    nativeView = { accountId: 'a', mailbox: 'Projects', scopePaths: ['Projects', 'Projects/A'] };
+    await refreshCurrentView();
+    expect(nativeRequest).toHaveBeenCalledWith({ accountId: 'a' });
+    expect(loadSubtree).toHaveBeenCalledWith('a', 'Projects');
+    expect(fetchMailboxes).not.toHaveBeenCalled();
   });
 
-  it('background: a cache whose total was self-reported short announces nothing below its newest uid', async () => {
-    // A writer recorded rows.length as the folder total, so 500 cached rows of
-    // a 1664 folder read as complete.
-    backgroundAccount();
-    cachedByKey['acct-2|INBOX'] = cacheEntry(range(1165, 1664), 500);
-    mockFetchEmails.mockResolvedValue({ emails: range(1, 1664).reverse().map(u => header(u)), total: 1664, hasMore: false });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
+  it('repaints the view that is current when a held native receipt finishes', async () => {
+    let finish;
+    nativeRequest.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = refreshCurrentView();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    state = { ...state, activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'Archive' };
+    finish({ receipt: { status: 'complete' }, uncertain: false });
+    await pending;
+    expect(loadUnifiedInbox).toHaveBeenCalledWith(null, 'Archive');
+    expect(loadEmails).not.toHaveBeenCalled();
   });
 
-  it('background: a uid the cache lost mid-folder is a hole, not an arrival', async () => {
-    backgroundAccount();
-    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2, 4, 5], 4);
-    mockFetchEmails.mockResolvedValue({ emails: range(1, 5).reverse().map(u => header(u)), total: 5, hasMore: false });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
+  it('targets only a requested account from All Inboxes and preserves connection error on uncertainty', async () => {
+    state = { ...state, activeMailbox: 'UNIFIED', unifiedInbox: true };
+    nativeView = { accountId: null, mailbox: 'UNIFIED', unifiedFolder: 'INBOX' };
+    nativeRequest.mockResolvedValueOnce({ receipt: { status: 'pending' }, uncertain: true });
+    await refreshAllAccounts({ accountId: 'b' });
+    expect(nativeRequest).toHaveBeenCalledWith({ accountId: 'b' });
+    expect(state.connectionStatus).toBe('error');
+    expect(loadUnifiedInbox).toHaveBeenCalledTimes(1);
+    expect(invalidateRestore).toHaveBeenCalledWith('a');
+    expect(invalidateRestore).toHaveBeenCalledWith('b');
   });
 
-  it('background: a real delivery above the cache still counts, beside a hole', async () => {
-    backgroundAccount();
-    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2, 4, 5], 4);
-    mockFetchEmails.mockResolvedValue({ emails: range(1, 6).reverse().map(u => header(u)), total: 6, hasMore: false });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toHaveLength(1);
-    expect(perAccountResults[0]).toMatchObject({ newCount: 1, uids: [6], newestUid: 6 });
-  });
-
-  it('active: the user switching folder during the refresh does not diff another folder\'s rows', async () => {
-    cachedByKey['acct-1|INBOX'] = cacheEntry([1, 2, 3], 3);
-    state.loadEmails = vi.fn(async () => {
-      state.activeMailbox = 'Archive';
-      state.emails = range(100, 1763).reverse().map(u => header(u));
-    });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
-  });
-
-  it('active: a branch listing holds rows of many folders and is not one folder\'s arrivals', async () => {
-    state.mailboxScope = { root: 'INBOX', paths: ['INBOX', 'INBOX/Sub'] };
-    cachedByKey['acct-1|INBOX'] = cacheEntry([1, 2, 3], 3);
-    state.loadEmails = vi.fn(async () => { state.emails = range(1, 1664).reverse().map(u => header(u)); });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
-  });
-});
-
-describe('a background account (the disk cache)', () => {
-  const backgroundAccount = () => {
-    state.accounts = [{ id: 'acct-2', email: 'other@example.com' }];
-    state.activeAccountId = 'acct-1';
-  };
-
-  it('announces nothing when the cache holds less than the folder', async () => {
-    backgroundAccount();
-    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2, 3], 900);
-    mockFetchEmails.mockResolvedValue({
-      emails: Array.from({ length: 900 }, (_, i) => header(i + 1)),
-      total: 900,
-      hasMore: false,
-    });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
-  });
-
-  // A failed listing is "unknown", not "nothing cached": every fetched header
-  // would read as an arrival.
-  it('announces nothing when the uid listing fails', async () => {
-    backgroundAccount();
-    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2], 2);
-    mockListCachedUids.mockResolvedValueOnce(null);
-    mockFetchEmails.mockResolvedValue({
-      emails: [header(3), header(2), header(1)],
-      total: 3,
-      hasMore: false,
-    });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toEqual([]);
-  });
-
-  it('names the sender by address when the header carries no display name', async () => {
-    backgroundAccount();
-    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2], 2);
-    mockFetchEmails.mockResolvedValue({
-      emails: [
-        header(3, { from: { address: 'bank@example.com' }, subject: 'statement' }),
-        header(2),
-        header(1),
-      ],
-      total: 3,
-      hasMore: false,
-    });
-
-    const { perAccountResults } = await refreshAllAccounts();
-
-    expect(perAccountResults).toHaveLength(1);
-    expect(perAccountResults[0]).toMatchObject({
-      newCount: 1,
-      newestSender: 'bank@example.com',
-      newestSubject: 'statement',
-    });
-    expect(mockGetEmailHeaders).not.toHaveBeenCalled();
-  });
-
-  // The badge counts what the inbox shows, and a local snooze holds its
-  // message out of it while the server still lists it there, unread.
-  it('leaves a message a local snooze holds out of the inbox off the badge', async () => {
-    backgroundAccount();
-    cachedByKey['acct-2|INBOX'] = cacheEntry([1, 2], 2);
-    mockFetchEmails.mockResolvedValue({
-      emails: [header(2, { flags: [], messageId: '<held@x>' }), header(1, { flags: [], messageId: '<other@x>' })],
-      total: 2,
-      hasMore: false,
-    });
-    useSnoozeStore.setState({ rows: [{ id: 's1', accountId: 'acct-2', fromMailbox: 'INBOX', snoozedMailbox: '', messageId: '<held@x>', state: 'snoozed' }] });
-    mockSetUnreadPerAccount.mockClear();
-    try {
-      await refreshAllAccounts();
-    } finally {
-      useSnoozeStore.setState({ rows: [] });
-    }
-    expect(mockSetUnreadPerAccount).toHaveBeenLastCalledWith({ 'acct-2': 1 });
-  });
-});
-
-describe('All Inboxes', () => {
-  // The scheduled refresh wrote every account's cache and never repainted the
-  // unified list: only a manual Refresh (refreshCurrentView) called
-  // loadUnifiedInbox, so new mail sat in the cache until the user clicked.
-  it('repaints the unified list after the scheduled refresh has synced', async () => {
-    state.activeMailbox = 'UNIFIED';
-    state.unifiedInbox = true;
-    state.unifiedFolder = 'INBOX';
-    state.loadUnifiedInbox = vi.fn().mockResolvedValue(undefined);
-    cachedByKey['acct-1|INBOX'] = cacheEntry([1], 1);
-    mockFetchEmails.mockResolvedValue({ emails: [header(2), header(1)], total: 2, hasMore: false });
-
-    await refreshAllAccounts();
-
-    expect(state.loadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
-    expect(state.loadEmails).not.toHaveBeenCalled();
-  });
-});
-
-// Retry on the connection notice in All Inboxes: that one account asks its
-// server again, the merged list is repainted, and the account's status says
-// how it went, so the notice stays gone or comes back.
-describe('retrying one account from All Inboxes', () => {
-  beforeEach(() => {
-    state.accounts = [{ id: 'acct-1', email: 'me@example.com' }, { id: 'acct-2', email: 'work@example.com' }];
-    Object.assign(state, {
-      activeAccountId: 'acct-2', activeMailbox: 'UNIFIED', unifiedInbox: true, unifiedFolder: 'INBOX',
-      connectionStatus: 'error', connectionError: 'Connection failed', connectionErrorType: 'serverError',
-      loadUnifiedInbox: vi.fn().mockResolvedValue(undefined),
-    });
-  });
-
-  it('refreshes only that account, repaints All Inboxes and marks it connected', async () => {
-    mockFetchEmails.mockResolvedValue({ emails: [header(1)], total: 1, hasMore: false });
-
-    await refreshAllAccounts({ accountId: 'acct-2' });
-
-    expect(mockFetchEmails).toHaveBeenCalledOnce();
-    expect(mockFetchEmails.mock.calls[0][0].id).toBe('acct-2');
-    expect(mockFetchEmails.mock.calls[0][1]).toBe('INBOX');
-    expect(state.loadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
-    expect(state).toMatchObject({ connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
-  });
-
-  it('leaves the error standing when the server still fails', async () => {
-    mockFetchEmails.mockRejectedValue(new Error('IMAP greeting failed'));
-
-    await refreshAllAccounts({ accountId: 'acct-2' });
-
-    expect(state).toMatchObject({ connectionStatus: 'error', connectionError: 'Connection failed', connectionErrorType: 'serverError' });
+  it('preserves a failed native result without a fabricated success time', async () => {
+    nativeRequest.mockRejectedValueOnce(new Error('native failure'));
+    await expect(refreshAllAccounts({ accountId: 'a' })).rejects.toThrow('native failure');
+    expect(state.connectionStatus).toBe('error');
+    expect(oldProviderPages).not.toHaveBeenCalled();
   });
 });

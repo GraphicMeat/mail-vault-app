@@ -560,6 +560,50 @@ it.skipIf(!process.env.W4S4_ORACLE_F06_OUT)('captures F06 old privacy enabled, d
 
 // S4 behavioral RED: the native policy answer enters the existing Focus/OS
 // chokepoint and must never call the public notify.decide route again.
+it('W4S4 prepared mail held by Focus rereads privacy before OS delivery', async () => {
+  usePrivacyStore.setState({ enabled: false });
+  const hydration = vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+  try {
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'sender@outside.test', viewIds: [] };
+    const target = { accountId: 'a1', mailbox: 'INBOX', uid: 7, code: '123456' };
+    useFocusStore.getState().start(25);
+    await notify('Sender', '123456\nPrivate subject', 'Ping', target, ctx,
+      { deliver: true, reason: 'delivered-default' });
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(notifyDecision).not.toHaveBeenCalled();
+    usePrivacyStore.setState({ enabled: true });
+    useFocusStore.getState().abandon();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sendNotification).toHaveBeenCalledWith('New message', '', 'Ping',
+      { accountId: 'a1', mailbox: 'INBOX', uid: 7 });
+    expect(notifyDecision).not.toHaveBeenCalled();
+    expect(getNotificationDecisions()).toHaveLength(1);
+  } finally {
+    useFocusStore.getState().abandon();
+    usePrivacyStore.setState({ enabled: false });
+    hydration.mockRestore();
+  }
+});
+
+it('W4S4 pre-decided suppression is logged without another policy call or OS banner', async () => {
+  usePrivacyStore.setState({ enabled: false });
+  const hydration = vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);
+  try {
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'sender@outside.test', viewIds: [] };
+    await notify('Sender', 'Subject', undefined,
+      { accountId: 'a1', mailbox: 'INBOX', uid: 7 }, ctx,
+      { deliver: false, reason: 'account-muted' });
+    expect(notifyDecision).not.toHaveBeenCalled();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(getNotificationDecisions()).toMatchObject([
+      { deliver: false, reason: 'account-muted', from: 'sender@outside.test' },
+    ]);
+  } finally {
+    usePrivacyStore.setState({ enabled: false });
+    hydration.mockRestore();
+  }
+});
+
 it('W4S4 prepared native mail delivery uses Focus without a second policy decision', async () => {
   usePrivacyStore.setState({ enabled: false });
   const hydration = vi.spyOn(usePrivacyStore.persist, 'hasHydrated').mockReturnValue(true);

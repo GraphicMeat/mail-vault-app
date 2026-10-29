@@ -15,6 +15,7 @@ mod backup_zip;
 mod blitz;
 mod bulk_worker;
 mod recent_actions;
+mod arrival;
 mod channel;
 pub mod classification;
 mod classification_worker;

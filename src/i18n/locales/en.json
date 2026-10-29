@@ -4061,6 +4061,10 @@
   "errors.syncFailed": "This account could not be refreshed. Try again.",
   "errors.syncHeadersIncomplete": "The folder's headers could not be fully refreshed. Try again.",
   "errors.syncGraphAdoptionRequired": "This Graph folder must be prepared in the app before it can refresh.",
+  "errors.syncGraphSettingsAckUnavailable": "Graph settings acknowledgement is unavailable",
+  "errors.syncGraphAdoptionPending": "Graph folder adoption is pending for {accountId}",
+  "errors.syncStatusUnavailable": "Native refresh status is unavailable",
+  "errors.syncReceiptUncertain": "Native refresh receipt is uncertain",
   "errors.bulkIdentityUncertain": "Message identity is uncertain. Refresh the folder before trying again.",
   "errors.bulkIdentityChanged": "The selected folder or message identity changed.",
   "errors.bulkGraphDeleteUnsupported": "Server deletion is unavailable for this Graph account.",
@@ -4083,5 +4087,12 @@
   "errors.accountsWriteFailed": "Your account change could not be completed.",
   "errors.accountRemovalBusy": "This account is busy. Wait for the current operation to finish, then try again.",
   "errors.accountRemovalIncomplete": "Account removal did not finish. Retry after the current operation settles.",
-  "errors.bulkAlreadyGone": "This message was already deleted."
+  "errors.bulkAlreadyGone": "This message was already deleted.",
+  "notify.arrival.unknownSender": "Unknown sender",
+  "notify.arrival.newEmail": "New Email",
+  "notify.arrival.newEmails": "{{count}} New Emails",
+  "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}} (and {{more}} more)",
+  "notify.arrival.singlePrivateBody": "New email in {{accountEmail}}",
+  "notify.arrival.batchPrivateBody": "{{count}} new emails in {{accountEmail}}"
+
 }

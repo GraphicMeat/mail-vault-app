@@ -43,6 +43,20 @@ fn key_pause(path: &std::path::Path) {
 /// decrypted copy is used and a first decryption is kept. Blocking (a
 /// keychain read, a file write): run it on a blocking thread.
 pub(crate) fn render(state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: &str, uid: u32, raw: Vec<u8>, in_vault: bool) -> (Vec<u8>, Option<&'static str>) {
+    render_with_source(state, stamp, mailbox, uid, raw, in_vault, None)
+}
+
+/// Arrival body rendering keeps the admitted original and native owner for
+/// the optional decrypted-copy writer. Ordinary opens use `render` above.
+pub(crate) fn render_original(state: &Arc<DaemonState>, source: &crate::sync_observation::SourceKey,
+    uid: u32, raw: Vec<u8>, in_vault: bool) -> (Vec<u8>, Option<&'static str>) {
+    render_with_source(state, source.original.clone(), &source.mailbox, uid, raw,
+        in_vault, Some(source))
+}
+
+fn render_with_source(state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: &str, uid: u32,
+    raw: Vec<u8>, in_vault: bool,
+    source: Option<&crate::sync_observation::SourceKey>) -> (Vec<u8>, Option<&'static str>) {
     let account_id = stamp.id();
     if !core_pgp::is_encrypted(&raw) {
         return (raw, None);
@@ -69,7 +83,25 @@ pub(crate) fn render(state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: &st
         let Ok(_permit) = state.account_lifecycle.try_commit(std::slice::from_ref(&stamp)) else {
             return (decrypted, Some(DECRYPTED));
         };
+        let _source_lease = match source {
+            Some(source) => match crate::sync_observation::source_lease(state,
+                &source.original, &source.origin_hash) {
+                Ok(lease) => Some(lease),
+                Err(_) => return (decrypted, Some(DECRYPTED)),
+            },
+            None => None,
+        };
         let kept = with_mailbox_write(state, account_id, mailbox, |root| {
+            if let Some(source) = source {
+                let owner = source.cache_owner.as_ref().ok_or("errors.bulkIdentityUncertain")?;
+                return crate::custody::with_conn(state, |conn| {
+                    if mailvault_core::custody::cache::native_identity(conn,
+                        &source.account_id, &source.mailbox)?.as_ref() != Some(owner) {
+                        return Err("errors.bulkIdentityChanged".to_owned());
+                    }
+                    message_store::write_decrypted_copy(root, account_id, mailbox, uid, &decrypted)
+                });
+            }
             message_store::write_decrypted_copy(root, account_id, mailbox, uid, &decrypted)
         });
         match kept {

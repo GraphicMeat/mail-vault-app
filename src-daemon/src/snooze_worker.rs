@@ -115,7 +115,39 @@ async fn pass(state: &Arc<DaemonState>) -> Vec<(String, snooze::WakeOutcome, Str
 /// snooze's wake off it: that wake only clears `\Seen`, so no sync reports
 /// it as an arrival.
 pub(crate) fn emit(state: &Arc<DaemonState>, id: &str, row_state: &str, woke: bool) {
-    state.events.emit("snooze", json!({"id": id, "state": row_state, "woke": woke}));
+    let mut payload = json!({"id": id, "state": row_state, "woke": woke});
+    if woke {
+        if let Some(generation) = state.recent.wake_generation(id) {
+            payload["arrival"] = json!({"kind":"local-wake","wakeRef":{
+                "instanceId":state.refresh.instance_id(),"gen":generation
+            }});
+        }
+    }
+    state.events.emit("snooze", payload);
+}
+
+async fn local_source(state: &Arc<DaemonState>, row: &snooze::Snooze)
+    -> Option<crate::sync_observation::SourceKey> {
+    let original = state.account_lifecycle.capture(&row.account_id).ok()?;
+    let origin = crate::sync_observation::origin(state, original).await.ok()?;
+    let (_, source) = crate::sync_observation::source(state, &origin, &row.from_mailbox).await.ok()?;
+    source.cache_owner.as_ref()?;
+    Some(source)
+}
+
+async fn retain_local_wake(state: &Arc<DaemonState>, row: &snooze::Snooze,
+    source: Option<crate::sync_observation::SourceKey>) {
+    let Some(source) = source else { return };
+    let origin = crate::sync_observation::Origin {
+        original:source.original.clone(), hash:source.origin_hash.clone(), graph:source.graph,
+    };
+    if crate::sync_observation::revalidate(state, &origin, &source).await.is_err() { return; }
+    // The sync ring's process generation is also this wake's one-use reference.
+    // A second real wake gets a new number, even when its sync did no work.
+    let generation = state.sync_engine.note_change(&row.account_id, &row.from_mailbox, 0, 0);
+    state.recent.note_wake(&row.id, crate::recent_actions::WakeProof {
+        source, message_id:row.message_id.clone(), generation, consumed:false,
+    });
 }
 
 /// Run every due row through `wake` and record what it came to. Returns
@@ -161,8 +193,11 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
             return if credentials::GATE.is_blocked() { Wait(msg) } else { Transient(msg) };
         }
     };
+    let local_evidence = if background && row.snoozed_mailbox.is_empty() {
+        local_source(state, row).await
+    } else { None };
     if account.uses_jmap() {
-        return wake_row_jmap(state, account, row).await;
+        return wake_row_jmap(state, account, row, local_evidence).await;
     }
     let checkout = if background {
         state.imap_pool.get_background(&account).await
@@ -210,6 +245,7 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
         return NotFound;
     }
     announce(state, account, row).await;
+    if background && local { retain_local_wake(state, row, local_evidence).await; }
     Woken
 }
 
@@ -218,7 +254,8 @@ pub(crate) async fn wake_row(state: &Arc<DaemonState>, row: &snooze::Snooze, bac
 /// preferred when that search confirms it), `$seen` removed, and unless the snooze was local one `mailboxIds`
 /// patch moving it back. No such email, or one the server no longer has:
 /// `NotFound`. Then the same sync and record as the IMAP wake.
-async fn wake_row_jmap(state: &Arc<DaemonState>, account: ImapConfig, row: &snooze::Snooze) -> snooze::WakeOutcome {
+async fn wake_row_jmap(state: &Arc<DaemonState>, account: ImapConfig, row: &snooze::Snooze,
+    local_evidence: Option<crate::sync_observation::SourceKey>) -> snooze::WakeOutcome {
     use snooze::WakeOutcome::*;
     let local = row.snoozed_mailbox.is_empty();
     let holder = if local { &row.from_mailbox } else { &row.snoozed_mailbox };
@@ -265,6 +302,7 @@ async fn wake_row_jmap(state: &Arc<DaemonState>, account: ImapConfig, row: &snoo
     match woke {
         Ok(true) => {
             announce(state, account, row).await;
+            if local { retain_local_wake(state, row, local_evidence).await; }
             Woken
         }
         Ok(false) => {
@@ -445,7 +483,14 @@ mod tests {
         );
         let dir = app_dir();
         let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
-        state.seed_accounts_for_test(&["acct"]);
+        // The wake proof rereads the authoritative source. Seed a complete
+        // stored account, not only the lifecycle ID used by older wake tests.
+        std::fs::write(dir.join("accounts.json"), json!([{
+            "id": "acct", "email": "user@example.com",
+            "imapHost": server.host(), "imapPort": server.port(),
+        }]).to_string()).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+            &mailvault_core::accounts_doc::shared(&dir)).unwrap());
         let creds = dir.join("credentials.json");
         let account = serde_json::json!({
             "id": "acct", "email": "user@example.com", "password": "hunter2",
@@ -496,13 +541,103 @@ mod tests {
                 }
             }
         }
-        assert_eq!(
-            sent,
-            vec![
-                json!({"id": "l", "state": "woken", "woke": true}),
-                json!({"id": "gone", "state": "woken", "woke": false}),
-            ]
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1], json!({"id": "gone", "state": "woken", "woke": false}));
+        assert_eq!(sent[0]["id"], json!("l"));
+        assert_eq!(sent[0]["arrival"]["kind"], json!("local-wake"),
+            "only an actual timed local wake receives native proof: {sent:?}");
+        let reference = sent[0]["arrival"]["wakeRef"].clone();
+        assert_eq!(reference["instanceId"], json!(state.refresh.instance_id()));
+        let request = json!({"snoozeId":"l","wakeRef":reference,"rearm":true});
+        let fetches_before_notice = server.count_commands("FETCH");
+        let first = crate::server::handle_request_for_test(&state, "notify.arrival", request.clone()).await;
+        assert!(first.error.is_none(), "native wake route: {:?}", first.error);
+        let prepared = first.result.unwrap();
+        assert_eq!(prepared["status"], json!("prepared"), "real wake must resolve its own cached UID: {prepared:?}");
+        assert_eq!(prepared["notification"]["uids"], json!([uid]));
+        assert_eq!(prepared["notification"]["target"]["uid"], json!(uid));
+        assert_eq!(server.count_commands("FETCH"), fetches_before_notice,
+            "a local wake needs the exact cached UID and must not fetch a body for a new code");
+        let duplicate = crate::server::handle_request_for_test(&state, "notify.arrival", request).await;
+        assert_eq!(duplicate.result.unwrap(), json!({"status":"unavailable","reason":"consumed-proof"}),
+            "the same event/RPC cannot rearm twice");
+    }
+
+    /// The timed wake already happened, but its one-use proof must not be
+    /// promoted into a notice after the account endpoint is replaced.
+    #[tokio::test]
+    async fn a_local_wake_refuses_a_retired_original_source_without_a_notice() {
+        use mock_imap::state::{Mailbox, Message};
+        let _env = crate::credentials::test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        let raw = "Message-ID: <retired-wake@example.com>\r\nFrom: a@example.com\r\nTo: user@example.com\r\nSubject: Later\r\nDate: Fri, 25 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n";
+        let server = mock_imap::MockImap::start(
+            mock_imap::Scenario::new().mailbox(Mailbox::new("INBOX")
+                .push_msg(Message::new(0, raw).with_flags(&["\\Seen"]))),
         );
+        let dir = app_dir();
+        let state = crate::server::DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let account = json!({
+            "id":"acct", "email":"user@example.com",
+            "imapHost":server.host(), "imapPort":server.port(),
+        });
+        std::fs::write(dir.join("accounts.json"), json!([account]).to_string()).unwrap();
+        state.account_lifecycle.seed(&mailvault_core::accounts_doc::list(
+            &mailvault_core::accounts_doc::shared(&dir)).unwrap());
+        let creds = dir.join("credentials.json");
+        let credential = json!({
+            "id":"acct", "email":"user@example.com", "password":"hunter2",
+            "imapHost":server.host(), "imapPort":server.port(),
+        }).to_string();
+        std::fs::write(&creds, json!({"acct":credential}).to_string()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds);
+        let sync_account: SyncAccount = serde_json::from_value(json!({
+            "id":"acct", "email":"user@example.com",
+            "imapConfig": {"email":"user@example.com", "password":"hunter2",
+                "imapHost":server.host(), "imapPort":server.port()},
+        })).unwrap();
+        assert!(state.sync_engine.sync_account(&sync_account, "INBOX").await.success);
+        let uid = server.state().find("INBOX").unwrap().messages[0].uid;
+        app_db::with(&dir, |c| snooze::insert(c, "retired", "acct", "INBOX", "",
+            Some(uid), "<retired-wake@example.com>", 1_000)).unwrap();
+        let mut events = state.events.subscribe();
+        let outcomes = pass(&state).await;
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        assert_eq!(outcomes[0].1, WakeOutcome::Woken);
+        let mut wake_ref = None;
+        while let Ok(line) = events.try_recv() {
+            if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                if name == "snooze" && payload["id"] == "retired" {
+                    wake_ref = Some(payload["arrival"]["wakeRef"].clone());
+                }
+            }
+        }
+        let wake_ref = wake_ref.expect("actual timed local wake publishes a proof");
+        assert_eq!(wake_ref["instanceId"], json!(state.refresh.instance_id()));
+        // The settings account now names a different endpoint under the same
+        // ID. No replacement epoch can redeem the original wake proof.
+        std::fs::write(dir.join("accounts.json"), json!([{
+            "id":"acct", "email":"user@example.com",
+            "imapHost":"replacement.example.invalid", "imapPort":server.port(),
+        }]).to_string()).unwrap();
+        let request = json!({"snoozeId":"retired","wakeRef":wake_ref,"rearm":true});
+        let fetches = server.count_commands("FETCH");
+        let refusal = crate::server::handle_request_for_test(&state,
+            "notify.arrival", request.clone()).await;
+        assert!(refusal.error.is_none(), "local wake reply: {:?}", refusal.error);
+        assert_eq!(refusal.result.unwrap(), json!({"status":"unavailable","reason":"stale-source"}),
+            "W4S4_LOCAL_WAKE_SOURCE_RED: old proof cannot be announced under a replacement source");
+        assert_eq!(server.count_commands("FETCH"), fetches,
+            "a retired local wake performs no body read");
+        let repeat = crate::server::handle_request_for_test(&state,
+            "notify.arrival", request).await;
+        assert_eq!(repeat.result.unwrap(), json!({"status":"unavailable","reason":"consumed-proof"}));
+        while let Ok(line) = events.try_recv() {
+            if let Some((name, _)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                assert_ne!(name, "notify", "a retired wake cannot emit a banner");
+                assert_ne!(name, "code-ready", "a retired wake cannot emit a code");
+            }
+        }
     }
 
     /// Locked keychain: the worker waits, the row is never marked failed.

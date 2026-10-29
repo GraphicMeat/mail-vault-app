@@ -4057,6 +4057,10 @@
   "errors.syncFailed": "このアカウントを更新できませんでした。もう一度お試しください。",
   "errors.syncHeadersIncomplete": "フォルダーのヘッダーを完全に更新できませんでした。",
   "errors.syncGraphAdoptionRequired": "この Graph フォルダーを更新するには、先にアプリで準備を完了してください。",
+  "errors.syncGraphSettingsAckUnavailable": "Graph 設定の確認を取得できません",
+  "errors.syncGraphAdoptionPending": "{accountId} の Graph フォルダーの適用は保留中です",
+  "errors.syncStatusUnavailable": "ネイティブ更新の状態を取得できません",
+  "errors.syncReceiptUncertain": "ネイティブ更新の確認ができません",
   "errors.bulkIdentityUncertain": "メッセージの識別情報が不確かです。フォルダーを更新してから再試行してください。",
   "errors.bulkIdentityChanged": "選択したフォルダーまたはメッセージの識別情報が変わりました。",
   "errors.bulkGraphDeleteUnsupported": "このGraphアカウントではサーバー上の削除は利用できません。",
@@ -4083,5 +4087,12 @@
   "settings.accounts.removeBusy": "このアカウントは処理中です。現在の操作が完了してから、もう一度お試しください。",
   "settings.accounts.removeFailed": "このアカウントを削除できませんでした。もう一度お試しください。",
   "settings.accounts.removeIncomplete": "アカウントの削除が完了しませんでした。現在の操作が落ち着いてから、もう一度お試しください。",
-  "settings.storage.emptyVaultFailed": "保管庫を空にできませんでした。アカウントやデータが残っている可能性があります。現在の操作が完了してから、もう一度お試しください。"
+  "settings.storage.emptyVaultFailed": "保管庫を空にできませんでした。アカウントやデータが残っている可能性があります。現在の操作が完了してから、もう一度お試しください。",
+  "notify.arrival.unknownSender": "不明な差出人",
+  "notify.arrival.newEmail": "新着メール",
+  "notify.arrival.newEmails": "新着メール {{count}} 件",
+  "notify.arrival.batchPreviewBody": "{{sender}}: {{subject}}（ほか {{more}} 件）",
+  "notify.arrival.singlePrivateBody": "{{accountEmail}} に新着メール",
+  "notify.arrival.batchPrivateBody": "{{accountEmail}} に新着メール {{count}} 件"
+
 }

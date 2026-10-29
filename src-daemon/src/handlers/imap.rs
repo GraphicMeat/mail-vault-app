@@ -151,6 +151,28 @@ pub(crate) async fn auto_cache_with_ids(
     opened: bool,
     ids: Option<mailvault_core::jmap_store::record::ServerIds>,
 ) -> Result<bool, String> {
+    auto_cache_guarded(state, stamp, mailbox, uid, raw, date_ms, opened, ids, None).await
+}
+
+/// A code child has an earlier admitted source, never a fresh account stamp.
+/// Its writer keeps the short source lease and cache-owner check in the actual
+/// blocking commit child; a replaced mailbox cannot inherit the old raw UID.
+pub(crate) async fn auto_cache_original(
+    state: &Arc<DaemonState>, source: &crate::sync_observation::SourceKey,
+    uid: u32, raw: Vec<u8>, date_ms: Option<i64>,
+    ids: Option<mailvault_core::jmap_store::record::ServerIds>,
+) -> Result<bool, String> {
+    auto_cache_guarded(state, source.original.clone(), source.mailbox.clone(), uid,
+        raw, date_ms, true, ids, Some(source.clone())).await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn auto_cache_guarded(
+    state: &Arc<DaemonState>, stamp: AccountStamp, mailbox: String,
+    uid: u32, raw: Vec<u8>, date_ms: Option<i64>, opened: bool,
+    ids: Option<mailvault_core::jmap_store::record::ServerIds>,
+    original: Option<crate::sync_observation::SourceKey>,
+) -> Result<bool, String> {
     let app_dir = state.app_dir.clone();
     let policy_account = stamp.id().to_owned();
     let policy = blocking(move || download_policy(&app_dir, &policy_account)).await.ok().flatten();
@@ -171,8 +193,23 @@ pub(crate) async fn auto_cache_with_ids(
         };
         #[cfg(test)]
         prepared_cache_pause(&state2.app_dir);
+        let _source_lease = original.as_ref().map(|source|
+            crate::sync_observation::source_lease(&state2, &source.original, &source.origin_hash))
+            .transpose()?;
         with_stamped_mailbox_write(&state2, &commit_stamp, &mailbox, |root| {
-            vault_files::store_prepared(&state2.vault_registry, root, commit_stamp.id(), &mailbox, &prepared, &[], false)
+            if let Some(source) = original.as_ref() {
+                let owner = source.cache_owner.as_ref().ok_or("errors.bulkIdentityUncertain")?;
+                return crate::custody::with_conn(&state2, |conn| {
+                    if mailvault_core::custody::cache::native_identity(conn,
+                        &source.account_id, &source.mailbox)?.as_ref() != Some(owner) {
+                        return Err("errors.bulkIdentityChanged".to_owned());
+                    }
+                    vault_files::store_prepared(&state2.vault_registry, root,
+                        commit_stamp.id(), &mailbox, &prepared, &[], false)
+                });
+            }
+            vault_files::store_prepared(&state2.vault_registry, root,
+                commit_stamp.id(), &mailbox, &prepared, &[], false)
         })
     })
     .await;

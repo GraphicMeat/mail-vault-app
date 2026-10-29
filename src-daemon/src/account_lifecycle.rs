@@ -116,7 +116,7 @@ enum Phase {
     Retired,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AccountStamp {
     id: String,
     epoch: u64,

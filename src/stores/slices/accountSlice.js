@@ -87,7 +87,8 @@ async function _runRefresh(set) {
   } finally {
     _refreshInFlight = false;
     if (_pendingRefresh) {
-      _pendingRefresh = false;
+      // The timer consumes this intent. Clearing it here drops a click made
+      // while the first refresh was in flight.
       const wait = Math.max(0, REFRESH_COOLDOWN_MS - (Date.now() - _lastRefreshAt));
       _scheduleTrailingRefresh(set, wait);
     }

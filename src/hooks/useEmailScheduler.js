@@ -2,162 +2,23 @@ import { useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
-import { useSettingsStore, selectOwnAddresses } from '../stores/settingsStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useSnoozeStore } from '../stores/snoozeStore';
 import { useViewHideStore } from '../stores/viewHideStore';
 import { recountNativeInbox, unreadPresentation } from '../stores/unreadCounts';
 import { invalidateUnreadConnection } from '../services/unreadCountsClient';
-import { notify } from '../stores/focusStore';
-import * as db from '../services/db';
 import { invalidateRestoreDescriptors } from '../services/cacheManager';
-import { watchAccount, waitForSyncChanges } from '../services/syncService';
-import { onDaemonReconnected } from '../services/searchIndex';
-import { hasValidCredentials } from '../services/authUtils';
-import { isGraphAccount } from '../services/graphConfig';
-import { normalizeNotificationSound } from '../utils/notificationSounds';
-import { isOwnAddress } from '../utils/ownAddresses';
-import { isOutgoingMailboxName, sentMailboxPathFor } from '../utils/sentFolder';
-import { offerCodeFromArrival } from '../services/codeBubble';
+import { waitForSyncChanges } from '../services/syncService';
 import { accountExpectedContext } from '../services/db/accounts';
+import { connectNativeSync, observeNativeView, currentNativeView, nativeInstanceId } from '../services/nativeSyncContext.js';
+import { deliverPreparedNotice, offerPreparedCode } from '../services/nativeArrival.js';
 
-// Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
-
-// Dispatch per-account notifications; notify() asks the daemon's notification
-// policy (`notify.decide`) whether each one is actually shown, and logs the
-// answer either way: the only way a suppressed one still lands in the
-// decision log ("why didn't I get this").
-const dispatchNotifications = (perAccountResults) => {
-  if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
-
-  const { showPreview, sound } = useSettingsStore.getState().notificationSettings;
-  const selectedSound = normalizeNotificationSound(sound);
-
-  for (const result of perAccountResults) {
-    const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress, newestCode, uids, rearm } = result;
-
-    // A click opens the message the banner shows, in the folder it arrived
-    // in. Without a preview the banner names no message, so it opens the folder.
-    const uid = Number(newestUid);
-    const named = showPreview && Number.isSafeInteger(uid) && uid > 0;
-    // A lone arrival's one-time code shows under the sender, and rides in the
-    // target for the banner's Copy & delete and Delete (macOS).
-    const code = named && newCount === 1 && newestCode ? newestCode : null;
-    const target = {
-      accountId,
-      mailbox: folder,
-      ...(named ? { uid } : {}),
-      ...(code ? { code } : {}),
-    };
-    const from = newestFromAddress || '';
-    // A view is an index query the daemon answers, and an arriving message
-    // is not in the index yet -- so nothing here can say which views it
-    // belongs to, and the mute would miss the very notification it was set
-    // for. The policy implements view-muted and is tested for it; the control
-    // stays out of Settings until arrival-time matching exists, because a
-    // switch that silently never fires is worse than no switch.
-    // The messages the banner is for, when the caller can name them (a scheduled
-    // refresh can): the daemon allows one banner per message, so a refresh that
-    // sees the same arrival again cannot raise it twice.
-    const mailCtx = { accountId, folder, from, viewIds: [], ...(Array.isArray(uids) && uids.length ? { uids } : {}), ...(rearm ? { rearm: true } : {}) };
-    const notifyEmail = (title, body) => selectedSound === 'none'
-      ? notify(title, body, undefined, target, mailCtx)
-      : notify(title, body, selectedSound, target, mailCtx);
-
-    if (newCount === 1) {
-      // Single new email
-      if (showPreview) {
-        const sender = newestSender || 'Unknown sender';
-        const subject = newestSubject || '(No subject)';
-        notifyEmail(sender, code ? `${code}\n${subject}` : subject);
-      } else {
-        notifyEmail('New Email', `New email in ${accountEmail}`);
-      }
-    } else {
-      // Multiple new emails
-      if (showPreview) {
-        const sender = newestSender || 'Unknown sender';
-        const subject = newestSubject || '(No subject)';
-        notifyEmail(
-          `${newCount} New Emails`,
-          `${sender}: ${subject} (and ${newCount - 1} more)`
-        );
-      } else {
-        notifyEmail('New Email', `${newCount} new emails in ${accountEmail}`);
-      }
-    }
-  }
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const accountContext = (state, id) => {
+  const account = state.accounts?.find(row => row.id === id);
+  return account ? JSON.stringify(accountExpectedContext(account, 'all')) : null;
 };
-
-/// One banner: `count` new in `folder` of `accountId`, previewing `header`
-/// (a cached list row, or null) and the one-time `code` found in it, if any.
-/// The change feed and a local snooze's wake (stores/snoozeStore.js) both
-/// announce through it. `announce` names the message(s) the banner is for
-/// (`uids`) so the daemon holds back a second banner for them; `rearm` marks a
-/// banner that must show though the message was announced before (a wake).
-export function notifyArrival(accountId, folder, count, header, code = null, announce = {}) {
-  const state = useMailStore.getState();
-  const account = state.accounts.find(a => a.id === accountId);
-  // Mail filed in Sent is mail the user sent, whoever the From says: a copy
-  // arriving there is not an arrival, however many land at once.
-  if (isOutgoingMailboxName(folder)
-    || (account?.sentFolderOverride && folder === account.sentFolderOverride)
-    || folder === sentMailboxPathFor(state, accountId, null)) return;
-  const fromAddress = typeof header?.from === 'string' ? header.from : (header?.from?.address || '');
-  // The user's own reply lands in the inbox thread too (Gmail files it under
-  // INBOX as well as Sent): mail the user wrote is not an arrival. Only a lone
-  // message can be judged by its newest header; a batch may hold others' mail.
-  if (count === 1 && account && isOwnAddress(fromAddress, selectOwnAddresses(useSettingsStore.getState(), account))) return;
-  dispatchNotifications([{
-    accountId, accountEmail: account?.email, folder, newCount: count,
-    newestSender: header?.from?.name || header?.from?.address,
-    newestSubject: header?.subject,
-    newestUid: header?.uid,
-    newestFromAddress: fromAddress,
-    newestCode: code,
-    ...(announce.uids?.length ? { uids: announce.uids } : {}),
-    ...(announce.rearm ? { rearm: true } : {}),
-  }]);
-}
-
-// How long a lone arrival's banner waits for the code read (which may read the
-// body) before it goes without the code. The bubble still gets a late code.
-const CODE_WAIT_MS = 3000;
-
-/// One folder's arrivals offered to the code bubble; the code for the banner
-/// of a lone arrival (null for several, none, or a read slower than
-/// CODE_WAIT_MS). One code read feeds both.
-async function arrivalCode(accountId, mailbox, count, header) {
-  const offered = offerCodeFromArrival(accountId, mailbox, header).catch(error => {
-    console.warn('[scheduler] Could not offer the code bubble:', error);
-    return null;
-  });
-  if (count !== 1) return null;
-  let timer;
-  const code = await Promise.race([offered, new Promise(resolve => { timer = setTimeout(resolve, CODE_WAIT_MS, null); })]);
-  clearTimeout(timer);
-  return code;
-}
-
-/// The change feed's banner and code bubble for one folder's arrivals.
-async function announceArrival(accountId, mailbox, count, header) {
-  notifyArrival(accountId, mailbox, count, header, await arrivalCode(accountId, mailbox, count, header));
-}
-
-/// A scheduled refresh's banners and code bubbles. A refresh that lists a
-/// code mail before the daemon's IDLE does leaves the change feed nothing to
-/// announce, so the refresh reads the code itself.
-async function announceRefresh(perAccountResults) {
-  dispatchNotifications(await Promise.all(perAccountResults.map(async r => ({
-    ...r,
-    newestCode: await arrivalCode(r.accountId, r.folder, r.newCount, {
-      uid: r.newestUid,
-      subject: r.newestSubject,
-      snippet: r.newestSnippet,
-      from: { name: r.newestSender, address: r.newestFromAddress },
-    }),
-  }))));
-}
 
 // Fire-and-forget, loaded late: both stores sit on top of the mail store this
 // hook is imported under, and nothing in the change feed waits on either.
@@ -189,69 +50,23 @@ export function useEmailScheduler() {
   const refreshAllAccounts = useAccountStore(s => s.refreshAllAccounts);
   const accounts = useAccountStore(s => s.accounts);
   const emails = useMessageListStore(s => s.emails);
-  // What the sidebar rows are made of (unreadCounts.unreadRows): whatever
-  // moves a row moves the dock badge and the tray menu with it.
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const displayNames = useSettingsStore(s => s.displayNames);
   const accountOrder = useSettingsStore(s => s.accountOrder);
-  const {
-    refreshInterval,
-    refreshOnLaunch,
-    setLastRefreshTime,
-    notificationSettings,
-    badgeEnabled,
-    badgeMode
-  } = useSettingsStore();
+  const { badgeEnabled, badgeMode } = useSettingsStore();
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const unifiedFolder = useMailStore(s => s.unifiedFolder);
+  const mailboxScope = useMailStore(s => s.mailboxScope);
 
-  const intervalRef = useRef(null);
-  const hasRefreshedOnLaunch = useRef(false);
   const hasReplayedOps = useRef(false);
   const lastBadgeCount = useRef(-1);
   const lastTrayRows = useRef('');
   const hadAccounts = useRef(false);
-  const badgeConsumerGeneration = useRef(0);
-  useEffect(() => () => { badgeConsumerGeneration.current += 1; }, []);
+  const badgeTimerRef = useRef(null);
 
-  // ── IDLE: register watchers, then follow the daemon's change feed ──
-  //
-  // The daemon idles each account's INBOX and bumps a generation counter when
-  // a wake-up sync found something. One long poll at a time; the reply names
-  // the account and the folder, and the app repaints only what is on screen
-  // and tells the user about the rest the way a scheduled refresh does.
-  //
-  // ponytail: one sync.watch round trip per IMAP account per scheduled
-  // refresh (doRefresh calls this too). The daemon no-ops an unchanged
-  // fingerprint, so this is cheap by design — batch into one RPC if account
-  // counts ever make the round-trip count matter.
-  const registerWatchers = () => {
-    for (const a of useMailStore.getState().accounts) {
-      if (!isGraphAccount(a) && hasValidCredentials(a)) watchAccount(a);
-    }
-  };
-
-  // Re-register when an account appears, disappears, or gets fresh credentials.
-  // An OAuth token the daemon never heard about is a watcher that keeps failing
-  // to authenticate until the next app launch.
-  const watchSignature = accounts
-    .map(a => `${a.id}:${a.password ? 1 : 0}:${(a.oauth2AccessToken || '').slice(-8)}`)
-    .join('|');
-  useEffect(() => { registerWatchers(); }, [watchSignature]);
-
-  // Answers whether the change landed on screen. A folder-subtree view
-  // (mailboxScope) lists every folder under its root — spansMailboxes(state)
-  // already treats that the same as UNIFIED, so a change to a folder under the
-  // open branch (not the root path itself) has to repaint too, not just an
-  // exact activeMailbox match. mailboxScope.paths is the branch already
-  // enumerated by loadSubtree (root + every descendant), so membership in it
-  // is the same check rather than a second copy of the delimiter/startsWith
-  // logic.
-  // An IDLE wake-up writes the daemon's cache and nothing else, so the
-  // account's badge would wait for the next scheduled refresh. Recount it
-  // from that cache on any INBOX change, flags-only ones included (a read on
-  // another device). Only a complete cache is counted: a partial one reads as
-  // fewer unread, so it only adds the arrivals (unreadCounts owns the rule).
-  // The daemon reads only the INBOX cache's count predicate fields.
   const loadedInbox = accountId => {
     const s = useMailStore.getState();
     return s.activeAccountId === accountId && !s.unifiedInbox && !s.mailboxScope
@@ -293,149 +108,212 @@ export function useEmailScheduler() {
       { kind: 'viewHiddenKeys', before, after });
   }), []);
 
-  const onSyncChange = async ({ accountId, mailbox, newEmails, updatedFlags }) => {
-    const s = useMailStore.getState();
-    const original = s.accounts.find(account => account.id === accountId);
-    const expected = original && JSON.stringify(accountExpectedContext(original, 'all'));
-    let invalid = !expected;
-    const checkSource = state => {
-      const current = state.accounts.find(account => account.id === accountId);
-      if (!current || JSON.stringify(accountExpectedContext(current, 'all')) !== expected) invalid = true;
-    };
-    const unwatchSource = useMailStore.subscribe?.(checkSource) || (() => {});
-    try {
-    // All Inboxes lists every account, so a change on ANY of them is on
-    // screen there, whichever account happens to be "active" underneath.
-    const unifiedOpen = s.unifiedInbox || s.activeMailbox === 'UNIFIED';
-    const onScreen =
-      (s.activeAccountId === accountId && (
-        s.activeMailbox === mailbox
-        || s.activeMailbox === 'UNIFIED'
-        || !!s.mailboxScope?.paths?.includes(mailbox)
-      ))
-      || (unifiedOpen && (s.unifiedFolder || 'INBOX') === mailbox);
+  // The same main-window context survives hook remounts. This observes the
+  // currently visible view; only the daemon chooses schedule and targets.
+  useEffect(() => {
+    observeNativeView(currentNativeView()).catch(error =>
+      console.warn('[scheduler] The native view could not be reported:', error));
+  },
+    [activeAccountId, activeMailbox, unifiedInbox, unifiedFolder, mailboxScope]);
 
-    if (newEmails > 0) {
-      let newest = null;
-      // A missing preview is not worth losing the notification over.
-      try {
-        newest = (await db.getEmailHeadersPartial(accountId, mailbox, 1))?.emails?.[0] || null;
-      } catch { /* no preview, still notify */ }
-      // A one-time code in that mail goes to the corner bubble and the banner.
-      // Fire-and-forget: it may read the body, and nothing in the feed waits on it.
-      announceArrival(accountId, mailbox, newEmails, newest)
-        .catch(error => console.warn('[scheduler] Could not announce the arrival:', error));
-    }
-    // A restore window saved before the change holds the old flags and any
-    // message since deleted at the mailbox (an expunge reports no count of its
-    // own), and All Inboxes paints those ahead of the cache. So any change
-    // drops it. The Notes to Self board keeps its own copy of each note's
-    // flags, whichever list is on screen.
-    invalidateRestoreDescriptors(accountId);
-    if (updatedFlags > 0) rereadNoteFlags(accountId, mailbox);
-    checkSource(useMailStore.getState());
-    if (mailbox === 'INBOX' && !invalid) await recountInboxUnread(accountId, newEmails);
-    return onScreen;
-    } finally {
-      unwatchSource();
-    }
-  };
-
-  // Each daemonCall is its own socket connection — the Tauri forwarder connects,
-  // authenticates, sends one request and reads one reply — so a parked long poll
-  // pins only its own connection. Nothing else needs a dedicated one.
   useEffect(() => {
     let stopped = false;
-    // No cursor yet: the daemon outlives the app, and 0 asked it for its whole
-    // ring of recent changes — a day of arrivals re-announced on every cold
-    // start. Without one it resumes after what the last app acknowledged.
     let since = null;
-    // A restarted daemon holds no watchers: the app is its only account list,
-    // and until the next scheduled refresh re-sent it, no account was idled.
-    let unlisten = null;
-    try {
-      Promise.resolve(onDaemonReconnected(() => {
-        if (stopped) return;
-        invalidateUnreadConnection();
-        badgeConsumerGeneration.current += 1;
-        registerWatchers();
-      }))
-        .then((u) => { if (stopped) u?.(); else unlisten = u; })
-        .catch(error => console.warn('[scheduler] Could not watch daemon reconnect:', error));
-    } catch (error) {
-      console.warn('[scheduler] Could not watch daemon reconnect:', error);
-    }
-    (async () => {
-      while (!stopped) {
-        let reply;
-        try {
-          reply = await waitForSyncChanges(since, 25000);
-        } catch (e) {
-          // No Tauri means no daemon for the life of this session (the web
-          // build) — retrying that is a spin, not a recovery.
-          if (stopped || e?.code === 'NO_TAURI') return;
-          await new Promise(r => setTimeout(r, e?.code === 'DAEMON_OFFLINE' ? 30000 : 5000));
-          continue;
+    let processId = null;
+    const unlisten = [];
+    const sourceRefs = new Map();
+    const waiting = [];
+    const sourceVersions = new Map();
+    let recovering = null;
+    let stopAccountWait = null;
+    let pendingChannel = false;
+    const version = accountId => sourceVersions.get(accountId) || 0;
+    const stopSourceWatch = useMailStore.subscribe((state, previous) => {
+      const ids = new Set([...(previous.accounts || []), ...(state.accounts || [])].map(row => row.id));
+      for (const id of ids) {
+        if (accountContext(state, id) === accountContext(previous, id)) continue;
+        // A first appearance has no earlier source to invalidate; a reply that
+        // was already in flight may carry this account's first notice, and the
+        // daemon spent its one claim preparing it.
+        if (!accountContext(previous, id)) continue;
+        sourceVersions.set(id, version(id) + 1);
+        for (const [reference, source] of sourceRefs) {
+          if (source.accountId === id) sourceRefs.delete(reference);
         }
-        if (stopped) return;
-        // A generation below our cursor is a restarted daemon (its counter
-        // starts again at 0): it has lost every watcher, so hand them back.
-        if (reply?.gen != null && reply.gen < since) registerWatchers();
-        // Adopt the generation the daemon reports, even a lower one: its
-        // counter restarts at 0 when the daemon does, and it answers a cursor
-        // from the future at once with where it actually is.
-        since = reply?.gen ?? since;
-        // Each iteration awaits a DB read, so an unmount between two changes
-        // in the same reply must stop the loop before the next one starts —
-        // checking `stopped` only before the loop let a change after the
-        // first still fire post-unmount.
-        // One banner per folder, not per change: the preview is the folder's
-        // newest message, so a launch after a night closed, which collects
-        // every arrival in one reply, repeated that message once per arrival.
-        const byFolder = new Map();
-        for (const c of reply?.changes || []) {
-          const key = `${c.accountId}\x01${c.mailbox}`;
-          const seen = byFolder.get(key);
-          byFolder.set(key, seen ? { ...seen, newEmails: (seen.newEmails || 0) + (c.newEmails || 0), updatedFlags: (seen.updatedFlags || 0) + (c.updatedFlags || 0) } : c);
-        }
-        // Any change can move a saved view's badge: a read, a star, an
-        // arrival, or a removal, which the feed reports without a count of
-        // its own. Once per reply, and the store coalesces it further.
-        if (byFolder.size) {
-          viewCountsStale();
-          notesStale();
-        }
-        let repaint = false, flagsMoved = false;
-        for (const c of byFolder.values()) {
-          if (stopped) break;
-          if (await onSyncChange(c)) {
-            repaint = true;
-            if (c.updatedFlags > 0) flagsMoved = true;
-          }
-        }
-        if (stopped) return;
-        // One reload per reply, whatever it named. `loadEmails()` takes no
-        // arguments and always reloads the view that is open, so deduping by
-        // (account, mailbox) deduped the keys and not the work: in All
-        // Inboxes, a reply naming two accounts' INBOXes fired two concurrent
-        // reloads of the one list. Notifications fire once per folder.
-        if (repaint) {
-          // 'UNIFIED' is a sentinel, not a mailbox. loadEmails has no
-          // reference to it and would walk on to SELECT "UNIFIED", fail, and
-          // restore the previous rows behind an error — "this happened in all
-          // inboxes". loadUnifiedInbox re-reads each account's disk cache,
-          // which is exactly the repaint a daemon-announced change needs; not
-          // refreshAllAccounts, because the daemon already synced.
-          const mail = useMailStore.getState();
-          if (mail.unifiedInbox || mail.activeMailbox === 'UNIFIED') {
-            mail.loadUnifiedInbox?.(null, mail.unifiedFolder || 'INBOX');
-          } else {
-            mail.loadEmails?.(flagsMoved ? { rereadFlags: true } : undefined);
-          }
+        for (let index = waiting.length - 1; index >= 0; index--) {
+          if (waiting[index].payload.accountId === id) waiting.splice(index, 1);
         }
       }
+    });
+    const current = (reference, accountId, instance) => {
+      if (stopped || instance !== nativeInstanceId() || instance !== processId) return false;
+      const source = sourceRefs.get(reference);
+      return source?.accountId === accountId
+        && source.version === version(accountId)
+        && source.context === accountContext(useMailStore.getState(), accountId);
+    };
+    const consume = (kind, payload, buffer = true) => {
+      if (!payload || typeof payload.sourceRef !== 'string') return;
+      if (!sourceRefs.has(payload.sourceRef)) {
+        if (buffer) {
+          if (waiting.length >= 64) waiting.shift();
+          waiting.push({ kind, payload });
+        }
+        return;
+      }
+      if (!current(payload.sourceRef, payload.accountId, payload.instanceId)) return;
+      if (kind === 'notify') void deliverPreparedNotice(payload);
+      else offerPreparedCode(payload);
+    };
+    const register = change => {
+      if (!change?.sourceRef || !change.accountId) return;
+      const context = accountContext(useMailStore.getState(), change.accountId);
+      if (!context) return;
+      sourceRefs.set(change.sourceRef, { accountId: change.accountId,
+        context, version: version(change.accountId) });
+      if (sourceRefs.size > 128) sourceRefs.delete(sourceRefs.keys().next().value);
+    };
+    const catchUp = async ({ channelChanged = false } = {}) => {
+      if (stopped) return;
+      sourceRefs.clear(); waiting.length = 0;
+      invalidateUnreadConnection();
+      const status = await connectNativeSync({ channelChanged });
+      if (stopped) return;
+      processId = status.instanceId;
+      for (const account of useMailStore.getState().accounts) {
+        void recountNativeInbox(account.id).catch(() => {});
+      }
+      viewCountsStale(); notesStale();
+      const mail = useMailStore.getState();
+      if (mail.unifiedInbox || mail.activeMailbox === 'UNIFIED') {
+        void mail.loadUnifiedInbox?.(null, mail.unifiedFolder || 'INBOX');
+      } else if (mail.activeAccountId && mail.activeMailbox) {
+        void mail.loadEmails?.({ rereadFlags: true });
+      }
+    };
+    const recover = options => {
+      pendingChannel ||= options?.channelChanged === true;
+      if (recovering) return recovering;
+      recovering = (async () => {
+        while (!stopped) {
+          const channelChanged = pendingChannel;
+          pendingChannel = false;
+          try {
+            await catchUp({ channelChanged });
+            if (!pendingChannel) return;
+          }
+          catch (error) {
+            pendingChannel ||= channelChanged;
+            console.warn('[scheduler] Native status recovery is pending:', error);
+            await pause(5_000);
+          }
+        }
+      })().finally(() => { recovering = null; });
+      return recovering;
+    };
+    const onChange = async change => {
+      const { accountId, mailbox, newEmails = 0, updatedFlags = 0 } = change;
+      const snapshot = useMailStore.getState();
+      const source = accountContext(snapshot, accountId);
+      if (!source) return { repaint: false, flagsMoved: false };
+      invalidateRestoreDescriptors(accountId);
+      if (updatedFlags > 0) rereadNoteFlags(accountId, mailbox);
+      if (mailbox === 'INBOX') await recountInboxUnread(accountId, newEmails);
+      if (source !== accountContext(useMailStore.getState(), accountId)) return { repaint: false, flagsMoved: false };
+      const now = useMailStore.getState();
+      const onScreen = (now.activeAccountId === accountId &&
+        (now.activeMailbox === mailbox || now.mailboxScope?.paths?.includes(mailbox)))
+        || ((now.unifiedInbox || now.activeMailbox === 'UNIFIED')
+          && (now.unifiedFolder || 'INBOX') === mailbox);
+      return { repaint: onScreen, flagsMoved: onScreen && updatedFlags > 0 };
+    };
+    (async () => {
+      while (!stopped) {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        for (const [name, handler] of [
+          ['notify', event => consume('notify', event.payload)],
+          ['code-ready', event => consume('code-ready', event.payload)],
+          ['daemon-reconnected', () => { void recover({ channelChanged: true }); }],
+          ['daemon-events-lagged', () => { void recover(); }],
+        ]) {
+          const off = await listen(name, handler);
+          if (stopped) off?.(); else unlisten.push(off);
+        }
+        if (stopped) return;
+        // Nothing is attached or polled before the accounts are in the store: a
+        // reply that names an account the app does not know yet is dropped, and
+        // the daemon has already spent its one claim on that notice.
+        if (!useMailStore.getState().accounts?.length) {
+          await new Promise(resolve => {
+            const off = useMailStore.subscribe(state => {
+              if (state.accounts?.length) { off(); resolve(); }
+            });
+            stopAccountWait = () => { off(); resolve(); };
+          });
+          stopAccountWait = null;
+          if (stopped) return;
+        }
+        // All typed-event and reconnect listeners are live before native
+        // owner attachment, context admission or the first change poll.
+        await recover();
+        while (!stopped) {
+          let reply;
+          const admittedVersions = new Map(sourceVersions);
+          try { reply = await waitForSyncChanges(since, 25000); }
+          catch (error) {
+            if (stopped || error?.code === 'NO_TAURI') return;
+            await pause(error?.code === 'DAEMON_OFFLINE' ? 30_000 : 5_000);
+            if (stopped) return;
+            await recover();
+            continue;
+          }
+          if (stopped) return;
+          if (reply?.instanceId !== processId || reply?.resyncRequired
+            || (since != null && reply?.gen < since)) {
+            since = reply?.gen ?? null;
+            await recover({ channelChanged: reply?.instanceId !== processId });
+            continue;
+          }
+          since = reply?.gen ?? since;
+          const changes = (reply?.changes || []).filter(change =>
+            (admittedVersions.get(change.accountId) || 0) === version(change.accountId));
+          for (const change of changes) register(change);
+          for (const item of waiting.splice(0)) consume(item.kind, item.payload, false);
+          for (const notice of reply?.notifications || []) consume('notify', notice, false);
+          if (changes.length) { viewCountsStale(); notesStale(); }
+          let repaint = false, flagsMoved = false;
+          for (const change of changes) {
+            if (stopped) break;
+            let result;
+            try { result = await onChange(change); }
+            catch (error) {
+              // One failed recount must not tear the feed down and clear every
+              // parked source; the next change or recovery repairs the count.
+              console.warn('[scheduler] A native change could not be applied:', error);
+              continue;
+            }
+            repaint ||= result.repaint;
+            flagsMoved ||= result.flagsMoved;
+          }
+          if (stopped) return;
+          if (!repaint) continue;
+          const mail = useMailStore.getState();
+          if (mail.unifiedInbox || mail.activeMailbox === 'UNIFIED') {
+            void mail.loadUnifiedInbox?.(null, mail.unifiedFolder || 'INBOX');
+          } else {
+            void mail.loadEmails?.(flagsMoved ? { rereadFlags: true } : undefined);
+          }
+        }
+      } catch (error) {
+        for (const off of unlisten.splice(0)) off?.();
+        if (stopped) return;
+        console.warn('[scheduler] Native change feed will retry:', error);
+        await pause(5_000);
+      }
+      }
     })();
-    return () => { stopped = true; unlisten?.(); };
+    return () => { stopped = true; stopAccountWait?.(); stopSourceWatch(); unlisten.forEach(off => off?.()); };
   }, []);
 
   // The badge's total, over the accounts the sidebar shows.
@@ -485,47 +363,12 @@ export function useEmailScheduler() {
     }
   };
 
-  // Refresh function that also updates last refresh time
+  // User actions request a native receipt; the daemon owns launch and
+  // interval scheduling. Repaint and counts are driven by its change feed.
   const doRefresh = async () => {
-    const consumer = badgeConsumerGeneration.current;
-    console.log('[scheduler] Starting scheduled refresh...');
-    // A token refreshed in the last tick reaches the daemon's watcher here.
-    registerWatchers();
-
-    try {
-      const result = await refreshAllAccounts();
-      setLastRefreshTime(Date.now());
-      console.log('[scheduler] Refresh completed:', result);
-
-      // Dispatch per-account notifications (replaces old aggregate notification)
-      if (result?.perAccountResults?.length) {
-        announceRefresh(result.perAccountResults)
-          .catch(error => console.warn('[scheduler] Could not announce the refresh:', error));
-      }
-
-      // Update badge to reflect total unread across ALL accounts
-      if (result) {
-        if (consumer !== badgeConsumerGeneration.current) return;
-        if (useSettingsStore.getState().badgeMode === 'unread') {
-          const total = await totalUnreadNow();
-          if (consumer === badgeConsumerGeneration.current && total !== null) await updateBadge(total);
-        } else {
-          await updateBadge(useMailStore.getState().emails.length);
-        }
-      }
-    } catch (error) {
-      console.error('[scheduler] Refresh failed:', error);
-    }
+    try { return await refreshAllAccounts(); }
+    catch (error) { console.error('[scheduler] Refresh failed:', error); return null; }
   };
-
-  // Handle refresh on launch
-  useEffect(() => {
-    if (refreshOnLaunch && accounts.length > 0 && !hasRefreshedOnLaunch.current) {
-      hasRefreshedOnLaunch.current = true;
-      console.log('[scheduler] Refreshing on launch...');
-      doRefresh();
-    }
-  }, [refreshOnLaunch, accounts.length]);
 
   // Finish any server op the last session confirmed but never sent.
   //
@@ -549,41 +392,9 @@ export function useEmailScheduler() {
       .catch((e) => console.warn('[scheduler] Could not replay pending ops:', e));
   }, [accounts.length]);
 
-  // Set up interval for periodic refresh
-  useEffect(() => {
-    // Clear existing interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    // Don't set interval if disabled (0) or no accounts
-    if (refreshInterval <= 0 || accounts.length === 0) {
-      console.log('[scheduler] Auto-refresh disabled or no accounts');
-      return;
-    }
-
-    const intervalMs = refreshInterval * 60 * 1000;
-    console.log(`[scheduler] Setting up refresh interval: ${refreshInterval} minutes`);
-
-    intervalRef.current = setInterval(() => {
-      console.log('[scheduler] Interval triggered');
-      doRefresh();
-    }, intervalMs);
-
-    // Cleanup on unmount or when interval changes
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [refreshInterval, accounts.length]);
-
   // Update the badge and the tray menu's rows when settings, the accounts or
   // their unread counts change. Debounced to avoid oscillation during IMAP
   // pagination (emails array changes every page).
-  const badgeTimerRef = useRef(null);
   useEffect(() => {
     if (!invoke) return;
     let disposed = false;

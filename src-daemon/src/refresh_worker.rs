@@ -60,6 +60,10 @@ impl SyncOwnerGuard {
             && self.state.refresh.owner_generation(&self.launch_id) == Some(self.generation)
     }
     pub(crate) fn generation(&self) -> u64 { self.generation }
+    pub(crate) fn may_advance(&self, launch_id: &str, revision: u64) -> bool {
+        self.launch_id == launch_id && revision > self.revision
+            && self.state.refresh.owner_generation(&self.launch_id) == Some(self.generation)
+    }
 }
 
 impl Drop for SyncOwnerGuard {

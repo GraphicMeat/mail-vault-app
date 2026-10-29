@@ -10,9 +10,10 @@ const C = { id: '56565656-5656-4565-8565-565656565656', email: 'unread-partial@m
 async function store(action, args = []) {
   await browser.execute((name, values) => {
     window.__S3_STORE_RESULT__ = null;
+    window.__S3_ACTION__ = true;
     Promise.resolve().then(() => window.__MAIL_STORE__.getState()[name](...values)).then(
-      value => { window.__S3_STORE_RESULT__ = { done: true, ok: true, id: value?.id || null }; },
-      failure => { window.__S3_STORE_RESULT__ = { done: true, ok: false, reason: String(failure?.message || failure) }; },
+      value => { window.__S3_ACTION__ = false; window.__S3_STORE_RESULT__ = { done: true, ok: true, id: value?.id || null }; },
+      failure => { window.__S3_ACTION__ = false; window.__S3_STORE_RESULT__ = { done: true, ok: false, reason: String(failure?.message || failure) }; },
     );
   }, action, args);
   const result = await browser.waitUntil(
@@ -376,8 +377,11 @@ describe('Connected native unread projection', function () {
             // The scheduler calls this for both flag-only and ordinary feed
             // replies. Its caller, rather than the options, identifies a
             // passive repaint; explicit action loads keep their real workflow.
-            const schedulerCall = call.stack.some(line =>
-              /useEmailScheduler(?:-|\.)/.test(line));
+            // The hook no longer sits in its own chunk (snoozeStore stopped
+            // importing it lazily), so the stack cannot name it. A load made
+            // while no spec-driven store action is running is a passive one.
+            const schedulerCall = opts?.rereadFlags === true || window.__S3_ACTION__ !== true
+              || call.stack.some(line => /useEmailScheduler(?:-|\.)/.test(line));
             call.scheduler = schedulerCall;
             // applyServerRemoval fires a list reload without awaiting it. Keep
             // that repaint queued during this one delete, while its network,
@@ -466,7 +470,7 @@ describe('Connected native unread projection', function () {
         }, { timeout: 120_000, interval: 500,
           timeoutMsg: 'C never held a real 500-of-501 visible INBOX window and native count 251' });
       } catch (error) {
-        throw new Error(`${error.message}; last partial state: ${JSON.stringify(lastPartialState)}; source/feed diagnostic: ${JSON.stringify(await runtimeDiagnostic(C.id))}`);
+        throw new Error(`${error.message}; last partial state: ${JSON.stringify(lastPartialState)}; source/feed diagnostic: ${JSON.stringify(await runtimeDiagnostic(C.id))}; list loads: ${JSON.stringify(await browser.execute(() => (window.__S3_PARTIAL_DRAIN__?.loadCalls || []).map(call => ({ kind: call.kind, opts: call.opts, scheduler: call.scheduler, held: call.held, before: call.before, after: call.after, stack: call.stack }))))}`);
       }
       expect((await rpc('sync.watch_status', {}))
         .find(row => row.accountId === C.id)?.wakeups).toBeGreaterThan(watcherBefore.wakeups);
@@ -474,6 +478,16 @@ describe('Connected native unread projection', function () {
         window.__S3_PARTIAL_DRAIN__?.passiveLoads > 0),
       { timeout: 15_000, interval: 200,
         timeoutMsg: 'real scheduler flags repaint did not reach the passive load gate' });
+      // Any list load outside a spec action counts as passive, so the held
+      // repaint alone proves nothing: the daemon's change feed must also have
+      // reported this account's flag change, and a held load must carry
+      // `rereadFlags` (only the feed and the refresh repaint pass it).
+      const heldFlagsRepaint = await browser.execute(() =>
+        (window.__S3_PARTIAL_DRAIN__?.loadCalls || []).some(call => call.held
+          && call.kind === 'loadEmails' && call.opts?.rereadFlags === true));
+      expect(heldFlagsRepaint).toBe(true);
+      expect((await snapshot()).feedCalls.some(call => call.changes?.some(change =>
+        change.accountId === C.id && change.updatedFlags > 0))).toBe(true);
       await expectPartialWindow(500, 501);
       await store('markEmailReadStatus', [501, true]);
       await browser.waitUntil(async () => (await snapshot()).counts[C.id] === 250,

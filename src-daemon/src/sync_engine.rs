@@ -45,8 +45,8 @@ pub struct SyncResult {
     /// The uids `arrivals` counts, for the IDLE watcher to fetch bodies of.
     #[serde(skip)]
     pub arrival_uids: Vec<u32>,
-    /// The arrivals were already published (`note_change`) mid-sync — only a
-    /// `sync_account_announcing` sync does that.
+    /// The arrivals were already published mid-sync, before slow reconcile.
+    /// The daemon's announcing path binds that record to the original source.
     #[serde(skip)]
     pub announced: bool,
 }
@@ -550,6 +550,14 @@ impl SyncEngine {
         self.sync_account_with_stamp(account, mailbox, announce, stamp, false, None).await
     }
 
+    /// The IDLE watcher retains its entry stamp and ticket through provider IO,
+    /// early arrival publication and the final flag/repaint record.
+    pub(crate) async fn sync_account_announcing_with_original(&self, account: &SyncAccount,
+        mailbox: &str, stamp: crate::account_lifecycle::AccountStamp,
+        evidence: &crate::sync_observation::TicketEvidence) -> SyncResult {
+        self.sync_account_with_stamp(account, mailbox, true, stamp, true, Some(evidence)).await
+    }
+
     /// An admitted refresh keeps its original account epoch across every lock
     /// wait and cache write. Legacy entries still capture at their old entry.
     pub(crate) async fn sync_account_with_original(&self, account: &SyncAccount, mailbox: &str,
@@ -728,7 +736,7 @@ impl SyncEngine {
         }
         let account_id = account.id.clone();
         let outcome = retry_once_on_dead_socket(|fresh|
-            self.sync_on(account, mailbox, fresh, announce, stamp, strict_origin)).await;
+            self.sync_on(account, mailbox, fresh, announce, stamp, strict_origin, evidence)).await;
         match outcome {
             Ok((delta, mailbox)) => SyncResult {
                 account_id,
@@ -766,6 +774,7 @@ impl SyncEngine {
         announce: bool,
         stamp: &crate::account_lifecycle::AccountStamp,
         strict_origin: bool,
+        evidence: Option<&crate::sync_observation::TicketEvidence>,
     ) -> Result<(SyncDelta, String), String> {
         let account_id = &account.id;
         let config = &account.imap_config;
@@ -784,7 +793,7 @@ impl SyncEngine {
         // the folder is not there.
         let requested = mailbox;
         let mut mailbox = self.alias_for(account_id, requested).await;
-        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, announce, stamp, strict_origin).await;
+        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, announce, stamp, strict_origin, evidence).await;
 
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
             if mailbox != requested {
@@ -801,7 +810,7 @@ impl SyncEngine {
                 // asking the server to resolve it: `resolve_mailbox` answers
                 // None for an exact match, so this is the only path that finds
                 // a plain folder by the requested name in the same tick.
-                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, announce, stamp, strict_origin).await;
+                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, announce, stamp, strict_origin, evidence).await;
             }
         }
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
@@ -810,7 +819,7 @@ impl SyncEngine {
                     "[sync] {} has no '{}' — syncing '{}' instead",
                     account.email, requested, actual
                 );
-                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, announce, stamp, strict_origin).await;
+                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, announce, stamp, strict_origin, evidence).await;
                 mailbox = actual;
             }
         }
@@ -845,6 +854,7 @@ impl SyncEngine {
         announce: bool,
         stamp: &crate::account_lifecycle::AccountStamp,
         strict_origin: bool,
+        evidence: Option<&crate::sync_observation::TicketEvidence>,
     ) -> Result<SyncDelta, String> {
         let account_id = &account.id;
         let io = self.cache_ctx_with_stamp(account_id, mailbox, Ok(stamp.clone())).strict_origin(strict_origin);
@@ -964,12 +974,24 @@ impl SyncEngine {
         // below — see `sync_account_announcing`. The headers go in first, so
         // the app's repaint finds the rows; the meta waits for the end as
         // before, so a sync that fails later is retried from the same place.
-        let announced = announce && arrivals > 0;
-        if announced {
+        let mut announced = false;
+        if announce && arrivals > 0 {
             let headers = new_headers.clone();
             let seed = seed.clone();
             cache_io(&io, move |io| io.write_bound_headers(&headers, &seed, fetched_validity)).await?;
-            self.note_change(account_id, mailbox, arrivals, 0);
+            if let Some(evidence) = evidence {
+                if let Some(state) = self.daemon.get().and_then(|weak| weak.upgrade()) {
+                    if let Some(source) = crate::sync_observation::complete_ticket_in_mailbox(
+                        &state, evidence, mailbox).await {
+                        announced = crate::sync_observation::publish_sources(&state, evidence,
+                            vec![(source, arrival_uids.clone(), 0)]).await.is_ok();
+                    }
+                }
+            } else {
+                // Standalone engine callers keep the original unqualified API.
+                self.note_change(account_id, mailbox, arrivals, 0);
+                announced = true;
+            }
         }
 
         // 2. Flag changes — CONDSTORE tells us exactly which UIDs moved.

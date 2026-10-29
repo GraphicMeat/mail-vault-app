@@ -4057,6 +4057,10 @@
   "errors.syncFailed": "无法刷新此账户，请重试。",
   "errors.syncHeadersIncomplete": "无法完整刷新文件夹中的邮件头。",
   "errors.syncGraphAdoptionRequired": "刷新此 Graph 文件夹前，请先在应用中完成准备。",
+  "errors.syncGraphSettingsAckUnavailable": "无法确认 Graph 设置",
+  "errors.syncGraphAdoptionPending": "{accountId} 的 Graph 文件夹接管尚未完成",
+  "errors.syncStatusUnavailable": "无法获取本机刷新状态",
+  "errors.syncReceiptUncertain": "本机刷新确认结果不确定",
   "errors.bulkIdentityUncertain": "邮件身份不确定。请刷新文件夹后重试。",
   "errors.bulkIdentityChanged": "所选文件夹或邮件的身份已更改。",
   "errors.bulkGraphDeleteUnsupported": "此Graph账户无法执行服务器删除。",
@@ -4083,5 +4087,12 @@
   "settings.accounts.removeBusy": "此账户正忙。请等待当前操作完成后重试。",
   "settings.accounts.removeFailed": "无法移除此账户。请重试。",
   "settings.accounts.removeIncomplete": "账户移除尚未完成。请在当前操作结束后重试。",
-  "settings.storage.emptyVaultFailed": "无法清空保险库。部分账户或数据可能仍然存在。请在当前操作完成后重试。"
+  "settings.storage.emptyVaultFailed": "无法清空保险库。部分账户或数据可能仍然存在。请在当前操作完成后重试。",
+  "notify.arrival.unknownSender": "未知发件人",
+  "notify.arrival.newEmail": "新邮件",
+  "notify.arrival.newEmails": "{{count}} 封新邮件",
+  "notify.arrival.batchPreviewBody": "{{sender}}：{{subject}}（另有 {{more}} 封）",
+  "notify.arrival.singlePrivateBody": "{{accountEmail}} 中有新邮件",
+  "notify.arrival.batchPrivateBody": "{{accountEmail}} 中有 {{count}} 封新邮件"
+
 }

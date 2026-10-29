@@ -290,6 +290,24 @@ pub fn load_by_uids(conn: &Connection, account: &str, mailbox: &str, uids: &[u32
     Ok(rows.into_iter().filter_map(|(_, _, s)| serde_json::from_str(&s).ok()).collect())
 }
 
+/// Exactly one current cached UID for a persisted Message-ID. A local
+/// snooze's stored UID is only a hint: the server may have reissued it while
+/// the message itself is still named by Message-ID. Read at most two UIDs to
+/// detect ambiguity and never bring a whole header list into the caller.
+pub fn unique_uid_by_message_id(conn: &Connection, account: &str, mailbox: &str,
+    message_id: &str) -> Result<Option<u32>, String> {
+    let Some(key) = message_id_key(message_id) else { return Ok(None) };
+    let mut statement = conn.prepare(
+        "SELECT uid FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 \
+         AND CASE WHEN json_valid(header_json) THEN \
+         trim(json_extract(header_json,'$.messageId'), '<> ') END=?3 LIMIT 2"
+    ).map_err(err)?;
+    let rows = statement.query_map(params![account, mailbox, key], |row| row.get::<_, u32>(0))
+        .map_err(err)?.collect::<Result<Vec<_>, _>>().map_err(err)?;
+    if rows.len() > 1 { return Err("ambiguous-message".to_owned()); }
+    Ok(rows.first().copied())
+}
+
 /// `(uid, flags)` of each cached uid in `uids`, ascending by uid: the lean
 /// read for a caller that needs no more of a header than whether it is
 /// listed and its flags. Only the `flags` member is pulled out of each row
@@ -1535,6 +1553,19 @@ mod tests {
         let (_t, c) = store();
         put(&c, "a", "INBOX", 1, 1, json!({"uid": 1, "inReplyTo": "<ABC.1@Mail.X>", "from": {"address": "ana@y.com"}}));
         assert!(replied_in(&c, "INBOX", "<abc.1@mail.x>", &["me@x.com"]));
+    }
+
+    #[test]
+    fn local_wake_message_id_requires_exactly_one_current_cached_uid() {
+        let (_t, c) = store();
+        put(&c, "a", "INBOX", 5, 5, json!({"uid":5,"messageId":"<held@x.test>"}));
+        put(&c, "a", "INBOX", 6, 6, json!({"uid":6,"messageId":"held@x.test"}));
+        put(&c, "b", "INBOX", 7, 7, json!({"uid":7,"messageId":"held@x.test"}));
+        assert_eq!(unique_uid_by_message_id(&c, "a", "INBOX", "<held@x.test>")
+            .unwrap_err(), "ambiguous-message");
+        c.execute("DELETE FROM header_cache WHERE account_id='a' AND mailbox_path='INBOX' AND uid=6", []).unwrap();
+        assert_eq!(unique_uid_by_message_id(&c, "a", "INBOX", "<held@x.test>").unwrap(), Some(5));
+        assert_eq!(unique_uid_by_message_id(&c, "a", "Archive", "<held@x.test>").unwrap(), None);
     }
 
     /// One read of a page answers for every reminder of the account at once.
