@@ -67,11 +67,11 @@ describe('conditional S4 old manual refresh input oracle', () => {
     samples.push(snapshot('spinner-deadline'));
     await vi.advanceTimersByTimeAsync(14_400);
     samples.push(snapshot('trailing-deadline'));
-    expect(invocations.length).toBe(2);
+    expect(invocations.length).toBe(1);
     captured.push({ id: 'T01', samples });
   });
 
-  it.skipIf(!process.env.W4S4_ORACLE_T_OUT)('T02 in-flight clicks collapse into a cooldown trailing intent', async () => {
+  it.skipIf(!process.env.W4S4_ORACLE_T_OUT)('T02 in-flight clicks lose queued refresh at cooldown timer', async () => {
     let release;
     const held = new Promise(resolve => { release = resolve; });
     mockRefreshCurrentView.mockImplementationOnce(() => {
@@ -91,7 +91,7 @@ describe('conditional S4 old manual refresh input oracle', () => {
     samples.push(snapshot('before-trailing'));
     await vi.advanceTimersByTimeAsync(1);
     samples.push(snapshot('trailing'));
-    expect(invocations.length).toBe(2);
+    expect(invocations.length).toBe(1);
     captured.push({ id: 'T02', samples });
   });
 
