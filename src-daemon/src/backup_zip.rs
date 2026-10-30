@@ -470,11 +470,12 @@ pub fn import(
 
     let total_entries: u32 = (0..archive.len())
         .filter(|&i| {
-            if let Ok(entry) = archive.by_index(i) {
-                let name = entry.name().to_string();
-                name.starts_with(email_prefix) && !entry.is_dir() && has_info(&name)
-            } else {
-                false
+            match archive.by_index(i) {
+                Ok(entry) => match entry.name() {
+                    Ok(name) => name.starts_with(email_prefix) && !entry.is_dir() && has_info(&name),
+                    Err(_) => false,
+                },
+                Err(_) => false,
             }
         })
         .count() as u32;
@@ -496,7 +497,13 @@ pub fn import(
             }
             Err(e) => return Err(format!("Failed to read ZIP entry: {e}")),
         };
-        let entry_name = entry.name().to_string();
+        let entry_name = match entry.name() {
+            Ok(n) => n.into_owned(),
+            Err(e) => {
+                warn!("import_backup: skipping entry with an unreadable name: {e}");
+                continue;
+            }
+        };
 
         if !entry_name.starts_with(email_prefix) || entry.is_dir() {
             continue;
@@ -889,7 +896,7 @@ mod tests {
         let manifest: BackupManifest = serde_json::from_str(&manifest_str).unwrap();
         assert_eq!(manifest.accounts.len(), 1);
         assert_eq!(manifest.accounts[0].email, "a@test.com");
-        assert!((0..archive.len()).any(|i| archive.by_index(i).unwrap().name().contains("INBOX")));
+        assert!((0..archive.len()).any(|i| archive.by_index(i).unwrap().name().unwrap().contains("INBOX")));
     }
 
     #[test]
@@ -925,7 +932,7 @@ mod tests {
         let mut body = String::new();
         archive.by_name(&format!("mailvault-backup/emails/a@test.com/MBOX_import_2026-09-29/{file}")).unwrap().read_to_string(&mut body).unwrap();
         assert_eq!(body, "imported mail");
-        assert!(!(0..archive.len()).any(|i| archive.by_index(i).unwrap().name().contains(mailvault_core::local_folder::MARKER_FILE)));
+        assert!(!(0..archive.len()).any(|i| archive.by_index(i).unwrap().name().unwrap().contains(mailvault_core::local_folder::MARKER_FILE)));
     }
 
     /// Task 1b: a `;2,`-spelled (Windows) vault file must be recognized both
@@ -1265,7 +1272,7 @@ mod tests {
 
         let mut archive = zip::ZipArchive::new(std::fs::File::open(&dest).unwrap()).unwrap();
         let mut emails: Vec<String> =
-            (0..archive.len()).map(|i| archive.by_index(i).unwrap().name().to_string()).filter(|n| n.contains("/emails/")).collect();
+            (0..archive.len()).map(|i| archive.by_index(i).unwrap().name().unwrap().to_string()).filter(|n| n.contains("/emails/")).collect();
         emails.sort();
         let one = mailvault_core::vault_files::build_maildir_filename(1, &["A".to_string()]);
         let two = mailvault_core::vault_files::build_maildir_filename(2, &[]);

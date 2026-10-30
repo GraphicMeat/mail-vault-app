@@ -39,7 +39,7 @@ base64 = "0.22"
 # Task 4.3: `backup_zip::export`/`import` (moved from src-tauri) read/write
 # backup ZIP archives directly. Same pin as src-core/Cargo.toml and
 # src-tauri/Cargo.toml.
-zip = "2"
+zip = "9"
 # export_fetch's SSRF guard inspects url::Host directly (reqwest re-exports
 # only Url, not Host). Pinned to the version reqwest 0.12 already vendors.
 url = "2.5"

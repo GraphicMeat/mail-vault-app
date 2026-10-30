@@ -42,7 +42,7 @@ url = "2"
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
 # Offline search index (src/search_index): FTS5 trigram + contentless_delete need SQLite >= 3.43, so bundle it.
 rusqlite = { version = "0.40", features = ["bundled"] }
-zip = "2"
+zip = "9"
 # Encrypted account transfer file (src/transfer).
 argon2 = "0.5"
 chacha20poly1305 = "0.10"

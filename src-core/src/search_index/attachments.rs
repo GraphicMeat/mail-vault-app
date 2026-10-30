@@ -172,7 +172,10 @@ fn extract_office(input: &AttachmentInput) -> Result<String, ExtractError> {
             Ok(e) => e,
             Err(_) => continue,
         };
-        let name = entry.name().to_string();
+        let name = match entry.name() {
+            Ok(n) => n.into_owned(),
+            Err(_) => continue,
+        };
         let wanted = name == "word/document.xml"
             || name == "xl/sharedStrings.xml"
             || (name.starts_with("ppt/slides/slide") && name.ends_with(".xml"));
