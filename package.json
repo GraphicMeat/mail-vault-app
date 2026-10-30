@@ -82,7 +82,7 @@
     "imapflow": "^1.7.8",
     "jsdom": "^29.0.0",
     "mailparser": "^3.9.33",
-    "nodemailer": "^10.0.13",
+    "nodemailer": "^10.3.1",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "vite": "^6.4.1",
@@ -90,7 +90,7 @@
     "webdriverio": "^9.24.0"
   },
   "overrides": {
-    "serialize-javascript": "^7.0.5",
+    "serialize-javascript": "^7.1.3",
     "@puppeteer/browsers": "^3.2.1",
     "nodemailer": "$nodemailer",
     "postcss-selector-parser": "^7.1.6"
