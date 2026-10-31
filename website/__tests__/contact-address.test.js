@@ -5,17 +5,23 @@ import { describe, expect, it } from 'vitest';
 // compose — goes to one inbox. The old mailvaultapp.com mailboxes are gone.
 const CONTACT = 'prime@graphicmeat.com';
 
-const grep = (pattern, ...paths) => {
+const gitGrep = (flags) => (pattern, ...paths) => {
   try {
-    return execFileSync('git', ['grep', '-nIE', pattern, '--', ...paths], { encoding: 'utf8' });
+    return execFileSync('git', ['grep', flags, pattern, '--', ...paths], { encoding: 'utf8' });
   } catch {
     return '';
   }
 };
+const grep = gitGrep('-nIE');
+const grepFixed = gitGrep('-nIF');
 
 describe('contact address', () => {
   it('no page, locale string or app file names a mailvaultapp.com mailbox', () => {
-    expect(grep('[A-Za-z0-9._%+-]+@mailvaultapp\\.com', 'website', 'src', 'src-tauri', 'src-daemon', 'src-core', 'index.html')).toBe('');
+    // A fixed-string search, then the mailbox pattern on the lines it found: git grep
+    // running `[...]+@` over every line of the large fixtures took 10 minutes on CI.
+    const lines = grepFixed('@mailvaultapp.com','website', 'src', 'src-tauri', 'src-daemon', 'src-core', 'index.html')
+      .split('\n').filter((line) => /[A-Za-z0-9._%+-]@mailvaultapp\.com/.test(line));
+    expect(lines).toEqual([]);
   });
 
   it('website mailto links all go to the contact inbox', () => {
