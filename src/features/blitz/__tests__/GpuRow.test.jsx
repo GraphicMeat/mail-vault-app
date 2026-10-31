@@ -6,7 +6,7 @@ vi.mock('../../../services/transport', () => ({ send: vi.fn() }));
 vi.mock('../../../services/billingApi', () => ({ openInBrowser: vi.fn(async () => {}) }));
 import { send } from '../../../services/transport';
 import { openInBrowser } from '../../../services/billingApi';
-import GpuRow, { GPU_LINKS, hostOs, statusLine, reasonKey } from '../GpuRow';
+import GpuRow, { gpuLinks, hostOs, statusLine, reasonKey } from '../GpuRow';
 import SettingsRow from '../SettingsRow';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import en from '../../../i18n/locales/en.json';
@@ -29,12 +29,24 @@ describe('GpuRow helpers', () => {
     expect(hostOs('Mozilla/5.0 (X11; Linux x86_64)')).toBe('linux');
   });
   it('every link key is in the catalog and macOS needs no link', () => {
-    for (const [key, url] of [...GPU_LINKS.windows, ...GPU_LINKS.linux]) {
+    for (const [key, url] of [...gpuLinks('windows'), ...gpuLinks('linux')]) {
       expect(en[key], key).toBeTruthy();
       expect(url).toMatch(/^https:\/\//);
     }
-    expect(GPU_LINKS.mac).toEqual([]);
+    expect(gpuLinks('mac')).toEqual([]);
     for (const os of ['mac', 'windows', 'linux']) expect(en[`blitz.gpu.needs.${os}`], os).toBeTruthy();
+  });
+  it('links open the driver pages in the app language, English where a vendor has none', () => {
+    const urls = (locale) => Object.fromEntries(gpuLinks('windows', locale).map(([k, u]) => [k.split('.').pop(), u]));
+    expect(urls('en').windowsDrivers).toContain('support.microsoft.com/en-us/');
+    expect(urls('de').windowsDrivers).toContain('support.microsoft.com/de-de/');
+    expect(urls('ja').nvidia).toBe('https://www.nvidia.com/ja-jp/drivers/');
+    expect(urls('pt-BR').intel).toBe('https://www.intel.com/content/www/br/pt/support/intel-driver-support-assistant.html');
+    expect(urls('zh-Hans').amd).toBe('https://www.amd.com/zh-cn/support/download/drivers.html');
+    expect(urls('it').amd).toBe('https://www.amd.com/en/support/download/drivers.html');
+    expect(urls('xx').nvidia).toBe('https://www.nvidia.com/en-us/drivers/');
+    // English-only docs stay as they are.
+    expect(gpuLinks('linux', 'fr')[0][1]).toBe('https://wiki.archlinux.org/title/Vulkan');
   });
   it('folds probe reasons into a missing driver or a failed one', () => {
     expect(reasonKey('no_adapter')).toBe('blitz.gpu.reason.noDriver');
@@ -47,6 +59,7 @@ describe('GpuRow helpers', () => {
     const line = (s) => t(...statusLine(s));
     expect(line(null)).toBe(en['blitz.gpu.checking']);
     expect(line(OK)).toBe('Graphics card: Apple M2 (Metal)');
+    expect(line({ ...OK, probe: { ok: true, adapter: 'Radeon', backend: 'Dx12' } })).toBe('Graphics card: Radeon (DirectX 12)');
     expect(line({ compiled: false })).toBe(en['blitz.gpu.notCompiled']);
     expect(line({ compiled: true, probe: { ok: false, reason: 'no_adapter' } })).toBe(en['blitz.gpu.reason.noDriver']);
     expect(line({ ...OK, wanted: true, broken: { reason: 'crashed' } })).toBe(en['blitz.gpu.broken']);
@@ -81,8 +94,8 @@ describe('GpuRow', () => {
   it('a link opens in the browser', async () => {
     render(<GpuRow />);
     const os = hostOs();
-    if (GPU_LINKS[os].length === 0) return; // macOS: Metal, nothing to install
-    const [key, url] = GPU_LINKS[os][0];
+    if (gpuLinks(os).length === 0) return; // macOS: Metal, nothing to install
+    const [key, url] = gpuLinks(os)[0];
     fireEvent.click(screen.getByText(en[key]));
     expect(openInBrowser).toHaveBeenCalledWith(url);
   });
