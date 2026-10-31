@@ -49,8 +49,9 @@ zeroize = "1"
 mailvault-render = { path = "../src-render", optional = true } # blitz-render
 
 [features]
-default = ["blitz-render"] # blitz-render
+default = ["blitz-render", "blitz-gpu"] # blitz-render
 blitz-render = ["dep:mailvault-render"] # blitz-render
+blitz-gpu = ["blitz-render", "mailvault-render/gpu"] # blitz-render
 
 [dev-dependencies]
 # Controlled time for the real backup worker deadline tests only.

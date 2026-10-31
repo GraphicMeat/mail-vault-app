@@ -357,6 +357,7 @@ fn main() {
     // The Blitz render worker: no runtime, no logging, no network. stdin/stdout only.
     #[cfg(feature = "blitz-render")]
     if std::env::args().nth(1).as_deref() == Some("--render-worker") {
+        mailvault_render::raster::want_gpu(std::env::args().any(|a| a == "--gpu"));
         let stdin = std::io::BufReader::new(std::io::stdin());
         let stdout = std::io::LineWriter::new(std::io::stdout());
         let code = match mailvault_render::worker::run(stdin, stdout, render_test_hook) {
@@ -364,6 +365,13 @@ fn main() {
             Err(_) => 1,
         };
         std::process::exit(code);
+    }
+    // Settings' GPU check: ask for an adapter, paint one frame, print the answer.
+    // A process of its own, so a driver that crashes takes nothing with it.
+    #[cfg(feature = "blitz-render")]
+    if std::env::args().nth(1).as_deref() == Some("--render-gpu-probe") {
+        println!("{}", serde_json::to_string(&mailvault_render::raster::probe()).unwrap_or_default());
+        std::process::exit(0);
     }
     // Before any runtime or logging exists: this process only extracts one PDF.
     #[cfg(not(target_os = "macos"))]

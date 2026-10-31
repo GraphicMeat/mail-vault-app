@@ -30,7 +30,9 @@ import { execFileSync } from 'node:child_process';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { BLITZ_FOLDER, BLITZ_THREAD_SUBJECT, BLITZ_CHAT_NAME, BLITZ_TALL_SUBJECT } from './mockImap.js';
 
-const MODE = process.env.MV_MEM_MODE === 'blitz' ? 'blitz' : 'web';
+// blitz-gpu: Blitz with Settings' graphics-card switch on (render workers spawn with --gpu).
+const MODE = ['blitz', 'blitz-gpu'].includes(process.env.MV_MEM_MODE) ? process.env.MV_MEM_MODE : 'web';
+const RENDERER = MODE === 'web' ? 'web' : 'blitz';
 const log = (phase, v) => console.log(`[blitzmem] ${JSON.stringify({ mode: MODE, phase, ...v })}`);
 const setStore = (patch) => browser.execute((p) => window.__SETTINGS_STORE__.setState(p), patch);
 
@@ -169,7 +171,7 @@ async function openChat(name, subject) {
 /** Every body in `scope` has drawn: a loaded iframe document, or a decoded Blitz tile. */
 const bodiesDrawn = (scope) => browser.execute((scope, mode) => {
   const host = document.querySelector(scope) || document;
-  if (mode === 'blitz') {
+  if (mode !== 'web') {
     const bodies = [...host.querySelectorAll('[data-renderer="blitz"]')];
     return bodies.length > 0 && bodies.some((b) => { const t = b.querySelector('[data-testid="blitz-tile"]'); return t && t.complete && t.naturalWidth > 0; });
   }
@@ -193,7 +195,7 @@ describe(`Memory while reading (${MODE})`, function () {
     await browser.setWindowSize(1280, 900);
     await browser.pause(2500);
     await browser.execute(() => [...document.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === 'Dismiss')?.click());
-    await setStore({ emailRenderer: MODE, viewStyle: 'list' });
+    await setStore({ emailRenderer: RENDERER, blitzGpu: MODE === 'blitz-gpu', viewStyle: 'list' });
     await switchToFolder(luke(), BLITZ_FOLDER);
   });
 
@@ -232,10 +234,20 @@ describe(`Memory while reading (${MODE})`, function () {
       iframes: document.querySelectorAll('iframe[sandbox]').length,
       blitz: document.querySelectorAll('[data-renderer="blitz"]').length,
     }));
-    if (MODE === 'blitz') { expect(page.blitz).toBeGreaterThan(0); expect(page.iframes).toBe(0); } else { expect(page.blitz).toBe(0); expect(page.iframes).toBeGreaterThan(0); }
+    if (MODE === 'blitz-gpu') {
+      // The GPU run must really have drawn on the GPU: a worker spawned with --gpu, and the GPU not given up.
+      const ps = execFileSync('ps', ['-axo', 'command='], { encoding: 'utf8', maxBuffer: 16 << 20 });
+      expect(ps).toMatch(/mailvault-daemon\b.*--render-worker --gpu/);
+      const status = await browser.executeAsync((done) => {
+        window.__TAURI__.core.invoke('daemon_rpc', { method: 'render.gpuStatus', params: {} }).then(done).catch((e) => done({ __error: String((e && e.message) || e) }));
+      });
+      log('gpu-status', { status });
+      expect(status?.active).toBe(true);
+    }
+    if (RENDERER === 'blitz') { expect(page.blitz).toBeGreaterThan(0); expect(page.iframes).toBe(0); } else { expect(page.blitz).toBe(0); expect(page.iframes).toBeGreaterThan(0); }
   });
 
   after(async () => {
-    try { await setStore({ emailRenderer: 'web', viewStyle: 'list' }); } catch { /* app gone */ }
+    try { await setStore({ emailRenderer: 'web', blitzGpu: false, viewStyle: 'list' }); } catch { /* app gone */ }
   });
 });

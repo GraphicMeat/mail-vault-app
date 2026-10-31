@@ -14,6 +14,10 @@ describe('SettingsRow', () => {
     render(<SettingsRow />);
     expect(screen.getByRole('switch', { name: en['blitz.settings.title'] })).toBeTruthy();
   });
+  it('says beside the switch why the Rust renderer is better for privacy', () => {
+    render(<SettingsRow />);
+    expect(screen.getByText((text) => text.includes(en['blitz.settings.privacy']))).toBeTruthy();
+  });
   it('flips the renderer setting', () => {
     render(<SettingsRow />);
     const sw = screen.getByRole('switch', { name: en['blitz.settings.title'] });

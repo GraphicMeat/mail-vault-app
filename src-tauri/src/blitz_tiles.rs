@@ -44,6 +44,8 @@ pub fn reply_timeout(method: &str) -> Option<Duration> {
         "render.fold" => Some(Duration::from_secs(6)),
         "render.image" => Some(Duration::from_secs(30)),
         "render.inspect" => Some(Duration::from_secs(6)),
+        // The daemon runs the GPU probe (adapter, shader compile, one frame; its own cap is 15 s).
+        "render.gpuStatus" => Some(Duration::from_secs(20)),
         m if m.starts_with("render.") => Some(Duration::from_secs(3)),
         _ => None,
     }
@@ -82,6 +84,7 @@ mod tests {
     #[test]
     fn reply_timeout_bounds_the_render_family_and_ignores_the_rest() {
         assert_eq!(reply_timeout("render.open"), Some(Duration::from_secs(10)));
+        assert_eq!(reply_timeout("render.gpuStatus"), Some(Duration::from_secs(20)));
         assert_eq!(reply_timeout("render.tile"), Some(Duration::from_secs(6)));
         assert_eq!(reply_timeout("render.textRuns"), Some(Duration::from_secs(6)));
         assert_eq!(reply_timeout("render.image"), Some(Duration::from_secs(30)));

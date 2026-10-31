@@ -4,7 +4,8 @@ vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: (p, proto) => `${proto}
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
 import { send } from '../../../services/transport';
 import { onDocGone } from '../surfaces/docGone';
-import { openRender, tileUrl, hitRender, closeRender, textRunsRender, serializeRender, foldRender, fontsRender, imageRender, settleRender, tileRender } from '../service';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { openRender, gpuStatusRender, tileUrl, hitRender, closeRender, textRunsRender, serializeRender, foldRender, fontsRender, imageRender, settleRender, tileRender } from '../service';
 
 beforeEach(() => { send.mockReset(); });
 
@@ -13,8 +14,17 @@ describe('blitz service', () => {
     send.mockResolvedValue({ docId: 4, rev: 1, meta: { tileCount: 2 } });
     const theme = { mode: 'light' };
     const r = await openRender({ html: '<p>x', cssWidth: 640, scale: 2, allowRemote: true, theme });
-    expect(send).toHaveBeenCalledWith('render.open', { html: '<p>x', cssWidth: 640, scale: 2, allowRemote: true, theme });
+    expect(send).toHaveBeenCalledWith('render.open', { html: '<p>x', cssWidth: 640, scale: 2, allowRemote: true, theme, gpu: false });
     expect(r.docId).toBe(4);
+  });
+  it('open carries the graphics-card setting, and gpuStatus asks the daemon', async () => {
+    send.mockResolvedValue({ docId: 5 });
+    useSettingsStore.setState({ blitzGpu: true });
+    await openRender({ html: '<p>x', cssWidth: 640, scale: 2, allowRemote: false, theme: null });
+    expect(send).toHaveBeenLastCalledWith('render.open', expect.objectContaining({ gpu: true }));
+    useSettingsStore.setState({ blitzGpu: false });
+    await gpuStatusRender(true);
+    expect(send).toHaveBeenLastCalledWith('render.gpuStatus', { refresh: true });
   });
   it('tileUrl encodes doc/rev/index for the mvrender scheme', () => {
     expect(tileUrl(4, 2, 0)).toBe('mvrender://localhost/4%2F2%2F0');

@@ -76,6 +76,100 @@ pub const WORKERS: usize = 2;
 pub const UNAVAILABLE: &str = "render_unavailable";
 pub const RENDER_UPDATED: &str = "render-updated";
 
+/// Settings' "draw on the graphics card": the backend the next worker spawn gets.
+/// Every `render.open` carries the user's choice (`set_gpu_wanted`), so a daemon that
+/// restarted learns it again from the first mail drawn.
+static GPU_WANTED: AtomicBool = AtomicBool::new(false);
+/// Why the GPU was given up for this daemon's life (a worker reported a failure, or
+/// a GPU worker died on its own): workers spawn on the CPU from then on.
+static GPU_BROKEN: StdMutex<Option<Value>> = StdMutex::new(None);
+/// The last `--render-gpu-probe` answer, kept until a `refresh`.
+static GPU_PROBE: StdMutex<Option<Value>> = StdMutex::new(None);
+const GPU_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+
+pub fn set_gpu_wanted(on: bool) {
+    GPU_WANTED.store(on, Ordering::Relaxed);
+}
+
+/// The backend a worker spawned now runs: GPU only when the build has it, the user
+/// asked for it and it has not failed in this daemon.
+pub fn gpu_effective() -> bool {
+    cfg!(feature = "blitz-gpu") && GPU_WANTED.load(Ordering::Relaxed) && GPU_BROKEN.lock().unwrap().is_none()
+}
+
+fn gpu_broke(why: Value) {
+    let mut b = GPU_BROKEN.lock().unwrap();
+    if b.is_none() {
+        info!("render GPU given up: {why}");
+        *b = Some(why);
+    }
+}
+
+/// The platform's native graphics API, for `WGPU_BACKEND`: never OpenGL, which has
+/// no compute shaders on most drivers.
+fn native_wgpu_backend() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "metal"
+    } else if cfg!(target_os = "windows") {
+        "dx12,vulkan"
+    } else {
+        "vulkan"
+    }
+}
+
+/// `render.gpuStatus`: whether the build has the GPU backend, what the user asked
+/// for, what workers run, the probe's answer (adapter, API, driver, or the reason it
+/// failed) and, once it happened, why the GPU was given up.
+pub async fn gpu_status(cmd_exe: Option<std::path::PathBuf>, refresh: bool) -> Value {
+    let compiled = cfg!(feature = "blitz-gpu");
+    let mut probe = Value::Null;
+    if compiled {
+        let cached = GPU_PROBE.lock().unwrap().clone();
+        probe = match cached {
+            Some(p) if !refresh => p,
+            _ => {
+                let p = run_gpu_probe(cmd_exe).await;
+                *GPU_PROBE.lock().unwrap() = Some(p.clone());
+                p
+            }
+        };
+    }
+    json!({
+        "compiled": compiled,
+        "wanted": GPU_WANTED.load(Ordering::Relaxed),
+        "active": gpu_effective(),
+        "probe": probe,
+        "broken": GPU_BROKEN.lock().unwrap().clone(),
+    })
+}
+
+/// A worker on the other backend is replaced, but only once it owes no answer: a
+/// caller mid-request never sees the switch as a failure.
+fn retire_for_backend(worker_gpu: bool, wanted_gpu: bool, owed: usize) -> bool {
+    worker_gpu != wanted_gpu && owed == 0
+}
+
+async fn run_gpu_probe(exe: Option<std::path::PathBuf>) -> Value {
+    let failed = |reason: &str| json!({"compiled": true, "ok": false, "reason": reason});
+    let Some(exe) = exe.or_else(|| std::env::current_exe().ok()) else { return failed("probe_failed") };
+    let mut cmd = Command::new(exe);
+    cmd.arg("--render-gpu-probe")
+        .env("WGPU_BACKEND", native_wgpu_backend())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    match tokio::time::timeout(GPU_PROBE_TIMEOUT, cmd.output()).await {
+        Err(_) => failed("probe_timeout"),
+        Ok(Err(_)) => failed("probe_failed"),
+        // A crash in the driver is a signal, not a printed answer.
+        Ok(Ok(out)) => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|l| serde_json::from_str::<Value>(l).ok())
+            .unwrap_or_else(|| failed("probe_crashed")),
+    }
+}
+
 /// Debug-build test hooks: the worker entry in main.rs hangs or aborts on
 /// these exact bodies so the host's timeout and crash paths are testable.
 #[cfg(debug_assertions)]
@@ -358,6 +452,8 @@ struct Worker {
     /// Fed by this worker's stdout reader and by `call`; read by the watchdog.
     /// Per spawn, so a dying worker's last lines cannot move a new one's clock.
     silence: Arc<StdMutex<Silence>>,
+    /// Started with `--gpu`.
+    gpu: bool,
 }
 
 pub struct RenderHost {
@@ -580,9 +676,27 @@ impl RenderHost {
             // stay in the slot, or the next, renderable message fails too.
             if let Some(w) = guard.as_mut() {
                 if w.dead.load(Ordering::Relaxed) || matches!(w.child.try_wait(), Ok(Some(_))) {
+                    // A GPU worker that died on its own (not a clean exit after a caught
+                    // panic): most likely the driver. Workers go back to the CPU.
+                    if w.gpu {
+                        if let Ok(Ok(status)) = tokio::time::timeout(Duration::from_millis(500), w.child.wait()).await {
+                            if !status.success() {
+                                gpu_broke(json!({"reason": "crashed", "detail": status.to_string()}));
+                            }
+                        }
+                    }
                     *guard = None;
                     self.open_docs.lock().unwrap().clear();
                 }
+            }
+            // The backend changed (Settings, or the GPU was given up): retire the worker
+            // once it owes nothing, so no caller sees a failure. Its docs answer
+            // render_unknown_doc on the new one and the bodies reopen them quietly.
+            if guard.as_ref().is_some_and(|w| retire_for_backend(w.gpu, gpu_effective(), w.waiters.lock().unwrap().len())) {
+                if let Some(w) = guard.take() {
+                    Self::terminate(w);
+                }
+                self.open_docs.lock().unwrap().clear();
             }
             if guard.is_none() {
                 let w = self.spawn().map_err(|_| UNAVAILABLE.to_string())?;
@@ -664,12 +778,17 @@ impl RenderHost {
     }
 
     fn spawn(&self) -> std::io::Result<Worker> {
-        let mut child = (self.cmd.0)().spawn()?;
+        let gpu = gpu_effective();
+        let mut cmd = (self.cmd.0)();
+        if gpu {
+            cmd.arg("--gpu").env("WGPU_BACKEND", native_wgpu_backend());
+        }
+        let mut child = cmd.spawn()?;
         let stdout = child.stdout.take().expect("piped stdout");
         let stdin = Arc::new(Mutex::new(child.stdin.take().expect("piped stdin")));
         let waiters: Waiters = Arc::default();
         let epoch = self.epoch.fetch_add(1, Ordering::Relaxed) + 1;
-        info!("render worker #{epoch} started");
+        info!("render worker #{epoch} started ({})", if gpu { "gpu" } else { "cpu" });
         let (events, slots, w2, s2) = (self.events.clone(), self.fetch_slots.clone(), waiters.clone(), stdin.clone());
         let inflight = self.inflight.clone();
         let silence = Arc::new(StdMutex::new(Silence::new(Instant::now())));
@@ -725,6 +844,7 @@ impl RenderHost {
                             frames.lock().unwrap().ack(epoch, family, v["ok"].as_bool().unwrap_or(false));
                         }
                     }
+                    Some("gpu") => gpu_broke(v.clone()),
                     Some("updated") => {
                         events.emit(RENDER_UPDATED, json!({"docId": v["doc"], "rev": v["rev"], "meta": v["meta"]}));
                     }
@@ -740,7 +860,7 @@ impl RenderHost {
                 let _ = tx.send(Err(UNAVAILABLE.into()));
             }
         });
-        Ok(Worker { epoch, child, stdin, waiters, dead, silence })
+        Ok(Worker { epoch, child, stdin, waiters, dead, silence, gpu })
     }
 }
 
@@ -953,6 +1073,23 @@ mod tests {
         let png = painter.await.unwrap().expect("the paint succeeds");
         assert_eq!(png["png"], "AA==");
         assert_eq!(h.spawned(), 1);
+    }
+
+    #[test]
+    fn a_backend_switch_waits_until_the_worker_owes_nothing() {
+        assert!(!retire_for_backend(false, false, 0));
+        assert!(!retire_for_backend(true, true, 0));
+        assert!(retire_for_backend(false, true, 0), "CPU worker, GPU asked for");
+        assert!(retire_for_backend(true, false, 0), "GPU worker, GPU off or given up");
+        assert!(!retire_for_backend(false, true, 2), "a busy worker finishes first");
+    }
+
+    #[test]
+    fn the_gpu_backend_is_the_native_api_never_opengl() {
+        let b = native_wgpu_backend();
+        assert!(!b.contains("gl"), "{b}");
+        #[cfg(target_os = "macos")]
+        assert_eq!(b, "metal");
     }
 
     #[test]

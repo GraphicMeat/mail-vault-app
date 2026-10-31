@@ -191,6 +191,13 @@ fn run_loop(input: impl BufRead + Send + 'static, mut output: impl Write, pre_op
         }
         // A relayout can discover new resources (CSS background images).
         flush_fetches(&docs, &mut output)?;
+        // The GPU gave up (no adapter, a wgpu panic): tiles paint on the CPU from
+        // here on, and the daemon is told once so Settings can say why.
+        if let Some(p) = crate::raster::take_gpu_report() {
+            let mut v = serde_json::to_value(p).unwrap_or_default();
+            v["kind"] = json!("gpu");
+            line(&mut output, v)?;
+        }
         output.flush()?;
     }
     Ok(())

@@ -5,13 +5,22 @@ edition = "2021"
 publish = false
 description = "MailVault's Blitz email renderer (runs only in the daemon's render worker)"
 
+[features]
+# Paint tiles on the graphics card when the worker is started with --gpu (Settings toggle).
+gpu = ["dep:anyrender_vello", "dep:pollster"]
+
 [dependencies]
 blitz-dom = { version = "=0.3.0-beta.4", features = ["floats"] }
 blitz-html = "=0.3.0-beta.4"
 blitz-paint = "=0.3.0-beta.4"
 blitz-traits = "=0.3.0-beta.4"
 anyrender = "0.14"
-anyrender_vello_cpu = "0.18"
+# multithreading: tiles raster on a few threads (raster.rs `raster_threads`). Vendored for
+# `with_render_settings`, which caps them: two workers must not each take every core.
+anyrender_vello_cpu = { version = "0.18", features = ["multithreading"] }
+# GPU tile raster (`gpu` feature, raster.rs): vello on wgpu 30, the anyrender 0.14 line.
+anyrender_vello = { version = "0.15", optional = true }
+pollster = { version = "0.4", optional = true }
 png = "0.17"
 data-url = "0.3"
 # Image header sizes, read before any decoder runs. Already in the lock via usvg (MIT).

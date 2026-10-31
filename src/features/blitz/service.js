@@ -2,14 +2,22 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { send } from '../../services/transport';
 import { reportDocGone } from './surfaces/docGone';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 export const RENDER_UPDATED = 'render-updated';
 
 // An op on a doc the worker no longer has (evicted, or lost with a restart) tells the doc registry.
 const forDoc = (docId, p) => p.catch((e) => { reportDocGone(docId, e); throw e; });
 
+// `gpu` is Settings' graphics-card toggle: the daemon applies it to the render workers it spawns from now on.
 export function openRender({ html, cssWidth, scale, allowRemote, theme }) {
-  return send('render.open', { html, cssWidth, scale, allowRemote, theme });
+  const gpu = useSettingsStore.getState().blitzGpu === true;
+  return send('render.open', { html, cssWidth, scale, allowRemote, theme, gpu });
+}
+// Whether the graphics card can draw mail: { compiled, wanted, active, probe: { ok, adapter, backend, driver, reason }, broken }.
+// `refresh` runs the probe again (after a driver install); otherwise the daemon answers its last result.
+export function gpuStatusRender(refresh = false) {
+  return send('render.gpuStatus', { refresh });
 }
 // The shell's mvrender scheme serves tile <index> of <docId>; <rev> only busts
 // the webview's cache when images arrive or the layout changes.

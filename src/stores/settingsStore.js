@@ -243,6 +243,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   swipeRightAction: normalizeSwipeAction(persisted?.swipeRightAction, current.swipeRightAction),
   listPreviewLines: normalizeListPreviewLines(persisted?.listPreviewLines ?? current.listPreviewLines),
   emailRenderer: normalizeEmailRenderer(persisted?.emailRenderer ?? current.emailRenderer),
+  blitzGpu: (persisted?.blitzGpu ?? current.blitzGpu) === true,
   socialExport: normalizeSocialExport(persisted?.socialExport ?? current.socialExport),
 });
 
@@ -626,6 +627,7 @@ export const useSettingsStore = create(
       actionButtonDisplay: 'icon-label', // 'icon-only' | 'icon-label' | 'text-only'
       appIcon: 'purple', // 'purple' | 'teal'
       emailRenderer: 'web', // 'web' | 'blitz', which engine draws the email body
+      blitzGpu: false, // Blitz paints on the graphics card (daemon workers spawn with --gpu)
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
       appFont: DEFAULT_APP_FONT, // an APP_FONTS id (utils/appFont.js) — the app's own UI font
       showMenuBar: true, // Linux only: the File/Logs menu bar under the title bar (utils/menuBar.js)
@@ -1382,6 +1384,7 @@ export const useSettingsStore = create(
       setAppIcon: (appIcon) => { if (['purple', 'teal'].includes(appIcon)) set({ appIcon }); },
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
       setEmailRenderer: (v) => set({ emailRenderer: normalizeEmailRenderer(v) }),
+      setBlitzGpu: (v) => set({ blitzGpu: v === true }),
       setShowMenuBar: (visible) => set({ showMenuBar: visible !== false }),
       setAppFont: (id) => set({ appFont: normalizeAppFont(id) }),
       setTextScale: (value) => set({ textScale: normalizeTextScale(value) }),
@@ -1637,6 +1640,7 @@ export const useSettingsStore = create(
           appIcon: 'purple', // 'purple' | 'teal'
           emailViewerTheme: 'system',
           emailRenderer: 'web',
+          blitzGpu: false,
           appFont: DEFAULT_APP_FONT,
           showMenuBar: true,
           textScale: 1,

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- **The experimental Rust renderer can draw on the graphics card.** With the Rust renderer turned on in Settings, Appearance, Colors, a new switch below it paints messages with the graphics card (Metal on macOS, DirectX 12 or Vulkan on Windows, Vulkan on Linux). The row checks the graphics card first and names it, or says why it cannot be used and what to install, with links to the driver pages for Windows and Linux. The switch needs no restart. If the graphics card fails while drawing, mail goes on drawing on the processor for the rest of the session. The graphics driver takes extra memory, so the switch stays off by default.
+
+- **The Rust renderer draws on several processor cores.** On a machine with 8 or more cores each of its two render workers now paints a tile on up to 3 threads (a quarter of the cores) instead of one, and keeps its renderers between tiles instead of building one per tile.
+
 - The original message beside a reply, forward or detached compose window now shows its inline pictures. Screenshots pasted into the body of a mail showed as empty boxes carrying only the file name, in the side pane and in the pop-out original window. The pictures are now read from the message's attachments, or from the cached copy of the mail when the list never loaded them, the same way the reading pane does.
 
 - Reply and Forward now open with From set to the alias the message was sent to, matched on To, then Cc, instead of always using the account's default address. A message sent to the login or the default address, or to none of the account's addresses, keeps the default. A restored draft keeps the From it was saved with.

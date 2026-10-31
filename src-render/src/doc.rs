@@ -1,5 +1,3 @@
-use anyrender::ImageRenderer;
-use anyrender_vello_cpu::VelloCpuImageRenderer;
 use blitz_dom::{local_name, BaseDocument, DocumentConfig, FontContext, NodeId, Point};
 use blitz_html::HtmlDocument;
 use crate::net::{img_srcs, BridgeNet};
@@ -302,10 +300,10 @@ impl RenderDoc {
         let (px_w, px_h) = tile_dims(css_w, meta_h, index, self.opts.scale)?;
         let top = index as f64 * TILE_CSS_HEIGHT as f64;
         self.doc.set_viewport_scroll(Point { x: 0.0, y: top });
-        let mut painter = VelloCpuImageRenderer::new(px_w, px_h);
-        let mut rgba = vec![0u8; px_w as usize * px_h as usize * 4];
-        let scale = self.opts.scale as f64;
-        painter.render(|scene| blitz_paint::paint_scene(scene, &mut self.doc, scale, px_w, px_h, 0, 0), &mut rgba);
+        // A full tile's height, so the last tile shares its renderer; not past the pixel cap.
+        let full_h = ((TILE_CSS_HEIGHT as f64 * self.opts.scale as f64).round() as u32).max(px_h);
+        let full_h = if px_w as u64 * full_h as u64 <= MAX_TILE_PIXELS { full_h } else { px_h };
+        let rgba = crate::raster::paint(&mut self.doc, self.opts.scale as f64, px_w, px_h, full_h);
         Ok((rgba, px_w, px_h))
     }
 

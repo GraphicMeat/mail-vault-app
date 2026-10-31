@@ -18,3 +18,4 @@ resolver = "2"
 imap-proto = { path = "vendor/imap-proto" }
 blitz-dom = { path = "src-render/vendor/blitz-dom" } # blitz-render
 string_cache = { path = "src-render/vendor/string_cache" } # blitz-render
+anyrender_vello_cpu = { path = "src-render/vendor/anyrender_vello_cpu" } # blitz-render

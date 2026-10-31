@@ -1,4 +1,5 @@
-Vello (https://github.com/linebender/vello): the vello_cpu and vello_common crates.
+Vello (https://github.com/linebender/vello): the vello_cpu, vello_common, vello,
+vello_encoding and vello_shaders crates.
 Each crate is licensed under "Apache-2.0 OR MIT" (see its Cargo.toml).
 MailVault uses them under the terms below.
 

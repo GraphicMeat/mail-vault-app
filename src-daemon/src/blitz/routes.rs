@@ -36,6 +36,16 @@ pub(crate) fn validate_open(p: &Value) -> Result<Value, String> {
     Ok(json!({"html": html, "cssWidth": css_width, "scale": scale, "allowRemote": allow_remote, "theme": p["theme"].clone()}))
 }
 
+/// `render.open`'s optional `gpu`: the Settings choice, which the pool applies to the
+/// workers it spawns from now on. Absent (an older shell) leaves it as it is.
+pub(crate) fn open_gpu(p: &Value) -> Result<Option<bool>, &'static str> {
+    match &p["gpu"] {
+        Value::Null => Ok(None),
+        Value::Bool(b) => Ok(Some(*b)),
+        _ => Err("gpu must be a boolean"),
+    }
+}
+
 /// `render.fold` params: a string id and an explicit boolean. A missing or
 /// non-boolean `open` is refused, not read as "close".
 pub(crate) fn validate_fold(p: &Value) -> Result<(&str, bool), &'static str> {
@@ -48,10 +58,17 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
     let pool = &state.blitz;
     let doc = || params["docId"].as_u64().unwrap_or(0);
     let res = match method {
-        "render.open" => match validate_open(params) {
-            Ok(frame) => pool.open(frame).await,
-            Err(msg) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, &msg)),
+        "render.open" => match (validate_open(params), open_gpu(params)) {
+            (Ok(frame), Ok(gpu)) => {
+                if let Some(on) = gpu {
+                    super::set_gpu_wanted(on);
+                }
+                pool.open(frame).await
+            }
+            (Err(msg), _) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, &msg)),
+            (_, Err(msg)) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, msg)),
         },
+        "render.gpuStatus" => Ok(super::gpu_status(None, params["refresh"].as_bool() == Some(true)).await),
         "render.tile" => pool
             .for_doc(doc())
             .tile(doc(), params["index"].as_u64().unwrap_or(0) as u32)
@@ -116,6 +133,16 @@ mod tests {
     fn range_edges_are_accepted() {
         ok(json!({"html": "x", "cssWidth": 1, "scale": 0.5}));
         ok(json!({"html": "x", "cssWidth": 4000, "scale": 4.0, "allowRemote": true}));
+    }
+
+    #[test]
+    fn open_gpu_is_optional_and_must_be_a_boolean() {
+        assert_eq!(open_gpu(&json!({})), Ok(None));
+        assert_eq!(open_gpu(&json!({"gpu": true})), Ok(Some(true)));
+        assert_eq!(open_gpu(&json!({"gpu": false})), Ok(Some(false)));
+        assert!(open_gpu(&json!({"gpu": "yes"})).is_err());
+        // The worker frame never carries it.
+        assert!(ok(json!({"html": "<p>x", "cssWidth": 600, "gpu": true})).get("gpu").is_none());
     }
 
     #[test]

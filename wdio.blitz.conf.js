@@ -3,7 +3,8 @@
 // the same messages; connected-blitz-surfaces draws every email-body surface
 // through Blitz (the Blitz fixture folder on luke); connected-blitz-preview
 // draws the Cleanup preview; connected-blitz-perf is the thread and chat perf
-// gate (20 bodies, iframe against Blitz, plan D Task 14).
+// gate (20 bodies, iframe against Blitz, plan D Task 14); connected-blitz-gpu
+// flips the graphics-card switch mid-session (needs a real GPU).
 //
 // Out of the `connected-ci` selection on purpose: interactions carries a
 // perf.foreground fold-paint gate a debug build misses on every run (a known,
@@ -32,6 +33,7 @@ export const config = {
     './tests/e2e/connected-blitz-surfaces.test.js',
     './tests/e2e/connected-blitz-preview.test.js',
     './tests/e2e/connected-blitz-perf.test.js',
+    './tests/e2e/connected-blitz-gpu.test.js',
   ],
   suites: {},
 };

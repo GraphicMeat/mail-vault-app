@@ -1,7 +1,7 @@
 Blitz (https://github.com/DioxusLabs/blitz): the blitz-dom, blitz-html, blitz-paint,
 blitz-traits, debug_timer and stylo_taffy crates, and AnyRender
-(https://github.com/DioxusLabs/anyrender): the anyrender, anyrender_svg and
-anyrender_vello_cpu crates. Each crate is licensed under "MIT OR Apache-2.0" (see its
+(https://github.com/DioxusLabs/anyrender): the anyrender, anyrender_svg,
+anyrender_vello_cpu (vendored, with a MailVault patch), anyrender_vello and wgpu_context crates. Each crate is licensed under "MIT OR Apache-2.0" (see its
 Cargo.toml); stylo_taffy adds "OR MPL-2.0", and MailVault uses it under the MIT or
 Apache-2.0 terms. MailVault uses them under the terms below.
 The upstream licence files carry no separate copyright holder line.
