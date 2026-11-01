@@ -212,7 +212,7 @@ describe('browser demo workspace persistence', () => {
     const baseline = source.snapshot();
     const account = baseline.accounts[0];
     const serverOnly = baseline.messages.find(message => message.accountId === account.id && message.custody === 'server');
-    await source.invoke('imap_delete_email', { account, mailbox: serverOnly.mailbox, uid: serverOnly.uid, permanent: true });
+    await source.invoke('imap_delete_email', { account, mailbox: serverOnly.mailbox, uid: serverOnly.uid, mode: 'permanent' });
     await source.invoke('imap_create_mailbox', { accountId: account.id, path: 'Kept after reload' });
     const stored = source.exportState();
     const restored = createDemoBackend();

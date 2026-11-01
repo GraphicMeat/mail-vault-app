@@ -1671,7 +1671,7 @@ mod tests {
         let resp = call(
             &s,
             "imap_delete_email",
-            json!({"account": account_json(&server), "uid": 1, "mailbox": "INBOX", "permanent": true}),
+            json!({"account": account_json(&server), "uid": 1, "mailbox": "INBOX", "mode": "permanent"}),
         )
         .await;
         let result = resp.result.expect("success");

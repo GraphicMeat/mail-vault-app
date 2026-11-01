@@ -447,7 +447,7 @@ pub(crate) async fn delete_with_config(
     // opted out (`message_delete::capture_policy`, the single delete's rule).
     use crate::message_delete::{capture_policy, CapturePolicy, Mode};
     let (uids, refused) = match capture_policy(Mode::Permanent, bin) {
-        CapturePolicy::Required | CapturePolicy::BestEffort => capture_all(
+        CapturePolicy::Required => capture_all(
             state,
             &original,
             &account_id,
@@ -459,6 +459,9 @@ pub(crate) async fn delete_with_config(
         )
         .await,
         CapturePolicy::Skip => (uids, 0),
+        // `capture_all` counts every failure as a refusal, which is the
+        // `Required` rule; a permanent delete is never best effort.
+        CapturePolicy::BestEffort => unreachable!("a permanent delete never has a best-effort capture"),
     };
     let (acct, mb) = (account_id.clone(), mailbox.clone());
     let (mut p, deleted) = delete_provider_only(state,account_id,config,mailbox,uids,cancel,identity,owner.clone()).await?;

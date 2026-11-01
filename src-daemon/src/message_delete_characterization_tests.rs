@@ -51,11 +51,11 @@ pub(crate) enum Provider {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Mode {
-    /// `permanent: null` from the caller; `api.js` makes it `mailbox != INBOX`.
+    /// `mode: "auto"`, the app's default: the daemon decides by the folder.
     Auto,
-    /// `permanent: false`.
+    /// `mode: "trash"`.
     Trash,
-    /// `permanent: true`.
+    /// `mode: "permanent"`.
     Permanent,
 }
 
@@ -96,10 +96,19 @@ impl ServerScenario {
 }
 
 impl Mode {
-    /// The `permanent` bool the daemon receives.
+    /// The `mode` string the daemon receives.
+    fn wire(self) -> &'static str {
+        match self {
+            Mode::Auto => "auto",
+            Mode::Trash => "trash",
+            Mode::Permanent => "permanent",
+        }
+    }
+
+    /// Whether the delete the daemon runs is permanent: `Auto` resolves by
+    /// the folder (INBOX is a move to Trash, any other folder permanent).
     fn permanent(self, server: ServerScenario) -> bool {
         match self {
-            // api.js: `permanent = mailbox !== 'INBOX'`.
             Mode::Auto => server != ServerScenario::Inbox,
             Mode::Trash => false,
             Mode::Permanent => true,
@@ -197,7 +206,6 @@ async fn run_imap(mode: Mode, capture: CaptureScenario, server: ServerScenario) 
     std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
     let mailbox = server.mailbox(Provider::Imap);
     let trash = server.trash();
-    let permanent = mode.permanent(server);
 
     let mut scenario = Scenario::new();
     match capture {
@@ -243,7 +251,7 @@ async fn run_imap(mode: Mode, capture: CaptureScenario, server: ServerScenario) 
     }
     let _claim = (capture == CaptureScenario::Busy).then(|| s.account_lifecycle.try_close(lease("acc1"), "acc1").unwrap());
 
-    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": mailbox, "permanent": permanent})).await;
+    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": mailbox, "mode": mode.wire()})).await;
 
     let state = srv.state();
     let in_source = state.find(mailbox).is_some_and(|m| m.by_uid(1).is_some());
@@ -257,7 +265,6 @@ async fn run_jmap(mode: Mode, capture: CaptureScenario, server: ServerScenario) 
     use crate::jmap_test_support as support;
     assert_ne!(server, ServerScenario::GmailAllMail, "JMAP has no Gmail IMAP folders");
     assert_ne!(capture, CaptureScenario::Timeout, "mock-jmap has no delay fault: the JMAP capture timeout cannot be injected");
-    let permanent = mode.permanent(server);
     let m = mock_jmap::MockJmap::start(support::scenario());
     let (_trap, port) = support::imap_trap();
     let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-char-jmap-{}", uuid::Uuid::new_v4())));
@@ -287,7 +294,7 @@ async fn run_jmap(mode: Mode, capture: CaptureScenario, server: ServerScenario) 
     }
     let _claim = (capture == CaptureScenario::Busy).then(|| s.account_lifecycle.try_close(lease("acct1"), "acct1").unwrap());
 
-    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": uid, "mailbox": mailbox, "permanent": permanent})).await;
+    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": uid, "mailbox": mailbox, "mode": mode.wire()})).await;
 
     let labels = m.read(|st| st.email("acc1", email_id).map(|e| e.mailbox_ids.clone()));
     let in_source = labels.as_ref().is_some_and(|l| l.contains(source_label));
@@ -315,9 +322,8 @@ async fn run_graph(mode: Mode, capture: CaptureScenario, server: ServerScenario)
         break_the_bin(&s.app_dir);
     }
     let _claim = (capture == CaptureScenario::Busy).then(|| s.account_lifecycle.try_close(lease("acct1"), "acct1").unwrap());
-    // The daemon ignores `permanent` on Graph; send what `mode` would, to pin that.
-    let permanent = mode.permanent(server);
-    let params = json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7, "permanent": permanent});
+    // The daemon never makes a Graph delete permanent; send every mode, to pin that.
+    let params = json!({"accessToken": "tok", "messageId": "m1", "accountId": "acct1", "mailbox": "INBOX", "uid": 7, "mode": mode.wire()});
     let resp = crate::handlers::graph::route(&s, "graph_delete_message", &params, json!(1)).await.expect("routed");
     Ran {
         resp,
@@ -632,7 +638,7 @@ async fn delete_imap_permanent_capture_empty_fetch_is_gone_already_not_a_refusal
     let account = json!({"id": "acc1", "email": "user@example.com", "password": "hunter2", "imapHost": srv.host(), "imapPort": srv.port()});
     let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-char-{}", uuid::Uuid::new_v4())));
     seed_accounts(&s, r#"[{"id":"acc1"}]"#);
-    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": "INBOX", "permanent": true})).await;
+    let resp = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": "INBOX", "mode": "permanent"})).await;
     let v = resp.result.clone().unwrap_or_else(|| panic!("expected a result, got {:?}", resp.error.as_ref().map(|e| &e.message)));
     assert_eq!(v["success"], json!(true), "{v}");
     assert_eq!(v["binId"], Value::Null, "nothing was kept, nothing to name: {v}");
@@ -640,7 +646,7 @@ async fn delete_imap_permanent_capture_empty_fetch_is_gone_already_not_a_refusal
     assert_eq!(srv.count_commands("BODY.PEEK[]"), 1, "the capture asked for the message once");
 }
 
-/// The wire default: no `permanent` param at all is a move to Trash.
+/// The wire default: no `permanent` or `mode` param at all is a move to Trash.
 #[tokio::test]
 async fn delete_imap_absent_permanent_param_is_a_move_to_trash() {
     std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");

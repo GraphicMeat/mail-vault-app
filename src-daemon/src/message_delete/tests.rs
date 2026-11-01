@@ -41,17 +41,21 @@ fn auto_resolves_from_the_folder_role() {
 }
 
 #[test]
-fn mode_reads_mode_then_the_legacy_permanent_flag() {
+fn mode_reads_the_mode_param_and_nothing_else() {
     let read = |v: Value| Mode::from_params(&v);
     assert_eq!(read(json!({"mode": "auto"})), Ok(Mode::Auto));
     assert_eq!(read(json!({"mode": "trash"})), Ok(Mode::Trash));
     assert_eq!(read(json!({"mode": "permanent"})), Ok(Mode::Permanent));
-    assert_eq!(read(json!({"permanent": true})), Ok(Mode::Permanent));
-    assert_eq!(read(json!({"permanent": false})), Ok(Mode::Trash));
+    // No stated intent never destroys mail: absent is a move to Trash, in
+    // every folder.
     assert_eq!(read(json!({})), Ok(Mode::Trash), "absent is a move to Trash");
-    assert_eq!(read(json!({"permanent": null})), Ok(Mode::Trash));
-    assert_eq!(read(json!({"mode": "trash", "permanent": true})), Ok(Mode::Trash), "mode wins");
+    assert_eq!(read(json!({"mode": null})), Ok(Mode::Trash));
+    // The legacy `permanent` flag is gone: the app sends intent, not policy.
+    assert_eq!(read(json!({"permanent": true})), Ok(Mode::Trash), "a legacy flag is not read");
+    assert_eq!(read(json!({"permanent": false})), Ok(Mode::Trash));
+    assert_eq!(read(json!({"mode": "trash", "permanent": true})), Ok(Mode::Trash));
     assert!(read(json!({"mode": "shred"})).is_err());
+    assert!(read(json!({"mode": true})).is_err());
 }
 
 /// The JMAP body-fetch timeout is read back by its text: the helper that
@@ -196,12 +200,40 @@ async fn a_landed_delete_names_its_bin_copy_and_where_it_went() {
 // ── the wire ───────────────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn imap_delete_email_reads_mode_before_the_legacy_flag() {
+async fn imap_delete_email_ignores_a_legacy_permanent_flag() {
     let f = fixture(vec![]);
     let r = handle_request_for_test(&f.s, "imap_delete_email", json!({"account": f.account, "uid": 1, "mailbox": "INBOX", "mode": "trash", "permanent": true})).await;
     let v = r.result.unwrap_or_else(|| panic!("{:?}", r.error.map(|e| e.message)));
     assert_eq!(v["trash"], json!("Trash"), "mode trash wins over permanent: {v}");
     assert!(f.in_trash());
+}
+
+/// No `mode`, a stale `permanent: true`, from a folder that `auto` would
+/// delete for good: still a move to Trash. A caller that has not caught up
+/// cannot destroy mail.
+#[tokio::test]
+async fn imap_delete_email_without_a_mode_is_a_move_to_trash_whatever_a_stale_flag_says() {
+    std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+    let mut work = Mailbox::new("Work");
+    work.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
+    let srv = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(work).mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"])));
+    let account = json!({"id": "acc1", "email": "user@example.com", "password": "hunter2", "imapHost": srv.host(), "imapPort": srv.port()});
+    let s = plain_state(&std::env::temp_dir().join(format!("mv-delete-core-{}", uuid::Uuid::new_v4())));
+    seed_accounts(&s, r#"[{"id":"acc1"}]"#);
+    let r = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": "Work", "permanent": true, "bin": false})).await;
+    let v = r.result.unwrap_or_else(|| panic!("{:?}", r.error.map(|e| e.message)));
+    assert_eq!(v["trash"], json!("Trash"), "{v}");
+    assert!(srv.state().find("Work").unwrap().messages.is_empty(), "left Work");
+    assert!(!srv.state().find("Trash").unwrap().messages.is_empty(), "landed in Trash");
+    // The same call with `mode: auto` is the permanent delete the flag asked for.
+    let mut work = Mailbox::new("Work");
+    work.add(Message::new(1, RAW).with_flags(&["\\Seen"]));
+    let srv = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(work).mailbox(Mailbox::new("Trash").with_attrs(&["\\Trash"])));
+    let account = json!({"id": "acc1", "email": "user@example.com", "password": "hunter2", "imapHost": srv.host(), "imapPort": srv.port()});
+    let r = handle_request_for_test(&s, "imap_delete_email", json!({"account": account, "uid": 1, "mailbox": "Work", "mode": "auto", "bin": false})).await;
+    let v = r.result.unwrap_or_else(|| panic!("{:?}", r.error.map(|e| e.message)));
+    assert_eq!(v["trash"], json!(null), "auto from Work is permanent: {v}");
+    assert!(srv.state().find("Trash").unwrap().messages.is_empty(), "nothing in Trash");
 }
 
 #[tokio::test]

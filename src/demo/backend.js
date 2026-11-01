@@ -29,6 +29,11 @@ const serializeMessage = message => {
 };
 
 const key = (accountId, mailbox, uid) => `${accountId}|${mailbox}|${uid}`;
+// The daemon's rule for a delete (message_delete.rs): `auto` moves an INBOX
+// message to Trash (INBOX is case-insensitive) and removes any other for good.
+// No mode at all is a move to Trash, as in the daemon.
+const demoDeleteGoesToTrash = (mode, mailbox) => (mode ?? 'trash') === 'trash'
+  || (mode === 'auto' && String(mailbox).toUpperCase() === 'INBOX');
 
 class DemoUnsupportedError extends Error {
   constructor(command) {
@@ -1567,7 +1572,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       }
       case 'imap_delete_email': {
         const row = find({ accountId, mailbox, uid: args.uid }); let trash = null; let trashUid = null; if (row) {
-          if (args.permanent === false) {
+          if (demoDeleteGoesToTrash(args.mode, mailbox)) {
             trash = 'Trash';
             trashUid = Math.max(0, ...messages.filter(item => item.accountId === accountId && item.mailbox === 'Trash').map(item => item.uid)) + 1;
             messages.push({ ...row, id: `demo-${accountId}-Trash-${trashUid}`, mailbox: 'Trash', _mailbox: 'Trash', uid: trashUid, localId: `${accountId}-Trash-${trashUid}`, serverPresent: true, serverDeleted: false, serverAbsent: false, vaultPresent: false, _origin: null, source: 'server' });
@@ -1806,7 +1811,7 @@ export function createDemoBackend({ initialSettings = {}, initialPendingOperatio
       case 'graph_move_folder': case 'graph_rename_folder': return invoke('imap_rename_mailbox', { ...args, from: args.from || args.source, to: args.to || args.target });
       case 'graph_move_emails': return invoke('imap_move_emails', { ...args, sourceMailbox: args.sourceMailbox || mailbox, targetMailbox: args.targetMailbox || args.destination });
       case 'graph_set_read': case 'graph_set_flagged': return { success: true, simulated: true };
-      case 'graph_delete_message': return invoke('imap_delete_email', { ...args, mailbox, permanent: args.permanent ?? false });
+      case 'graph_delete_message': return invoke('imap_delete_email', { ...args, mailbox, mode: 'trash' });
       case 'imap_disconnect': return { success: true, simulated: true };
       case 'imap_find_message_id': {
         const found = messages.filter(row => (!accountId || row.accountId === accountId) && row.messageId === args.messageId).map(row => ({ mailbox: row.mailbox, uid: row.uid }));

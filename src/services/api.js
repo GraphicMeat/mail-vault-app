@@ -324,21 +324,23 @@ export async function updateEmailFlags(account, uid, flags, action = 'add', mail
   });
 }
 
-// `bin: false` skips the daemon's copy into the deleted-mail bin (a purge of
-// every copy, a cleanup rule over mail the vault already holds).
-export async function deleteEmail(account, uid, mailbox = 'INBOX', permanent = null, { bin = true } = {}) {
-  // Default: permanent delete for non-INBOX folders (Sent, Spam, Trash, etc.)
-  // INBOX emails get moved to Trash first (non-permanent)
-  if (permanent === null) {
-    permanent = mailbox !== 'INBOX';
-  }
+// The app says what it wants; the daemon decides what that means for the
+// folder (src-daemon/src/message_delete.rs). `mode`:
+//   'auto'      (default) INBOX moves to Trash, any other folder is deleted for
+//               good. The daemon reads the folder name (INBOX is
+//               case-insensitive); nothing here does.
+//   'trash'     always a move to the account's Trash.
+//   'permanent' always removed for good.
+// `bin: false` skips the daemon's copy into the deleted-mail bin (a cleanup
+// rule over mail the vault already holds).
+export async function deleteEmail(account, uid, mailbox = 'INBOX', { mode = 'auto', bin = true } = {}) {
   if (IS_TAURI) {
-    return tauriInvoke('imap_delete_email', { account, uid, mailbox, permanent, bin })
+    return tauriInvoke('imap_delete_email', { account, uid, mailbox, mode, bin })
       .catch((e) => { throw binCaptureError(e); });
   }
   return httpRequest(`/email/${uid}/delete`, {
     method: 'POST',
-    body: JSON.stringify({ account, mailbox, permanent }),
+    body: JSON.stringify({ account, mailbox, mode }),
   });
 }
 

@@ -79,10 +79,31 @@ describe('browser demo workflow contracts', () => {
     const backend = createDemoBackend();
     const account = backend.accounts[0];
     const original = backend.snapshot().messages.find(row => row.accountId === account.id && row.mailbox === 'INBOX' && row.vaultPresent && row.serverPresent);
-    await backend.invoke('imap_delete_email', { account, mailbox: 'INBOX', uid: original.uid, permanent: false });
+    await backend.invoke('imap_delete_email', { account, mailbox: 'INBOX', uid: original.uid, mode: 'trash' });
     const trash = (await backend.invoke('imap_get_emails', { account, mailbox: 'Trash' })).emails;
     expect(trash.some(row => row.messageId === original.messageId)).toBe(true);
     expect(await backend.invoke('maildir_exists', { accountId: account.id, mailbox: 'INBOX', uid: original.uid })).toBe(true);
+  });
+
+  // The demo follows the daemon: `auto` is a move to Trash from the INBOX
+  // (matched case-insensitively) and a permanent delete anywhere else, and a
+  // legacy `permanent` flag is not read.
+  it('resolves mode "auto" like the daemon and ignores a legacy permanent flag', async () => {
+    const backend = createDemoBackend();
+    const account = backend.accounts[0];
+    const inbox = backend.snapshot().messages.filter(row => row.accountId === account.id && row.mailbox === 'INBOX' && row.serverPresent);
+    const [first, second] = inbox;
+    const trashHas = async (row) => (await backend.invoke('imap_get_emails', { account, mailbox: 'Trash' })).emails.some(r => r.messageId === row.messageId);
+
+    await backend.invoke('imap_delete_email', { account, mailbox: 'INBOX', uid: first.uid, mode: 'auto' });
+    expect(await trashHas(first)).toBe(true);
+
+    await backend.invoke('imap_delete_email', { account, mailbox: 'INBOX', uid: second.uid, mode: 'auto', permanent: true });
+    expect(await trashHas(second)).toBe(true);
+
+    const trashed = backend.snapshot().messages.find(row => row.accountId === account.id && row.mailbox === 'Trash' && row.messageId === first.messageId);
+    await backend.invoke('imap_delete_email', { account, mailbox: 'Trash', uid: trashed.uid, mode: 'auto' });
+    expect(await trashHas(first)).toBe(false);
   });
 
   it('keeps folder creation scoped to one account and reset restores the folder tree', async () => {

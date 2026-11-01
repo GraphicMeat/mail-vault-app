@@ -1018,7 +1018,7 @@ mod tests {
     }
 
     async fn delete(s: &Arc<DaemonState>, server: &MockImap, permanent: bool) -> RpcResponse {
-        handle_request_for_test(s, "imap_delete_email", json!({"account": account(server), "uid": 1, "mailbox": "INBOX", "permanent": permanent})).await
+        handle_request_for_test(s, "imap_delete_email", json!({"account": account(server), "uid": 1, "mailbox": "INBOX", "mode": if permanent { "permanent" } else { "trash" }})).await
     }
 
     fn binned(s: &DaemonState) -> Vec<Deleted> {
@@ -1171,7 +1171,7 @@ mod tests {
     async fn a_delete_opted_out_of_the_bin_keeps_nothing() {
         let server = server(Scenario::new());
         let s = state(&server);
-        let r = handle_request_for_test(&s, "imap_delete_email", json!({"account": account(&server), "uid": 1, "mailbox": "INBOX", "permanent": true, "bin": false})).await;
+        let r = handle_request_for_test(&s, "imap_delete_email", json!({"account": account(&server), "uid": 1, "mailbox": "INBOX", "mode": "permanent", "bin": false})).await;
         assert_eq!(r.result.expect("deleted")["binId"], Value::Null);
         assert!(binned(&s).is_empty());
     }
@@ -1370,7 +1370,7 @@ mod tests {
         let m = mock_jmap::MockJmap::start(support::scenario());
         let (trap, port) = support::imap_trap();
         let (s, e1, _) = jmap_state(&m, port).await;
-        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e1, "mailbox": "INBOX", "permanent": false}))
+        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e1, "mailbox": "INBOX", "mode": "trash"}))
             .await
             .result
             .expect("deleted");
@@ -1397,7 +1397,7 @@ mod tests {
         let m = mock_jmap::MockJmap::start(support::scenario());
         let (trap, port) = support::imap_trap();
         let (s, _, e2) = jmap_state(&m, port).await;
-        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e2, "mailbox": "INBOX", "permanent": true}))
+        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e2, "mailbox": "INBOX", "mode": "permanent"}))
             .await
             .result
             .expect("deleted");
@@ -1427,7 +1427,7 @@ mod tests {
             let (s, e1, e2) = jmap_state(&m, port).await;
             let uid = if import { e2 } else { e1 };
             handle_request_for_test(&s, "imap_delete_email", json!({
-                "account": support::account_json(&m, port), "uid": uid, "mailbox": "INBOX", "permanent": import
+                "account": support::account_json(&m, port), "uid": uid, "mailbox": "INBOX", "mode": if import { "permanent" } else { "trash" }
             })).await.result.expect("deleted before recovery");
             let mut pause = RecoveryPause::arm_jmap_ledger(&s);
             let (done, completed) = mpsc::channel();
@@ -1458,7 +1458,7 @@ mod tests {
         let (trap, port) = support::imap_trap();
         let (s, _, e2) = jmap_state(&m, port).await;
         handle_request_for_test(&s, "imap_delete_email", json!({
-            "account": support::account_json(&m, port), "uid": e2, "mailbox": "INBOX", "permanent": true
+            "account": support::account_json(&m, port), "uid": e2, "mailbox": "INBOX", "mode": "permanent"
         })).await.result.expect("deleted before close");
         let mut claim = s.account_lifecycle.try_close(lifecycle_lease("acct1"), "acct1").unwrap();
         let drained = claim.wait_local_until(tokio::time::Instant::now() + Duration::from_secs(5)).await.unwrap();
@@ -1583,7 +1583,7 @@ mod tests {
             .expect("listed");
         let uid_of = |subject: &str| listing["emails"].as_array().unwrap().iter().find(|e| e["subject"] == subject).unwrap()["uid"].as_u64().unwrap() as u32;
         for copy in ["ca", "cb"] {
-            handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": uid_of(copy), "mailbox": "INBOX", "permanent": false}))
+            handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": uid_of(copy), "mailbox": "INBOX", "mode": "trash"}))
                 .await
                 .result
                 .expect("deleted");
@@ -1606,7 +1606,7 @@ mod tests {
         let m = mock_jmap::MockJmap::start(support::scenario());
         let (trap, port) = support::imap_trap();
         let (s, e1, _) = jmap_state(&m, port).await;
-        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e1, "mailbox": "INBOX", "permanent": false}))
+        handle_request_for_test(&s, "imap_delete_email", json!({"account": support::account_json(&m, port), "uid": e1, "mailbox": "INBOX", "mode": "trash"}))
             .await
             .result
             .expect("deleted");

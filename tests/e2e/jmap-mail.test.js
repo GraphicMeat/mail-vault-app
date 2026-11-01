@@ -12,7 +12,7 @@
  * - Flagging e1 sets `$flagged` on the server.
  * - Moving e1 to Work leaves it in Work only.
  * - Deleting e2 from INBOX lands it in Trash. Not e1: a delete from any folder
- *   but INBOX is permanent (`api.deleteEmail`), and on JMAP a permanent delete
+ *   but INBOX is permanent (the daemon's `auto` mode), and on JMAP a permanent delete
  *   from the only mailbox destroys the email (ruling R5).
  * - Mail delivered on the server shows up without Refresh, through the
  *   EventSource push, within 10 s.

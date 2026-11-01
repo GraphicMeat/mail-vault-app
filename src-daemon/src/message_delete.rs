@@ -5,8 +5,9 @@
 //! params and call `delete_one`; nothing else writes this sequence.
 //!
 //! - `Mode`: what the caller asked. `Auto` resolves from the folder's role:
-//!   INBOX is a move to Trash, any other folder a permanent delete (what the
-//!   app computed itself before the daemon owned it).
+//!   INBOX (matched case-insensitively, RFC 3501) is a move to Trash, any
+//!   other folder a permanent delete. This is the only place that rule lives:
+//!   the app sends `mode` (default `auto`) and never reads a folder name.
 //! - `capture_policy`: whether the bin copy is skipped, best effort or
 //!   required. Required exactly when the delete is permanent and `bin` is on:
 //!   the bin would be the only copy, so a capture that fails refuses the
@@ -44,11 +45,13 @@ pub(crate) enum Mode {
 }
 
 impl Mode {
-    /// The RPC's `mode` (`auto` | `trash` | `permanent`), else the legacy
-    /// `permanent` flag: true is `Permanent`, false or absent `Trash`.
+    /// The RPC's `mode` (`auto` | `trash` | `permanent`); absent is `Trash`,
+    /// so a caller that states no intent never destroys mail (the app always
+    /// sends `auto` or more). The old `permanent` flag is not read: the app
+    /// sends intent and this module decides what it means for the folder.
     pub(crate) fn from_params(params: &Value) -> Result<Mode, String> {
         match params.get("mode") {
-            None | Some(Value::Null) => Ok(if params.get("permanent").and_then(Value::as_bool).unwrap_or(false) { Mode::Permanent } else { Mode::Trash }),
+            None | Some(Value::Null) => Ok(Mode::Trash),
             Some(Value::String(m)) => match m.as_str() {
                 "auto" => Ok(Mode::Auto),
                 "trash" => Ok(Mode::Trash),
@@ -166,10 +169,11 @@ pub(crate) async fn delete_one(
     mode: Mode,
     bin: bool,
 ) -> Result<Outcome, Refusal> {
-    let mode_now = provider.mode(mode, mailbox);
-    let wants_stamp = capture_policy(mode_now, bin) != CapturePolicy::Skip || matches!(provider, Provider::Jmap(_));
+    let mode = provider.mode(mode, mailbox);
+    let policy = capture_policy(mode, bin);
+    let wants_stamp = policy != CapturePolicy::Skip || matches!(provider, Provider::Jmap(_));
     let original = if wants_stamp { state.account_lifecycle.capture(account_id).ok() } else { None };
-    delete_one_stamped(state, original, provider, account_id, mailbox, uid, mode, bin).await
+    run(state, original, provider, account_id, mailbox, uid, mode, policy).await
 }
 
 /// `delete_one` under the account stamp `original` (`None`: the account is
@@ -185,10 +189,27 @@ pub(crate) async fn delete_one_stamped(
     mode: Mode,
     bin: bool,
 ) -> Result<Outcome, Refusal> {
-    let tag = provider.name();
     let mode = provider.mode(mode, mailbox);
-    let permanent = mode == Mode::Permanent;
     let policy = capture_policy(mode, bin);
+    run(state, original, provider, account_id, mailbox, uid, mode, policy).await
+}
+
+/// The sequence, for a `mode` already resolved by `Provider::mode` (never
+/// `Auto`) and the `policy` that mode and `bin` give.
+#[allow(clippy::too_many_arguments)]
+async fn run(
+    state: &Arc<DaemonState>,
+    original: Option<AccountStamp>,
+    provider: Provider<'_>,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    mode: Mode,
+    policy: CapturePolicy,
+) -> Result<Outcome, Refusal> {
+    debug_assert_ne!(mode, Mode::Auto, "the caller resolves Auto against the folder");
+    let tag = provider.name();
+    let permanent = mode == Mode::Permanent;
     // JMAP addresses the message through the account's ledger, which needs
     // the stamp: without one there is nothing to delete with.
     if matches!(provider, Provider::Jmap(_)) && original.is_none() && policy != CapturePolicy::Required {

@@ -229,7 +229,7 @@ describe('demo mailbox backend', () => {
       account: target.account,
       mailbox: target.mailbox,
       uid: target.uid,
-      permanent: true,
+      mode: 'permanent',
     });
 
     const after = backend.snapshot().messages.find(message => message.id === target.id);
@@ -387,7 +387,7 @@ describe('demo mailbox backend', () => {
     const backend = createDemoBackend();
     const baseline = backend.snapshot();
     await backend.invoke('imap_delete_email', {
-      account: baseline.accounts[0], mailbox: 'INBOX', uid: baseline.messages[0].uid, permanent: true,
+      account: baseline.accounts[0], mailbox: 'INBOX', uid: baseline.messages[0].uid, mode: 'permanent',
     });
 
     await expect(backend.invoke('oauth2_auth_url', { email: 'visitor@example.com', provider: 'google' }))
